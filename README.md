@@ -11,7 +11,7 @@ The idea, architecture, and implementation were conceived independently, based o
 ## 🕓 Timeline
 
 - **Project start date:** 15 Jun 2025
-- **Git repository initialized:** https://github.com/saymyframe/smf_flutter_cli/tree/01362e7aa9d378f6e085c7faedb7a6e366553004
+- **Git repository initialized:** [763c24996bf2d7d850099bcf051e6111347cc177](https://github.com/saymyframe/smf_flutter_cli/tree/763c24996bf2d7d850099bcf051e6111347cc177)
 - **Development environment:** personal laptop
 - **Development time:** evenings, weekends, and other off-hours
 
