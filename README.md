@@ -1,6 +1,8 @@
 # [SMF CLI] – SayMyFrame CLI for Flutter project generation.
 
 > ⚠️ This project is a personal initiative of Yevhen Beshkarov, created and maintained independently, and not related to any client or employer, including but not limited to Ciklum.
+>
+> For full intellectual property and legal independence statement, see [LEGAL.md](LEGAL.md).
 
 ## 🧠 Purpose
 
