@@ -1,0 +1,12 @@
+name: SMFFlutterCLI
+repository: https://github.com/saymyframe/smf_flutter_cli
+packages:
+  - packages/**
+  - "*"
+
+command:
+  version:
+    # Generate commit links in package changelogs.
+    linkToCommits: true
+    # Additionally build a changelog at the root of the workspace.
+    workspaceChangelog: true

@@ -1,0 +1,33 @@
+name: smf_flutter_cli
+description: A sample command-line application with basic argument parsing.
+version: 0.0.1
+homepage: https://github.com/saymyframe/smf_flutter_cli
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+executables:
+  smfflutter: smf_flutter
+
+dependencies:
+  args: ^2.7.0
+  ansi_styles: ^0.3.2+1
+  cli_util: ^0.4.2
+  file: ^7.0.1
+  interact: ^2.2.0
+  meta: ^1.17.0
+  path: ^1.9.1
+  mason: ^0.1.1
+
+  # Packages
+  smf_firebase_core:
+    path: ../smf_firebase_core
+  smf_flutter_core:
+    path: ../smf_flutter_core
+  smf_firebase_analytics:
+    path: ../smf_firebase_analytics
+
+dev_dependencies:
+  test: ^1.24.0
+  very_good_analysis: ^9.0.0
+

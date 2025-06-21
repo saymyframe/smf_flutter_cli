@@ -1,15 +1,17 @@
-name: smf_flutter_cli
-description: A sample command-line application with basic argument parsing.
-version: 0.0.1
-# repository: https://github.com/my_org/my_repo
+name: smf_flutter_cli_monorepo
+publish_to: none
 
 environment:
-  sdk: ^3.7.2
+  sdk: ">=3.0.0 <4.0.0"
 
-# Add regular dependencies here.
-dependencies:
-  args: ^2.5.0
+executables:
+  smfflutter: smfflutter_dev
 
 dev_dependencies:
-  lints: ^5.0.0
-  test: ^1.24.0
+  smf_flutter_cli:
+    path: packages/smf_flutter_cli
+  melos: ^6.3.3
+
+dependency_overrides:
+  smf_flutter_cli:
+    path: packages/smf_flutter_cli
