@@ -5,6 +5,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 final smfModules = <String, IModuleCodeContributor>{
   kFirebaseCore: FirebaseCoreModule(),
   kFirebaseAnalytics: FirebaseAnalyticsModule(),
+  kFlutterCoreModule: SmfCoreModule(),
   // kFirebaseAuthModule ,
   // kFirebaseCrashlytics,
 };

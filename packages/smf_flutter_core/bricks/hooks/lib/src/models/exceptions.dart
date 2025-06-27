@@ -1,0 +1,1 @@
+class InvalidAppIdException implements Exception {}

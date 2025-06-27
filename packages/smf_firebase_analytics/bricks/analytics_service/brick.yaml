@@ -1,4 +1,4 @@
-name: firebase_analytics
+name: smf_firebase_analytics
 description: Injects Firebase initialization into bootstrap.dart
 version: 0.0.1
 
