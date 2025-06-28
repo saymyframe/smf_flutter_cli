@@ -1,4 +1,4 @@
-import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 class ProjectPreferences {
   const ProjectPreferences({

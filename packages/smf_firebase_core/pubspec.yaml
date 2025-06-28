@@ -11,7 +11,8 @@ dependencies:
 
   smf_flutter_core:
     path: ../smf_flutter_core
-
+  smf_contracts:
+    path: ../smf_contracts
 
 
 dev_dependencies:

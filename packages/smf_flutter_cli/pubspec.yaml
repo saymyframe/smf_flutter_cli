@@ -26,6 +26,8 @@ dependencies:
     path: ../smf_flutter_core
   smf_firebase_analytics:
     path: ../smf_firebase_analytics
+  smf_contracts:
+    path: ../smf_contracts
 
 dev_dependencies:
   test: ^1.24.0

@@ -1,6 +1,5 @@
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/constants/smf_modules.dart';
-import 'package:smf_flutter_core/smf_flutter_core.dart'
-    show IModuleCodeContributor;
 
 class ModuleDependencyResolver {
   const ModuleDependencyResolver();

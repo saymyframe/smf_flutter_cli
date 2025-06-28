@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:mason/mason.dart';
+import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 
@@ -9,7 +11,7 @@ Future<void> runCli() async {
   final modules = <IModuleCodeContributor>[
     // FirebaseCoreModule(),
     SmfCoreModule(),
-    // FirebaseAnalyticsModule(),
+    FirebaseAnalyticsModule(),
   ];
   final logger = Logger(level: Level.verbose);
 
@@ -22,22 +24,21 @@ Future<void> runCli() async {
         Directory('/Users/ybeshkarov/gen/'),
       );
 
-      final generateProgress = logger.progress('Bootstrapping');
+      final generateProgress = logger.progress(
+        '🚀 Generating from ${brick.name}',
+      );
       var vars = brick.vars;
       await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
 
-      print('🚀 Generating from ${brick.name}...');
       final files = await generator.generate(
         target,
         vars: vars,
         fileConflictResolution: _mapMergeStrategy(brick.mergeStrategy),
         logger: logger,
       );
-      generateProgress.complete('Generated ${files.length} file(s)');
+      generateProgress.complete('✅ Generated ${files.length} file(s)');
     }
   }
-
-  print('✅ Done!');
 }
 
 FileConflictResolution _mapMergeStrategy(FileMergeStrategy strategy) {
