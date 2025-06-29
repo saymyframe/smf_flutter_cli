@@ -13,6 +13,8 @@ dependencies:
     path: ../smf_flutter_core
   smf_contracts:
     path: ../smf_contracts
+  smf_sharable_bricks:
+    path: ../smf_sharable_bricks
 
 dev_dependencies:
   lints: ^5.0.0

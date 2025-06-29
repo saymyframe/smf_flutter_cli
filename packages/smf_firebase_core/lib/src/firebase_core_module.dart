@@ -1,18 +1,31 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_sharable_bricks/bundles/smf_bootstrap_brick_bundle.dart';
 
 class FirebaseCoreModule implements IModuleCodeContributor {
   @override
-  List<BrickContribution> get brickContributions => [
-    // BrickContribution(
-    //   name: 'firebase_core_bootstrap',
-    //   bundle: bootstrapBundle,
-    //   vars: {'init_block': 'await Firebase.initializeApp();'},
-    // ),
-  ];
+  List<BrickContribution> get brickContributions => [];
 
   @override
-  List<SharedFileContribution> get sharedFileContributions => [];
+  List<SharedFileContribution> get sharedFileContributions => [
+    SharedFileContribution(
+      bundle: smfBootstrapBrickBundle,
+      slot: SharableCodeSlots.imports.slot,
+      content: '''
+      import 'package:firebase_core/firebase_core.dart';
+        ''',
+    ),
+    SharedFileContribution(
+      bundle: smfBootstrapBrickBundle,
+      slot: SharableCodeSlots.bootstrap.slot,
+      content: '''
+      // Firebase Core -------------
+      await Firebase.initializeApp();
+      // Firebase Core END -------------
+        ''',
+      order: 0,
+    ),
+  ];
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(

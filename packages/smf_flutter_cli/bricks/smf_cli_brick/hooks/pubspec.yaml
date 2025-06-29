@@ -1,4 +1,4 @@
-name: test_hooks
+name: smf_cli_hooks
 
 environment:
   sdk: ^3.5.4

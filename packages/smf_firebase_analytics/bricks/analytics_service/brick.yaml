@@ -1,8 +1,0 @@
-name: smf_firebase_analytics
-description: Injects Firebase initialization into bootstrap.dart
-version: 0.0.1
-
-vars:
-  init_block:
-    type: string
-    description: Dart code to initialize Firebase

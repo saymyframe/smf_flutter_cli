@@ -1,7 +1,7 @@
-import 'package:test_hooks/src/constants/arguments.dart';
-import 'package:test_hooks/src/constants/constants.dart';
-import 'package:test_hooks/src/models/app_id.dart';
-import 'package:test_hooks/src/models/exceptions.dart';
+import 'package:smf_cli_hooks/src/constants/arguments.dart';
+import 'package:smf_cli_hooks/src/constants/constants.dart';
+import 'package:smf_cli_hooks/src/models/app_id.dart';
+import 'package:smf_cli_hooks/src/models/exceptions.dart';
 
 class SmfCoreConfig {
   SmfCoreConfig({

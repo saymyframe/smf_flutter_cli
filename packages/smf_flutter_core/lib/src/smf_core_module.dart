@@ -5,11 +5,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 class SmfCoreModule implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
-    BrickContribution(
-      name: 'flutter_core',
-      bundle: smfFlutterCoreBundle,
-      vars: {},
-    ),
+    BrickContribution(name: 'flutter_core', bundle: smfFlutterCoreBundle),
   ];
 
   @override

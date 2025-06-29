@@ -1,0 +1,19 @@
+name: smf_cli_brick
+description: A new brick created with the Mason CLI.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
+
+vars:
+  app_name:
+    type: string
+    description: The app name
+    default: app
+  org_name:
+    type: string
+    description: The organization name
+    default: com.example
+  application_id:
+    type: string
+    description: The application id on Android, Bundle ID on iOS. If omitted value will be formed by org_name + . + project_name.

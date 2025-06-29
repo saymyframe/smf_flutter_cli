@@ -1,4 +1,4 @@
-name: smf_firebase_core
+name: smf_sharable_bricks
 description: A starting point for Dart libraries or applications.
 version: 1.0.0
 # repository: https://github.com/my_org/my_repo
@@ -8,14 +8,7 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-
-  smf_flutter_core:
-    path: ../smf_flutter_core
-  smf_contracts:
-    path: ../smf_contracts
-  smf_sharable_bricks:
-    path: ../smf_sharable_bricks
-
+  # path: ^1.8.0
 
 dev_dependencies:
   lints: ^5.0.0
