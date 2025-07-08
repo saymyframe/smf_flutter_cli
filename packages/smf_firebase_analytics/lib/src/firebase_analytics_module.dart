@@ -1,6 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
-import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
 
 class FirebaseAnalyticsModule implements IModuleCodeContributor {
@@ -38,13 +37,31 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
     // Firebase Analytics EMD -------------
       ''',
     ),
+
+    SharedFileContribution(
+      bundle: smfCoreDiBrickBundle,
+      slot: SharableCodeSlots.imports.slot,
+      content: '''
+      import 'package:{{app_name_sc}}/services/analytics/firebase/firebase_analytics_service.dart';
+      import 'package:{{app_name_sc}}/services/analytics/i_analytics_service.dart';
+      ''',
+    ),
+    SharedFileContribution(
+      bundle: smfCoreDiBrickBundle,
+      slot: SharableCodeSlots.di.slot,
+      content: '''
+        getIt.registerLazySingleton<IAnalyticsService>(
+        () => FirebaseAnalyticsService(FirebaseAnalytics.instance),
+        );
+      ''',
+    ),
   ];
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
     name: kFirebaseAnalytics,
     description: 'Firebase Analytics module',
-    dependsOn: [kFirebaseCore],
-    pubDependency: ['firebase_analytics'],
+    dependsOn: {kFirebaseCore, kGetItModule},
+    pubDependency: {'firebase_analytics: ^11.5.2'},
   );
 }

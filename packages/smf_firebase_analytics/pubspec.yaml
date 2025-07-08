@@ -8,9 +8,6 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-
-  smf_flutter_core:
-    path: ../smf_flutter_core
   smf_contracts:
     path: ../smf_contracts
   smf_sharable_bricks:
