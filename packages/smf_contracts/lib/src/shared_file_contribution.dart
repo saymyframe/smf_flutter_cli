@@ -4,11 +4,7 @@ enum SharableCodeSlots {
   imports._('imports'),
   bootstrap._('bootstrap'),
   routes._('routes'),
-  di._('di'),
-  services._('services'),
-  providers._('providers'),
-  config._('config'),
-  utils._('utils');
+  di._('di');
 
   const SharableCodeSlots._(this.slot);
 

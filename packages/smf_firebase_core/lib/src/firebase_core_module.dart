@@ -1,6 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_flutter_core/smf_flutter_core.dart';
-import 'package:smf_sharable_bricks/bundles/smf_bootstrap_brick_bundle.dart';
+import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
 
 class FirebaseCoreModule implements IModuleCodeContributor {
   @override
@@ -31,6 +30,6 @@ class FirebaseCoreModule implements IModuleCodeContributor {
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
     name: kFirebaseCore,
     description: 'Firebase Core module',
-    pubDependency: ['firebase_core'],
+    pubDependency: {'firebase_core: ^3.15.1'},
   );
 }

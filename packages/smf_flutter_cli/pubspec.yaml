@@ -18,6 +18,8 @@ dependencies:
   meta: ^1.17.0
   path: ^1.9.1
   mason: ^0.1.1
+  mustachex: ^1.0.0
+  yaml_edit: ^2.2.2
 
   # Packages
   smf_firebase_core:
@@ -28,6 +30,8 @@ dependencies:
     path: ../smf_firebase_analytics
   smf_contracts:
     path: ../smf_contracts
+  smf_get_it:
+    path: ../smf_get_it
 
 dev_dependencies:
   test: ^1.24.0

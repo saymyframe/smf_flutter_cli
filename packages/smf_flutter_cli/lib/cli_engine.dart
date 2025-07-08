@@ -1,11 +1,16 @@
 import 'dart:io';
 
 import 'package:mason/mason.dart';
+import 'package:mustachex/mustachex.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_flutter_cli/bundles/smf_cli_brick_bundle.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
+import 'package:smf_flutter_cli/utils/utils.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:yaml_edit/yaml_edit.dart';
+
+const testPath = '/Users/ybeshkarov/gen/';
 
 Future<void> runCli() async {
   // Selected modules, dev only data.
@@ -30,6 +35,10 @@ Future<void> runCli() async {
 
   // Generate shared file contributions
   await _generateSharable(resolvedModules, logger, coreVars);
+
+  // Generate dependencies to pubspec
+  await _generatePubspecDependencies(
+      resolvedModules, logger, coreVars['app_name'] as String);
 }
 
 Future<void> _generateBrickContributions(
@@ -41,9 +50,7 @@ Future<void> _generateBrickContributions(
     for (final brick in module.brickContributions) {
       final generator = await MasonGenerator.fromBundle(brick.bundle);
 
-      final target = DirectoryGeneratorTarget(
-        Directory('/Users/ybeshkarov/gen/'),
-      );
+      final target = DirectoryGeneratorTarget(Directory(testPath));
 
       final generateProgress = logger.progress(
         '🔄 Generating from ${brick.name}',
@@ -91,21 +98,26 @@ Future<void> _generateSharable(
     final bundle = sampleContribution.bundle;
 
     final generator = await MasonGenerator.fromBundle(bundle);
-    final target =
-        DirectoryGeneratorTarget(Directory('/Users/ybeshkarov/gen/'));
+    final target = DirectoryGeneratorTarget(Directory(testPath));
 
     // Prepare variables for the bundle
     var vars = coreVars..addAll(sampleContribution.vars ?? {});
+
+    // Processor for shared contribution content
+    final processor = MustachexProcessor(initialVariables: vars);
 
     // Process each slot
     for (final slot in slotContributions.keys) {
       final contributions = slotContributions[slot]!
 
         // Sort by order if specified
-        ..sort((a, b) => (a.order ?? 0).compareTo(b.order ?? 0));
+        ..sort((a, b) =>
+            (a.order ?? maxIntValue).compareTo(b.order ?? maxIntValue));
 
-      // Combine content for this slot
-      final combinedContent = contributions.map((c) => c.content).join();
+      final renderedContents = await Future.wait(
+        contributions.map((c) => processor.process(c.content)),
+      );
+      final combinedContent = renderedContents.join();
       vars[slot] = combinedContent;
     }
 
@@ -126,6 +138,39 @@ Future<void> _generateSharable(
       '✅ Generated shared content in ${files.length} file(s)',
     );
   }
+}
+
+Future<void> _generatePubspecDependencies(
+  List<IModuleCodeContributor> modules,
+  Logger logger,
+  String appName,
+) async {
+  final dependencies = modules
+      .map((m) => m.moduleDescriptor.pubDependency)
+      .expand((e) => e)
+      .toSet();
+  final devDependencies = modules
+      .map((m) => m.moduleDescriptor.pubDevDependency)
+      .expand((e) => e)
+      .toSet();
+  final file = File(
+    '$testPath${toSnakeCase(appName)}/pubspec.yaml',
+  );
+
+  final yaml = await file.readAsString();
+  final editor = YamlEditor(yaml);
+
+  void updatePubspec(Set<String> dependencies, String pubSpecSection) {
+    for (final dependency in dependencies) {
+      final split = dependency.split(':');
+      editor.update([pubSpecSection, split.first], split.last);
+    }
+  }
+
+  updatePubspec(dependencies, 'dependencies');
+  updatePubspec(devDependencies, 'dev_dependencies');
+
+  await file.writeAsString(editor.toString());
 }
 
 FileConflictResolution _mapMergeStrategy(FileMergeStrategy strategy) {
