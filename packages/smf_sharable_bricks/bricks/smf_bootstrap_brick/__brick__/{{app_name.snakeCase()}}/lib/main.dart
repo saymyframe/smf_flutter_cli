@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 {{{.}}}
 {{/imports}}
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   {{#bootstrap}}
   {{{.}}}
   {{/bootstrap}}

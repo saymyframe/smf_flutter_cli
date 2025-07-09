@@ -10,8 +10,8 @@ executables:
   smfflutter: smf_flutter
 
 dependencies:
-  args: ^2.7.0
   ansi_styles: ^0.3.2+1
+  args: ^2.7.0
   cli_util: ^0.4.2
   file: ^7.0.1
   interact: ^2.2.0

@@ -14,36 +14,12 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
   @override
   List<SharedFileContribution> get sharedFileContributions => [
     SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.imports.slot,
-      content: '''
-      import 'package:firebase_analytics/firebase_analytics.dart';
-      import 'package:package_info_plus/package_info_plus.dart';
-      ''',
-    ),
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.bootstrap.slot,
-      content: '''
-      // Firebase Analytics -------------
-      final analytics = FirebaseAnalytics.instance;
-          // TODO: refactor to a separate service
-    final info = await PackageInfo.fromPlatform();
-    await analytics.setDefaultEventParameters({
-      'app_version': info.version,
-      'build_number': info.buildNumber,
-      'platform': Platform.operatingSystem,
-    });
-    // Firebase Analytics EMD -------------
-      ''',
-    ),
-
-    SharedFileContribution(
       bundle: smfCoreDiBrickBundle,
       slot: SharableCodeSlots.imports.slot,
       content: '''
       import 'package:{{app_name_sc}}/services/analytics/firebase/firebase_analytics_service.dart';
       import 'package:{{app_name_sc}}/services/analytics/i_analytics_service.dart';
+      import 'package:firebase_analytics/firebase_analytics.dart';
       ''',
     ),
     SharedFileContribution(

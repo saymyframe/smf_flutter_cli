@@ -1,4 +1,4 @@
-name: app
+name: {{app_name.snakeCase()}}
 description: "A new Flutter project."
 publish_to: 'none'
 version: 0.1.0

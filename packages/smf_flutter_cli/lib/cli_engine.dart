@@ -52,12 +52,12 @@ Future<void> _generateBrickContributions(
 
       final target = DirectoryGeneratorTarget(Directory(testPath));
 
+      var vars = coreVars..addAll(brick.vars ?? {});
+      await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
+
       final generateProgress = logger.progress(
         '🔄 Generating from ${brick.name}',
       );
-
-      var vars = coreVars..addAll(brick.vars ?? {});
-      await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
 
       final files = await generator.generate(
         target,
@@ -121,11 +121,11 @@ Future<void> _generateSharable(
       vars[slot] = combinedContent;
     }
 
+    await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
+
     final generateProgress = logger.progress(
       '🔄 Generating shared content for $bundleKey',
     );
-
-    await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
 
     final files = await generator.generate(
       target,
@@ -154,7 +154,7 @@ Future<void> _generatePubspecDependencies(
       .expand((e) => e)
       .toSet();
   final file = File(
-    '$testPath${toSnakeCase(appName)}/pubspec.yaml',
+    '$testPath${appName.snakeCase}/pubspec.yaml',
   );
 
   final yaml = await file.readAsString();
@@ -163,7 +163,7 @@ Future<void> _generatePubspecDependencies(
   void updatePubspec(Set<String> dependencies, String pubSpecSection) {
     for (final dependency in dependencies) {
       final split = dependency.split(':');
-      editor.update([pubSpecSection, split.first], split.last);
+      editor.update([pubSpecSection, split.first.trim()], split.last.trim());
     }
   }
 
