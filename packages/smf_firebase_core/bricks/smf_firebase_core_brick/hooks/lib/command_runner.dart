@@ -3,11 +3,10 @@ import 'dart:io';
 import 'package:mason/mason.dart';
 
 class CommandRunner {
-  static Future<ProcessResult> run(
+  static Future<void> run(
     String command,
     List<String> args, {
     required Logger logger,
-    bool throwOnError = true,
     String? workingDirectory,
     bool runInShell = false,
   }) async {
@@ -22,12 +21,38 @@ class CommandRunner {
     );
 
     _logResult(logger, result, commandString);
+    _throwIfProcessFailed(result, command, args);
+  }
 
-    if (throwOnError) {
-      _throwIfProcessFailed(result, command, args);
-    }
+  static Future<void> start(
+    String command,
+    List<String> args, {
+    required Logger logger,
+    String? workingDirectory,
+    bool runInShell = true,
+    ProcessStartMode mode = ProcessStartMode.inheritStdio,
+  }) async {
+    final commandString = _buildCommandString(command, args);
+    logger.detail('🔄 Running: $commandString');
 
-    return result;
+    final process = await Process.start(
+      command,
+      args,
+      workingDirectory: workingDirectory,
+      runInShell: runInShell,
+      mode: mode,
+    );
+
+    final exitCode = await process.exitCode;
+    final result = ProcessResult(
+      process.pid,
+      exitCode,
+      '',
+      '',
+    );
+
+    _logResult(logger, result, commandString);
+    _throwIfProcessFailed(result, command, args);
   }
 
   static String _buildCommandString(String command, List<String> args) {
@@ -73,6 +98,10 @@ class CommandRunner {
         : 'Process failed with exit code ${result.exitCode}';
 
     throw ProcessException(
-        executable, arguments, errorMessage, result.exitCode);
+      executable,
+      arguments,
+      errorMessage,
+      result.exitCode,
+    );
   }
 }

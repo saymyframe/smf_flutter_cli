@@ -1,3 +1,4 @@
+import 'package:path/path.dart';
 import 'package:smf_cli_hooks/src/constants/arguments.dart';
 import 'package:smf_cli_hooks/src/constants/constants.dart';
 import 'package:smf_cli_hooks/src/models/app_id.dart';
@@ -7,6 +8,7 @@ class SmfCoreConfig {
   SmfCoreConfig({
     required this.appName,
     required this.orgName,
+    required this.workingDirectory,
     AppId? appId,
     String? androidNamespace,
   }) {
@@ -51,10 +53,21 @@ class SmfCoreConfig {
       );
     }
 
+    final workingDir = vars['working_dir'];
+    if (workingDir is! String) {
+      throw ArgumentError.value(
+        vars,
+        'vars',
+        'Expected a value for key working_dir '
+            'to be of type String, got $workingDir.',
+      );
+    }
+
     return SmfCoreConfig(
       appName: appName ?? kDefaultAppName,
       orgName: orgName ?? kDefaultOrgName,
       appId: appId == null || appId.isEmpty ? null : AppId(appId),
+      workingDirectory: join(workingDir, appName ?? kDefaultAppName),
     );
   }
 
@@ -62,4 +75,5 @@ class SmfCoreConfig {
   final String orgName;
   late final AppId appId;
   late final String androidNamespace;
+  final String workingDirectory;
 }

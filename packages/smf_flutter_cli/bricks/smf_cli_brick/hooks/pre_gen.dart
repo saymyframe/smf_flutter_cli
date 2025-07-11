@@ -9,5 +9,6 @@ void run(HookContext context) {
     'org_name': config.orgName,
     'application_id': config.appId,
     'android_namespace': config.androidNamespace,
+    'working_dir': config.workingDirectory,
   };
 }

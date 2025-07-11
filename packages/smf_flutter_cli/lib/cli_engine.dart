@@ -24,7 +24,7 @@ Future<void> runCli() async {
   final resolvedModules = resolver.resolve(modules);
 
   final generator = await MasonGenerator.fromBundle(smfCliBrickBundle);
-  var coreVars = <String, dynamic>{};
+  var coreVars = <String, dynamic>{kWorkingDirectory: testPath};
   await generator.hooks.preGen(
     vars: coreVars,
     onVarsChanged: (v) => coreVars = v,
@@ -53,7 +53,11 @@ Future<void> _generateBrickContributions(
       final target = DirectoryGeneratorTarget(Directory(testPath));
 
       var vars = coreVars..addAll(brick.vars ?? {});
-      await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
+      await generator.hooks.preGen(
+        vars: vars,
+        onVarsChanged: (v) => vars = v,
+        logger: logger,
+      );
 
       final generateProgress = logger.progress(
         '🔄 Generating from ${brick.name}',
@@ -67,6 +71,12 @@ Future<void> _generateBrickContributions(
       );
 
       generateProgress.complete('✅ Generated ${files.length} file(s)');
+
+      await generator.hooks.postGen(
+        vars: vars,
+        onVarsChanged: (v) => vars = v,
+        logger: logger,
+      );
     }
   }
 }
@@ -121,7 +131,11 @@ Future<void> _generateSharable(
       vars[slot] = combinedContent;
     }
 
-    await generator.hooks.preGen(vars: vars, onVarsChanged: (v) => vars = v);
+    await generator.hooks.preGen(
+      vars: vars,
+      onVarsChanged: (v) => vars = v,
+      logger: logger,
+    );
 
     final generateProgress = logger.progress(
       '🔄 Generating shared content for $bundleKey',
@@ -136,6 +150,12 @@ Future<void> _generateSharable(
 
     generateProgress.complete(
       '✅ Generated shared content in ${files.length} file(s)',
+    );
+
+    await generator.hooks.postGen(
+      vars: vars,
+      onVarsChanged: (v) => vars = v,
+      logger: logger,
     );
   }
 }

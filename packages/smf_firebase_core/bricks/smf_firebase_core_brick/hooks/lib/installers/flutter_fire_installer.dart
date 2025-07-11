@@ -1,12 +1,17 @@
-import 'package:interact/interact.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_firebase_core_brick_hooks/command_runner.dart';
+import 'package:smf_firebase_core_brick_hooks/installers/i_installer.dart';
+import 'package:smf_firebase_core_brick_hooks/prompts.dart';
 
-class FlutterFireInstaller {
-  FlutterFireInstaller(this._logger);
+class FlutterFireInstaller implements Installer {
+  const FlutterFireInstaller(this._logger);
 
   final Logger _logger;
 
+  @override
+  String get name => 'FlutterFire CLI';
+
+  @override
   Future<bool> checkInstallation() async {
     final progress = _logger.progress('🔄 Checking flutterfire_cli installed');
     try {
@@ -14,11 +19,12 @@ class FlutterFireInstaller {
       progress.complete('✅ flutterfire_cli installed');
       return true;
     } on Exception catch (_) {
-      progress.complete('❌ flutterfire_cli isn\'t installed');
+      progress.fail('❌ flutterfire_cli isn\'t installed');
       return false;
     }
   }
 
+  @override
   Future<bool> install() async {
     final progress = _logger.progress('🔄 Installing flutterfire_cli');
     try {
@@ -30,36 +36,28 @@ class FlutterFireInstaller {
       progress.complete('✅ flutterfire_cli installed');
       return true;
     } on Exception catch (_) {
-      progress.complete('❌ something went wrong');
+      progress.fail('❌ something went wrong');
       return false;
     }
   }
 
-  Future<bool> promptForInstallation() async {
-    return Confirm(
-      prompt: "FlutterFire CLI isn't installed on your system. "
-          "Do you want to install it now?",
-      defaultValue: true,
-    ).interact();
-  }
-
-  Future<bool> promptForConfirmation() async {
-    return Confirm(
-      prompt: 'Are you sure? All modules related to Firebase will be disabled',
-      defaultValue: false,
-    ).interact();
-  }
-
+  @override
   Future<bool> ensureInstalled() async {
     final isInstalled = await checkInstallation();
 
     if (!isInstalled) {
-      final shouldInstall = await promptForInstallation();
+      final shouldInstall = await promptForInstallation(
+        "FlutterFire CLI isn't installed on your system. "
+        "Do you want to install it now?",
+      );
 
       if (shouldInstall) {
         return await install();
       } else {
-        final confirmed = await promptForConfirmation();
+        final confirmed = await promptForConfirmation(
+          'Are you sure? All modules related to Firebase will be disabled',
+        );
+
         if (confirmed) {
           return await install();
         }
@@ -67,5 +65,23 @@ class FlutterFireInstaller {
     }
 
     return isInstalled;
+  }
+
+  @override
+  Future<bool> configure({
+    required String workingDirectory,
+  }) async {
+    final process = await CommandRunner.start(
+      'flutterfire',
+      ['configure'],
+      logger: _logger,
+      workingDirectory: workingDirectory,
+      runInShell: true,
+    );
+
+    return false;
+
+    // final exitCode = await process.exitCode;
+    // return exitCode == 0;
   }
 }

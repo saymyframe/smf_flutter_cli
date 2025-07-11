@@ -1,17 +1,23 @@
 import 'package:mason/mason.dart';
-import 'package:smf_firebase_core_brick_hooks/flutter_fire_installer.dart';
+import 'package:smf_firebase_core_brick_hooks/smf_firebase_core_hook.dart';
 
 void run(HookContext context) async {
-  final logger = Logger();
-  final installer = FlutterFireInstaller(logger);
+  final workDirectory = context.vars['working_dir'];
+  if (workDirectory is! String) {
+    throw throw ArgumentError.value(
+      context.vars,
+      'vars',
+      'Expected a value for key working_dir to be of type String, got $workDirectory.',
+    );
+  }
 
-  // Ensure FlutterFire CLI is installed
-  await installer.ensureInstalled();
+  final isInstalled = await SmfFirebaseCoreHook(
+    context.logger,
+    workingDirectory: workDirectory,
+  ).run();
 
-  // Disable logging before last installation checking
-  logger.level = Level.quiet;
   // Update context variables
   context.vars = {
-    'flutterfire_installed': await installer.checkInstallation(),
+    'flutterfire_installed': isInstalled,
   };
 }
