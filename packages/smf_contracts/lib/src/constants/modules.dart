@@ -6,3 +6,4 @@ const kFirebaseAnalytics = 'Firebase Analytics';
 const kFirebaseCrashlytics = 'Firebase Crashlytics';
 const kFlutterCoreModule = 'Flutter Core';
 const kGetItModule = 'Get It';
+const kCommunicationModule = 'Communication module';

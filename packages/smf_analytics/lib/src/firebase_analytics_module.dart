@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
 import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
+
+import '../bundles/smf_firebase_analytics_brick_bundle.dart';
 
 class FirebaseAnalyticsModule implements IModuleCodeContributor {
   @override

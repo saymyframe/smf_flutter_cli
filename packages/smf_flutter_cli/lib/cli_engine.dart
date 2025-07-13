@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:mason/mason.dart';
 import 'package:mustachex/mustachex.dart';
+import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_flutter_cli/bundles/smf_cli_brick_bundle.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:smf_flutter_cli/utils/utils.dart';
@@ -18,7 +18,8 @@ Future<void> runCli() async {
     SmfCoreModule(),
     FirebaseAnalyticsModule(),
   ];
-  final logger = Logger(level: Level.verbose);
+
+  final logger = Logger();
 
   const resolver = ModuleDependencyResolver();
   final resolvedModules = resolver.resolve(modules);
