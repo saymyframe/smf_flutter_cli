@@ -15,14 +15,14 @@ class FirebaseCoreModule implements IModuleCodeContributor {
   List<SharedFileContribution> get sharedFileContributions => [
     SharedFileContribution(
       bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.imports.slot,
+      slot: BootstrapSharedCodeSlots.imports,
       content: '''
       import 'package:firebase_core/firebase_core.dart';
         ''',
     ),
     SharedFileContribution(
       bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.bootstrap.slot,
+      slot: BootstrapSharedCodeSlots.bootstrap,
       content: '''
       // Firebase Core -------------
       await Firebase.initializeApp();

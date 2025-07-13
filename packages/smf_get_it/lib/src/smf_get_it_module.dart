@@ -19,14 +19,14 @@ class SmfGetItModule implements IModuleCodeContributor {
   List<SharedFileContribution> get sharedFileContributions => [
     SharedFileContribution(
       bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.imports.slot,
+      slot: BootstrapSharedCodeSlots.imports,
       content: '''
       import 'package:{{app_name_sc}}/core/di/core_di.dart';
       ''',
     ),
     SharedFileContribution(
       bundle: smfBootstrapBrickBundle,
-      slot: SharableCodeSlots.bootstrap.slot,
+      slot: BootstrapSharedCodeSlots.bootstrap,
       order: 1,
       content: '''
       setUpCoreDI();

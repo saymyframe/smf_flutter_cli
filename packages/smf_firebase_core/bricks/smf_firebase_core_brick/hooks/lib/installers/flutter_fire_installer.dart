@@ -71,17 +71,16 @@ class FlutterFireInstaller implements Installer {
   Future<bool> configure({
     required String workingDirectory,
   }) async {
-    final process = await CommandRunner.start(
-      'flutterfire',
-      ['configure'],
-      logger: _logger,
-      workingDirectory: workingDirectory,
-      runInShell: true,
-    );
-
-    return false;
-
-    // final exitCode = await process.exitCode;
-    // return exitCode == 0;
+    try {
+      await CommandRunner.start(
+        'flutterfire',
+        ['configure', '--platforms=ios,android'],
+        logger: _logger,
+        workingDirectory: workingDirectory,
+      );
+      return true;
+    } on Exception catch (_) {
+      return false;
+    }
   }
 }

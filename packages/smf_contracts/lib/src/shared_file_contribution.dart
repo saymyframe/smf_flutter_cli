@@ -21,18 +21,20 @@ class SharedFileContribution {
   });
 
   final MasonBundle bundle;
-  final String slot;
+  final SharedCodeSlot slot;
   final String content;
   final int? order;
   final Map<String, dynamic>? vars;
 }
 
-class SharedFileContributionGroup {
-  const SharedFileContributionGroup({
-    required this.bundle,
-    required this.contributions,
+class SharedCodeSlot {
+  const SharedCodeSlot({
+    required this.tag,
+    required this.filePath,
+    required this.description,
   });
 
-  final MasonBundle bundle;
-  final List<SharedFileContribution> contributions;
+  final String tag;
+  final String filePath;
+  final String description;
 }

@@ -94,8 +94,9 @@ Future<void> _generateSharable(
     for (final contribution in module.sharedFileContributions) {
       final bundleKey = contribution.bundle.name;
       sharedContributions.putIfAbsent(bundleKey, () => {});
-      sharedContributions[bundleKey]!.putIfAbsent(contribution.slot, () => []);
-      sharedContributions[bundleKey]![contribution.slot]!.add(contribution);
+      sharedContributions[bundleKey]!
+          .putIfAbsent(contribution.slot.tag, () => []);
+      sharedContributions[bundleKey]![contribution.slot.tag]!.add(contribution);
     }
   }
 

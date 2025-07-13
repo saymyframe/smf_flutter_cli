@@ -15,7 +15,7 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
   List<SharedFileContribution> get sharedFileContributions => [
     SharedFileContribution(
       bundle: smfCoreDiBrickBundle,
-      slot: SharableCodeSlots.imports.slot,
+      slot: CoreDiSharedCodeSlots.imports,
       content: '''
       import 'package:{{app_name_sc}}/services/analytics/firebase/firebase_analytics_service.dart';
       import 'package:{{app_name_sc}}/services/analytics/i_analytics_service.dart';
@@ -24,7 +24,7 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
     ),
     SharedFileContribution(
       bundle: smfCoreDiBrickBundle,
-      slot: SharableCodeSlots.di.slot,
+      slot: CoreDiSharedCodeSlots.di,
       content: '''
         getIt.registerLazySingleton<IAnalyticsService>(
         () => FirebaseAnalyticsService(FirebaseAnalytics.instance),
