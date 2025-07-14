@@ -1,6 +1,6 @@
 import 'package:event_bus/event_bus.dart';
-import 'package:{{app_name.snakeCase()}}/services/communication/base_event.dart';
-import 'package:{{app_name.snakeCase()}}/services/communication/i_communication_service.dart';
+import 'package:{{app_name.snakeCase()}}/core/services/communication/base_event.dart';
+import 'package:{{app_name.snakeCase()}}/core/services/communication/i_communication_service.dart';
 
 class EventBusService implements ICommunicationService {
   const EventBusService(this._eventBus);

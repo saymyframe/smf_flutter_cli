@@ -14,6 +14,12 @@ class CoreDiSharedCodeSlots implements ISharableSlots {
     description: 'Register dependency using di system',
   );
 
+  static final homeWidget = SharedCodeSlot(
+    tag: SharableCodeSlots.widget.slot,
+    filePath: 'lib/feature/home/home_screen.dart',
+    description: 'Widget for the home screen',
+  );
+
   @override
-  List<SharedCodeSlot> get all => [imports, di];
+  List<SharedCodeSlot> get all => [imports, di, homeWidget];
 }

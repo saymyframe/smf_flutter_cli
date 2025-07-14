@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:{{app_name.snakeCase()}}/features/home/bloc/home_bloc.dart';
+{{#imports}}
+{{{.}}}
+{{/imports}}
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -38,6 +41,10 @@ class HomeScreen extends StatelessWidget {
                     return const SizedBox.shrink();
                   },
                 ),
+
+              {{#widget}}
+              {{{.}}}
+              {{/widget}}
               ],
             ),
           ),

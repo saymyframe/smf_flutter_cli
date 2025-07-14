@@ -1,5 +1,5 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:{{app_name.snakeCase()}}/services/analytics/i_analytics_service.dart';
+import 'package:{{app_name.snakeCase()}}/core/services/analytics/i_analytics_service.dart';
 
 class FirebaseAnalyticsService implements IAnalyticsService {
   const FirebaseAnalyticsService(this._analytics);

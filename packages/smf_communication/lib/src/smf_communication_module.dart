@@ -10,7 +10,7 @@ class SmfCommunicationModule implements IModuleCodeContributor {
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-    name: 'smf event bus module',
+    name: 'Event Bus',
     description: 'Communication between modules build on top of event bus',
     pubDependency: {'event_bus: ^2.0.1', 'equatable: ^2.0.7'},
   );
@@ -23,6 +23,7 @@ class SmfCommunicationModule implements IModuleCodeContributor {
       content: '''
       import 'package:{{app_name_sc}}/core/services/communication/event_bus/event_bus_service.dart';
       import 'package:{{app_name_sc}}/core/services/communication/i_communication_service.dart';
+      import 'package:event_bus/event_bus.dart';
       ''',
     ),
     SharedFileContribution(

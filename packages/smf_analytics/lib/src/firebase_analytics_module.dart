@@ -1,7 +1,6 @@
+import 'package:smf_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
-
-import '../bundles/smf_firebase_analytics_brick_bundle.dart';
 
 class FirebaseAnalyticsModule implements IModuleCodeContributor {
   @override
@@ -18,8 +17,8 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
       bundle: smfCoreDiBrickBundle,
       slot: CoreDiSharedCodeSlots.imports,
       content: '''
-      import 'package:{{app_name_sc}}/services/analytics/firebase/firebase_analytics_service.dart';
-      import 'package:{{app_name_sc}}/services/analytics/i_analytics_service.dart';
+      import 'package:{{app_name_sc}}/core/services/analytics/firebase/firebase_analytics_service.dart';
+      import 'package:{{app_name_sc}}/core/services/analytics/i_analytics_service.dart';
       import 'package:firebase_analytics/firebase_analytics.dart';
       ''',
     ),
@@ -30,6 +29,25 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
         getIt.registerLazySingleton<IAnalyticsService>(
         () => FirebaseAnalyticsService(FirebaseAnalytics.instance),
         );
+      ''',
+    ),
+    SharedFileContribution(
+      bundle: smfBootstrapBrickBundle,
+      slot: CoreDiSharedCodeSlots.homeWidget,
+      content: '''
+        TextButton(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => AnalyticsScreen())),
+                  child: Text('Open analytics screen'),
+                ),
+      ''',
+    ),
+    SharedFileContribution(
+      bundle: smfBootstrapBrickBundle,
+      slot: CoreDiSharedCodeSlots.imports,
+      content: '''
+      import 'package:{{app_name_sc}}/features/analytics/analytics_screen.dart';
       ''',
     ),
   ];

@@ -25,10 +25,15 @@ Future<void> runCli() async {
   final resolvedModules = resolver.resolve(modules);
 
   final generator = await MasonGenerator.fromBundle(smfCliBrickBundle);
-  var coreVars = <String, dynamic>{kWorkingDirectory: testPath};
+  final coreVars = <String, dynamic>{
+    kWorkingDirectory: testPath,
+    'modules':
+        '[${resolvedModules.map((e) => "'${e.moduleDescriptor.name}'").join(',')}]',
+  };
   await generator.hooks.preGen(
     vars: coreVars,
-    onVarsChanged: (v) => coreVars = v,
+    onVarsChanged: coreVars.addAll,
+    logger: logger,
   );
 
   // Generate individual brick contributions
@@ -53,10 +58,10 @@ Future<void> _generateBrickContributions(
 
       final target = DirectoryGeneratorTarget(Directory(testPath));
 
-      var vars = coreVars..addAll(brick.vars ?? {});
+      final vars = coreVars..addAll(brick.vars ?? {});
       await generator.hooks.preGen(
         vars: vars,
-        onVarsChanged: (v) => vars = v,
+        onVarsChanged: vars.addAll,
         logger: logger,
       );
 
@@ -73,11 +78,7 @@ Future<void> _generateBrickContributions(
 
       generateProgress.complete('✅ Generated ${files.length} file(s)');
 
-      await generator.hooks.postGen(
-        vars: vars,
-        onVarsChanged: (v) => vars = v,
-        logger: logger,
-      );
+      await generator.hooks.postGen(vars: vars, logger: logger);
     }
   }
 }
@@ -113,7 +114,7 @@ Future<void> _generateSharable(
     final target = DirectoryGeneratorTarget(Directory(testPath));
 
     // Prepare variables for the bundle
-    var vars = coreVars..addAll(sampleContribution.vars ?? {});
+    final vars = coreVars..addAll(sampleContribution.vars ?? {});
 
     // Processor for shared contribution content
     final processor = MustachexProcessor(initialVariables: vars);
@@ -135,7 +136,7 @@ Future<void> _generateSharable(
 
     await generator.hooks.preGen(
       vars: vars,
-      onVarsChanged: (v) => vars = v,
+      onVarsChanged: vars.addAll,
       logger: logger,
     );
 
@@ -154,11 +155,7 @@ Future<void> _generateSharable(
       '✅ Generated shared content in ${files.length} file(s)',
     );
 
-    await generator.hooks.postGen(
-      vars: vars,
-      onVarsChanged: (v) => vars = v,
-      logger: logger,
-    );
+    await generator.hooks.postGen(vars: vars, logger: logger);
   }
 }
 
