@@ -1,6 +1,5 @@
 import 'package:smf_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
 
 class FirebaseAnalyticsModule implements IModuleCodeContributor {
   @override
@@ -12,51 +11,63 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
   ];
 
   @override
-  List<SharedFileContribution> get sharedFileContributions => [
-    SharedFileContribution(
-      bundle: smfCoreDiBrickBundle,
-      slot: CoreDiSharedCodeSlots.imports,
-      content: '''
-      import 'package:{{app_name_sc}}/core/services/analytics/firebase/firebase_analytics_service.dart';
-      import 'package:{{app_name_sc}}/core/services/analytics/i_analytics_service.dart';
-      import 'package:firebase_analytics/firebase_analytics.dart';
-      ''',
-    ),
-    SharedFileContribution(
-      bundle: smfCoreDiBrickBundle,
-      slot: CoreDiSharedCodeSlots.di,
-      content: '''
-        getIt.registerLazySingleton<IAnalyticsService>(
-        () => FirebaseAnalyticsService(FirebaseAnalytics.instance),
-        );
-      ''',
-    ),
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: CoreDiSharedCodeSlots.homeWidget,
-      content: '''
-        TextButton(
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => AnalyticsScreen())),
-                  child: Text('Open analytics screen'),
-                ),
-      ''',
-    ),
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: CoreDiSharedCodeSlots.imports,
-      content: '''
-      import 'package:{{app_name_sc}}/features/analytics/analytics_screen.dart';
-      ''',
-    ),
-  ];
-
-  @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
     name: kFirebaseAnalytics,
     description: 'Firebase Analytics module',
     dependsOn: {kFirebaseCore, kGetItModule},
     pubDependency: {'firebase_analytics: ^11.5.2'},
   );
+
+  @override
+  List<Contribution> get sharedFileContributions => [
+    InsertImport(
+      file: 'lib/features/home/home_screen.dart',
+      import:
+          "import 'package:{{app_name_sc}}/features/analytics/analytics_screen.dart';",
+    ),
+    InsertIntoListInMethodInClass(
+      file: 'lib/features/home/home_screen.dart',
+      className: 'HomeScreen',
+      method: 'build',
+      listVariableMatch: 'children',
+      parentExpressionMatch: 'Column',
+      index: 0,
+      insert: '''
+      TextButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => AnalyticsScreen()),
+        ),
+        child: Text('Open analytics screen'),
+      ),
+      ''',
+    ),
+  ];
+
+  @override
+  List<DiDependencyGroup> get di => [
+    DiDependencyGroup(
+      diDependencies: [
+        DiDependency(
+          abstractType: 'IAnalyticsService',
+          implementation:
+              'FirebaseAnalyticsService(FirebaseAnalytics.instance)',
+          bindingType: DiBindingType.singleton,
+        ),
+      ],
+      scope: DiScope.core,
+      imports: [
+        DiImport.core(
+          DiImportAnchor.coreService,
+          'analytics/firebase/firebase_analytics_service.dart',
+        ),
+        DiImport.core(
+          DiImportAnchor.coreService,
+          'analytics/i_analytics_service.dart',
+        ),
+        DiImport.direct(
+          "import 'package:firebase_analytics/firebase_analytics.dart';",
+        ),
+      ],
+    ),
+  ];
 }

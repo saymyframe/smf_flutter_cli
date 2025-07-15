@@ -1,8 +1,10 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_get_it/bundles/smf_get_it_brick_bundle.dart';
-import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
+import 'package:smf_get_it/src/di_dsl_generator.dart';
 
-class SmfGetItModule implements IModuleCodeContributor {
+class SmfGetItModule
+    with EmptyModuleCodeContributor, DiDslGenerator
+    implements IModuleCodeContributor, DiDslAwareCodeGenerator {
   @override
   List<BrickContribution> get brickContributions => [
     BrickContribution(name: 'get_it', bundle: smfGetItBrickBundle),
@@ -16,21 +18,16 @@ class SmfGetItModule implements IModuleCodeContributor {
   );
 
   @override
-  List<SharedFileContribution> get sharedFileContributions => [
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: BootstrapSharedCodeSlots.imports,
-      content: '''
-      import 'package:{{app_name_sc}}/core/di/core_di.dart';
-      ''',
+  List<Contribution> get sharedFileContributions => [
+    InsertImport(
+      file: 'lib/main.dart',
+      import: "import 'package:{{app_name_sc}}/core/di/core_di.dart';",
     ),
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: BootstrapSharedCodeSlots.bootstrap,
-      order: 1,
-      content: '''
-      setUpCoreDI();
-      ''',
+    InsertIntoFunction(
+      file: 'lib/main.dart',
+      function: 'main',
+      afterStatement: 'WidgetsFlutterBinding.ensureInitialized',
+      insert: "setUpCoreDI();",
     ),
   ];
 }

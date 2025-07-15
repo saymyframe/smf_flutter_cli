@@ -10,6 +10,8 @@ dependencies:
   analyzer: ^7.5.9
   dart_style: ^3.1.0
   path: ^1.9.1
+  mustachex: ^1.0.0
+  mason_logger: ^0.3.3
 
 dev_dependencies:
   lints: ^5.0.0

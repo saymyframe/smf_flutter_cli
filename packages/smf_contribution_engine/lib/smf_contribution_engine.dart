@@ -5,4 +5,4 @@ library;
 
 export 'src/contribution.dart';
 export 'src/contributions/contributions.dart';
-export 'src/smf_path_engine.dart';
+export 'src/smf_patch_engine.dart';

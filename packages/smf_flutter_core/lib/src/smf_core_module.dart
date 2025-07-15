@@ -1,8 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/smf_flutter_core_bundle.dart';
-import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
 
-class SmfCoreModule implements IModuleCodeContributor {
+class SmfCoreModule
+    with EmptyModuleCodeContributor
+    implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
     BrickContribution(name: 'flutter_core', bundle: smfFlutterCoreBundle),
@@ -18,21 +19,23 @@ class SmfCoreModule implements IModuleCodeContributor {
   );
 
   @override
-  List<SharedFileContribution> get sharedFileContributions => [
-    SharedFileContribution(
-      bundle: smfCoreDiBrickBundle,
-      slot: CoreDiSharedCodeSlots.imports,
-      content: '''
-      import 'package:{{app_name_sc}}/core/services/system/i_system_service.dart';
-      import 'package:{{app_name_sc}}/core/services/system/system_service.dart';
-      ''',
-    ),
-    SharedFileContribution(
-      bundle: smfCoreDiBrickBundle,
-      slot: CoreDiSharedCodeSlots.di,
-      content: '''
-      getIt.registerLazySingleton<ISystemService>(SystemService.new);
-        ''',
+  List<DiDependencyGroup> get di => [
+    DiDependencyGroup(
+      diDependencies: [
+        DiDependency(
+          abstractType: 'ISystemService',
+          implementation: 'SystemService()',
+          bindingType: DiBindingType.singleton,
+        ),
+      ],
+      scope: DiScope.core,
+      imports: [
+        DiImport.core(
+          DiImportAnchor.coreService,
+          'system/i_system_service.dart',
+        ),
+        DiImport.core(DiImportAnchor.coreService, 'system/system_service.dart'),
+      ],
     ),
   ];
 }

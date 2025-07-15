@@ -4,6 +4,10 @@ import 'package:mason/mason.dart';
 import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/bundles/smf_cli_brick_bundle.dart';
+import 'package:smf_flutter_cli/generators/brick_generator.dart';
+import 'package:smf_flutter_cli/generators/dsl_generator.dart';
+import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
+import 'package:smf_flutter_cli/generators/sharable_generator.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:yaml_edit/yaml_edit.dart';
@@ -35,14 +39,30 @@ Future<void> runCli() async {
   );
 
   // Generate individual brick contributions
-  await _generateBrickContributions(resolvedModules, logger, coreVars);
+  await BrickGenerator().generate(resolvedModules, logger, coreVars, testPath);
 
   // Generate shared file contributions
-  await _generateSharable(resolvedModules, logger, coreVars);
+  await SharableGenerator().generate(
+    resolvedModules,
+    logger,
+    coreVars,
+    coreVars[kWorkingDirectory] as String,
+  );
+
+  await DslGenerator().generate(
+    resolvedModules,
+    logger,
+    coreVars,
+    coreVars[kWorkingDirectory] as String,
+  );
 
   // Generate dependencies to pubspec
-  await _generatePubspecDependencies(
-      resolvedModules, logger, coreVars['app_name'] as String);
+  await PubspecGenerator().generate(
+    resolvedModules,
+    logger,
+    coreVars,
+    coreVars[kWorkingDirectory] as String,
+  );
 }
 
 Future<void> _generateBrickContributions(

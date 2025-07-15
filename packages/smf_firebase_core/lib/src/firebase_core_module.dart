@@ -1,8 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/bundles/smf_firebase_core_brick_bundle.dart';
-import 'package:smf_sharable_bricks/smf_sharable_bricks.dart';
 
-class FirebaseCoreModule implements IModuleCodeContributor {
+class FirebaseCoreModule
+    with EmptyModuleCodeContributor
+    implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
     BrickContribution(
@@ -12,23 +13,20 @@ class FirebaseCoreModule implements IModuleCodeContributor {
   ];
 
   @override
-  List<SharedFileContribution> get sharedFileContributions => [
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: BootstrapSharedCodeSlots.imports,
-      content: '''
-      import 'package:firebase_core/firebase_core.dart';
-        ''',
+  List<Contribution> get sharedFileContributions => [
+    InsertImport(
+      file: 'lib/main.dart',
+      import: "import 'package:firebase_core/firebase_core.dart';",
     ),
-    SharedFileContribution(
-      bundle: smfBootstrapBrickBundle,
-      slot: BootstrapSharedCodeSlots.bootstrap,
-      content: '''
+    InsertIntoFunction(
+      file: 'lib/main.dart',
+      function: 'main',
+      afterStatement: 'WidgetsFlutterBinding.ensureInitialized',
+      insert: '''
       // Firebase Core -------------
       await Firebase.initializeApp();
       // Firebase Core END -------------
-        ''',
-      order: 0,
+      ''',
     ),
   ];
 

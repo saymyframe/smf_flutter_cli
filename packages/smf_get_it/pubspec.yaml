@@ -8,10 +8,11 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
+  mason_logger: ^0.3.3
   smf_contracts:
     path: ../smf_contracts
-  smf_sharable_bricks:
-    path: ../smf_sharable_bricks
+  path: ^1.9.1
+  mustachex: ^1.0.0
 
 dev_dependencies:
   lints: ^5.0.0

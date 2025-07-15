@@ -1,11 +1,22 @@
-import 'package:smf_contracts/src/brick_contribution.dart';
-import 'package:smf_contracts/src/module_descriptor.dart';
-import 'package:smf_contracts/src/shared_file_contribution.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 abstract interface class IModuleCodeContributor {
   List<BrickContribution> get brickContributions;
 
-  List<SharedFileContribution> get sharedFileContributions;
+  List<Contribution> get sharedFileContributions;
 
   ModuleDescriptor get moduleDescriptor;
+
+  List<DiDependencyGroup> get di;
+}
+
+mixin EmptyModuleCodeContributor implements IModuleCodeContributor {
+  @override
+  List<BrickContribution> get brickContributions => const [];
+
+  @override
+  List<Contribution> get sharedFileContributions => const [];
+
+  @override
+  List<DiDependencyGroup> get di => const [];
 }
