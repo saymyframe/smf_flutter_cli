@@ -18,7 +18,6 @@ dependencies:
   meta: ^1.17.0
   path: ^1.9.1
   mason: ^0.1.1
-  mustachex: ^1.0.0
   yaml_edit: ^2.2.2
 
   # Packages
@@ -34,6 +33,8 @@ dependencies:
     path: ../smf_get_it
   smf_communication:
     path: ../smf_communication
+  smf_contribution_engine:
+    path: ../smf_contribution_engine
 
 dev_dependencies:
   test: ^1.24.0
