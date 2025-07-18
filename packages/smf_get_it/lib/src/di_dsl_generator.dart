@@ -1,5 +1,6 @@
 import 'package:mason_logger/mason_logger.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_get_it/src/contributors/get_it_code_generator.dart';
 import 'package:smf_get_it/src/contributors/module_di_contributor.dart';
 
 import 'contributors/contributors.dart';
@@ -18,6 +19,7 @@ mixin DiDslGenerator implements DiDslAwareCodeGenerator {
 
     await CoreDiContributor(
       projectRoot: projectRootPath,
+      coreGenerator: const GetItCodeGenerator(),
       logger: logger,
     ).contribute(coreDependencies, mustacheVariables: mustacheVariables);
 

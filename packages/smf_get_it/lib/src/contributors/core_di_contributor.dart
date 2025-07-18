@@ -5,7 +5,13 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_get_it/src/contributors/contributors.dart';
 
 class CoreDiContributor extends DiContributor {
-  const CoreDiContributor({required super.projectRoot, super.logger});
+  const CoreDiContributor({
+    required super.projectRoot,
+    required this.coreGenerator,
+    super.logger,
+  });
+
+  final DiCodeGenerator coreGenerator;
 
   @override
   Future<List<File?>> contribute(
@@ -55,9 +61,10 @@ class CoreDiContributor extends DiContributor {
 
     final buff = StringBuffer();
     for (final dependency in dependencies) {
-      buff.writeln(generateDependency(dependency, logger: logger));
+      buff.writeln(coreGenerator.generate(dependency));
     }
 
+    logger?.detail('Generated bindins ${buff.toString()}');
     return buff.toString();
   }
 }

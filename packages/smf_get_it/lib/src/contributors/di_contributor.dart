@@ -23,25 +23,4 @@ abstract class DiContributor {
         return join(projectRoot, group.pathToDiTemplate);
     }
   }
-
-  String generateDependency(DiDependency dependency, {Logger? logger}) {
-    late String binding;
-
-    switch (dependency.bindingType) {
-      case DiBindingType.singleton:
-        binding = 'registerLazySingleton';
-        break;
-
-      case DiBindingType.factory:
-        binding = 'registerFactory';
-        break;
-    }
-
-    final output =
-        'getIt.$binding<${dependency.abstractType}>'
-        '(() => ${dependency.implementation});';
-
-    logger?.detail('Generating binding $output');
-    return output;
-  }
 }
