@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:mason/mason.dart';
 import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -10,7 +8,6 @@ import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
 import 'package:smf_flutter_cli/generators/sharable_generator.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
-import 'package:yaml_edit/yaml_edit.dart';
 
 const testPath = '/Users/ybeshkarov/gen/';
 
@@ -63,101 +60,4 @@ Future<void> runCli() async {
     coreVars,
     coreVars[kWorkingDirectory] as String,
   );
-}
-
-Future<void> _generateBrickContributions(
-  List<IModuleCodeContributor> modules,
-  Logger logger,
-  Map<String, dynamic> coreVars,
-) async {
-  for (final module in modules) {
-    for (final brick in module.brickContributions) {
-      final generator = await MasonGenerator.fromBundle(brick.bundle);
-
-      final target = DirectoryGeneratorTarget(Directory(testPath));
-
-      final vars = coreVars..addAll(brick.vars ?? {});
-      await generator.hooks.preGen(
-        vars: vars,
-        onVarsChanged: vars.addAll,
-        logger: logger,
-      );
-
-      final generateProgress = logger.progress(
-        '🔄 Generating from ${brick.name}',
-      );
-
-      final files = await generator.generate(
-        target,
-        vars: vars,
-        fileConflictResolution: _mapMergeStrategy(brick.mergeStrategy),
-        logger: logger,
-      );
-
-      generateProgress.complete('✅ Generated ${files.length} file(s)');
-
-      await generator.hooks.postGen(vars: vars, logger: logger);
-    }
-  }
-}
-
-Future<void> _generateSharable(
-  List<IModuleCodeContributor> modules,
-  Logger logger,
-  Map<String, dynamic> coreVars,
-) async {
-  final contributions =
-      modules.map((m) => m.sharedFileContributions).expand((e) => e).toList();
-
-  await PatchEngine(
-    contributions,
-    projectRoot: coreVars[kWorkingDirectory] as String,
-    mustacheVariables: coreVars,
-    logger: logger,
-  ).applyAll();
-}
-
-Future<void> _generatePubspecDependencies(
-  List<IModuleCodeContributor> modules,
-  Logger logger,
-  String appName,
-) async {
-  final dependencies = modules
-      .map((m) => m.moduleDescriptor.pubDependency)
-      .expand((e) => e)
-      .toSet();
-  final devDependencies = modules
-      .map((m) => m.moduleDescriptor.pubDevDependency)
-      .expand((e) => e)
-      .toSet();
-  final file = File(
-    '$testPath${appName.snakeCase}/pubspec.yaml',
-  );
-
-  final yaml = await file.readAsString();
-  final editor = YamlEditor(yaml);
-
-  void updatePubspec(Set<String> dependencies, String pubSpecSection) {
-    for (final dependency in dependencies) {
-      final split = dependency.split(':');
-      editor.update([pubSpecSection, split.first.trim()], split.last.trim());
-    }
-  }
-
-  updatePubspec(dependencies, 'dependencies');
-  updatePubspec(devDependencies, 'dev_dependencies');
-
-  await file.writeAsString(editor.toString());
-}
-
-FileConflictResolution _mapMergeStrategy(FileMergeStrategy strategy) {
-  switch (strategy) {
-    case FileMergeStrategy.appendToFile:
-      return FileConflictResolution.append;
-    case FileMergeStrategy.injectByTag:
-      return FileConflictResolution.prompt;
-    case FileMergeStrategy.overwrite:
-  }
-
-  return FileConflictResolution.overwrite;
 }
