@@ -1,4 +1,3 @@
-import 'package:path/path.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 class DiImport {
@@ -10,13 +9,17 @@ class DiImport {
   final String import;
 
   String resolve() {
-    if (anchor != null) {
-      return join(
-        anchor!.path.replaceFirst('lib', "import 'package:{{app_name_sc}}"),
-        import,
-      );
+    String addSemicolonIfMissing(String import) {
+      return import.endsWith(';') ? import : '$import;';
     }
 
-    return import.replaceFirst('lib', "import 'package:{{app_name_sc}}");
+    final cleanedImport = import.replaceFirst('lib/', '');
+    const package = "import 'package:{{app_name_sc}}";
+    if (anchor != null) {
+      final cleanedAnchor = anchor!.path.replaceFirst('lib/', '');
+      return addSemicolonIfMissing("$package/$cleanedAnchor$cleanedImport'");
+    }
+
+    return addSemicolonIfMissing(import.trim());
   }
 }
