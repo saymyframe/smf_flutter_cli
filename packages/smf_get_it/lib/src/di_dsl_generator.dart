@@ -1,35 +1,35 @@
-import 'package:mason_logger/mason_logger.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_get_it/src/contributors/get_it_code_generator.dart';
 import 'package:smf_get_it/src/contributors/module_di_contributor.dart';
 
 import 'contributors/contributors.dart';
 
-mixin DiDslGenerator implements DiDslAwareCodeGenerator {
+mixin DiDslGenerator implements DslAwareCodeGenerator {
   @override
-  Future<void> generateFromDiDsl({
-    required List<DiDependencyGroup> diGroups,
-    required String projectRootPath,
-    Map<String, dynamic>? mustacheVariables,
-    Logger? logger,
-  }) async {
-    final coreDependencies = diGroups
+  Future<void> generateFromDsl(DslContext context) async {
+    final coreDependencies = context.diGroups
         .where((g) => g.scope == DiScope.core)
         .toList();
 
     await CoreDiContributor(
-      projectRoot: projectRootPath,
+      projectRoot: context.projectRootPath,
       coreGenerator: const GetItCodeGenerator(),
-      logger: logger,
-    ).contribute(coreDependencies, mustacheVariables: mustacheVariables);
+      logger: context.logger,
+    ).contribute(
+      coreDependencies,
+      mustacheVariables: context.mustacheVariables,
+    );
 
-    final moduleDependencies = diGroups
+    final moduleDependencies = context.diGroups
         .where((g) => g.scope == DiScope.module)
         .toList();
 
     await ModuleDiContributor(
-      projectRoot: projectRootPath,
-      logger: logger,
-    ).contribute(moduleDependencies, mustacheVariables: mustacheVariables);
+      projectRoot: context.projectRootPath,
+      logger: context.logger,
+    ).contribute(
+      moduleDependencies,
+      mustacheVariables: context.mustacheVariables,
+    );
   }
 }

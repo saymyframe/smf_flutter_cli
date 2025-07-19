@@ -4,7 +4,7 @@ import 'package:smf_get_it/src/di_dsl_generator.dart';
 
 class SmfGetItModule
     with EmptyModuleCodeContributor, DiDslGenerator
-    implements IModuleCodeContributor, DiDslAwareCodeGenerator {
+    implements IModuleCodeContributor, DslAwareCodeGenerator {
   @override
   List<BrickContribution> get brickContributions => [
     BrickContribution(name: 'get_it', bundle: smfGetItBrickBundle),
