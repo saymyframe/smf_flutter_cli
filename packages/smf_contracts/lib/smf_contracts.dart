@@ -12,3 +12,4 @@ export 'src/generators/generators.dart';
 export 'src/module_contributor.dart';
 export 'src/module_descriptor.dart';
 export 'src/mustache/mustache.dart';
+export 'src/routing/routing.dart';

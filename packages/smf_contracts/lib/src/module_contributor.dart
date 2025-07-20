@@ -8,6 +8,8 @@ abstract interface class IModuleCodeContributor {
   ModuleDescriptor get moduleDescriptor;
 
   List<DiDependencyGroup> get di;
+
+  RouteGroup get routes;
 }
 
 mixin EmptyModuleCodeContributor implements IModuleCodeContributor {
@@ -19,4 +21,7 @@ mixin EmptyModuleCodeContributor implements IModuleCodeContributor {
 
   @override
   List<DiDependencyGroup> get di => const [];
+
+  @override
+  RouteGroup get routes => RouteGroup.empty();
 }
