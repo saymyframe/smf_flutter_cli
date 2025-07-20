@@ -14,7 +14,7 @@ class CoreDiContributor extends DiContributor {
   final DiCodeGenerator coreGenerator;
 
   @override
-  Future<List<File?>> contribute(
+  Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
     Map? mustacheVariables,
   }) async {
@@ -40,7 +40,7 @@ class CoreDiContributor extends DiContributor {
 
     final file = File(writeTo(groups.first));
     final processed = await processor.process(await file.readAsString());
-    return [await file.writeAsString(processed)];
+    return [GeneratedFile(file.path, processed)];
   }
 
   String _imports(List<DiDependencyGroup> groups) {

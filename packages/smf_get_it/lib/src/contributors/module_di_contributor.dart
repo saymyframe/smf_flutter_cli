@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_get_it/src/contributors/contributors.dart';
 
@@ -7,7 +5,7 @@ class ModuleDiContributor extends DiContributor {
   ModuleDiContributor({required super.projectRoot, super.logger});
 
   @override
-  Future<List<File?>> contribute(
+  Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
     Map? mustacheVariables,
   }) async {

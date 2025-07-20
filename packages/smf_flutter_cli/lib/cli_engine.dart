@@ -2,6 +2,8 @@ import 'package:mason/mason.dart';
 import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/bundles/smf_cli_brick_bundle.dart';
+import 'package:smf_flutter_cli/file_writers/composite_write_strategy.dart';
+import 'package:smf_flutter_cli/file_writers/default_write_strategy.dart';
 import 'package:smf_flutter_cli/generators/brick_generator.dart';
 import 'package:smf_flutter_cli/generators/dsl_generator.dart';
 import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
@@ -19,7 +21,6 @@ Future<void> runCli() async {
   ];
 
   final logger = Logger();
-
   const resolver = ModuleDependencyResolver();
   final resolvedModules = resolver.resolve(modules);
 
@@ -35,6 +36,8 @@ Future<void> runCli() async {
     logger: logger,
   );
 
+  final writeStrategy = CompositeWriteStrategy([DefaultWriteStrategy()]);
+
   // Generate individual brick contributions
   await BrickGenerator().generate(resolvedModules, logger, coreVars, testPath);
 
@@ -46,7 +49,7 @@ Future<void> runCli() async {
     coreVars[kWorkingDirectory] as String,
   );
 
-  await DslGenerator().generate(
+  await DslGenerator(writeStrategy).generate(
     resolvedModules,
     logger,
     coreVars,

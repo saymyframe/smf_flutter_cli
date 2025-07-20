@@ -2,6 +2,8 @@ import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 abstract class Generator {
+  const Generator();
+
   Future<void> generate(
     List<IModuleCodeContributor> modules,
     Logger logger,

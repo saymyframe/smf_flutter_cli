@@ -1,5 +1,5 @@
-import 'package:smf_contracts/src/generators/dsl_context.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 abstract interface class DslAwareCodeGenerator {
-  Future<void> generateFromDsl(DslContext context);
+  Future<List<GeneratedFile>> generateFromDsl(DslContext context);
 }

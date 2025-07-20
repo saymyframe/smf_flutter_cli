@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -10,7 +8,7 @@ abstract class DiContributor {
   final String projectRoot;
   final Logger? logger;
 
-  Future<List<File?>> contribute(
+  Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
     Map? mustacheVariables,
   });
