@@ -1,8 +1,7 @@
 class RouteShellLink {
-  const RouteShellLink(this.shellName);
+  const RouteShellLink(this.id);
 
-  factory RouteShellLink.toMainTabsShell() =>
-      const RouteShellLink('MainTabsShell');
+  factory RouteShellLink.toMainTabsShell() => const RouteShellLink('main-tabs');
 
-  final String shellName;
+  final String id;
 }

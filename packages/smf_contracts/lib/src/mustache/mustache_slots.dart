@@ -1,9 +1,11 @@
 enum MustacheSlots {
   imports._('imports'),
   bootstrap._('bootstrap'),
-  routes._('routes'),
+  router._('router'),
+  appRoutes._('appRoutes'),
   di._('di'),
-  widget._('widget');
+  tabsWidget._('tabsWidget'),
+  pagesWidget._('pagesWidget');
 
   const MustacheSlots._(this.slot);
 

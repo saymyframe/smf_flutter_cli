@@ -7,3 +7,5 @@ const kFirebaseCrashlytics = 'Firebase Crashlytics';
 const kFlutterCoreModule = 'Flutter Core';
 const kGetItModule = 'Get It';
 const kCommunicationModule = 'Communication module';
+const kGoRouterModule = 'Go Router';
+const kHomeFeatureModule = 'Home Feature';

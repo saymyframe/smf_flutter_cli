@@ -1,8 +1,7 @@
-import 'package:path/path.dart';
 import 'package:smf_contracts/src/routing/import/import.dart';
 
 class RouteImport {
-  const RouteImport.features(this.anchor, this.import) : assert(anchor != null);
+  const RouteImport.features(this.import) : anchor = RouteImportAnchor.features;
 
   const RouteImport.direct(this.import) : anchor = null;
 
@@ -10,13 +9,17 @@ class RouteImport {
   final String import;
 
   String resolve() {
-    if (anchor != null) {
-      return join(
-        anchor!.path.replaceFirst('lib', "import 'package:{{app_name_sc}}"),
-        import,
-      );
+    String addSemicolonIfMissing(String import) {
+      return import.endsWith(';') ? import : '$import;';
     }
 
-    return import.replaceFirst('lib', "import 'package:{{app_name_sc}}");
+    final cleanedImport = import.replaceFirst('lib/', '');
+    const package = "import 'package:{{app_name_sc}}";
+    if (anchor != null) {
+      final cleanedAnchor = anchor!.path.replaceFirst('lib/', '');
+      return addSemicolonIfMissing("$package/$cleanedAnchor$cleanedImport'");
+    }
+
+    return addSemicolonIfMissing(import.trim());
   }
 }

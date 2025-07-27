@@ -2,12 +2,12 @@ import 'package:smf_contracts/src/routing/routing.dart';
 
 class NestedRoute extends BaseRoute {
   const NestedRoute({
-    required this.path,
     required this.children,
-    super.name,
-    super.guards = const [],
+    required this.shellLink,
+    super.guards,
+    super.imports,
   });
 
-  final String path;
-  final List<BaseRoute> children;
+  final List<Route> children;
+  final RouteShellLink shellLink;
 }

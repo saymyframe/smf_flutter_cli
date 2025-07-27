@@ -13,6 +13,13 @@ class FirebaseCoreModule
   ];
 
   @override
+  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+    name: kFirebaseCore,
+    description: 'Firebase Core module',
+    pubDependency: {'firebase_core: ^3.15.1'},
+  );
+
+  @override
   List<Contribution> get sharedFileContributions => [
     InsertImport(
       file: 'lib/main.dart',
@@ -29,11 +36,4 @@ class FirebaseCoreModule
       ''',
     ),
   ];
-
-  @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-    name: kFirebaseCore,
-    description: 'Firebase Core module',
-    pubDependency: {'firebase_core: ^3.15.1'},
-  );
 }

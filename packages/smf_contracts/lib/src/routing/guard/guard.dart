@@ -1,2 +1,2 @@
-export 'binding/guard_implementation.dart';
+export 'binding/binding.dart';
 export 'route_guard.dart';

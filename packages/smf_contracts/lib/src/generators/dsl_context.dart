@@ -7,7 +7,8 @@ class DslContext {
     required this.mustacheVariables,
     required this.logger,
     this.diGroups = const [],
-    // this.routeDefinitions = const [],
+    this.routeGroups = const [],
+    this.shellDeclarations = const [],
   });
 
   final String projectRootPath;
@@ -15,5 +16,6 @@ class DslContext {
   final Logger logger;
 
   final List<DiDependencyGroup> diGroups;
-  // final List<RouteDefinition> routeDefinitions;
+  final List<RouteGroup> routeGroups;
+  final List<ShellDeclaration> shellDeclarations;
 }

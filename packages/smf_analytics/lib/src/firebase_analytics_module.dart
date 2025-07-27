@@ -1,7 +1,9 @@
 import 'package:smf_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
-class FirebaseAnalyticsModule implements IModuleCodeContributor {
+class FirebaseAnalyticsModule
+    with EmptyModuleCodeContributor
+    implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
     BrickContribution(
@@ -70,4 +72,21 @@ class FirebaseAnalyticsModule implements IModuleCodeContributor {
       ],
     ),
   ];
+
+  @override
+  RouteGroup get routes => RouteGroup(
+    routes: [
+      NestedRoute(
+        shellLink: RouteShellLink.toMainTabsShell(),
+        children: [
+          Route(
+            path: '/analytics',
+            screen: RouteScreen('AnalyticsScreen'),
+            meta: RouteMeta(label: 'Analytics', icon: 'Icons.star'),
+            imports: [RouteImport.features('analytics/analytics_screen.dart')],
+          ),
+        ],
+      ),
+    ],
+  );
 }

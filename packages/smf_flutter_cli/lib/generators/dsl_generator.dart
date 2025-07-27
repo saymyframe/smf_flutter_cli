@@ -24,11 +24,17 @@ class DslGenerator extends Generator {
     String generateTo,
   ) async {
     final dslGenerators = modules.whereType<DslAwareCodeGenerator>().toList();
+    final diGroups = modules.map((m) => m.di).expand((e) => e).toList();
+    final routeGroups = modules.map((m) => m.routes).toList();
+    final shellDeclarations = _toShellDeclarations(routeGroups);
+
     final context = DslContext(
       projectRootPath: generateTo,
       mustacheVariables: coreVars,
       logger: logger,
-      diGroups: modules.map((m) => m.di).expand((e) => e).toList(),
+      diGroups: diGroups,
+      routeGroups: routeGroups,
+      shellDeclarations: shellDeclarations,
     );
 
     for (final dslGenerator in dslGenerators) {
@@ -37,5 +43,25 @@ class DslGenerator extends Generator {
         await strategy.write(file);
       }
     }
+  }
+
+  List<ShellDeclaration> _toShellDeclarations(List<RouteGroup> routeGroups) {
+    final shellIds = routeGroups
+        .expand((group) => group.routes)
+        .whereType<NestedRoute>()
+        .map((r) => r.shellLink.id)
+        .whereType<String>()
+        .toSet();
+
+    return shellIds.map((id) {
+      final declaration = ShellRegistry.resolve(id);
+      if (declaration == null) {
+        throw ArgumentError(
+          'Unknown shell link $id. Declare it in ShellRegistry.',
+        );
+      }
+
+      return declaration;
+    }).toList();
   }
 }

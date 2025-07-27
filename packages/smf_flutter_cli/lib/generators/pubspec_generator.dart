@@ -21,8 +21,8 @@ class PubspecGenerator extends Generator {
         .map((m) => m.moduleDescriptor.pubDevDependency)
         .expand((e) => e)
         .toSet();
-    final file = File('$generateTo/pubspec.yaml');
 
+    final file = File('$generateTo/pubspec.yaml');
     final yaml = await file.readAsString();
     final editor = YamlEditor(yaml);
 

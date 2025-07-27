@@ -10,6 +10,8 @@ import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
 import 'package:smf_flutter_cli/generators/sharable_generator.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_home_flutter/smf_home_flutter.dart';
 
 const testPath = '/Users/ybeshkarov/gen/';
 
@@ -18,6 +20,8 @@ Future<void> runCli() async {
   final modules = <IModuleCodeContributor>[
     SmfCoreModule(),
     FirebaseAnalyticsModule(),
+    SmfGoRouterModule(),
+    SmfHomeFlutterModule(),
   ];
 
   final logger = Logger();
