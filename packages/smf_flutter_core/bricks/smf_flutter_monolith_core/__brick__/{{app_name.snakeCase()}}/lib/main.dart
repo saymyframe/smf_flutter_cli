@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:{{app_name.snakeCase()}}/features/home/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -13,29 +13,19 @@ class SmfCoreModule
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
     name: kFlutterCoreModule,
     description: 'Core Flutter application module module',
-    dependsOn: {kCommunicationModule, kGetItModule},
-    pubDependency: {'flutter_bloc: ^9.1.1', 'freezed_annotation: ^3.1.0'},
-    pubDevDependency: {'build_runner: ^2.5.4', 'freezed: ^3.1.0'},
   );
 
   @override
-  List<DiDependencyGroup> get di => [
-    DiDependencyGroup(
-      diDependencies: [
-        DiDependency(
-          abstractType: 'ISystemService',
-          implementation: 'SystemService()',
-          bindingType: DiBindingType.singleton,
-        ),
-      ],
-      scope: DiScope.core,
-      imports: [
-        DiImport.core(
-          DiImportAnchor.coreService,
-          'system/i_system_service.dart',
-        ),
-        DiImport.core(DiImportAnchor.coreService, 'system/system_service.dart'),
-      ],
-    ),
-  ];
+  RouteGroup get routes => RouteGroup(
+    initialRoute: '/noModules',
+    routes: [
+      Route(
+        path: '/noModules',
+        screen: RouteScreen('NoModulesScreen'),
+        imports: [
+          Import.core(ImportAnchor.coreWidgets, 'no_modules_screen.dart'),
+        ],
+      ),
+    ],
+  );
 }
