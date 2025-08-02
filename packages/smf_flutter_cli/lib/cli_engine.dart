@@ -1,5 +1,4 @@
 import 'package:mason/mason.dart';
-import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/bundles/smf_cli_brick_bundle.dart';
 import 'package:smf_flutter_cli/file_writers/composite_write_strategy.dart';
@@ -8,54 +7,48 @@ import 'package:smf_flutter_cli/generators/brick_generator.dart';
 import 'package:smf_flutter_cli/generators/dsl_generator.dart';
 import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
 import 'package:smf_flutter_cli/generators/sharable_generator.dart';
+import 'package:smf_flutter_cli/promts/models/cli_context.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
-import 'package:smf_flutter_core/smf_flutter_core.dart';
-import 'package:smf_go_router/smf_go_router.dart';
-import 'package:smf_home_flutter/smf_home_flutter.dart';
 
-const testPath = '/Users/ybeshkarov/gen/';
-
-Future<void> runCli() async {
-  // Selected modules, dev only data.
-  final modules = <IModuleCodeContributor>[
-    SmfCoreModule(),
-    FirebaseAnalyticsModule(),
-    SmfGoRouterModule(),
-    SmfHomeFlutterModule(),
-  ];
-
-  final logger = Logger();
+Future<void> runCli(CliContext context) async {
   const resolver = ModuleDependencyResolver();
-  final resolvedModules = resolver.resolve(modules);
+  final resolvedModules = resolver.resolve(context.selectedModules);
 
-  final generator = await MasonGenerator.fromBundle(smfCliBrickBundle);
+  final cliGenerator = await MasonGenerator.fromBundle(smfCliBrickBundle);
   final coreVars = <String, dynamic>{
-    kWorkingDirectory: testPath,
+    kWorkingDirectory: context.outputDirectory,
     'modules':
         '[${resolvedModules.map((e) => "'${e.moduleDescriptor.name}'").join(',')}]',
+    'app_name': context.name,
+    'org_name': context.packageName,
   };
-  await generator.hooks.preGen(
+  await cliGenerator.hooks.preGen(
     vars: coreVars,
     onVarsChanged: coreVars.addAll,
-    logger: logger,
+    logger: context.logger,
   );
 
   final writeStrategy = CompositeWriteStrategy([DefaultWriteStrategy()]);
 
   // Generate individual brick contributions
-  await BrickGenerator().generate(resolvedModules, logger, coreVars, testPath);
+  await BrickGenerator().generate(
+    resolvedModules,
+    context.logger,
+    coreVars,
+    context.outputDirectory,
+  );
 
   // Generate shared file contributions
   await SharableGenerator().generate(
     resolvedModules,
-    logger,
+    context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,
   );
 
-  await DslGenerator(writeStrategy).generate(
+  await DslGenerator(writeStrategy, cliContext: context).generate(
     resolvedModules,
-    logger,
+    context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,
   );
@@ -63,8 +56,13 @@ Future<void> runCli() async {
   // Generate dependencies to pubspec
   await PubspecGenerator().generate(
     resolvedModules,
-    logger,
+    context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,
+  );
+
+  await cliGenerator.hooks.postGen(
+    vars: coreVars,
+    logger: context.logger,
   );
 }

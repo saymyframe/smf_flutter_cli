@@ -1,5 +1,13 @@
+import 'dart:async';
+
+import 'package:smf_analytics/smf_analytics.dart';
 import 'package:smf_flutter_cli/cli_engine.dart';
 import 'package:smf_flutter_cli/commands/base.dart';
+import 'package:smf_flutter_cli/promts/create_prompt.dart';
+import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_home_flutter/smf_home_flutter.dart';
 
 final class CreateCommand extends BaseCommand {
   CreateCommand() {
@@ -19,15 +27,30 @@ final class CreateCommand extends BaseCommand {
 
   @override
   Future<void> run() async {
-    print(argResults!['output']);
-    print(argResults!.rest.first);
-    print('${argResults!['output']}${argResults!.rest.first}');
-    // Process.run(
-    //   'flutter',
-    //   ['create', '${argResults!['output']}${argResults!.rest.first}'],
-    // );
+    return runCli(
+      CliContext(
+        name: 'my_cli_test_app',
+        selectedModules: [
+          SmfCoreModule(),
+          FirebaseAnalyticsModule(),
+          SmfGoRouterModule(),
+          SmfHomeFlutterModule(),
+        ],
+        outputDirectory: argResults?['output'] as String? ?? './',
+        logger: logger,
+      ),
+    );
 
-    // CreatePrompt().prompt();
-    runCli();
+    final preferences = CreatePrompt().prompt(argResults);
+    return runCli(
+      CliContext(
+        name: preferences.name,
+        packageName: preferences.packageName,
+        selectedModules: preferences.selectedModules,
+        outputDirectory: argResults?['output'] as String? ?? './',
+        initialRoute: preferences.initialRoute,
+        logger: logger,
+      ),
+    );
   }
 }

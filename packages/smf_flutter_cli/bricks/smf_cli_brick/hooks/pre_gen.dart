@@ -1,7 +1,7 @@
 import 'package:mason/mason.dart';
 import 'package:smf_cli_hooks/smf_core_hook_config.dart';
 
-void run(HookContext context) {
+Future<void> run(HookContext context) async {
   final config = SmfCoreConfig.fromHooksVars(context.vars);
 
   context.vars = {

@@ -2,6 +2,7 @@ import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/file_writers/composite_write_strategy.dart';
 import 'package:smf_flutter_cli/generators/generator.dart';
+import 'package:smf_flutter_cli/promts/models/cli_context.dart';
 
 /// Aggregates DSL data from all modules and invokes registered
 /// [DslAwareCodeGenerator] implementations using a unified [DslContext].
@@ -12,9 +13,10 @@ import 'package:smf_flutter_cli/generators/generator.dart';
 /// Note: adding new DSL types may require extending [DslContext],
 /// which is considered an acceptable and localized compromise.
 class DslGenerator extends Generator {
-  const DslGenerator(this.strategy);
+  const DslGenerator(this.strategy, {required this.cliContext});
 
   final CompositeWriteStrategy strategy;
+  final CliContext cliContext;
 
   @override
   Future<void> generate(
@@ -27,6 +29,7 @@ class DslGenerator extends Generator {
     final diGroups = modules.map((m) => m.di).expand((e) => e).toList();
     final routeGroups = modules.map((m) => m.routes).toList();
     final shellDeclarations = _toShellDeclarations(routeGroups);
+    final initialRoute = cliContext.initialRoute ?? '/noModules';
 
     final context = DslContext(
       projectRootPath: generateTo,
@@ -35,6 +38,7 @@ class DslGenerator extends Generator {
       diGroups: diGroups,
       routeGroups: routeGroups,
       shellDeclarations: shellDeclarations,
+      initialRoute: initialRoute,
     );
 
     for (final dslGenerator in dslGenerators) {
