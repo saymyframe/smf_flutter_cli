@@ -3,18 +3,18 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
 class InsertIntoMethodInClass extends Contribution {
-  final String className;
-  final String method;
-  final String afterStatement;
-  final String insert;
-
-  InsertIntoMethodInClass({
+  const InsertIntoMethodInClass({
     required super.file,
     required this.className,
     required this.method,
     required this.afterStatement,
     required this.insert,
   });
+
+  final String className;
+  final String method;
+  final String afterStatement;
+  final String insert;
 
   @override
   Future<String> apply(String original) async {

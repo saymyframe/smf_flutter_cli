@@ -4,13 +4,7 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
 class InsertIntoListInFunction extends Contribution {
-  final String function;
-  final String listVariableMatch;
-  final String parentExpressionMatch;
-  final String insert;
-  final int index;
-
-  InsertIntoListInFunction({
+  const InsertIntoListInFunction({
     required super.file,
     required this.function,
     required this.listVariableMatch,
@@ -18,6 +12,12 @@ class InsertIntoListInFunction extends Contribution {
     required this.insert,
     this.index = 0,
   });
+
+  final String function;
+  final String listVariableMatch;
+  final String parentExpressionMatch;
+  final String insert;
+  final int index;
 
   @override
   Future<String> apply(String original) async {
