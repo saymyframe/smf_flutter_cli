@@ -1,4 +1,4 @@
-import 'package:smf_contracts/src/routing/routing.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 abstract class BaseRoute {
   const BaseRoute({
@@ -11,5 +11,5 @@ abstract class BaseRoute {
   final String? name;
   final RouteScreen? screen;
   final List<RouteGuard> guards;
-  final List<RouteImport> imports;
+  final List<Import> imports;
 }

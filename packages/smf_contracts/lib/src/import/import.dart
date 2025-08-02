@@ -1,11 +1,13 @@
-import 'package:smf_contracts/src/routing/import/import.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
-class RouteImport {
-  const RouteImport.features(this.import) : anchor = RouteImportAnchor.features;
+class Import {
+  const Import.core(this.anchor, this.import) : assert(anchor != null);
 
-  const RouteImport.direct(this.import) : anchor = null;
+  const Import.direct(this.import) : anchor = null;
 
-  final RouteImportAnchor? anchor;
+  const Import.features(this.import) : anchor = ImportAnchor.features;
+
+  final ImportAnchor? anchor;
   final String import;
 
   String resolve() {

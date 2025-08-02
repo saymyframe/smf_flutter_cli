@@ -15,6 +15,6 @@ class DiDependencyGroup {
 
   final List<DiDependency> diDependencies;
   final DiScope scope;
-  final List<DiImport> imports;
+  final List<Import> imports;
   final String? pathToDiTemplate;
 }
