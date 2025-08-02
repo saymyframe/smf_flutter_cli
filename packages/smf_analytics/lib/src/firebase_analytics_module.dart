@@ -21,31 +21,6 @@ class FirebaseAnalyticsModule
   );
 
   @override
-  List<Contribution> get sharedFileContributions => [
-    InsertImport(
-      file: 'lib/features/home/home_screen.dart',
-      import:
-          "import 'package:{{app_name_sc}}/features/analytics/analytics_screen.dart';",
-    ),
-    InsertIntoListInMethodInClass(
-      file: 'lib/features/home/home_screen.dart',
-      className: 'HomeScreen',
-      method: 'build',
-      listVariableMatch: 'children',
-      parentExpressionMatch: 'Column',
-      index: 0,
-      insert: '''
-      TextButton(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => AnalyticsScreen()),
-        ),
-        child: Text('Open analytics screen'),
-      ),
-      ''',
-    ),
-  ];
-
-  @override
   List<DiDependencyGroup> get di => [
     DiDependencyGroup(
       diDependencies: [
@@ -58,15 +33,15 @@ class FirebaseAnalyticsModule
       ],
       scope: DiScope.core,
       imports: [
-        DiImport.core(
-          DiImportAnchor.coreService,
+        Import.core(
+          ImportAnchor.coreService,
           'analytics/firebase/firebase_analytics_service.dart',
         ),
-        DiImport.core(
-          DiImportAnchor.coreService,
+        Import.core(
+          ImportAnchor.coreService,
           'analytics/i_analytics_service.dart',
         ),
-        DiImport.direct(
+        Import.direct(
           "import 'package:firebase_analytics/firebase_analytics.dart';",
         ),
       ],
@@ -75,6 +50,7 @@ class FirebaseAnalyticsModule
 
   @override
   RouteGroup get routes => RouteGroup(
+    initialRoute: '/analytics',
     routes: [
       NestedRoute(
         shellLink: RouteShellLink.toMainTabsShell(),
@@ -83,7 +59,7 @@ class FirebaseAnalyticsModule
             path: '/analytics',
             screen: RouteScreen('AnalyticsScreen'),
             meta: RouteMeta(label: 'Analytics', icon: 'Icons.star'),
-            imports: [RouteImport.features('analytics/analytics_screen.dart')],
+            imports: [Import.features('analytics/analytics_screen.dart')],
           ),
         ],
       ),

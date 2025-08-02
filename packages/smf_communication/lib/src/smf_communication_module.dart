@@ -11,7 +11,7 @@ class SmfCommunicationModule
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-    name: 'Event Bus',
+    name: kCommunicationModule,
     description: 'Communication between modules build on top of event bus',
     pubDependency: {'event_bus: ^2.0.1', 'equatable: ^2.0.7'},
   );
@@ -28,15 +28,15 @@ class SmfCommunicationModule
       ],
       scope: DiScope.core,
       imports: [
-        DiImport.core(
-          DiImportAnchor.coreService,
+        Import.core(
+          ImportAnchor.coreService,
           'communication/event_bus/event_bus_service.dart',
         ),
-        DiImport.core(
-          DiImportAnchor.coreService,
+        Import.core(
+          ImportAnchor.coreService,
           'communication/i_communication_service.dart',
         ),
-        DiImport.direct("import 'package:event_bus/event_bus.dart';"),
+        Import.direct("import 'package:event_bus/event_bus.dart';"),
       ],
     ),
   ];

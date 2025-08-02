@@ -9,7 +9,12 @@ class TabsShellGenerator {
   }) {
     final buffer = StringBuffer();
 
-    final tabInfos = routes.map(_extractTabInfo).toList();
+    final tabInfos = routes.map(_extractTabInfo).toList()
+      ..sort(
+        (a, b) => (a.order ?? double.maxFinite).compareTo(
+          b.order ?? double.maxFinite,
+        ),
+      );
     for (final tab in tabInfos) {
       buffer.writeln(tab);
     }
@@ -25,17 +30,28 @@ class TabsShellGenerator {
       );
     }
 
-    return _TabInfo(path: route.path, label: meta.label, icon: meta.icon);
+    return _TabInfo(
+      path: route.path,
+      label: meta.label,
+      icon: meta.icon,
+      order: meta.order,
+    );
   }
 }
 
 /// Internal representation for generation.
 class _TabInfo {
-  _TabInfo({required this.path, required this.label, required this.icon});
+  _TabInfo({
+    required this.path,
+    required this.label,
+    required this.icon,
+    this.order,
+  });
 
   final String path;
   final String? label;
   final String icon;
+  final int? order;
 
   @override
   String toString() {

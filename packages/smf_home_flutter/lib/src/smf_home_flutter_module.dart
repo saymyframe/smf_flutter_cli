@@ -19,6 +19,7 @@ class SmfHomeFlutterModule
 
   @override
   RouteGroup get routes => RouteGroup(
+    initialRoute: '/home',
     routes: [
       NestedRoute(
         shellLink: RouteShellLink.toMainTabsShell(),
@@ -27,8 +28,8 @@ class SmfHomeFlutterModule
             path: '/home',
             name: 'homeScreen',
             screen: RouteScreen('HomeScreen'),
-            meta: RouteMeta(label: 'Home', icon: 'Icons.home'),
-            imports: [RouteImport.features('home/home_screen.dart')],
+            meta: RouteMeta(label: 'Home', icon: 'Icons.home', order: 0),
+            imports: [Import.features('home/home_screen.dart')],
           ),
         ],
       ),

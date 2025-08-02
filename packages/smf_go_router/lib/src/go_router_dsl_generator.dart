@@ -35,6 +35,7 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
 
     final buffer = StringBuffer();
     buffer.writeln('GoRouter(');
+    buffer.writeln('initialLocation: \'${context.initialRoute}\',');
     buffer.writeln('  routes: [');
     for (final route in routes) {
       final code = RouteGenerationStrategyRegistry.generate(

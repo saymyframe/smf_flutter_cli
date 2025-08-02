@@ -17,16 +17,25 @@ class SmfGoRouterModule
     pubDependency: {'go_router: ^16.0.0'},
   );
 
-  RouteGroup get routes => RouteGroup(
-    routes: [
-      Route(
-        path: '/',
-        guards: [
-          RouteGuard(
-            bindings: {RoutingMode.goRouter: GoRouteRedirect(code: "'/home'")},
-          ),
-        ],
-      ),
-    ],
-  );
+  @override
+  List<Contribution> get sharedFileContributions => [
+    InsertImport(
+      file: 'lib/main.dart',
+      import: "import 'package:{{app_name_sc}}/core/router/app_router.dart';",
+    ),
+
+    ReplaceWidget(
+      file: 'lib/main.dart',
+      fromWidget: 'MaterialApp',
+      toWidget: 'MaterialApp.router',
+      className: 'MainApp',
+      methodName: 'build',
+    ),
+    ModifyWidgetArguments(
+      file: 'lib/main.dart',
+      widgetName: 'router',
+      removeArgs: ['home'],
+      addArgs: {'routerConfig': 'router'},
+    ),
+  ];
 }

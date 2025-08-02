@@ -4,21 +4,21 @@ import 'package:{{app_name.snakeCase()}}/core/services/system/i_system_service.d
 import 'package:{{app_name.snakeCase()}}/core/typedef.dart';
 
 part 'home_bloc.freezed.dart';
+
 part 'home_events.dart';
+
 part 'home_states.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
-  HomeBloc(this._systemService) : super(const HomeLoadingState()) {
+  HomeBloc() : super(const HomeLoadingState()) {
     on<HomeFetchEvent>(_fetchEvent);
   }
 
   factory HomeBloc.create() {
-    return HomeBloc(getIt());
+    return HomeBloc();
   }
 
-  final ISystemService _systemService;
-
   Future<void> _fetchEvent(HomeEvent event, Emitter<HomeState> emit) async {
-    emit(ConnectedModulesState(_systemService.getConnectedModules()));
+    emit(ConnectedModulesState({{#modules}} {{{.}}} {{/modules}}));
   }
 }
