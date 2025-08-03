@@ -31,6 +31,7 @@ Future<void> runCli(CliContext context) async {
   final writeStrategy = CompositeWriteStrategy([DefaultWriteStrategy()]);
 
   // Generate individual brick contributions
+  context.logger.info('📦 Generating brick contributions...');
   await BrickGenerator().generate(
     resolvedModules,
     context.logger,
@@ -39,6 +40,7 @@ Future<void> runCli(CliContext context) async {
   );
 
   // Generate shared file contributions
+  context.logger.info('🔧 Applying shared file contributions...');
   await SharableGenerator().generate(
     resolvedModules,
     context.logger,
@@ -46,6 +48,7 @@ Future<void> runCli(CliContext context) async {
     coreVars[kWorkingDirectory] as String,
   );
 
+  context.logger.info('🛣️ Generating from dsls...');
   await DslGenerator(writeStrategy, cliContext: context).generate(
     resolvedModules,
     context.logger,
@@ -54,6 +57,7 @@ Future<void> runCli(CliContext context) async {
   );
 
   // Generate dependencies to pubspec
+  context.logger.info('📋 Updating pubspec.yaml...');
   await PubspecGenerator().generate(
     resolvedModules,
     context.logger,
@@ -61,6 +65,7 @@ Future<void> runCli(CliContext context) async {
     coreVars[kWorkingDirectory] as String,
   );
 
+  context.logger.info('🏁 Running post gen cli hook...');
   await cliGenerator.hooks.postGen(
     vars: coreVars,
     logger: context.logger,

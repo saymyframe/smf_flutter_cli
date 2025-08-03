@@ -15,7 +15,6 @@ final smfModules = <String, IModuleCodeContributor>{
   kCommunicationModule: SmfCommunicationModule(),
   kGoRouterModule: SmfGoRouterModule(),
   kHomeFeatureModule: SmfHomeFlutterModule(),
-  // kFirebaseCrashlytics,
 };
 
 const smfStateManagers = <String>[

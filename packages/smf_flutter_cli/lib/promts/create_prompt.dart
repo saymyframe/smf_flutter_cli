@@ -6,17 +6,24 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/constants/smf_modules.dart';
 import 'package:smf_flutter_cli/promts/models/project_preferences.dart';
 import 'package:smf_flutter_cli/promts/theme.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 
 class CreatePrompt {
-  ProjectPreferences prompt(ArgResults? argResult) {
+  ProjectPreferences prompt(
+    ArgResults? argResult, {
+    required List<String> allowedModules,
+  }) {
     stdout.writeln(
       "👋 Hello! Let's create a flutter project with Say my Frame.",
     );
 
-    return _collect(argResult);
+    return _collect(argResult, allowedModules: allowedModules);
   }
 
-  ProjectPreferences _collect(ArgResults? argResult) {
+  ProjectPreferences _collect(
+    ArgResults? argResult, {
+    required List<String> allowedModules,
+  }) {
     final name = argResult?.rest.first ??
         Input.withTheme(
           prompt: '👋 Enter project name: ',
@@ -31,34 +38,37 @@ class CreatePrompt {
           },
         ).interact();
 
-    final packageName = Input.withTheme(
-      prompt: '🏢 Enter package name: ',
-      theme: terminalTheme,
-      defaultValue: 'com.example.$name',
-    ).interact();
+    final packageName = argResult?['org'] as String? ??
+        Input.withTheme(
+          prompt: '🏢 Enter package name: ',
+          theme: terminalTheme,
+          defaultValue: 'com.example.$name',
+        ).interact();
 
-    // final stateManager = Select.withTheme(
-    //   prompt: 'Select state management approach',
-    //   options: smfStateManagers,
-    //   theme: terminalTheme,
-    // ).interact();
+    var selectedModules = _selectedModules(
+      argResult,
+      allowedModules: allowedModules,
+    );
 
-    final allModulesKeysList = smfModules.keys.toList();
-    final modules = MultiSelect.withTheme(
-      prompt: '📦 Select modules',
-      options: allModulesKeysList,
-      theme: terminalTheme,
-    ).interact();
+    if (selectedModules.isEmpty) {
+      final modules = MultiSelect.withTheme(
+        prompt: '📦 Select modules',
+        options: allowedModules,
+        theme: terminalTheme,
+      ).interact();
 
-    final selectedModules =
-        modules.map((i) => smfModules[allModulesKeysList[i]]!).toList();
-    final initialRoute = _initialRoute(selectedModules);
+      selectedModules = _resolveModule(
+        modules.map((i) => allowedModules[i]).toList(),
+      );
+    }
+
+    final initialRoute =
+        argResult?['route'] as String? ?? _initialRoute(selectedModules);
 
     return ProjectPreferences(
       name: name,
       packageName: packageName,
-      stateManager: '',
-      selectedModules: selectedModules,
+      selectedModules: [SmfCoreModule(), ...selectedModules],
       initialRoute: initialRoute,
     );
   }
@@ -76,5 +86,54 @@ class CreatePrompt {
     ).interact();
 
     return modulesWithInitialRoute[initialRoute].routes.initialRoute!;
+  }
+
+  List<IModuleCodeContributor> _selectedModules(
+    ArgResults? argResult, {
+    required List<String> allowedModules,
+  }) {
+    final modulesArg = argResult?['modules'] as String?;
+    var selectedModules = <String>[];
+
+    if (modulesArg != null && modulesArg.isNotEmpty) {
+      // Split by commas and clean up whitespace
+      selectedModules = modulesArg
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      // Remove duplicates
+      selectedModules = selectedModules.toSet().toList();
+
+      final invalidModules = selectedModules
+          .where((module) => !allowedModules.contains(module))
+          .toList();
+
+      if (invalidModules.isNotEmpty) {
+        throw ArgumentError(
+          'Invalid modules: ${invalidModules.join(', ')}. '
+          'Allowed modules: ${allowedModules.join(', ')}',
+        );
+      }
+
+      return _resolveModule(selectedModules);
+    }
+
+    return const [];
+  }
+
+  List<IModuleCodeContributor> _resolveModule(List<String> modules) {
+    return modules.map((e) {
+      final module = smfModules[e];
+      if (module == null) {
+        throw ArgumentError(
+          'Module "$e" is not registered. '
+          'Available modules: ${smfModules.keys.join(', ')}',
+        );
+      }
+
+      return module;
+    }).toList();
   }
 }
