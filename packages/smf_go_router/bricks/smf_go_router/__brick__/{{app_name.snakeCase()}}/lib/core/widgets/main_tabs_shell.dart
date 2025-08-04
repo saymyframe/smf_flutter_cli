@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:{{app_name.snakeCase()}}/core/services/navigation/navigation.dart';
 
 class MainTabsShell extends StatefulWidget {
   const MainTabsShell({super.key, required this.child});
@@ -26,7 +27,10 @@ class _MainTabsShellState extends State<MainTabsShell> {
   }
 
   void _onTap(int index) {
-    context.go(_tabs[index].path);
+    context.navigateTo(
+      NavigationTarget(routeName: _tabs[index].path),
+      strategy: NavigationStrategy.pushReplacement,
+    );
   }
 
   @override
@@ -35,18 +39,28 @@ class _MainTabsShellState extends State<MainTabsShell> {
 
     return Scaffold(
       body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: _onTap,
-        items: _tabs
-            .map(
-              (t) =>
-                  BottomNavigationBarItem(icon: Icon(t.icon), label: t.label),
-            )
-            .toList(),
+      bottomNavigationBar: BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: List.generate(_tabs.length, (index) {
+            final tab = _tabs[index];
+            final isSelected = index == currentIndex;
+
+            return IconButton(
+              icon: Icon(
+                tab.icon,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).iconTheme.color,
+              ),
+              onPressed: () => _onTap(index),
+            );
+          }),
+        ),
       ),
     );
   }
+
 }
 
 class _TabInfo {

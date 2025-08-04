@@ -13,12 +13,17 @@ abstract class DiContributor {
     Map? mustacheVariables,
   });
 
-  String writeTo(DiDependencyGroup group) {
-    switch (group.scope) {
+  String writeTo(DiScope scope, {String? pathToDiTemplate}) {
+    assert(
+      scope != DiScope.module || pathToDiTemplate?.isNotEmpty == true,
+      'pathToDiTemplate must be provided when scope is DiScope.module',
+    );
+
+    switch (scope) {
       case DiScope.core:
         return join(projectRoot, 'lib', 'core', 'di', 'core_di.dart');
       case DiScope.module:
-        return join(projectRoot, group.pathToDiTemplate);
+        return join(projectRoot, pathToDiTemplate);
     }
   }
 }

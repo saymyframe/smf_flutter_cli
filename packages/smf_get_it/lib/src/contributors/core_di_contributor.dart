@@ -18,11 +18,6 @@ class CoreDiContributor extends DiContributor {
     List<DiDependencyGroup> groups, {
     Map? mustacheVariables,
   }) async {
-    if (groups.isEmpty) {
-      logger?.info('Core di dependencies is empty.');
-      return [];
-    }
-
     final innerProcessor = MustachexProcessor(
       initialVariables: mustacheVariables,
     );
@@ -38,7 +33,7 @@ class CoreDiContributor extends DiContributor {
       },
     );
 
-    final file = File(writeTo(groups.first));
+    final file = File(writeTo(DiScope.core));
     final processed = await processor.process(await file.readAsString());
     return [GeneratedFile(file.path, processed)];
   }

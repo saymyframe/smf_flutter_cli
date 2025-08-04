@@ -1,7 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:{{app_name.snakeCase()}}/core/services/system/i_system_service.dart';
-import 'package:{{app_name.snakeCase()}}/core/typedef.dart';
 
 part 'home_bloc.freezed.dart';
 

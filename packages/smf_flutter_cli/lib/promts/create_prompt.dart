@@ -68,7 +68,11 @@ class CreatePrompt {
     return ProjectPreferences(
       name: name,
       packageName: packageName,
-      selectedModules: [SmfCoreModule(), ...selectedModules],
+      selectedModules: [
+        SmfCoreModule(),
+        SmfContractsModule(),
+        ...selectedModules
+      ],
       initialRoute: initialRoute,
     );
   }

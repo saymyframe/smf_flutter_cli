@@ -35,24 +35,30 @@ class CommandRunner {
     final commandString = _buildCommandString(command, args);
     logger.detail('🔄 Running: $commandString');
 
-    final process = await Process.start(
-      command,
-      args,
-      workingDirectory: workingDirectory,
-      runInShell: runInShell,
-      mode: mode,
-    );
+    try {
+      final process = await Process.start(
+        command,
+        args,
+        workingDirectory: workingDirectory,
+        runInShell: runInShell,
+        mode: mode,
+      );
 
-    final exitCode = await process.exitCode;
-    final result = ProcessResult(
-      process.pid,
-      exitCode,
-      '',
-      '',
-    );
+      final exitCode = await process.exitCode;
+      final result = ProcessResult(
+        process.pid,
+        exitCode,
+        '',
+        '',
+      );
 
-    _logResult(logger, result, commandString);
-    _throwIfProcessFailed(result, command, args);
+      _logResult(logger, result, commandString);
+      _throwIfProcessFailed(result, command, args);
+    } catch (_) {
+      rethrow;
+    } finally {
+      stdout.write('\x1B[?25h');
+    }
   }
 
   static String _buildCommandString(String command, List<String> args) {

@@ -2,6 +2,7 @@ library;
 
 export 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
+export 'smf_contracts_module.dart';
 export 'src/brick_contribution.dart';
 export 'src/constants/constants.dart';
 export 'src/di/di_contract.dart';

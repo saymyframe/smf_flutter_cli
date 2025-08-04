@@ -9,3 +9,4 @@ const kGetItModule = 'get_it';
 const kCommunicationModule = 'event_bus';
 const kGoRouterModule = 'go_router';
 const kHomeFeatureModule = 'home';
+const kContractsModule = 'contracts';

@@ -11,7 +11,12 @@ class ModuleDiContributor extends DiContributor {
   }) async {
     final byFile = <String, List<DiDependencyGroup>>{};
     for (final group in groups) {
-      byFile.putIfAbsent(writeTo(group), () => []).add(group);
+      byFile
+          .putIfAbsent(
+            writeTo(DiScope.module, pathToDiTemplate: group.pathToDiTemplate),
+            () => [],
+          )
+          .add(group);
     }
 
     return [];
