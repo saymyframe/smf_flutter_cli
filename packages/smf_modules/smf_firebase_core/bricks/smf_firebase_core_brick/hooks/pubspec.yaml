@@ -1,0 +1,8 @@
+name: smf_firebase_core_brick_hooks
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  mason: ^0.1.1
+  interact: ^2.2.0
