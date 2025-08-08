@@ -22,23 +22,23 @@ dependencies:
 
   # Packages
   smf_firebase_core:
-    path: ../smf_firebase_core
+    path: ../smf_modules/smf_firebase_core
   smf_flutter_core:
-    path: ../smf_flutter_core
+    path: ../smf_modules/smf_flutter_core
   smf_analytics:
-    path: ../smf_analytics
+    path: ../smf_modules/smf_analytics
   smf_contracts:
-    path: ../smf_contracts
+    path: ../smf_modules/smf_contracts
   smf_get_it:
-    path: ../smf_get_it
+    path: ../smf_modules/smf_get_it
   smf_communication:
-    path: ../smf_communication
+    path: ../smf_modules/smf_communication
   smf_contribution_engine:
-    path: ../smf_contribution_engine
+    path: ../smf_modules/smf_contribution_engine
   smf_go_router:
-    path: ../smf_go_router
+    path: ../smf_modules/smf_go_router
   smf_home_flutter:
-    path: ../smf_home_flutter
+    path: ../smf_modules/smf_home_flutter
 
 dev_dependencies:
   test: ^1.24.0
