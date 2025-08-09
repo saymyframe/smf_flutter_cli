@@ -9,7 +9,7 @@ environment:
 # Add regular dependencies here.
 dependencies:
   smf_contracts:
-    path: ../smf_contracts
+    path: ../../smf_contracts
 
 dev_dependencies:
   lints: ^5.0.0

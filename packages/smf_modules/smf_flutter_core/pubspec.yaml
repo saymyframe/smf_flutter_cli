@@ -10,7 +10,7 @@ environment:
 dependencies:
   mason: ^0.1.1
   smf_contracts:
-    path: ../smf_contracts
+    path: ../../smf_contracts
 
 dev_dependencies:
   lints: ^5.0.0

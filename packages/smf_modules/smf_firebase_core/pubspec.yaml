@@ -1,6 +1,7 @@
 name: smf_firebase_core
 description: A starting point for Dart libraries or applications.
 version: 1.0.0
+publish_to: none
 # repository: https://github.com/my_org/my_repo
 
 environment:
@@ -8,10 +9,10 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-
   smf_contracts:
-    path: ../smf_contracts
-
+    path: ../../smf_contracts
+  smf_contribution_engine:
+    path: ../smf_contribution_engine
 
 dev_dependencies:
   lints: ^5.0.0
