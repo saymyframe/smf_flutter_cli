@@ -1,10 +1,61 @@
-name: SMFFlutterCLI
+name: smf_flutter_cli
 repository: https://github.com/saymyframe/smf_flutter_cli
+homepage: https://saymyframe.com
+issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+
 packages:
-  - packages/**
-  - "*"
+  - packages/*
+  - packages/smf_modules/*
+
+ignore:
+  - "**/__brick__/**"
+  - "**/brick/**"
+  - "**/bricks/**"
+
+scripts:
+  gen:dev:
+    run: dart tools/restore_dev.dart
+
+  init:dev:
+    run: |
+      dart tools/fetch_modules.dart && \
+      dart tools/restore_dev.dart && \
+      melos bootstrap
+
+  bundle:
+    run: |
+      melos exec -c 6 --fail-fast --dir-exists="bricks" -- \
+        dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
+
+  # Quality gates
+  analyze:
+    run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
+  format:
+    run: melos exec -c 6 -- dart format . --fix
+  format:check:
+    run: melos exec -c 6 -- dart format . --output=none --set-exit-if-changed
+  test:
+    run: melos exec -c 4 --fail-fast -- dart test --reporter expanded
+  check:
+    run: |
+      melos run format:check && \
+      melos run analyze && \
+      melos run test
 
 command:
+  bootstrap:
+    # https://github.com/dart-lang/pub/issues/3404
+    runPubGetInParallel: false
+    hooks:
+      pre:
+        run: |
+          dart tools/fetch_modules.dart && \
+          dart tools/restore_dev.dart
+
+      # Automatically bundle after bootstrap so dev env is ready
+      post:
+        run: melos run bundle
+
   version:
     # Generate commit links in package changelogs.
     linkToCommits: true
