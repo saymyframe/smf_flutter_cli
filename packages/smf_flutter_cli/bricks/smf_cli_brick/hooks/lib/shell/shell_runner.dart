@@ -29,7 +29,7 @@ class ShellRunner {
     List<String> args, {
     required Logger logger,
     String? workingDirectory,
-    bool runInShell = true,
+    bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.inheritStdio,
   }) async {
     final commandString = _buildCommandString(command, args);
