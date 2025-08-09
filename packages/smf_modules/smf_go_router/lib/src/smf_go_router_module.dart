@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_go_router/bundles/smf_go_router_bundle.dart';
 import 'package:smf_go_router/src/go_router_dsl_generator.dart';
 

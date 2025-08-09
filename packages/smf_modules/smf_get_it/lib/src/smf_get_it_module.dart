@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_get_it/bundles/smf_get_it_brick_bundle.dart';
 import 'package:smf_get_it/src/di_dsl_generator.dart';
 

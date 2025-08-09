@@ -1,6 +1,7 @@
 name: smf_get_it
 description: A starting point for Dart libraries or applications.
 version: 1.0.0
+publish_to: none
 # repository: https://github.com/my_org/my_repo
 
 environment:
@@ -10,7 +11,9 @@ environment:
 dependencies:
   mason_logger: ^0.3.3
   smf_contracts:
-    path: ../smf_contracts
+    path: ../../smf_contracts
+  smf_contribution_engine:
+    path: ../smf_contribution_engine
   path: ^1.9.1
   mustachex: ^1.0.0
 

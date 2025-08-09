@@ -6,9 +6,6 @@
 # https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
  
-# Generated Mason bundles
-lib/bundles/*.dart
-
 # Melos local overrides
 pubspec_overrides.yaml
 

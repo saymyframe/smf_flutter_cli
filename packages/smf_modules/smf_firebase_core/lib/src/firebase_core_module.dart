@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_firebase_core/bundles/smf_firebase_core_brick_bundle.dart';
 
 class FirebaseCoreModule
