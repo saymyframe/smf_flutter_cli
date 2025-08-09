@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
 abstract interface class IModuleCodeContributor {
   List<BrickContribution> get brickContributions;
