@@ -1,5 +1,6 @@
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_flutter_cli/generators/generator.dart';
 
 class SharableGenerator extends Generator {

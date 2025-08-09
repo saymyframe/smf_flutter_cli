@@ -15,9 +15,9 @@ dependencies:
   cli_util: ^0.4.2
   file: ^7.0.1
   interact: ^2.2.0
+  mason: ^0.1.1
   meta: ^1.17.0
   path: ^1.9.1
-  mason: ^0.1.1
   yaml_edit: ^2.2.2
 
   # Packages
@@ -28,7 +28,7 @@ dependencies:
   smf_analytics:
     path: ../smf_modules/smf_analytics
   smf_contracts:
-    path: ../smf_modules/smf_contracts
+    path: ../smf_contracts
   smf_get_it:
     path: ../smf_modules/smf_get_it
   smf_communication:
