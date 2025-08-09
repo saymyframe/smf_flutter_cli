@@ -15,7 +15,7 @@ mixin DiDslGenerator implements DslAwareCodeGenerator {
     generatedFiles.addAll(
       await CoreDiContributor(
         projectRoot: context.projectRootPath,
-        coreGenerator: const GetItCodeGenerator(),
+        codeGenerator: const GetItCodeGenerator(),
         logger: context.logger,
       ).contribute(
         coreDependencies,
@@ -30,6 +30,7 @@ mixin DiDslGenerator implements DslAwareCodeGenerator {
     generatedFiles.addAll(
       await ModuleDiContributor(
         projectRoot: context.projectRootPath,
+        codeGenerator: const GetItCodeGenerator(),
         logger: context.logger,
       ).contribute(
         moduleDependencies,
