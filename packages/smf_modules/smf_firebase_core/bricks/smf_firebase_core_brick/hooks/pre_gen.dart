@@ -2,7 +2,6 @@ import 'package:mason/mason.dart';
 import 'package:smf_firebase_core_brick_hooks/smf_firebase_core_hook.dart';
 
 void run(HookContext context) async {
-  return;
   final workDirectory = context.vars['working_dir'];
   if (workDirectory is! String) {
     throw throw ArgumentError.value(
@@ -18,7 +17,5 @@ void run(HookContext context) async {
   ).run();
 
   // Update context variables
-  context.vars = {
-    'flutterfire_installed': isInstalled,
-  };
+  context.vars['flutterfire_installed'] = isInstalled;
 }
