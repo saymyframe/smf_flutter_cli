@@ -1,4 +1,0 @@
-# melos_managed_dependency_overrides: smf_contracts
-dependency_overrides:
-  smf_contracts:
-    path: ../smf_contracts
