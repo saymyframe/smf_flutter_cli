@@ -8,7 +8,9 @@ import 'package:smf_flutter_cli/promts/models/project_preferences.dart';
 import 'package:smf_flutter_cli/promts/theme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 
+/// Interactive prompt that gathers project preferences from the user.
 class CreatePrompt {
+  /// Starts the prompt flow and returns collected [ProjectPreferences].
   ProjectPreferences prompt(
     ArgResults? argResult, {
     required List<String> allowedModules,
@@ -20,6 +22,7 @@ class CreatePrompt {
     return _collect(argResult, allowedModules: allowedModules);
   }
 
+  /// Collects values from CLI flags or interacts with the user when missing.
   ProjectPreferences _collect(
     ArgResults? argResult, {
     required List<String> allowedModules,
@@ -77,6 +80,7 @@ class CreatePrompt {
     );
   }
 
+  /// Requests the initial route from user based on selected modules.
   String _initialRoute(List<IModuleCodeContributor> modules) {
     final modulesWithInitialRoute = modules
         .where((m) => m.routes.initialRoute?.isNotEmpty ?? false)
@@ -92,6 +96,7 @@ class CreatePrompt {
     return modulesWithInitialRoute[initialRoute].routes.initialRoute!;
   }
 
+  /// Parses the `--modules` argument and validates allowed module names.
   List<IModuleCodeContributor> _selectedModules(
     ArgResults? argResult, {
     required List<String> allowedModules,
@@ -127,6 +132,7 @@ class CreatePrompt {
     return const [];
   }
 
+  /// Maps module names to their implementations using the registry.
   List<IModuleCodeContributor> _resolveModule(List<String> modules) {
     return modules.map((e) {
       final module = smfModules[e];

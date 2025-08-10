@@ -1,3 +1,16 @@
+// Copyright 2025 SayMyFrame. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/file_writers/composite_write_strategy.dart';
@@ -13,9 +26,12 @@ import 'package:smf_flutter_cli/promts/models/cli_context.dart';
 /// Note: adding new DSL types may require extending [DslContext],
 /// which is considered an acceptable and localized compromise.
 class DslGenerator extends Generator {
+  /// Creates a generator that aggregates DSLs and writes output via [strategy].
   const DslGenerator(this.strategy, {required this.cliContext});
 
+  /// Write strategy used for persisting generated files.
   final CompositeWriteStrategy strategy;
+  /// Execution context with CLI-level preferences.
   final CliContext cliContext;
 
   @override
@@ -49,6 +65,7 @@ class DslGenerator extends Generator {
     }
   }
 
+  /// Collects unique shell declarations referenced by nested routes.
   List<ShellDeclaration> _toShellDeclarations(List<RouteGroup> routeGroups) {
     final shellIds = routeGroups
         .expand((group) => group.routes)

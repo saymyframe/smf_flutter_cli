@@ -1,4 +1,12 @@
 name: smf_flutter_cli_monorepo
+description: A monorepo containing SMF Flutter CLI tools and modules for scaffolding Flutter applications
+version: 0.1.0
+homepage: https://saymyframe.com
+repository: https://github.com/saymyframe/smf_flutter_cli
+issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+license: Apache-2.0
+authors:
+  - SayMyFrame Team <team@saymyframe.com>
 publish_to: none
 
 environment:

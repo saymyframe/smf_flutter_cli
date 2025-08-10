@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:mason/mason.dart';
 
+/// Runs shell commands and logs execution details and results.
 class ShellRunner {
+  /// Runs a command to completion and throws if the process fails.
   static Future<void> run(
     String command,
     List<String> args, {
@@ -24,6 +26,7 @@ class ShellRunner {
     _throwIfProcessFailed(result, command, args);
   }
 
+  /// Starts a process and awaits its exit code, throwing on non-zero status.
   static Future<void> start(
     String command,
     List<String> args, {
@@ -55,10 +58,12 @@ class ShellRunner {
     _throwIfProcessFailed(result, command, args);
   }
 
+  /// Builds a human-readable command string for logging.
   static String _buildCommandString(String command, List<String> args) {
     return '$command ${args.join(' ')}';
   }
 
+  /// Logs stdout, stderr and exit status of a finished process.
   static void _logResult(Logger logger, ProcessResult result, String command) {
     if (result.stdout.toString().isNotEmpty) {
       logger.detail('📤 stdout:\n${result.stdout}');
@@ -75,6 +80,7 @@ class ShellRunner {
     }
   }
 
+  /// Throws a [ProcessException] with captured output when exit code != 0.
   static void _throwIfProcessFailed(
     ProcessResult result,
     String executable,
