@@ -1,11 +1,12 @@
 name: smf_contracts
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-publish_to: none
-# repository: https://github.com/my_org/my_repo
+description: Contracts, DSL, and shared codegen interfaces used across SMF modules (routing, DI, code generation).
+version: 0.1.0
+repository: https://github.com/saymyframe/smf_modules
+homepage: https://saymyframe.com
+issue_tracker: https://github.com/saymyframe/smf_modules/issues
 
 environment:
-  sdk: ^3.8.1
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   smf_contribution_engine:
