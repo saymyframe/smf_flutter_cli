@@ -1,9 +1,10 @@
 name: smf_contracts
 description: Contracts, DSL, and shared codegen interfaces used across SMF modules (routing, DI, code generation).
 version: 0.1.0
-repository: https://github.com/saymyframe/smf_modules
 homepage: https://saymyframe.com
+repository: https://github.com/saymyframe/smf_modules
 issue_tracker: https://github.com/saymyframe/smf_modules/issues
+topics: [dsl, codegen, routing, dependency-injection, interfaces]
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
