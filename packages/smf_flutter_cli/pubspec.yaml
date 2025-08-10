@@ -3,6 +3,8 @@ description: A sample command-line application with basic argument parsing.
 version: 0.1.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli
+issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+topics: [flutter, cli, scaffolding, configuration, code-generation]
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
