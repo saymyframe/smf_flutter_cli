@@ -1,39 +1,17 @@
-<!-- 
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# smf_flutter_core
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages). 
+Core scaffolding and utilities for SMF monolithic Flutter applications.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages). 
--->
+Provides the foundational app structure and helpers shared across SMF modules.
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+## Use with SMF CLI
+This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
 
-## Features
+- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+## Links
+- Repository: https://github.com/saymyframe/smf_modules
+- Issues: https://github.com/saymyframe/smf_modules/issues
 
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder. 
-
-```dart
-const like = 'sample';
-```
-
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to 
-contribute to the package, how to file issues, what response they can expect 
-from the package authors, and more.
+## License
+See LICENSE.

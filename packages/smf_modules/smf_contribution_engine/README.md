@@ -1,39 +1,23 @@
-<!-- 
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# smf_contribution_engine
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages). 
+Engine for structured code transformations in Dart/Flutter.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages). 
--->
+This package powers SMF code modifications such as:
+- Insert/replace widgets
+- Modify widget arguments
+- Insert into lists/methods/classes
+- Insert imports
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+Most users will interact with this indirectly through the SMF Flutter CLI.
 
-## Features
+## Use with SMF CLI
+This package is not intended to be installed directly. Use the SMF CLI to scaffold and configure features; this library is used under the hood.
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 
-## Getting started
+## Links
+- Repository: https://github.com/saymyframe/smf_modules
+- Issues: https://github.com/saymyframe/smf_modules/issues
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder. 
-
-```dart
-const like = 'sample';
-```
-
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to 
-contribute to the package, how to file issues, what response they can expect 
-from the package authors, and more.
+## License
+See LICENSE.

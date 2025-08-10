@@ -1,10 +1,12 @@
 name: smf_analytics
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+description: Firebase Analytics integration module for SMF projects.
+version: 0.1.0
+repository: https://github.com/saymyframe/smf_modules
+homepage: https://saymyframe.com
+issue_tracker: https://github.com/saymyframe/smf_modules/issues
 
 environment:
-  sdk: ^3.8.1
+  sdk: ">=3.0.0 <4.0.0"
 
 # Add regular dependencies here.
 dependencies:
