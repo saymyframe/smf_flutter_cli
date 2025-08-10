@@ -1,9 +1,10 @@
 name: smf_home_flutter
 description: Home feature module (starter screen) for SMF Flutter applications.
 version: 0.1.0
-repository: https://github.com/saymyframe/smf_modules
 homepage: https://saymyframe.com
+repository: https://github.com/saymyframe/smf_modules
 issue_tracker: https://github.com/saymyframe/smf_modules/issues
+topics: [flutter, template, boilerplate, feature, home-screen]
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
