@@ -7,7 +7,8 @@ Future<void> run(HookContext context) async {
   context.vars = {
     'app_name': config.appName,
     'org_name': config.orgName,
-    'application_id': config.appId,
+    'android_application_id': config.androidAppId,
+    'ios_application_id': config.iOSAppId,
     'android_namespace': config.androidNamespace,
     'working_dir': config.workingDirectory,
   };

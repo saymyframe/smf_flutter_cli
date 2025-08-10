@@ -12,17 +12,23 @@ class SmfCoreConfig {
     AppId? appId,
     String? androidNamespace,
   }) {
-    this.appId = appId ??
-        AppId.fallback(
+    androidAppId = appId ??
+        AppId.fallbackAndroid(
           orgName: orgName,
           appName: appName,
         );
 
-    if (!this.appId.isValid) {
+    iOSAppId = appId ??
+        AppId.fallbackiOS(
+          orgName: orgName,
+          appName: appName,
+        );
+
+    if (!androidAppId.isValid) {
       throw InvalidAppIdException();
     }
 
-    this.androidNamespace = androidNamespace ?? this.appId.appId;
+    this.androidNamespace = androidNamespace ?? androidAppId.appId;
   }
 
   factory SmfCoreConfig.fromHooksVars(Map<String, dynamic> vars) {
@@ -73,7 +79,8 @@ class SmfCoreConfig {
 
   final String appName;
   final String orgName;
-  late final AppId appId;
+  late final AppId androidAppId;
+  late final AppId iOSAppId;
   late final String androidNamespace;
   final String workingDirectory;
 }

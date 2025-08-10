@@ -1,17 +1,32 @@
 import 'package:mason/mason.dart';
 
 extension type AppId(String appId) {
-  factory AppId.fallback({
+  factory AppId.fallbackAndroid({
     required String orgName,
     required String appName,
   }) {
     final segments = <String>[];
     for (final part in orgName.split('.')) {
       if (part.isEmpty) continue;
-      segments.add(part.lowerCase);
+      segments.add(part.snakeCase);
     }
 
-    segments.add(appName.lowerCase);
+    segments.add(appName.snakeCase);
+
+    return AppId(segments.join('.'));
+  }
+
+  factory AppId.fallbackiOS({
+    required String orgName,
+    required String appName,
+  }) {
+    final segments = <String>[];
+    for (final part in orgName.split('.')) {
+      if (part.isEmpty) continue;
+      segments.add(part.paramCase);
+    }
+
+    segments.add(appName.paramCase);
 
     return AppId(segments.join('.'));
   }
