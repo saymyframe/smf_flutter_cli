@@ -13,15 +13,6 @@ ignore:
   - "**/bricks/**"
 
 scripts:
-  gen:dev:
-    run: dart tools/restore_dev.dart
-
-  init:dev:
-    run: |
-      dart tools/fetch_modules.dart && \
-      dart tools/restore_dev.dart && \
-      melos bootstrap
-
   bundle:
     run: |
       melos exec -c 6 --fail-fast --dir-exists="bricks" -- \
@@ -49,8 +40,7 @@ command:
     hooks:
       pre:
         run: |
-          dart tools/fetch_modules.dart && \
-          dart tools/restore_dev.dart
+          dart tools/fetch_modules.dart
 
       # Automatically bundle after bootstrap so dev env is ready
       post:
@@ -61,3 +51,5 @@ command:
     linkToCommits: true
     # Additionally build a changelog at the root of the workspace.
     workspaceChangelog: true
+    # Also update version constraints in dependent packages automatically.
+    updateDependents: true
