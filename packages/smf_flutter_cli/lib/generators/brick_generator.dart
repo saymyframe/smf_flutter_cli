@@ -16,9 +16,16 @@ import 'dart:io';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/generators/generator.dart';
+import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 /// Generates files from module-provided mason bricks.
 class BrickGenerator extends Generator {
+  /// Creates a [BrickGenerator] that uses the provided [moduleResolver].
+  const BrickGenerator(this.moduleResolver);
+
+  /// Resolves module dependencies and dependents during brick generation.
+  final ModuleDependencyResolver moduleResolver;
+
   @override
   Future<void> generate(
     List<IModuleCodeContributor> modules,
@@ -26,34 +33,64 @@ class BrickGenerator extends Generator {
     Map<String, dynamic> coreVars,
     String generateTo,
   ) async {
+    final disabledModules = <IModuleCodeContributor>{};
+
     for (final module in modules) {
       for (final brick in module.brickContributions) {
+        if (disabledModules.contains(module)) continue;
+
         final generator = await MasonGenerator.fromBundle(brick.bundle);
 
         final target = DirectoryGeneratorTarget(Directory(generateTo));
 
         final vars = coreVars..addAll(brick.vars ?? {});
-        await generator.hooks.preGen(
-          vars: vars,
-          onVarsChanged: vars.addAll,
-          logger: logger,
-        );
+        try {
+          await generator.hooks.preGen(
+            vars: vars,
+            onVarsChanged: vars.addAll,
+            logger: logger,
+          );
 
-        final generateProgress = logger.progress(
-          '🔄 Generating from ${brick.name}',
-        );
+          final generateProgress = logger.progress(
+            '🔄 Generating from ${brick.name}',
+          );
 
-        final files = await generator.generate(
-          target,
-          vars: vars,
-          fileConflictResolution: mapMergeStrategy(brick.mergeStrategy),
-          logger: logger,
-        );
+          final files = await generator.generate(
+            target,
+            vars: vars,
+            fileConflictResolution: mapMergeStrategy(brick.mergeStrategy),
+            logger: logger,
+          );
 
-        generateProgress.complete('✅ Generated ${files.length} file(s)');
+          generateProgress.complete('✅ Generated ${files.length} file(s)');
 
-        await generator.hooks.postGen(vars: vars, logger: logger);
+          await generator.hooks.postGen(vars: vars, logger: logger);
+        } on Exception catch (e) {
+          logger.detail(
+            'Error during pre-generation for module '
+            "'${module.moduleDescriptor.name}': $e",
+          );
+
+          disabledModules
+            ..add(module)
+            ..addAll(
+              moduleResolver.dependentsOf(module, modules),
+            );
+        }
       }
+    }
+
+    if (disabledModules.isNotEmpty) {
+      final excludedNames =
+          disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
+
+      logger.info(
+        '⚠️ Errors occurred during generation.\n'
+        'Excluding the following modules (and their dependents):\n'
+        '$excludedNames',
+      );
+
+      modules.removeWhere(disabledModules.contains);
     }
   }
 }

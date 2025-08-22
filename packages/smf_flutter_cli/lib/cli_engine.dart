@@ -46,7 +46,7 @@ Future<void> runCli(CliContext context) async {
 
   // Generate individual brick contributions
   context.logger.info('📦 Generating brick contributions...');
-  await BrickGenerator().generate(
+  await const BrickGenerator(resolver).generate(
     resolvedModules,
     context.logger,
     coreVars,
@@ -55,7 +55,7 @@ Future<void> runCli(CliContext context) async {
 
   // Generate shared file contributions
   context.logger.info('🔧 Applying shared file contributions...');
-  await SharableGenerator().generate(
+  await const SharableGenerator().generate(
     resolvedModules,
     context.logger,
     coreVars,
@@ -72,7 +72,7 @@ Future<void> runCli(CliContext context) async {
 
   // Generate dependencies to pubspec
   context.logger.info('📋 Updating pubspec.yaml...');
-  await PubspecGenerator().generate(
+  await const PubspecGenerator().generate(
     resolvedModules,
     context.logger,
     coreVars,

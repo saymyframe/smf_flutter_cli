@@ -11,7 +11,8 @@ environment:
   sdk: ">=3.0.0 <4.0.0"
 
 executables:
-  smfflutter: smf_flutter
+  smf: smf_flutter
+  smf_flutter: smf_flutter
 
 dependencies:
   ansi_styles: ^0.3.2+1

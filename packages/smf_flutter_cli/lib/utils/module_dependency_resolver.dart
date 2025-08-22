@@ -47,4 +47,16 @@ class ModuleDependencyResolver {
 
     return sorted;
   }
+
+  /// Returns a list of modules that directly depend on [module] within
+  /// the provided [allModules] collection.
+  List<IModuleCodeContributor> dependentsOf(
+    IModuleCodeContributor module,
+    List<IModuleCodeContributor> allModules,
+  ) {
+    final targetName = module.moduleDescriptor.name;
+    return allModules
+        .where((m) => m.moduleDescriptor.dependsOn.contains(targetName))
+        .toList();
+  }
 }
