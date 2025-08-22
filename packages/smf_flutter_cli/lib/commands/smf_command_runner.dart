@@ -12,15 +12,17 @@
 // limitations under the License.
 
 import 'package:args/command_runner.dart';
+import 'package:cli_util/cli_logging.dart';
 import 'package:smf_flutter_cli/commands/create.dart';
 import 'package:smf_flutter_cli/utils/utils.dart';
+import 'package:smf_flutter_cli/version.dart';
 
-/// Top-level command runner for the `smfflutter` CLI.
+/// Top-level command runner for the `smf` CLI.
 class SMFCommandRunner extends CommandRunner<void> {
   /// Configures the top-level CLI and registers subcommands.
   SMFCommandRunner()
       : super(
-          'smfflutter',
+          'smf',
           'A CLI tool by Say My Frame',
           usageLineLength: terminalLineLength,
         ) {
@@ -38,5 +40,20 @@ class SMFCommandRunner extends CommandRunner<void> {
       );
 
     addCommand(CreateCommand());
+  }
+
+  @override
+  Future<void> run(Iterable<String> args) async {
+    // Print version if requested.
+    // If no subcommand is provided, exit after printing.
+    final hasVersion = args.contains('--version') || args.contains('-v');
+    final hasSubcommand = args.any((a) => commands.containsKey(a));
+
+    if (hasVersion) {
+      Logger.standard().write('ℹ️ CLI version: $packageVersion\n');
+      if (!hasSubcommand) return;
+    }
+
+    return super.run(args);
   }
 }

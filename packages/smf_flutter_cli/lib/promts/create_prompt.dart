@@ -27,9 +27,9 @@ class CreatePrompt {
     ArgResults? argResult, {
     required List<String> allowedModules,
   }) {
-    final name = argResult?.rest.first ??
+    final name = argResult?.rest.firstOrNull ??
         Input.withTheme(
-          prompt: '👋 Enter project name: ',
+          prompt: '✍️ Enter project name: ',
           theme: terminalTheme,
           defaultValue: 'app',
           validator: (x) {
