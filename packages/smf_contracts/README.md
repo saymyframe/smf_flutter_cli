@@ -14,9 +14,8 @@ Use the SMF CLI for scaffolding and configuration; this package is used under th
 
 - SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 
-## Links
-- Repository: https://github.com/saymyframe/smf_modules
-- Issues: https://github.com/saymyframe/smf_modules/issues
+## 🌐 Links
+[Repository](https://github.com/saymyframe/smf_modules) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_modules/issues)
 
 ## License
 See LICENSE.
