@@ -1,4 +1,4 @@
-name: smf_analytics
+name: smf_firebase_analytics
 description: Firebase Analytics integration module for SMF projects.
 version: 0.1.0
 homepage: https://saymyframe.com

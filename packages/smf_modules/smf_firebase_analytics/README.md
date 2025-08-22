@@ -1,4 +1,4 @@
-# smf_analytics
+# smf_firebase_analytics
 
 Firebase Analytics integration module for SMF projects.
 
@@ -7,9 +7,8 @@ This package is not intended to be installed directly. Prefer using the SMF CLI 
 
 - SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 
-## Links
-- Repository: https://github.com/saymyframe/smf_modules
-- Issues: https://github.com/saymyframe/smf_modules/issues
+## 🌐 Links
+[Repository](https://github.com/saymyframe/smf_modules) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_modules/issues)
 
 ## License
 See LICENSE.
