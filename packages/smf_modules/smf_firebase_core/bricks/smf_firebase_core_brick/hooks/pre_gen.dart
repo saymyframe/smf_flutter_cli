@@ -16,6 +16,7 @@ void run(HookContext context) async {
     workingDirectory: workDirectory,
   ).run();
 
-  // Update context variables
-  context.vars['flutterfire_installed'] = isInstalled;
+  if (!isInstalled) {
+    throw Exception("Firebase wasn't installed");
+  }
 }
