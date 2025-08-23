@@ -1,0 +1,35 @@
+# Authors
+
+This file lists the authors and contributors to the SMF Contracts project.
+
+## Core Team
+
+- Yevhen Beshkarov <ybeshkarov@saymyframe.com>
+
+## Contributors
+
+Contributors are listed in chronological order of their first contribution.
+
+<!-- Add contributors here as they make contributions -->
+
+## How to Add Your Name
+
+If you've contributed to this project and would like to be listed as a contributor:
+
+1. Fork the repository
+2. Add your name to this file in the Contributors section
+3. Submit a pull request
+
+Please include:
+- Your name
+- Your email (optional)
+- A brief description of your contribution
+
+## Copyright
+
+Copyright 2025 SayMyFrame. All rights reserved.
+
+This project is licensed under the Apache License, Version 2.0.
+See LICENSE file for details.
+
+
