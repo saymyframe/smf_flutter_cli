@@ -9,10 +9,8 @@ topics: [flutter, firebase, analytics, events, measurement]
 environment:
   sdk: ">=3.0.0 <4.0.0"
 
-# Add regular dependencies here.
 dependencies:
-  smf_contracts:
-    path: ../../smf_contracts
+  smf_contracts: ^0.1.0
 
 dev_dependencies:
   lints: ^5.0.0

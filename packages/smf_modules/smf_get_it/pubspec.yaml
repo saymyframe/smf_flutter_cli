@@ -9,15 +9,13 @@ topics: [flutter, dependency-injection, get-it, codegen, architecture]
 environment:
   sdk: ">=3.0.0 <4.0.0"
 
-# Add regular dependencies here.
 dependencies:
   mason_logger: ^0.3.3
-  smf_contracts:
-    path: ../../smf_contracts
-  smf_contribution_engine:
-    path: ../smf_contribution_engine
+  smf_contracts: ^0.1.0
+  smf_contribution_engine: ^0.1.0
   path: ^1.9.1
   mustachex: ^1.0.0
+  mason: ^0.1.1
 
 dev_dependencies:
   lints: ^5.0.0
