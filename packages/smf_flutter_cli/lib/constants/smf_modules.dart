@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'package:smf_communication/smf_communication.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -26,7 +26,7 @@ final smfModules = <String, IModuleCodeContributor>{
   kFirebaseAnalytics: FirebaseAnalyticsModule(),
   kFlutterCoreModule: SmfCoreModule(),
   kGetItModule: SmfGetItModule(),
-  kCommunicationModule: SmfCommunicationModule(),
+  kCommunicationModule: SmfEventBusModule(),
   kGoRouterModule: SmfGoRouterModule(),
   kHomeFeatureModule: SmfHomeFlutterModule(),
   kContractsModule: SmfContractsModule(),

@@ -20,6 +20,7 @@ import 'package:yaml_edit/yaml_edit.dart';
 
 /// Updates the target project's pubspec.yaml with module dependencies.
 class PubspecGenerator extends Generator {
+  /// Creates a [PubspecGenerator].
   const PubspecGenerator();
 
   @override

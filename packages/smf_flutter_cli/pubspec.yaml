@@ -25,24 +25,15 @@ dependencies:
   yaml_edit: ^2.2.2
 
   # Packages
-  smf_firebase_core:
-    path: ../smf_modules/smf_firebase_core
-  smf_flutter_core:
-    path: ../smf_modules/smf_flutter_core
-  smf_firebase_analytics:
-    path: ../smf_modules/smf_firebase_analytics
-  smf_contracts:
-    path: ../smf_contracts
-  smf_get_it:
-    path: ../smf_modules/smf_get_it
-  smf_communication:
-    path: ../smf_modules/smf_communication
-  smf_contribution_engine:
-    path: ../smf_modules/smf_contribution_engine
-  smf_go_router:
-    path: ../smf_modules/smf_go_router
-  smf_home_flutter:
-    path: ../smf_modules/smf_home_flutter
+  smf_contribution_engine: ^0.1.0
+  smf_contracts: ^0.1.0
+  smf_event_bus: ^0.1.0
+  smf_firebase_analytics: ^0.1.0
+  smf_firebase_core: ^0.1.0
+  smf_flutter_core: ^0.1.0
+  smf_get_it: ^0.1.0
+  smf_go_router: ^0.1.0
+  smf_home_flutter: ^0.1.0
 
 dev_dependencies:
   test: ^1.24.0

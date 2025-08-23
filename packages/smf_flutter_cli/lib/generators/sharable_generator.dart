@@ -18,6 +18,7 @@ import 'package:smf_flutter_cli/generators/generator.dart';
 
 /// Applies cross-cutting contributions to existing project files.
 class SharableGenerator extends Generator {
+  /// Creates a [SharableGenerator].
   const SharableGenerator();
 
   @override
