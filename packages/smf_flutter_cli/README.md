@@ -48,4 +48,4 @@ Note: SMF core modules required by the system are added automatically when gener
 [Repository](https://github.com/saymyframe/smf_flutter_cli) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/SayMyFrame/smf_flutter_cli/issues)
 
 ## License
-See LICENSE.
+See [LICENSE](LICENSE).
