@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: SMF Modules repository
+    url: https://github.com/saymyframe/smf_modules
+    about: Issues related to modules (features/bugs in modules) should go here.
+  - name: SMF Contracts repository
+    url: https://github.com/saymyframe/smf_contracts
+    about: Issues related to shared contracts/DSL should go here.
+  - name: Documentation
+    url: https://doc.saymyframe.com
+    about: Read the docs for guidance and examples.

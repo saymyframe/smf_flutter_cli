@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Root workspace (CLI repository root)
+  - package-ecosystem: "pub"
+    directory: "/" # looks for pubspec.yaml at repo root
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # CLI package inside packages/
+  - package-ecosystem: "pub"
+    directory: "/packages/smf_flutter_cli"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Mason hook for the CLI brick (Dart pubspec)
+  - package-ecosystem: "pub"
+    directory: "/packages/smf_flutter_cli/bricks/smf_cli_brick/hooks"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

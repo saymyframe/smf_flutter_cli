@@ -1,0 +1,9 @@
+# CODEOWNERS for SMF Flutter CLI monorepo
+# Paths are relative to the repository root.
+# Owners can be individuals (@user) or teams (@org/team).
+
+# Default owner for all files
+* @ybeshkarov
+
+# Explicit ownership for CLI package in this repo
+packages/smf_flutter_cli/ @ybeshkarov
