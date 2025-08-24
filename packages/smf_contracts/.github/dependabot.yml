@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Root of smf_contracts repository (has pubspec.yaml)
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

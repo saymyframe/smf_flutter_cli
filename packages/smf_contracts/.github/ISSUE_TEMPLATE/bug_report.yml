@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a reproducible problem in the SMF Contracts repository
+title: "bug: <short description>"
+labels: [bug]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched open/closed issues and did not find a duplicate
+          required: true
+        - label: This is not a usage question or support request
+          required: true
+        - label: I can reproduce this on the latest main branch
+          required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Affected area (select all that apply)
+      multiple: true
+      options:
+        - Contracts core
+        - DSL / Context
+        - Generators interfaces
+        - Routing contracts
+        - DI contracts
+        - Mustache templates / slots
+        - Import utilities
+        - Contribution engine integration
+        - Docs
+        - Other / unsure
+  - type: textarea
+    id: desc
+    attributes:
+      label: Description
+      description: Clear, concise description of the bug.
+      placeholder: What happened? What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, reproducible example (link to repo or gist if possible).
+      placeholder: |
+        1. Describe context and versions
+        2. Provide minimal code snippet or interface usage
+        3. Observe actual vs expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs or screenshots. Redact secrets.
+      render: shell
+  - type: input
+    id: flutter
+    attributes:
+      label: Flutter version
+      placeholder: e.g., 3.22.1
+  - type: input
+    id: dart
+    attributes:
+      label: Dart version
+      placeholder: e.g., 3.4.0
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: e.g., macOS 14.6, Ubuntu 22.04, Windows 11
+  - type: checkboxes
+    id: mre
+    attributes:
+      label: Minimal reproducible example
+      options:
+        - label: I have provided a minimal reproduction or a link to it
+          required: false
