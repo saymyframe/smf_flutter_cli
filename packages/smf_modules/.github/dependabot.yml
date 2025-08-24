@@ -40,13 +40,3 @@ updates:
     directory: "/smf_contribution_engine"
     schedule:
       interval: "weekly"
-
-  # Hooks with their own pubspecs
-  - package-ecosystem: "pub"
-    directory: "/smf_firebase_core/bricks/smf_firebase_core_brick/hooks"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "pub"
-    directory: "/smf_flutter_core/bricks/smf_flutter_monolith_core/__brick__/{{app_name.snakeCase()}}"
-    schedule:
-      interval: "weekly"
