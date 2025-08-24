@@ -33,7 +33,7 @@ Interactive (you will be prompted for missing values):
 smf create my_app
 ```
 
-![smf_cli.gif](assets/smf_cli.gif)
+![SMF CLI Demo](https://raw.githubusercontent.com/saymyframe/.github/main/assets/smf_cli.gif)
 
 ```bash
 A CLI tool by Say My Frame
