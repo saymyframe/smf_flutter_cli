@@ -17,7 +17,6 @@ smf create my_app
 Non-interactive (fully scripted):
 ```bash
 smf create my_cli_test_app \
-  -o /Users/ybeshkarov/gen/ \
   -m firebase_analytics,home,get_it,go_router \
   --route /home \
   --org com.saymyframe

@@ -1,3 +1,6 @@
+[![pub package](https://img.shields.io/pub/v/smf_flutter_cli.svg)](https://pub.dev/packages/smf_flutter_cli)
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 # SMF Flutter CLI
 
 A comprehensive Flutter CLI tool for scaffolding and configuring Flutter applications with modular architecture.
@@ -17,14 +20,43 @@ SMF Flutter CLI is a powerful command-line interface that helps developers quick
 - 📊 **Analytics Ready**: Built-in analytics and tracking capabilities
 - 🎯 **Customizable Templates**: Extensible brick-based template system
 
-## Quick Start
+## Install
+```bash
+dart pub global activate smf_flutter_cli
+smf --version
+```
+
+## Quick start
+
+Interactive (you will be prompted for missing values):
+```bash
+smf create my_app
+```
+
+![smf_cli.gif](assets/smf_cli.gif)
 
 ```bash
-# Install the CLI globally
-dart pub global activate --source path packages/smf_flutter_cli
+A CLI tool by Say My Frame
 
-# Generate a new Flutter project
-smfflutter create my_app
+Usage: smf <command> [arguments]
+
+Global options:
+-h, --help       Print this usage information.
+    --verbose    Enable verbose logging.
+-v, --version    Print the current CLI version.
+
+Available commands:
+  create   Create flutter app
+
+Run "smf help <command>" for more information about a command.
+```
+
+Non-interactive (fully scripted):
+```bash
+smf create my_cli_test_app \
+  -m firebase_analytics,home,get_it,go_router \
+  --route /home \
+  --org com.saymyframe
 ```
 
 ## Available Modules
@@ -44,12 +76,6 @@ This is a monorepo managed with Melos. To contribute:
 ```bash
 # Install dependencies
 melos bootstrap
-
-# Run tests
-melos test
-
-# Build packages
-melos build
 ```
 
 ## License
