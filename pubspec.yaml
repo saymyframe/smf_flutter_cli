@@ -17,7 +17,7 @@ dev_dependencies:
   lints: ^3.0.0
   smf_flutter_cli:
     path: packages/smf_flutter_cli
-  melos: ^6.3.3
+  melos: ^7.1.0
 
 dependency_overrides:
   smf_flutter_cli:
