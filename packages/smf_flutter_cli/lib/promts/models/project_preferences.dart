@@ -17,7 +17,7 @@ class ProjectPreferences {
   final String packageName;
 
   /// Initial route path to show after app launch.
-  final String initialRoute;
+  final String? initialRoute;
 
   /// Selected modules to be included in the generated project.
   final List<IModuleCodeContributor> selectedModules;
