@@ -14,6 +14,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// Strategy for writing generated files.
+// ignore: one_member_abstracts
 abstract interface class FileWriteStrategy {
   /// Writes a single [GeneratedFile] to its target location.
   Future<void> write(GeneratedFile file);

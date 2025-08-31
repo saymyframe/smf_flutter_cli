@@ -27,7 +27,7 @@ class SafeGenerationRunner {
   ///
   /// Steps:
   /// - Create temp workspace (cross-platform)
-  /// - Clone [context] with [outputDirectory] replaced to temp path
+  /// - Clone the context with outputDirectory replaced to temp path
   /// - Run generation into temp
   /// - Resolve destination conflicts (replace/copy/cancel)
   /// - Move temp project to final destination

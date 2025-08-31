@@ -45,8 +45,8 @@ class SMFCommandRunner extends CommandRunner<void> {
       )
       ..addOption(
         'on-conflict',
-        help:
-            'Behavior when destination directory exists (replace, copy, cancel, prompt).',
+        help: 'Behavior when destination directory exists '
+            '(replace, copy, cancel, prompt).',
         allowed: ['replace', 'copy', 'cancel', 'prompt'],
         defaultsTo: 'prompt',
       );
