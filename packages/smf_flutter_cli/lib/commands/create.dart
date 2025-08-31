@@ -16,6 +16,7 @@ import 'dart:core';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/commands/base.dart';
 import 'package:smf_flutter_cli/constants/smf_modules.dart';
+import 'package:smf_flutter_cli/constants/smf_options.dart';
 import 'package:smf_flutter_cli/promts/create_prompt.dart';
 import 'package:smf_flutter_cli/promts/models/cli_context.dart';
 import 'package:smf_flutter_cli/utils/module_creator.dart';

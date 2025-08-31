@@ -1,8 +1,28 @@
+// Copyright 2025 SayMyFrame. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
-enum StrictMode { strict, lenient }
+/// Strictness modes for module generation and validation.
+enum StrictMode { 
+  /// Fail fast when encountering an error.
+  strict, 
+  
+  /// Continue generation, skipping unsupported modules with warnings.
+  lenient 
+}
 
 /// Execution context passed across generators and hooks.
 class CliContext {
@@ -39,5 +59,6 @@ class CliContext {
   /// Strictness mode for generation behavior (errors vs warnings).
   final StrictMode strictMode;
 
+  /// Resolver for handling module dependencies and ordering.
   final ModuleDependencyResolver moduleResolver;
 }

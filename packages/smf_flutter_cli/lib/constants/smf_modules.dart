@@ -31,9 +31,3 @@ final smfModules = <String, IModuleContributorFactory>{
   kHomeFeatureModule: SmfHomeModuleFactory(),
   kContractsModule: SmfContractsFactory(),
 };
-
-/// Supported state management options that can be applied in templates.
-const smfStateManagers = <String>[
-  kBlocStateManagement,
-  kRiverpodStateManagement,
-];

@@ -1,3 +1,16 @@
+// Copyright 2025 SayMyFrame. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import 'package:mason/mason.dart' show Logger;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/promts/models/cli_context.dart';
@@ -6,19 +19,26 @@ import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 /// Builds module instances from factories, enforcing supports(profile)
 /// and populating transitive dependencies from the registry.
 class ModuleCreator {
+  /// Creates a new [ModuleCreator] with the specified dependencies.
   const ModuleCreator(
     this.resolver,
     this.registry, {
     this.coreModuleKeys = const <String>[],
   });
 
+  /// Resolver for determining module dependency order.
   final ModuleDependencyResolver resolver;
+  
+  /// Registry mapping module names to their factory implementations.
   final Map<String, IModuleContributorFactory> registry;
+  
+  /// List of core module keys that are automatically included.
   final List<String> coreModuleKeys;
 
   /// Builds module instances using [rootFactories] and [profile].
   ///
-  /// - Adds core factories (flutter_core, contracts) implicitly via [coreModuleKeys].
+  /// - Adds core factories (flutter_core, contracts) implicitly via 
+  ///   [coreModuleKeys].
   /// - In strict mode throws when a module or its dependency is unsupported
   ///   or missing in the registry. In lenient mode logs a warning and skips.
   List<IModuleCodeContributor> build(
