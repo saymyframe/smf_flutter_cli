@@ -62,20 +62,30 @@ class BrickGenerator extends Generator {
             logger: logger,
           );
 
-          generateProgress.complete('✅ Generated ${files.length} file(s)');
+          generateProgress.complete('Generated ${files.length} file(s)');
 
           await generator.hooks.postGen(vars: vars, logger: logger);
         } on Exception catch (e) {
-          logger.detail(
-            'Error during pre-generation for module '
-            "'${module.moduleDescriptor.name}': $e",
-          );
+          final isStrict = coreVars['strict_mode'] == true;
 
-          disabledModules
-            ..add(module)
-            ..addAll(
-              moduleResolver.dependentsOf(module, modules),
+          if (isStrict) {
+            logger.err(
+              '❌ Error in module ${module.moduleDescriptor.name}',
             );
+
+            rethrow;
+          } else {
+            logger.detail(
+              'Error during pre-generation for module '
+              "'${module.moduleDescriptor.name}': $e",
+            );
+
+            disabledModules
+              ..add(module)
+              ..addAll(
+                moduleResolver.dependentsOf(module, modules),
+              );
+          }
         }
       }
     }
@@ -84,11 +94,14 @@ class BrickGenerator extends Generator {
       final excludedNames =
           disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
 
-      logger.info(
-        '⚠️ Errors occurred during generation.\n'
-        'Excluding the following modules (and their dependents):\n'
-        '$excludedNames',
-      );
+      logger
+        ..info('⚠️⚠️⚠️ Generation warnings ⚠️⚠️⚠️')
+        ..info(
+          ' Errors occurred during generation.\n'
+          ' Excluding the following modules (and their dependents):\n'
+          ' $excludedNames',
+        )
+        ..info('⚠️⚠️⚠️ End of warnings ⚠️⚠️⚠️');
 
       modules.removeWhere(disabledModules.contains);
     }
