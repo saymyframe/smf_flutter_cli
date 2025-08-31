@@ -18,18 +18,18 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
-import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_home_flutter/smf_home_module.dart';
 
 /// Registry of available SMF modules keyed by their public identifiers.
-final smfModules = <String, IModuleCodeContributor>{
-  kFirebaseCore: FirebaseCoreModule(),
-  kFirebaseAnalytics: FirebaseAnalyticsModule(),
-  kFlutterCoreModule: SmfCoreModule(),
-  kGetItModule: SmfGetItModule(),
-  kCommunicationModule: SmfEventBusModule(),
-  kGoRouterModule: SmfGoRouterModule(),
-  kHomeFeatureModule: SmfHomeFlutterModule(),
-  kContractsModule: SmfContractsModule(),
+final smfModules = <String, IModuleContributorFactory>{
+  kFirebaseCore: SmfFirebaseCoreFactory(),
+  kFirebaseAnalytics: SmfFirebaseAnalyticsFactory(),
+  kFlutterCoreModule: SmfFlutterCoreFactory(),
+  kGetItModule: SmfGetItFactory(),
+  kCommunicationModule: SmfEventBusFactory(),
+  kGoRouterModule: SmfGoRouterFactory(),
+  kHomeFeatureModule: SmfHomeModuleFactory(),
+  kContractsModule: SmfContractsFactory(),
 };
 
 /// Supported state management options that can be applied in templates.

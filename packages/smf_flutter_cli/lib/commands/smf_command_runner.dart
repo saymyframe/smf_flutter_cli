@@ -33,6 +33,11 @@ class SMFCommandRunner extends CommandRunner<void> {
         help: 'Enable verbose logging.',
       )
       ..addFlag(
+        'strict',
+        negatable: false,
+        help: 'Enable strict mode for module compatibility checks.',
+      )
+      ..addFlag(
         'version',
         abbr: 'v',
         negatable: false,

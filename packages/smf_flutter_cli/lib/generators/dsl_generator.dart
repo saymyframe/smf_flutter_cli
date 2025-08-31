@@ -31,6 +31,7 @@ class DslGenerator extends Generator {
 
   /// Write strategy used for persisting generated files.
   final CompositeWriteStrategy strategy;
+
   /// Execution context with CLI-level preferences.
   final CliContext cliContext;
 

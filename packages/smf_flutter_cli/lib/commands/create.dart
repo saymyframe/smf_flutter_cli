@@ -16,8 +16,11 @@ import 'dart:core';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/cli_engine.dart';
 import 'package:smf_flutter_cli/commands/base.dart';
+import 'package:smf_flutter_cli/constants/smf_modules.dart';
 import 'package:smf_flutter_cli/promts/create_prompt.dart';
 import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_cli/utils/module_creator.dart';
+import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 /// CLI command that scaffolds a new Flutter app using Say My Frame modules.
 final class CreateCommand extends BaseCommand {
@@ -65,11 +68,22 @@ final class CreateCommand extends BaseCommand {
 
   @override
   Future<void> run() async {
-    final preferences = CreatePrompt().prompt(
+    final isStrict = (globalResults?['strict'] as bool?) ?? false;
+    final moduleCreator = ModuleCreator(
+      const ModuleDependencyResolver(),
+      smfModules,
+      coreModuleKeys: const [
+        kFlutterCoreModule,
+        kContractsModule,
+      ],
+    );
+    final preferences = CreatePrompt(creator: moduleCreator).prompt(
       argResults,
       allowedModules: allowedModules,
+      strictMode: isStrict ? StrictMode.strict : StrictMode.lenient,
+      logger: logger,
     );
-
+    
     return runCli(
       CliContext(
         name: preferences.name,
@@ -77,6 +91,7 @@ final class CreateCommand extends BaseCommand {
         selectedModules: preferences.selectedModules,
         outputDirectory: argResults?['output'] as String? ?? './',
         initialRoute: preferences.initialRoute,
+        strictMode: isStrict ? StrictMode.strict : StrictMode.lenient,
         logger: logger,
       ),
     );

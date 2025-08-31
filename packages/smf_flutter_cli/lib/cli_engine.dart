@@ -35,6 +35,7 @@ Future<void> runCli(CliContext context) async {
         '[${resolvedModules.map((e) => "'${e.moduleDescriptor.name}'").join(',')}]',
     'app_name': context.name,
     'org_name': context.packageName,
+    'strict_mode': context.strictMode == StrictMode.strict,
   };
   await cliGenerator.hooks.preGen(
     vars: coreVars,

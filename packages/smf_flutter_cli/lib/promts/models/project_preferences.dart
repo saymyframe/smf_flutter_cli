@@ -12,10 +12,13 @@ class ProjectPreferences {
 
   /// Human-readable project name.
   final String name;
+
   /// Reverse-domain package/organization name.
   final String packageName;
+
   /// Initial route path to show after app launch.
   final String initialRoute;
+
   /// Selected modules to be included in the generated project.
   final List<IModuleCodeContributor> selectedModules;
 }

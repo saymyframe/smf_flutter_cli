@@ -12,7 +12,6 @@
 // limitations under the License.
 
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_flutter_cli/constants/smf_modules.dart';
 
 /// Resolves transitive module dependencies and returns a topologically
 /// sorted list suitable for generation.
@@ -20,24 +19,29 @@ class ModuleDependencyResolver {
   /// Creates a new [ModuleDependencyResolver].
   const ModuleDependencyResolver();
 
-  /// Returns a sorted list where dependencies appear before dependents.
+  /// Returns a list where dependencies appear before dependents using only
+  /// the provided module instances.
   List<IModuleCodeContributor> resolve(
     List<IModuleCodeContributor> selectedModules,
   ) {
-    final resolved = <String>{};
+    final byName = {
+      for (final m in selectedModules) m.moduleDescriptor.name: m,
+    };
+
+    final visited = <String>{};
     final sorted = <IModuleCodeContributor>[];
 
     void visit(String name) {
-      if (resolved.contains(name)) return;
+      if (visited.contains(name)) return;
 
-      final module = smfModules[name];
-      if (module == null) throw Exception('Unknown module: $name');
+      final module = byName[name];
+      if (module == null) return;
 
       for (final dep in module.moduleDescriptor.dependsOn) {
         visit(dep);
       }
 
-      resolved.add(name);
+      visited.add(name);
       sorted.add(module);
     }
 
