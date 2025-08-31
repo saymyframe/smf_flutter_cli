@@ -27,12 +27,12 @@ class ModuleCreator {
     required StrictMode strictMode,
     Logger? logger,
   }) {
-    final allRequestedFactories = <IModuleContributorFactory>{
-      ...rootFactories,
+    final allRequestedFactories = <IModuleContributorFactory>[
       ...coreModuleKeys
           .map((key) => registry[key])
           .whereType<IModuleContributorFactory>(),
-    };
+      ...rootFactories,
+    ];
 
     final moduleNameToInstance = <String, IModuleCodeContributor>{};
     final processedModuleNames = <String>{};

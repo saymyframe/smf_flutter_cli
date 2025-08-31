@@ -80,20 +80,28 @@ class CreatePrompt {
       );
     }
 
-    // Select state manager (default to BLoC)
-    final stateIndex = Select.withTheme(
-      prompt: '🧠 Choose state manager',
-      options: smfStateManagers,
-      theme: terminalTheme,
-    ).interact();
-    final selectedState = smfStateManagers[stateIndex];
-    final profile = ModuleProfile(
-      stateManager: selectedState == kRiverpodStateManagement
-          ? StateManager.riverpod
-          : StateManager.bloc,
-    );
+    final stateArg = argResult?['state-manager'] as String?;
+    final selectedState = stateArg ??
+        Select.withTheme(
+          prompt: '🧠 Choose state manager',
+          options: StateManager.values.map((s) => s.stateManager).toList(),
+          theme: terminalTheme,
+        ).interact();
 
-    // Build module instances using ModuleCreator
+    late final ModuleProfile profile;
+
+    if (stateArg != null) {
+      profile = ModuleProfile(
+        stateManager: StateManager.values.firstWhere(
+          (s) => s.stateManager == stateArg,
+        ),
+      );
+    } else {
+      profile = ModuleProfile(
+        stateManager: StateManager.values[selectedState as int],
+      );
+    }
+
     final modules = creator.build(
       selectedFactories,
       profile,
@@ -116,24 +124,35 @@ class CreatePrompt {
   }
 
   /// Requests the initial route from user based on selected modules.
-  String _initialRoute(
+  String? _initialRoute(
     List<IModuleCodeContributor> modules, {
     required List<String> coreModules,
   }) {
     final modulesWithInitialRoute = modules
-        .where((m) => m.routes.initialRoute?.isNotEmpty ?? false)
-        .toList()
-      // To prevent asking for the initial route from core modules
-      ..removeWhere((m) => coreModules.contains(m.moduleDescriptor.name));
+        .where(
+          (m) =>
+              (m.routes.initialRoute?.isNotEmpty ?? false) &&
+              !coreModules.contains(m.moduleDescriptor.name),
+        )
+        .toList();
 
-    final initialRoute = Select.withTheme(
-      prompt: '🧭 Choose your initial screen',
-      options:
-          modulesWithInitialRoute.map((m) => m.moduleDescriptor.name).toList(),
-      theme: terminalTheme,
-    ).interact();
+    if (modulesWithInitialRoute.isNotEmpty) {
+      if (modulesWithInitialRoute.length == 1) {
+        return modulesWithInitialRoute.first.routes.initialRoute!;
+      }
 
-    return modulesWithInitialRoute[initialRoute].routes.initialRoute!;
+      final initialRoute = Select.withTheme(
+        prompt: '🧭 Choose your initial screen',
+        options: modulesWithInitialRoute
+            .map((m) => m.moduleDescriptor.name)
+            .toList(),
+        theme: terminalTheme,
+      ).interact();
+
+      return modulesWithInitialRoute[initialRoute].routes.initialRoute;
+    }
+
+    return null;
   }
 
   /// Parses the `--modules` argument and validates allowed module names.

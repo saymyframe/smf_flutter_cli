@@ -52,7 +52,7 @@ class BrickGenerator extends Generator {
           );
 
           final generateProgress = logger.progress(
-            '🔄 Generating from ${brick.name}',
+            'Generating from ${brick.name}',
           );
 
           final files = await generator.generate(

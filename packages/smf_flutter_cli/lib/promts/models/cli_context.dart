@@ -1,5 +1,6 @@
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 enum StrictMode { strict, lenient }
 
@@ -12,6 +13,7 @@ class CliContext {
     required this.outputDirectory,
     required this.logger,
     required this.strictMode,
+    required this.moduleResolver,
     this.packageName,
     this.initialRoute,
   });
@@ -36,4 +38,6 @@ class CliContext {
 
   /// Strictness mode for generation behavior (errors vs warnings).
   final StrictMode strictMode;
+
+  final ModuleDependencyResolver moduleResolver;
 }

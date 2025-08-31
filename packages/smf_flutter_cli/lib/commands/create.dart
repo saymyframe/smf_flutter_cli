@@ -14,13 +14,13 @@
 import 'dart:core';
 
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_flutter_cli/cli_engine.dart';
 import 'package:smf_flutter_cli/commands/base.dart';
 import 'package:smf_flutter_cli/constants/smf_modules.dart';
 import 'package:smf_flutter_cli/promts/create_prompt.dart';
 import 'package:smf_flutter_cli/promts/models/cli_context.dart';
 import 'package:smf_flutter_cli/utils/module_creator.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
+import 'package:smf_flutter_cli/utils/safe_generation_runner.dart';
 
 /// CLI command that scaffolds a new Flutter app using Say My Frame modules.
 final class CreateCommand extends BaseCommand {
@@ -47,6 +47,12 @@ final class CreateCommand extends BaseCommand {
       ..addOption(
         'org',
         help: 'Organization name for app ID (format: org_name.app_name)',
+      )
+      ..addOption(
+        'state-manager',
+        abbr: 's',
+        help: 'State manager to use (allowed: ${smfStateManagers.join(', ')})',
+        allowed: smfStateManagers,
       );
   }
 
@@ -68,9 +74,11 @@ final class CreateCommand extends BaseCommand {
 
   @override
   Future<void> run() async {
+    const moduleResolver = ModuleDependencyResolver();
+
     final isStrict = (globalResults?['strict'] as bool?) ?? false;
     final moduleCreator = ModuleCreator(
-      const ModuleDependencyResolver(),
+      moduleResolver,
       smfModules,
       coreModuleKeys: const [
         kFlutterCoreModule,
@@ -83,8 +91,8 @@ final class CreateCommand extends BaseCommand {
       strictMode: isStrict ? StrictMode.strict : StrictMode.lenient,
       logger: logger,
     );
-    
-    return runCli(
+
+    return SafeGenerationRunner().run(
       CliContext(
         name: preferences.name,
         packageName: preferences.packageName,
@@ -93,7 +101,9 @@ final class CreateCommand extends BaseCommand {
         initialRoute: preferences.initialRoute,
         strictMode: isStrict ? StrictMode.strict : StrictMode.lenient,
         logger: logger,
+        moduleResolver: moduleResolver,
       ),
+      onConflict: globalResults?['on-conflict'] as String? ?? 'prompt',
     );
   }
 }

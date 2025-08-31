@@ -1,8 +1,9 @@
 import 'package:mason/mason.dart';
 import 'package:smf_cli_hooks/shell/shell_runner.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 Future<void> run(HookContext context) async {
-  final workingDirectory = context.vars['working_dir'] as String;
+  final workingDirectory = context.vars[kWorkingDirectory] as String;
 
   await ShellRunner.run(
     'flutter',

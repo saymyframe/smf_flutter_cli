@@ -11,21 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'dart:io';
-
-import 'package:args/command_runner.dart';
 import 'package:smf_flutter_cli/commands/smf_command_runner.dart';
 
 Future<void> main(List<String> arguments) async {
-  try {
-    await SMFCommandRunner().run(arguments);
-  } on UsageException catch (e) {
-    exit(64);
-  } on FormatException catch (e) {
-    exit(64);
-  } on ProcessException catch (e) {
-    exit(1);
-  } on Exception catch (e) {
-    exit(1);
-  }
+  await SMFCommandRunner().run(arguments);
 }

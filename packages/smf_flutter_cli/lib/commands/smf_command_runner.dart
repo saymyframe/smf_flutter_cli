@@ -42,6 +42,13 @@ class SMFCommandRunner extends CommandRunner<void> {
         abbr: 'v',
         negatable: false,
         help: 'Print the current CLI version.',
+      )
+      ..addOption(
+        'on-conflict',
+        help:
+            'Behavior when destination directory exists (replace, copy, cancel, prompt).',
+        allowed: ['replace', 'copy', 'cancel', 'prompt'],
+        defaultsTo: 'prompt',
       );
 
     addCommand(CreateCommand());

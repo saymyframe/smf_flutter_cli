@@ -21,18 +21,15 @@ import 'package:smf_flutter_cli/generators/dsl_generator.dart';
 import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
 import 'package:smf_flutter_cli/generators/sharable_generator.dart';
 import 'package:smf_flutter_cli/promts/models/cli_context.dart';
-import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 /// Entrypoint that orchestrates project generation using selected modules.
 Future<void> runCli(CliContext context) async {
-  const resolver = ModuleDependencyResolver();
-  final resolvedModules = resolver.resolve(context.selectedModules);
-
   final cliGenerator = await MasonGenerator.fromBundle(smfCliBrickBundle);
   final coreVars = <String, dynamic>{
     kWorkingDirectory: context.outputDirectory,
-    'modules':
-        '[${resolvedModules.map((e) => "'${e.moduleDescriptor.name}'").join(',')}]',
+    'modules': '[${context.selectedModules.map(
+          (e) => "'${e.moduleDescriptor.name}'",
+        ).join(',')}]',
     'app_name': context.name,
     'org_name': context.packageName,
     'strict_mode': context.strictMode == StrictMode.strict,
@@ -47,8 +44,8 @@ Future<void> runCli(CliContext context) async {
 
   // Generate individual brick contributions
   context.logger.info('📦 Generating brick contributions...');
-  await const BrickGenerator(resolver).generate(
-    resolvedModules,
+  await BrickGenerator(context.moduleResolver).generate(
+    context.selectedModules,
     context.logger,
     coreVars,
     context.outputDirectory,
@@ -57,7 +54,7 @@ Future<void> runCli(CliContext context) async {
   // Generate shared file contributions
   context.logger.info('🔧 Applying shared file contributions...');
   await const SharableGenerator().generate(
-    resolvedModules,
+    context.selectedModules,
     context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,
@@ -65,7 +62,7 @@ Future<void> runCli(CliContext context) async {
 
   context.logger.info('🛣️ Generating from dsls...');
   await DslGenerator(writeStrategy, cliContext: context).generate(
-    resolvedModules,
+    context.selectedModules,
     context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,
@@ -74,7 +71,7 @@ Future<void> runCli(CliContext context) async {
   // Generate dependencies to pubspec
   context.logger.info('📋 Updating pubspec.yaml...');
   await const PubspecGenerator().generate(
-    resolvedModules,
+    context.selectedModules,
     context.logger,
     coreVars,
     coreVars[kWorkingDirectory] as String,

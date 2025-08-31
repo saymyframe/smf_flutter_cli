@@ -3,6 +3,7 @@ import 'package:smf_cli_hooks/src/constants/arguments.dart';
 import 'package:smf_cli_hooks/src/constants/constants.dart';
 import 'package:smf_cli_hooks/src/models/app_id.dart';
 import 'package:smf_cli_hooks/src/models/exceptions.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// Configuration object for SMF core project scaffolding.
 ///
@@ -88,7 +89,7 @@ class SmfCoreConfig {
       );
     }
 
-    final workingDir = vars['working_dir'];
+    final workingDir = vars[kWorkingDirectory];
     if (workingDir is! String) {
       throw ArgumentError.value(
         vars,
