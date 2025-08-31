@@ -3,4 +3,4 @@
 /// More dartdocs go here.
 library;
 
-export 'src/smf_get_it_module.dart';
+export 'smf_get_it_factory.dart';

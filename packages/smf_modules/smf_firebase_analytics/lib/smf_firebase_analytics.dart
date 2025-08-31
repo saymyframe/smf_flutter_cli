@@ -3,4 +3,4 @@
 /// More dartdocs go here.
 library;
 
-export 'src/firebase_analytics_module.dart';
+export 'smf_firebase_analytics_factory.dart';

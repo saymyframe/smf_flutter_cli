@@ -15,10 +15,10 @@ class FirebaseCliInstaller implements Installer {
 
   @override
   Future<bool> checkInstallation() async {
-    final progress = _logger.progress('🔄 Checking firebase cli installed');
+    final progress = _logger.progress('Checking firebase cli installed');
     try {
       await CommandRunner.run('firebase', ['--help'], logger: _logger);
-      progress.complete('✅ firebase cli installed');
+      progress.complete('firebase cli installed');
       return true;
     } on Exception catch (_) {
       progress.fail("❌ firebase cli isn't installed");
@@ -49,7 +49,7 @@ class FirebaseCliInstaller implements Installer {
         throw Exception('❌ Unsupported platform: ${Platform.operatingSystem}');
       }
 
-      progress.complete('✅ firebase cli installed');
+      progress.complete('firebase cli installed');
       return true;
     } on Exception catch (_) {
       progress.fail('❌ something went wrong');

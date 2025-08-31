@@ -32,7 +32,7 @@ class PatchEngine {
       final file = join(projectRoot, entry.key);
 
       final generateProgress = logger?.progress(
-        '🔄 Generating shared content for ${entry.key}',
+        'Generating shared content for ${entry.key}',
       );
 
       final content = await File(file).readAsString();
@@ -43,7 +43,7 @@ class PatchEngine {
 
       await File(file).writeAsString(result);
 
-      generateProgress?.complete('✅ Generated shared content for ${entry.key}');
+      generateProgress?.complete('Generated shared content for ${entry.key}');
     }
   }
 }

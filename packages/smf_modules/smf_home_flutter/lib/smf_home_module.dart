@@ -3,4 +3,4 @@
 /// More dartdocs go here.
 library;
 
-export 'src/smf_home_flutter_module.dart';
+export 'smf_home_module_factory.dart';

@@ -3,4 +3,4 @@
 /// More dartdocs go here.
 library;
 
-export 'src/smf_event_bus_module.dart';
+export 'smf_event_bus_factory.dart';

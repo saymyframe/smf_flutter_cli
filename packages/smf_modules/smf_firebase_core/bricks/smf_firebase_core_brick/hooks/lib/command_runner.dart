@@ -11,7 +11,7 @@ class CommandRunner {
     bool runInShell = false,
   }) async {
     final commandString = _buildCommandString(command, args);
-    logger.detail('🔄 Running: $commandString');
+    logger.detail('Running: $commandString');
 
     final result = await Process.run(
       command,
@@ -33,7 +33,7 @@ class CommandRunner {
     ProcessStartMode mode = ProcessStartMode.inheritStdio,
   }) async {
     final commandString = _buildCommandString(command, args);
-    logger.detail('🔄 Running: $commandString');
+    logger.detail('Running: $commandString');
 
     try {
       final process = await Process.start(
