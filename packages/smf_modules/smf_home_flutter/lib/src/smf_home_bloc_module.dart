@@ -13,6 +13,7 @@ class SmfHomeBlocModule
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
+        dependsOn: {kGoRouterModule},
         pubDependency: {'flutter_bloc: ^9.1.1', 'freezed_annotation: ^3.1.0'},
         pubDevDependency: {'build_runner: ^2.5.4', 'freezed: ^3.1.0'},
       );

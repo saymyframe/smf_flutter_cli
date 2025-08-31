@@ -151,7 +151,7 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
 
     for (final route in routes) {
       if (route is! NestedRoute) {
-        result.add(route); // залишаємо RouteDefinition як є
+        result.add(route);
         continue;
       }
 

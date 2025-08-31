@@ -1,8 +1,9 @@
 import 'package:mason/mason.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core_brick_hooks/smf_firebase_core_hook.dart';
 
 void run(HookContext context) async {
-  final workDirectory = context.vars['working_dir'];
+  final workDirectory = context.vars[kWorkingDirectory];
   if (workDirectory is! String) {
     throw throw ArgumentError.value(
       context.vars,

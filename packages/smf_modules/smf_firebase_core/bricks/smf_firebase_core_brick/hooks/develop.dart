@@ -1,11 +1,12 @@
 import 'package:mason/mason.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 import 'pre_gen.dart' as pre_gen;
 
 void main() async {
   const testPath = '/Users/ybeshkarov/gen/app';
   final vars = <String, dynamic>{
-    'working_dir': testPath,
+    kWorkingDirectory: testPath,
   };
 
   pre_gen.run(MyHook(vars));

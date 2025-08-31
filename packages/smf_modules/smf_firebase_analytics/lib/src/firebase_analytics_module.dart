@@ -16,7 +16,7 @@ class FirebaseAnalyticsModule
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
         name: kFirebaseAnalytics,
         description: 'Firebase Analytics module',
-        dependsOn: {kFirebaseCore, kGetItModule},
+        dependsOn: {kFirebaseCore, kGetItModule, kGoRouterModule},
         pubDependency: {'firebase_analytics: ^11.5.2'},
       );
 

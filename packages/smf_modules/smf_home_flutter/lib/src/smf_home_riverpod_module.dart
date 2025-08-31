@@ -14,6 +14,7 @@ class SmfHomeRiverpodModule
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
+        dependsOn: {kGoRouterModule},
         pubDependency: {'flutter_riverpod: ^2.5.1'},
       );
 
