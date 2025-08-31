@@ -6,8 +6,11 @@ class SmfContractsModule
     implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
-    BrickContribution(name: 'smf_contracts', bundle: smfContractsBrickBundle),
-  ];
+        BrickContribution(
+          name: 'smf_contracts',
+          bundle: smfContractsBrickBundle,
+        ),
+      ];
 
   @override
   ModuleDescriptor get moduleDescriptor =>
