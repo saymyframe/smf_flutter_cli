@@ -21,6 +21,7 @@ class SmfCoreModuleRiverpod
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
         name: kFlutterCoreModule,
         description: 'Core Flutter application module module with riverpod',
+        pubDependency: {'flutter_riverpod: ^2.5.1'},
       );
 
   @override
