@@ -69,7 +69,7 @@ class SafeGenerationRunner {
       logger
         ..success('✅  Project created at: $destinationPath')
         ..info('\n')
-        ..info('Created an SMF App! ✨')
+        ..info(cyan.wrap('Created an SMF App! ✨'))
         ..info(
           green.wrap('''
 +--------------------------------------------------------------+
