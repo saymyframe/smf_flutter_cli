@@ -43,6 +43,8 @@ melos:
       linkToCommits: true
       # Additionally build a changelog at the workspace root
       workspaceChangelog: true
+      # Do bump dependents automatically
+      updateDependents: true
 
   scripts:
     # Bundle mason bricks in each package that contains a "bricks" directory
