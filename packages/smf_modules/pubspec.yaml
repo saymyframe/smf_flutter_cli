@@ -1,9 +1,70 @@
 name: smf_modules
 publish_to: none
+repository: https://github.com/saymyframe/smf_modules
+license: Apache-2.0
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dev_dependencies:
-  melos: ^6.3.3
+  melos: ^7.1.0
+
+workspace:
+  - smf_contribution_engine
+  - smf_event_bus
+  - smf_firebase_analytics
+  - smf_firebase_core
+  - smf_flutter_core
+  - smf_get_it
+  - smf_go_router
+  - smf_home_flutter
+
+dependency_overrides:
+  smf_contracts:
+    path: ../smf_contracts
+
+melos:
+  # Ignore brick templates and generated mason folders
+  ignore:
+    - "**/__brick__/**"
+    - "**/brick/**"
+    - "**/bricks/**"
+    - "**/mason/**"
+
+  command:
+    bootstrap:
+      # https://github.com/dart-lang/pub/issues/3404
+      runPubGetInParallel: false
+      hooks:
+        # Auto-bundle templates after bootstrap so dev env is ready
+        post: melos run bundle
+    version:
+      # Generate commit links in package changelogs
+      linkToCommits: true
+      # Additionally build a changelog at the workspace root
+      workspaceChangelog: true
+      # Do not bump dependents automatically
+      updateDependents: false
+
+  scripts:
+    # Bundle mason bricks in each package that contains a "bricks" directory
+    bundle:
+      run: |
+        melos exec -c 6 --fail-fast --dir-exists="bricks" -- \
+          dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
+
+    # Quality gates
+    analyze:
+      run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
+    format:
+      run: melos exec -c 6 -- dart format . --fix
+    format:check:
+      run: melos exec -c 6 -- dart format . --output=none --set-exit-if-changed
+    test:
+      run: melos exec -c 4 --fail-fast -- dart test --reporter expanded
+    check:
+      run: |
+        melos run format:check && \
+        melos run analyze && \
+        melos run test
 
