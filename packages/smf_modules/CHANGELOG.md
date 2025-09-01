@@ -11,6 +11,27 @@ See [Conventional Commits](https://conventionalcommits.org) for commit guideline
 
 Packages with breaking changes:
 
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_flutter_core` - `v0.2.0+1`](#smf_flutter_core---v0201)
+
+---
+
+#### `smf_flutter_core` - `v0.2.0+1`
+
+ - **FIX**: add flutter_riverpod dependency to the core module. ([2ee5ca1b](https://github.com/saymyframe/smf_modules/commit/2ee5ca1b688005ccfb033b1899ed6b7b83feba17))
+
+
+## 2025-09-01
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
  - [`smf_contribution_engine` - `v0.2.0`](#smf_contribution_engine---v020)
  - [`smf_event_bus` - `v0.2.0`](#smf_event_bus---v020)
  - [`smf_firebase_analytics` - `v0.2.0`](#smf_firebase_analytics---v020)
