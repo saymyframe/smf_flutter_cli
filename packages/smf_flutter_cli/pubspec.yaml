@@ -8,7 +8,9 @@ topics: [flutter, cli, scaffolding, configuration, code-generation]
 license: Apache-2.0
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
+
+resolution: workspace
 
 executables:
   smf: smf_flutter

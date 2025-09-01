@@ -8,17 +8,82 @@ license: Apache-2.0
 publish_to: none
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
+
+workspace:
+  - packages/smf_flutter_cli
+  - packages/smf_contracts
 
 executables:
   smfflutter: smfflutter_dev
 
 dev_dependencies:
-  lints: ^3.0.0
-  smf_flutter_cli:
-    path: packages/smf_flutter_cli
-  melos: ^6.3.3
+  lints: ^6.0.0
+  smf_flutter_cli: ^0.1.0
+  melos: ^7.1.0
 
 dependency_overrides:
-  smf_flutter_cli:
-    path: packages/smf_flutter_cli
+  smf_contribution_engine:
+    path: packages/smf_modules/smf_contribution_engine
+  smf_event_bus:
+    path: packages/smf_modules/smf_event_bus
+  smf_firebase_analytics:
+    path: packages/smf_modules/smf_firebase_analytics
+  smf_firebase_core:
+    path: packages/smf_modules/smf_firebase_core
+  smf_flutter_core:
+    path: packages/smf_modules/smf_flutter_core
+  smf_get_it:
+    path: packages/smf_modules/smf_get_it
+  smf_go_router:
+    path: packages/smf_modules/smf_go_router
+  smf_home_flutter:
+    path: packages/smf_modules/smf_home_flutter
+ 
+
+melos:
+  ignore:
+    - "**/__brick__/**"
+    - "**/brick/**"
+    - "**/bricks/**"
+
+  scripts:
+    bundle:
+      run: |
+        melos exec -c 6 --fail-fast --dir-exists="bricks" -- \
+          dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
+
+    # Quality gates
+    analyze:
+      run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
+    format:
+      run: melos exec -c 6 -- dart format . --fix
+    format:check:
+      run: melos exec -c 6 -- dart format . --output=none --set-exit-if-changed
+    test:
+      run: melos exec -c 4 --fail-fast -- dart test --reporter expanded
+    check:
+      run: |
+        melos run format:check && \
+        melos run analyze && \
+        melos run test
+
+  command:
+    bootstrap:
+      # https://github.com/dart-lang/pub/issues/3404
+      runPubGetInParallel: false
+      hooks:
+        pre:
+          run: |
+            dart tools/fetch_modules.dart
+        # Automatically bundle after bootstrap so dev env is ready
+        post:
+          run: melos run bundle
+
+    version:
+      # Generate commit links in package changelogs.
+      linkToCommits: true
+      # Additionally build a changelog at the root of the workspace.
+      workspaceChangelog: true
+      # Also update version constraints in dependent packages automatically.
+      updateDependents: true
