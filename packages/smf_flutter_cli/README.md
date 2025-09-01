@@ -1,10 +1,34 @@
-# smf_flutter_cli
+[![pub package](https://img.shields.io/pub/v/smf_flutter_cli.svg)](https://pub.dev/packages/smf_flutter_cli)
+[![status: preview](https://img.shields.io/badge/status-preview-blue.svg)](https://github.com/saymyframe/smf_flutter_cli/issues)
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Join us on Discord](https://img.shields.io/badge/Join%20us-Discord-5865F2?logo=discord&logoColor=white)](https://saymyframe.com/discord)
 
-Command line interface for SMF Flutter projects: scaffold, configure modules, and generate code.
+
+# SMF Flutter CLI
+
+A comprehensive Flutter CLI tool for scaffolding and configuring Flutter applications with modular architecture.
+
+## Overview
+
+SMF Flutter CLI is a powerful command-line interface that helps developers quickly scaffold Flutter applications with pre-configured modules, dependencies, and best practices. It provides a modular approach to Flutter project generation, allowing developers to select only the components they need.
+
+> Status: Alpha — Actively developed. Features are added continuously and APIs may change. Best suited for exploration and early prototypes. Feedback and contributions are welcome.
+
+## Features
+
+- 🚀 **Rapid Project Scaffolding**: Generate Flutter projects with pre-configured modules
+- 🧩 **Modular Architecture**: Select and configure only the modules you need
+- 🔧 **Smart Dependency Management**: Automatic dependency resolution and configuration
+- 📱 **Flutter Best Practices**: Built-in templates following Flutter development standards
+- 🔥 **Firebase Integration**: Seamless Firebase setup and configuration
+- 🛣️ **Routing Solutions**: Multiple routing options including GoRouter
+- 📊 **Analytics Ready**: Built-in analytics and tracking capabilities
+- 🎯 **Customizable Templates**: Extensible brick-based template system
 
 ## Install
 ```bash
 dart pub global activate smf_flutter_cli
+smf --version
 ```
 
 ## Quick start
@@ -14,38 +38,53 @@ Interactive (you will be prompted for missing values):
 smf create my_app
 ```
 
+![SMF CLI Demo](https://raw.githubusercontent.com/saymyframe/.github/main/assets/smf_cli.gif)
+
+```bash
+A CLI tool by Say My Frame
+
+Usage: smf <command> [arguments]
+
+Global options:
+-h, --help           Print this usage information.
+    --verbose        Enable verbose logging.
+    --strict         Enable strict mode for module compatibility checks.
+-v, --version        Print the current CLI version.
+    --on-conflict    Behavior when destination directory exists (replace, copy, cancel, prompt).
+                     [replace, copy, cancel, prompt (default)]
+
+Available commands:
+  create   Create flutter app
+
+Run "smf help <command>" for more information about a command.
+```
+
 Non-interactive (fully scripted):
 ```bash
 smf create my_cli_test_app \
   -m firebase_analytics,home,get_it,go_router \
   --route /home \
-  --org com.saymyframe
+  --org com.saymyframe \
+  -s bloc \
+  --on-conflict replace
 ```
 
-## Options
+## Available Modules
 
-- `-o, --output` (default: `./`)
-  - Output path where the project will be created.
+- **Core Flutter**: Basic Flutter project structure and configuration
+- **Firebase Core**: Firebase initialization and basic setup
+- **Analytics**: Analytics and tracking integration
+- **GoRouter**: Advanced routing with GoRouter
+- **GetIt**: Dependency injection with GetIt
+- **Communication**: Inter-module communication patterns
+- **Home Flutter**: Home screen and navigation templates
 
-- `-m, --modules`
-  - Comma-separated list of modules to include. If omitted, you will be prompted to select modules interactively.
-  - Allowed module identifiers: `firebase_core`, `firebase_analytics`, `get_it`, `event_bus`, `go_router`, `home`.
+## Available State Manager Approach
+- **BLoC**: Event–State pattern using `flutter_bloc`.
+- **Riverpod**: Provider-based model using `flutter_riverpod`.
 
-- `-r, --route`
-  - Initial route for the generated app (e.g., `/home`, `/dashboard`). If omitted, and multiple modules can provide an initial route, you will be prompted to choose one.
+## Support
 
-- `--org`
-  - Organization (reverse-DNS) used to generate the package/bundle id, e.g., `com.saymyframe` → `com.saymyframe.my_app`.
-
-### Global flags
-
-- `--verbose` — enable verbose logging
-- `-v, --version` — print CLI version
-
-Note: SMF core modules required by the system are added automatically when generating a project.
-
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/SayMyFrame/smf_flutter_cli/issues)
-
-## License
-See [LICENSE](LICENSE).
+- 📧 Email: support@saymyframe.com
+- 🐛 Issues: [GitHub Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+- 📖 Documentation: [SayMyFrame Docs](https://saymyframe.com)

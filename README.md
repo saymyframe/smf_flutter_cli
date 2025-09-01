@@ -1,5 +1,7 @@
 [![pub package](https://img.shields.io/pub/v/smf_flutter_cli.svg)](https://pub.dev/packages/smf_flutter_cli)
+[![status: preview](https://img.shields.io/badge/status-preview-blue.svg)](https://github.com/saymyframe/smf_flutter_cli/issues)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Join us on Discord](https://img.shields.io/badge/Join%20us-Discord-5865F2?logo=discord&logoColor=white)](https://saymyframe.com/discord)
 
 # SMF Flutter CLI
 
@@ -8,6 +10,8 @@ A comprehensive Flutter CLI tool for scaffolding and configuring Flutter applica
 ## Overview
 
 SMF Flutter CLI is a powerful command-line interface that helps developers quickly scaffold Flutter applications with pre-configured modules, dependencies, and best practices. It provides a modular approach to Flutter project generation, allowing developers to select only the components they need.
+
+> Status: Alpha — Actively developed. Features are added continuously and APIs may change. Best suited for exploration and early prototypes. Feedback and contributions are welcome.
 
 ## Features
 
@@ -41,9 +45,12 @@ A CLI tool by Say My Frame
 Usage: smf <command> [arguments]
 
 Global options:
--h, --help       Print this usage information.
-    --verbose    Enable verbose logging.
--v, --version    Print the current CLI version.
+-h, --help           Print this usage information.
+    --verbose        Enable verbose logging.
+    --strict         Enable strict mode for module compatibility checks.
+-v, --version        Print the current CLI version.
+    --on-conflict    Behavior when destination directory exists (replace, copy, cancel, prompt).
+                     [replace, copy, cancel, prompt (default)]
 
 Available commands:
   create   Create flutter app
@@ -56,7 +63,9 @@ Non-interactive (fully scripted):
 smf create my_cli_test_app \
   -m firebase_analytics,home,get_it,go_router \
   --route /home \
-  --org com.saymyframe
+  --org com.saymyframe \
+  -s bloc \
+  --on-conflict replace
 ```
 
 ## Available Modules
@@ -69,6 +78,10 @@ smf create my_cli_test_app \
 - **Communication**: Inter-module communication patterns
 - **Home Flutter**: Home screen and navigation templates
 
+## Available State Manager Approach
+- **BLoC**: Event–State pattern using `flutter_bloc`.
+- **Riverpod**: Provider-based model using `flutter_riverpod`.
+
 ## Development
 
 This is a monorepo managed with Melos. To contribute:
@@ -77,22 +90,6 @@ This is a monorepo managed with Melos. To contribute:
 # Install dependencies
 melos bootstrap
 ```
-
-## License
-
-Copyright 2025 SayMyFrame. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 
 ## Contributing
 

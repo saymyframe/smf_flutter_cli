@@ -2,4 +2,4 @@
 // This file provides the CLI version string without parsing pubspec.
 
 /// The current version of the SMF Flutter CLI.
-const String packageVersion = '0.1.0-alpha';
+const String packageVersion = '0.2.0-alpha';
