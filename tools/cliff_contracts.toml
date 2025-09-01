@@ -1,0 +1,51 @@
+# git-cliff configuration for generating CHANGELOG.md using Conventional Commits
+
+[changelog]
+# Header placed at the top of the generated file (kept if file exists)
+header = "# Changelog\n\n"
+# Sort commits newest first
+trim = true
+
+# How a single release section is rendered
+body = '''
+{% if version %}## [{{ version | trim_start_matches(pat="v") }}] - {{ now() | date(format="%Y-%m-%d") }}
+{% else %}## [Unreleased]
+{% endif %}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}- {{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})
+{% endfor %}
+{% endfor %}
+'''
+
+# Footer is left empty
+footer = "\n"
+
+[git]
+# Use Conventional Commits
+conventional_commits = true
+# Skip merge commits
+filter_commits = true
+# Do not include non-conventional commits
+filter_unconventional = true
+# Prefix used for tags
+tag_prefix = "v"
+commit_parsers = [
+  { message = '^feat(\(.+\))?:', group = 'Features' },
+  { message = '^fix(\(.+\))?:', group = 'Bug Fixes' },
+  { message = '^perf(\(.+\))?:', group = 'Performance' },
+  { message = '^refactor(\(.+\))?:', group = 'Refactoring' },
+  { message = '^docs(\(.+\))?:', group = 'Documentation' },
+  { message = '^test(\(.+\))?:', group = 'Tests' },
+  { message = '^build(\(.+\))?:', group = 'Build' },
+  { message = '^ci(\(.+\))?:', group = 'CI' },
+  { message = '^chore(\(.+\))?:', group = 'Chore' },
+  { message = '^deps?:', group = 'Dependencies' }
+]
+
+# Keep BREAKING CHANGE notes
+[git.notes]
+commit_notes = ["BREAKING CHANGE", "BREAKING-CHANGE"]
+
+
