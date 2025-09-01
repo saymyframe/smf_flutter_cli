@@ -66,7 +66,20 @@ class SafeGenerationRunner {
 
       logger.detail('📁 Moving project to: $destinationPath');
       await _moveDirectoryRobust(tempProjectDir, destinationPath);
-      logger.success('✅  Project created at: $destinationPath');
+      logger
+        ..success('✅  Project created at: $destinationPath')
+        ..info('\n')
+        ..info('Created an SMF App! ✨')
+        ..info(
+          green.wrap('''
++--------------------------------------------------------------+
+| Want help or ideas? Join our Discord and meet the community! |
+| Star the repo if this helped you — it motivates us ❤️        |
+| Docs: https://doc.saymyframe.com                             |
+| Discord: https://saymyframe.com/discord                      |
+| GitHub: https://github.com/saymyframe/smf_flutter_cli        |
++--------------------------------------------------------------+'''),
+        );
     } on Exception catch (_) {
     } finally {
       // Best-effort cleanup
