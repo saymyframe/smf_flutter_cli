@@ -3,8 +3,9 @@ import 'dart:io';
 Future<void> main() async {
   final masonRunner = await MasonRunner.detect();
   if (masonRunner == null) {
-    stderr.writeln('⚠️ Mason CLI not found. Install it with:');
-    stderr.writeln('   dart pub global activate mason_cli');
+    stderr
+      ..writeln('⚠️ Mason CLI not found. Install it with:')
+      ..writeln('   dart pub global activate mason_cli');
     exit(127);
   }
 
@@ -18,7 +19,7 @@ Future<void> main() async {
   cleanExistingBundles(outputDirectory);
 
   final brickDirectories = findBrickDirectories(bricksRoot);
-  int totalFailures = 0;
+  var totalFailures = 0;
   for (final brickDirectory in brickDirectories) {
     final success = await bundleBrickDirectory(
       masonRunner: masonRunner,
@@ -34,8 +35,7 @@ Future<void> main() async {
 }
 
 Directory ensureOutputDirectory() {
-  final output = Directory('lib/bundles');
-  output.createSync(recursive: true);
+  final output = Directory('lib/bundles')..createSync(recursive: true);
   return output;
 }
 
@@ -44,7 +44,9 @@ void cleanExistingBundles(Directory outputDirectory) {
     if (file.path.endsWith('_bundle.dart')) {
       try {
         file.deleteSync();
-      } catch (_) {}
+      } on FileSystemException catch (e) {
+        stderr.writeln(e);
+      }
     }
   }
 }
@@ -93,7 +95,9 @@ class MasonRunner {
       if (probe.exitCode == 0) {
         return MasonRunner(executable: 'mason', prefixArgs: const []);
       }
-    } catch (_) {}
+    } on ProcessException catch (e) {
+      stderr.writeln(e);
+    }
 
     try {
       final probe = await Process.run(
@@ -107,7 +111,9 @@ class MasonRunner {
           prefixArgs: const ['pub', 'global', 'run', 'mason_cli:mason'],
         );
       }
-    } catch (_) {}
+    } on ProcessException catch (e) {
+      stderr.writeln(e);
+    }
 
     return null;
   }
@@ -117,4 +123,3 @@ class MasonRunner {
     return Process.run(executable, fullArgs, runInShell: true);
   }
 }
-
