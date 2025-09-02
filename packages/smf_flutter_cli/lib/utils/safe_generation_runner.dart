@@ -17,8 +17,7 @@ import 'package:interact/interact.dart';
 import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_flutter_cli/cli_engine.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
-import 'package:smf_flutter_cli/promts/theme.dart';
+import 'package:smf_flutter_cli/prompts/prompt.dart';
 
 /// Runs project generation into a temporary workspace and moves the result
 /// to the final destination upon success. Always cleans up the temp directory.
@@ -111,7 +110,7 @@ class SafeGenerationRunner {
 
         case 'cancel':
           logger.warn('⚠️ Operation cancelled by user.');
-          throw throw Exception('User canceled operation');
+          throw Exception('User canceled operation');
       }
     }
 

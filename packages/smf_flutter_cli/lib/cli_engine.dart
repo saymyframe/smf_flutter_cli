@@ -20,7 +20,7 @@ import 'package:smf_flutter_cli/generators/brick_generator.dart';
 import 'package:smf_flutter_cli/generators/dsl_generator.dart';
 import 'package:smf_flutter_cli/generators/pubspec_generator.dart';
 import 'package:smf_flutter_cli/generators/sharable_generator.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_cli/prompts/models/cli_context.dart';
 
 /// Entrypoint that orchestrates project generation using selected modules.
 Future<void> runCli(CliContext context) async {

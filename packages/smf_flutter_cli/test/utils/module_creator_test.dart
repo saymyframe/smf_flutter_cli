@@ -1,5 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_cli/prompts/prompt.dart';
 import 'package:smf_flutter_cli/utils/module_creator.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 import 'package:test/test.dart';

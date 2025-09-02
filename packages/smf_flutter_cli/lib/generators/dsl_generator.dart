@@ -15,7 +15,7 @@ import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/file_writers/composite_write_strategy.dart';
 import 'package:smf_flutter_cli/generators/generator.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_cli/prompts/prompt.dart';
 
 /// Aggregates DSL data from all modules and invokes registered
 /// [DslAwareCodeGenerator] implementations using a unified [DslContext].

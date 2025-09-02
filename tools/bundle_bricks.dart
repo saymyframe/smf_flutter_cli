@@ -3,7 +3,8 @@ import 'dart:io';
 Future<void> main() async {
   final runner = await MasonRunner.detect();
   if (runner == null) {
-    _logError('Mason CLI not found. Install it with:\n   dart pub global activate mason_cli');
+    _logError('Mason CLI not found. Install it with:\n   '
+        'dart pub global activate mason_cli');
     // Optionally add to PATH: export PATH="$HOME/.pub-cache/bin:$PATH"
     exit(127);
   }
@@ -14,7 +15,7 @@ Future<void> main() async {
     return;
   }
 
-  int failures = 0;
+  var failures = 0;
   for (final packageRoot in packageRoots) {
     final bricksRoot = Directory('${packageRoot.path}/bricks');
     if (!bricksRoot.existsSync()) continue;
@@ -28,7 +29,11 @@ Future<void> main() async {
     _logInfo('Bundling bricks for: ${packageRoot.path}');
     for (final brickDir in brickDirs) {
       _removeMacOsJunk(brickDir);
-      final ok = await _bundleBrick(runner: runner, brickDirectory: brickDir, outputDirectory: outputDir);
+      final ok = await _bundleBrick(
+        runner: runner,
+        brickDirectory: brickDir,
+        outputDirectory: outputDir,
+      );
       if (!ok) failures += 1;
     }
   }
@@ -41,7 +46,9 @@ List<Directory> _determineTargetPackages() {
   final melosPackagePath = Platform.environment['MELOS_PACKAGE_PATH'];
   if (melosPackagePath != null && melosPackagePath.isNotEmpty) {
     final pkg = Directory(melosPackagePath);
-    return (pkg.existsSync() && Directory('${pkg.path}/bricks').existsSync()) ? [pkg] : const [];
+    return (pkg.existsSync() && Directory('${pkg.path}/bricks').existsSync())
+        ? [pkg]
+        : const [];
   }
 
   // Single-package invocation
@@ -51,7 +58,9 @@ List<Directory> _determineTargetPackages() {
 
   // Workspace/monorepo invocation
   final rootPath = Platform.environment['MELOS_ROOT_PATH'];
-  final root = (rootPath != null && rootPath.isNotEmpty) ? Directory(rootPath) : Directory.current;
+  final root = (rootPath != null && rootPath.isNotEmpty)
+      ? Directory(rootPath)
+      : Directory.current;
   return _findPackagesWithBricks(root).toList(growable: false);
 }
 
@@ -60,7 +69,15 @@ Set<Directory> _findPackagesWithBricks(Directory root) {
   if (!root.existsSync()) return result;
 
   final skipNames = <String>{
-    '.git', '.dart_tool', 'build', 'ios', 'android', '.idea', '.vscode', 'node_modules', '.fvm',
+    '.git',
+    '.dart_tool',
+    'build',
+    'ios',
+    'android',
+    '.idea',
+    '.vscode',
+    'node_modules',
+    '.fvm',
   };
 
   final toVisit = <Directory>[root];
@@ -69,7 +86,7 @@ Set<Directory> _findPackagesWithBricks(Directory root) {
     late final List<FileSystemEntity> children;
     try {
       children = current.listSync(followLinks: false);
-    } catch (_) {
+    } on FileSystemException catch (_) {
       continue;
     }
 
@@ -89,7 +106,9 @@ Set<Directory> _findPackagesWithBricks(Directory root) {
 
     for (final entity in children) {
       if (entity is! Directory) continue;
-      final name = entity.uri.pathSegments.isNotEmpty ? entity.uri.pathSegments.last : '';
+      final name = entity.uri.pathSegments.isNotEmpty
+          ? entity.uri.pathSegments.last
+          : '';
       if (skipNames.contains(name)) continue;
       toVisit.add(entity);
     }
@@ -99,8 +118,8 @@ Set<Directory> _findPackagesWithBricks(Directory root) {
 
 // Bundling
 Directory _ensureBundlesOutput(Directory packageRoot) {
-  final dir = Directory('${packageRoot.path}/lib/bundles');
-  dir.createSync(recursive: true);
+  final dir = Directory('${packageRoot.path}/lib/bundles')
+    ..createSync(recursive: true);
   return dir;
 }
 
@@ -109,7 +128,7 @@ void _cleanExistingBundles(Directory outputDir) {
     if (file.path.endsWith('_bundle.dart')) {
       try {
         file.deleteSync();
-      } catch (_) {
+      } on FileSystemException {
         // Non-fatal
       }
     }
@@ -123,7 +142,7 @@ List<Directory> _findBrickDirectories(Directory bricksRoot) {
         .whereType<Directory>()
         .where((dir) => File('${dir.path}/brick.yaml').existsSync())
         .toList(growable: false);
-  } catch (_) {
+  } on FileSystemException {
     return const [];
   }
 }
@@ -154,19 +173,28 @@ void _removeMacOsJunk(Directory root) {
   try {
     for (final entity in root.listSync(recursive: true, followLinks: false)) {
       if (entity is File) {
-        final name = entity.uri.pathSegments.isNotEmpty ? entity.uri.pathSegments.last : '';
-        if (name == '.DS_Store' || name.startsWith('.DS_') || name.startsWith('._')) {
+        final name = entity.uri.pathSegments.isNotEmpty
+            ? entity.uri.pathSegments.last
+            : '';
+        if (name == '.DS_Store' ||
+            name.startsWith('.DS_') ||
+            name.startsWith('._')) {
           try {
             entity.deleteSync();
-          } catch (_) {/* ignore */}
+          } on FileSystemException {
+            /* ignore */
+          }
         }
       }
     }
-  } catch (_) {/* ignore */}
+  } on FileSystemException {
+    /* ignore */
+  }
 }
 
 // Logging helpers
 void _logInfo(String message) => stdout.writeln('ℹ️ $message');
+
 void _logError(String message) => stderr.writeln('❌ $message');
 
 // Mason CLI wrapper
@@ -182,7 +210,9 @@ class MasonRunner {
       if (probe.exitCode == 0) {
         return MasonRunner(executable: 'mason', prefixArgs: const []);
       }
-    } catch (_) {/* ignore */}
+    } on ProcessException {
+      /* ignore */
+    }
 
     try {
       final probe = await Process.run(
@@ -196,7 +226,9 @@ class MasonRunner {
           prefixArgs: const ['pub', 'global', 'run', 'mason_cli:mason'],
         );
       }
-    } catch (_) {/* ignore */}
+    } on ProcessException {
+      /* ignore */
+    }
 
     return null;
   }

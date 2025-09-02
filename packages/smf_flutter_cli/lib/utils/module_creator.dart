@@ -13,7 +13,7 @@
 
 import 'package:mason/mason.dart' show Logger;
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
+import 'package:smf_flutter_cli/prompts/prompt.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 /// Builds module instances from factories, enforcing supports(profile)
@@ -28,16 +28,16 @@ class ModuleCreator {
 
   /// Resolver for determining module dependency order.
   final ModuleDependencyResolver resolver;
-  
+
   /// Registry mapping module names to their factory implementations.
   final Map<String, IModuleContributorFactory> registry;
-  
+
   /// List of core module keys that are automatically included.
   final List<String> coreModuleKeys;
 
   /// Builds module instances using [rootFactories] and [profile].
   ///
-  /// - Adds core factories (flutter_core, contracts) implicitly via 
+  /// - Adds core factories (flutter_core, contracts) implicitly via
   ///   [coreModuleKeys].
   /// - In strict mode throws when a module or its dependency is unsupported
   ///   or missing in the registry. In lenient mode logs a warning and skips.

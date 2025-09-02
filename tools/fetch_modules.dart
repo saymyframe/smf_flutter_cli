@@ -23,7 +23,9 @@ Future<void> main(List<String> args) async {
 
   final gitAvailable = await _isGitAvailable();
   if (!gitAvailable) {
-    stderr.writeln('❌ Git is not available. Please install Git to clone repositories.');
+    stderr.writeln(
+      '❌ Git is not available. Please install Git to clone repositories.',
+    );
     exit(1);
   }
 
@@ -33,15 +35,15 @@ Future<void> main(List<String> args) async {
 }
 
 class _RepoSpec {
-  final String name;
-  final String url;
-  final Directory targetDir;
-
   const _RepoSpec({
     required this.name,
     required this.url,
     required this.targetDir,
   });
+
+  final String name;
+  final String url;
+  final Directory targetDir;
 }
 
 Future<void> _cloneRepository(
@@ -54,16 +56,26 @@ Future<void> _cloneRepository(
   if (targetDir.existsSync()) {
     // Safety: do not overwrite existing directory unless --force
     if (!force) {
-      stdout.writeln('ℹ️ ${targetDir.path} already exists. Skipping clone of ${repo.name}.');
-      stdout.writeln('   Use `dart tools/fetch_modules.dart --force` to reclone.');
+      stdout
+        ..writeln(
+          'ℹ️ ${targetDir.path} already exists. '
+          'Skipping clone of ${repo.name}.',
+        )
+        ..writeln(
+          '   Use `dart tools/fetch_modules.dart --force` to reclone.',
+        );
       return;
     }
 
-    stdout.writeln('⚠️ --force specified. Removing existing directory: ${targetDir.path}');
+    stdout.writeln(
+      '⚠️ --force specified. Removing existing directory: ${targetDir.path}',
+    );
     try {
       targetDir.deleteSync(recursive: true);
-    } catch (e) {
-      stderr.writeln('❌ Failed to remove existing directory ${targetDir.path}: $e');
+    } on FileSystemException catch (e) {
+      stderr.writeln(
+        '❌ Failed to remove existing directory ${targetDir.path}: $e',
+      );
       exit(1);
     }
   }
@@ -75,8 +87,12 @@ Future<void> _cloneRepository(
 
   stdout.writeln('⬇️ Cloning ${repo.name} from ${repo.url} ...');
   final result = await Process.run('git', cloneArgs, runInShell: true);
-  stdout.write(result.stdout);
-  stderr.write(result.stderr);
+  stdout
+    ..write(result.stdout)
+    ..write('');
+  stderr
+    ..write(result.stderr)
+    ..write('');
   if (result.exitCode != 0) {
     stderr.writeln('❌ Failed to clone ${repo.name}.');
     exit(result.exitCode);
@@ -89,7 +105,7 @@ Future<bool> _isGitAvailable() async {
   try {
     final res = await Process.run('git', ['--version'], runInShell: true);
     return res.exitCode == 0;
-  } catch (_) {
+  } on ProcessException {
     return false;
   }
 }
