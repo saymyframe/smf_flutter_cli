@@ -18,9 +18,7 @@ import 'package:interact/interact.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/constants/smf_modules.dart';
-import 'package:smf_flutter_cli/promts/models/cli_context.dart';
-import 'package:smf_flutter_cli/promts/models/project_preferences.dart';
-import 'package:smf_flutter_cli/promts/theme.dart';
+import 'package:smf_flutter_cli/prompts/prompt.dart';
 import 'package:smf_flutter_cli/utils/module_creator.dart';
 
 /// Interactive prompt that gathers project preferences from the user.
@@ -64,6 +62,9 @@ class CreatePrompt {
           defaultValue: 'app',
           validator: (x) {
             if (x.contains(RegExp(r'[^a-zA-Z\d]'))) {
+              // Using ValidationError from interact 
+              // to show inline validation feedback to the user.
+              // ignore: only_throw_errors
               throw ValidationError('Contains an invalid character!');
             }
 
