@@ -25,7 +25,7 @@ jobs:
       # Install Melos globally
       - name: Install Melos
         run: dart pub global activate melos
-      
+
       - name: Install Mason CLI
         run: dart pub global activate mason_cli
       - name: Add pub-cache bin to PATH
@@ -42,7 +42,20 @@ jobs:
       # Optional quality checks can be run here (format/analyze/tests)
       # Skipped because they currently fail in CI; enable when fixed.
 
-      # Build step removed: Sonar will analyze sources only for this repo
+      # Generate coverage for smf_flutter_cli
+      - name: Install coverage tool
+        run: dart pub global activate coverage
+
+      - name: Run tests with coverage (smf_flutter_cli)
+        run: |
+          cd packages/smf_flutter_cli
+          dart pub get
+          dart test --coverage=coverage
+          format_coverage \
+            -i coverage \
+            -o coverage/lcov.info \
+            --lcov \
+            --report-on=lib
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
