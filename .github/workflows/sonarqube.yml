@@ -4,7 +4,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
   sonarqube:
@@ -33,7 +33,7 @@ jobs:
       # Skipped because they currently fail in CI; enable when fixed.
 
       # Build step removed: Sonar will analyze sources only for this repo
-      
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:
