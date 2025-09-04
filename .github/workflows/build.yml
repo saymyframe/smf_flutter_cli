@@ -55,7 +55,6 @@ jobs:
             -i coverage \
             -o coverage/lcov.info \
             --lcov \
-            --packages=.dart_tool/package_config.json \
             --report-on=lib
 
       - name: SonarQube Scan
