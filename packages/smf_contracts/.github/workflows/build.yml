@@ -1,0 +1,47 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      
+      # Setup Dart/Flutter
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.9.0"
+
+      - name: Drop workspace resolution for CI
+        run: sed -i '/^resolution:\s*workspace\s*$/d' pubspec.yaml
+
+      - name: Get dependencies
+        run: dart pub get
+
+      # Generate coverage for smf_contracts
+      # - name: Install coverage tool
+      #   run: dart pub global activate coverage
+
+      # - name: Run tests with coverage (smf_contracts)
+      #   run: |
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
