@@ -4,12 +4,13 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,6 +26,15 @@ jobs:
       - name: Install Melos
         run: dart pub global activate melos
       
+      - name: Install Mason CLI
+        run: dart pub global activate mason_cli
+      - name: Add pub-cache bin to PATH
+        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      # Clone external packages before Melos resolves the workspace
+      - name: Fetch external packages (contracts/modules)
+        run: dart tools/fetch_modules.dart
+
       # Bootstrap the monorepo
       - name: Bootstrap monorepo
         run: melos bootstrap
@@ -33,9 +43,8 @@ jobs:
       # Skipped because they currently fail in CI; enable when fixed.
 
       # Build step removed: Sonar will analyze sources only for this repo
-      
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
