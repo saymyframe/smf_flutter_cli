@@ -10,8 +10,7 @@ jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
-    env:
-      SONAR_ENABLED: ${{ and(secrets.SONAR_TOKEN != '', startsWith(secrets.SONAR_HOST_URL, 'http')) }}
+
     steps:
       - uses: actions/checkout@v4
         with:
