@@ -44,6 +44,22 @@ jobs:
 
       # Build step removed: Sonar will analyze sources only for this repo
 
+      # Generate coverage for smf_flutter_cli
+      - name: Install coverage tool
+        run: dart pub global activate coverage
+
+      - name: Run tests with coverage (smf_flutter_cli)
+        run: |
+          cd packages/smf_flutter_cli
+          dart pub get
+          dart test --coverage=coverage
+          format_coverage \
+            -i coverage \
+            -o coverage/lcov.info \
+            --lcov \
+            --packages=.dart_tool/package_config.json \
+            --report-on=lib
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:
