@@ -25,6 +25,11 @@ jobs:
       - name: Install Melos
         run: dart pub global activate melos
       
+      - name: Install Mason CLI
+        run: dart pub global activate mason_cli
+      - name: Add pub-cache bin to PATH
+        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
       # Clone external packages before Melos resolves the workspace
       - name: Fetch external packages (contracts/modules)
         run: dart tools/fetch_modules.dart
