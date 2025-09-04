@@ -25,6 +25,10 @@ jobs:
       - name: Install Melos
         run: dart pub global activate melos
       
+      # Clone external packages before Melos resolves the workspace
+      - name: Fetch external packages (contracts/modules)
+        run: dart tools/fetch_modules.dart
+
       # Bootstrap the monorepo
       - name: Bootstrap monorepo
         run: melos bootstrap
