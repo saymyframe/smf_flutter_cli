@@ -1,3 +1,5 @@
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=saymyframe_smf_contracts&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=saymyframe_smf_contracts)
+
 # smf_contracts
 
 Contracts, DSL, and shared codegen interfaces used across SMF modules (routing, DI, code generation).
