@@ -44,7 +44,12 @@ jobs:
       # Build step removed: Sonar will analyze sources only for this repo
 
       - name: SonarQube Scan
+        if: ${{ secrets.SONAR_TOKEN != '' && startsWith(secrets.SONAR_HOST_URL, 'http') }}
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Skip Sonar (missing or invalid secrets)
+        if: ${{ !(secrets.SONAR_TOKEN != '' && startsWith(secrets.SONAR_HOST_URL, 'http')) }}
+        run: echo "Skipping SonarQube scan: secrets missing or SONAR_HOST_URL invalid"
