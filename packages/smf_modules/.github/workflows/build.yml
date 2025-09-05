@@ -1,0 +1,138 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      
+      # Setup Dart/Flutter
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      
+      # Install Melos globally
+      - name: Install Melos
+        run: dart pub global activate melos
+
+      - name: Install Mason CLI
+        run: dart pub global activate mason_cli
+      - name: Add pub-cache bin to PATH
+        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      # Ensure smf_contracts path exists for dependency_overrides
+      - name: Fetch smf_contracts
+        run: git clone https://github.com/saymyframe/smf_contracts ../smf_contracts
+
+      # Bootstrap the monorepo
+      - name: Bootstrap monorepo
+        run: melos bootstrap
+
+      # Install coverage tool
+      # - name: Install coverage tool
+      #   run: dart pub global activate coverage
+
+      # Generate coverage for all modules
+      # - name: Run tests with coverage (smf_contribution_engine)
+      #   run: |
+      #     cd smf_contribution_engine
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_event_bus)
+      #   run: |
+      #     cd smf_event_bus
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_firebase_analytics)
+      #   run: |
+      #     cd smf_firebase_analytics
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_firebase_core)
+      #   run: |
+      #     cd smf_firebase_core
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_flutter_core)
+      #   run: |
+      #     cd smf_flutter_core
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_get_it)
+      #   run: |
+      #     cd smf_get_it
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_go_router)
+      #   run: |
+      #     cd smf_go_router
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      # - name: Run tests with coverage (smf_home_flutter)
+      #   run: |
+      #     cd smf_home_flutter
+      #     dart pub get
+      #     dart test --coverage=coverage
+      #     format_coverage \
+      #       -i coverage \
+      #       -o coverage/lcov.info \
+      #       --lcov \
+      #       --report-on=lib
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
