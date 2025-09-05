@@ -6,10 +6,17 @@ on:
   pull_request:
     types: [ opened, synchronize, reopened ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUB_ENVIRONMENT: ci
 
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +28,15 @@ jobs:
         uses: saymyframe/.github/.github/actions/setup-dart-tools@main
         with:
           sdk: "3.9.0"
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-dart-3.9.0-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dart-3.9.0-pub-
 
       # Clone external packages before Melos resolves the workspace
       - name: Fetch external packages (contracts/modules)
@@ -40,7 +56,6 @@ jobs:
       - name: Run tests with coverage (smf_flutter_cli)
         run: |
           cd packages/smf_flutter_cli
-          dart pub get
           dart test --coverage=coverage
           format_coverage \
             -i coverage \
