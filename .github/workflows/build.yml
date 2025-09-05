@@ -16,20 +16,11 @@ jobs:
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
       
-      # Setup Dart/Flutter
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
+      # Setup Dart tools (Dart SDK, Melos, Mason)
+      - name: Setup Dart tools
+        uses: saymyframe/.github/.github/actions/setup-dart-tools.yml@main
         with:
-          sdk: stable
-      
-      # Install Melos globally
-      - name: Install Melos
-        run: dart pub global activate melos
-
-      - name: Install Mason CLI
-        run: dart pub global activate mason_cli
-      - name: Add pub-cache bin to PATH
-        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+          sdk: "3.9.0"
 
       # Clone external packages before Melos resolves the workspace
       - name: Fetch external packages (contracts/modules)
