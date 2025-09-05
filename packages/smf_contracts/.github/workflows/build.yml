@@ -6,21 +6,37 @@ on:
   pull_request:
     types: [ opened, synchronize, reopened ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUB_ENVIRONMENT: ci
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
       
-      # Setup Dart/Flutter
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
+      # Setup Dart tools (Dart SDK, Melos, Mason)
+      - name: Setup Dart tools
+        uses: saymyframe/.github/.github/actions/setup-dart-tools@main
         with:
           sdk: "3.9.0"
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-dart-3.9.0-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dart-3.9.0-pub-
 
       - name: Drop workspace resolution for CI
         run: sed -i '/^resolution:\s*workspace\s*$/d' pubspec.yaml
