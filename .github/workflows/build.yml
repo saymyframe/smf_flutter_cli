@@ -18,7 +18,7 @@ jobs:
       
       # Setup Dart tools (Dart SDK, Melos, Mason)
       - name: Setup Dart tools
-        uses: saymyframe/.github/.github/actions/setup-dart-tools.yml@main
+        uses: saymyframe/.github/.github/actions/setup-dart-tools@main
         with:
           sdk: "3.9.0"
 
