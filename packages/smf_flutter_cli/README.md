@@ -1,9 +1,3 @@
-[![pub package](https://img.shields.io/pub/v/smf_flutter_cli.svg)](https://pub.dev/packages/smf_flutter_cli)
-[![status: preview](https://img.shields.io/badge/status-preview-blue.svg)](https://github.com/saymyframe/smf_flutter_cli/issues)
-[![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Join us on Discord](https://img.shields.io/badge/Join%20us-Discord-5865F2?logo=discord&logoColor=white)](https://saymyframe.com/discord)
-
-
 # SMF Flutter CLI
 
 A comprehensive Flutter CLI tool for scaffolding and configuring Flutter applications with modular architecture.
