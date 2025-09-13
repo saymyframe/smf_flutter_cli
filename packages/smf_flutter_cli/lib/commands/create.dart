@@ -60,10 +60,11 @@ final class CreateCommand extends BaseCommand {
   final allowedModules = <String>[
     kFirebaseCore,
     kFirebaseAnalytics,
+    kFirebaseCrashlytics,
     kGetItModule,
     kCommunicationModule,
     kGoRouterModule,
-    kHomeFeatureModule
+    kHomeFeatureModule,
   ];
 
   @override

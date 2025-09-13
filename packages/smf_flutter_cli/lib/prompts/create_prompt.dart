@@ -60,16 +60,6 @@ class CreatePrompt {
           prompt: '✍️ Enter project name: ',
           theme: terminalTheme,
           defaultValue: 'app',
-          validator: (x) {
-            if (x.contains(RegExp(r'[^a-zA-Z\d]'))) {
-              // Using ValidationError from interact 
-              // to show inline validation feedback to the user.
-              // ignore: only_throw_errors
-              throw ValidationError('Contains an invalid character!');
-            }
-
-            return true;
-          },
         ).interact();
 
     final packageName = argResult?['org'] as String? ??
@@ -86,7 +76,7 @@ class CreatePrompt {
 
     if (selectedFactories.isEmpty) {
       final modules = MultiSelect.withTheme(
-        prompt: '📦 Select modules',
+        prompt: '📦 Select modules (use space to select, enter to approve)',
         options: allowedModules,
         theme: terminalTheme,
       ).interact();
@@ -99,7 +89,7 @@ class CreatePrompt {
     final stateArg = argResult?['state-manager'] as String?;
     final selectedState = stateArg ??
         Select.withTheme(
-          prompt: '🧠 Choose state manager',
+          prompt: '🧠 Choose state manager (use enter to select)',
           options: StateManager.values.map((s) => s.stateManager).toList(),
           theme: terminalTheme,
         ).interact();

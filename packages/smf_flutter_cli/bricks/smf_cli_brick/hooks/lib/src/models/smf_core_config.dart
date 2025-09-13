@@ -1,3 +1,4 @@
+import 'package:mason/mason.dart';
 import 'package:path/path.dart';
 import 'package:smf_cli_hooks/src/constants/arguments.dart';
 import 'package:smf_cli_hooks/src/constants/constants.dart';
@@ -59,7 +60,7 @@ class SmfCoreConfig {
   ///
   /// Throws [ArgumentError] when a value has an unexpected type.
   factory SmfCoreConfig.fromHooksVars(Map<String, dynamic> vars) {
-    final appName = vars['app_name'];
+    var appName = vars['app_name'];
     if (appName is! String?) {
       throw ArgumentError.value(
         vars,
@@ -67,9 +68,11 @@ class SmfCoreConfig {
         'Expected a value for key app_name to be of type String?,'
             ' got $appName.',
       );
+    } else {
+      appName = appName?.snakeCase;
     }
 
-    final orgName = vars[kOrgNameArg];
+    var orgName = vars[kOrgNameArg];
     if (orgName is! String?) {
       throw ArgumentError.value(
         vars,
@@ -77,6 +80,8 @@ class SmfCoreConfig {
         'Expected a value for key org_name to be of type String?,'
             ' got $orgName.',
       );
+    } else {
+      orgName = orgName?.dotCase;
     }
 
     final appId = vars[kAppIdArg];

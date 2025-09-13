@@ -32,10 +32,12 @@ dependencies:
   smf_event_bus: ^0.2.0
   smf_firebase_analytics: ^0.2.0
   smf_firebase_core: ^0.2.0
-  smf_flutter_core: ^0.2.0
+  smf_flutter_core: ^0.2.1
   smf_get_it: ^0.2.0
   smf_go_router: ^0.2.0
   smf_home_flutter: ^0.2.0
+  smf_firebase_crashlytics:
+    path: ../smf_modules/smf_firebase_crashlytics
 
 dev_dependencies:
   mocktail: ^1.0.4

@@ -15,6 +15,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -30,4 +31,5 @@ final smfModules = <String, IModuleContributorFactory>{
   kGoRouterModule: SmfGoRouterFactory(),
   kHomeFeatureModule: SmfHomeModuleFactory(),
   kContractsModule: SmfContractsFactory(),
+  kFirebaseCrashlytics: SmfFirebaseCrashlyticsFactory(),
 };
