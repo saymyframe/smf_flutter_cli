@@ -7,34 +7,30 @@ class FirebaseCoreModule
     implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
-    BrickContribution(
-      name: 'firebase_core',
-      bundle: smfFirebaseCoreBrickBundle,
-    ),
-  ];
+        BrickContribution(
+          name: 'firebase_core',
+          bundle: smfFirebaseCoreBrickBundle,
+        ),
+      ];
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-    name: kFirebaseCore,
-    description: 'Firebase Core module',
-    pubDependency: {'firebase_core: ^3.15.1'},
-  );
+        name: kFirebaseCore,
+        description: 'Firebase Core module',
+        pubDependency: {'firebase_core: ^4.1.0'},
+      );
 
   @override
   List<Contribution> get sharedFileContributions => [
-    InsertImport(
-      file: 'lib/main.dart',
-      import: "import 'package:firebase_core/firebase_core.dart';",
-    ),
-    InsertIntoFunction(
-      file: 'lib/main.dart',
-      function: 'main',
-      afterStatement: 'WidgetsFlutterBinding.ensureInitialized',
-      insert: '''
-      // Firebase Core -------------
-      await Firebase.initializeApp();
-      // Firebase Core END -------------
-      ''',
-    ),
-  ];
+        InsertImport(
+          file: 'lib/main.dart',
+          import: "import 'package:firebase_core/firebase_core.dart';",
+        ),
+        InsertIntoFunction(
+          file: 'lib/main.dart',
+          function: 'main',
+          afterStatement: 'WidgetsFlutterBinding.ensureInitialized',
+          insert: 'await Firebase.initializeApp();',
+        ),
+      ];
 }

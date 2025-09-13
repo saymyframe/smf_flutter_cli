@@ -18,6 +18,7 @@ workspace:
   - smf_get_it
   - smf_go_router
   - smf_home_flutter
+  - smf_firebase_crashlytics
 
 dependency_overrides:
   smf_contracts:

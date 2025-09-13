@@ -17,7 +17,7 @@ class FirebaseAnalyticsModule
         name: kFirebaseAnalytics,
         description: 'Firebase Analytics module',
         dependsOn: {kFirebaseCore, kGetItModule, kGoRouterModule},
-        pubDependency: {'firebase_analytics: ^11.5.2'},
+        pubDependency: {'firebase_analytics: ^12.0.1'},
       );
 
   @override
