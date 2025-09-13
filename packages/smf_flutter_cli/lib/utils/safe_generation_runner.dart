@@ -73,18 +73,43 @@ class SafeGenerationRunner {
           green.wrap('''
 +--------------------------------------------------------------+
 | Want help or ideas? Join our Discord and meet the community! |
-| Star the repo if this helped you — it motivates us ❤️        |
+| Star the repo if this helped you - it motivates us ❤️        |
 | Docs: https://doc.saymyframe.com                             |
 | Discord: https://saymyframe.com/discord                      |
 | GitHub: https://github.com/saymyframe/smf_flutter_cli        |
-+--------------------------------------------------------------+'''),
++--------------------------------------------------------------+
+'''),
         );
-    } on Exception catch (_) {
+    } on Exception catch (e, s) {
+      _handleCliError(logger, e, s, logger.level == Level.verbose);
     } finally {
       // Best-effort cleanup
       if (tempRoot.existsSync()) {
         await tempRoot.delete(recursive: true);
       }
+    }
+  }
+
+  void _handleCliError(
+    Logger logger,
+    Object error, [
+    StackTrace? stackTrace,
+    bool verbose = false,
+  ]) {
+    logger
+      ..write('❌  An unexpected error occurred.\n')
+      ..write('⚠️ CLI has stopped.\n\n');
+
+    if (verbose) {
+      logger
+        ..write('--- Details ---\n\n')
+        ..write('$error\n')
+        ..write('${stackTrace ?? ''}\n')
+        ..write('---------------\n');
+    } else {
+      logger.write(
+        '💡 Try running with --verbose to see the full log and stacktrace.\n',
+      );
     }
   }
 
