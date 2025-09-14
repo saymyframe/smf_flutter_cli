@@ -70,7 +70,7 @@ class BrickGenerator extends Generator {
 
           if (isStrict) {
             logger.err(
-              '❌ Error in module ${module.moduleDescriptor.name}',
+              '❌  Error in module ${module.moduleDescriptor.name}',
             );
 
             rethrow;
@@ -91,8 +91,7 @@ class BrickGenerator extends Generator {
     }
 
     if (disabledModules.isNotEmpty) {
-      final excludedNames =
-          disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
+      final excludedNames = disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
 
       logger
         ..info('⚠️⚠️⚠️ Generation warnings ⚠️⚠️⚠️')
