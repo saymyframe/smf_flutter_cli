@@ -3,4 +3,42 @@
 
 import 'package:mason/mason.dart';
 
-final smfFlutterRiverpodBundle = MasonBundle.fromJson(<String, dynamic>{"files":[{"path":"{{app_name.snakeCase()}}/lib/main.dart","data":"aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvbWF0ZXJpYWwuZGFydCc7CmltcG9ydCAncGFja2FnZTpmbHV0dGVyX3JpdmVycG9kL2ZsdXR0ZXJfcml2ZXJwb2QuZGFydCc7CgpGdXR1cmU8dm9pZD4gbWFpbigpIGFzeW5jIHsKICBXaWRnZXRzRmx1dHRlckJpbmRpbmcuZW5zdXJlSW5pdGlhbGl6ZWQoKTsKCiAgcnVuQXBwKGNvbnN0IFByb3ZpZGVyU2NvcGUoY2hpbGQ6IE1haW5BcHAoKSkpOwp9CgpjbGFzcyBNYWluQXBwIGV4dGVuZHMgU3RhdGVsZXNzV2lkZ2V0IHsKICBjb25zdCBNYWluQXBwKHtzdXBlci5rZXl9KTsKCiAgQG92ZXJyaWRlCiAgV2lkZ2V0IGJ1aWxkKEJ1aWxkQ29udGV4dCBjb250ZXh0KSB7CiAgICByZXR1cm4gY29uc3QgTWF0ZXJpYWxBcHAoCiAgICAgIGhvbWU6IFNjYWZmb2xkKGJvZHk6IENlbnRlcihjaGlsZDogVGV4dCgnSGVsbG8gV29ybGQhJykpKSwKICAgICk7CiAgfQp9Cg==","type":"text"}],"hooks":[],"name":"smf_flutter_riverpod","description":"A new brick created with the Mason CLI.","version":"0.1.0+1","environment":{"mason":"^0.1.1"},"readme":{"path":"README.md","data":"IyBzbWZfZmx1dHRlcl9yaXZlcnBvZAoKWyFbUG93ZXJlZCBieSBNYXNvbl0oaHR0cHM6Ly9pbWcuc2hpZWxkcy5pby9lbmRwb2ludD91cmw9aHR0cHMlM0ElMkYlMkZ0aW55dXJsLmNvbSUyRm1hc29uLWJhZGdlKV0oaHR0cHM6Ly9naXRodWIuY29tL2ZlbGFuZ2VsL21hc29uKQoKQSBuZXcgYnJpY2sgY3JlYXRlZCB3aXRoIHRoZSBNYXNvbiBDTEkuCgpfR2VuZXJhdGVkIGJ5IFttYXNvbl1bMV0g8J+nsV8KCiMjIEdldHRpbmcgU3RhcnRlZCDwn5qACgpUaGlzIGlzIGEgc3RhcnRpbmcgcG9pbnQgZm9yIGEgbmV3IGJyaWNrLgpBIGZldyByZXNvdXJjZXMgdG8gZ2V0IHlvdSBzdGFydGVkIGlmIHRoaXMgaXMgeW91ciBmaXJzdCBicmljayB0ZW1wbGF0ZToKCi0gW09mZmljaWFsIE1hc29uIERvY3VtZW50YXRpb25dWzJdCi0gW0NvZGUgZ2VuZXJhdGlvbiB3aXRoIE1hc29uIEJsb2ddWzNdCi0gW1ZlcnkgR29vZCBMaXZlc3RyZWFtOiBGZWxpeCBBbmdlbG92IERlbW9zIE1hc29uXVs0XQotIFtGbHV0dGVyIFBhY2thZ2Ugb2YgdGhlIFdlZWs6IE1hc29uXVs1XQotIFtPYnNlcnZhYmxlIEZsdXR0ZXI6IEJ1aWxkaW5nIGEgTWFzb24gYnJpY2tdWzZdCi0gW01lZXQgTWFzb246IEZsdXR0ZXIgVmlraW5ncyAyMDIyXVs3XQoKWzFdOiBodHRwczovL2dpdGh1Yi5jb20vZmVsYW5nZWwvbWFzb24KWzJdOiBodHRwczovL2RvY3MuYnJpY2todWIuZGV2ClszXTogaHR0cHM6Ly92ZXJ5Z29vZC52ZW50dXJlcy9ibG9nL2NvZGUtZ2VuZXJhdGlvbi13aXRoLW1hc29uCls0XTogaHR0cHM6Ly95b3V0dS5iZS9HNFBUakE2dHBUVQpbNV06IGh0dHBzOi8veW91dHUuYmUvcWpBMEpGaVBNblEKWzZdOiBodHRwczovL3lvdXR1LmJlL284QjFFZmNVaXN3Cls3XTogaHR0cHM6Ly95b3V0dS5iZS9MWGhnaUY1SGlRZwo=","type":"text"},"changelog":{"path":"CHANGELOG.md","data":"IyAwLjEuMCsxCgotIFRPRE86IERlc2NyaWJlIGluaXRpYWwgcmVsZWFzZS4K","type":"text"},"license":{"path":"LICENSE","data":"VE9ETzogQWRkIHlvdXIgbGljZW5zZSBoZXJlLgo=","type":"text"},"vars":{"name":{"type":"string","description":"Your name","default":"Dash","prompt":"What is your name?"}}});
+final smfFlutterRiverpodBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "{{app_name.snakeCase()}}/lib/main.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvbWF0ZXJpYWwuZGFydCc7CmltcG9ydCAncGFja2FnZTpmbHV0dGVyX3JpdmVycG9kL2ZsdXR0ZXJfcml2ZXJwb2QuZGFydCc7CgpGdXR1cmU8dm9pZD4gbWFpbigpIGFzeW5jIHsKICBXaWRnZXRzRmx1dHRlckJpbmRpbmcuZW5zdXJlSW5pdGlhbGl6ZWQoKTsKCiAgcnVuQXBwKGNvbnN0IFByb3ZpZGVyU2NvcGUoY2hpbGQ6IE1haW5BcHAoKSkpOwp9CgpjbGFzcyBNYWluQXBwIGV4dGVuZHMgU3RhdGVsZXNzV2lkZ2V0IHsKICBjb25zdCBNYWluQXBwKHtzdXBlci5rZXl9KTsKCiAgQG92ZXJyaWRlCiAgV2lkZ2V0IGJ1aWxkKEJ1aWxkQ29udGV4dCBjb250ZXh0KSB7CiAgICByZXR1cm4gY29uc3QgTWF0ZXJpYWxBcHAoCiAgICAgIGhvbWU6IFNjYWZmb2xkKGJvZHk6IENlbnRlcihjaGlsZDogVGV4dCgnSGVsbG8gV29ybGQhJykpKSwKICAgICk7CiAgfQp9Cg==",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "smf_flutter_riverpod",
+  "description": "A new brick created with the Mason CLI.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "readme": {
+    "path": "README.md",
+    "data":
+        "IyBzbWZfZmx1dHRlcl9yaXZlcnBvZAoKWyFbUG93ZXJlZCBieSBNYXNvbl0oaHR0cHM6Ly9pbWcuc2hpZWxkcy5pby9lbmRwb2ludD91cmw9aHR0cHMlM0ElMkYlMkZ0aW55dXJsLmNvbSUyRm1hc29uLWJhZGdlKV0oaHR0cHM6Ly9naXRodWIuY29tL2ZlbGFuZ2VsL21hc29uKQoKQSBuZXcgYnJpY2sgY3JlYXRlZCB3aXRoIHRoZSBNYXNvbiBDTEkuCgpfR2VuZXJhdGVkIGJ5IFttYXNvbl1bMV0g8J+nsV8KCiMjIEdldHRpbmcgU3RhcnRlZCDwn5qACgpUaGlzIGlzIGEgc3RhcnRpbmcgcG9pbnQgZm9yIGEgbmV3IGJyaWNrLgpBIGZldyByZXNvdXJjZXMgdG8gZ2V0IHlvdSBzdGFydGVkIGlmIHRoaXMgaXMgeW91ciBmaXJzdCBicmljayB0ZW1wbGF0ZToKCi0gW09mZmljaWFsIE1hc29uIERvY3VtZW50YXRpb25dWzJdCi0gW0NvZGUgZ2VuZXJhdGlvbiB3aXRoIE1hc29uIEJsb2ddWzNdCi0gW1ZlcnkgR29vZCBMaXZlc3RyZWFtOiBGZWxpeCBBbmdlbG92IERlbW9zIE1hc29uXVs0XQotIFtGbHV0dGVyIFBhY2thZ2Ugb2YgdGhlIFdlZWs6IE1hc29uXVs1XQotIFtPYnNlcnZhYmxlIEZsdXR0ZXI6IEJ1aWxkaW5nIGEgTWFzb24gYnJpY2tdWzZdCi0gW01lZXQgTWFzb246IEZsdXR0ZXIgVmlraW5ncyAyMDIyXVs3XQoKWzFdOiBodHRwczovL2dpdGh1Yi5jb20vZmVsYW5nZWwvbWFzb24KWzJdOiBodHRwczovL2RvY3MuYnJpY2todWIuZGV2ClszXTogaHR0cHM6Ly92ZXJ5Z29vZC52ZW50dXJlcy9ibG9nL2NvZGUtZ2VuZXJhdGlvbi13aXRoLW1hc29uCls0XTogaHR0cHM6Ly95b3V0dS5iZS9HNFBUakE2dHBUVQpbNV06IGh0dHBzOi8veW91dHUuYmUvcWpBMEpGaVBNblEKWzZdOiBodHRwczovL3lvdXR1LmJlL284QjFFZmNVaXN3Cls3XTogaHR0cHM6Ly95b3V0dS5iZS9MWGhnaUY1SGlRZwo=",
+    "type": "text"
+  },
+  "changelog": {
+    "path": "CHANGELOG.md",
+    "data": "IyAwLjEuMCsxCgotIFRPRE86IERlc2NyaWJlIGluaXRpYWwgcmVsZWFzZS4K",
+    "type": "text"
+  },
+  "license": {
+    "path": "LICENSE",
+    "data": "VE9ETzogQWRkIHlvdXIgbGljZW5zZSBoZXJlLgo=",
+    "type": "text"
+  },
+  "vars": {
+    "name": {
+      "type": "string",
+      "description": "Your name",
+      "default": "Dash",
+      "prompt": "What is your name?"
+    }
+  }
+});

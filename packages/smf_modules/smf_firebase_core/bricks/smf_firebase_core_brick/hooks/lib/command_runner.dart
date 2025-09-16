@@ -8,7 +8,7 @@ class CommandRunner {
     List<String> args, {
     required Logger logger,
     String? workingDirectory,
-    bool runInShell = false,
+    bool runInShell = true,
   }) async {
     final commandString = _buildCommandString(command, args);
     logger.detail('Running: $commandString');
@@ -29,7 +29,7 @@ class CommandRunner {
     List<String> args, {
     required Logger logger,
     String? workingDirectory,
-    bool runInShell = false,
+    bool runInShell = true,
     ProcessStartMode mode = ProcessStartMode.inheritStdio,
   }) async {
     final commandString = _buildCommandString(command, args);

@@ -19,7 +19,7 @@ class FlutterFireInstaller implements Installer {
       progress.complete('flutterfire_cli installed');
       return true;
     } on Exception catch (_) {
-      progress.fail('❌ flutterfire_cli isn\'t installed');
+      progress.fail("flutterfire_cli isn't installed");
       return false;
     }
   }
