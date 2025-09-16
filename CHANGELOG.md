@@ -15,6 +15,27 @@ Packages with breaking changes:
 
 Packages with other changes:
 
+ - [`smf_flutter_cli` - `v0.2.1+1`](#smf_flutter_cli---v0211)
+
+---
+
+#### `smf_flutter_cli` - `v0.2.1+1`
+
+ - **FIX**(safe-write): correct project name in safe write. ([e1cdb985](https://github.com/saymyframe/smf_flutter_cli/commit/e1cdb98564f302c25485418c1c42f04d8c497524))
+
+
+## 2025-09-16
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
  - [`smf_flutter_cli` - `v0.2.1`](#smf_flutter_cli---v021)
 
 ---
