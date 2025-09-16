@@ -91,16 +91,17 @@ class BrickGenerator extends Generator {
     }
 
     if (disabledModules.isNotEmpty) {
-      final excludedNames = disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
+      final excludedNames =
+          disabledModules.map((m) => m.moduleDescriptor.name).join(', ');
 
       logger
-        ..info('⚠️⚠️⚠️ Generation warnings ⚠️⚠️⚠️')
+        ..info('⚠️ ⚠️ ⚠️  Generation warnings  ⚠️ ⚠️ ⚠️')
         ..info(
           ' Errors occurred during generation.\n'
           ' Excluding the following modules (and their dependents):\n'
           ' $excludedNames',
         )
-        ..info('⚠️⚠️⚠️ End of warnings ⚠️⚠️⚠️');
+        ..info('⚠️ ⚠️ ⚠️  End of warnings  ⚠️ ⚠️ ⚠️');
 
       modules.removeWhere(disabledModules.contains);
     }

@@ -53,7 +53,7 @@ class SafeGenerationRunner {
     try {
       await runCli(tempContext);
 
-      final appName = context.name;
+      final appName = context.name.snakeCase;
       final tempProjectDir = p.join(tempRoot.path, appName);
       final desiredDest = p.join(context.outputDirectory, appName);
 
