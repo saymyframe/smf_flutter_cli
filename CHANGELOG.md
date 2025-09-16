@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2025-09-16
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_flutter_cli` - `v0.2.1`](#smf_flutter_cli---v021)
+
+---
+
+#### `smf_flutter_cli` - `v0.2.1`
+
+ - **FIX**: add extra space between emoji and message. ([#11](https://github.com/saymyframe/smf_flutter_cli/issues/11)). ([84535ff4](https://github.com/saymyframe/smf_flutter_cli/commit/84535ff47ac322e587ef3921372060f94f9fd443))
+ - **FEAT**: improve UX when cli stop with an error. ([f770f643](https://github.com/saymyframe/smf_flutter_cli/commit/f770f64307515a0ce9252d7c4fd55a3a1d082c84))
+ - **FEAT**: firebase crashlytics module. ([9679223f](https://github.com/saymyframe/smf_flutter_cli/commit/9679223f6f635e3d98a88fa671fc9fb6ff1c30fb))
+
+
 ## 2025-09-01
 
 ### Changes

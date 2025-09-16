@@ -1,6 +1,6 @@
 name: smf_flutter_cli
 description: "CLI for SayMyFrame (SMF) Flutter: scaffold projects, configure modules, and generate code."
-version: 0.2.0
+version: 0.2.1
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
@@ -31,13 +31,12 @@ dependencies:
   smf_contracts: ^0.2.0
   smf_event_bus: ^0.2.0
   smf_firebase_analytics: ^0.2.0
-  smf_firebase_core: ^0.2.0
+  smf_firebase_core: ^0.2.1
   smf_flutter_core: ^0.2.1
   smf_get_it: ^0.2.0
   smf_go_router: ^0.2.0
   smf_home_flutter: ^0.2.0
-  smf_firebase_crashlytics:
-    path: ../smf_modules/smf_firebase_crashlytics
+  smf_firebase_crashlytics: ^0.0.1
 
 dev_dependencies:
   mocktail: ^1.0.4
