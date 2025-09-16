@@ -9,9 +9,13 @@ import 'package:smf_firebase_core_brick_hooks/installers/i_installer.dart';
 import 'package:smf_firebase_core_brick_hooks/prompts.dart';
 
 class FirebaseCliInstaller implements Installer {
-  const FirebaseCliInstaller(this._logger);
+  const FirebaseCliInstaller(
+    this._logger, {
+    required this.workingDirectory,
+  });
 
   final Logger _logger;
+  final String workingDirectory;
 
   @override
   String get name => 'Firebase CLI';

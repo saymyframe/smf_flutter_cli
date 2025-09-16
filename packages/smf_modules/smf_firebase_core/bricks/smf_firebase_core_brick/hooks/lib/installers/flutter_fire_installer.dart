@@ -4,9 +4,13 @@ import 'package:smf_firebase_core_brick_hooks/installers/i_installer.dart';
 import 'package:smf_firebase_core_brick_hooks/prompts.dart';
 
 class FlutterFireInstaller implements Installer {
-  const FlutterFireInstaller(this._logger);
+  const FlutterFireInstaller(
+    this._logger, {
+    required this.workingDirectory,
+  });
 
   final Logger _logger;
+  final String workingDirectory;
 
   @override
   String get name => 'FlutterFire CLI';
@@ -15,7 +19,12 @@ class FlutterFireInstaller implements Installer {
   Future<bool> checkInstallation() async {
     final progress = _logger.progress('Checking flutterfire_cli installed');
     try {
-      await CommandRunner.run('flutterfire', ['--help'], logger: _logger);
+      await CommandRunner.run(
+        'flutterfire',
+        ['--help'],
+        logger: _logger,
+        workingDirectory: workingDirectory,
+      );
       progress.complete('flutterfire_cli installed');
       return true;
     } on Exception catch (_) {

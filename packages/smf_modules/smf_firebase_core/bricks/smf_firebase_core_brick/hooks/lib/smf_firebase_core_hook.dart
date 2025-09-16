@@ -11,11 +11,21 @@ class SmfFirebaseCoreHook {
 
   Future<bool> run() async {
     // Firebase CLI
-    var result = await _runInstallation(FirebaseCliInstaller(_logger));
+    var result = await _runInstallation(
+      FirebaseCliInstaller(
+        _logger,
+        workingDirectory: workingDirectory,
+      ),
+    );
     if (!result) throw Exception('Installation failed for firebase cli');
 
     // FlutterFire CLI
-    result = await _runInstallation(FlutterFireInstaller(_logger));
+    result = await _runInstallation(
+      FlutterFireInstaller(
+        _logger,
+        workingDirectory: workingDirectory,
+      ),
+    );
     if (!result) throw Exception('Installation failed for flutterfire cli');
 
     return true;
