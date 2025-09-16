@@ -15,6 +15,27 @@ Packages with breaking changes:
 
 Packages with other changes:
 
+ - [`smf_firebase_core` - `v0.2.1+1`](#smf_firebase_core---v0211)
+
+---
+
+#### `smf_firebase_core` - `v0.2.1+1`
+
+ - **FIX**(firebase_core): check if Firebase CLI is installed. ([4462df06](https://github.com/saymyframe/smf_modules/commit/4462df06601637af1c5b3661dbdd1688735ad54f))
+
+
+## 2025-09-16
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
  - [`smf_firebase_core` - `v0.2.1`](#smf_firebase_core---v021)
  - [`smf_firebase_crashlytics` - `v0.0.1`](#smf_firebase_crashlytics---v001)
 

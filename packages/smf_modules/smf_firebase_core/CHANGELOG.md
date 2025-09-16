@@ -1,3 +1,7 @@
+## 0.2.1+1
+
+ - **FIX**(firebase_core): check if Firebase CLI is installed. ([4462df06](https://github.com/saymyframe/smf_modules/commit/4462df06601637af1c5b3661dbdd1688735ad54f))
+
 ## 0.2.1
 
 - **FIX**(firebase_core): fix Firebase installation process across
