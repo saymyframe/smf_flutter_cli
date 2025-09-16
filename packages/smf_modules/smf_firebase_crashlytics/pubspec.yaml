@@ -4,7 +4,7 @@ version: 0.0.1
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_modules
 issue_tracker: https://github.com/saymyframe/smf_modules/issues
-topics: [flutter, firebase, crashlytics]
+topics: [ flutter, firebase, crashlytics ]
 license: Apache-2.0
 
 environment:
