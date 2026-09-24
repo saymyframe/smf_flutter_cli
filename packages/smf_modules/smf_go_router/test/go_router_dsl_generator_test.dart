@@ -961,18 +961,16 @@ void main() {
 
 /// A link that equals only itself, like RouteShellLink before it compared ids.
 ///
-/// Its identity-based `==` and `hashCode` are what Object has, which is safe
-/// for mutable classes. It is not `@immutable`, as that asks for a const
-/// constructor, and const links with the same id would be one canonical
-/// instance, equal to itself.
+/// Its identity-based `==` and `hashCode` are what Object has. The
+/// constructor must not be const: const links with the same id would be one
+/// canonical instance, equal to itself, and the test would prove nothing.
 class _IdentityShellLink extends RouteShellLink {
+  // ignore: prefer_const_constructors_in_immutables, see the class doc.
   _IdentityShellLink(super.id);
 
   @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes, identity-based.
   bool operator ==(Object other) => identical(this, other);
 
   @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes, identity-based.
   int get hashCode => identityHashCode(this);
 }
