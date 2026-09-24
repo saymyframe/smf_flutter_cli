@@ -15,10 +15,10 @@ resolution: workspace
 dependencies:
   analyzer: ">=7.5.9 <9.0.0"
   dart_style: ^3.1.0
-  path: ^1.9.1
-  mustachex: ^1.0.0
   mason_logger: ^0.3.3
+  mustachex: ^1.0.0
+  path: ^1.9.1
 
 dev_dependencies:
-  very_good_analysis: ^10.3.0
   test: ^1.24.0
+  very_good_analysis: ^10.3.0
