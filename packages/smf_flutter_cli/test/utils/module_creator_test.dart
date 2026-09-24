@@ -174,6 +174,58 @@ void main() {
       expect(names.contains('a'), isFalse);
     });
 
+    test(
+        'skips every dependent of a dependency whose own dependency is '
+        'unsupported (lenient)', () {
+      registry['a'] =
+          TestFactory(name: 'a', description: 'A', dependsOn: {'b'});
+      registry['b'] =
+          TestFactory(name: 'b', description: 'B', dependsOn: {'c'});
+      registry['c'] =
+          TestFactory(name: 'c', description: 'C', supportsProfile: false);
+
+      final modules = creator.build(
+        <IModuleContributorFactory>[registry['a']!],
+        profile,
+        strictMode: StrictMode.lenient,
+      );
+
+      expect(modules.map((m) => m.moduleDescriptor.name), isEmpty);
+    });
+
+    test(
+        'skips every dependent of a dependency whose own dependency is '
+        'missing in registry (lenient)', () {
+      registry['a'] =
+          TestFactory(name: 'a', description: 'A', dependsOn: {'b'});
+      registry['b'] =
+          TestFactory(name: 'b', description: 'B', dependsOn: {'missing'});
+
+      final modules = creator.build(
+        <IModuleContributorFactory>[registry['a']!],
+        profile,
+        strictMode: StrictMode.lenient,
+      );
+
+      expect(modules.map((m) => m.moduleDescriptor.name), isEmpty);
+    });
+
+    test('does not bring back a skipped module through a dependent (lenient)',
+        () {
+      registry['b'] =
+          TestFactory(name: 'b', description: 'B', dependsOn: {'missing'});
+      registry['a'] =
+          TestFactory(name: 'a', description: 'A', dependsOn: {'b'});
+
+      final modules = creator.build(
+        <IModuleContributorFactory>[registry['b']!, registry['a']!],
+        profile,
+        strictMode: StrictMode.lenient,
+      );
+
+      expect(modules.map((m) => m.moduleDescriptor.name), isEmpty);
+    });
+
     test('deduplicates factories passed multiple times', () {
       registry['x'] = TestFactory(name: 'x', description: 'X');
 

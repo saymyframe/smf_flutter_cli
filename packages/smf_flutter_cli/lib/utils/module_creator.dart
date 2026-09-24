@@ -47,86 +47,128 @@ class ModuleCreator {
     required StrictMode strictMode,
     Logger? logger,
   }) {
-    final allRequestedFactories = <IModuleContributorFactory>[
+    final selection = _ModuleSelection(
+      registry,
+      profile,
+      strictMode: strictMode,
+      logger: logger,
+    );
+    [
       ...coreModuleKeys
           .map((key) => registry[key])
           .whereType<IModuleContributorFactory>(),
       ...rootFactories,
-    ];
+    ].forEach(selection.addRoot);
 
-    final moduleNameToInstance = <String, IModuleCodeContributor>{};
-    final processedModuleNames = <String>{};
+    return resolver.resolve(selection.modules.values.toList());
+  }
+}
 
-    IModuleCodeContributor? tryCreateModuleInstance(
-      IModuleContributorFactory factory,
-    ) {
-      if (!factory.supports(profile)) {
-        final message = 'Module factory ${factory.runtimeType} '
-            'does not support profile: $profile';
-        if (strictMode == StrictMode.strict) {
-          logger?.err('❌ $message');
-          throw StateError(message);
-        } else {
-          logger?.warn('⚠️ $message. Skipping.');
-          return null;
-        }
-      }
+/// The modules of one [ModuleCreator.build] run.
+///
+/// A module is selected only when all of its dependencies are, transitively.
+/// In lenient mode a module that can't be selected is skipped together with
+/// every module that depends on it, and it is never brought back later.
+class _ModuleSelection {
+  _ModuleSelection(
+    this.registry,
+    this.profile, {
+    required this.strictMode,
+    required this.logger,
+  });
 
-      return factory.create(profile);
+  final Map<String, IModuleContributorFactory> registry;
+  final ModuleProfile profile;
+  final StrictMode strictMode;
+  final Logger? logger;
+
+  /// Selected modules by name. A dependency takes its slot before its own
+  /// dependencies, which keeps the order the resolver starts from stable.
+  final modules = <String, IModuleCodeContributor>{};
+
+  final _selected = <String>{};
+  final _skipped = <String>{};
+  final _visiting = <String>{};
+
+  void addRoot(IModuleContributorFactory factory) {
+    final module = _create(factory);
+    if (module != null) _add(module);
+  }
+
+  /// Selects [module] if all of its dependencies can be selected.
+  bool _add(IModuleCodeContributor module) {
+    final name = module.moduleDescriptor.name;
+    if (_selected.contains(name)) return true;
+    if (_skipped.contains(name)) return false;
+    // A module that is already being added depends on itself; the resolver
+    // reports the cycle.
+    if (!_visiting.add(name)) return true;
+
+    final dependenciesSelected = module.moduleDescriptor.dependsOn
+        .every((dependency) => _addDependency(dependency, name));
+    _visiting.remove(name);
+
+    if (!dependenciesSelected) {
+      _skipped.add(name);
+      modules.remove(name);
+      return false;
+    }
+    modules[name] = module;
+    _selected.add(name);
+    return true;
+  }
+
+  bool _addDependency(String dependency, String dependent) {
+    if (_selected.contains(dependency)) return true;
+
+    final factory = registry[dependency];
+    if (factory == null) {
+      _fail(
+        'Unknown dependency: $dependency for $dependent',
+        skipping: 'Skipping $dependent',
+      );
+      return false;
     }
 
-    void addModuleAndDependencies(IModuleCodeContributor module) {
-      final moduleName = module.moduleDescriptor.name;
-      if (processedModuleNames.contains(moduleName)) return;
-      processedModuleNames.add(moduleName);
-
-      for (final dependencyName in module.moduleDescriptor.dependsOn) {
-        final dependencyFactory = registry[dependencyName];
-        if (dependencyFactory == null) {
-          final message = 'Unknown dependency: $dependencyName for $moduleName';
-          if (strictMode == StrictMode.strict) {
-            logger?.err('❌ $message');
-            throw StateError(message);
-          } else {
-            logger?.warn('⚠️ $message. Skipping $moduleName');
-            return; // skip this module in lenient mode
-          }
-        }
-
-        final alreadyPresent = moduleNameToInstance.containsKey(dependencyName);
-        final dependencyInstance = moduleNameToInstance[dependencyName] ??
-            tryCreateModuleInstance(dependencyFactory);
-        if (dependencyInstance == null) {
-          // Unsupported dependency in lenient mode → skip current module
-          logger?.warn(
-            '⚠️ Dependency $dependencyName not available for $moduleName. '
-            'Skipping $moduleName',
-          );
-
-          return;
-        }
-
-        moduleNameToInstance[dependencyName] = dependencyInstance;
-        if (!alreadyPresent) {
-          logger?.detail(
-            '🔗 Resolved transitive dependency: '
-            '$dependencyName (required by $moduleName)',
-          );
-        }
-        addModuleAndDependencies(dependencyInstance);
-      }
-
-      moduleNameToInstance[moduleName] = module;
+    final isNew = !modules.containsKey(dependency);
+    final module = _skipped.contains(dependency)
+        ? null
+        : modules[dependency] ?? _create(factory);
+    if (module != null) modules[dependency] = module;
+    if (module == null || !_add(module)) {
+      logger?.warn(
+        '⚠️ Dependency $dependency not available for $dependent. '
+        'Skipping $dependent',
+      );
+      return false;
     }
 
-    for (final factory in allRequestedFactories) {
-      final instance = tryCreateModuleInstance(factory);
-      if (instance == null) continue;
-      addModuleAndDependencies(instance);
+    if (isNew) {
+      logger?.detail(
+        '🔗 Resolved transitive dependency: '
+        '$dependency (required by $dependent)',
+      );
     }
+    return true;
+  }
 
-    // Resolve final order using provided resolver
-    final built = moduleNameToInstance.values.toList();
-    return resolver.resolve(built);
+  IModuleCodeContributor? _create(IModuleContributorFactory factory) {
+    if (factory.supports(profile)) return factory.create(profile);
+
+    _fail(
+      'Module factory ${factory.runtimeType} does not support profile: '
+      '$profile',
+      skipping: 'Skipping.',
+    );
+    return null;
+  }
+
+  /// Throws in strict mode; otherwise warns that something is [skipping].
+  void _fail(String message, {required String skipping}) {
+    if (strictMode == StrictMode.strict) {
+      logger?.err('❌ $message');
+      throw StateError(message);
+    }
+    logger?.warn('⚠️ $message. $skipping');
   }
 }
