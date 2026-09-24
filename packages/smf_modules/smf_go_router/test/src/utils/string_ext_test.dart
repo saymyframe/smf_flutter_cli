@@ -31,8 +31,14 @@ void main() {
         expect('homeScreen'.camelCase(), 'homeScreen');
         expect('userProfile'.camelCase(), 'userProfile');
       },
-      skip: 'Bug: camelCase lowercases the rest of every word, so it is not '
-          "idempotent ('homeScreen' -> 'homescreen')",
     );
+
+    test('splits camelCased words, acronyms included', () {
+      expect('HomeScreen'.camelCase(), 'homeScreen');
+      expect('HTTPClient'.camelCase(), 'httpClient');
+      expect('userID'.camelCase(), 'userId');
+      expect('tab2View'.camelCase(), 'tab2View');
+      expect('/orders/:orderId'.camelCase(), 'ordersOrderId');
+    });
   });
 }

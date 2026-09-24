@@ -7,11 +7,11 @@ class AppRoutesGenerator {
     final seen = <String>{};
 
     for (final route in routes) {
-      final pathConstName = _safeRouteConst(
-        route.name ?? _pathToConstName(route.path),
-        suffix: 'Path',
-      );
-      final nameConstName = route.name;
+      // Like the router, treat an empty name as no name.
+      final nameConstName = (route.name?.isEmpty ?? true) ? null : route.name;
+      // camelCase splits on every non-alphanumeric character, so a path
+      // gives one word per segment: '/user-profile/:id' -> 'userProfileId'.
+      final pathConstName = '${(nameConstName ?? route.path).camelCase()}Path';
 
       if (!seen.contains(pathConstName)) {
         buffer.writeln("  static const $pathConstName = '${route.path}';");
@@ -25,18 +25,5 @@ class AppRoutesGenerator {
     }
 
     return buffer.toString();
-  }
-
-  String _pathToConstName(String path) {
-    return path
-        .replaceAll('/', '')
-        .replaceAll(':', '')
-        .replaceAll('-', '_')
-        .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '')
-        .camelCase();
-  }
-
-  String _safeRouteConst(String value, {String suffix = ''}) {
-    return '${value.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').camelCase()}$suffix';
   }
 }
