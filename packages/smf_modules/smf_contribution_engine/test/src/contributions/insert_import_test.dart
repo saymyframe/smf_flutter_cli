@@ -94,8 +94,6 @@ void main() {
           'void main() {}\n',
         );
       },
-      skip: 'Bug: the import is inserted right after the last `;`, which moves '
-          "that line's trailing comment onto the new import",
     );
 
     test(
@@ -112,9 +110,43 @@ void main() {
 
         expect(await insert(source, import: singleLine), source);
       },
-      skip: 'Bug: the duplicate check only sees single-line imports and '
-          'compares raw text',
     );
+
+    test('does not duplicate an import written with double quotes', () async {
+      const source = 'import "package:firebase_core/firebase_core.dart";\n';
+
+      expect(await insert(source), source);
+    });
+
+    test('adds the import when the same URI is only imported with show',
+        () async {
+      const source =
+          "import 'package:firebase_core/firebase_core.dart' show Firebase;\n";
+
+      expect(directivesOf(await insert(source)), [
+        "import 'package:firebase_core/firebase_core.dart' show Firebase;",
+        firebaseImport,
+      ]);
+    });
+
+    test('keeps code that follows the last import on its line valid', () async {
+      const source = "import 'package:flutter/material.dart'; void main() {}\n";
+
+      final result = await insert(source);
+
+      expect(directivesOf(result), [
+        "import 'package:flutter/material.dart';",
+        firebaseImport,
+      ]);
+      expect(functionStatements(result, 'main'), isEmpty);
+    });
+
+    test('rejects text that is not a single import directive', () {
+      expect(
+        insert(monolithMainDart, import: "export 'a.dart';"),
+        throwsArgumentError,
+      );
+    });
 
     group('when the file has no imports', () {
       test(
@@ -125,8 +157,6 @@ void main() {
           expect(result, startsWith('$firebaseImport\n'));
           expect(result, contains('\nvoid main() {}\n'));
         },
-        skip: 'Bug: the import is inserted at offset 0 as "\\n<import>", '
-            'gluing it to the first line of code',
       );
 
       test(
@@ -134,11 +164,38 @@ void main() {
         () async {
           final result = await insert('library;\n\nvoid main() {}\n');
 
-          expect(directivesOf(result), ['library;', firebaseImport]);
+          // Not checked with directivesOf(): toSource() prints `library ;`.
+          expect(result, 'library;\n$firebaseImport\n\nvoid main() {}\n');
         },
-        skip: 'Bug: the import is inserted before the library directive, '
-            'which is a syntax error',
       );
+
+      test('puts the import below a leading license comment', () async {
+        final result = await insert('// Copyright 2025 SayMyFrame.\n\n'
+            'void main() {}\n');
+
+        expect(
+          result,
+          '// Copyright 2025 SayMyFrame.\n\n'
+          '$firebaseImport\n\n'
+          'void main() {}\n',
+        );
+      });
+
+      test('adds the import after a file that holds only a comment', () async {
+        expect(
+          await insert('// Nothing here yet.'),
+          '// Nothing here yet.\n$firebaseImport\n',
+        );
+      });
+
+      test('keeps a doc comment on the declaration it documents', () async {
+        final result = await insert('/// Starts the app.\nvoid main() {}\n');
+
+        expect(
+          result,
+          '$firebaseImport\n\n/// Starts the app.\nvoid main() {}\n',
+        );
+      });
     });
   });
 }
