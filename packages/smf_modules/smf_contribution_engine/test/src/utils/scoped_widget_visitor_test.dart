@@ -15,11 +15,27 @@ class SettingsPage {
 }
 ''';
 
+const _topLevelSource = '''
+final title = const Text('title');
+
+void main() => runApp(const Text('main'));
+
+Widget build() => const Text('build');
+
+class HomePage {
+  Widget build() => const Text('home.build');
+}
+''';
+
 /// The string arguments of the `Text` widgets that [ScopedWidgetVisitor]
 /// reports, in visiting order.
-List<String> textsIn({String? className, String? methodName}) {
+List<String> textsIn({
+  String source = _source,
+  String? className,
+  String? methodName,
+}) {
   final matches = <String>[];
-  parseValid(_source).visitChildren(
+  parseValid(source).visitChildren(
     ScopedWidgetVisitor(
       fromWidget: 'Text',
       className: className,
@@ -61,6 +77,29 @@ void main() {
 
     test('reports nothing when the class does not exist', () {
       expect(textsIn(className: 'ProfilePage'), isEmpty);
+    });
+
+    group('outside classes', () {
+      test('visits the whole file when no scope is given', () {
+        expect(
+          textsIn(source: _topLevelSource),
+          ['title', 'main', 'build', 'home.build'],
+        );
+      });
+
+      test('matches top-level functions by the method name', () {
+        expect(
+          textsIn(source: _topLevelSource, methodName: 'build'),
+          ['build', 'home.build'],
+        );
+      });
+
+      test('visits nothing when a class is given', () {
+        expect(
+          textsIn(source: _topLevelSource, className: 'HomePage'),
+          ['home.build'],
+        );
+      });
     });
   });
 }

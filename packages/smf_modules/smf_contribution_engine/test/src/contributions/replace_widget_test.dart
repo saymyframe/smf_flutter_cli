@@ -173,8 +173,6 @@ class HomePage {
         expect(functionStatements(result, 'main'),
             contains('runApp(const App());'));
       },
-      skip: 'Bug: ScopedWidgetVisitor only visits class declarations, so '
-          'top-level functions such as main() are skipped',
     );
 
     test(
@@ -203,8 +201,6 @@ class HomePage {
               "child: Text('x')));",
         ]);
       },
-      skip: 'Bug: the outer widget is rewritten from its original source '
-          'using offsets that the inner replacement already shifted',
     );
 
     test(
@@ -219,8 +215,6 @@ class HomePage {
 
         expect(result, contains('// The first screen.'));
       },
-      skip: 'Bug: the widget is regenerated with toSource(), which drops '
-          'comments',
     );
   });
 }

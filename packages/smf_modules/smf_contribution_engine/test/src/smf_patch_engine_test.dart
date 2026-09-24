@@ -41,6 +41,25 @@ class _RecordingProgress implements Progress {
   void cancel() => events.add('cancel');
 }
 
+/// A contribution of a type the engine does not know.
+class _AppendLine extends Contribution {
+  const _AppendLine(this.line) : super(file: _mainFile);
+
+  final String line;
+
+  @override
+  Future<String> apply(String original) async => '$original$line\n';
+}
+
+/// A subclass of a contribution type the engine knows, doing a bit more.
+class _SignedImport extends InsertImport {
+  const _SignedImport({required super.import}) : super(file: _mainFile);
+
+  @override
+  Future<String> apply(String original) async =>
+      '${await super.apply(original)}// Signed.\n';
+}
+
 InsertIntoFunction _afterEnsureInitialized(String insert) => InsertIntoFunction(
       file: _mainFile,
       function: 'main',
@@ -304,8 +323,6 @@ void main() {
 
         expect(await readMain(), contains("Text('Hello {{name}}!')"));
       },
-      skip: 'Bug: the whole file is rendered as a mustache template after '
-          'every contribution, not just the inserted code',
     );
 
     test(
@@ -324,8 +341,6 @@ void main() {
 
         expect(await readMain(), once);
       },
-      skip: 'Bug: contributions see their unrendered text, so the duplicate '
-          'check compares {{app_name_sc}} with the rendered file',
     );
 
     test(
@@ -341,8 +356,193 @@ void main() {
           contains('await MyAppDi.setUp();'),
         );
       },
-      skip: 'Bug: placeholders are rendered only after apply(), so one in code '
-          'position makes the formatter reject the snippet',
     );
+
+    group('renders the inserted text of', () {
+      const myApp = {'app_name': 'my_app'};
+
+      test('InsertIntoFunction, keeping beforeStatement', () async {
+        await applyAll(
+          [
+            const InsertIntoFunction(
+              file: _mainFile,
+              function: 'main',
+              beforeStatement: 'runApp',
+              insert: 'await {{app_name_pc}}Di.setUp();',
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        expect(functionStatements(await readMain(), 'main'), [
+          _ensureInitialized,
+          'await MyAppDi.setUp();',
+          _runApp,
+        ]);
+      });
+
+      test('InsertIntoMethodInClass', () async {
+        await writeFile(_mainFile, homePageStateDart);
+
+        await applyAll(
+          [
+            const InsertIntoMethodInClass(
+              file: _mainFile,
+              className: '_HomePageState',
+              method: 'initState',
+              afterStatement: 'super.initState()',
+              insert: '{{app_name_pc}}Analytics.track();',
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        expect(
+          methodStatements(await readMain(), '_HomePageState', 'initState'),
+          ['super.initState();', 'MyAppAnalytics.track();'],
+        );
+      });
+
+      test('InsertIntoListInFunction', () async {
+        await writeFile(_mainFile, providerMainDart);
+
+        await applyAll(
+          [
+            const InsertIntoListInFunction(
+              file: _mainFile,
+              function: 'main',
+              listVariableMatch: 'providers',
+              parentExpressionMatch: 'MultiProvider',
+              insert: 'Provider(create: (_) => {{app_name_pc}}Api()),',
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        expect(namedListsOf(await readMain(), 'providers'), [
+          [
+            'Provider(create: (_) => MyAppApi())',
+            'Provider(create: (_) => Logger())'
+          ],
+        ]);
+      });
+
+      test('InsertIntoListInMethodInClass', () async {
+        await writeFile(_mainFile, '''
+class MainApp {
+  Widget build() {
+    return MaterialApp(
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+      ],
+    );
+  }
+}
+''');
+
+        await applyAll(
+          [
+            const InsertIntoListInMethodInClass(
+              file: _mainFile,
+              className: 'MainApp',
+              method: 'build',
+              listVariableMatch: 'localizationsDelegates',
+              parentExpressionMatch: 'MaterialApp',
+              insert: '{{app_name_pc}}Localizations.delegate,',
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        expect(namedListsOf(await readMain(), 'localizationsDelegates'), [
+          [
+            'GlobalMaterialLocalizations.delegate',
+            'MyAppLocalizations.delegate',
+          ],
+        ]);
+      });
+
+      test('ReplaceWidget, keeping its scope', () async {
+        await applyAll(
+          [
+            const ReplaceWidget(
+              file: _mainFile,
+              fromWidget: 'MaterialApp',
+              toWidget: '{{app_name_pc}}App',
+              className: 'MainApp',
+              methodName: 'build',
+            ),
+            // Would rename the widget in main() if the class were lost.
+            const ReplaceWidget(
+              file: _mainFile,
+              fromWidget: 'MainApp',
+              toWidget: '{{app_name_pc}}',
+              className: 'MainApp',
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        final result = await readMain();
+        expect(
+          methodStatements(result, 'MainApp', 'build').single,
+          startsWith('return const MyAppApp('),
+        );
+        expect(functionStatements(result, 'main'), contains(_runApp));
+      });
+
+      test('ModifyWidgetArguments', () async {
+        await applyAll(
+          [
+            const ModifyWidgetArguments(
+              file: _mainFile,
+              widgetName: 'MaterialApp',
+              removeArgs: ['home'],
+              addArgs: {'title': '{{app_name_pc}}Strings.title'},
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        expect(methodStatements(await readMain(), 'MainApp', 'build'), [
+          'return MaterialApp(title: MyAppStrings.title);',
+        ]);
+      });
+
+      test('a contribution of another type, but not the existing code',
+          () async {
+        final source = monolithMainDart.replaceFirst(
+          "Text('Hello World!')",
+          "Text('Hello {{name}}!')",
+        );
+        await writeFile(_mainFile, source);
+
+        await applyAll(
+          [const _AppendLine('// Made by {{app_name_pc}}.')],
+          mustacheVariables: myApp,
+        );
+
+        expect(await readMain(), '$source// Made by MyApp.\n');
+      });
+
+      test('a subclass of a known type, keeping what the subclass adds',
+          () async {
+        await applyAll(
+          [
+            const _SignedImport(
+              import: "import 'package:{{app_name_sc}}/core/di/core_di.dart';",
+            ),
+          ],
+          mustacheVariables: myApp,
+        );
+
+        final result = await readMain();
+        expect(
+          directivesOf(result),
+          contains("import 'package:my_app/core/di/core_di.dart';"),
+        );
+        expect(result, endsWith('// Signed.\n'));
+      });
+    });
   });
 }

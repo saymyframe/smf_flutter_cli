@@ -4,6 +4,17 @@ import 'package:test/test.dart';
 import '../../ast_helpers.dart';
 import '../../fixtures.dart';
 
+const _nestedPaddings = '''
+class HomePage {
+  Widget build() {
+    return const Padding(
+      padding: EdgeInsets.all(8),
+      child: const Padding(padding: EdgeInsets.all(4), child: Text('x')),
+    );
+  }
+}
+''';
+
 void main() {
   group('ModifyWidgetArguments', () {
     // What ReplaceWidget leaves behind for SmfGoRouterModule.
@@ -114,8 +125,6 @@ class HomePage {
           allOf(contains('maxLines: 2'), isNot(contains('maxLines: 1'))),
         );
       },
-      skip: 'Bug: addArgs appends a named argument that already exists, which '
-          'does not compile',
     );
 
     test(
@@ -133,37 +142,70 @@ const Text(
 
         expect(result, contains('// Titles must fit on one line.'));
       },
-      skip: 'Bug: kept arguments are regenerated with toSource(), which drops '
-          'comments',
     );
 
     test(
       'modifies nested widgets of the same type',
       () async {
-        const source = '''
-class HomePage {
-  Widget build() {
-    return const Padding(
-      padding: EdgeInsets.all(8),
-      child: const Padding(padding: EdgeInsets.all(4), child: Text('x')),
-    );
-  }
-}
-''';
-
         final result = await const ModifyWidgetArguments(
           file: 'lib/home_page.dart',
           widgetName: 'Padding',
           addArgs: {'key': 'key'},
-        ).apply(source);
+        ).apply(_nestedPaddings);
 
         expect(
           'key: key'.allMatches(parseValid(result).toSource()),
           hasLength(2),
         );
       },
-      skip: 'Bug: the outer widget is rewritten from its original source '
-          'using offsets that the inner edit already shifted',
     );
+
+    test('removes the last argument together with the comma before it',
+        () async {
+      final source = classWithBuild("const Text('Hi', maxLines: 1)");
+
+      final result = await modifyText(removeArgs: ['maxLines']).apply(source);
+
+      expect(result, contains("return Text('Hi');"));
+    });
+
+    test('keeps a trailing comma after the appended arguments', () async {
+      final source = classWithBuild('''
+const Text(
+      'Hi',
+      maxLines: 1,
+    )''');
+
+      final result =
+          await modifyText(addArgs: {'softWrap': 'false'}).apply(source);
+
+      expect(result, contains('      softWrap: false,\n    );'));
+    });
+
+    test('drops the edits inside a nested widget that the outer one removes',
+        () async {
+      final result = await const ModifyWidgetArguments(
+        file: 'lib/home_page.dart',
+        widgetName: 'Padding',
+        removeArgs: ['child'],
+      ).apply(_nestedPaddings);
+
+      expect(methodStatements(result, 'HomePage', 'build'), [
+        'return Padding(padding: EdgeInsets.all(8));',
+      ]);
+    });
+
+    test('drops the edits inside a nested widget that the outer one replaces',
+        () async {
+      final result = await const ModifyWidgetArguments(
+        file: 'lib/home_page.dart',
+        widgetName: 'Padding',
+        addArgs: {'child': 'const SizedBox()'},
+      ).apply(_nestedPaddings);
+
+      expect(methodStatements(result, 'HomePage', 'build'), [
+        'return Padding(padding: EdgeInsets.all(8), child: const SizedBox());',
+      ]);
+    });
   });
 }
