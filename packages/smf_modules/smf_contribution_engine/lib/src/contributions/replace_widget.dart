@@ -32,11 +32,14 @@ class ReplaceWidget extends Contribution {
       ),
     );
 
+    // Only the type name is replaced, so the rest of the widget stays as
+    // written. Matches come in source order: editing from the last one keeps
+    // the offsets of the others valid, nested widgets included.
     var result = original;
     for (final node in edits.reversed) {
-      final oldSource = node.toSource();
-      final newSource = oldSource.replaceFirst(fromWidget, toWidget);
-      result = result.replaceRange(node.offset, node.end, newSource);
+      // ignore: deprecated_member_use
+      final name = node.constructorName.type.name2;
+      result = result.replaceRange(name.offset, name.end, toWidget);
     }
 
     return dartFormater.format(result);
