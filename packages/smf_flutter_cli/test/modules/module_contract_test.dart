@@ -19,15 +19,7 @@ const _packageImportsCheck = 'Dart files import only packages its dependency '
     'closure declares';
 
 /// Contract checks that currently fail because of known bugs, by module key.
-const _knownBugs = <String, Map<String, String>>{
-  kFirebaseAnalytics: {
-    _appImportsCheck: 'Bug: the firebase_analytics brick imports '
-        'core/services/communication/base_event.dart, which only the '
-        'event_bus brick renders, but the module does not depend on event_bus',
-    _packageImportsCheck: 'Bug: the firebase_analytics brick imports '
-        'flutter_bloc, but the module does not declare it',
-  },
-};
+const _knownBugs = <String, Map<String, String>>{};
 
 String? _knownBug(String module, String check) => _knownBugs[module]?[check];
 
