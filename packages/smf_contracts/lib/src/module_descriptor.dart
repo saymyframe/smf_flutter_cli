@@ -24,16 +24,16 @@ class ModuleDescriptor {
 
   /// Unique identifier for this module.
   final String name;
-  
+
   /// Human-readable description of this module's purpose.
   final String description;
-  
+
   /// Set of module names that this module depends on.
   final Set<String> dependsOn;
-  
+
   /// Set of pub.dev dependencies required by this module.
   final Set<String> pubDependency;
-  
+
   /// Set of pub.dev dev dependencies required by this module.
   final Set<String> pubDevDependency;
 }

@@ -26,12 +26,11 @@ class InsertIntoListInMethodInClass extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetClass = unit.declarations
-        .whereType<ClassDeclaration>()
-        .firstWhere(
-          (c) => c.name.lexeme == className,
-          orElse: () => throw Exception('Class $className not found'),
-        );
+    final targetClass =
+        unit.declarations.whereType<ClassDeclaration>().firstWhere(
+              (c) => c.name.lexeme == className,
+              orElse: () => throw Exception('Class $className not found'),
+            );
 
     final targetMethod = targetClass.members
         .whereType<MethodDeclaration>()

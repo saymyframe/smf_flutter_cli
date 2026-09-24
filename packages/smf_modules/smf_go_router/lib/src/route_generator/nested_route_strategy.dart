@@ -6,9 +6,8 @@ import 'package:smf_go_router/src/route_generator/route_generation_strategy.dart
 class NestedRouteStrategy implements RouteGenerationStrategy<NestedRoute> {
   @override
   String generate(NestedRoute route, RouteGenerationContext context) {
-    final childrenCode = route.children
-        .map((child) => context.generateRoute(child))
-        .join('\n');
+    final childrenCode =
+        route.children.map((child) => context.generateRoute(child)).join('\n');
     final redirectsCode = RedirectsGenerator.generateCombinedRedirectCode(
       route.guards,
     );

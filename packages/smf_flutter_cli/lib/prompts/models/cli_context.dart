@@ -16,12 +16,12 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/utils/module_dependency_resolver.dart';
 
 /// Strictness modes for module generation and validation.
-enum StrictMode { 
+enum StrictMode {
   /// Fail fast when encountering an error.
-  strict, 
-  
+  strict,
+
   /// Continue generation, skipping unsupported modules with warnings.
-  lenient 
+  lenient
 }
 
 /// Execution context passed across generators and hooks.

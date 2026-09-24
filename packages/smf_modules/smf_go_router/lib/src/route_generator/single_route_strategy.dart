@@ -42,21 +42,19 @@ class SingleRouteStrategy implements RouteGenerationStrategy<Route> {
   ) {
     final paramMap = {for (final p in parameters) p.name: p};
 
-    return args
-        .map((arg) {
-          final param = paramMap[arg.sourceName];
-          if (param == null) {
-            throw ArgumentError(
-              'Missing RouteParameter for screen argument ${arg.sourceName}',
-            );
-          }
+    return args.map((arg) {
+      final param = paramMap[arg.sourceName];
+      if (param == null) {
+        throw ArgumentError(
+          'Missing RouteParameter for screen argument ${arg.sourceName}',
+        );
+      }
 
-          final rawSource = _sourceExpr(arg);
-          final value = _castExpr(rawSource, param.type, param.optional);
+      final rawSource = _sourceExpr(arg);
+      final value = _castExpr(rawSource, param.type, param.optional);
 
-          return arg.isNamed ? '${arg.name}: $value' : value;
-        })
-        .join(', ');
+      return arg.isNamed ? '${arg.name}: $value' : value;
+    }).join(', ');
   }
 
   String _sourceExpr(RouteScreenArgs arg) {

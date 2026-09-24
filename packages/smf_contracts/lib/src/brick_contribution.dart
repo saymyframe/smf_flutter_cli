@@ -26,13 +26,13 @@ class BrickContribution {
 
   /// Human-readable name for this brick contribution.
   final String name;
-  
+
   /// The Mason bundle containing the template files.
   final MasonBundle bundle;
-  
+
   /// Optional variables to pass to the Mason template during generation.
   final Map<String, dynamic>? vars;
-  
+
   /// Strategy for handling file conflicts during generation.
   final FileMergeStrategy mergeStrategy;
 }

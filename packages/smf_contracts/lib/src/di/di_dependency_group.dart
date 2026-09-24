@@ -9,9 +9,10 @@ class DiDependencyGroup {
     required this.imports,
     this.pathToDiTemplate,
   }) : assert(
-         scope != DiScope.module || pathToDiTemplate?.trim().isNotEmpty == true,
-         'pathToDiTemplate must be provided and non-empty if scope is DiScope.module',
-       );
+          scope != DiScope.module ||
+              pathToDiTemplate?.trim().isNotEmpty == true,
+          'pathToDiTemplate must be provided and non-empty if scope is DiScope.module',
+        );
 
   final List<DiDependency> diDependencies;
   final DiScope scope;

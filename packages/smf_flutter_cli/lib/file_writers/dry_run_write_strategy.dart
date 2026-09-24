@@ -24,6 +24,7 @@ class DryRunWriteStrategy implements FileWriteStrategy {
   final Logger logger;
 
   @override
+
   /// Prints the target path and file contents instead of writing to disk.
   Future<void> write(GeneratedFile file) async {
     logger
