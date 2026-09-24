@@ -18,7 +18,7 @@ final class ModuleDiContributor extends DiContributor {
   @override
   Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
-    Map? mustacheVariables,
+    Map<dynamic, dynamic>? mustacheVariables,
   }) async {
     final byFile = <String, List<DiDependencyGroup>>{};
     for (final group in groups) {

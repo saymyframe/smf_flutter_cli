@@ -34,7 +34,7 @@ abstract base class DiContributor {
   /// The files are returned, not written.
   Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
-    Map? mustacheVariables,
+    Map<dynamic, dynamic>? mustacheVariables,
   });
 
   /// The path of the template that [scope] registrations go to, under
@@ -96,7 +96,7 @@ abstract base class DiContributor {
     required String imports,
     required String registrations,
     required File file,
-    Map? mustacheVariables,
+    Map<dynamic, dynamic>? mustacheVariables,
   }) async {
     final innerProcessor = MustachexProcessor(
       initialVariables: mustacheVariables,

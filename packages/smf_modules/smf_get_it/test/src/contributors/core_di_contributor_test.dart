@@ -35,7 +35,9 @@ void main() {
             scope: DiScope.core,
             imports: [
               const Import.core(
-                  ImportAnchor.coreService, 'analytics/analytics.dart'),
+                ImportAnchor.coreService,
+                'analytics/analytics.dart',
+              ),
             ],
             diDependencies: [
               const DiDependency(

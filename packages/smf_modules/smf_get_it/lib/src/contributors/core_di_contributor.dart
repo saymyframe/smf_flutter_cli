@@ -17,7 +17,7 @@ final class CoreDiContributor extends DiContributor {
   @override
   Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
-    Map? mustacheVariables,
+    Map<dynamic, dynamic>? mustacheVariables,
   }) async {
     return [
       await processFile(

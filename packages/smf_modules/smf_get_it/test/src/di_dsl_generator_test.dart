@@ -27,7 +27,9 @@ final _analyticsGroup = DiDependencyGroup(
       'analytics/firebase/firebase_analytics_service.dart',
     ),
     const Import.core(
-        ImportAnchor.coreService, 'analytics/i_analytics_service.dart'),
+      ImportAnchor.coreService,
+      'analytics/i_analytics_service.dart',
+    ),
     const Import.direct(
       "import 'package:firebase_analytics/firebase_analytics.dart';",
     ),
@@ -97,18 +99,16 @@ void main() {
       final files = await generate([_analyticsGroup, _eventBusGroup]);
 
       final content = files.single.content;
-      for (final import in [
-        "import 'package:test_app/core/typedef.dart';",
-        "import 'package:test_app/core/services/analytics/firebase/"
-            "firebase_analytics_service.dart';",
-        "import 'package:test_app/core/services/analytics/"
-            "i_analytics_service.dart';",
-        "import 'package:firebase_analytics/firebase_analytics.dart';",
-        "import 'package:test_app/core/services/communication/event_bus/"
-            "event_bus_service.dart';",
-        "import 'package:event_bus/event_bus.dart';",
+      const services = 'package:test_app/core/services';
+      for (final uri in [
+        'package:test_app/core/typedef.dart',
+        '$services/analytics/firebase/firebase_analytics_service.dart',
+        '$services/analytics/i_analytics_service.dart',
+        'package:firebase_analytics/firebase_analytics.dart',
+        '$services/communication/event_bus/event_bus_service.dart',
+        'package:event_bus/event_bus.dart',
       ]) {
-        expect(content, contains(import));
+        expect(content, contains("import '$uri';"));
       }
       expect(
         content,

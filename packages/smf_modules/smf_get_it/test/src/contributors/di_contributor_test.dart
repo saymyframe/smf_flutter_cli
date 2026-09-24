@@ -24,7 +24,7 @@ final class _TestContributor extends DiContributor {
   @override
   Future<List<GeneratedFile>> contribute(
     List<DiDependencyGroup> groups, {
-    Map? mustacheVariables,
+    Map<dynamic, dynamic>? mustacheVariables,
   }) async =>
       const [];
 }
@@ -84,13 +84,17 @@ void main() {
           _coreGroup(
             imports: [
               const Import.core(
-                  ImportAnchor.coreService, 'analytics/analytics.dart'),
+                ImportAnchor.coreService,
+                'analytics/analytics.dart',
+              ),
               const Import.direct(
-                  "import 'package:firebase_analytics/fa.dart'"),
+                "import 'package:firebase_analytics/fa.dart'",
+              ),
             ],
           ),
           _coreGroup(
-              imports: [const Import.features('auth/auth_repository.dart')]),
+            imports: [const Import.features('auth/auth_repository.dart')],
+          ),
         ]);
 
         expect(imports.split('\n'), [
