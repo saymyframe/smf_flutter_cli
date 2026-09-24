@@ -172,9 +172,16 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     );
   }
 
+  /// Merges the nested routes linked to the same shell into one, so the
+  /// router gets a single ShellRoute per shell. Nested routes are matched by
+  /// shell id: separate modules create separate links to the same shell.
+  ///
+  /// The shell is shared, but modules must not affect each other, so the
+  /// guards of a nested route are moved onto its own children instead of
+  /// guarding the whole shell.
   List<BaseRoute> mergeNestedRoutesByShellLink(List<BaseRoute> routes) {
     final result = <BaseRoute>[];
-    final shellMap = <RouteShellLink, List<Route>>{};
+    final shellMap = <String, List<NestedRoute>>{};
 
     for (final route in routes) {
       if (route is! NestedRoute) {
@@ -182,13 +189,39 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
         continue;
       }
 
-      shellMap.putIfAbsent(route.shellLink, () => []).addAll(route.children);
+      shellMap.putIfAbsent(route.shellLink.id, () => []).add(route);
     }
 
-    for (final entry in shellMap.entries) {
-      result.add(NestedRoute(shellLink: entry.key, children: entry.value));
+    for (final nested in shellMap.values) {
+      result.add(
+        NestedRoute(
+          shellLink: nested.first.shellLink,
+          children: [
+            for (final route in nested)
+              for (final child in route.children)
+                _withGuards(child, route.guards),
+          ],
+          imports: [for (final route in nested) ...route.imports],
+        ),
+      );
     }
 
     return result;
+  }
+
+  /// [route] guarded by [guards] before its own guards.
+  Route _withGuards(Route route, List<RouteGuard> guards) {
+    if (guards.isEmpty) return route;
+
+    // Copies every field of Route; keep in sync when Route gets new ones.
+    return Route(
+      path: route.path,
+      screen: route.screen,
+      parameters: route.parameters,
+      meta: route.meta,
+      name: route.name,
+      guards: [...guards, ...route.guards],
+      imports: route.imports,
+    );
   }
 }

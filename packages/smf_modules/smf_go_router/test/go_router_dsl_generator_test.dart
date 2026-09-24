@@ -54,6 +54,20 @@ void main() {
   String contentOf(List<GeneratedFile> files, String path) =>
       files.singleWhere((f) => f.path == path).content;
 
+  /// The `GoRoute(...)` call of the route at [path] in the generated router.
+  String goRouteOf(String router, String path) {
+    final start =
+        router.lastIndexOf('GoRoute(', router.indexOf("path: '$path'"));
+    var depth = 0;
+    for (var i = start + 'GoRoute'.length; i < router.length; i++) {
+      if (router[i] == '(') depth++;
+      if (router[i] == ')' && --depth == 0) {
+        return router.substring(start, i + 1);
+      }
+    }
+    fail('No complete GoRoute for $path in:\n$router');
+  }
+
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('smf_go_router_test');
     final generator = await MasonGenerator.fromBundle(smfGoRouterBundle);
@@ -340,7 +354,7 @@ void main() {
     });
 
     test(
-      'applies guards declared on a nested route',
+      'applies guards declared on a nested route to its routes',
       () async {
         final router = await generateRouter([
           RouteGroup(
@@ -350,17 +364,68 @@ void main() {
                 guards: [goRouterGuard('onboardingGuard(context, state)')],
                 children: [
                   Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                  Route(path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
                 ],
               ),
             ],
           ),
         ]);
 
-        expect(router, contains('onboardingGuard(context, state)'));
+        expect(
+          goRouteOf(router, '/home'),
+          contains('final r0 = onboardingGuard(context, state);'),
+        );
+        expect(
+          goRouteOf(router, '/cart'),
+          contains('final r0 = onboardingGuard(context, state);'),
+        );
+        // On the routes only, not on the shell or the router.
+        expect(countOf(router, 'onboardingGuard'), 2);
+        expectParses(router);
       },
-      skip: 'Bug: mergeNestedRoutesByShellLink rebuilds NestedRoutes without '
-          'their guards',
     );
+
+    test(
+        'does not apply the nested route guards of one module to the tabs '
+        'another module adds to the same shell', () async {
+      final router = await generateRouter([
+        RouteGroup(
+          routes: [
+            NestedRoute(
+              shellLink: RouteShellLink.toMainTabsShell(),
+              guards: [goRouterGuard('onboardingGuard(context, state)')],
+              children: [
+                Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+              ],
+            ),
+          ],
+        ),
+        RouteGroup(
+          routes: [
+            NestedRoute(
+              shellLink: RouteShellLink('main-tabs'),
+              children: [
+                Route(
+                  path: '/profile',
+                  meta: RouteMeta(icon: 'Icons.person'),
+                  guards: [goRouterGuard('authGuard(context, state)')],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      expect(countOf(router, 'ShellRoute('), 1);
+      expect(countOf(router, 'onboardingGuard'), 1);
+      expect(goRouteOf(router, '/home'), contains('onboardingGuard'));
+      expect(goRouteOf(router, '/home'), isNot(contains('authGuard')));
+      expect(goRouteOf(router, '/profile'), isNot(contains('onboardingGuard')));
+      expect(
+        goRouteOf(router, '/profile'),
+        contains('final r0 = authGuard(context, state);'),
+      );
+    });
 
     test(
       'imports files declared on a nested route',
@@ -386,8 +451,6 @@ void main() {
           contains("import 'package:test_app/core/widgets/tabs_scope.dart';"),
         );
       },
-      skip: 'Bug: mergeNestedRoutesByShellLink rebuilds NestedRoutes without '
-          'their imports',
     );
 
     test(
@@ -637,9 +700,85 @@ void main() {
 
         expect(merged, hasLength(1));
       },
-      skip: 'Bug: nested routes are merged by RouteShellLink identity, which '
-          'has no ==, instead of by shell id',
     );
+
+    test('merges by shell id even when the links are not equal', () {
+      // The published smf_contracts may predate RouteShellLink equality.
+      final merged = module.mergeNestedRoutesByShellLink([
+        NestedRoute(
+          shellLink: _IdentityShellLink('main-tabs'),
+          children: [Route(path: '/home')],
+        ),
+        NestedRoute(
+          shellLink: _IdentityShellLink('main-tabs'),
+          children: [Route(path: '/profile')],
+        ),
+      ]);
+
+      expect(merged, hasLength(1));
+    });
+
+    test('moves the guards of each nested route onto its own children', () {
+      final onboarding = goRouterGuard('onboardingGuard(context, state)');
+      final premium = goRouterGuard('premiumGuard(context, state)');
+      final home = Route(
+        path: '/home',
+        name: 'home',
+        screen: RouteScreen('HomeScreen'),
+        parameters: [QueryParam('tab', type: String, optional: true)],
+        meta: RouteMeta(icon: 'Icons.home'),
+        guards: [premium],
+        imports: [Import.features('home/home_screen.dart')],
+      );
+      final profile = Route(path: '/profile');
+
+      final merged = module.mergeNestedRoutesByShellLink([
+        NestedRoute(
+          shellLink: RouteShellLink.toMainTabsShell(),
+          guards: [onboarding],
+          children: [home],
+        ),
+        NestedRoute(
+          shellLink: RouteShellLink.toMainTabsShell(),
+          children: [profile],
+        ),
+      ]);
+
+      final tabs = merged.single as NestedRoute;
+      expect(tabs.guards, isEmpty);
+      expect(tabs.children, hasLength(2));
+
+      final guardedHome = tabs.children[0];
+      expect(guardedHome.guards, [onboarding, premium]);
+      expect(guardedHome.path, home.path);
+      expect(guardedHome.name, home.name);
+      expect(guardedHome.screen, same(home.screen));
+      expect(guardedHome.parameters, same(home.parameters));
+      expect(guardedHome.meta, same(home.meta));
+      expect(guardedHome.imports, same(home.imports));
+
+      expect(tabs.children[1], same(profile));
+    });
+
+    test('keeps the imports of every merged nested route', () {
+      final tabsScope = Import.core(ImportAnchor.coreWidgets, 'tabs.dart');
+      final authScope = Import.features('auth/auth_scope.dart');
+
+      final merged = module.mergeNestedRoutesByShellLink([
+        NestedRoute(
+          shellLink: RouteShellLink.toMainTabsShell(),
+          imports: [tabsScope],
+          children: [Route(path: '/home')],
+        ),
+        NestedRoute(
+          shellLink: RouteShellLink.toMainTabsShell(),
+          imports: [authScope],
+          children: [Route(path: '/profile')],
+        ),
+      ]);
+
+      expect((merged.single as NestedRoute).imports, [tabsScope, authScope]);
+    });
   });
 
   group('groupRoutesByShellLink', () {
@@ -689,4 +828,15 @@ void main() {
       );
     });
   });
+}
+
+/// A link that equals only itself, like RouteShellLink before it compared ids.
+class _IdentityShellLink extends RouteShellLink {
+  _IdentityShellLink(super.id);
+
+  @override
+  bool operator ==(Object other) => identical(this, other);
+
+  @override
+  int get hashCode => identityHashCode(this);
 }
