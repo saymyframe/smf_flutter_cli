@@ -2,7 +2,15 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contribution_engine/src/utils/match_widget_visitor.dart';
 
+/// Runs a [MatchWidgetVisitor] for [fromWidget] over the declarations that
+/// [className] and [methodName] select.
+///
+/// With both, that is the methods named [methodName] of the class named
+/// [className]; with just [className], the whole class; with just
+/// [methodName], the methods and top-level functions of that name; with
+/// neither, every declaration in the file.
 class ScopedWidgetVisitor extends GeneralizingAstVisitor<void> {
+  /// Creates a visitor that calls [onMatch] for each [fromWidget] in scope.
   const ScopedWidgetVisitor({
     required this.fromWidget,
     required this.className,
@@ -10,9 +18,17 @@ class ScopedWidgetVisitor extends GeneralizingAstVisitor<void> {
     required this.onMatch,
   });
 
+  /// The type name to look for, as [MatchWidgetVisitor.targetWidget].
   final String fromWidget;
+
+  /// The class to limit the search to, if any.
   final String? className;
+
+  /// The method, or top-level function without [className], to limit the
+  /// search to, if any.
   final String? methodName;
+
+  /// Called with each matching widget creation in scope.
   final void Function(InstanceCreationExpression) onMatch;
 
   MatchWidgetVisitor get _matcher =>

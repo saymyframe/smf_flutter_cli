@@ -11,7 +11,20 @@ import 'package:smf_contribution_engine/src/contributions/contributions.dart';
 /// Mustache placeholders, such as `{{app_name_sc}}`, are rendered with
 /// [mustacheVariables] in the text that contributions insert. The code that is
 /// already in the files is never rendered.
+///
+/// For the contribution types of this package, only the fields that hold new
+/// code are rendered, such as [InsertIntoFunction.insert] or
+/// [ReplaceWidget.toWidget]; the fields that find the target, such as
+/// function names and anchors, are matched as written. A contribution of any
+/// other type, a subclass included, is applied first and its result rendered,
+/// with the `{{` that was already in the file kept out of it.
+///
+/// Each file is read once, gets its contributions in list order and is
+/// written back once. A failure leaves the file being patched untouched, but
+/// the files written before it stay patched.
 class PatchEngine {
+  /// Creates an engine that applies [contributions] to the files under
+  /// [projectRoot].
   const PatchEngine(
     this.contributions, {
     required this.projectRoot,
@@ -19,11 +32,26 @@ class PatchEngine {
     this.logger,
   });
 
+  /// The changes to apply, in list order within each file.
   final List<Contribution> contributions;
+
+  /// The directory that each [Contribution.file] is relative to.
   final String projectRoot;
+
+  /// The values of the placeholders, such as `{'app_name': 'shop app'}`.
+  ///
+  /// Suffixes pick a case: with that value, `{{app_name_sc}}` renders as
+  /// `shop_app` and `{{app_name_pc}}` as `ShopApp`.
   final Map? mustacheVariables;
+
+  /// Reports the progress of each file, when given.
   final Logger? logger;
 
+  /// Applies [contributions] and writes the patched files back.
+  ///
+  /// Throws a [FileSystemException] when a file doesn't exist, a
+  /// [MissingVariableException] when an inserted placeholder has no value,
+  /// and whatever a failing contribution throws.
   Future<void> applyAll() async {
     final byFile = <String, List<Contribution>>{};
     for (final c in contributions) {
