@@ -1,6 +1,13 @@
 import 'package:smf_contracts/smf_contracts.dart';
 
+/// Renders route guards as a go_router `redirect` callback.
 class RedirectsGenerator {
+  /// A `(context, state) { ... }` callback that evaluates the go_router
+  /// redirect code of [guards] in order and returns the first non-null
+  /// location, or `null` to allow navigation.
+  ///
+  /// Throws an [ArgumentError] naming the index of a guard without a
+  /// [GoRouteRedirect] binding.
   static String generateCombinedRedirectCode(List<RouteGuard> guards) {
     final redirects = <String>[];
 

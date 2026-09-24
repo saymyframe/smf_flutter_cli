@@ -3,7 +3,12 @@
 /// last capital of an acronym that starts a new word ('HTTP|Client').
 final _camelHump = RegExp('(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])');
 
+/// Helpers for naming generated identifiers.
 extension StringExt on String {
+  /// This string in lowerCamelCase, with a word for every run of letters and
+  /// digits and every camelCase hump: `/user-profile/:id` gives
+  /// `userProfileId`, `HTTPClient` gives `httpClient`. Returns an empty
+  /// string when there are no words.
   String camelCase() {
     final buffer = StringBuffer();
     final parts = replaceAll(_camelHump, ' ')

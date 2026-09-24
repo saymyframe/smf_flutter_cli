@@ -12,7 +12,20 @@ import 'package:smf_go_router/src/route_generator/tabs_shell_generator.dart';
 /// Shells whose widget templates ship with the go_router brick.
 final _bundledShells = [RouteShellLink.toMainTabsShell()];
 
+/// Renders the routes that modules declare with the routing DSL as GoRouter
+/// code in the brick templates.
+///
+/// Fills `app_router.dart` with the `GoRouter` and its imports,
+/// `app_routes.dart` with the `AppRoutes` constants, and the widget template
+/// of every shell that routes link to with its tabs. Templates of shells no
+/// module links to are deleted.
+///
+/// Each guard applies where it is declared: the core guards of a route group
+/// to the whole router, a route's guards to that route, and a nested route's
+/// guards to its own children only (see [mergeNestedRoutesByShellLink]).
 mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
+  /// Lets the route strategies render and import child routes; set at the
+  /// start of each [generateFromDsl] run.
   late RouteGenerationContext generationContext;
 
   @override
@@ -170,6 +183,12 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     }
   }
 
+  /// The children of the nested routes in [groups], grouped by the
+  /// [ShellRegistry] declaration of the shell they link to, in declaration
+  /// order. These are the tabs each shell widget lists.
+  ///
+  /// Throws an [ArgumentError] for a link to a shell missing from
+  /// [ShellRegistry].
   Map<ShellDeclaration, List<Route>> groupRoutesByShellLink(
     List<RouteGroup> groups,
   ) {
@@ -197,6 +216,7 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
   /// Merges the nested routes linked to the same shell into one, so the
   /// router gets a single ShellRoute per shell. Nested routes are matched by
   /// shell id: separate modules create separate links to the same shell.
+  /// Plain routes keep their order and come before the merged nested routes.
   ///
   /// The shell is shared, but modules must not affect each other, so the
   /// guards of a nested route are moved onto its own children instead of
