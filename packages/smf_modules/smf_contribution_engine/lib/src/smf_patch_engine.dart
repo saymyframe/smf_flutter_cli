@@ -42,7 +42,7 @@ class PatchEngine {
   ///
   /// Suffixes pick a case: with that value, `{{app_name_sc}}` renders as
   /// `shop_app` and `{{app_name_pc}}` as `ShopApp`.
-  final Map? mustacheVariables;
+  final Map<dynamic, dynamic>? mustacheVariables;
 
   /// Reports the progress of each file, when given.
   final Logger? logger;

@@ -79,10 +79,9 @@ class HomePage {
         },
       ).apply(source);
 
-      expect(methodStatements(result, 'HomePage', 'build'), [
-        "return Text('Hi', overflow: TextOverflow.ellipsis, "
-            'style: const TextStyle(fontSize: 12), softWrap: false);',
-      ]);
+      const expected = "return Text('Hi', overflow: TextOverflow.ellipsis, "
+          'style: const TextStyle(fontSize: 12), softWrap: false);';
+      expect(methodStatements(result, 'HomePage', 'build'), [expected]);
     });
 
     test('modifies every matching widget in the file', () async {

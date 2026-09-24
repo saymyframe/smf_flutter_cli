@@ -36,9 +36,10 @@ final w = const Padding(
 );
 ''';
 
+      const outer = 'const Padding(padding: EdgeInsets.zero, '
+          'child: const Padding(padding: EdgeInsets.zero))';
       expect(matchesOf(source, 'Padding'), [
-        'const Padding(padding: EdgeInsets.zero, '
-            'child: const Padding(padding: EdgeInsets.zero))',
+        outer,
         'const Padding(padding: EdgeInsets.zero)',
       ]);
     });
