@@ -59,17 +59,25 @@ void main() {
       );
     });
 
-    test(
-      'keeps lib/ segments that are part of a directory name',
-      () {
-        expect(
-          const Import.core(ImportAnchor.coreUtil, 'zlib/codec.dart').resolve(),
-          "import '$_package/core/utils/zlib/codec.dart';",
-        );
-      },
-      skip: 'Bug: Import.resolve removes the first "lib/" anywhere in the '
-          'path (zlib/codec.dart becomes zcodec.dart), not only a leading one',
-    );
+    test('keeps lib/ segments that are part of a directory name', () {
+      expect(
+        const Import.core(ImportAnchor.coreUtil, 'zlib/codec.dart').resolve(),
+        "import '$_package/core/utils/zlib/codec.dart';",
+      );
+    });
+
+    test('strips only the leading lib/ of the relative path', () {
+      expect(
+        const Import.core(ImportAnchor.coreUtil, 'lib/zlib/codec.dart')
+            .resolve(),
+        "import '$_package/core/utils/zlib/codec.dart';",
+      );
+      expect(
+        const Import.core(ImportAnchor.coreUtil, 'codecs/lib/codec.dart')
+            .resolve(),
+        "import '$_package/core/utils/codecs/lib/codec.dart';",
+      );
+    });
 
     test('requires an anchor', () {
       ImportAnchor? noAnchor;
