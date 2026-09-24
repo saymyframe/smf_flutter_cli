@@ -479,7 +479,6 @@ void main() {
           contains("import 'package:test_app/core/services/auth/guard.dart';"),
         );
       },
-      skip: 'Bug: imports of GoRouteRedirect bindings are never collected',
     );
 
     test(
@@ -504,9 +503,52 @@ void main() {
           contains("import 'package:test_app/core/services/auth/guard.dart';"),
         );
       },
-      skip: 'Bug: imports of core guard GoRouteRedirect bindings are never '
-          'collected',
     );
+
+    test('imports what the guards of nested and tab routes need, once',
+        () async {
+      final authImport = Import.core(ImportAnchor.coreService, 'auth.dart');
+      final router = await generateRouter([
+        RouteGroup(
+          routes: [
+            NestedRoute(
+              shellLink: RouteShellLink.toMainTabsShell(),
+              guards: [
+                goRouterGuard(
+                  'onboardingGuard(context, state)',
+                  imports: [Import.features('onboarding/guard.dart')],
+                ),
+              ],
+              children: [
+                Route(
+                  path: '/home',
+                  meta: RouteMeta(icon: 'Icons.home'),
+                  guards: [
+                    goRouterGuard(
+                      'authGuard(context, state)',
+                      imports: [authImport],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          coreGuards: [
+            goRouterGuard('sessionGuard(context, state)',
+                imports: [authImport]),
+          ],
+        ),
+      ]);
+
+      expect(
+        router,
+        contains("import 'package:test_app/features/onboarding/guard.dart';"),
+      );
+      expect(
+        countOf(router, "import 'package:test_app/core/services/auth.dart';"),
+        1,
+      );
+    });
   });
 
   group('AppRoutes', () {

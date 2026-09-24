@@ -29,12 +29,15 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
           RouteGenerationStrategyRegistry.imports(route, generationContext),
     );
 
+    final coreGuards = context.routeGroups.expand((g) => g.coreGuards).toList();
+
     final imports = <String>{};
     for (final route in routes) {
       imports.addAll(
         RouteGenerationStrategyRegistry.imports(route, generationContext),
       );
     }
+    imports.addAll(_guardImports([...coreGuards, ..._routeGuards(routes)]));
 
     final buffer = StringBuffer();
     buffer.writeln('GoRouter(');
@@ -51,9 +54,8 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
 
     buffer.writeln('  ],');
 
-    final coreRedirects = RedirectsGenerator.generateCombinedRedirectCode(
-      context.routeGroups.map((rg) => rg.coreGuards).expand((e) => e).toList(),
-    );
+    final coreRedirects =
+        RedirectsGenerator.generateCombinedRedirectCode(coreGuards);
 
     buffer.writeln('redirect: $coreRedirects');
     buffer.writeln(');');
@@ -124,6 +126,25 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
       GeneratedFile(appRoutesFile.path, appRoutes),
       ...shellFiles,
     ];
+  }
+
+  /// The guards declared on [routes] and on the routes nested in them.
+  Iterable<RouteGuard> _routeGuards(List<BaseRoute> routes) sync* {
+    for (final route in routes) {
+      yield* route.guards;
+      if (route is NestedRoute) {
+        yield* route.children.expand((child) => child.guards);
+      }
+    }
+  }
+
+  /// The imports that the go_router redirects of [guards] need.
+  Iterable<String> _guardImports(List<RouteGuard> guards) {
+    return guards
+        .map((guard) => guard.bindings[RoutingMode.goRouter])
+        .whereType<GoRouteRedirect>()
+        .expand((redirect) => redirect.imports)
+        .map((i) => i.resolve());
   }
 
   /// The brick ships a template for every shell, but only shells that some
