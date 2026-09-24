@@ -39,7 +39,9 @@ void main() {
         shellLink: RouteShellLink.toMainTabsShell(),
         children: [
           const Route(
-              path: '/home', imports: [Import.features('home/home.dart')]),
+            path: '/home',
+            imports: [Import.features('home/home.dart')],
+          ),
         ],
       );
 

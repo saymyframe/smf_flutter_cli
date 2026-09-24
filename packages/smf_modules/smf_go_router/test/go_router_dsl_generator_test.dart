@@ -138,7 +138,8 @@ void main() {
       final files = await generate(
         routeGroups: [
           const RouteGroup(
-              routes: [Route(path: '/splash'), Route(path: '/login')]),
+            routes: [Route(path: '/splash'), Route(path: '/login')],
+          ),
         ],
         initialRoute: '/login',
       );
@@ -366,9 +367,13 @@ void main() {
                 guards: [goRouterGuard('onboardingGuard(context, state)')],
                 children: [
                   const Route(
-                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                    path: '/home',
+                    meta: RouteMeta(icon: 'Icons.home'),
+                  ),
                   const Route(
-                      path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
+                    path: '/cart',
+                    meta: RouteMeta(icon: 'Icons.cart'),
+                  ),
                 ],
               ),
             ],
@@ -441,11 +446,15 @@ void main() {
                 shellLink: RouteShellLink.toMainTabsShell(),
                 imports: [
                   const Import.core(
-                      ImportAnchor.coreWidgets, 'tabs_scope.dart'),
+                    ImportAnchor.coreWidgets,
+                    'tabs_scope.dart',
+                  ),
                 ],
                 children: [
                   const Route(
-                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                    path: '/home',
+                    meta: RouteMeta(icon: 'Icons.home'),
+                  ),
                 ],
               ),
             ],
@@ -472,7 +481,9 @@ void main() {
                     'authGuard(context, state)',
                     imports: [
                       const Import.core(
-                          ImportAnchor.coreService, 'auth/guard.dart'),
+                        ImportAnchor.coreService,
+                        'auth/guard.dart',
+                      ),
                     ],
                   ),
                 ],
@@ -499,7 +510,9 @@ void main() {
                 'authGuard(context, state)',
                 imports: [
                   const Import.core(
-                      ImportAnchor.coreService, 'auth/guard.dart'),
+                    ImportAnchor.coreService,
+                    'auth/guard.dart',
+                  ),
                 ],
               ),
             ],
@@ -589,7 +602,9 @@ void main() {
                     meta: RouteMeta(icon: 'Icons.home'),
                   ),
                   const Route(
-                      path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
+                    path: '/cart',
+                    meta: RouteMeta(icon: 'Icons.cart'),
+                  ),
                 ],
               ),
             ],
@@ -712,7 +727,9 @@ void main() {
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
                   const Route(
-                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                    path: '/home',
+                    meta: RouteMeta(icon: 'Icons.home'),
+                  ),
                 ],
               ),
             ],
@@ -943,12 +960,19 @@ void main() {
 }
 
 /// A link that equals only itself, like RouteShellLink before it compared ids.
+///
+/// Its identity-based `==` and `hashCode` are what Object has, which is safe
+/// for mutable classes. It is not `@immutable`, as that asks for a const
+/// constructor, and const links with the same id would be one canonical
+/// instance, equal to itself.
 class _IdentityShellLink extends RouteShellLink {
   _IdentityShellLink(super.id);
 
   @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes, identity-based.
   bool operator ==(Object other) => identical(this, other);
 
   @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes, identity-based.
   int get hashCode => identityHashCode(this);
 }

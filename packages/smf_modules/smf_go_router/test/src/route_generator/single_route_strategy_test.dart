@@ -56,7 +56,10 @@ abstract final class AppRoutes {
         for (final name in [null, '']) {
           final code = generate(
             Route(
-                path: '/about', name: name, screen: const RouteScreen('About')),
+              path: '/about',
+              name: name,
+              screen: const RouteScreen('About'),
+            ),
           );
 
           expect(code, isNot(contains('name:')), reason: 'name: $name');

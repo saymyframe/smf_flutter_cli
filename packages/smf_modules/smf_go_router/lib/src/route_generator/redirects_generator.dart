@@ -24,8 +24,9 @@ class RedirectsGenerator {
       final func = impl.code.trim();
       final varName = 'r$i';
 
-      redirects.add('final $varName = $func;');
-      redirects.add('if ($varName != null) return $varName;');
+      redirects
+        ..add('final $varName = $func;')
+        ..add('if ($varName != null) return $varName;');
     }
 
     redirects.add('return null;');

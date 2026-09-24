@@ -118,7 +118,7 @@ $code
         final route = NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
           imports: [
-            const Import.core(ImportAnchor.coreWidgets, 'tabs_scope.dart')
+            const Import.core(ImportAnchor.coreWidgets, 'tabs_scope.dart'),
           ],
           children: [
             const Route(

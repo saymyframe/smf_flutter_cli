@@ -15,26 +15,22 @@ class TabsShellGenerator {
     required ShellDeclaration declaration,
     required List<Route> routes,
   }) {
-    final buffer = StringBuffer();
-
     final tabInfos = routes.map(_extractTabInfo).toList()
       ..sort(
         (a, b) => (a.order ?? double.maxFinite).compareTo(
           b.order ?? double.maxFinite,
         ),
       );
-    for (final tab in tabInfos) {
-      buffer.writeln(tab);
-    }
 
-    return buffer.toString();
+    return tabInfos.map((tab) => '$tab\n').join();
   }
 
   _TabInfo _extractTabInfo(Route route) {
     final meta = route.meta;
     if (meta == null) {
       throw StateError(
-        'Route ${route.name} must define RouteMeta to be used in main-tabs shell',
+        'Route ${route.name} must define RouteMeta to be used in '
+        'main-tabs shell',
       );
     }
 

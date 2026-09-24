@@ -22,8 +22,9 @@ extension StringExt on String {
 
     for (final part in parts.skip(1)) {
       if (part.isEmpty) continue;
-      buffer.write(part[0].toUpperCase());
-      buffer.write(part.substring(1).toLowerCase());
+      buffer
+        ..write(part[0].toUpperCase())
+        ..write(part.substring(1).toLowerCase());
     }
 
     return buffer.toString();

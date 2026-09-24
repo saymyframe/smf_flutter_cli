@@ -52,10 +52,10 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     }
     imports.addAll(_guardImports([...coreGuards, ..._routeGuards(routes)]));
 
-    final buffer = StringBuffer();
-    buffer.writeln('GoRouter(');
-    buffer.writeln("initialLocation: '${context.initialRoute}',");
-    buffer.writeln('  routes: [');
+    final buffer = StringBuffer()
+      ..writeln('GoRouter(')
+      ..writeln("initialLocation: '${context.initialRoute}',")
+      ..writeln('  routes: [');
     for (final route in routes) {
       final code = RouteGenerationStrategyRegistry.generate(
         route,
@@ -70,8 +70,9 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     final coreRedirects =
         RedirectsGenerator.generateCombinedRedirectCode(coreGuards);
 
-    buffer.writeln('redirect: $coreRedirects');
-    buffer.writeln(');');
+    buffer
+      ..writeln('redirect: $coreRedirects')
+      ..writeln(');');
 
     final appRoutesGenerator = AppRoutesGenerator();
     // Every GoRoute the router renders, top-level and nested alike.
@@ -198,7 +199,8 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
         final declaration = ShellRegistry.resolve(route.shellLink.id);
         if (declaration == null) {
           throw ArgumentError(
-            'Unknown shell link ${route.shellLink.id}. Declare it in ShellRegistry.',
+            'Unknown shell link ${route.shellLink.id}. '
+            'Declare it in ShellRegistry.',
           );
         }
 
