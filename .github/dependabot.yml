@@ -1,7 +1,10 @@
 version: 2
 updates:
   - package-ecosystem: "pub"
-    directory: "/packages/smf_flutter_cli"
+    directories:
+      - "/packages/smf_flutter_cli"
+      - "/packages/smf_contracts"
+      - "/packages/smf_modules/*"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5

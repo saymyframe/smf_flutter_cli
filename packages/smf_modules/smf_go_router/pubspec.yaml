@@ -1,0 +1,25 @@
+name: smf_go_router
+description: GoRouter integration, DSL, and route generators for SMF.
+version: 0.2.0
+homepage: https://saymyframe.com
+repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_go_router
+issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+topics: [flutter, routing, go-router, navigation, codegen]
+license: Apache-2.0
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  mason_logger: ^0.3.3
+  smf_contracts: ^0.2.0
+  smf_contribution_engine: ^0.2.0
+  mustachex: ^1.0.0
+  path: ^1.9.1
+  mason: ^0.1.1
+
+dev_dependencies:
+  lints: ">=5.0.0 <7.0.0"
+  test: ^1.24.0
