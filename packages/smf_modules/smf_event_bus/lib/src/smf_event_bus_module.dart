@@ -1,6 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_event_bus/bundles/smf_event_bus_brick_bundle.dart';
 
+/// Adds an `ICommunicationService` built on the event_bus package, through
+/// which features exchange events without importing each other, and
+/// registers it as a core singleton.
 class SmfEventBusModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {

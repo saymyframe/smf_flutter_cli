@@ -2,6 +2,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_firebase_core/bundles/smf_firebase_core_brick_bundle.dart';
 
+/// Adds Firebase to the app: its brick installs and configures the Firebase
+/// and FlutterFire CLIs, and `main()` calls `Firebase.initializeApp()` right
+/// after `WidgetsFlutterBinding.ensureInitialized()`.
 class FirebaseCoreModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {

@@ -2,6 +2,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/smf_flutter_core_bundle.dart';
 import 'package:smf_flutter_core/bundles/smf_flutter_riverpod_bundle.dart';
 
+/// The Flutter app that every project starts from, as used with Riverpod:
+/// the same app as for bloc, with `main()` wrapping it in a `ProviderScope`
+/// and flutter_riverpod added.
 class SmfCoreModuleRiverpod
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {

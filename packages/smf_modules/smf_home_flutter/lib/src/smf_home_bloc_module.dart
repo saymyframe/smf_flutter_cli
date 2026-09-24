@@ -1,6 +1,8 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/smf_home_bloc_bundle.dart';
 
+/// The home screen as the first tab of the main shell, with its state in a
+/// bloc with freezed events and states.
 class SmfHomeBlocModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {

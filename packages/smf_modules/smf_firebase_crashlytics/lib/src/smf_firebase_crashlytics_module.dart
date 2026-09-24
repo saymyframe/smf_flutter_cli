@@ -1,6 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
+/// Reports Flutter errors, uncaught asynchronous errors and isolate errors to
+/// Firebase Crashlytics, set up in `main()` right after the
+/// `Firebase.initializeApp()` call of firebase_core, which it depends on.
 class SmfFirebaseCrashlyticsModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {

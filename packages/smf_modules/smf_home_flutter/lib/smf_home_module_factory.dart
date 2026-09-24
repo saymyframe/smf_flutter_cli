@@ -1,6 +1,8 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/src/module.dart';
 
+/// Creates the home feature module for the profile's state manager:
+/// [SmfHomeBlocModule] or [SmfHomeRiverpodModule].
 class SmfHomeModuleFactory implements IModuleContributorFactory {
   @override
   IModuleCodeContributor create(ModuleProfile profile) {

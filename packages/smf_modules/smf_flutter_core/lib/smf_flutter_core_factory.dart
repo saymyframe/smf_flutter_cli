@@ -14,7 +14,8 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/src/module.dart';
 
-/// Factory for creating Flutter core module instances based on state management choice.
+/// Creates the core module for the profile's state manager: [SmfCoreModule]
+/// for bloc, [SmfCoreModuleRiverpod] for Riverpod.
 class SmfFlutterCoreFactory implements IModuleContributorFactory {
   @override
   IModuleCodeContributor create(ModuleProfile profile) {

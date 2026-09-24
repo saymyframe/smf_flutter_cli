@@ -78,6 +78,8 @@ abstract class FirebaseAnalyticsModule
       );
 }
 
+/// The [FirebaseAnalyticsModule] whose demo screen talks to a cubit
+/// (flutter_bloc).
 class FirebaseAnalyticsBlocModule extends FirebaseAnalyticsModule {
   @override
   BrickContribution get featureBrick => BrickContribution(
@@ -89,6 +91,8 @@ class FirebaseAnalyticsBlocModule extends FirebaseAnalyticsModule {
   String get stateManagerDependency => 'flutter_bloc: ^9.1.1';
 }
 
+/// The [FirebaseAnalyticsModule] whose demo screen talks to Riverpod
+/// providers.
 class FirebaseAnalyticsRiverpodModule extends FirebaseAnalyticsModule {
   @override
   BrickContribution get featureBrick => BrickContribution(
