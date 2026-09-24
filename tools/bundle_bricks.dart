@@ -246,7 +246,10 @@ Future<void> _embedHookAssets(Directory brickDir) async {
         return false;
       }
       return true;
-    }).toList(growable: false);
+    }).toList()
+      // listSync order depends on the file system; sort so the generated
+      // file (and the bundle that embeds it) is identical on every OS.
+      ..sort((a, b) => a.path.compareTo(b.path));
   } on FileSystemException {
     return;
   }
