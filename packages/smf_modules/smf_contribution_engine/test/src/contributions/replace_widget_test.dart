@@ -173,8 +173,6 @@ class HomePage {
         expect(functionStatements(result, 'main'),
             contains('runApp(const App());'));
       },
-      skip: 'Bug: ScopedWidgetVisitor only visits class declarations, so '
-          'top-level functions such as main() are skipped',
     );
 
     test(
