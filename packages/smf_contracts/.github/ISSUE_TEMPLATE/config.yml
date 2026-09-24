@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: SMF Flutter CLI repository
+    url: https://github.com/saymyframe/smf_flutter_cli
+    about: Issues related to the CLI should go here.
+  - name: SMF Modules repository
+    url: https://github.com/saymyframe/smf_modules
+    about: Issues related to modules should go here.
+  - name: Documentation
+    url: https://doc.saymyframe.com
+    about: Read the docs for guidance and examples.

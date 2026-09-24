@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest an idea to improve the SMF Contracts repository
+title: "feat: <short description>"
+labels: [enhancement]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched open/closed issues and did not find a duplicate
+          required: true
+        - label: This is not a question
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem would this feature solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the ideal solution and how it fits this repository (contracts, DSL, generators interfaces, routing/DI contracts, imports, mustache, or docs).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Affected area (select all that apply)
+      multiple: true
+      options:
+        - Contracts core
+        - DSL / Context
+        - Generators interfaces
+        - Routing contracts
+        - DI contracts
+        - Mustache templates / slots
+        - Import utilities
+        - Docs
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, references, or examples that help explain the request.
