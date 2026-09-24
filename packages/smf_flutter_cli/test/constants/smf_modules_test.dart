@@ -11,7 +11,7 @@ void main() {
         // ModuleCreator resolves dependencies by registry key, so the key must
         // match the name of the module the factory creates.
         test('registers each factory under its module name', () {
-          for (final MapEntry(key: key, value: factory) in smfModules.entries) {
+          for (final MapEntry(:key, value: factory) in smfModules.entries) {
             if (!factory.supports(profile)) continue;
 
             expect(

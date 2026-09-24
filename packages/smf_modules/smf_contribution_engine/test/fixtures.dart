@@ -47,7 +47,7 @@ class MainApp extends StatelessWidget {
 ''';
 
 /// The part of [monolithMainDart] that follows `main()`.
-final monolithMainAppClass = monolithMainDart.substring(
+final String monolithMainAppClass = monolithMainDart.substring(
   monolithMainDart.indexOf('class MainApp'),
 );
 

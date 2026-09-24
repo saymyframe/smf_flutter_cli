@@ -333,11 +333,15 @@ void main() {
           import: "import 'package:{{app_name_sc}}/core/di/core_di.dart';",
         );
 
-        await applyAll([contribution],
-            mustacheVariables: {'app_name': 'my_app'});
+        await applyAll(
+          [contribution],
+          mustacheVariables: {'app_name': 'my_app'},
+        );
         final once = await readMain();
-        await applyAll([contribution],
-            mustacheVariables: {'app_name': 'my_app'});
+        await applyAll(
+          [contribution],
+          mustacheVariables: {'app_name': 'my_app'},
+        );
 
         expect(await readMain(), once);
       },
@@ -422,7 +426,7 @@ void main() {
         expect(namedListsOf(await readMain(), 'providers'), [
           [
             'Provider(create: (_) => MyAppApi())',
-            'Provider(create: (_) => Logger())'
+            'Provider(create: (_) => Logger())',
           ],
         ]);
       });

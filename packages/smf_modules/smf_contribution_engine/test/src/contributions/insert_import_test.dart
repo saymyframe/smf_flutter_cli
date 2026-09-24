@@ -61,7 +61,7 @@ void main() {
     });
 
     test('ignores commented-out imports', () async {
-      final source = '// $firebaseImport\n$monolithMainDart';
+      const source = '// $firebaseImport\n$monolithMainDart';
 
       expect(directivesOf(await insert(source)), [
         "import 'package:flutter/material.dart';",

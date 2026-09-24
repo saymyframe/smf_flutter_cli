@@ -1,5 +1,3 @@
-library;
-
 export 'smf_contracts_factory.dart';
 export 'smf_contracts_module.dart';
 export 'src/brick_contribution.dart';

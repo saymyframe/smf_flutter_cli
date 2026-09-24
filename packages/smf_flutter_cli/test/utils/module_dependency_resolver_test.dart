@@ -18,7 +18,8 @@ IModuleCodeContributor makeModule(
   Set<String> dependsOn = const <String>{},
 }) =>
     TestModule(
-        ModuleDescriptor(name: name, description: name, dependsOn: dependsOn));
+      ModuleDescriptor(name: name, description: name, dependsOn: dependsOn),
+    );
 
 void main() {
   group('ModuleDependencyResolver', () {

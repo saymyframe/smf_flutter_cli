@@ -14,7 +14,7 @@ void main() {
 
     test('generates a GoRoute for a Route', () {
       final code = RouteGenerationStrategyRegistry.generate(
-        Route(path: '/home'),
+        const Route(path: '/home'),
         context,
       );
 
@@ -26,7 +26,7 @@ void main() {
       final code = RouteGenerationStrategyRegistry.generate(
         NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
-          children: [Route(path: '/home')],
+          children: [const Route(path: '/home')],
         ),
         context,
       );
@@ -38,7 +38,10 @@ void main() {
       final route = NestedRoute(
         shellLink: RouteShellLink.toMainTabsShell(),
         children: [
-          Route(path: '/home', imports: [Import.features('home/home.dart')]),
+          const Route(
+            path: '/home',
+            imports: [Import.features('home/home.dart')],
+          ),
         ],
       );
 

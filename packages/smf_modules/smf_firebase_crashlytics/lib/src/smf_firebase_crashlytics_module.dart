@@ -1,11 +1,14 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
+/// Reports Flutter errors, uncaught asynchronous errors and isolate errors to
+/// Firebase Crashlytics, set up in `main()` right after the
+/// `Firebase.initializeApp()` call of firebase_core, which it depends on.
 class SmfFirebaseCrashlyticsModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kFirebaseCrashlytics,
         description: 'SMF Firebase Crashlytics module',
         dependsOn: {kFirebaseCore},
@@ -14,22 +17,22 @@ class SmfFirebaseCrashlyticsModule
 
   @override
   List<Contribution> get sharedFileContributions => [
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
           import: "import 'dart:isolate';",
         ),
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
-          import: "import "
+          import: 'import '
               "'package:firebase_crashlytics/firebase_crashlytics.dart';",
         ),
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
-          import: "import "
+          import: 'import '
               "'package:flutter/foundation.dart' "
-              "show PlatformDispatcher, kDebugMode;",
+              'show PlatformDispatcher, kDebugMode;',
         ),
-        InsertIntoFunction(
+        const InsertIntoFunction(
           file: 'lib/main.dart',
           function: 'main',
           afterStatement: 'Firebase.initializeApp',

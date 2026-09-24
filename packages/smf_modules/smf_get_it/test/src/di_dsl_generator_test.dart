@@ -22,12 +22,15 @@ final _analyticsGroup = DiDependencyGroup(
   ],
   scope: DiScope.core,
   imports: [
-    Import.core(
+    const Import.core(
       ImportAnchor.coreService,
       'analytics/firebase/firebase_analytics_service.dart',
     ),
-    Import.core(ImportAnchor.coreService, 'analytics/i_analytics_service.dart'),
-    Import.direct(
+    const Import.core(
+      ImportAnchor.coreService,
+      'analytics/i_analytics_service.dart',
+    ),
+    const Import.direct(
       "import 'package:firebase_analytics/firebase_analytics.dart';",
     ),
   ],
@@ -44,15 +47,15 @@ final _eventBusGroup = DiDependencyGroup(
   ],
   scope: DiScope.core,
   imports: [
-    Import.core(
+    const Import.core(
       ImportAnchor.coreService,
       'communication/event_bus/event_bus_service.dart',
     ),
-    Import.core(
+    const Import.core(
       ImportAnchor.coreService,
       'communication/i_communication_service.dart',
     ),
-    Import.direct("import 'package:event_bus/event_bus.dart';"),
+    const Import.direct("import 'package:event_bus/event_bus.dart';"),
   ],
 );
 
@@ -96,18 +99,16 @@ void main() {
       final files = await generate([_analyticsGroup, _eventBusGroup]);
 
       final content = files.single.content;
-      for (final import in [
-        "import 'package:test_app/core/typedef.dart';",
-        "import 'package:test_app/core/services/analytics/firebase/"
-            "firebase_analytics_service.dart';",
-        "import 'package:test_app/core/services/analytics/"
-            "i_analytics_service.dart';",
-        "import 'package:firebase_analytics/firebase_analytics.dart';",
-        "import 'package:test_app/core/services/communication/event_bus/"
-            "event_bus_service.dart';",
-        "import 'package:event_bus/event_bus.dart';",
+      const services = 'package:test_app/core/services';
+      for (final uri in [
+        'package:test_app/core/typedef.dart',
+        '$services/analytics/firebase/firebase_analytics_service.dart',
+        '$services/analytics/i_analytics_service.dart',
+        'package:firebase_analytics/firebase_analytics.dart',
+        '$services/communication/event_bus/event_bus_service.dart',
+        'package:event_bus/event_bus.dart',
       ]) {
-        expect(content, contains(import));
+        expect(content, contains("import '$uri';"));
       }
       expect(
         content,
@@ -174,7 +175,7 @@ void main() {
         DiDependencyGroup(
           scope: DiScope.module,
           pathToDiTemplate: _authTemplate,
-          imports: [Import.features('auth/auth_repository.dart')],
+          imports: [const Import.features('auth/auth_repository.dart')],
           diDependencies: [
             const DiDependency(
               abstractType: 'IAuthRepository',

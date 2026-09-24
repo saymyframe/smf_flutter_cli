@@ -4,10 +4,27 @@ import 'package:analyzer/dart/ast/token.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_contribution_engine/src/utils/match_widget_visitor.dart';
 
-/// Replaces the source from [offset] to [end] with [text].
+/// Replaces the source from `offset` to `end` with `text`.
 typedef _Edit = ({int offset, int end, String text});
 
+/// Removes, overrides and appends named arguments of a widget, such as
+/// swapping `home` for `routerConfig` on `MaterialApp.router`.
+///
+/// Every instance of [widgetName] in the file is changed: the arguments named
+/// in [removeArgs] go with their comma, those in [addArgs] that the widget
+/// already has get the new value, and the rest of [addArgs] are appended,
+/// keeping a trailing comma at the end of the list. Each matched widget loses
+/// its `const` (or `new`), since the new arguments need not be constant. An
+/// edit inside an argument that an outer widget removes or overrides goes
+/// away with that argument.
+///
+/// Without a matching widget nothing is edited. Only the changed arguments
+/// are touched, so the others and their comments stay as written, but the
+/// whole file is reformatted. Running it again changes nothing: the removed
+/// arguments are gone, and [addArgs] overrides what it added instead of
+/// repeating it.
 class ModifyWidgetArguments extends Contribution {
+  /// Creates a contribution that changes the arguments of [widgetName].
   const ModifyWidgetArguments({
     required super.file,
     required this.widgetName,
@@ -15,11 +32,23 @@ class ModifyWidgetArguments extends Contribution {
     this.addArgs = const {},
   });
 
+  /// The name of the widget to change, such as `Text`.
+  ///
+  /// It is matched against the type name as parsed without resolution: an
+  /// import prefix doesn't count, and `const MaterialApp.router()` reads as
+  /// the type `router`. Only widgets created with `const` or `new` are found,
+  /// since `Text('a')` alone parses as a method call.
   final String widgetName;
+
+  /// The names of the named arguments to remove, such as `home`.
   final List<String> removeArgs;
 
   /// Named arguments to set: one the widget already has gets the new value,
   /// the others are appended.
+  ///
+  /// Maps each name to the source of its value, such as
+  /// `{'routerConfig': 'router'}`. [PatchEngine] renders the placeholders in
+  /// both.
   final Map<String, String> addArgs;
 
   @override

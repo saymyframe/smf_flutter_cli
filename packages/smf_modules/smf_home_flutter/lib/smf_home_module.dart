@@ -1,6 +1,4 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
+/// The home feature module of SMF.
 library;
 
 export 'smf_home_module_factory.dart';

@@ -3,6 +3,15 @@ import 'package:smf_go_router/src/route_generator/redirects_generator.dart';
 import 'package:smf_go_router/src/route_generator/route_generation_context.dart';
 import 'package:smf_go_router/src/route_generator/route_generation_strategy.dart';
 
+/// Renders a [Route] as a `GoRoute`.
+///
+/// A named route gets `name: AppRoutes.<name>`, a route with a screen gets a
+/// builder that reads the screen arguments from the path and query
+/// parameters (parsing `int`, `double` and `bool` ones), and the redirect
+/// checks the route's own guards.
+///
+/// Throws an [ArgumentError] for a screen argument without a matching route
+/// parameter, or a guard without a go_router binding.
 class SingleRouteStrategy implements RouteGenerationStrategy<Route> {
   @override
   String generate(Route route, RouteGenerationContext context) {

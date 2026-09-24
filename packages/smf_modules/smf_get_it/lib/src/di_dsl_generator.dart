@@ -3,6 +3,11 @@ import 'package:smf_get_it/src/contributors/contributors.dart';
 import 'package:smf_get_it/src/contributors/get_it_code_generator.dart';
 import 'package:smf_get_it/src/contributors/module_di_contributor.dart';
 
+/// Renders the DI files from the [DiDependencyGroup]s of a [DslContext].
+///
+/// Core groups fill `lib/core/di/core_di.dart`, which is rendered even when
+/// there is nothing to register; module groups fill their own templates, one
+/// file per template. The files are returned, core first, not written.
 mixin DiDslGenerator implements DslAwareCodeGenerator {
   @override
   Future<List<GeneratedFile>> generateFromDsl(DslContext context) async {

@@ -2,6 +2,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_firebase_core/bundles/smf_firebase_core_brick_bundle.dart';
 
+/// Adds Firebase to the app: its brick installs and configures the Firebase
+/// and FlutterFire CLIs, and `main()` calls `Firebase.initializeApp()` right
+/// after `WidgetsFlutterBinding.ensureInitialized()`.
 class FirebaseCoreModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {
@@ -14,7 +17,7 @@ class FirebaseCoreModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kFirebaseCore,
         description: 'Firebase Core module',
         pubDependency: {'firebase_core: ^4.1.0'},
@@ -22,11 +25,11 @@ class FirebaseCoreModule
 
   @override
   List<Contribution> get sharedFileContributions => [
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
           import: "import 'package:firebase_core/firebase_core.dart';",
         ),
-        InsertIntoFunction(
+        const InsertIntoFunction(
           file: 'lib/main.dart',
           function: 'main',
           afterStatement: 'WidgetsFlutterBinding.ensureInitialized',

@@ -1,6 +1,4 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
+/// The event bus module of SMF: event-based communication between features.
 library;
 
 export 'smf_event_bus_factory.dart';

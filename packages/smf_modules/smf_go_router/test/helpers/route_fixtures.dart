@@ -7,15 +7,15 @@ import 'package:smf_go_router/src/route_generator/route_generation_strategy_regi
 RouteGenerationContext registryContext({
   List<ShellDeclaration> shellDeclarations = const [],
 }) {
+  // The callbacks refer to the context they are part of.
   late final RouteGenerationContext context;
-  context = RouteGenerationContext(
+  return context = RouteGenerationContext(
     shellDeclarations: shellDeclarations,
     generateRoute: (route) =>
         RouteGenerationStrategyRegistry.generate(route, context),
     generateImports: (route) =>
         RouteGenerationStrategyRegistry.imports(route, context),
   );
-  return context;
 }
 
 ShellDeclaration get mainTabsShell => ShellRegistry.resolve('main-tabs')!;

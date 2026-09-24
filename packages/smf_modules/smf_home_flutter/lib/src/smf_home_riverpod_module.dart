@@ -1,17 +1,21 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/smf_home_riverpod_bundle.dart';
 
+/// The home screen as the first tab of the main shell, with its state in
+/// Riverpod providers.
 class SmfHomeRiverpodModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
         BrickContribution(
-            name: 'smf home riverpod', bundle: smfHomeRiverpodBundle),
+          name: 'smf home riverpod',
+          bundle: smfHomeRiverpodBundle,
+        ),
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
         dependsOn: {kGoRouterModule},
@@ -25,7 +29,7 @@ class SmfHomeRiverpodModule
           NestedRoute(
             shellLink: RouteShellLink.toMainTabsShell(),
             children: [
-              Route(
+              const Route(
                 path: '/home',
                 name: 'homeScreen',
                 screen: RouteScreen('HomeScreen'),

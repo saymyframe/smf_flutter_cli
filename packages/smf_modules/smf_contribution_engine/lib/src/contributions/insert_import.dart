@@ -3,10 +3,26 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:smf_contribution_engine/src/contribution.dart';
 
+/// Adds an import directive to [file], unless the file already has it.
+///
+/// An existing import counts as the same when it has the same URI, prefix and
+/// combinators, whatever its quotes or line breaks, so running this again
+/// changes nothing. Commented-out imports don't count.
+///
+/// The import goes on a new line after the last import, or else after the
+/// library directive, past any comment that trails it on that line. A file
+/// with neither gets it above its first directive or declaration, below
+/// leading comments such as a license header, or at the end when it holds
+/// only comments. Only the new line is added: the rest of the file keeps its
+/// formatting, and syntax errors elsewhere in the file don't stop it.
 class InsertImport extends Contribution {
+  /// Creates a contribution that adds [import] to [file].
   const InsertImport({required super.file, required this.import});
 
   /// A single import directive, such as `import 'package:a/a.dart';`.
+  ///
+  /// `PatchEngine` renders its placeholders. [apply] throws an
+  /// [ArgumentError] when it isn't a single import directive.
   final String import;
 
   @override

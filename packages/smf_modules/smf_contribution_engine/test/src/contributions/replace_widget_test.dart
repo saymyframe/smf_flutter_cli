@@ -54,10 +54,9 @@ void main() {
         () async {
       final result = await toRouter.apply(monolithMainDart);
 
-      expect(methodStatements(result, 'MainApp', 'build'), [
-        'return const MaterialApp.router('
-            "home: Scaffold(body: Center(child: Text('Hello World!'))));",
-      ]);
+      const expected = 'return const MaterialApp.router(home: '
+          "Scaffold(body: Center(child: Text('Hello World!'))));";
+      expect(methodStatements(result, 'MainApp', 'build'), [expected]);
       expect(
         functionStatements(result, 'main'),
         functionStatements(monolithMainDart, 'main'),
@@ -170,8 +169,10 @@ class HomePage {
           toWidget: 'App',
         ).apply(monolithMainDart);
 
-        expect(functionStatements(result, 'main'),
-            contains('runApp(const App());'));
+        expect(
+          functionStatements(result, 'main'),
+          contains('runApp(const App());'),
+        );
       },
     );
 
@@ -195,11 +196,11 @@ class HomePage {
           toWidget: 'SliverPadding',
         ).apply(source);
 
-        expect(methodStatements(result, 'HomePage', 'build'), [
-          'return const SliverPadding(padding: EdgeInsets.all(8), '
-              'child: const SliverPadding(padding: EdgeInsets.all(4), '
-              "child: Text('x')));",
-        ]);
+        const expected =
+            'return const SliverPadding(padding: EdgeInsets.all(8), '
+            'child: const SliverPadding(padding: EdgeInsets.all(4), '
+            "child: Text('x')));";
+        expect(methodStatements(result, 'HomePage', 'build'), [expected]);
       },
     );
 

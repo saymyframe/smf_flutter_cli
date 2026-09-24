@@ -1,6 +1,8 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/smf_home_bloc_bundle.dart';
 
+/// The home screen as the first tab of the main shell, with its state in a
+/// bloc with freezed events and states.
 class SmfHomeBlocModule
     with EmptyModuleCodeContributor
     implements IModuleCodeContributor {
@@ -10,7 +12,7 @@ class SmfHomeBlocModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
         dependsOn: {kGoRouterModule},
@@ -25,7 +27,7 @@ class SmfHomeBlocModule
           NestedRoute(
             shellLink: RouteShellLink.toMainTabsShell(),
             children: [
-              Route(
+              const Route(
                 path: '/home',
                 name: 'homeScreen',
                 screen: RouteScreen('HomeScreen'),

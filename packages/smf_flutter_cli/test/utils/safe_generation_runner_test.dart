@@ -215,14 +215,17 @@ void main() {
         expectUnexpectedErrorReported();
       });
 
-      test('signals the failure to the caller', () async {
-        await expectLater(
-          run(modules: [TestModule('empty')]),
-          throwsA(isA<Exception>()),
-        );
-      },
-          skip: 'Bug: run() swallows generation errors, so `smf create` exits '
-              'with code 0 after a failed generation');
+      test(
+        'signals the failure to the caller',
+        () async {
+          await expectLater(
+            run(modules: [TestModule('empty')]),
+            throwsA(isA<Exception>()),
+          );
+        },
+        skip: 'Bug: run() swallows generation errors, so `smf create` exits '
+            'with code 0 after a failed generation',
+      );
     });
   });
 }

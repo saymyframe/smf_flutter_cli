@@ -37,9 +37,7 @@ class ModuleDependencyResolver {
       final module = byName[name];
       if (module == null) return;
 
-      for (final dep in module.moduleDescriptor.dependsOn) {
-        visit(dep);
-      }
+      module.moduleDescriptor.dependsOn.forEach(visit);
 
       visited.add(name);
       sorted.add(module);

@@ -2,7 +2,26 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 
+/// Inserts statements into the body of a method, after the statements that
+/// contain an anchor text, such as a call in `initState` after
+/// `super.initState();`.
+///
+/// The target is the first method named [method] in the first class named
+/// [className]. [insert] goes after each statement of its body whose source,
+/// as the parser prints it, contains [afterStatement]. Only the statements
+/// directly in the body are checked, not those nested in blocks, and when
+/// none matches nothing is inserted.
+///
+/// Throws an [Exception] when the class or the method is missing or the
+/// method body is an expression, and a `FormatterException` when [insert]
+/// leaves invalid code.
+///
+/// The body is rebuilt from the source of its statements, so the comments and
+/// blank lines in it are lost, and the whole file is reformatted. Nothing
+/// checks whether [insert] is already there: every run adds it again.
 class InsertIntoMethodInClass extends Contribution {
+  /// Creates a contribution that inserts [insert] into [method] of
+  /// [className].
   const InsertIntoMethodInClass({
     required super.file,
     required this.className,
@@ -11,9 +30,17 @@ class InsertIntoMethodInClass extends Contribution {
     required this.insert,
   });
 
+  /// The name of the class that declares [method], such as `_HomePageState`.
   final String className;
+
+  /// The name of the method to patch, such as `initState`.
   final String method;
+
+  /// Text that marks the statements to insert after, such as
+  /// `super.initState()`.
   final String afterStatement;
+
+  /// The statements to insert. [PatchEngine] renders its placeholders.
   final String insert;
 
   @override

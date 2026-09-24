@@ -121,36 +121,39 @@ void main() {
       expect(projectFile('vars.txt').readAsStringSync(), 'demo/dev');
     });
 
-    test('does not leak brick vars into coreVars or later bricks', () async {
-      final coreVars = <String, dynamic>{'app_name': 'demo'};
+    test(
+      'does not leak brick vars into coreVars or later bricks',
+      () async {
+        final coreVars = <String, dynamic>{'app_name': 'demo'};
 
-      await generate(
-        [
-          TestModule(
-            'first',
-            brickContributions: [
-              textBrick(
-                'first_brick',
-                {'first.txt': '{{flavor}}'},
-                vars: <String, dynamic>{'flavor': 'dev'},
-              ),
-            ],
-          ),
-          TestModule(
-            'second',
-            brickContributions: [
-              textBrick('second_brick', {'second.txt': '[{{flavor}}]'}),
-            ],
-          ),
-        ],
-        coreVars: coreVars,
-      );
+        await generate(
+          [
+            TestModule(
+              'first',
+              brickContributions: [
+                textBrick(
+                  'first_brick',
+                  {'first.txt': '{{flavor}}'},
+                  vars: <String, dynamic>{'flavor': 'dev'},
+                ),
+              ],
+            ),
+            TestModule(
+              'second',
+              brickContributions: [
+                textBrick('second_brick', {'second.txt': '[{{flavor}}]'}),
+              ],
+            ),
+          ],
+          coreVars: coreVars,
+        );
 
-      expect(projectFile('second.txt').readAsStringSync(), '[]');
-      expect(coreVars, isNot(contains('flavor')));
-    },
-        skip: 'Bug: `coreVars..addAll(brick.vars)` mutates the shared '
-            'coreVars, so brick vars leak into later bricks and generators');
+        expect(projectFile('second.txt').readAsStringSync(), '[]');
+        expect(coreVars, isNot(contains('flavor')));
+      },
+      skip: 'Bug: `coreVars..addAll(brick.vars)` mutates the shared '
+          'coreVars, so brick vars leak into later bricks and generators',
+    );
 
     test('overwrites existing files for the overwrite strategy', () async {
       projectFile('file.txt').writeAsStringSync('old');
@@ -258,29 +261,34 @@ void main() {
         ).called(1);
       });
 
-      test('also drops modules that depend on a dropped dependent', () async {
-        final base = failingModule('base');
-        final middle = writingModule('middle', dependsOn: {'base'});
-        final top = writingModule('top', dependsOn: {'middle'});
-        final modules = <IModuleCodeContributor>[base, middle, top];
+      test(
+        'also drops modules that depend on a dropped dependent',
+        () async {
+          final base = failingModule('base');
+          final middle = writingModule('middle', dependsOn: {'base'});
+          final top = writingModule('top', dependsOn: {'middle'});
+          final modules = <IModuleCodeContributor>[base, middle, top];
 
-        await generate(modules);
+          await generate(modules);
 
-        expect(modules, isEmpty);
-        expect(projectFile('top.txt').existsSync(), isFalse);
-      },
-          skip: 'Bug: only direct dependents of a failed module are excluded '
-              '(dependentsOf is not transitive)');
+          expect(modules, isEmpty);
+          expect(projectFile('top.txt').existsSync(), isFalse);
+        },
+        skip: 'Bug: only direct dependents of a failed module are excluded '
+            '(dependentsOf is not transitive)',
+      );
 
-      test('finishes the progress of a brick that failed to generate',
-          () async {
-        await generate([failingModule('base')]);
+      test(
+        'finishes the progress of a brick that failed to generate',
+        () async {
+          await generate([failingModule('base')]);
 
-        expect(progresses, hasLength(1));
-        expect(progresses.single.isFinished, isTrue);
-      },
-          skip: 'Bug: the progress is never completed/failed when generate '
-              'throws, so the spinner keeps running');
+          expect(progresses, hasLength(1));
+          expect(progresses.single.isFinished, isTrue);
+        },
+        skip: 'Bug: the progress is never completed/failed when generate '
+            'throws, so the spinner keeps running',
+      );
     });
 
     group('in strict mode', () {
@@ -295,7 +303,7 @@ void main() {
             modules,
             coreVars: <String, dynamic>{
               'app_name': 'demo',
-              'strict_mode': true
+              'strict_mode': true,
             },
           ),
           throwsA(isA<FileSystemException>()),
