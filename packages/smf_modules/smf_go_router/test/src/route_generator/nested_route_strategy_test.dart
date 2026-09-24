@@ -22,13 +22,13 @@ void main() {
       test('wraps the children in a ShellRoute built with the shell widget',
           () async {
         final route = tabs([
-          Route(
+          const Route(
             path: '/home',
             name: 'home',
             screen: RouteScreen('HomeScreen'),
             meta: RouteMeta(icon: 'Icons.home'),
           ),
-          Route(
+          const Route(
             path: '/profile',
             screen: RouteScreen('ProfileScreen'),
             meta: RouteMeta(icon: 'Icons.person'),
@@ -78,7 +78,7 @@ $code
         );
 
         final code = strategy.generate(
-          tabs([Route(path: '/a'), Route(path: '/b')]),
+          tabs([const Route(path: '/a'), const Route(path: '/b')]),
           context,
         );
 
@@ -88,7 +88,7 @@ $code
       test('chains the nested route guards into the ShellRoute redirect', () {
         final code = strategy.generate(
           tabs(
-            [Route(path: '/home', screen: RouteScreen('HomeScreen'))],
+            [const Route(path: '/home', screen: RouteScreen('HomeScreen'))],
             guards: [goRouterGuard('onboardingGuard(context, state)')],
           ),
           registryContext(shellDeclarations: [mainTabsShell]),
@@ -105,7 +105,7 @@ $code
       test('throws when the linked shell is not declared in the context', () {
         expect(
           () => strategy.generate(
-            tabs([Route(path: '/home')]),
+            tabs([const Route(path: '/home')]),
             registryContext(),
           ),
           throwsArgumentError,
@@ -117,13 +117,15 @@ $code
       test('lists its own imports before the imports of its children', () {
         final route = NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
-          imports: [Import.core(ImportAnchor.coreWidgets, 'tabs_scope.dart')],
+          imports: [
+            const Import.core(ImportAnchor.coreWidgets, 'tabs_scope.dart')
+          ],
           children: [
-            Route(
+            const Route(
               path: '/home',
               imports: [Import.features('home/home_screen.dart')],
             ),
-            Route(
+            const Route(
               path: '/profile',
               imports: [Import.features('profile/profile_screen.dart')],
             ),

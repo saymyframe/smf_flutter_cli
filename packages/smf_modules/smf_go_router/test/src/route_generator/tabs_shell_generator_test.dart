@@ -19,7 +19,7 @@ void main() {
     test('emits a _TabInfo with path, label and icon for each route', () {
       expect(
         tabLines([
-          Route(
+          const Route(
             path: '/home',
             meta: RouteMeta(label: 'Home', icon: 'Icons.home'),
           ),
@@ -31,7 +31,7 @@ void main() {
     test('omits the label when RouteMeta has none', () {
       expect(
         tabLines([
-          Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+          const Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
         ]),
         ['_TabInfo(path: "/home", icon: Icons.home),'],
       );
@@ -39,14 +39,14 @@ void main() {
 
     test('orders tabs by RouteMeta.order and puts unordered tabs last', () {
       final lines = tabLines([
-        Route(path: '/c', meta: RouteMeta(icon: 'Icons.c')),
-        Route(path: '/b', meta: RouteMeta(icon: 'Icons.b', order: 1)),
-        Route(path: '/d', meta: RouteMeta(icon: 'Icons.d')),
-        Route(path: '/a', meta: RouteMeta(icon: 'Icons.a', order: 0)),
+        const Route(path: '/c', meta: RouteMeta(icon: 'Icons.c')),
+        const Route(path: '/b', meta: RouteMeta(icon: 'Icons.b', order: 1)),
+        const Route(path: '/d', meta: RouteMeta(icon: 'Icons.d')),
+        const Route(path: '/a', meta: RouteMeta(icon: 'Icons.a', order: 0)),
       ]);
 
       expect(
-        lines.map((l) => RegExp(r'path: "([^"]+)"').firstMatch(l)!.group(1)),
+        lines.map((l) => RegExp('path: "([^"]+)"').firstMatch(l)!.group(1)),
         ['/a', '/b', '/c', '/d'],
       );
     });
@@ -55,11 +55,11 @@ void main() {
       final code = generator.generate(
         declaration: mainTabsShell,
         routes: [
-          Route(
+          const Route(
             path: '/home',
             meta: RouteMeta(label: 'Home', icon: 'Icons.home', order: 0),
           ),
-          Route(path: '/profile', meta: RouteMeta(icon: 'Icons.person')),
+          const Route(path: '/profile', meta: RouteMeta(icon: 'Icons.person')),
         ],
       );
 
@@ -77,7 +77,7 @@ void main() {
       expect(
         () => generator.generate(
           declaration: mainTabsShell,
-          routes: [Route(path: '/home', name: 'home')],
+          routes: [const Route(path: '/home', name: 'home')],
         ),
         throwsA(
           isA<StateError>().having(

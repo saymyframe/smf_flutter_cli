@@ -41,7 +41,7 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
 
     final buffer = StringBuffer();
     buffer.writeln('GoRouter(');
-    buffer.writeln('initialLocation: \'${context.initialRoute}\',');
+    buffer.writeln("initialLocation: '${context.initialRoute}',");
     buffer.writeln('  routes: [');
     for (final route in routes) {
       final code = RouteGenerationStrategyRegistry.generate(
@@ -73,7 +73,7 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     final shellFiles = <GeneratedFile>[];
     final routesByShellLinks = groupRoutesByShellLink(context.routeGroups);
     for (final shell in routesByShellLinks.entries) {
-      final code = TabsShellGenerator().generate(
+      final code = const TabsShellGenerator().generate(
         declaration: shell.key,
         routes: shell.value,
       );

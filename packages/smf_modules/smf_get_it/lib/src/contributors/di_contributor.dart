@@ -60,7 +60,7 @@ abstract base class DiContributor {
       buff.writeln(codeGenerator.generate(dependency));
     }
 
-    logger?.detail('Generated bindins ${buff.toString()}');
+    logger?.detail('Generated bindins $buff');
     return buff.toString();
   }
 

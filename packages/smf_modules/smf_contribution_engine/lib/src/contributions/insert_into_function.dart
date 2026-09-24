@@ -6,9 +6,9 @@ class InsertIntoFunction extends Contribution {
   const InsertIntoFunction({
     required super.file,
     required this.function,
+    required this.insert,
     this.beforeStatement,
     this.afterStatement,
-    required this.insert,
   }) : assert(
           beforeStatement != null || afterStatement != null,
           'Either beforeStatement or afterStatement must be provided',

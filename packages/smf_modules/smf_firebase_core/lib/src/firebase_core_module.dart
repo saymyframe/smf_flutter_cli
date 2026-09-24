@@ -14,7 +14,7 @@ class FirebaseCoreModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kFirebaseCore,
         description: 'Firebase Core module',
         pubDependency: {'firebase_core: ^4.1.0'},
@@ -22,11 +22,11 @@ class FirebaseCoreModule
 
   @override
   List<Contribution> get sharedFileContributions => [
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
           import: "import 'package:firebase_core/firebase_core.dart';",
         ),
-        InsertIntoFunction(
+        const InsertIntoFunction(
           file: 'lib/main.dart',
           function: 'main',
           afterStatement: 'WidgetsFlutterBinding.ensureInitialized',

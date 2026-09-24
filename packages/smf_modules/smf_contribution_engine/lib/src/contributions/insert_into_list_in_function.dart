@@ -42,7 +42,7 @@ class InsertIntoListInFunction extends Contribution {
       _Visitor(
         listVariableMatch: listVariableMatch,
         parentMatch: parentExpressionMatch,
-        collector: (list) => childrenMatches.add(list),
+        collector: childrenMatches.add,
       ),
     );
 
@@ -59,15 +59,14 @@ class InsertIntoListInFunction extends Contribution {
 }
 
 class _Visitor extends RecursiveAstVisitor<void> {
-  final String listVariableMatch;
-  final String parentMatch;
-  final void Function(ListLiteral) collector;
-
   _Visitor({
     required this.listVariableMatch,
     required this.parentMatch,
     required this.collector,
   });
+  final String listVariableMatch;
+  final String parentMatch;
+  final void Function(ListLiteral) collector;
 
   @override
   void visitNamedExpression(NamedExpression node) {

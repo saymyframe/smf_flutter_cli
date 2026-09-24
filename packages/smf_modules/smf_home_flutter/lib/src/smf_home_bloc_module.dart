@@ -10,7 +10,7 @@ class SmfHomeBlocModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
         dependsOn: {kGoRouterModule},
@@ -25,7 +25,7 @@ class SmfHomeBlocModule
           NestedRoute(
             shellLink: RouteShellLink.toMainTabsShell(),
             children: [
-              Route(
+              const Route(
                 path: '/home',
                 name: 'homeScreen',
                 screen: RouteScreen('HomeScreen'),

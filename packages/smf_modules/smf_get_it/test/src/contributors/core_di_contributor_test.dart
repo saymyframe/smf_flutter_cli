@@ -34,7 +34,8 @@ void main() {
           DiDependencyGroup(
             scope: DiScope.core,
             imports: [
-              Import.core(ImportAnchor.coreService, 'analytics/analytics.dart'),
+              const Import.core(
+                  ImportAnchor.coreService, 'analytics/analytics.dart'),
             ],
             diDependencies: [
               const DiDependency(
@@ -47,7 +48,7 @@ void main() {
           DiDependencyGroup(
             scope: DiScope.core,
             imports: [
-              Import.direct("import 'package:event_bus/event_bus.dart';"),
+              const Import.direct("import 'package:event_bus/event_bus.dart';"),
             ],
             diDependencies: [
               const DiDependency(

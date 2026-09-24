@@ -27,7 +27,7 @@ ${generate(route)}
     group('generate', () {
       test('emits a GoRoute with path, AppRoutes name and screen builder',
           () async {
-        final route = Route(
+        const route = Route(
           path: '/settings',
           name: 'settings',
           screen: RouteScreen('SettingsScreen'),
@@ -55,7 +55,8 @@ abstract final class AppRoutes {
       test('omits the name when the route has none or an empty one', () {
         for (final name in [null, '']) {
           final code = generate(
-            Route(path: '/about', name: name, screen: RouteScreen('About')),
+            Route(
+                path: '/about', name: name, screen: const RouteScreen('About')),
           );
 
           expect(code, isNot(contains('name:')), reason: 'name: $name');
@@ -64,7 +65,7 @@ abstract final class AppRoutes {
       });
 
       test('omits the builder when the route has no screen', () {
-        final code = generate(Route(path: '/redirect-only'));
+        final code = generate(const Route(path: '/redirect-only'));
 
         expect(code, isNot(contains('builder:')));
         expect(code, contains('redirect:'));
@@ -73,7 +74,8 @@ abstract final class AppRoutes {
 
       test('emits a redirect that allows navigation when there are no guards',
           () {
-        final code = generate(Route(path: '/open', screen: RouteScreen('X')));
+        final code =
+            generate(const Route(path: '/open', screen: RouteScreen('X')));
 
         expect(code, contains('redirect:'));
         expect(code, contains('return null;'));
@@ -83,7 +85,7 @@ abstract final class AppRoutes {
       test('chains the route guards into its redirect', () async {
         final route = Route(
           path: '/account',
-          screen: RouteScreen('AccountScreen'),
+          screen: const RouteScreen('AccountScreen'),
           guards: [goRouterGuard('authGuard(context, state)')],
         );
 
@@ -113,7 +115,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
     group('screen arguments', () {
       test('reads path parameters from state.pathParameters', () {
         final code = generate(
-          Route(
+          const Route(
             path: '/users/:userId',
             parameters: [PathParam('userId', type: String)],
             screen: RouteScreen(
@@ -137,7 +139,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
 
       test('reads query parameters from state.uri.queryParameters', () {
         final code = generate(
-          Route(
+          const Route(
             path: '/search',
             parameters: [QueryParam('q', type: String)],
             screen: RouteScreen(
@@ -161,7 +163,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
 
       test('parses int, double and bool parameters', () {
         final code = generate(
-          Route(
+          const Route(
             path: '/products/:id',
             parameters: [
               PathParam('id', type: int),
@@ -208,7 +210,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
 
       test('passes positional arguments without a name', () {
         final code = generate(
-          Route(
+          const Route(
             path: '/users/:id',
             parameters: [PathParam('id', type: String)],
             screen: RouteScreen(
@@ -230,7 +232,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
 
       test('passes an optional String query parameter through as nullable', () {
         final code = generate(
-          Route(
+          const Route(
             path: '/search',
             parameters: [QueryParam('q', type: String, optional: true)],
             screen: RouteScreen(
@@ -253,7 +255,7 @@ String? authGuard(BuildContext context, GoRouterState state) => null;
       });
 
       test('generates a builder that type-checks against the screen', () async {
-        final route = Route(
+        const route = Route(
           path: '/products/:id/:slug',
           name: 'product',
           parameters: [
@@ -318,7 +320,7 @@ class ProductScreen {
       test(
         'passes optional int and double query parameters as nullable numbers',
         () async {
-          final route = Route(
+          const route = Route(
             path: '/catalog',
             parameters: [
               QueryParam('page', type: int, optional: true),
@@ -355,7 +357,7 @@ class CatalogScreen {
       );
 
       test('throws when a screen argument has no matching route parameter', () {
-        final route = Route(
+        const route = Route(
           path: '/users/:id',
           screen: RouteScreen(
             'UserScreen',
@@ -385,7 +387,7 @@ class CatalogScreen {
     group('imports', () {
       test('resolves the route imports in declaration order', () {
         final imports = strategy.imports(
-          Route(
+          const Route(
             path: '/home',
             imports: [
               Import.features('home/home_screen.dart'),
@@ -405,7 +407,7 @@ class CatalogScreen {
 
       test('returns no imports when the route declares none', () {
         expect(
-          strategy.imports(Route(path: '/home'), registryContext()),
+          strategy.imports(const Route(path: '/home'), registryContext()),
           isEmpty,
         );
       });

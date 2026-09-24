@@ -83,11 +83,14 @@ void main() {
         final imports = contributor.combineImports([
           _coreGroup(
             imports: [
-              Import.core(ImportAnchor.coreService, 'analytics/analytics.dart'),
-              Import.direct("import 'package:firebase_analytics/fa.dart'"),
+              const Import.core(
+                  ImportAnchor.coreService, 'analytics/analytics.dart'),
+              const Import.direct(
+                  "import 'package:firebase_analytics/fa.dart'"),
             ],
           ),
-          _coreGroup(imports: [Import.features('auth/auth_repository.dart')]),
+          _coreGroup(
+              imports: [const Import.features('auth/auth_repository.dart')]),
         ]);
 
         expect(imports.split('\n'), [
@@ -104,7 +107,7 @@ void main() {
       test(
         'imports a file shared by several groups only once',
         () {
-          final shared = Import.core(
+          const shared = Import.core(
             ImportAnchor.coreService,
             'communication/i_communication_service.dart',
           );

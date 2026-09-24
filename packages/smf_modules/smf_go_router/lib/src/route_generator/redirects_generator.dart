@@ -4,7 +4,7 @@ class RedirectsGenerator {
   static String generateCombinedRedirectCode(List<RouteGuard> guards) {
     final redirects = <String>[];
 
-    for (int i = 0; i < guards.length; i++) {
+    for (var i = 0; i < guards.length; i++) {
       final guard = guards[i];
       final impl = guard.bindings[RoutingMode.goRouter];
 
@@ -17,8 +17,8 @@ class RedirectsGenerator {
       final func = impl.code.trim();
       final varName = 'r$i';
 
-      redirects.add("final $varName = $func;");
-      redirects.add("if ($varName != null) return $varName;");
+      redirects.add('final $varName = $func;');
+      redirects.add('if ($varName != null) return $varName;');
     }
 
     redirects.add('return null;');

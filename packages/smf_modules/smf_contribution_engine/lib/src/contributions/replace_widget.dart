@@ -28,7 +28,7 @@ class ReplaceWidget extends Contribution {
         fromWidget: fromWidget,
         className: className,
         methodName: methodName,
-        onMatch: (node) => edits.add(node),
+        onMatch: edits.add,
       ),
     );
 

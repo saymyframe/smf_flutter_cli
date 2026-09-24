@@ -11,7 +11,7 @@ void main() {
 
     test('declares a path and a name constant for a named route', () {
       final code = generator.generateAppRoutes([
-        Route(path: '/settings', name: 'settings'),
+        const Route(path: '/settings', name: 'settings'),
       ]);
 
       expect(
@@ -24,14 +24,14 @@ void main() {
     });
 
     test('derives the path constant from the path of an unnamed route', () {
-      final code = generator.generateAppRoutes([Route(path: '/profile')]);
+      final code = generator.generateAppRoutes([const Route(path: '/profile')]);
 
       expect(code.trim(), "static const profilePath = '/profile';");
     });
 
     test('treats an empty name like no name, as the router does', () {
       final code = generator.generateAppRoutes([
-        Route(path: '/about', name: ''),
+        const Route(path: '/about', name: ''),
       ]);
 
       expect(code.trim(), "static const aboutPath = '/about';");
@@ -39,7 +39,7 @@ void main() {
 
     test('keeps the path template, including parameters, as the value', () {
       final code = generator.generateAppRoutes([
-        Route(path: '/orders/:orderId', name: 'order'),
+        const Route(path: '/orders/:orderId', name: 'order'),
       ]);
 
       expect(code, contains("static const orderPath = '/orders/:orderId';"));
@@ -47,10 +47,10 @@ void main() {
 
     test('declares each constant only once', () {
       final code = generator.generateAppRoutes([
-        Route(path: '/settings', name: 'settings'),
-        Route(path: '/settings', name: 'settings'),
-        Route(path: '/profile'),
-        Route(path: '/profile'),
+        const Route(path: '/settings', name: 'settings'),
+        const Route(path: '/settings', name: 'settings'),
+        const Route(path: '/profile'),
+        const Route(path: '/profile'),
       ]);
 
       expect(countOf(code, 'static const settingsPath '), 1);
@@ -64,9 +64,9 @@ void main() {
 
     test('produces a class body that compiles', () async {
       final code = generator.generateAppRoutes([
-        Route(path: '/home', name: 'home'),
-        Route(path: '/orders/:orderId', name: 'order'),
-        Route(path: '/profile'),
+        const Route(path: '/home', name: 'home'),
+        const Route(path: '/orders/:orderId', name: 'order'),
+        const Route(path: '/profile'),
       ]);
 
       expect(
@@ -79,7 +79,7 @@ void main() {
       'keeps the camelCase of a route name in its path constant',
       () {
         final code = generator.generateAppRoutes([
-          Route(path: '/home', name: 'homeScreen'),
+          const Route(path: '/home', name: 'homeScreen'),
         ]);
 
         expect(code, contains("static const homeScreenPath = '/home';"));
@@ -90,7 +90,7 @@ void main() {
       'turns a dashed path into a camelCase path constant',
       () {
         final code = generator.generateAppRoutes([
-          Route(path: '/user-profile'),
+          const Route(path: '/user-profile'),
         ]);
 
         expect(
@@ -102,7 +102,7 @@ void main() {
 
     test('camelCases every segment of a nested path', () {
       final code = generator.generateAppRoutes([
-        Route(path: '/orders/:orderId/tracking-info'),
+        const Route(path: '/orders/:orderId/tracking-info'),
       ]);
 
       expect(

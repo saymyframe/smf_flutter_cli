@@ -51,7 +51,7 @@ class InsertIntoListInMethodInClass extends Contribution {
       _ListLiteralVisitor(
         match: listVariableMatch,
         parentMatch: parentExpressionMatch,
-        onMatch: (list) => matches.add(list),
+        onMatch: matches.add,
       ),
     );
 
@@ -71,15 +71,14 @@ class InsertIntoListInMethodInClass extends Contribution {
 }
 
 class _ListLiteralVisitor extends RecursiveAstVisitor<void> {
-  final String match;
-  final String parentMatch;
-  final void Function(ListLiteral) onMatch;
-
   _ListLiteralVisitor({
     required this.match,
     required this.parentMatch,
     required this.onMatch,
   });
+  final String match;
+  final String parentMatch;
+  final void Function(ListLiteral) onMatch;
 
   @override
   void visitNamedExpression(NamedExpression node) {

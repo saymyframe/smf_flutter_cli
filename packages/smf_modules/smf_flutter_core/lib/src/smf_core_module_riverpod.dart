@@ -18,14 +18,14 @@ class SmfCoreModuleRiverpod
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kFlutterCoreModule,
         description: 'Core Flutter application module module with riverpod',
         pubDependency: {'flutter_riverpod: ^2.5.1'},
       );
 
   @override
-  RouteGroup get routes => RouteGroup(
+  RouteGroup get routes => const RouteGroup(
         initialRoute: '/noModules',
         routes: [
           Route(

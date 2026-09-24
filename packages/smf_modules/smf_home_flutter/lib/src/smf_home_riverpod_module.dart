@@ -7,11 +7,13 @@ class SmfHomeRiverpodModule
   @override
   List<BrickContribution> get brickContributions => [
         BrickContribution(
-            name: 'smf home riverpod', bundle: smfHomeRiverpodBundle),
+          name: 'smf home riverpod',
+          bundle: smfHomeRiverpodBundle,
+        ),
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kHomeFeatureModule,
         description: 'Flutter home feature',
         dependsOn: {kGoRouterModule},
@@ -25,7 +27,7 @@ class SmfHomeRiverpodModule
           NestedRoute(
             shellLink: RouteShellLink.toMainTabsShell(),
             children: [
-              Route(
+              const Route(
                 path: '/home',
                 name: 'homeScreen',
                 screen: RouteScreen('HomeScreen'),

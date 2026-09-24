@@ -75,7 +75,7 @@ class HomePage {
         removeArgs: ['maxLines'],
         addArgs: {
           'style': 'const TextStyle(fontSize: 12)',
-          'softWrap': 'false'
+          'softWrap': 'false',
         },
       ).apply(source);
 

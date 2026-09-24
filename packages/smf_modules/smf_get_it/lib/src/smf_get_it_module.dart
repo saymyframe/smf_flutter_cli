@@ -12,7 +12,7 @@ class SmfGetItModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kGetItModule,
         description: 'Get it service locator',
         pubDependency: {'get_it: ^8.0.3'},
@@ -20,15 +20,15 @@ class SmfGetItModule
 
   @override
   List<Contribution> get sharedFileContributions => [
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
           import: "import 'package:{{app_name_sc}}/core/di/core_di.dart';",
         ),
-        InsertIntoFunction(
+        const InsertIntoFunction(
           file: 'lib/main.dart',
           function: 'main',
           afterStatement: 'WidgetsFlutterBinding.ensureInitialized',
-          insert: "setUpCoreDI();",
+          insert: 'setUpCoreDI();',
         ),
       ];
 }

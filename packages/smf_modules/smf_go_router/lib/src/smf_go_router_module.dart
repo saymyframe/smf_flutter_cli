@@ -12,7 +12,7 @@ class SmfGoRouterModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kGoRouterModule,
         description: 'SMF GoRouter Code-Aware Generator Module',
         pubDependency: {'go_router: ^16.0.0'},
@@ -20,19 +20,19 @@ class SmfGoRouterModule
 
   @override
   List<Contribution> get sharedFileContributions => [
-        InsertImport(
+        const InsertImport(
           file: 'lib/main.dart',
           import:
               "import 'package:{{app_name_sc}}/core/router/app_router.dart';",
         ),
-        ReplaceWidget(
+        const ReplaceWidget(
           file: 'lib/main.dart',
           fromWidget: 'MaterialApp',
           toWidget: 'MaterialApp.router',
           className: 'MainApp',
           methodName: 'build',
         ),
-        ModifyWidgetArguments(
+        const ModifyWidgetArguments(
           file: 'lib/main.dart',
           widgetName: 'router',
           removeArgs: ['home'],

@@ -170,8 +170,10 @@ class HomePage {
           toWidget: 'App',
         ).apply(monolithMainDart);
 
-        expect(functionStatements(result, 'main'),
-            contains('runApp(const App());'));
+        expect(
+          functionStatements(result, 'main'),
+          contains('runApp(const App());'),
+        );
       },
     );
 

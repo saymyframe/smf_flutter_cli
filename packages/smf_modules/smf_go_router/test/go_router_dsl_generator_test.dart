@@ -85,7 +85,7 @@ void main() {
 
     final files = await generate(
       routeGroups: [
-        RouteGroup(
+        const RouteGroup(
           initialRoute: '/noModules',
           routes: [
             Route(
@@ -114,7 +114,7 @@ void main() {
             NestedRoute(
               shellLink: RouteShellLink.toMainTabsShell(),
               children: [
-                Route(
+                const Route(
                   path: '/home',
                   name: 'homeScreen',
                   screen: RouteScreen('HomeScreen'),
@@ -137,7 +137,8 @@ void main() {
     test('starts at the initial route of the DSL context', () async {
       final files = await generate(
         routeGroups: [
-          RouteGroup(routes: [Route(path: '/splash'), Route(path: '/login')]),
+          const RouteGroup(
+              routes: [Route(path: '/splash'), Route(path: '/login')]),
         ],
         initialRoute: '/login',
       );
@@ -152,7 +153,7 @@ void main() {
         () async {
       final files = await generate(
         routeGroups: [
-          RouteGroup(
+          const RouteGroup(
             initialRoute: '/noModules',
             routes: [
               Route(path: '/noModules', screen: RouteScreen('NoModules')),
@@ -181,7 +182,7 @@ void main() {
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(
+                  const Route(
                     path: '/home',
                     name: 'home',
                     screen: RouteScreen('HomeScreen'),
@@ -192,7 +193,7 @@ void main() {
               ),
             ],
           ),
-          RouteGroup(
+          const RouteGroup(
             routes: [
               Route(
                 path: '/settings',
@@ -206,7 +207,7 @@ void main() {
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(
+                  const Route(
                     path: '/analytics',
                     name: 'analytics',
                     screen: RouteScreen('AnalyticsScreen'),
@@ -248,7 +249,7 @@ void main() {
     test('imports each route file once, resolving the app package name',
         () async {
       final router = await generateRouter([
-        RouteGroup(
+        const RouteGroup(
           routes: [
             Route(
               path: '/orders',
@@ -278,7 +279,7 @@ void main() {
             NestedRoute(
               shellLink: RouteShellLink.toMainTabsShell(),
               children: [
-                Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                const Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
               ],
             ),
           ],
@@ -288,7 +289,8 @@ void main() {
       expect(
         router,
         contains(
-            "import 'package:test_app/core/widgets/main_tabs_shell.dart';"),
+          "import 'package:test_app/core/widgets/main_tabs_shell.dart';",
+        ),
       );
     });
 
@@ -296,11 +298,11 @@ void main() {
         () async {
       final router = await generateRouter([
         RouteGroup(
-          routes: [Route(path: '/home')],
+          routes: [const Route(path: '/home')],
           coreGuards: [goRouterGuard('maintenanceGuard(context, state)')],
         ),
         RouteGroup(
-          routes: [Route(path: '/login')],
+          routes: [const Route(path: '/login')],
           coreGuards: [goRouterGuard('authGuard(context, state)')],
         ),
       ]);
@@ -318,7 +320,7 @@ void main() {
       final router = await generateRouter([
         RouteGroup(
           routes: [
-            Route(path: '/home'),
+            const Route(path: '/home'),
             Route(
               path: '/account',
               guards: [goRouterGuard('authGuard(context, state)')],
@@ -339,10 +341,10 @@ void main() {
         generate(
           initialRoute: '/home',
           routeGroups: [
-            RouteGroup(
+            const RouteGroup(
               routes: [
                 NestedRoute(
-                  shellLink: const RouteShellLink('unknown-shell'),
+                  shellLink: RouteShellLink('unknown-shell'),
                   children: [Route(path: '/home')],
                 ),
               ],
@@ -363,8 +365,10 @@ void main() {
                 shellLink: RouteShellLink.toMainTabsShell(),
                 guards: [goRouterGuard('onboardingGuard(context, state)')],
                 children: [
-                  Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
-                  Route(path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
+                  const Route(
+                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                  const Route(
+                      path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
                 ],
               ),
             ],
@@ -395,7 +399,7 @@ void main() {
               shellLink: RouteShellLink.toMainTabsShell(),
               guards: [goRouterGuard('onboardingGuard(context, state)')],
               children: [
-                Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                const Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
               ],
             ),
           ],
@@ -403,11 +407,11 @@ void main() {
         RouteGroup(
           routes: [
             NestedRoute(
-              shellLink: RouteShellLink('main-tabs'),
+              shellLink: const RouteShellLink('main-tabs'),
               children: [
                 Route(
                   path: '/profile',
-                  meta: RouteMeta(icon: 'Icons.person'),
+                  meta: const RouteMeta(icon: 'Icons.person'),
                   guards: [goRouterGuard('authGuard(context, state)')],
                 ),
               ],
@@ -436,10 +440,12 @@ void main() {
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 imports: [
-                  Import.core(ImportAnchor.coreWidgets, 'tabs_scope.dart'),
+                  const Import.core(
+                      ImportAnchor.coreWidgets, 'tabs_scope.dart'),
                 ],
                 children: [
-                  Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                  const Route(
+                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
                 ],
               ),
             ],
@@ -465,7 +471,8 @@ void main() {
                   goRouterGuard(
                     'authGuard(context, state)',
                     imports: [
-                      Import.core(ImportAnchor.coreService, 'auth/guard.dart'),
+                      const Import.core(
+                          ImportAnchor.coreService, 'auth/guard.dart'),
                     ],
                   ),
                 ],
@@ -486,12 +493,13 @@ void main() {
       () async {
         final router = await generateRouter([
           RouteGroup(
-            routes: [Route(path: '/home')],
+            routes: [const Route(path: '/home')],
             coreGuards: [
               goRouterGuard(
                 'authGuard(context, state)',
                 imports: [
-                  Import.core(ImportAnchor.coreService, 'auth/guard.dart'),
+                  const Import.core(
+                      ImportAnchor.coreService, 'auth/guard.dart'),
                 ],
               ),
             ],
@@ -507,7 +515,7 @@ void main() {
 
     test('imports what the guards of nested and tab routes need, once',
         () async {
-      final authImport = Import.core(ImportAnchor.coreService, 'auth.dart');
+      const authImport = Import.core(ImportAnchor.coreService, 'auth.dart');
       final router = await generateRouter([
         RouteGroup(
           routes: [
@@ -516,13 +524,13 @@ void main() {
               guards: [
                 goRouterGuard(
                   'onboardingGuard(context, state)',
-                  imports: [Import.features('onboarding/guard.dart')],
+                  imports: [const Import.features('onboarding/guard.dart')],
                 ),
               ],
               children: [
                 Route(
                   path: '/home',
-                  meta: RouteMeta(icon: 'Icons.home'),
+                  meta: const RouteMeta(icon: 'Icons.home'),
                   guards: [
                     goRouterGuard(
                       'authGuard(context, state)',
@@ -534,8 +542,10 @@ void main() {
             ),
           ],
           coreGuards: [
-            goRouterGuard('sessionGuard(context, state)',
-                imports: [authImport]),
+            goRouterGuard(
+              'sessionGuard(context, state)',
+              imports: [authImport],
+            ),
           ],
         ),
       ]);
@@ -573,12 +583,13 @@ void main() {
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(
+                  const Route(
                     path: '/home',
                     name: 'home',
                     meta: RouteMeta(icon: 'Icons.home'),
                   ),
-                  Route(path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
+                  const Route(
+                      path: '/cart', meta: RouteMeta(icon: 'Icons.cart')),
                 ],
               ),
             ],
@@ -604,12 +615,12 @@ void main() {
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(
+                  const Route(
                     path: '/home',
                     name: 'home',
                     meta: RouteMeta(icon: 'Icons.home'),
                   ),
-                  Route(
+                  const Route(
                     path: '/profile',
                     name: 'profile',
                     meta: RouteMeta(icon: 'Icons.person'),
@@ -634,7 +645,7 @@ void main() {
       () async {
         final files = await generate(
           routeGroups: [
-            RouteGroup(
+            const RouteGroup(
               initialRoute: '/login',
               routes: [
                 Route(
@@ -664,11 +675,11 @@ void main() {
         routeGroups: [
           RouteGroup(
             routes: [
-              Route(path: '/user-profile', name: 'userProfile'),
+              const Route(path: '/user-profile', name: 'userProfile'),
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(
+                  const Route(
                     path: '/home',
                     name: 'homeScreen',
                     meta: RouteMeta(icon: 'Icons.home'),
@@ -695,12 +706,13 @@ void main() {
         routeGroups: [
           RouteGroup(
             routes: [
-              Route(path: '/login'),
-              Route(path: '/settings', name: 'settings'),
+              const Route(path: '/login'),
+              const Route(path: '/settings', name: 'settings'),
               NestedRoute(
                 shellLink: RouteShellLink.toMainTabsShell(),
                 children: [
-                  Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                  const Route(
+                      path: '/home', meta: RouteMeta(icon: 'Icons.home')),
                 ],
               ),
             ],
@@ -755,10 +767,10 @@ void main() {
     test('keeps plain routes first and merges nested routes per shell link',
         () {
       const pagesLink = RouteShellLink('onboarding-pages');
-      final home = Route(path: '/home');
-      final profile = Route(path: '/profile');
-      final welcome = Route(path: '/welcome');
-      final settings = Route(path: '/settings');
+      const home = Route(path: '/home');
+      const profile = Route(path: '/profile');
+      const welcome = Route(path: '/welcome');
+      const settings = Route(path: '/settings');
 
       final merged = module.mergeNestedRoutesByShellLink([
         NestedRoute(
@@ -766,7 +778,7 @@ void main() {
           children: [home],
         ),
         settings,
-        NestedRoute(shellLink: pagesLink, children: [welcome]),
+        const NestedRoute(shellLink: pagesLink, children: [welcome]),
         NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
           children: [profile],
@@ -788,11 +800,11 @@ void main() {
       () {
         // Equal but non-identical links, as two separate modules create them.
         final merged = module.mergeNestedRoutesByShellLink([
-          NestedRoute(
+          const NestedRoute(
             shellLink: RouteShellLink('main-tabs'),
             children: [Route(path: '/home')],
           ),
-          NestedRoute(
+          const NestedRoute(
             shellLink: RouteShellLink('main-tabs'),
             children: [Route(path: '/profile')],
           ),
@@ -807,11 +819,11 @@ void main() {
       final merged = module.mergeNestedRoutesByShellLink([
         NestedRoute(
           shellLink: _IdentityShellLink('main-tabs'),
-          children: [Route(path: '/home')],
+          children: [const Route(path: '/home')],
         ),
         NestedRoute(
           shellLink: _IdentityShellLink('main-tabs'),
-          children: [Route(path: '/profile')],
+          children: [const Route(path: '/profile')],
         ),
       ]);
 
@@ -824,13 +836,13 @@ void main() {
       final home = Route(
         path: '/home',
         name: 'home',
-        screen: RouteScreen('HomeScreen'),
-        parameters: [QueryParam('tab', type: String, optional: true)],
-        meta: RouteMeta(icon: 'Icons.home'),
+        screen: const RouteScreen('HomeScreen'),
+        parameters: [const QueryParam('tab', type: String, optional: true)],
+        meta: const RouteMeta(icon: 'Icons.home'),
         guards: [premium],
-        imports: [Import.features('home/home_screen.dart')],
+        imports: [const Import.features('home/home_screen.dart')],
       );
-      final profile = Route(path: '/profile');
+      const profile = Route(path: '/profile');
 
       final merged = module.mergeNestedRoutesByShellLink([
         NestedRoute(
@@ -861,19 +873,19 @@ void main() {
     });
 
     test('keeps the imports of every merged nested route', () {
-      final tabsScope = Import.core(ImportAnchor.coreWidgets, 'tabs.dart');
-      final authScope = Import.features('auth/auth_scope.dart');
+      const tabsScope = Import.core(ImportAnchor.coreWidgets, 'tabs.dart');
+      const authScope = Import.features('auth/auth_scope.dart');
 
       final merged = module.mergeNestedRoutesByShellLink([
         NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
           imports: [tabsScope],
-          children: [Route(path: '/home')],
+          children: [const Route(path: '/home')],
         ),
         NestedRoute(
           shellLink: RouteShellLink.toMainTabsShell(),
           imports: [authScope],
-          children: [Route(path: '/profile')],
+          children: [const Route(path: '/profile')],
         ),
       ]);
 
@@ -885,13 +897,13 @@ void main() {
     final module = SmfGoRouterModule();
 
     test('groups the tab routes of all route groups by shell declaration', () {
-      final home = Route(path: '/home');
-      final profile = Route(path: '/profile');
+      const home = Route(path: '/home');
+      const profile = Route(path: '/profile');
 
       final grouped = module.groupRoutesByShellLink([
         RouteGroup(
           routes: [
-            Route(path: '/settings'),
+            const Route(path: '/settings'),
             NestedRoute(
               shellLink: RouteShellLink.toMainTabsShell(),
               children: [home],
@@ -915,10 +927,10 @@ void main() {
     test('throws for a shell link missing from ShellRegistry', () {
       expect(
         () => module.groupRoutesByShellLink([
-          RouteGroup(
+          const RouteGroup(
             routes: [
               NestedRoute(
-                shellLink: const RouteShellLink('unknown-shell'),
+                shellLink: RouteShellLink('unknown-shell'),
                 children: [Route(path: '/home')],
               ),
             ],

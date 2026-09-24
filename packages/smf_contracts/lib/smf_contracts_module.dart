@@ -27,6 +27,6 @@ class SmfContractsModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor =>
-      ModuleDescriptor(name: kContractsModule, description: 'SMF Contracts');
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
+      name: kContractsModule, description: 'SMF Contracts');
 }

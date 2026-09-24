@@ -10,13 +10,13 @@ class SmfCoreModule
       ];
 
   @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
+  ModuleDescriptor get moduleDescriptor => const ModuleDescriptor(
         name: kFlutterCoreModule,
         description: 'Core Flutter application module module',
       );
 
   @override
-  RouteGroup get routes => RouteGroup(
+  RouteGroup get routes => const RouteGroup(
         initialRoute: '/noModules',
         routes: [
           Route(

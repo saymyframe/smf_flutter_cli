@@ -35,7 +35,7 @@ abstract class FirebaseAnalyticsModule
   List<DiDependencyGroup> get di => [
         DiDependencyGroup(
           diDependencies: [
-            DiDependency(
+            const DiDependency(
               abstractType: 'IAnalyticsService',
               implementation:
                   'FirebaseAnalyticsService(FirebaseAnalytics.instance)',
@@ -44,15 +44,15 @@ abstract class FirebaseAnalyticsModule
           ],
           scope: DiScope.core,
           imports: [
-            Import.core(
+            const Import.core(
               ImportAnchor.coreService,
               'analytics/firebase/firebase_analytics_service.dart',
             ),
-            Import.core(
+            const Import.core(
               ImportAnchor.coreService,
               'analytics/i_analytics_service.dart',
             ),
-            Import.direct(
+            const Import.direct(
               "import 'package:firebase_analytics/firebase_analytics.dart';",
             ),
           ],
@@ -66,7 +66,7 @@ abstract class FirebaseAnalyticsModule
           NestedRoute(
             shellLink: RouteShellLink.toMainTabsShell(),
             children: [
-              Route(
+              const Route(
                 path: '/analytics',
                 screen: RouteScreen('AnalyticsScreen'),
                 meta: RouteMeta(label: 'Analytics', icon: 'Icons.star'),

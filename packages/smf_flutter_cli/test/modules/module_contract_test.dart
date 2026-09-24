@@ -201,7 +201,7 @@ void main() {
         );
       });
 
-      for (final MapEntry(key: key, value: module) in modules.entries) {
+      for (final MapEntry(:key, value: module) in modules.entries) {
         final descriptor = module.moduleDescriptor;
 
         group(key, () {
