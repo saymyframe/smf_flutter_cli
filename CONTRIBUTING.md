@@ -24,25 +24,27 @@ This project and everyone participating in it is governed by our Code of Conduct
 ### Submitting Code Changes
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Create a branch named after the change type (`git checkout -b feat/amazing-feature`, or `fix/...`, `docs/...`)
 3. Make your changes
 4. Add tests for new functionality
-5. Ensure all tests pass
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
+5. Ensure all checks pass (`melos run check`)
+6. Commit using [Conventional Commits](https://www.conventionalcommits.org/) (`git commit -m 'feat(go_router): add amazing feature'`)
+7. Push to the branch (`git push origin feat/amazing-feature`)
 8. Open a Pull Request
 
 ## Development Setup
 
 1. Clone the repository
-2. Install dependencies: `melos bootstrap`
-3. Run tests: `melos test`
+2. Install dependencies and bundle bricks: `melos bootstrap`
+3. Run all checks: `melos run check` (format, analyze, brick hooks, tests)
+
+The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people.
 
 ## Code Style
 
-- Follow Dart style guide
-- Use `very_good_analysis` for linting
-- Write meaningful commit messages
+- Follow the Dart style guide; CI checks formatting with Dart 3.12.2
+- `very_good_analysis` is enabled in every package
+- Use Conventional Commits with the package as scope (`fix(contracts): ...`); versions and changelogs are generated from them
 - Add tests for new functionality
 
 ## Copyright and Licensing
