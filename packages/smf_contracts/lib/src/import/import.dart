@@ -1,7 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 
 class Import {
-  const Import.core(this.anchor, this.import) : assert(anchor != null);
+  // ignore: tighten_type_of_initializing_formals, keeps the public signature.
+  const Import.core(this.anchor, this.import)
+      : assert(anchor != null, 'Import.core needs an anchor.');
 
   const Import.direct(this.import) : anchor = null;
 

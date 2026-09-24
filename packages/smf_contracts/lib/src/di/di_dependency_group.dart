@@ -11,7 +11,8 @@ class DiDependencyGroup {
   }) : assert(
           scope != DiScope.module ||
               pathToDiTemplate?.trim().isNotEmpty == true,
-          'pathToDiTemplate must be provided and non-empty if scope is DiScope.module',
+          'pathToDiTemplate must be provided and non-empty if scope is '
+          'DiScope.module',
         );
 
   final List<DiDependency> diDependencies;

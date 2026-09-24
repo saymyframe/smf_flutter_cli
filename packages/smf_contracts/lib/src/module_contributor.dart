@@ -32,7 +32,9 @@ abstract interface class IModuleCodeContributor {
   RouteGroup get routes;
 }
 
-/// Mixin providing empty implementations for all [IModuleCodeContributor] methods.
+/// Mixin with empty defaults for every [IModuleCodeContributor] member except
+/// [IModuleCodeContributor.moduleDescriptor], so a module overrides only what
+/// it contributes.
 mixin EmptyModuleCodeContributor implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => const [];
