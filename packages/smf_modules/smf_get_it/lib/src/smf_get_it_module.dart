@@ -3,6 +3,14 @@ import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_get_it/bundles/smf_get_it_brick_bundle.dart';
 import 'package:smf_get_it/src/di_dsl_generator.dart';
 
+/// Sets the app up with get_it and registers the dependencies that modules
+/// declare in their `di`.
+///
+/// Its brick adds the `getIt` instance and `lib/core/di/core_di.dart` with
+/// `setUpCoreDI()`, which `main()` calls right after
+/// `WidgetsFlutterBinding.ensureInitialized()`. [generateFromDsl] then fills
+/// in the registrations. It knows no other module: whatever
+/// [DiDependencyGroup]s the context carries get registered.
 class SmfGetItModule
     with EmptyModuleCodeContributor, DiDslGenerator
     implements IModuleCodeContributor, DslAwareCodeGenerator {
