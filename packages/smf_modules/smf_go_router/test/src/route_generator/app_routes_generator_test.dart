@@ -84,8 +84,6 @@ void main() {
 
         expect(code, contains("static const homeScreenPath = '/home';"));
       },
-      skip: 'Bug: StringExt.camelCase lowercases inner capitals, so '
-          "'homeScreen' becomes 'homescreenPath'",
     );
 
     test(
@@ -100,8 +98,20 @@ void main() {
           contains("static const userProfilePath = '/user-profile';"),
         );
       },
-      skip: 'Bug: _safeRouteConst re-runs StringExt.camelCase, which '
-          "lowercases 'userProfile' into 'userprofilePath'",
     );
+
+    test('camelCases every segment of a nested path', () {
+      final code = generator.generateAppRoutes([
+        Route(path: '/orders/:orderId/tracking-info'),
+      ]);
+
+      expect(
+        code,
+        contains(
+          'static const ordersOrderIdTrackingInfoPath = '
+          "'/orders/:orderId/tracking-info';",
+        ),
+      );
+    });
   });
 }

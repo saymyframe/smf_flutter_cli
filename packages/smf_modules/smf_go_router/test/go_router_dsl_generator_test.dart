@@ -656,6 +656,38 @@ void main() {
       },
     );
 
+    test('declares camelCased route names as the router refers to them',
+        () async {
+      final files = await generate(
+        initialRoute: '/home',
+        shellDeclarations: [mainTabsShell],
+        routeGroups: [
+          RouteGroup(
+            routes: [
+              Route(path: '/user-profile', name: 'userProfile'),
+              NestedRoute(
+                shellLink: RouteShellLink.toMainTabsShell(),
+                children: [
+                  Route(
+                    path: '/home',
+                    name: 'homeScreen',
+                    meta: RouteMeta(icon: 'Icons.home'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final referenced = referencedMembers(contentOf(files, routerPath()));
+      expect(referenced, {'userProfile', 'homeScreen'});
+      expect(
+        declaredMembers(contentOf(files, appRoutesPath())),
+        containsAll([...referenced, 'userProfilePath', 'homeScreenPath']),
+      );
+    });
+
     test('declares constants for top-level and tab routes alike', () async {
       final files = await generate(
         initialRoute: '/home',
