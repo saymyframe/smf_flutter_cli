@@ -10,9 +10,9 @@ class InsertIntoFunction extends Contribution {
     this.afterStatement,
     required this.insert,
   }) : assert(
-         beforeStatement != null || afterStatement != null,
-         'Either beforeStatement or afterStatement must be provided',
-       );
+          beforeStatement != null || afterStatement != null,
+          'Either beforeStatement or afterStatement must be provided',
+        );
 
   final String function;
   final String? beforeStatement;
@@ -24,12 +24,11 @@ class InsertIntoFunction extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetFunction = unit.declarations
-        .whereType<FunctionDeclaration>()
-        .firstWhere(
-          (f) => f.name.lexeme == function,
-          orElse: () => throw Exception('Function $function not found'),
-        );
+    final targetFunction =
+        unit.declarations.whereType<FunctionDeclaration>().firstWhere(
+              (f) => f.name.lexeme == function,
+              orElse: () => throw Exception('Function $function not found'),
+            );
 
     final body = targetFunction.functionExpression.body;
     if (body is! BlockFunctionBody) {

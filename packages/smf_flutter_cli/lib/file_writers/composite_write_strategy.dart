@@ -24,6 +24,7 @@ class CompositeWriteStrategy implements FileWriteStrategy {
   final List<FileWriteStrategy> strategies;
 
   @override
+
   /// Writes the [file] using each strategy in [strategies], in order.
   Future<void> write(GeneratedFile file) async {
     for (final strategy in strategies) {

@@ -6,26 +6,26 @@ class SmfCoreModule
     implements IModuleCodeContributor {
   @override
   List<BrickContribution> get brickContributions => [
-    BrickContribution(name: 'flutter_core', bundle: smfFlutterCoreBundle),
-  ];
+        BrickContribution(name: 'flutter_core', bundle: smfFlutterCoreBundle),
+      ];
 
   @override
   ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-    name: kFlutterCoreModule,
-    description: 'Core Flutter application module module',
-  );
+        name: kFlutterCoreModule,
+        description: 'Core Flutter application module module',
+      );
 
   @override
   RouteGroup get routes => RouteGroup(
-    initialRoute: '/noModules',
-    routes: [
-      Route(
-        path: '/noModules',
-        screen: RouteScreen('NoModulesScreen'),
-        imports: [
-          Import.core(ImportAnchor.coreWidgets, 'no_modules_screen.dart'),
+        initialRoute: '/noModules',
+        routes: [
+          Route(
+            path: '/noModules',
+            screen: RouteScreen('NoModulesScreen'),
+            imports: [
+              Import.core(ImportAnchor.coreWidgets, 'no_modules_screen.dart'),
+            ],
+          ),
         ],
-      ),
-    ],
-  );
+      );
 }

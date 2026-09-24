@@ -24,12 +24,11 @@ class InsertIntoListInFunction extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetFunction = unit.declarations
-        .whereType<FunctionDeclaration>()
-        .firstWhere(
-          (f) => f.name.lexeme == function,
-          orElse: () => throw Exception('Function $function not found'),
-        );
+    final targetFunction =
+        unit.declarations.whereType<FunctionDeclaration>().firstWhere(
+              (f) => f.name.lexeme == function,
+              orElse: () => throw Exception('Function $function not found'),
+            );
 
     final body = targetFunction.functionExpression.body;
     if (body is! BlockFunctionBody) {

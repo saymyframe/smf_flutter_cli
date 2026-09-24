@@ -12,13 +12,13 @@
 // limitations under the License.
 
 /// Strategies for handling file conflicts during template generation.
-enum FileMergeStrategy { 
+enum FileMergeStrategy {
   /// Completely replace the existing file with the new content.
-  overwrite, 
-  
+  overwrite,
+
   /// Append the new content to the end of the existing file.
-  appendToFile, 
-  
+  appendToFile,
+
   /// Inject content at specific tagged locations within the existing file.
-  injectByTag 
+  injectByTag
 }

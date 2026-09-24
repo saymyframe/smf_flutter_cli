@@ -48,11 +48,12 @@ abstract base class DiContributor {
 
   String combineRegistrations(List<DiDependencyGroup> groups) {
     final dependencies =
-        groups.map((g) => g.diDependencies).expand((e) => e).toList()..sort(
-          (a, b) => (a.order ?? double.maxFinite).compareTo(
-            b.order ?? double.maxFinite,
-          ),
-        );
+        groups.map((g) => g.diDependencies).expand((e) => e).toList()
+          ..sort(
+            (a, b) => (a.order ?? double.maxFinite).compareTo(
+              b.order ?? double.maxFinite,
+            ),
+          );
 
     final buff = StringBuffer();
     for (final dependency in dependencies) {

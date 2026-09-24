@@ -18,9 +18,10 @@ linter:
     # Dependencies are logically grouped (external packages, then SMF packages)
     sort_pub_dependencies: false
 
-# analyzer:
-#   exclude:
-#     - path/to/excluded/files/**
+# Brick hooks are separate packages; CI analyzes them after their own pub get.
+analyzer:
+  exclude:
+    - bricks/**
 
 # For more information about the core and recommended set of lints, see
 # https://dart.dev/go/core-lints

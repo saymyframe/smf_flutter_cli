@@ -8,6 +8,6 @@ abstract class Contribution {
   Future<String> apply(String original);
 
   DartFormatter get dartFormater => DartFormatter(
-    languageVersion: DartFormatter.latestShortStyleLanguageVersion,
-  );
+        languageVersion: DartFormatter.latestShortStyleLanguageVersion,
+      );
 }

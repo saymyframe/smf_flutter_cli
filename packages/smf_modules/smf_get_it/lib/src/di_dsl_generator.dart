@@ -8,9 +8,8 @@ mixin DiDslGenerator implements DslAwareCodeGenerator {
   Future<List<GeneratedFile>> generateFromDsl(DslContext context) async {
     final generatedFiles = <GeneratedFile>[];
 
-    final coreDependencies = context.diGroups
-        .where((g) => g.scope == DiScope.core)
-        .toList();
+    final coreDependencies =
+        context.diGroups.where((g) => g.scope == DiScope.core).toList();
 
     generatedFiles.addAll(
       await CoreDiContributor(
@@ -23,9 +22,8 @@ mixin DiDslGenerator implements DslAwareCodeGenerator {
       ),
     );
 
-    final moduleDependencies = context.diGroups
-        .where((g) => g.scope == DiScope.module)
-        .toList();
+    final moduleDependencies =
+        context.diGroups.where((g) => g.scope == DiScope.module).toList();
 
     generatedFiles.addAll(
       await ModuleDiContributor(

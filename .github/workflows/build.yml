@@ -10,9 +10,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Formatter output depends on the SDK version; keep in sync with the Dart
+  # that ships with the Flutter stable used for development.
+  DART_SDK: "3.12.2"
+
 jobs:
-  sonarqube:
-    name: SonarQube
+  checks:
+    name: Format, analyze, test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -22,42 +27,48 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      
+
       # Setup Dart tools (Dart SDK, Melos, Mason)
       - name: Setup Dart tools
         uses: saymyframe/.github/.github/actions/setup-dart-tools@main
         with:
-          sdk: "3.9.0"
+          sdk: ${{ env.DART_SDK }}
 
       - name: Cache pub packages
         uses: actions/cache@v6
         with:
           path: |
             ~/.pub-cache
-          key: ${{ runner.os }}-dart-3.9.0-pub-${{ hashFiles('**/pubspec.lock') }}
+          key: ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-${{ hashFiles('**/pubspec.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-dart-3.9.0-pub-
+            ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-
 
-      # Bootstrap the monorepo
-      - name: Bootstrap monorepo
+      # Resolves the workspace and re-bundles every brick
+      - name: Bootstrap workspace
         run: melos bootstrap
-      
-      # Optional quality checks can be run here (format/analyze/tests)
-      # Skipped because they currently fail in CI; enable when fixed.
 
-      # Generate coverage for smf_flutter_cli
+      - name: Check brick bundles are up to date
+        run: |
+          if ! git diff --quiet -- '*_bundle.dart'; then
+            git diff --stat -- '*_bundle.dart'
+            echo "::error::Brick bundles are out of date. Run 'melos bootstrap' and commit the regenerated bundles."
+            exit 1
+          fi
+
+      - name: Format
+        run: melos run format:check
+
+      - name: Analyze
+        run: melos run analyze
+
+      - name: Analyze brick hooks
+        run: melos run analyze:hooks
+
       - name: Install coverage tool
         run: dart pub global activate coverage
 
-      - name: Run tests with coverage (smf_flutter_cli)
-        run: |
-          cd packages/smf_flutter_cli
-          dart test --coverage=coverage
-          format_coverage \
-            -i coverage \
-            -o coverage/lcov.info \
-            --lcov \
-            --report-on=lib
+      - name: Test
+        run: melos run test:coverage
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8

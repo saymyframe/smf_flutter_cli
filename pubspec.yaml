@@ -42,19 +42,32 @@ melos:
         melos exec -c 6 --fail-fast --dir-exists="bricks" -- \
           dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
 
-    # Quality gates
+    # Quality gates. Formatting covers hand-written package code only
+    # (lib, test, bin): bricks/**/__brick__ holds mustache templates, and
+    # lib/bundles is generated (CI checks it matches the bricks instead).
     analyze:
       run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
+    analyze:hooks:
+      description: Analyze brick hooks, which are packages with their own pubspec.
+      run: |
+        for hooks in $(find packages -path '*/bricks/*/hooks/pubspec.yaml' -exec dirname {} \;); do
+          echo "Analyzing $hooks"
+          (cd "$hooks" && dart pub get > /dev/null && dart analyze --fatal-infos --fatal-warnings) || exit 1
+        done
     format:
-      run: melos exec -c 6 -- dart format . --fix
+      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
     format:check:
-      run: melos exec -c 6 -- dart format . --output=none --set-exit-if-changed
+      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
     test:
-      run: melos exec -c 4 --fail-fast -- dart test --reporter expanded
+      run: melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded
+    test:coverage:
+      description: Run tests and write coverage/lcov.info in every package with tests.
+      run: melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage
     check:
       run: |
         melos run format:check && \
         melos run analyze && \
+        melos run analyze:hooks && \
         melos run test
 
   command:

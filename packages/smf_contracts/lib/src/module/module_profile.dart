@@ -15,7 +15,7 @@
 enum StateManager {
   /// BLoC (Business Logic Component) state management.
   bloc._('bloc'),
-  
+
   /// Riverpod state management solution.
   riverpod._('riverpod');
 
