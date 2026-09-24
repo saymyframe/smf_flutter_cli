@@ -85,10 +85,23 @@ smf create my_cli_test_app \
 
 ## Development
 
-This is a monorepo managed with Melos. To contribute:
+This is a monorepo managed with Melos. Every package is versioned and published to pub.dev on its own.
+
+```
+packages/
+  smf_contracts/            # public API that modules implement
+  smf_modules/
+    smf_contribution_engine/  # AST-based code contributions
+    smf_<module>/             # first-party modules (go_router, get_it, firebase_*, ...)
+  smf_flutter_cli/          # the `smf` CLI
+```
+
+Dependencies only point one way: `smf_contracts` ← modules ← `smf_flutter_cli`.
+
+To contribute:
 
 ```bash
-# Install dependencies
+# Install dependencies and bundle bricks
 melos bootstrap
 ```
 

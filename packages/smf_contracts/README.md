@@ -12,7 +12,7 @@ Use the SMF CLI for scaffolding and configuration; this package is used under th
 - SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 
 ## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_contracts) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_contracts/issues)
+[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_contracts) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
 
 ## License
 See [LICENSE](LICENSE).

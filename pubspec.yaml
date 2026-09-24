@@ -13,6 +13,15 @@ environment:
 workspace:
   - packages/smf_flutter_cli
   - packages/smf_contracts
+  - packages/smf_modules/smf_contribution_engine
+  - packages/smf_modules/smf_event_bus
+  - packages/smf_modules/smf_firebase_analytics
+  - packages/smf_modules/smf_firebase_core
+  - packages/smf_modules/smf_firebase_crashlytics
+  - packages/smf_modules/smf_flutter_core
+  - packages/smf_modules/smf_get_it
+  - packages/smf_modules/smf_go_router
+  - packages/smf_modules/smf_home_flutter
 
 executables:
   smfflutter: smfflutter_dev
@@ -53,9 +62,6 @@ melos:
       # https://github.com/dart-lang/pub/issues/3404
       runPubGetInParallel: false
       hooks:
-        pre:
-          run: |
-            dart tools/fetch_modules.dart
         # Automatically bundle after bootstrap so dev env is ready
         post:
           run: melos run bundle

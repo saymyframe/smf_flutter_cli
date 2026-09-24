@@ -38,10 +38,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-dart-3.9.0-pub-
 
-      # Clone external packages before Melos resolves the workspace
-      - name: Fetch external packages (contracts/modules)
-        run: dart tools/fetch_modules.dart
-
       # Bootstrap the monorepo
       - name: Bootstrap monorepo
         run: melos bootstrap
