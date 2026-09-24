@@ -10,6 +10,7 @@ class MatchWidgetVisitor extends RecursiveAstVisitor<void> {
   @override
   void visitInstanceCreationExpression(InstanceCreationExpression node) {
     final type = node.constructorName.type;
+    // ignore: deprecated_member_use
     if (type.name2.lexeme == targetWidget) {
       onMatch(node);
     }

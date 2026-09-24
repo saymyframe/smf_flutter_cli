@@ -19,9 +19,10 @@ include: package:lints/recommended.yaml
 #   rules:
 #     - camel_case_types
 
-#analyzer:
-#  exclude:
-#    - bricks/**
+# Brick hooks are separate packages; CI analyzes them after their own pub get.
+analyzer:
+  exclude:
+    - bricks/**
 
 # For more information about the core and recommended set of lints, see
 # https://dart.dev/go/core-lints

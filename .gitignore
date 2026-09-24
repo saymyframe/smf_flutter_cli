@@ -41,3 +41,5 @@ test_generation_dev/
 
 # melos
 pubspec_overrides.yaml
+# test coverage (melos run test:coverage)
+coverage/
