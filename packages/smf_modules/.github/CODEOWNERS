@@ -1,0 +1,5 @@
+# CODEOWNERS for SMF Modules monorepo
+# Paths are relative to the repository root.
+
+# Default owner for all files
+* @ybeshkarov

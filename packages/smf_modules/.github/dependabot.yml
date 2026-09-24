@@ -1,0 +1,42 @@
+version: 2
+updates:
+  # Root workspace of smf_modules monorepo
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Individual modules
+  - package-ecosystem: "pub"
+    directory: "/smf_go_router"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_get_it"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_firebase_core"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_firebase_analytics"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_event_bus"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_home_flutter"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_flutter_core"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/smf_contribution_engine"
+    schedule:
+      interval: "weekly"
