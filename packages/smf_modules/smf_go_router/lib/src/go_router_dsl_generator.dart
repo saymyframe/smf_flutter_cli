@@ -61,13 +61,14 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
     buffer.writeln(');');
 
     final appRoutesGenerator = AppRoutesGenerator();
-    final appRoutesBuff = appRoutesGenerator.generateAppRoutes(
-      routes
-          .whereType<NestedRoute>()
-          .map((n) => n.children)
-          .expand((r) => r)
-          .toList(),
-    );
+    // Every GoRoute the router renders, top-level and nested alike.
+    final appRoutesBuff = appRoutesGenerator.generateAppRoutes([
+      for (final route in routes)
+        if (route is NestedRoute)
+          ...route.children
+        else if (route is Route)
+          route,
+    ]);
 
     final shellFiles = <GeneratedFile>[];
     final routesByShellLinks = groupRoutesByShellLink(context.routeGroups);

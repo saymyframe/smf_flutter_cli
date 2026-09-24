@@ -7,11 +7,12 @@ class AppRoutesGenerator {
     final seen = <String>{};
 
     for (final route in routes) {
+      // Like the router, treat an empty name as no name.
+      final nameConstName = (route.name?.isEmpty ?? true) ? null : route.name;
       final pathConstName = _safeRouteConst(
-        route.name ?? _pathToConstName(route.path),
+        nameConstName ?? _pathToConstName(route.path),
         suffix: 'Path',
       );
-      final nameConstName = route.name;
 
       if (!seen.contains(pathConstName)) {
         buffer.writeln("  static const $pathConstName = '${route.path}';");

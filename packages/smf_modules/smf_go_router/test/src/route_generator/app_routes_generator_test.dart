@@ -29,6 +29,14 @@ void main() {
       expect(code.trim(), "static const profilePath = '/profile';");
     });
 
+    test('treats an empty name like no name, as the router does', () {
+      final code = generator.generateAppRoutes([
+        Route(path: '/about', name: ''),
+      ]);
+
+      expect(code.trim(), "static const aboutPath = '/about';");
+    });
+
     test('keeps the path template, including parameters, as the value', () {
       final code = generator.generateAppRoutes([
         Route(path: '/orders/:orderId', name: 'order'),

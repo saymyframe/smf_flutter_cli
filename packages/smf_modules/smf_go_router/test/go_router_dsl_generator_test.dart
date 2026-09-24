@@ -654,9 +654,35 @@ void main() {
           containsAll(referenced),
         );
       },
-      skip: 'Bug: AppRoutes is generated only from tab routes, so named '
-          'top-level routes reference missing AppRoutes members',
     );
+
+    test('declares constants for top-level and tab routes alike', () async {
+      final files = await generate(
+        initialRoute: '/home',
+        shellDeclarations: [mainTabsShell],
+        routeGroups: [
+          RouteGroup(
+            routes: [
+              Route(path: '/login'),
+              Route(path: '/settings', name: 'settings'),
+              NestedRoute(
+                shellLink: RouteShellLink.toMainTabsShell(),
+                children: [
+                  Route(path: '/home', meta: RouteMeta(icon: 'Icons.home')),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final appRoutes = contentOf(files, appRoutesPath());
+      expect(appRoutes, contains("static const loginPath = '/login';"));
+      expect(appRoutes, contains("static const settingsPath = '/settings';"));
+      expect(appRoutes, contains("static const settings = 'settings';"));
+      expect(appRoutes, contains("static const homePath = '/home';"));
+      expectParses(appRoutes);
+    });
   });
 
   group('tabs shell', () {
