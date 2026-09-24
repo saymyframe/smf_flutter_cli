@@ -86,3 +86,8 @@ melos:
       workspaceChangelog: true
       # Also update version constraints in dependent packages automatically.
       updateDependents: true
+      hooks:
+        # Keep `smf --version` in sync with the bumped CLI version.
+        preCommit: |
+          dart tools/sync_cli_version.dart && \
+          git add packages/smf_flutter_cli/lib/version.dart

@@ -20,8 +20,6 @@ void main() {
           .parseAt(['version']).value as String;
 
       expect(packageVersion, version);
-    },
-        skip: 'Bug: lib/version.dart still says 0.2.0-alpha while the package '
-            'is 0.2.1+1, so `smf --version` prints a stale version');
+    });
   });
 }
