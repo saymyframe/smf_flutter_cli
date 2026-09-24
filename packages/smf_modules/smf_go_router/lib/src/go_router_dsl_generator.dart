@@ -9,6 +9,9 @@ import 'package:smf_go_router/src/route_generator/route_generation_context.dart'
 import 'package:smf_go_router/src/route_generator/route_generation_strategy_registry.dart';
 import 'package:smf_go_router/src/route_generator/tabs_shell_generator.dart';
 
+/// Shells whose widget templates ship with the go_router brick.
+final _bundledShells = [RouteShellLink.toMainTabsShell()];
+
 mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
   late RouteGenerationContext generationContext;
 
@@ -87,6 +90,8 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
       );
     }
 
+    await _removeUnusedShells(context, routesByShellLinks.keys);
+
     final innerProcessor = MustachexProcessor(
       initialVariables: context.mustacheVariables,
     );
@@ -119,6 +124,28 @@ mixin GoRouterDslGenerator implements DslAwareCodeGenerator {
       GeneratedFile(appRoutesFile.path, appRoutes),
       ...shellFiles,
     ];
+  }
+
+  /// The brick ships a template for every shell, but only shells that some
+  /// module links routes to get rendered. Leftover templates still contain
+  /// raw mustache slots and would break the generated project, so they are
+  /// removed.
+  Future<void> _removeUnusedShells(
+    DslContext context,
+    Iterable<ShellDeclaration> usedShells,
+  ) async {
+    final usedIds = usedShells.map((s) => s.id).toSet();
+    for (final link in _bundledShells) {
+      if (usedIds.contains(link.id)) continue;
+
+      final declaration = ShellRegistry.resolve(link.id);
+      if (declaration == null) continue;
+
+      final file = File(
+        join(context.projectRootPath, 'lib', declaration.widgetFilePath),
+      );
+      if (file.existsSync()) await file.delete();
+    }
   }
 
   Map<ShellDeclaration, List<Route>> groupRoutesByShellLink(
