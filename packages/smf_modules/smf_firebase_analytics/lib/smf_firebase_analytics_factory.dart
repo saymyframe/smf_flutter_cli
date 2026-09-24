@@ -4,7 +4,10 @@ import 'package:smf_firebase_analytics/src/module.dart';
 class SmfFirebaseAnalyticsFactory implements IModuleContributorFactory {
   @override
   IModuleCodeContributor create(ModuleProfile profile) {
-    return FirebaseAnalyticsModule();
+    return switch (profile.stateManager) {
+      StateManager.bloc => FirebaseAnalyticsBlocModule(),
+      StateManager.riverpod => FirebaseAnalyticsRiverpodModule(),
+    };
   }
 
   @override
