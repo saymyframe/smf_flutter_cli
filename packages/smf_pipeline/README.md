@@ -11,7 +11,7 @@ Most users use it through the SMF CLI, which passes its modules and the machine 
 ```dart
 exitCode = await runSmf(
   arguments,
-  registry: ModuleRegistry(modules),
+  modules: modules,
   hostFor: ({required verbose}) => host,
 );
 ```

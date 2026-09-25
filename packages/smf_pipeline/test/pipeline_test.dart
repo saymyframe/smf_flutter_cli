@@ -494,9 +494,9 @@ void main() {
           '  core_lib ^1.2.0 (core)\n'
           '  flutter from the flutter SDK (scaffold)\n\n'
           'Dev dependencies\n'
-          '  flutter_test from the flutter SDK (core)\n'
           // Code generation needs build_runner, which the pipeline adds.
-          '  build_runner ^2.7.0 (pipeline)',
+          '  build_runner ^2.7.0 (pipeline)\n'
+          '  flutter_test from the flutter SDK (core)',
         ),
       );
       expect(

@@ -14,7 +14,14 @@ part of '../contributions.dart';
 ///
 /// Then the pipeline prints the command for the user to run later, or fails
 /// generation if the step is not [skippable]. In an interactive run, the
-/// user may also skip a [skippable] step.
+/// user may also skip a [skippable] step. A [skippable] step whose tool is
+/// missing, or that fails, is left for later too; any other step that fails
+/// fails generation.
+///
+/// The app is generated in a temporary directory and moved to its place
+/// afterwards, so a step must not write the absolute path of its working
+/// directory into the app. The files where Flutter records such paths, like
+/// `ios/Flutter/Generated.xcconfig`, are written again in the app's place.
 final class PostGenStep extends Contribution {
   /// Creates a step that runs [tool] with [arguments].
   const PostGenStep(

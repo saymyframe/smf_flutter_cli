@@ -4,11 +4,14 @@ part of '../contributions.dart';
 ///
 /// The pipeline renders the bundle with mason, with these variables:
 /// - `app_name` and `org_name` of the [ModuleContext];
-/// - `has_<role>` for each role the contributor provides, requires or uses
-///   (see [Role.presenceFlag]);
+/// - `has_<role>` for each role the contributor provides, requires or uses,
+///   and each role open to all modules (see [Role.presenceFlag]);
 /// - the rendered contributions of each socket tag in the bundle;
 /// - the variables a role hook returns in [RoleOutput.vars] for its bricks;
 /// - [vars].
+///
+/// A template reads only variables that one of these sets; mustache would
+/// render any other as nothing.
 ///
 /// Paths are relative to the root of the app. A path may use variables,
 /// such as the directory of the app's Kotlin package, but no mustache

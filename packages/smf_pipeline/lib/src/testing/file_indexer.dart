@@ -45,6 +45,10 @@ abstract final class DartFileIndexer {
         for (final directive in unit.directives)
           if (directive is ImportDirective) _import(directive),
       ],
+      exports: [
+        for (final directive in unit.directives)
+          if (directive is ExportDirective) _import(directive),
+      ],
       declarations: [
         for (final declaration in unit.declarations)
           ..._declarations(declaration),
@@ -56,9 +60,9 @@ abstract final class DartFileIndexer {
   }
 }
 
-IndexedImport _import(ImportDirective directive) => IndexedImport(
+IndexedImport _import(NamespaceDirective directive) => IndexedImport(
       directive.uri.stringValue ?? '',
-      prefix: directive.prefix?.name,
+      prefix: directive is ImportDirective ? directive.prefix?.name : null,
       show: [
         for (final combinator in directive.combinators)
           if (combinator is ShowCombinator)

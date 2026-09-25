@@ -39,12 +39,63 @@ final class ValidationResult {
 /// [isReservedVar].
 const _reservedVars = {'app_name', 'org_name'};
 
-/// Whether the pipeline sets the brick variable [name] itself, so neither a
-/// brick nor a render hook may set it.
+/// Whether the pipeline or mason sets the brick variable [name] itself, so
+/// neither a brick nor a render hook may set it: the names of the app, the
+/// tags of sockets, the presence flags of roles, and mason's case lambdas
+/// and brace variables.
 bool isReservedVar(String name) =>
     _reservedVars.contains(name) ||
     name.startsWith('smf_') ||
-    name.startsWith('has_');
+    name.startsWith('has_') ||
+    masonLambdas.contains(name) ||
+    masonVariables.contains(name);
+
+/// The request that the hooks of the roles get: the data of [collection]
+/// that applies, the present roles of [resolution], the [context] and the
+/// [choices] of the roles once they are made.
+///
+/// Data of the wrong type, or for a role its contributor has no access to,
+/// is reported with its contribution by [validate] and left out here: the
+/// hooks would only add confusing problems about it, and building their
+/// input cannot fail on the type.
+RoleHookRequest hookRequest({
+  required ModuleRegistry registry,
+  required Resolution resolution,
+  required Collection collection,
+  required ModuleContext context,
+  Map<Role, Object?> choices = const {},
+}) =>
+    RoleHookRequest(
+      data: [
+        for (final data in collection.roleData)
+          if (data.role.accepts(data.value) &&
+              rolesOf(data.origin!, registry, resolution)
+                  .access
+                  .contains(data.role))
+            data,
+      ],
+      presentRoles: resolution.presentRoles,
+      context: context,
+      choices: choices,
+    );
+
+/// The names of the brick variables among [vars] that are not plain data:
+/// `null`, strings, numbers, booleans, and lists and maps of them with
+/// string keys. mason calls a function as a lambda and renders another
+/// object as nothing.
+List<String> nonPlainVars(Map<String, Object?> vars) {
+  bool plain(Object? value) => switch (value) {
+        null || String() || num() || bool() => true,
+        final List<Object?> items => items.every(plain),
+        final Map<Object?, Object?> map =>
+          map.keys.every((key) => key is String) && map.values.every(plain),
+        _ => false,
+      };
+  return [
+    for (final MapEntry(:key, :value) in vars.entries)
+      if (!plain(value)) key,
+  ];
+}
 
 /// The dev dependency the pipeline adds when a [CodegenRequest] applies.
 ///
@@ -86,8 +137,9 @@ List<String> strippedVars(Map<String, Object?> vars) {
 ///   dependency;
 /// - the `validate` hooks of the present roles' templates and providers,
 ///   and the module rules of the roles;
-/// - the tags of the sockets in the bricks (see [checkTemplateTags]), and
-///   that every socket of a present role that needs a value has one;
+/// - the tags of the sockets in the bricks (see [checkTemplateTags]), that
+///   every socket and every section of the pubspec with contributions has
+///   its tag, and that every socket that needs a value has one;
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
 ///   generated;
@@ -101,20 +153,31 @@ ValidationResult validate({
   bool interactive = true,
   bool skipExternalSetup = false,
 }) {
-  final issues = <SmfIssue>[
-    ...collection.issues,
-    for (final collected in collection.all)
-      ...contributionIssues(collected, registry, resolution),
-    ..._ownerIssues(collection),
-    ..._preflightIssues(collection),
-    for (final module in resolution.modules) ..._kindIssues(module, collection),
-  ];
+  final issues = <SmfIssue>[...collection.issues];
+  // Sockets with a contribution that breaks a rule, whose tags are not
+  // worth reporting too.
+  final broken = <SocketRef>{};
+  for (final collected in collection.all) {
+    final found = contributionIssues(collected, registry, resolution).toList();
+    if (found.isEmpty) continue;
+    issues.addAll(found);
+    if (collected.contribution case SocketContribution(:final socket)) {
+      broken.add(socket);
+    }
+  }
+  issues
+    ..addAll(_ownerIssues(collection))
+    ..addAll(_preflightIssues(collection));
+  for (final module in resolution.modules) {
+    issues.addAll(_kindIssues(module, collection));
+  }
 
   final codegen = collection.applyingOf<CodegenRequest>().isNotEmpty;
+  // First, so that a module whose constraint conflicts is at fault.
   final merged = mergePubspec([
-    ...collection.all,
     if (codegen)
       const Collected(codegenDependency, PipelineOrigin(), applies: true),
+    ...collection.all,
   ]);
   final pubspec = merged.pubspec;
   if (pubspec.sdk == null && merged.issues.isEmpty) {
@@ -141,14 +204,15 @@ ValidationResult validate({
   }
   issues
     ..addAll(merged.issues)
-    ..addAll(_hookIssues(registry, resolution, collection, context))
-    ..addAll(
-      checkTemplateTags(
-        registry: registry,
-        resolution: resolution,
-        collection: collection,
-      ),
-    )
+    ..addAll(_hookIssues(registry, resolution, collection, context));
+  final tags = scanBricks(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
+  );
+  issues
+    ..addAll(tags.issues)
+    ..addAll(_pubspecTagIssues(pubspec, tags, collection))
     ..addAll(_requiredValueIssues(resolution, collection));
 
   final bySocket = <SocketRef, List<Collected>>{};
@@ -178,6 +242,18 @@ ValidationResult validate({
         break;
     }
   }
+
+  issues.addAll(
+    _taglessIssues(
+      {
+        for (final MapEntry(key: socket, value: contributions)
+            in bySocket.entries)
+          if (!broken.contains(socket)) socket: contributions,
+      },
+      tags,
+      resolution,
+    ),
+  );
 
   final orders = <SocketRef, ContributionOrder>{};
   for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
@@ -294,10 +370,21 @@ Iterable<SmfIssue> contributionIssues(
           origin: origin,
         );
       }
+      for (final name in nonPlainVars(brick.vars)) {
+        yield SmfIssue(
+          'The variable $name of the brick ${brick.bundle.name} of $origin '
+          'is not plain data: strings, numbers, booleans, and lists and maps '
+          'of them.',
+          origin: origin,
+        );
+      }
       if (origin case ModuleOrigin(:final module)) {
         final kind = resolution.module(module)?.descriptor.kind;
         for (final file in brick.bundle.files) {
-          if (kind != null && !kind.allowsFile(module, file.path)) {
+          // A path with a variable is checked once it is rendered.
+          if (kind != null &&
+              !file.path.contains('{{') &&
+              !kind.allowsFile(module, file.path)) {
             yield SmfIssue(
               'The module $module generates ${file.path}, where modules of '
               'the ${kind.id} kind may not.',
@@ -307,8 +394,18 @@ Iterable<SmfIssue> contributionIssues(
           }
         }
       }
-    case Preflight() || PubspecContribution() || CodegenRequest():
-    case PostGenStep():
+    case CodegenRequest(:final outputs):
+      for (final output in outputs) {
+        if (!_isDartPathInApp(output)) {
+          yield SmfIssue(
+            'The output $output of the code generation of $origin is not '
+            'the path of a Dart file inside the app, such as '
+            'lib/core/di/dependencies.config.dart.',
+            origin: origin,
+          );
+        }
+      }
+    case Preflight() || PubspecContribution() || PostGenStep():
       break;
   }
 }
@@ -373,6 +470,16 @@ Iterable<SmfIssue> _socketIssues(
 bool _isMember(SocketFamily<Object?, SocketKind> family, SocketRef socket) =>
     family.name == socket.name && family.memberOfTag(socket.tag) == socket;
 
+/// Whether [path] is the relative path of a Dart file inside the app, with
+/// forward slashes.
+bool _isDartPathInApp(String path) {
+  final segments = path.split('/');
+  return path.endsWith('.dart') &&
+      !path.contains(r'\') &&
+      !path.contains(':') &&
+      segments.every((s) => s.isNotEmpty && s != '.' && s != '..');
+}
+
 /// Preflight checks whose ids are not lower snake_case or not unique for
 /// their contributor, which the pipeline keys their results by.
 Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
@@ -394,9 +501,10 @@ Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
   }
 }
 
-/// A socket for one value of a present role that cannot render without one,
-/// such as the minimum iOS version, but got none: the providers of the role
-/// contribute its base value.
+/// A socket for one value of a present role or of a module of the app that
+/// cannot render without one, such as the minimum iOS version, but got
+/// none: the providers of the role, or the module, contribute its base
+/// value.
 Iterable<SmfIssue> _requiredValueIssues(
   Resolution resolution,
   Collection collection,
@@ -405,27 +513,109 @@ Iterable<SmfIssue> _requiredValueIssues(
     for (final collected in collection.applyingOf<SocketContribution>())
       (collected.contribution as SocketContribution).socket,
   };
+  bool missing(SocketRef socket) => switch (socket.kind) {
+        ValueSocket(required: true) => !contributed.contains(socket),
+        _ => false,
+      };
   for (final role in resolution.presentRoles) {
-    for (final socket in role.sockets) {
-      if (socket.kind case ValueSocket(required: true)
-          when !contributed.contains(socket)) {
-        final providers = resolution.providersOf(role);
-        yield SmfIssue(
-          'The $socket needs a value, but nothing contributes one; the '
-          'provider of the ${role.id} contributes its base value.',
-          origin: providers.length == 1 ? providers.single.origin : null,
-        );
-      }
+    for (final socket in role.sockets.where(missing)) {
+      final providers = resolution.providersOf(role);
+      yield SmfIssue(
+        'The $socket needs a value, but nothing contributes one; the '
+        'provider of the ${role.id} contributes its base value.',
+        origin: providers.length == 1 ? providers.single.origin : null,
+      );
+    }
+  }
+  for (final module in resolution.modules) {
+    for (final socket in module.descriptor.sockets.where(missing)) {
+      yield SmfIssue(
+        'The $socket needs a value, but nothing contributes one; the module '
+        '${module.id} contributes its base value.',
+        origin: module.origin,
+      );
     }
   }
 }
 
+/// Contributions to a socket whose tag no brick of the app holds, so their
+/// code would be lost.
+///
+/// The template that lacks the tag is at fault: that of the only provider of
+/// the socket's role, or of the module that owns the socket. The tag of a
+/// member of a role's family may be in the files of any module, so no one
+/// is named for it.
+Iterable<SmfIssue> _taglessIssues(
+  Map<SocketRef, List<Collected>> bySocket,
+  BrickTags tags,
+  Resolution resolution,
+) sync* {
+  for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
+    if (tags.found.containsKey(socket)) continue;
+    final contributors = {
+      for (final collected in contributions) collected.origin,
+    };
+    final providers = switch (socket.role) {
+      final role? when socket.familyKey.isEmpty => resolution.providersOf(role),
+      _ => const <ResolvedModule>[],
+    };
+    final owner = switch (socket.module) {
+      final module? => resolution.module(module)?.origin,
+      null => providers.length == 1 ? providers.single.origin : null,
+    };
+    yield SmfIssue(
+      '${contributors.join(', ')} '
+      '${contributors.length == 1 ? 'contributes' : 'contribute'} to the '
+      '$socket, but no template of the app has its tag '
+      '${socket.tags.join(', ')}, so what they contribute would be lost.',
+      origin: owner,
+    );
+  }
+}
+
+/// A section of [pubspec] that has entries but whose tag the brick with
+/// `pubspec.yaml` lacks, so it would be lost.
+///
+/// Without such a brick there is nothing to check here; the contract
+/// harness reports every tag of the pipeline missing.
+Iterable<SmfIssue> _pubspecTagIssues(
+  MergedPubspec pubspec,
+  BrickTags tags,
+  Collection collection,
+) sync* {
+  final owner = [
+    for (final collected in collection.applyingOf<BrickContribution>())
+      if ((collected.contribution as BrickContribution)
+          .bundle
+          .files
+          .any((file) => file.path == 'pubspec.yaml'))
+        collected.origin,
+  ].firstOrNull;
+  if (owner == null) return;
+  final texts = pubspecSocketTexts(pubspec);
+  for (final socket in PipelineSockets.all) {
+    if (texts[socket.tag]!.isEmpty || tags.found.containsKey(socket)) {
+      continue;
+    }
+    yield SmfIssue(
+      'The pubspec.yaml of $owner has no tag ${socket.tag}, so that section '
+      'of the pubspec would be lost.',
+      hint: 'Put {{{${socket.tag}}}} at the start of a line of pubspec.yaml.',
+      origin: owner,
+    );
+  }
+}
+
 /// Two bricks that generate the same file.
+///
+/// A path with a variable is left to stage 8, which compares the rendered
+/// paths.
 Iterable<SmfIssue> _ownerIssues(Collection collection) sync* {
   final owners = <String, ContributionOrigin>{};
   for (final collected in collection.applyingOf<BrickContribution>()) {
     final brick = collected.contribution as BrickContribution;
     for (final file in brick.bundle.files) {
+      if (file.path.contains('{{')) continue;
       final existing = owners[file.path];
       owners[file.path] = collected.origin;
       if (existing != null) {
@@ -485,20 +675,10 @@ Iterable<SmfIssue> _hookIssues(
   Collection collection,
   ModuleContext context,
 ) sync* {
-  // Data of the wrong type, or for a role its contributor has no access
-  // to, is reported with its contribution and left out here: the hooks
-  // would only add confusing problems about it, and building their input
-  // cannot fail on the type.
-  final request = RoleHookRequest(
-    data: [
-      for (final data in collection.roleData)
-        if (data.role.accepts(data.value) &&
-            rolesOf(data.origin!, registry, resolution)
-                .access
-                .contains(data.role))
-          data,
-    ],
-    presentRoles: resolution.presentRoles,
+  final request = hookRequest(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
     context: context,
   );
   for (final role in resolution.presentRoles) {

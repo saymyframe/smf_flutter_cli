@@ -188,6 +188,23 @@ void main() {
     expect(result.added, hasLength(2));
   });
 
+  test('keeps the line endings of the file', () {
+    expect(
+      _add(
+        "import 'dart:io';\r\n\r\nimport 'c.dart';\r\n\r\nvoid f() {}\r\n",
+        [_async, _zeta],
+      ),
+      "import 'dart:async';\r\n"
+      "import 'dart:io';\r\n"
+      '\r\n'
+      "import 'package:zeta/zeta.dart';\r\n"
+      '\r\n'
+      "import 'c.dart';\r\n"
+      '\r\n'
+      'void f() {}\r\n',
+    );
+  });
+
   test('nothing to add leaves the text as it is', () {
     expect(_add('void f() {}\n', const []), 'void f() {}\n');
   });

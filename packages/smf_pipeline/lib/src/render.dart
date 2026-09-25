@@ -6,6 +6,7 @@ import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/imports.dart';
+import 'package:smf_pipeline/src/move.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -173,9 +174,20 @@ RenderedApp renderApp({
     issues: issues,
   );
   texts.texts.addAll(pubspecSocketTexts(pubspec));
-  for (final byName in tags.found.values) {
+  for (final MapEntry(key: socket, value: byName) in tags.found.entries) {
     for (final name in byName.keys) {
-      texts.texts.putIfAbsent(name, () => '');
+      if (texts.texts.containsKey(name)) continue;
+      if (socket.kind case ValueSocket(required: true)) {
+        issues.add(
+          SmfIssue(
+            'The $socket needs a value, but nothing contributes one.',
+            origin: byName[name]!.first.$2,
+          ),
+        );
+        continue;
+      }
+      // A socket that gets nothing renders to nothing.
+      texts.texts[name] = '';
     }
   }
   stopOnErrors();
@@ -200,9 +212,9 @@ RenderedApp renderApp({
 
   for (final MapEntry(key: (owner, template), value: added)
       in texts.imports.entries) {
-    // Only the text files of bricks that rendered hold tags.
-    final path = renderedPaths[(owner, template)];
-    if (path == null) continue;
+    // Only text files hold tags, and every brick rendered.
+    final path = renderedPaths[(owner, template)] ??
+        (throw StateError('$template of $owner was not rendered.'));
     try {
       files[path] = _withImports(files[path]!, added, context.appName);
     } on ImportTargetException catch (error) {
@@ -266,9 +278,10 @@ _HookOutput _runRenderHooks({
   required List<SmfIssue> issues,
 }) {
   final present = resolution.presentRoles;
-  final request = RoleHookRequest(
-    data: collection.roleData,
-    presentRoles: present,
+  final request = hookRequest(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
     context: context,
     choices: choices,
   );
@@ -311,6 +324,16 @@ _HookOutput _runRenderHooks({
           'The brick variable $name of the render hook of $origin has a '
           'backslash before a line break or a non-ASCII character, which '
           'mason removes.',
+          origin: origin,
+        ),
+      );
+    }
+    for (final name in nonPlainVars(result.vars)) {
+      issues.add(
+        SmfIssue(
+          'The brick variable $name of the render hook of $origin is not '
+          'plain data: strings, numbers, booleans, and lists and maps of '
+          'them.',
           origin: origin,
         ),
       );
@@ -393,7 +416,7 @@ _SocketTexts _renderSockets({
           '${contributors.join(', ')} '
           '${contributors.length == 1 ? 'contributes' : 'contribute'} to '
           'the $socket, but no template of the app has its tag '
-          '${socket.tags.join(', ')}, so the code would be lost.',
+          '${socket.tags.join(', ')}, so what they contribute would be lost.',
           origin: contributors.first,
         ),
       );
@@ -433,10 +456,6 @@ _SocketTexts _renderSockets({
   return result;
 }
 
-/// A tag that mason renders; a file without one is copied as it is, like
-/// mason does.
-final RegExp _mustache = RegExp('{{([^;,=]*?)}}');
-
 /// Renders the files of the brick of [collected] into [files].
 void _renderBrick(
   Collected collected, {
@@ -453,10 +472,7 @@ void _renderBrick(
   final brick = collected.contribution as BrickContribution;
   final name = brick.bundle.name;
   // A variant's bricks belong to its module and get the module's variables.
-  final owner = switch (origin) {
-    ModuleOrigin(:final module) => ModuleOrigin(module),
-    _ => origin,
-  };
+  final owner = ownerOf(origin);
   final fromHooks = hookVars[owner] ?? const <String, Object?>{};
   final present = resolution.presentRoles;
   final vars = <String, Object?>{
@@ -525,10 +541,27 @@ void _renderBrick(
     }
 
     var bytes = base64.decode(file.data) as List<int>;
-    final isText = file.type == 'text';
-    if (isText) {
-      final text = utf8.decode(bytes, allowMalformed: true);
-      if (_mustache.hasMatch(text)) {
+    final text = templateTextOf(file);
+    final isText = text != null;
+    if (text != null) {
+      final unset = masonTag.hasMatch(text)
+          ? unsetNames(scanTemplate(template, text), vars)
+          : const <String>[];
+      if (unset.isNotEmpty) {
+        issues.add(
+          SmfIssue(
+            'The template $template in the brick $name of $origin reads '
+            '${unset.join(', ')}, which neither the brick nor a render hook '
+            'of $owner sets, so mustache would render nothing.',
+            hint: 'Set every variable a template reads, to "" or false when '
+                'there is nothing.',
+            origin: origin,
+            path: template,
+          ),
+        );
+        continue;
+      }
+      if (masonTag.hasMatch(text)) {
         try {
           bytes = utf8.encode(text.render(vars));
         } on Object catch (error) {
@@ -544,13 +577,21 @@ void _renderBrick(
         }
       }
     }
-    if (files[path] case final existing?) {
+    // File systems that ignore case, as macOS and Windows do by default,
+    // take paths that differ only in case for one file.
+    final same = files.values
+        .where((file) => file.path.toLowerCase() == path.toLowerCase())
+        .firstOrNull;
+    if (same != null) {
+      final what = same.path == path
+          ? path
+          : '${same.path} and $path, one file where case does not matter';
       issues.add(
         SmfIssue(
-          existing.owner == origin
-              ? '$origin generates $path twice; every file has one brick.'
-              : 'Both ${existing.owner} and $origin generate $path; every '
-                  'file has one brick.',
+          same.owner == origin
+              ? '$origin generates $what twice; every file has one brick.'
+              : 'Both ${same.owner} and $origin generate $what; every file '
+                  'has one brick.',
           origin: origin,
           path: path,
         ),
@@ -578,9 +619,15 @@ String? _pathProblem(String path) {
   }
   final segments = path.split('/');
   if (segments.any((segment) => segment.isEmpty || segment == '.')) {
-    return 'has an empty segment';
+    return 'has an empty or "." segment';
   }
   if (segments.contains('..')) return 'leaves the directory of the app';
+  for (final tool in flutterToolFiles) {
+    if (path == tool || path.startsWith('$tool/')) {
+      return "is written by Flutter's tools, which the pipeline does not move "
+          'with the app';
+    }
+  }
   if (_entity.hasMatch(path)) {
     return 'has an HTML entity: mustache escapes variables in two braces, '
         'so a variable with a slash needs three';

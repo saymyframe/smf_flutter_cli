@@ -125,7 +125,8 @@ final class ContractResult {
 /// its providers. Each app goes through the stages 3 to 5 of the pipeline,
 /// in a run without a terminal that skips external setup, as the Flutter
 /// job generates apps; stage 5 includes [checkTemplateTags], and the
-/// harness adds [missingTemplateTags]. Unless [render] is off, the harness
+/// harness adds [missingTemplateTags] and reports templates with `{{`
+/// that mason would copy as they are. Unless [render] is off, the harness
 /// then makes the roles' choices (stage 7) with the options of the case,
 /// renders the app in memory (stage 8) and checks the rendered code with
 /// [checkRendered].
@@ -133,11 +134,13 @@ final class ContractResult {
 /// It depends on no test framework, so the tests of any package can use it.
 final class ContractHarness {
   /// Creates the harness for [registry], generating apps described by
-  /// [context], and rendering them unless [render] is `false`.
+  /// [context], and rendering them unless [render] is `false`, with the
+  /// [roleOptions] of every case.
   ContractHarness(
     this.registry, {
     this.context = defaultContext,
     this.render = true,
+    this.roleOptions = const {},
   });
 
   /// The context of the apps the harness builds.
@@ -160,6 +163,11 @@ final class ContractHarness {
   /// Whether the harness renders the app of every case that has no errors
   /// and checks the rendered code.
   final bool render;
+
+  /// Values of role options by name for every case, such as the start route
+  /// of an app with several screens that can start it; the options of a
+  /// case override them.
+  final Map<String, String?> roleOptions;
 
   /// The cases of the module [id]:
   /// - every provider of the role of its variants, also one without a
@@ -311,6 +319,7 @@ final class ContractHarness {
           resolution: resolution,
           collection: collection,
         ),
+        ..._copiedTemplateIssues(collection),
       ],
       resolution: resolution,
       collection: collection,
@@ -325,7 +334,7 @@ final class ContractHarness {
         registry: registry,
         resolution: resolution,
         collection: collection,
-        optionValues: contractCase.roleOptions,
+        optionValues: {...roleOptions, ...contractCase.roleOptions},
         environment: environment,
         context: context,
       );
@@ -385,42 +394,49 @@ final class ContractHarness {
 
   /// Checks [app], the rendered app of [result]:
   /// - the structural rules and symbols of the roles, see [checkStructure];
-  /// - no text file has `{{` left, which a template that mason did not
-  ///   render leaves;
-  /// - every import of a file of the app finds the file;
-  /// - every import of a package is of a dependency of the app;
-  /// - a file imports only files that its owner may use, and the pipeline
-  ///   added only imports that the contributors of the fragments may use:
-  ///   their own files, the files of the modules they depend on, directly or
-  ///   not, the files of the roles they provide, require or use (the files
-  ///   of each role's template and the files of its required symbols), and,
-  ///   for the template and the providers of a role, the files of those who
-  ///   contribute data to the role, which they render.
+  /// - every import or export of a file of the app finds the file, or a
+  ///   file that code generation or Flutter's localizations generate;
+  /// - every imported or exported package is a dependency of the app, a
+  ///   regular one for the code in `lib/` and `bin/`;
+  /// - a file imports and exports only files that its owner may use, and
+  ///   the pipeline added only imports that the contributors of the
+  ///   fragments may use: their own files, the files of the modules they
+  ///   depend on directly, the files of the roles they provide,
+  ///   require or use (the files of each role's template and the files of
+  ///   its required symbols), and, for the template and the providers of a
+  ///   role, the files of those who contribute data to the role, which they
+  ///   render. The cases the harness builds have one provider of each
+  ///   role, so there a provider cannot reach the files of another through
+  ///   the data.
   ///
   /// Throws an [ArgumentError] if the case of [result] did not resolve.
   List<SmfIssue> checkRendered(ContractResult result, RenderedApp app) {
     final owners = app.owners;
     final texts = app.texts;
     final (:indexes, :issues) = _index(texts, owners);
-    issues.addAll(_structureIssues(result, indexes, owners));
-    for (final MapEntry(key: path, value: text) in texts.entries) {
-      final offset = text.indexOf('{{');
-      if (offset < 0) continue;
-      final line = '\n'.allMatches(text.substring(0, offset)).length + 1;
-      issues.add(
-        SmfIssue(
-          '$path:$line has "{{" left after rendering: mason did not render '
-          'the template, or the template writes the braces itself.',
-          hint: 'mason renders a file only if a tag in it has no ",", ";" '
-              'or "=".',
-          origin: owners[path],
-          path: path,
-        ),
-      );
-    }
-    issues.addAll(_importIssues(result, app, indexes));
+    issues
+      ..addAll(_structureIssues(result, indexes, owners))
+      ..addAll(_importIssues(result, app, indexes));
     return issues;
   }
+
+  /// The templates among [collection]'s bricks that have `{{` but no tag
+  /// that mason renders, so mason copies them with the braces as they are.
+  List<SmfIssue> _copiedTemplateIssues(Collection collection) => [
+        for (final collected in collection.applyingOf<BrickContribution>())
+          for (final MapEntry(key: path, value: text) in templateFilesOf(
+            collected.contribution as BrickContribution,
+          ).entries)
+            if (text.contains('{{') && !masonTag.hasMatch(text))
+              SmfIssue(
+                'The template $path of ${collected.origin} has "{{" but no '
+                'tag that mason renders, one without ",", ";" or "=", so '
+                'mason copies it with the braces as they are.',
+                hint: 'Write a literal brace as {{__LEFT_CURLY_BRACKET__}}.',
+                origin: collected.origin,
+                path: path,
+              ),
+      ];
 
   /// The indexes of the Dart files among [files], and a problem for every
   /// file that does not parse.
@@ -454,9 +470,10 @@ final class ContractHarness {
   ) {
     final (:resolution, :collection) = _resolved(result);
     final request = StructuralRuleRequest(
-      hook: RoleHookRequest(
-        data: collection.roleData,
-        presentRoles: resolution.presentRoles,
+      hook: hookRequest(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
         context: context,
         choices: result.choices ?? const {},
       ),
@@ -497,28 +514,34 @@ final class ContractHarness {
     final (:resolution, :collection) = _resolved(result);
     final appName = context.appName;
     final pubspec = result.validation?.pubspec;
-    final packages = {
-      appName,
-      ...?pubspec?.dependencies.keys,
-      ...?pubspec?.devDependencies.keys,
-    };
+    // The code of the app itself may use only its dependencies; tests and
+    // tools may use its dev dependencies too, as depend_on_referenced_packages
+    // has it.
+    final dependencies = {appName, ...?pubspec?.dependencies.keys};
+    final devDependencies = {...?pubspec?.devDependencies.keys};
 
     // The template and the providers of a role render the data of its
     // contributors, so they may import their files.
     final dataContributors = <Role, Set<ContributionOrigin>>{};
     for (final data in collection.roleData) {
       if (data.origin case final origin?) {
-        dataContributors.putIfAbsent(data.role, () => {}).add(_owner(origin));
+        dataContributors.putIfAbsent(data.role, () => {}).add(ownerOf(origin));
       }
     }
 
     bool mayImport(ContributionOrigin who, String target) {
-      final owner = _owner(app.files[target]!.owner);
-      final user = _owner(who);
+      final owner = ownerOf(app.files[target]!.owner);
+      final user = ownerOf(who);
       if (owner == user) return true;
+      // A module knows only the modules it depends on directly.
       if ((user, owner)
           case (ModuleOrigin(:final module), ModuleOrigin(module: final other))
-          when resolution.dependencyClosure(module).contains(other)) {
+          when resolution
+                  .module(module)
+                  ?.descriptor
+                  .dependsOn
+                  .contains(other) ??
+              false) {
         return true;
       }
       final roles = rolesOf(who, registry, resolution).access;
@@ -539,7 +562,11 @@ final class ContractHarness {
       return false;
     }
 
-    final generated = _flutterOutputs(app, pubspec);
+    final generated = {
+      ..._flutterOutputs(app, pubspec),
+      for (final collected in collection.applyingOf<CodegenRequest>())
+        ...(collected.contribution as CodegenRequest).outputs,
+    };
     final issues = <SmfIssue>[];
     for (final MapEntry(key: path, value: index) in indexes.entries) {
       final file = app.files[path];
@@ -553,7 +580,13 @@ final class ContractHarness {
             )
             .add(import.contributor);
       }
-      for (final import in index.imports) {
+      final public = path.startsWith('lib/') || path.startsWith('bin/');
+      final packages =
+          public ? dependencies : {...dependencies, ...devDependencies};
+      for (final (verb, import) in [
+        for (final import in index.imports) ('imports', import),
+        for (final export in index.exports) ('exports', export),
+      ]) {
         final uri = import.uri;
         if (uri.startsWith('dart:')) continue;
         final target = _appPathOf(uri, path, appName);
@@ -564,8 +597,11 @@ final class ContractHarness {
           if (package != null && !packages.contains(package)) {
             issues.add(
               SmfIssue(
-                '$path imports $uri, but the app does not depend on '
-                '$package.',
+                devDependencies.contains(package)
+                    ? '$path $verb $uri, but $package is only a dev '
+                        'dependency of the app.'
+                    : '$path $verb $uri, but the app does not depend on '
+                        '$package.',
                 origin: file.owner,
                 path: path,
               ),
@@ -577,7 +613,7 @@ final class ContractHarness {
         if (!app.files.containsKey(target)) {
           issues.add(
             SmfIssue(
-              '$path imports $uri, but the app has no $target.',
+              '$path $verb $uri, but the app has no $target.',
               origin: file.owner,
               path: path,
             ),
@@ -585,14 +621,14 @@ final class ContractHarness {
           continue;
         }
         final key = '${_packageUriOf(uri, path, appName)} as ${import.prefix}';
-        for (final who in added[key] ?? {file.owner}) {
+        final byPipeline = verb == 'imports' && added.containsKey(key);
+        for (final who in byPipeline ? added[key]! : {file.owner}) {
           if (mayImport(who, target)) continue;
-          final by = added.containsKey(key)
-              ? 'for a fragment of $who'
-              : 'in the template of $who';
+          final by =
+              byPipeline ? 'for a fragment of $who' : 'in the template of $who';
           issues.add(
             SmfIssue(
-              '$path imports $target $by, but that file is of '
+              '$path $verb $target $by, but that file is of '
               '${app.files[target]!.owner}, which $who neither depends on '
               'nor knows through a role.',
               origin: who,
@@ -634,13 +670,6 @@ Set<String> _flutterOutputs(RenderedApp app, MergedPubspec? pubspec) {
   final file = read('output-localization-file') ?? 'app_localizations.dart';
   return {'$directory/$file'};
 }
-
-/// [origin] as the owner of files: a module's variant owns what the module
-/// owns.
-ContributionOrigin _owner(ContributionOrigin origin) => switch (origin) {
-      ModuleOrigin(:final module) => ModuleOrigin(module),
-      _ => origin,
-    };
 
 /// The path relative to the root of the app of the file of the app that
 /// [uri] imports in the file at [from], or `null` for a library outside the

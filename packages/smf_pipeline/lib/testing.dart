@@ -7,6 +7,8 @@
 library;
 
 export 'src/collector.dart' show Collected, Collection;
+export 'src/order.dart' show ContributionOrder, OrderEdge;
+export 'src/pubspec.dart' show MergedDependency, MergedPubspec;
 export 'src/render.dart' show AddedImport, RenderedApp, RenderedFile;
 export 'src/resolver.dart'
     show

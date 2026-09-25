@@ -168,11 +168,33 @@ void main() {
       expect(target.conflict, isFalse);
     });
 
-    test('a file is in the way', () {
+    test('a file is in the way', () async {
       final host = FakeHost();
       host.fileSystem.file('/work/out/app').createSync(recursive: true);
+      await expectLater(
+        decide(host),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            'Cannot create the app at /work/out/app, because a file is there.',
+          ),
+        ),
+      );
 
-      expect(decide(host), throwsA(isA<SmfUsageException>()));
+      final above = FakeHost();
+      above.fileSystem.file('/work/out').createSync(recursive: true);
+      await expectLater(
+        decide(above),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            'Cannot create the app at /work/out/app, because /work/out is a '
+                'file.',
+          ),
+        ),
+      );
     });
 
     test('--explain only reports the conflict', () async {
@@ -237,10 +259,18 @@ void main() {
 
       expect(target.replaceExisting, isTrue);
       expect(replace.prompter.asked.single.shown, [
-        'Replace it with the new app',
         'Keep it and create the app next to it',
+        'Replace it with the new app',
         'Cancel',
       ]);
+
+      // The default keeps the directory.
+      final keep = FakeHost(answers: [null]);
+      keep.fileSystem.file('/work/out/app/a').createSync(recursive: true);
+      expect(
+        (await decide(keep, interactive: true)).path,
+        '/work/out/app copy',
+      );
 
       final cancel = FakeHost(answers: ['Cancel']);
       cancel.fileSystem.file('/work/out/app/a').createSync(recursive: true);

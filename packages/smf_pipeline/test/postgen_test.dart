@@ -3,6 +3,14 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
+/// A request of [module] for code generation of [outputs].
+Collected _codegen(String module, [List<String> outputs = const []]) =>
+    Collected(
+      CodegenRequest(outputs: outputs),
+      ModuleOrigin(ModuleId(module)),
+      applies: true,
+    );
+
 /// A step of [module].
 Collected _step(
   String module,
@@ -54,7 +62,7 @@ void main() {
     final skipped = await runPostGen(
       directory: '/tmp/app',
       environment: environment,
-      codegen: true,
+      codegen: [_codegen('model')],
       steps: [
         _step('a', const PostGenStep(ToolRef('firebase'), ['--version'])),
         _step(
@@ -80,10 +88,51 @@ void main() {
     for (final call in runner.calls) {
       expect(call.workingDirectory, '/tmp/app');
       expect(call.runInShell, isFalse);
-      expect(call.environment['PATH'], '/sdk/bin:/sdk/bin:/usr/bin');
+      expect(
+        call.environment['PATH'],
+        allOf(startsWith('/sdk/bin:'), endsWith(':/usr/bin')),
+      );
     }
     expect(runner.calls.first.executable, '/sdk/bin/flutter');
     expect(runner.calls[2].executable, '/usr/bin/firebase');
+    expect(
+      host.logger.details.first,
+      'Running /sdk/bin/flutter pub get in /tmp/app',
+    );
+  });
+
+  test('code generation must generate the outputs it names', () async {
+    host.fileSystem.file('/tmp/app/lib/di.config.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// generated');
+
+    await runPostGen(
+      directory: '/tmp/app',
+      environment: environment,
+      steps: const [],
+      codegen: [
+        _codegen('di', ['lib/di.config.dart']),
+      ],
+    );
+    await expectLater(
+      runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: const [],
+        codegen: [
+          _codegen('di', ['lib/di.config.dart']),
+          _codegen('assets', ['lib/gen/assets.gen.dart']),
+        ],
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          'build_runner did not generate lib/gen/assets.gen.dart, which assets '
+              'named as an output of its code generation.',
+        ),
+      ),
+    );
   });
 
   test('without code generation and the full dart fix', () async {
@@ -101,7 +150,8 @@ void main() {
     ]);
   });
 
-  test('batch files of the SDK run in a shell on Windows', () async {
+  test('on Windows, the batch files of the SDK go to the runner as they are',
+      () async {
     environment = environmentOf(operatingSystem: HostOperatingSystem.windows);
     await runPostGen(
       directory: r'C:\tmp\app',
@@ -110,7 +160,7 @@ void main() {
     );
 
     expect(runner.calls.first.executable, r'C:\sdk\bin\flutter.bat');
-    expect(runner.calls.every((call) => call.runInShell), isTrue);
+    expect(runner.calls.any((call) => call.runInShell), isFalse);
   });
 
   test('a failed pub get or code generation stops generation', () async {
@@ -136,7 +186,7 @@ void main() {
         directory: '/tmp/app',
         environment: environment,
         steps: [],
-        codegen: true,
+        codegen: [_codegen('model')],
       ),
       throwsA(
         isA<GenerationFailedException>().having(
@@ -146,6 +196,41 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('a failure shows the end of both streams, and --verbose all output',
+      () async {
+    runner.onRun = (call) => call.arguments.contains('build_runner')
+        ? const SmfProcessResult(
+            exitCode: 1,
+            stderr: 'Building package executable...\n',
+            stdout: '[SEVERE] lib/model.g.dart: bad\n',
+          )
+        : const SmfProcessResult(exitCode: 0, stdout: 'Got dependencies!\n');
+
+    await expectLater(
+      runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [],
+        codegen: [_codegen('model')],
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          'dart run build_runner build failed: it exited with code 1:\n'
+              'Building package executable...\n'
+              '[SEVERE] lib/model.g.dart: bad',
+        ),
+      ),
+    );
+    expect(host.logger.details, [
+      'Running /sdk/bin/flutter pub get in /tmp/app',
+      'Got dependencies!',
+      'Running /sdk/bin/dart run build_runner build in /tmp/app',
+      'Building package executable...\n[SEVERE] lib/model.g.dart: bad',
+    ]);
   });
 
   test('a failed dart fix or dart format only warns', () async {
@@ -244,7 +329,7 @@ void main() {
 
       expect(skipped.map((step) => '$step'), [
         'Log in to Firebase: firebase login (the run skips external setup)',
-        'firebase use: firebase use (it needs a terminal)',
+        'firebase use: firebase use (the run cannot ask the user)',
       ]);
       expect(runner.lines, isNot(contains(startsWith('firebase'))));
     });
@@ -268,18 +353,73 @@ void main() {
     });
 
     test('the user may leave a skippable step for later', () async {
-      environment = environmentOf(interactive: true, answers: [false]);
+      environment = environmentOf(interactive: true, answers: [false, false]);
+      host.fileSystem.file('/usr/bin/flutterfire').createSync();
       final skipped = await runPostGen(
         directory: '/tmp/app',
         environment: environment,
-        steps: [_step('firebase', configure)],
+        steps: [
+          _step('firebase', configure),
+          _step(
+            'other',
+            const PostGenStep(ToolRef('firebase'), ['use'], skippable: true),
+          ),
+        ],
       );
 
-      expect(
-        '${skipped.single}',
-        'Configure Firebase: flutterfire configure --platforms=android,ios '
-            "--out 'lib/my options.dart' (you chose to run it later)",
+      expect(skipped.map((step) => '$step'), [
+        equals(
+          'Configure Firebase: flutterfire configure --platforms=android,ios '
+          "--out 'lib/my options.dart' (you chose to run it later)",
+        ),
+        'firebase use: firebase use (you chose to run it later)',
+      ]);
+      expect(host.prompter.asked.map((prompt) => prompt.message), [
+        equals(
+          'Configure Firebase (flutterfire configure --platforms=android,ios '
+          "--out 'lib/my options.dart'), for firebase. Run it now?",
+        ),
+        'firebase use, for other. Run it now?',
+      ]);
+    });
+
+    test('the command for later suits the shell of the user', () async {
+      environment = environmentOf(
+        operatingSystem: HostOperatingSystem.windows,
+        skipExternalSetup: true,
       );
+      final windows = await runPostGen(
+        directory: r'C:\tmp\app',
+        environment: environment,
+        steps: [
+          _step(
+            'firebase',
+            const PostGenStep(
+              ToolRef('flutterfire'),
+              ['configure', '--platforms=android,ios', '--out', 'a b.dart'],
+              external: true,
+              skippable: true,
+            ),
+          ),
+        ],
+      );
+      expect(
+        windows.single.command,
+        'flutterfire configure "--platforms=android,ios" --out "a b.dart"',
+      );
+
+      // A tool installed during the run is not on the user's PATH.
+      environment = environmentOf(skipExternalSetup: true)
+        ..addBinDirs(['/home/me/.npm/bin']);
+      host.fileSystem
+          .file('/home/me/.npm/bin/firebase')
+          .createSync(recursive: true);
+      final installed = await runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [_step('firebase', login)],
+      );
+      expect(installed.single.command, '/home/me/.npm/bin/firebase login');
     });
 
     test('a skippable step that fails or is missing is left for later',
@@ -300,16 +440,68 @@ void main() {
       );
 
       expect(skipped.map((step) => step.reason), [
-        'it failed: it exited with code 2',
-        'it failed: The executable flutterfire was not found.',
+        'it exited with code 2',
+        'flutterfire was not found',
       ]);
       expect(host.logger.warnings, [
-        'The step "firebase use" failed; run it later: firebase use',
-        equals(
-          'The step "Configure Firebase" failed; run it later: flutterfire '
-          "configure --platforms=android,ios --out 'lib/my options.dart'",
-        ),
+        'The step "firebase use" failed: it exited with code 2',
       ]);
+    });
+
+    test('a missing tool is not offered to run', () async {
+      environment = environmentOf(interactive: true);
+      final skipped = await runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [_step('firebase', configure)],
+      );
+
+      expect(skipped.single.reason, 'flutterfire was not found');
+      expect(host.prompter.asked, isEmpty);
+
+      await expectLater(
+        runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step(
+              'firebase',
+              const PostGenStep(
+                ToolRef('flutterfire'),
+                ['configure'],
+                description: 'Configure Firebase',
+              ),
+            ),
+          ],
+        ),
+        throwsA(
+          isA<GenerationFailedException>().having(
+            (e) => e.message,
+            'message',
+            'The step "Configure Firebase" of firebase cannot run, because '
+                'flutterfire was not found.',
+          ),
+        ),
+      );
+    });
+
+    test('an interactive step that cannot start is left for later', () async {
+      environment = environmentOf(interactive: true, answers: [true]);
+      runner.onInteractive =
+          (call) => throw const ProcessStartFailure('Permission denied');
+
+      final skipped = await runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [_step('firebase', login)],
+      );
+
+      expect(skipped.single.reason, 'it could not start');
+      expect(
+        host.logger.warnings.single,
+        'The step "Log in to Firebase" failed: it could not start: '
+        'Permission denied',
+      );
     });
 
     test('a step that is not skippable stops generation when it fails',

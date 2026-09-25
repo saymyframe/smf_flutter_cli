@@ -131,7 +131,6 @@ final class FlutterSdkCheck extends PreflightCheck {
       final result = await environment.processRunner.run(
         flutter,
         ['--version', '--machine'],
-        runInShell: environment.operatingSystem == HostOperatingSystem.windows,
       );
       if (!result.succeeded) return null;
       final output = result.stdout;

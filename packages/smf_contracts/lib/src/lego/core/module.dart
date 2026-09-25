@@ -226,9 +226,12 @@ final class ModuleKind {
   }
 
   /// Whether the module [module] may generate the file at [path].
+  ///
+  /// Case does not matter, as on the file systems of macOS and Windows.
   bool allowsFile(ModuleId module, String path) {
+    final lower = path.toLowerCase();
     bool isIn(String root) =>
-        path.startsWith(root.endsWith('/') ? root : '$root/');
+        lower.startsWith((root.endsWith('/') ? root : '$root/').toLowerCase());
 
     final roots = fileRootsOf(module);
     return (roots.isEmpty || roots.any(isIn)) &&

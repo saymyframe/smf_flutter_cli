@@ -172,13 +172,18 @@ const plainKind = ModuleKind(id: 'plain', label: 'Plain modules');
 
 /// The module that provides the app entry in tests, with the base value of
 /// the minimum iOS version, the Dart SDK constraint and the dependency on
-/// Flutter, as flutter_core contributes them.
-TestModule scaffold({List<Contribution> contributions = const []}) =>
+/// Flutter, as flutter_core contributes them, and the files of
+/// [entryBrick] unless [bricks] is `false`.
+TestModule scaffold({
+  List<Contribution> contributions = const [],
+  bool bricks = true,
+}) =>
     TestModule(
       'scaffold',
       kind: ModuleKinds.scaffold,
       providers: [const RoleProvider.plain(appEntryRole)],
       contributions: [
+        if (bricks) entryBrick(),
         AppEntryRole.iosDeploymentTarget.value('13.0'),
         const PubspecContribution.environment(sdk: '^3.8.1'),
         const PubspecContribution.sdk('flutter'),
@@ -384,7 +389,8 @@ final class Prompt {
 /// Each answer is, by kind of question:
 /// - `confirm`: a bool;
 /// - `input`: a string, or `null` for the default value;
-/// - `select`: the start of the displayed choice to pick;
+/// - `select`: the start of the displayed choice to pick, or `null` for the
+///   default value;
 /// - `multiSelect`: the starts of the displayed choices to pick.
 final class ScriptedPrompter implements SmfPrompter {
   ScriptedPrompter(List<Object?> answers) : _answers = [...answers];
@@ -421,7 +427,10 @@ final class ScriptedPrompter implements SmfPrompter {
     T? defaultValue,
   }) async {
     final shown = [for (final c in choices) display?.call(c) ?? '$c'];
-    final answer = _next(Prompt('select', message, shown))! as String;
+    final answer = _next(Prompt('select', message, shown)) as String?;
+    if (answer == null) {
+      return defaultValue ?? (throw StateError('No default for: $message'));
+    }
     final index = shown.indexWhere((text) => text.startsWith(answer));
     if (index < 0) throw StateError('No choice "$answer" in $shown');
     return choices[index];

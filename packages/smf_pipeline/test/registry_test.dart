@@ -341,6 +341,7 @@ void main() {
         options: const [
           RoleOption(name: 'Start', help: ''),
           RoleOption(name: 'modules', help: ''),
+          RoleOption(name: 'verbose', help: ''),
           RoleOption(name: 'shared', help: ''),
         ],
       );
@@ -356,6 +357,7 @@ void main() {
         allOf([
           _hasProblem('--Start of the a is not lower kebab-case'),
           _hasProblem('--modules of the a is an option of the pipeline'),
+          _hasProblem('--verbose of the a is an option of the pipeline'),
           _hasProblem('The a and the b both have the option --shared'),
         ]),
       );

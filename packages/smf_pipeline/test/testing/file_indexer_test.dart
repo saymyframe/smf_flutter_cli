@@ -9,6 +9,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart' show StatelessWidget, Widget;
 import 'package:my_app/core/di/service_locator.dart' as di hide Unused;
 
+export 'home_state.dart' show HomeState;
+
 @immutable
 class HomeScreen extends StatelessWidget {
   const HomeScreen({@PathParam('id') required this.id, super.key, String? tab});
@@ -73,7 +75,7 @@ void main() {
     expect(DartFileIndexer.errorsOf('void main( {'), isNotEmpty);
   });
 
-  test('indexes imports with their combinators', () {
+  test('indexes imports and exports with their combinators', () {
     expect(
       [
         for (final import in index.imports)
@@ -84,6 +86,13 @@ void main() {
         'package:flutter/widgets.dart null [StatelessWidget, Widget] []',
         'package:my_app/core/di/service_locator.dart di [] [Unused]',
       ],
+    );
+    expect(
+      [
+        for (final export in index.exports)
+          '${export.uri} ${export.prefix} ${export.show}',
+      ],
+      ['home_state.dart null [HomeState]'],
     );
   });
 

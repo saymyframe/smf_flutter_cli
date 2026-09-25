@@ -77,10 +77,13 @@ final class _Existing {
   if (added.isEmpty) return (text: text, added: const []);
 
   // What to insert at each offset, in the order of the merged imports,
-  // which are sorted by group and URI like the result.
+  // which are sorted by group and URI like the result, with the line
+  // endings of the file.
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
   final insertions = <int, List<String>>{};
-  void insert(int offset, String code) =>
-      insertions.putIfAbsent(offset, () => []).add(code);
+  void insert(int offset, String code) => insertions
+      .putIfAbsent(offset, () => [])
+      .add(code.replaceAll('\n', newline));
 
   final nodes = [for (final known in existing) known.node];
   int groupOfNode(ImportDirective node) => _groupOf(_uriOf(node));
@@ -205,5 +208,6 @@ int _lineStart(String text, int offset) =>
 
 int _lineEnd(String text, int offset) {
   final end = text.indexOf('\n', offset);
-  return end < 0 ? text.length : end;
+  if (end < 0) return text.length;
+  return end > 0 && text[end - 1] == '\r' ? end - 1 : end;
 }

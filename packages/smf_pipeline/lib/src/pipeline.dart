@@ -1,3 +1,4 @@
+import 'package:file/file.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/choices.dart';
 import 'package:smf_pipeline/src/collector.dart';
@@ -133,8 +134,9 @@ final class CreatePipeline {
   /// Generates the app of [request] and returns it, or `null` after
   /// `--explain` printed what would happen.
   ///
-  /// It plans the app in the stages 1 to 7 (see [CreatePlanning.plan]),
-  /// then:
+  /// It plans the app in the stages 1 to 7: selection, identity,
+  /// resolution, collection, validation, preflight checks and the choices of
+  /// the roles. Then:
   /// 8. Rendering: the files of the app, in memory.
   /// 9. Post-generation: in a temporary directory, `flutter pub get`, code
   ///    generation, the steps of the modules, `dart fix` and
@@ -154,7 +156,13 @@ final class CreatePipeline {
     try {
       return await _generate(plan);
     } finally {
-      await plan.environment.dispose();
+      try {
+        await plan.environment.dispose();
+      } on FileSystemException catch (error) {
+        plan.environment.logger.warn(
+          'The temporary files of the run could not be deleted: $error',
+        );
+      }
     }
   }
 
@@ -183,32 +191,55 @@ final class CreatePipeline {
     final temporary =
         await fileSystem.systemTempDirectory.createTemp('smf_create_');
     final directory = temporary.childDirectory(plan.context.appName);
-    for (final file in app.files.values) {
-      final written = fileSystem.file(
-        fileSystem.path.joinAll([directory.path, ...file.path.split('/')]),
-      );
-      await written.parent.create(recursive: true);
-      await written.writeAsBytes(file.bytes);
-    }
+    logger.detail('Generating the app in ${directory.path}');
 
-    final target = plan.selection.target;
     final List<SkippedStep> skipped;
     try {
+      for (final file in app.files.values) {
+        final written = fileSystem.file(
+          fileSystem.path.joinAll([directory.path, ...file.path.split('/')]),
+        );
+        await written.parent.create(recursive: true);
+        await written.writeAsBytes(file.bytes);
+      }
       skipped = await runPostGen(
         directory: directory.path,
         environment: environment,
         steps: plan.postGenOrder.contributions,
-        codegen: plan.collection.applyingOf<CodegenRequest>().isNotEmpty,
+        codegen: plan.collection.applyingOf<CodegenRequest>().toList(),
         fullDartFix: plan.request.dartFix,
       );
-      await moveApp(fileSystem, source: directory.path, target: target);
     } on GenerationFailedException catch (error) {
       throw GenerationFailedException(
         '${error.message}\nThe app so far is in ${directory.path}.',
         issues: error.issues,
       );
+    } on FileSystemException catch (error) {
+      throw GenerationFailedException(
+        'The app could not be written: $error\nThe app so far is in '
+        '${directory.path}.',
+      );
+    } on Object {
+      // A bug; the app is still worth finding.
+      logger.warn('The app so far is in ${directory.path}.');
+      rethrow;
     }
-    await temporary.delete(recursive: true);
+    // Its errors say where the app stays.
+    final target = plan.selection.target;
+    await moveApp(
+      fileSystem,
+      source: directory.path,
+      target: target,
+      logger: logger,
+    );
+    try {
+      await temporary.delete(recursive: true);
+    } on FileSystemException catch (error) {
+      logger.warn(
+        'The temporary directory ${temporary.path} could not be deleted: '
+        '$error',
+      );
+    }
     await getPackagesInPlace(environment, target.path);
     return GeneratedApp(
       name: plan.context.appName,

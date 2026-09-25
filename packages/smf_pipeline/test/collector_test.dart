@@ -99,7 +99,7 @@ void main() {
     );
 
     final collection = collect(
-      resolutionOf([scaffold(), module, provider]),
+      resolutionOf([scaffold(bricks: false), module, provider]),
       testContext,
     );
 

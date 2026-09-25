@@ -188,6 +188,7 @@ void main() {
       final runner = RecordingRunner();
       final host = testHost(processRunner: runner);
 
+      GeneratedApp? created;
       final code = await runSmf(
         [
           'create',
@@ -196,12 +197,16 @@ void main() {
           everyFixture().join(','),
           '--no-input',
           '--skip-external-setup',
+          '--strict',
         ],
-        registry: ModuleRegistry(fixtureModules()),
+        modules: fixtureModules(),
         hostFor: ({required verbose}) => host,
+        onCreated: (app) => created = app,
       );
 
       expect(code, SmfExitCodes.success);
+      expect(created?.path, '/work/fixture_app');
+      expect(created?.skippedSteps, isEmpty);
       expect(runner.lines, [
         'flutter pub get',
         'dart run build_runner build',

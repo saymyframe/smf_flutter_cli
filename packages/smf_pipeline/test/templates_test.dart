@@ -136,7 +136,6 @@ void f() {{{{smf_after__brace}}}
         check([
           scaffold(
             contributions: [
-              entryBrick(),
               brick({
                 'ios/Podfile': "platform :ios, '$target'",
                 'ios/project': target,
@@ -181,6 +180,7 @@ void f() {{{{smf_after__brace}}}
         check(
           [
             scaffold(
+              bricks: false,
               contributions: [
                 brick({
                   'lib/a.dart': '{{smf_app_entry__top_level}}\n'
@@ -215,6 +215,31 @@ void f() {{{{smf_after__brace}}}
             'mustache delimiters, which the pipeline does not support.',
           ),
         ],
+      );
+    });
+
+    test('a template that is not valid mustache is an error', () {
+      final issues = check(
+        [
+          scaffold(
+            contributions: [
+              brick({
+                'lib/a.dart':
+                    '{{#open}}never closed {{{smf_app_entry__top_level}}}',
+                'lib/b.dart': 'only {{a,b}}, which mason copies',
+              }),
+            ],
+          ),
+        ],
+        complete: false,
+      );
+
+      expect(
+        issues.single,
+        startsWith(
+          'scaffold: The template lib/a.dart of scaffold is not valid '
+          'mustache:',
+        ),
       );
     });
 
@@ -255,7 +280,7 @@ void f() {{{{smf_after__brace}}}
       expect(
         check(
           [
-            scaffold(contributions: [entryBrick()]),
+            scaffold(),
             TestModule('go', providers: [RoleProvider.plain(nav)]),
             TestModule('elsewhere', providers: [RoleProvider.plain(other)]),
             TestModule(
@@ -299,7 +324,7 @@ void f() {{{{smf_after__brace}}}
 
       expect(
         check([
-          scaffold(contributions: [entryBrick()]),
+          scaffold(),
           TestModule(
             'go',
             providers: [RoleProvider.plain(nav)],
@@ -336,6 +361,7 @@ void f() {{{{smf_after__brace}}}
         check(
           [
             scaffold(
+              bricks: false,
               contributions: [
                 brick({
                   'lib/a.dart': '{{{smf_app_entry__bootstrap_late}}}',
@@ -370,12 +396,14 @@ void f() {{{{smf_after__brace}}}
         check(
           [
             scaffold(
+              bricks: false,
               contributions: [
                 brick({
                   'lib/a.txt': '{{{smf_app_entry__bootstrap_late}}}',
                   'pubspec.yaml': 'x: {{{smf_pubspec_flutter}}}\n'
                       '{{{smf_pubspec_dependencies}}}',
                   'other.yaml': '{{{smf_pubspec_environment}}}',
+                  'sub/pubspec.yaml': '{{{smf_pubspec_dev_dependencies}}}',
                 }),
               ],
             ),
@@ -386,9 +414,12 @@ void f() {{{{smf_after__brace}}}
           contains('smf_app_entry__bootstrap_late in lib/a.txt:1 of scaffold '
               'is in a file that is not Dart'),
           contains('smf_pubspec_flutter in pubspec.yaml:1 of scaffold must be '
-              'at the start of a line of pubspec.yaml'),
+              'at the start of a line of the pubspec.yaml at the root of the '
+              'app'),
           contains('smf_pubspec_environment in other.yaml:1 of scaffold must '
               'be at the start'),
+          contains('smf_pubspec_dev_dependencies in sub/pubspec.yaml:1 of '
+              'scaffold must be at the start'),
         ],
       );
     });
@@ -412,7 +443,7 @@ void f() {{{{smf_after__brace}}}
 
       expect(
         check([
-          scaffold(contributions: [entryBrick()]),
+          scaffold(),
           TestModule(
             'm',
             sockets: const [one, two, three],
@@ -463,7 +494,7 @@ void f() {{{{smf_after__brace}}}
 
       expect(
         check([
-          scaffold(),
+          scaffold(bricks: false),
           TestModule('go', providers: [RoleProvider.plain(nav)]),
           TestModule('prov', providers: [RoleProvider.plain(service)]),
           TestModule(
@@ -508,10 +539,6 @@ void f() {{{{smf_after__brace}}}
               'null: No brick has the tag ${socket.tag} of the pipeline; the '
               'owner of pubspec.yaml puts it at the start of a line.',
             ),
-          equals(
-            'home: home contributes to the socket nav.screens.home, but no '
-            'brick has its tag smf_nav__screens__home.',
-          ),
         ],
       );
     });

@@ -15,6 +15,7 @@ final class DartFileIndex {
   const DartFileIndex({
     required this.path,
     this.imports = const [],
+    this.exports = const [],
     this.declarations = const [],
     this.invocations = const [],
     this.references = const [],
@@ -27,6 +28,9 @@ final class DartFileIndex {
 
   /// The import directives, in source order.
   final List<IndexedImport> imports;
+
+  /// The export directives, in source order; an export has no prefix.
+  final List<IndexedImport> exports;
 
   /// The top-level declarations, in source order.
   final List<IndexedDeclaration> declarations;
@@ -72,9 +76,9 @@ final class DartFileIndex {
       memberAccesses.any((access) => access.name == name);
 }
 
-/// An import directive of an indexed file.
+/// An import or export directive of an indexed file.
 final class IndexedImport {
-  /// Creates the index of an import of [uri].
+  /// Creates the index of an import or export of [uri].
   const IndexedImport(
     this.uri, {
     this.prefix,
@@ -82,7 +86,7 @@ final class IndexedImport {
     this.hide = const [],
   });
 
-  /// The imported URI, as written.
+  /// The imported or exported URI, as written.
   final String uri;
 
   /// The import prefix, if any.

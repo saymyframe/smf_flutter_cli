@@ -231,6 +231,11 @@ void main() {
 
   test('CodegenRequest explains why it is needed', () {
     expect(const CodegenRequest().description, isNull);
+    expect(const CodegenRequest().outputs, isEmpty);
+    expect(
+      const CodegenRequest(outputs: ['lib/di.config.dart']).outputs,
+      ['lib/di.config.dart'],
+    );
     expect(
       const CodegenRequest(description: 'auto_route').description,
       'auto_route',

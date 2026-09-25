@@ -7,35 +7,46 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-/// A file system where the directory at [source] cannot be renamed, as if it
-/// were on another file system, and cannot be listed if [unreadable].
-final class _Crossing extends ForwardingFileSystem {
-  _Crossing(super.delegate, this.source, {this.unreadable = false});
+/// A file system where the directories at some paths fail: they cannot be
+/// renamed, as if they were on another file system, deleted, or listed.
+final class _Faulty extends ForwardingFileSystem {
+  _Faulty(
+    super.delegate, {
+    this.noRename = const {},
+    this.noDelete = const {},
+    this.unreadable = const {},
+  });
 
-  final String source;
-  final bool unreadable;
+  final Set<String> noRename;
+  final Set<String> noDelete;
+  final Set<String> unreadable;
 
   @override
   Directory directory(dynamic path) {
     final directory = delegate.directory(path);
-    return directory.path == source ? _Stuck(this, directory) : directory;
+    final faulty = {...noRename, ...noDelete, ...unreadable};
+    return faulty.contains(directory.path)
+        ? _FaultyDirectory(this, directory)
+        : directory;
   }
 }
 
-final class _Stuck extends ForwardingFileSystemEntity<Directory, io.Directory>
+final class _FaultyDirectory
+    extends ForwardingFileSystemEntity<Directory, io.Directory>
     with ForwardingDirectory<Directory> {
-  _Stuck(this._crossing, this.delegate);
+  _FaultyDirectory(this._faulty, this.delegate);
 
-  final _Crossing _crossing;
+  final _Faulty _faulty;
 
   @override
   final io.Directory delegate;
 
   @override
-  FileSystem get fileSystem => _crossing;
+  FileSystem get fileSystem => _faulty;
 
   @override
-  Directory wrapDirectory(io.Directory delegate) => delegate as Directory;
+  Directory wrapDirectory(io.Directory delegate) =>
+      _faulty.directory(delegate.path);
 
   @override
   File wrapFile(io.File delegate) => delegate as File;
@@ -57,20 +68,29 @@ final class _Stuck extends ForwardingFileSystemEntity<Directory, io.Directory>
 
   @override
   Future<Directory> rename(String newPath) async =>
-      throw FileSystemException('Cross-device link', path);
+      _faulty.noRename.contains(path)
+          ? throw FileSystemException('Cross-device link', path)
+          : super.rename(newPath);
+
+  @override
+  Future<Directory> delete({bool recursive = false}) async =>
+      _faulty.noDelete.contains(path)
+          ? throw FileSystemException('Permission denied', path)
+          : super.delete(recursive: recursive);
 
   @override
   Stream<FileSystemEntity> list({
     bool recursive = false,
     bool followLinks = true,
   }) =>
-      _crossing.unreadable
+      _faulty.unreadable.contains(path)
           ? Stream.error(FileSystemException('Permission denied', path))
           : super.list(recursive: recursive, followLinks: followLinks);
 }
 
 void main() {
   late MemoryFileSystem fileSystem;
+  late FakeLogger logger;
 
   void write(String path, [String text = 'x']) => fileSystem.file(path)
     ..createSync(recursive: true)
@@ -78,6 +98,7 @@ void main() {
 
   setUp(() {
     fileSystem = MemoryFileSystem.test();
+    logger = FakeLogger();
     write('/tmp/smf/app/lib/main.dart', 'main');
     write('/tmp/smf/app/pubspec.yaml');
     write('/tmp/smf/app/.dart_tool/package_config.json');
@@ -95,6 +116,18 @@ void main() {
           if (entity is File) entity.path.substring(directory.length + 1),
       ]..sort();
 
+  List<String> namesIn(String directory) => [
+        for (final entity in fileSystem.directory(directory).listSync())
+          entity.basename,
+      ]..sort();
+
+  Future<void> move(TargetDecision target, {FileSystem? on}) => moveApp(
+        on ?? fileSystem,
+        source: '/tmp/smf/app',
+        target: target,
+        logger: logger,
+      );
+
   const moved = [
     'ios/Flutter/Debug.xcconfig',
     'lib/main.dart',
@@ -102,14 +135,37 @@ void main() {
   ];
 
   test('moves the app without the files of the Flutter tools', () async {
-    await moveApp(
-      fileSystem,
-      source: '/tmp/smf/app',
-      target: const TargetDecision(path: '/work/out/app'),
-    );
+    await move(const TargetDecision(path: '/work/out/app'));
 
     expect(filesIn('/work/out/app'), moved);
     expect(fileSystem.directory('/tmp/smf/app').existsSync(), isFalse);
+  });
+
+  test('moves the app on Windows', () async {
+    final windows = MemoryFileSystem.test(style: FileSystemStyle.windows);
+    for (final path in [
+      r'C:\tmp\smf\app\lib\main.dart',
+      r'C:\tmp\smf\app\ios\Flutter\Generated.xcconfig',
+      r'C:\tmp\smf\app\windows\flutter\ephemeral\generated_config.cmake',
+    ]) {
+      windows.file(path).createSync(recursive: true);
+    }
+
+    await moveApp(
+      windows,
+      source: r'C:\tmp\smf\app',
+      target: const TargetDecision(path: r'C:\work\app'),
+      logger: logger,
+    );
+
+    expect(
+      [
+        for (final entity
+            in windows.directory(r'C:\work\app').listSync(recursive: true))
+          if (entity is File) entity.path,
+      ],
+      [r'C:\work\app\lib\main.dart'],
+    );
   });
 
   test('replaces the directory that stage 1 decided to replace', () async {
@@ -117,40 +173,28 @@ void main() {
     // Another run's leftover does not stop this one.
     write('/work/app.smf-replaced-1/older.txt');
 
-    await moveApp(
-      fileSystem,
-      source: '/tmp/smf/app',
-      target: const TargetDecision(path: '/work/app', replaceExisting: true),
-    );
+    await move(const TargetDecision(path: '/work/app', replaceExisting: true));
 
     expect(filesIn('/work/app'), moved);
-    expect(
-      fileSystem.directory('/work').listSync().map((e) => e.path),
-      unorderedEquals(['/work/app', '/work/app.smf-replaced-1']),
-    );
+    expect(namesIn('/work'), ['app', 'app.smf-replaced-1']);
+    expect(logger.warnings, isEmpty);
   });
 
   test('an empty directory at the target is taken over', () async {
     fileSystem.directory('/work/app').createSync(recursive: true);
 
-    await moveApp(
-      fileSystem,
-      source: '/tmp/smf/app',
-      target: const TargetDecision(path: '/work/app'),
-    );
+    await move(const TargetDecision(path: '/work/app'));
 
     expect(filesIn('/work/app'), moved);
   });
 
-  test('never replaces a directory that appeared meanwhile', () async {
+  test('never replaces a directory that appeared meanwhile, nor a file',
+      () async {
     write('/work/app/mine.txt');
+    write('/work/notes');
 
     await expectLater(
-      moveApp(
-        fileSystem,
-        source: '/tmp/smf/app',
-        target: const TargetDecision(path: '/work/app'),
-      ),
+      move(const TargetDecision(path: '/work/app')),
       throwsA(
         isA<GenerationFailedException>().having(
           (e) => e.message,
@@ -160,17 +204,29 @@ void main() {
         ),
       ),
     );
+    await expectLater(
+      move(const TargetDecision(path: '/work/notes', replaceExisting: true)),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          '/work/notes is a file, so the app stays in /tmp/smf/app.',
+        ),
+      ),
+    );
     expect(filesIn('/work/app'), ['mine.txt']);
     expect(filesIn('/tmp/smf/app'), moved);
   });
 
-  test('copies the app when renaming cannot move it', () async {
-    fileSystem.link('/tmp/smf/app/lib/latest.dart').createSync('main.dart');
+  test('copies the app next to the target when renaming cannot move it',
+      () async {
+    fileSystem
+        .link('/tmp/smf/app/lib/sub/latest.dart')
+        .createSync('../main.dart', recursive: true);
 
-    await moveApp(
-      _Crossing(fileSystem, '/tmp/smf/app'),
-      source: '/tmp/smf/app',
-      target: const TargetDecision(path: '/work/app'),
+    await move(
+      const TargetDecision(path: '/work/app'),
+      on: _Faulty(fileSystem, noRename: {'/tmp/smf/app'}),
     );
 
     expect(filesIn('/work/app'), moved);
@@ -179,10 +235,29 @@ void main() {
       'main',
     );
     expect(
-      fileSystem.link('/work/app/lib/latest.dart').targetSync(),
-      'main.dart',
+      fileSystem.link('/work/app/lib/sub/latest.dart').targetSync(),
+      '../main.dart',
     );
+    expect(namesIn('/work'), ['app']);
     expect(fileSystem.directory('/tmp/smf/app').existsSync(), isFalse);
+  });
+
+  test('a temporary copy that cannot be deleted only warns', () async {
+    await move(
+      const TargetDecision(path: '/work/app'),
+      on: _Faulty(
+        fileSystem,
+        noRename: {'/tmp/smf/app'},
+        noDelete: {'/tmp/smf/app'},
+      ),
+    );
+
+    expect(filesIn('/work/app'), moved);
+    expect(
+      logger.warnings.single,
+      startsWith('The app is in /work/app, but its temporary copy could not '
+          'be deleted from /tmp/smf/app:'),
+    );
   });
 
   test('puts the replaced directory back when the app cannot be moved',
@@ -190,10 +265,13 @@ void main() {
     write('/work/app/old.txt');
 
     await expectLater(
-      moveApp(
-        _Crossing(fileSystem, '/tmp/smf/app', unreadable: true),
-        source: '/tmp/smf/app',
-        target: const TargetDecision(path: '/work/app', replaceExisting: true),
+      move(
+        const TargetDecision(path: '/work/app', replaceExisting: true),
+        on: _Faulty(
+          fileSystem,
+          noRename: {'/tmp/smf/app'},
+          unreadable: {'/tmp/smf/app'},
+        ),
       ),
       throwsA(
         isA<GenerationFailedException>().having(
@@ -205,6 +283,68 @@ void main() {
       ),
     );
     expect(filesIn('/work/app'), ['old.txt']);
+    expect(namesIn('/work'), ['app']);
     expect(filesIn('/tmp/smf/app'), moved);
+  });
+
+  test('names the replaced directory if it cannot be put back', () async {
+    write('/work/app/old.txt');
+
+    await expectLater(
+      move(
+        const TargetDecision(path: '/work/app', replaceExisting: true),
+        on: _Faulty(
+          fileSystem,
+          noRename: {'/tmp/smf/app', '/work/app.smf-replaced-1'},
+          unreadable: {'/tmp/smf/app'},
+        ),
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          endsWith('The directory it was to replace is at '
+              '/work/app.smf-replaced-1.'),
+        ),
+      ),
+    );
+    expect(filesIn('/work/app.smf-replaced-1'), ['old.txt']);
+  });
+
+  test('a directory that cannot be set aside keeps the app where it is',
+      () async {
+    write('/work/app/old.txt');
+
+    await expectLater(
+      move(
+        const TargetDecision(path: '/work/app', replaceExisting: true),
+        on: _Faulty(fileSystem, noRename: {'/work/app'}),
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          startsWith('The app could not be moved to /work/app, so it stays in '
+              '/tmp/smf/app:'),
+        ),
+      ),
+    );
+    expect(filesIn('/work/app'), ['old.txt']);
+  });
+
+  test('a replaced directory that cannot be deleted only warns', () async {
+    write('/work/app/old.txt');
+
+    await move(
+      const TargetDecision(path: '/work/app', replaceExisting: true),
+      on: _Faulty(fileSystem, noDelete: {'/work/app.smf-replaced-1'}),
+    );
+
+    expect(filesIn('/work/app'), moved);
+    expect(
+      logger.warnings.single,
+      startsWith('The app replaced /work/app, but the old files could not be '
+          'deleted from /work/app.smf-replaced-1:'),
+    );
   });
 }

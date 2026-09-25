@@ -102,7 +102,8 @@ void main() {
       );
       expect(
         snapshot,
-        file.readAsStringSync(),
+        // Git may check the snapshot out with Windows line endings.
+        file.readAsStringSync().replaceAll('\r\n', '\n'),
         reason: 'The rendered app differs from ${file.path}. If the change '
             'is intended, run the test with $_update=1 and review the diff.',
       );

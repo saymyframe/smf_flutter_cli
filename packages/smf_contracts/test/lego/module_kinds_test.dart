@@ -29,6 +29,8 @@ void main() {
     expect(kind.compositionFileOf(_home), isNull);
     expect(kind.allowsFile(_home, 'lib/core/router/app_router.dart'), isTrue);
     expect(kind.allowsFile(_home, 'lib/features/home/x.dart'), isFalse);
+    // Case does not matter, as on the file systems of macOS and Windows.
+    expect(kind.allowsFile(_home, 'lib/Features/home/x.dart'), isFalse);
   });
 
   test('a feature requires the router and lives in its own directory', () {

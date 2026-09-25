@@ -12,7 +12,7 @@ void main() {
   /// The modules of a small app, with [contributions] of a module `extra`.
   List<SmfModule> modulesWith([List<Contribution> contributions = const []]) =>
       [
-        scaffold(contributions: [entryBrick()]),
+        scaffold(),
         TestModule('extra', contributions: contributions),
       ];
 
@@ -166,6 +166,59 @@ void main() {
     expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
   });
 
+  test('a directory that appears meanwhile keeps the app where it is',
+      () async {
+    final onRun = runner.onRun!;
+    runner.onRun = (call) {
+      host.fileSystem.file('/work/my_app/mine.txt').createSync(recursive: true);
+      return onRun(call);
+    };
+
+    await expectLater(
+      pipeline(modulesWith()).run(request()),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          allOf(
+            startsWith('/work/my_app appeared while the app was being '
+                'generated, so the app stays in '),
+            isNot(contains('The app so far')),
+          ),
+        ),
+      ),
+    );
+    expect(
+      host.fileSystem.directory('/work/my_app').listSync().single.path,
+      '/work/my_app/mine.txt',
+    );
+  });
+
+  test('an unexpected error after rendering says where the app is', () async {
+    host = FakeHost(processRunner: runner, terminal: true);
+
+    await expectLater(
+      pipeline(
+        modulesWith([
+          const PostGenStep(ToolRef('dart'), ['run', 'x'], skippable: true),
+        ]),
+      ).run(
+        const CreateRequest(
+          appName: 'my_app',
+          org: 'com.example',
+          outputDirectory: '/work',
+          modules: [ModuleId('extra')],
+        ),
+      ),
+      // The prompter has no answer for the step.
+      throwsA(isA<StateError>()),
+    );
+
+    final kept = runner.calls.first.workingDirectory!;
+    expect(host.logger.warnings.last, 'The app so far is in $kept.');
+    expect(host.fileSystem.file('$kept/lib/main.dart').existsSync(), isTrue);
+  });
+
   test('--explain generates nothing', () async {
     expect(await pipeline(modulesWith()).run(request(explain: true)), isNull);
 
@@ -180,7 +233,7 @@ void main() {
     await expectLater(
       pipeline(
         modulesWith([
-          BrickContribution(bundle('broken', files: {'lib/b.dart': '{{#a}}'})),
+          BrickContribution(bundle('broken', files: {'lib/b.dart': '{{a}}'})),
         ]),
       ).run(request()),
       throwsA(isA<GenerationFailedException>()),

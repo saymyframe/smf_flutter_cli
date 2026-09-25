@@ -29,6 +29,11 @@ final class _ThrowingProvider extends RoleProvider<String> {
       throw StateError('hook broke');
 }
 
+String _asIs(String value) => value;
+
+/// The tag of the minimum iOS version.
+const _ios = '{{{smf_app_entry__ios_deployment_target}}}';
+
 /// Validates an app of [modules], all requested.
 ValidationResult _validate(List<SmfModule> modules) {
   final registry = ModuleRegistry(modules);
@@ -242,12 +247,29 @@ void main() {
       );
       final result = _validate([
         entry,
-        TestModule('parent', socketFamilies: [moduleFamily]),
+        TestModule(
+          'parent',
+          socketFamilies: [moduleFamily],
+          contributions: [
+            BrickContribution(
+              bundle(
+                'parent',
+                files: {'lib/parent.dart': '{{{smf_parent__items__x}}}\n'},
+              ),
+            ),
+          ],
+        ),
         TestModule(
           'home',
           dependsOn: {'parent'},
           uses: {familyRole},
           contributions: [
+            BrickContribution(
+              bundle(
+                'home',
+                files: {'lib/home.dart': '{{{smf_family__screens__home}}}\n'},
+              ),
+            ),
             SocketContribution.code(family('home'), const Fragment('@A()')),
             SocketContribution.code(unknown('home'), const Fragment('@B()')),
             SocketContribution.code(moduleFamily('x'), const Fragment('y')),
@@ -307,13 +329,14 @@ void main() {
             BrickContribution(
               bundle(
                 'home',
-                paths: ['lib/features/home/a.dart', 'lib/main.dart'],
+                paths: ['lib/features/home/a.dart', 'lib/core/home.dart'],
                 hooks: true,
               ),
               vars: const {
                 'app_name': 1,
                 'smf_x': 1,
                 'has_y': 1,
+                'snakeCase': 1,
                 'fine': 1,
               },
             ),
@@ -334,10 +357,13 @@ void main() {
             'home: The brick home of home sets the variable has_y, which the '
             'pipeline sets itself.'),
         equals(
-            'home: The module home generates lib/main.dart, where modules of the '
-            'feature kind may not.'),
+            'home: The brick home of home sets the variable snakeCase, which '
+            'the pipeline sets itself.'),
+        equals(
+            'home: The module home generates lib/core/home.dart, where modules '
+            'of the feature kind may not.'),
       ]);
-      expect(result.issues.last.path, 'lib/main.dart');
+      expect(result.issues.last.path, 'lib/core/home.dart');
     });
 
     test('variables that mason would change are errors', () {
@@ -348,11 +374,13 @@ void main() {
           contributions: [
             BrickContribution(
               bundle('home', paths: ['lib/a.dart']),
-              vars: const {
+              vars: {
                 'text': 'a\\\nb',
-                'items': ['fine', r'caf\é'],
-                'map': {'k': 'fine'},
+                'items': const ['fine', r'caf\é'],
+                'map': const {'k': 'fine'},
                 'number': 1,
+                'lambda': (Object? context) => 'x',
+                'object': Object(),
               },
             ),
           ],
@@ -369,16 +397,41 @@ void main() {
           'backslash before a line break or a non-ASCII character, which '
           'mason removes.',
         ),
+        equals(
+          'home: The variable lambda of the brick home of home is not plain '
+          'data: strings, numbers, booleans, and lists and maps of them.',
+        ),
+        equals(
+          'home: The variable object of the brick home of home is not plain '
+          'data: strings, numbers, booleans, and lists and maps of them.',
+        ),
       ]);
+    });
+
+    test('paths with variables are left to the rendering', () {
+      final result = _validate([
+        entry,
+        TestModule(
+          'a',
+          contributions: [
+            BrickContribution(bundle('a', paths: ['lib/{{name}}.dart'])),
+          ],
+        ),
+        TestModule(
+          'b',
+          contributions: [
+            BrickContribution(bundle('b', paths: ['lib/{{name}}.dart'])),
+          ],
+        ),
+      ]);
+
+      expect(result.issues, isEmpty);
     });
 
     test('every file has one brick', () {
       final result = _validate([
-        scaffold(
-          contributions: [
-            BrickContribution(bundle('a', paths: ['lib/main.dart'])),
-          ],
-        ),
+        // Its brick generates lib/main.dart.
+        scaffold(),
         TestModule(
           'other',
           contributions: [
@@ -489,7 +542,12 @@ void main() {
         'bare',
         kind: ModuleKinds.scaffold,
         providers: [const RoleProvider.plain(appEntryRole)],
-        contributions: [AppEntryRole.iosDeploymentTarget.value('13.0')],
+        contributions: [
+          AppEntryRole.iosDeploymentTarget.value('13.0'),
+          BrickContribution(
+            bundle('ios', files: {'ios/Podfile': "platform :ios, '$_ios'"}),
+          ),
+        ],
       ),
     ]);
 
@@ -499,6 +557,80 @@ void main() {
       'every pubspec.yaml.',
     );
     expect(result.issues.single.origin, isNull);
+  });
+
+  test('a section of the pubspec with entries needs its tag', () {
+    BrickContribution pubspec(String text) =>
+        BrickContribution(bundle('app', files: {'pubspec.yaml': text}));
+    const withoutFlutter = 'name: app\n'
+        '{{{smf_pubspec_environment}}}\n'
+        '{{{smf_pubspec_dependencies}}}\n'
+        '{{{smf_pubspec_dev_dependencies}}}\n';
+
+    final podfile = BrickContribution(
+      bundle('ios', files: {'ios/Podfile': "platform :ios, '$_ios'"}),
+    );
+    expect(
+      _messages(
+        _validate([
+          scaffold(
+            bricks: false,
+            contributions: [
+              pubspec(withoutFlutter),
+              podfile,
+              const PubspecContribution.flutter(assets: ['assets/']),
+            ],
+          ),
+        ]),
+      ),
+      [
+        equals(
+          'scaffold: The pubspec.yaml of scaffold has no tag '
+          'smf_pubspec_flutter, so that section of the pubspec would be '
+          'lost.',
+        ),
+      ],
+    );
+    expect(
+      _validate([
+        scaffold(
+          bricks: false,
+          contributions: [pubspec(withoutFlutter), podfile],
+        ),
+      ]).issues,
+      isEmpty,
+    );
+  });
+
+  test('the outputs of code generation are Dart files inside the app', () {
+    String problem(String output) =>
+        'scaffold: The output $output of the code generation of scaffold is '
+        'not the path of a Dart file inside the app, such as '
+        'lib/core/di/dependencies.config.dart.';
+
+    expect(
+      _messages(
+        _validate([
+          scaffold(
+            contributions: const [
+              CodegenRequest(
+                outputs: [
+                  'lib/di.config.dart',
+                  '../outside.dart',
+                  'lib/notes.txt',
+                  r'lib\win.dart',
+                ],
+              ),
+            ],
+          ),
+        ]),
+      ),
+      [
+        problem('../outside.dart'),
+        problem('lib/notes.txt'),
+        problem(r'lib\win.dart'),
+      ],
+    );
   });
 
   test('code generation adds build_runner to the dev dependencies', () {
@@ -517,6 +649,25 @@ void main() {
     expect(builder.constraintText, '^2.7.0');
     expect(builder.origins, [const PipelineOrigin()]);
     expect(without.pubspec.devDependencies, isNot(contains('build_runner')));
+
+    // A module that needs an older build_runner is at fault.
+    final older = _validate([
+      scaffold(
+        contributions: const [
+          CodegenRequest(),
+          PubspecContribution.hosted(
+            'build_runner',
+            '>=2.4.0 <2.7.0',
+            dev: true,
+          ),
+        ],
+      ),
+    ]);
+    expect(older.issues.single.message, contains('have no version in common'));
+    expect(
+      older.issues.single.origin,
+      const ModuleOrigin(ModuleId('scaffold')),
+    );
   });
 
   test('pubspec problems are reported', () {
@@ -625,6 +776,79 @@ void main() {
   });
 
   group('sockets', () {
+    test('code for a socket without a tag is an error of its owner', () {
+      final sockets = <SocketRef>[];
+      final nav = TestRole<NoDsl>('tabs', sockets: sockets);
+      final observers = SocketRef<FactoryListSocket>.role(
+        nav,
+        'observers',
+        const FactoryListSocket(),
+      );
+      sockets.add(observers);
+      const hook = SocketRef<CodeSocket>.module(
+        ModuleId('parent'),
+        'hook',
+        CodeSocket(),
+      );
+
+      expect(
+        _messages(
+          _validate([
+            entry,
+            TestModule('go', providers: [RoleProvider.plain(nav)]),
+            TestModule('parent', sockets: const [hook]),
+            TestModule(
+              'child',
+              dependsOn: {'parent'},
+              uses: {nav},
+              contributions: [
+                SocketContribution.item(
+                  observers,
+                  const Fragment('() => Watcher()'),
+                ),
+                const SocketContribution.code(hook, Fragment('a();')),
+              ],
+            ),
+          ]),
+        ),
+        [
+          equals(
+            'go: child contributes to the socket tabs.observers, but no '
+            'template of the app has its tag smf_tabs__observers, so what '
+            'they contribute would be lost.',
+          ),
+          equals(
+            'parent: child contributes to the socket parent.hook, but no '
+            'template of the app has its tag smf_parent__hook, so what they '
+            'contribute would be lost.',
+          ),
+        ],
+      );
+    });
+
+    test('a required value of a module is an error of the module', () {
+      const version = SocketRef<ValueSocket<String>>.module(
+        ModuleId('lib_x'),
+        'version',
+        ValueSocket(policy: MaxPolicy(), renderer: _asIs, required: true),
+      );
+
+      expect(
+        _messages(
+          _validate([
+            entry,
+            TestModule('lib_x', sockets: const [version]),
+          ]),
+        ),
+        [
+          equals(
+            'lib_x: The socket lib_x.version needs a value, but nothing '
+            'contributes one; the module lib_x contributes its base value.',
+          ),
+        ],
+      );
+    });
+
     test(
         'a required value that nothing contributes is an error of the '
         'provider', () {

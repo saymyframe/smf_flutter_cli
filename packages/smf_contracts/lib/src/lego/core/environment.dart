@@ -115,7 +115,11 @@ final class SmfProcessResult {
 ///
 /// The executable is always an absolute path, found with
 /// [SmfEnvironment.findExecutable], so the result does not depend on how a
-/// shell would resolve the name.
+/// shell would resolve the name. On Windows it may be a batch file, such as
+/// `flutter.bat`; the runner starts it the way the host needs.
+///
+/// Both methods throw if the command cannot start, as when the file is not
+/// executable.
 abstract interface class SmfProcessRunner {
   /// Runs [executable] with [arguments] and captures its output.
   Future<SmfProcessResult> run(

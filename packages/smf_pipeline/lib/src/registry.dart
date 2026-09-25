@@ -389,7 +389,7 @@ List<String> _optionProblems(List<Role> roles) {
         );
       }
       if (CreateOptions.names.contains(name) ||
-          name == 'help' ||
+          const {'help', 'verbose', 'version'}.contains(name) ||
           name.startsWith('no-')) {
         problems.add(
           'The option --$name of the ${role.id} is an option of the '

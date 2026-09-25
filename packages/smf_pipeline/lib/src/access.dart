@@ -27,3 +27,10 @@ import 'package:smf_pipeline/src/resolver.dart';
       return (access: open, when: const {});
   }
 }
+
+/// [origin] as the owner of files and brick variables: a module's variant
+/// is its module.
+ContributionOrigin ownerOf(ContributionOrigin origin) => switch (origin) {
+      ModuleOrigin(:final module) => ModuleOrigin(module),
+      _ => origin,
+    };

@@ -208,6 +208,15 @@ Future<TargetDecision> _decideTarget(
       'Cannot create the app at $path, because a file is there.',
     );
   }
+  for (var parent = context.dirname(path);
+      parent != context.dirname(parent);
+      parent = context.dirname(parent)) {
+    if (await fileSystem.isFile(parent)) {
+      throw SmfUsageException(
+        'Cannot create the app at $path, because $parent is a file.',
+      );
+    }
+  }
   final directory = fileSystem.directory(path);
   if (!directory.existsSync() || directory.listSync().isEmpty) {
     return TargetDecision(path: path);
@@ -224,12 +233,13 @@ Future<TargetDecision> _decideTarget(
     }
     decision = await environment.prompter.select(
       '$path already exists. What should happen to it?',
-      const [OnConflict.replace, OnConflict.copy, OnConflict.cancel],
+      const [OnConflict.copy, OnConflict.replace, OnConflict.cancel],
       display: (choice) => switch (choice) {
         OnConflict.replace => 'Replace it with the new app',
         OnConflict.copy => 'Keep it and create the app next to it',
         _ => 'Cancel',
       },
+      defaultValue: OnConflict.copy,
     );
   }
   switch (decision) {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:mason/mason.dart' show MasonBundledFile, RenderTemplate;
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
@@ -66,10 +67,14 @@ final class TemplateSection {
     required this.path,
     required this.line,
     this.inverted = false,
+    this.sections = const [],
   });
 
   /// The name of the section, such as `has_router`.
   final String name;
+
+  /// The names of the sections this one is in, outermost first.
+  final List<String> sections;
 
   /// The path of the template file in its brick.
   final String path;
@@ -108,14 +113,98 @@ final class TemplateScan {
   final int? delimiterLine;
 }
 
+/// The text of [file], a file of a bundle, or `null` if mason copies it as
+/// it is: a file the bundle calls binary, or one that is not UTF-8, since
+/// mason's bundler calls a file binary only by some extensions.
+String? templateTextOf(MasonBundledFile file) {
+  if (file.type != 'text') return null;
+  try {
+    return utf8.decode(base64.decode(file.data));
+  } on FormatException {
+    return null;
+  }
+}
+
 /// The text files of [brick], by path with forward slashes, decoded from
-/// its bundle.
+/// its bundle; see [templateTextOf].
 Map<String, String> templateFilesOf(BrickContribution brick) => {
       for (final file in brick.bundle.files)
-        if (file.type == 'text')
-          file.path.replaceAll(r'\', '/'):
-              utf8.decode(base64.decode(file.data), allowMalformed: true),
+        if (templateTextOf(file) case final text?)
+          file.path.replaceAll(r'\', '/'): text,
     };
+
+/// A tag that mason renders; mason copies a text file without one as it
+/// is.
+final RegExp masonTag = RegExp('{{([^;,=]*?)}}');
+
+/// The case lambdas of mason, which a template calls as
+/// `{{name.snakeCase()}}` or opens as a section, `{{#snakeCase}}`.
+const Set<String> masonLambdas = {
+  'camelCase',
+  'constantCase',
+  'dotCase',
+  'headerCase',
+  'lowerCase',
+  'mustacheCase',
+  'pascalCase',
+  'pascalDotCase',
+  'paramCase',
+  'pathCase',
+  'sentenceCase',
+  'snakeCase',
+  'titleCase',
+  'upperCase',
+};
+
+/// The variables that mason sets in every template.
+const Set<String> masonVariables = {
+  '__LEFT_CURLY_BRACKET__',
+  '__RIGHT_CURLY_BRACKET__',
+};
+
+final RegExp _lambdaCall = RegExp(r'\.(\w+)\(\)$');
+
+/// The variable that [name], a name in a template, reads: `name` for
+/// `name.snakeCase()` and `name.first`, or an empty name for `.`, the
+/// current item of a list.
+String variableOf(String name) {
+  var variable = name.trim();
+  while (true) {
+    final call = _lambdaCall.firstMatch(variable);
+    if (call == null || !masonLambdas.contains(call[1])) break;
+    variable = variable.substring(0, call.start);
+  }
+  return variable.split('.').first;
+}
+
+/// The names of the variables and sections of [scan] that [vars] do not
+/// set and mason does not either, which mustache would render as nothing.
+///
+/// A name inside a section over a list or a map may be a field of its
+/// items, so it is not checked.
+List<String> unsetNames(TemplateScan scan, Map<String, Object?> vars) {
+  bool inItems(List<String> sections) => sections.any(
+        (section) => switch (vars[variableOf(section)]) {
+          List<Object?>() || Map<Object?, Object?>() => true,
+          _ => false,
+        },
+      );
+  bool known(String name) {
+    final variable = variableOf(name);
+    return variable.isEmpty ||
+        vars.containsKey(variable) ||
+        masonVariables.contains(variable) ||
+        masonLambdas.contains(variable);
+  }
+
+  return {
+    for (final tag in scan.tags)
+      if (!inItems(tag.sections) && !known(tag.name)) variableOf(tag.name),
+    for (final section in scan.sections)
+      if (!inItems(section.sections) && !known(section.name))
+        variableOf(section.name),
+  }.toList();
+}
 
 final RegExp _tagName = RegExp(r'^smf_[a-z0-9_]+$');
 
@@ -154,15 +243,16 @@ TemplateScan scanTemplate(String path, String text) {
       final name = content.substring(1).trim();
       switch (marker) {
         case '#' || '^':
-          sections.add(name);
           opened.add(
             TemplateSection(
               name: name,
               path: path,
               line: lineOf(start) + 1,
               inverted: marker == '^',
+              sections: List.unmodifiable(sections),
             ),
           );
+          sections.add(name);
           continue;
         case '/':
           final open = sections.lastIndexOf(name);
@@ -318,6 +408,20 @@ BrickTags scanBricks({
 
     for (final MapEntry(key: path, value: text)
         in templateFilesOf(brick).entries) {
+      if (masonTag.hasMatch(text)) {
+        try {
+          text.render(const {});
+        } on Object catch (error) {
+          issues.add(
+            SmfIssue(
+              'The template $path of $origin is not valid mustache: $error',
+              origin: origin,
+              path: path,
+            ),
+          );
+          continue;
+        }
+      }
       final scan = scanTemplate(path, text);
       if (scan.delimiterLine case final line?) {
         issues.add(
@@ -405,9 +509,10 @@ BrickTags scanBricks({
 ///   template or a provider of the socket's role, a module whose roles
 ///   include the role of a family member, the module that owns a socket of
 ///   a module, or anyone for a socket of the pipeline;
-/// - no variable, a tag or not, comes right after a `{`, no template
-///   changes the mustache delimiters or includes a partial, and the path of
-///   every file uses no mustache but variables;
+/// - every template that mason renders is valid mustache; no variable, a
+///   tag or not, comes right after a `{`, no template changes the mustache
+///   delimiters or includes a partial, and the path of every file uses no
+///   mustache but variables;
 /// - a presence flag, `has_<role>`, is of a role that the brick's owner
 ///   provides, requires or uses, or of a role open to all modules: the
 ///   pipeline sets no other;
@@ -432,8 +537,8 @@ List<SmfIssue> checkTemplateTags({
 /// Checks that the bricks among [collection]'s contributions that apply hold
 /// every tag they must: of every socket of a present role, in the bricks of
 /// the role's template or providers; of every socket of a module, in its
-/// bricks; of every socket of the pipeline; and of every member of a socket
-/// family that something contributes to.
+/// bricks; and of every socket of the pipeline. Stage 5 checks the sockets
+/// that get contributions, members of socket families included.
 ///
 /// The contract harness runs it; the pipeline leaves it to the contract
 /// tests of the modules.
@@ -487,10 +592,10 @@ Iterable<SmfIssue> _placeIssues(
     }
     for (final (tag, origin) in places) {
       if (socket.isPipeline &&
-          (tag.path.split('/').last != 'pubspec.yaml' || tag.column != 0)) {
+          (tag.path != 'pubspec.yaml' || tag.column != 0)) {
         yield SmfIssue(
           'The tag $name in ${tag.path}:${tag.line} of $origin must be at '
-          'the start of a line of pubspec.yaml.',
+          'the start of a line of the pubspec.yaml at the root of the app.',
           origin: origin,
           path: tag.path,
         );
@@ -569,20 +674,6 @@ Iterable<SmfIssue> _missingTagIssues(
     yield SmfIssue(
       'No brick has the tag ${socket.tag} of the pipeline; the owner of '
       'pubspec.yaml puts it at the start of a line.',
-    );
-  }
-  final reported = <SocketRef>{};
-  for (final collected in collection.applyingOf<SocketContribution>()) {
-    final socket = (collected.contribution as SocketContribution).socket;
-    if (socket.familyKey.isEmpty ||
-        found.containsKey(socket) ||
-        !reported.add(socket)) {
-      continue;
-    }
-    yield SmfIssue(
-      '${collected.origin} contributes to the $socket, but no brick has its '
-      'tag ${socket.tag}.',
-      origin: collected.origin,
     );
   }
 }
