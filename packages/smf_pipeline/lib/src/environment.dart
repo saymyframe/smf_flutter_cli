@@ -26,6 +26,18 @@ final class FlutterSdk {
   final String? dartVersion;
 }
 
+/// Thrown when the executable of a tool is not on the machine.
+final class ToolNotFoundException implements Exception {
+  /// Creates the exception for the executable [executable].
+  const ToolNotFoundException(this.executable);
+
+  /// The executable as the tool names it, such as `firebase`.
+  final String executable;
+
+  @override
+  String toString() => 'The executable $executable was not found.';
+}
+
 /// A command ready to run: an absolute executable, all its arguments and its
 /// environment variables.
 final class ResolvedTool {
@@ -212,7 +224,7 @@ final class PipelineEnvironment implements SmfEnvironment {
   /// `flutter` and `dart` stand for the SDK the preflight checks found;
   /// other names are looked up with [findExecutable]. The command's `PATH`
   /// is the tool's own, if it has one, followed by [path]. Throws a
-  /// [StateError] if the executable cannot be found.
+  /// [ToolNotFoundException] if the executable cannot be found.
   Future<ResolvedTool> resolveTool(
     ToolRef tool, [
     List<String> arguments = const [],
@@ -222,9 +234,7 @@ final class PipelineEnvironment implements SmfEnvironment {
       'dart' => sdk?.dart,
       final name => await findExecutable(name),
     };
-    if (executable == null) {
-      throw StateError('The executable ${tool.executable} was not found.');
-    }
+    if (executable == null) throw ToolNotFoundException(tool.executable);
     bool isPath(String key) =>
         _isWindows ? key.toUpperCase() == 'PATH' : key == 'PATH';
     final toolPath = [

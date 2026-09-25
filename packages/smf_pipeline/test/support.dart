@@ -10,10 +10,13 @@ import 'package:smf_pipeline/src/resolver.dart';
 // keeps internal, through this file.
 export 'package:smf_pipeline/src/choices.dart';
 export 'package:smf_pipeline/src/collector.dart';
+export 'package:smf_pipeline/src/environment.dart';
 export 'package:smf_pipeline/src/errors.dart';
 export 'package:smf_pipeline/src/explain.dart';
 export 'package:smf_pipeline/src/identity.dart';
 export 'package:smf_pipeline/src/order.dart';
+export 'package:smf_pipeline/src/pipeline.dart';
+export 'package:smf_pipeline/src/postgen.dart';
 export 'package:smf_pipeline/src/preflight.dart';
 export 'package:smf_pipeline/src/pubspec.dart';
 export 'package:smf_pipeline/src/resolver.dart';
@@ -610,5 +613,88 @@ final class TestCheck extends PreflightCheck {
     installs++;
     if (afterInstall != null) status = afterInstall!;
     return ToolInstall(binDirs: binDirs);
+  }
+}
+
+/// A command that a [RecordingRunner] was asked to run.
+final class RecordedCall {
+  const RecordedCall({
+    required this.executable,
+    required this.arguments,
+    required this.workingDirectory,
+    required this.environment,
+    required this.runInShell,
+    required this.interactive,
+  });
+
+  final String executable;
+  final List<String> arguments;
+  final String? workingDirectory;
+  final Map<String, String> environment;
+  final bool runInShell;
+  final bool interactive;
+
+  /// The executable's name and the arguments, as a line.
+  String get line => [executable.split('/').last, ...arguments].join(' ');
+
+  @override
+  String toString() => line;
+}
+
+/// A process runner that records every call and answers with [onRun] and
+/// [onInteractive]; by default every command succeeds.
+final class RecordingRunner implements SmfProcessRunner {
+  RecordingRunner({this.onRun, this.onInteractive});
+
+  /// Answers a call of [run].
+  SmfProcessResult Function(RecordedCall call)? onRun;
+
+  /// Answers a call of [runInteractive] with an exit code.
+  int Function(RecordedCall call)? onInteractive;
+
+  /// The calls, in order.
+  final List<RecordedCall> calls = [];
+
+  /// The lines of the calls, in order.
+  List<String> get lines => [for (final call in calls) call.line];
+
+  @override
+  Future<SmfProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    final call = RecordedCall(
+      executable: executable,
+      arguments: arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      runInShell: runInShell,
+      interactive: false,
+    );
+    calls.add(call);
+    return onRun?.call(call) ?? const SmfProcessResult(exitCode: 0);
+  }
+
+  @override
+  Future<int> runInteractive(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    final call = RecordedCall(
+      executable: executable,
+      arguments: arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      runInShell: runInShell,
+      interactive: true,
+    );
+    calls.add(call);
+    return onInteractive?.call(call) ?? 0;
   }
 }

@@ -1,5 +1,4 @@
 import 'package:smf_contracts/lego_core.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -212,11 +211,17 @@ void main() {
 
       await expectLater(
         environment.resolveTool(const ToolRef('flutter')),
-        throwsStateError,
+        throwsA(isA<ToolNotFoundException>()),
       );
       await expectLater(
         environment.resolveTool(const ToolRef('firebase')),
-        throwsStateError,
+        throwsA(
+          isA<ToolNotFoundException>().having(
+            (e) => '$e',
+            'message',
+            'The executable firebase was not found.',
+          ),
+        ),
       );
       expect(
         (await environment.resolveTool(const ToolRef('/sdk/bin/dart')))

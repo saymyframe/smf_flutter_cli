@@ -14,6 +14,8 @@ export 'src/environment.dart'
     show FlutterSdk, PipelineEnvironment, ResolvedTool;
 export 'src/errors.dart' show GenerationFailedException, RegistryException;
 export 'src/host.dart';
-export 'src/pipeline.dart' show CreatePipeline, GenerationPlan, LeftOut;
+export 'src/pipeline.dart'
+    show CreatePipeline, CreatePlanning, GeneratedApp, GenerationPlan, LeftOut;
+export 'src/postgen.dart' show SkippedStep;
 export 'src/registry.dart' show ModuleRegistry;
 export 'src/request.dart' show CreateOptions, CreateRequest, OnConflict;

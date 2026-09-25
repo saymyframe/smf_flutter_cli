@@ -6,10 +6,13 @@ import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/explain.dart';
 import 'package:smf_pipeline/src/host.dart';
 import 'package:smf_pipeline/src/identity.dart';
+import 'package:smf_pipeline/src/move.dart';
 import 'package:smf_pipeline/src/order.dart';
+import 'package:smf_pipeline/src/postgen.dart';
 import 'package:smf_pipeline/src/preflight.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
+import 'package:smf_pipeline/src/render.dart';
 import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/selection.dart';
@@ -88,8 +91,32 @@ final class GenerationPlan {
   final List<LeftOut> leftOut;
 }
 
-/// The stages of `smf create` up to the choices of the roles: what to
-/// generate, checked, with the machine ready for it.
+/// The app that `smf create` generated.
+final class GeneratedApp {
+  /// Creates the record of the app [name] at [path].
+  const GeneratedApp({
+    required this.name,
+    required this.path,
+    this.leftOut = const [],
+    this.skippedSteps = const [],
+  });
+
+  /// The package name of the app, such as `my_app`.
+  final String name;
+
+  /// The absolute path of the app's directory.
+  final String path;
+
+  /// The modules lenient mode left out.
+  final List<LeftOut> leftOut;
+
+  /// The post-generation steps that did not run, with their commands for
+  /// the user to run later.
+  final List<SkippedStep> skippedSteps;
+}
+
+/// The `create` command of SMF: generates a Flutter app from the modules of
+/// a [registry].
 ///
 /// The pipeline knows no role and no module: everything specific comes from
 /// the [registry] and the hooks of its roles.
@@ -103,6 +130,98 @@ final class CreatePipeline {
   /// The machine the pipeline runs on.
   final SmfHost host;
 
+  /// Generates the app of [request] and returns it, or `null` after
+  /// `--explain` printed what would happen.
+  ///
+  /// It plans the app in the stages 1 to 7 (see [CreatePlanning.plan]),
+  /// then:
+  /// 8. Rendering: the files of the app, in memory.
+  /// 9. Post-generation: in a temporary directory, `flutter pub get`, code
+  ///    generation, the steps of the modules, `dart fix` and
+  ///    `dart format`.
+  /// 10. Moving: the app goes to its directory, without the files Flutter
+  ///    writes with the temporary path, and `flutter pub get` writes them
+  ///    again there.
+  ///
+  /// If a stage after rendering fails, the app stays in the temporary
+  /// directory, which the error names.
+  ///
+  /// Throws a [GenerationFailedException] with the errors found, or an
+  /// [SmfUsageException] for a problem of the command line.
+  Future<GeneratedApp?> run(CreateRequest request) async {
+    final plan = await this.plan(request);
+    if (plan == null) return null;
+    try {
+      return await _generate(plan);
+    } finally {
+      await plan.environment.dispose();
+    }
+  }
+
+  Future<GeneratedApp> _generate(GenerationPlan plan) async {
+    final environment = plan.environment;
+    final fileSystem = environment.fileSystem;
+    final logger = environment.logger;
+
+    final rendering = logger.progress('Rendering the app');
+    final RenderedApp app;
+    try {
+      app = renderApp(
+        registry: registry,
+        resolution: plan.resolution,
+        collection: plan.collection,
+        context: plan.context,
+        choices: plan.choices,
+        pubspec: plan.pubspec,
+      );
+    } on Object {
+      rendering.fail();
+      rethrow;
+    }
+    rendering.complete();
+
+    final temporary =
+        await fileSystem.systemTempDirectory.createTemp('smf_create_');
+    final directory = temporary.childDirectory(plan.context.appName);
+    for (final file in app.files.values) {
+      final written = fileSystem.file(
+        fileSystem.path.joinAll([directory.path, ...file.path.split('/')]),
+      );
+      await written.parent.create(recursive: true);
+      await written.writeAsBytes(file.bytes);
+    }
+
+    final target = plan.selection.target;
+    final List<SkippedStep> skipped;
+    try {
+      skipped = await runPostGen(
+        directory: directory.path,
+        environment: environment,
+        steps: plan.postGenOrder.contributions,
+        codegen: plan.collection.applyingOf<CodegenRequest>().isNotEmpty,
+        fullDartFix: plan.request.dartFix,
+      );
+      await moveApp(fileSystem, source: directory.path, target: target);
+    } on GenerationFailedException catch (error) {
+      throw GenerationFailedException(
+        '${error.message}\nThe app so far is in ${directory.path}.',
+        issues: error.issues,
+      );
+    }
+    await temporary.delete(recursive: true);
+    await getPackagesInPlace(environment, target.path);
+    return GeneratedApp(
+      name: plan.context.appName,
+      path: target.path,
+      leftOut: plan.leftOut,
+      skippedSteps: skipped,
+    );
+  }
+}
+
+/// The stages 1 to 7 of `smf create`, which [CreatePipeline.run] runs
+/// before it renders the app. The tests of the pipeline run them alone.
+extension CreatePlanning on CreatePipeline {
   /// Runs the stages 1 to 7 for [request] and returns the plan, or `null`
   /// after `--explain` printed what would happen.
   ///
