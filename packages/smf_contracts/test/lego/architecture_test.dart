@@ -44,10 +44,13 @@ String? _target(File file, String uri) {
 bool _isCore(String path) =>
     path == 'lego_core.dart' || path.startsWith('src/lego/core/');
 
+/// The templates of the lego roles are bricks bundled into
+/// `bundles/<role>_role_bundle.dart`.
 bool _isLego(String path) =>
     path == 'lego.dart' ||
     path == 'lego_core.dart' ||
-    path.startsWith('src/lego/');
+    path.startsWith('src/lego/') ||
+    RegExp(r'^bundles/[a-z_]+_role_bundle\.dart$').hasMatch(path);
 
 String _relative(File file) => file.path
     .substring(file.path.lastIndexOf('lib${Platform.pathSeparator}') + 4)

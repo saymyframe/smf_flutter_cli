@@ -41,6 +41,72 @@ void main() {
     });
   });
 
+  group('SmfNames.isDartIdentifier', () {
+    test('accepts identifiers that are not reserved words', () {
+      for (final name in ['id', 'userId', r'$x', '_private', 'HomeScreen']) {
+        expect(SmfNames.isDartIdentifier(name), isTrue, reason: name);
+      }
+    });
+
+    test('rejects reserved words and malformed names', () {
+      for (final name in ['class', 'new', 'await', 'yield', '', '1a', 'a-b']) {
+        expect(SmfNames.isDartIdentifier(name), isFalse, reason: name);
+      }
+      expect(SmfNames.reservedWords, contains('switch'));
+    });
+  });
+
+  group('SmfNames.snakeCaseOf', () {
+    test('splits camelCase words, keeping digits with the word before', () {
+      expect(SmfNames.snakeCaseOf('HomeScreen'), 'home_screen');
+      expect(SmfNames.snakeCaseOf('userId'), 'user_id');
+      expect(SmfNames.snakeCaseOf('HTTPClient'), 'http_client');
+      expect(SmfNames.snakeCaseOf('Screen2'), 'screen2');
+      expect(SmfNames.snakeCaseOf('ID'), 'id');
+      expect(SmfNames.snakeCaseOf('a'), 'a');
+    });
+
+    test('always returns a valid snake_case name', () {
+      for (final name in ['A2B', 'HTTP2Client', 'aB', 'ABc', 'x1Y2']) {
+        expect(
+          SmfNames.isSnakeCase(SmfNames.snakeCaseOf(name)),
+          isTrue,
+          reason: name,
+        );
+      }
+    });
+
+    test('rejects names that are not letters and digits', () {
+      for (final name in ['', '_Home', '1st', r'a$b', 'a_b']) {
+        expect(() => SmfNames.snakeCaseOf(name), throwsArgumentError);
+      }
+    });
+  });
+
+  group('SmfNames.dartString', () {
+    test('quotes text and escapes what Dart would interpret', () {
+      expect(SmfNames.dartString('Home'), "'Home'");
+      expect(SmfNames.dartString("It's"), r"'It\'s'");
+      expect(SmfNames.dartString(r'$5 \ x'), r"'\$5 \\ x'");
+      expect(SmfNames.dartString('a\nb\tc'), r"'a\nb\tc'");
+      expect(SmfNames.dartString('\x01'), r"'\x01'");
+    });
+
+    test('keeps non-ASCII text, which mason renders unchanged', () {
+      final literal = SmfNames.dartString('Головна');
+
+      expect(literal, "'Головна'");
+      expect(Fragment.hasStrippedBackslash(literal), isFalse);
+    });
+
+    test('escapes a non-ASCII character after a backslash', () {
+      final literal = SmfNames.dartString(r'a\é');
+
+      expect(literal, r"'a\\\u{e9}'");
+      expect(Fragment.hasStrippedBackslash(literal), isFalse);
+    });
+  });
+
   group('ModuleId', () {
     test('compares and hashes by name, also as a constant map key', () {
       const constant = ModuleId('go_router');
