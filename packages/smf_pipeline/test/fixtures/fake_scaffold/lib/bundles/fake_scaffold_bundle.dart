@@ -6,6 +6,11 @@ import 'package:mason/mason.dart';
 final fakeScaffoldBundle = MasonBundle.fromJson(<String, dynamic>{
   "files": [
     {
+      "path": "analysis_options.yaml",
+      "data": "aW5jbHVkZTogcGFja2FnZTpmbHV0dGVyX2xpbnRzL2ZsdXR0ZXIueWFtbAo=",
+      "type": "text"
+    },
+    {
       "path": "android/app/build.gradle.kts",
       "data":
           "cGx1Z2lucyB7Cnt7e3NtZl9hcHBfZW50cnlfX2dyYWRsZV9hcHBfcGx1Z2luc319fQp9CgpkZXBlbmRlbmNpZXMgewp7e3tzbWZfYXBwX2VudHJ5X19ncmFkbGVfYXBwX2RlcGVuZGVuY2llc319fQp9Cg==",

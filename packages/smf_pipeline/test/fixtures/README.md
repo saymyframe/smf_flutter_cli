@@ -2,11 +2,11 @@
 
 Fake modules for the tests of the generation pipeline. **They are not modules to use in an app.**
 
-The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them.
+The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them, and keeps snapshots of the apps they render in `fixture_registry/test/snapshots/`.
 
 | Package | What it has |
 | --- | --- |
-| `fake_scaffold` | The app entry (`main.dart`, `bootstrap.dart`, `pubspec.yaml`) until the `flutter_core` module provides it. Its Android and iOS files only hold the tags of the native sockets and do not build. |
+| `fake_scaffold` | The app entry (`main.dart`, `bootstrap.dart`, `pubspec.yaml`, the lints of a new Flutter app) until the `flutter_core` module provides it. Its Android and iOS files only hold the tags of the native sockets and do not build. |
 | `fake_state` | Two providers of the state management role. |
 | `fake_roles` | Two roles defined outside `smf_contracts` with the same data type, one module that provides both, and a module that uses them under `when` and inside `{{#has_badge}}`. |
 | `fake_di` | A DI container whose capabilities each test sets. |
@@ -26,4 +26,10 @@ The real SMF modules do not yet use every feature of the module model in `packag
 ```bash
 cd packages/smf_pipeline/fixture_registry
 dart test
+```
+
+When a change to the pipeline or the fixtures changes what the apps render, update the snapshots and review their diff:
+
+```bash
+SMF_UPDATE_SNAPSHOTS=1 dart test test/snapshot_test.dart
 ```

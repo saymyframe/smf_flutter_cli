@@ -1,0 +1,1185 @@
+=== analysis_options.yaml (fake_scaffold) ===
+include: package:flutter_lints/flutter.yaml
+=== android/app/build.gradle.kts (fake_scaffold) ===
+plugins {
+    id("io.github.ben-manes.versions")
+}
+
+dependencies {
+    implementation("androidx.annotation:annotation:1.9.1")
+}
+=== android/app/src/main/AndroidManifest.xml (fake_scaffold) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <application android:label="fixture_app">
+        <activity android:name=".MainActivity" android:exported="true">
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="fixture" />
+</intent-filter>
+        </activity>
+        <meta-data android:name="com.example.fixture.KEY" android:value="fixture"/>
+        <meta-data android:name="com.example.fixture.ICON" android:resource="@mipmap/ic_launcher"/>
+    </application>
+</manifest>
+=== android/settings.gradle.kts (fake_scaffold) ===
+plugins {
+    id("io.github.ben-manes.versions") version("0.64.0") apply false
+}
+=== assets/fixture/readme.txt (fake_sockets) ===
+An asset of the fixture that uses every socket.
+=== fonts/FixtureSans.ttf (fake_sockets) ===
+<58 bytes>
+=== ios/Podfile (fake_scaffold) ===
+platform :ios, '14.0'
+=== ios/Runner/Info.plist (fake_scaffold) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>fixture_app</string>
+	<key>FixtureName</key>
+	<string>Fixture</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fixture</string>
+	</array>
+</dict>
+</plist>
+=== l10n.yaml (fake_sockets) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+=== lib/app.dart (fake_scaffold) ===
+import 'package:fixture_app/l10n/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the app.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    theme: ThemeData(fontFamily: "FixtureSans"),
+    darkTheme: ThemeData.dark(),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+    ],
+    supportedLocales: [Locale('en')],
+    builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
+
+    routerConfig: appRouter.config,
+  );
+}
+=== lib/bootstrap.dart (fake_scaffold) ===
+import 'package:fixture_app/core/badge/badge_factory.dart';
+import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
+import 'package:fixture_app/core/di/dependencies.dart';
+import 'package:fixture_app/core/events/communication_service.dart';
+import 'package:fixture_app/core/fixture_parent/fixture_parent.dart';
+import 'package:flutter/foundation.dart';
+
+@pragma('vm:entry-point')
+Future<void> fixtureBackgroundHandler() async {}
+
+/// Runs the start-up code of all modules before the app starts.
+Future<void> bootstrap() async {
+  debugPrint('early');
+  debugPrint('platform');
+  await initCrashReporting();
+  installCrashReporting();
+  await initEvents();
+  debugPrint('di');
+  await registerDependencies();
+  debugPrint(createBadge().labels.join());
+  setUpFixtureParent();
+  debugPrint('late');
+}
+=== lib/core/analytics/analytics_service.dart (role:analytics) ===
+import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
+    as impl0;
+
+/// Records what users do in the app.
+abstract interface class AnalyticsService {
+  /// Logs the event [name] with [parameters].
+  Future<void> logEvent(String name, {Map<String, Object>? parameters});
+
+  /// Logs that the user signed in, with the sign-in [method].
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters});
+
+  /// Logs that the user signed up, with the sign-up [method].
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  });
+
+  /// Turns the collection of analytics data on or off.
+  Future<void> setAnalyticsCollectionEnabled(bool enabled);
+
+  /// Sets the id of the signed-in user, or clears it with `null`.
+  Future<void> setUserId(String? userId);
+
+  /// Sets the user property [name] to [value], or clears it with `null`.
+  Future<void> setUserProperty({required String name, required String? value});
+}
+
+/// Returns the analytics service of the app, which forwards every call to
+/// the analytics services of all modules.
+AnalyticsService createAnalyticsService() => _analyticsService;
+
+final AnalyticsService _analyticsService = _AnalyticsServices(
+  _analyticsServices,
+);
+
+final List<AnalyticsService> _analyticsServices = [
+  impl0.createFixtureAnalytics(),
+];
+
+final class _AnalyticsServices implements AnalyticsService {
+  const _AnalyticsServices(this._services);
+
+  final List<AnalyticsService> _services;
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _forAll((service) => service.logEvent(name, parameters: parameters));
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _forAll(
+        (service) => service.logSignIn(method: method, parameters: parameters),
+      );
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _forAll(
+    (service) => service.logSignUp(method: method, parameters: parameters),
+  );
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _forAll((service) => service.setAnalyticsCollectionEnabled(enabled));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((service) => service.setUserId(userId));
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _forAll((service) => service.setUserProperty(name: name, value: value));
+
+  Future<void> _forAll(
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    await Future.wait(_services.map(call));
+  }
+}
+=== lib/core/app/fallback_start_screen.dart (fake_scaffold) ===
+import 'package:flutter/material.dart';
+
+/// The screen of an app without a router or without a start route.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Placeholder();
+}
+=== lib/core/badge/badge.dart (role:badge) ===
+/// A badge of the app, a role of a third-party package (fixture).
+abstract interface class Badge {
+  /// The labels the modules of the app asked for.
+  List<String> get labels;
+}
+
+/// The labels the modules of the app asked for.
+const badgeLabels = <String>['New'];
+=== lib/core/badge/badge_factory.dart (fake_clock_badge) ===
+import 'badge.dart';
+
+/// Creates the badge of the app.
+Badge createBadge() => const _FixedBadge();
+
+final class _FixedBadge implements Badge {
+  const _FixedBadge();
+
+  @override
+  List<String> get labels => badgeLabels;
+}
+=== lib/core/clock/clock.dart (role:clock) ===
+import 'package:flutter/foundation.dart';
+
+/// The clock of the app, a role of a third-party package (fixture).
+abstract interface class Clock {
+  /// The time zones the modules of the app asked for.
+  List<String> get zones;
+}
+
+/// The time zones the modules of the app asked for.
+const clockZones = <String>['Europe/Kyiv\'s zone'];
+
+/// Runs the ticks of the modules of the app.
+void tick() {
+  debugPrint('tick');
+}
+=== lib/core/clock/clock_factory.dart (fake_clock_badge) ===
+import 'clock.dart';
+
+/// Creates the clock of the app.
+Clock createClock() => const _FixedClock();
+
+final class _FixedClock implements Clock {
+  const _FixedClock();
+
+  @override
+  List<String> get zones => clockZones;
+}
+=== lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+import '../badge/badge_factory.dart';
+
+/// The text that the clock user shows: the labels of the badge when the
+/// app has one.
+String clockUserText() {
+  return createBadge().labels.join(', ');
+}
+=== lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl0;
+import 'package:flutter/foundation.dart';
+
+/// Reports the errors of the app.
+abstract interface class CrashReporter {
+  /// Reports [error] with its [stackTrace]; a [fatal] error ended the app.
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  });
+
+  /// Reports an error that Flutter caught, described by [details].
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  });
+
+  /// Adds [message] to the log sent with the next report.
+  Future<void> log(String message);
+
+  /// Sets the id of the signed-in user for the next reports, or clears it
+  /// with `null`.
+  Future<void> setUserId(String? userId);
+}
+
+/// Returns the crash reporter of the app, which forwards every call to the
+/// crash reporters of all modules.
+CrashReporter createCrashReporter() => _crashReporter;
+
+/// Reports the errors that Flutter and the platform dispatcher do not handle.
+///
+/// `bootstrap()` calls it once the crash reporting services are ready. In
+/// debug mode the errors also still reach the console. The listener on the
+/// current isolate is a safety net for errors that do not reach the platform
+/// dispatcher; isolates that the app starts need listeners of their own.
+void installCrashReporting() {
+  final reporter = createCrashReporter();
+  final presentError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (kDebugMode) {
+      presentError?.call(details);
+    }
+    unawaited(reporter.recordFlutterError(details, fatal: true));
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    unawaited(reporter.recordError(error, stackTrace, fatal: true));
+    return !kDebugMode;
+  };
+  Isolate.current.addErrorListener(
+    RawReceivePort((Object? message) {
+      if (message case [final Object error, final String? stackTrace]) {
+        unawaited(
+          reporter.recordError(
+            error,
+            stackTrace == null ? null : StackTrace.fromString(stackTrace),
+            fatal: true,
+          ),
+        );
+      }
+    }).sendPort,
+  );
+}
+
+final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
+
+final List<CrashReporter> _crashReporters = [];
+
+/// Creates the implementations of CrashReporter that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initCrashReporting() async {
+  _crashReporters.addAll(
+    await Future.wait<CrashReporter>([impl0.initFixtureCrashReporter()]),
+  );
+}
+
+final class _CrashReporters implements CrashReporter {
+  const _CrashReporters(this._reporters);
+
+  final List<CrashReporter> _reporters;
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _forAll(
+    (reporter) =>
+        reporter.recordError(error, stackTrace, fatal: fatal, reason: reason),
+  );
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) =>
+      _forAll((reporter) => reporter.recordFlutterError(details, fatal: fatal));
+
+  @override
+  Future<void> log(String message) =>
+      _forAll((reporter) => reporter.log(message));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((reporter) => reporter.setUserId(userId));
+
+  Future<void> _forAll(
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    await Future.wait(_reporters.map(call));
+  }
+}
+=== lib/core/di/dependencies.dart (fake_di) ===
+import 'package:fixture_app/core/fixture_services/fixture_services.dart' as di0;
+import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
+import 'package:fixture_app/core/events/communication_service.dart' as di2;
+import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
+import 'service_locator.dart';
+
+/// Creates the service locator of the app: a map of factories (fixture).
+ServiceLocator createServiceLocator() => _MapLocator();
+
+/// Registers the services of the modules of the app.
+Future<void> registerDependencies() async {
+  final locator = serviceLocator as _MapLocator;
+  locator.singleton<di0.FixtureConfig>(di0.createFixtureConfig());
+  locator.lazy<di0.FixtureApi>(
+    () => di0.createFixtureApi(locator.resolve<di0.FixtureConfig>()),
+  );
+  locator.singleton<di0.FixtureSession>(await di0.openFixtureSession());
+  locator.singleton<di0.FixtureCache>(
+    di0.createFixtureCache(locator.resolve<di0.FixtureApi>()),
+  );
+  locator.onDispose(
+    () => di0.closeFixtureCache(locator.resolve<di0.FixtureCache>()),
+  );
+  locator.factoryWith<di0.FixtureGreeting>(
+    (param1, param2) => di0.createFixtureGreeting(
+      locator.resolve<di0.FixtureConfig>(),
+      param1 as String,
+      param2 as int,
+    ),
+  );
+  locator.factoryWith<di0.FixtureLabel>(
+    (param1, param2) => di0.createFixtureLabel(
+      locator.resolve<di0.FixtureConfig>(),
+      param1 as String,
+    ),
+  );
+  locator.lazy<di0.FixtureZone>(() => di0.createUtcZone(), name: 'utc');
+  locator.lazy<di1.CrashReporter>(() => di1.createCrashReporter());
+  locator.lazy<di2.CommunicationService>(
+    () => di2.createCommunicationService(),
+  );
+  locator.lazy<di3.AnalyticsService>(() => di3.createAnalyticsService());
+}
+
+final class _MapLocator implements ServiceLocator {
+  final Map<(Type, String?), Object Function()> _getters = {};
+  final Map<(Type, String?), Object Function(Object?, Object?)> _factories = {};
+  final List<void Function()> _disposers = [];
+
+  @override
+  T resolve<T extends Object>({String? instanceName}) {
+    final getter = _getters[(T, instanceName)];
+    if (getter == null) throw StateError('$T is not registered.');
+    return getter() as T;
+  }
+
+  @override
+  T resolveWith<T extends Object>(Object? param1, [Object? param2]) {
+    final factory = _factories[(T, null)];
+    if (factory == null) throw StateError('$T is not registered.');
+    return factory(param1, param2) as T;
+  }
+
+  void singleton<T extends Object>(T instance, {String? name}) =>
+      _getters[(T, name)] = () => instance;
+
+  void lazy<T extends Object>(T Function() create, {String? name}) {
+    T? instance;
+    _getters[(T, name)] = () => instance ??= create();
+  }
+
+  void factoryOf<T extends Object>(T Function() create, {String? name}) =>
+      _getters[(T, name)] = create;
+
+  void factoryWith<T extends Object>(
+    T Function(Object? param1, Object? param2) create, {
+    String? name,
+  }) => _factories[(T, name)] = create;
+
+  void onDispose(void Function() dispose) => _disposers.add(dispose);
+}
+=== lib/core/di/service_locator.dart (role:di) ===
+import 'dependencies.dart';
+
+/// The service locator of the app, created on first use.
+final ServiceLocator serviceLocator = createServiceLocator();
+
+/// Returns the service of type [T], or the one named [instanceName].
+///
+/// Only the composition file of a feature calls it, to create what the
+/// feature's screens need; other code receives its services as parameters.
+T resolve<T extends Object>({String? instanceName}) =>
+    serviceLocator.resolve<T>(instanceName: instanceName);
+
+/// Returns a new service of type [T] from a factory that takes parameters,
+/// created with [param1] and [param2].
+T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
+    serviceLocator.resolveWith<T>(param1, param2);
+
+/// Finds the services that `registerDependencies()` registers.
+abstract interface class ServiceLocator {
+  /// Returns the service of type [T], or the one named [instanceName].
+  T resolve<T extends Object>({String? instanceName});
+
+  /// Returns a new service of type [T] from a factory that takes
+  /// parameters, created with [param1] and [param2].
+  T resolveWith<T extends Object>(Object? param1, [Object? param2]);
+}
+=== lib/core/events/communication_service.dart (role:events) ===
+import 'package:fixture_app/core/fixture_events/fixture_events.dart' as impl0;
+
+/// A message that one part of the app sends to the others, such as
+/// `final class ItemAdded extends AppEvent`.
+abstract class AppEvent {
+  /// Allows the events to have constant constructors.
+  const AppEvent();
+}
+
+/// Delivers [AppEvent]s between parts of the app that do not know each
+/// other.
+abstract interface class CommunicationService {
+  /// Sends [event] to everyone listening to its type.
+  void fire(AppEvent event);
+
+  /// The events of type [T] sent from now on.
+  Stream<T> on<T extends AppEvent>();
+}
+
+/// Returns the communication service of the app.
+CommunicationService createCommunicationService() => _communicationService;
+
+late final CommunicationService _communicationService;
+
+/// Creates the CommunicationService of the app, which starts asynchronously;
+/// `bootstrap()` awaits it.
+Future<void> initEvents() async {
+  _communicationService = await impl0.openFixtureEvents();
+}
+=== lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
+import 'package:flutter/widgets.dart';
+
+import '../analytics/analytics_service.dart';
+
+/// Creates the analytics service of the fixture, which logs nothing.
+AnalyticsService createFixtureAnalytics() => const FixtureAnalytics();
+
+/// A navigator observer that the fixture adds to every navigator.
+final class FixtureObserver extends NavigatorObserver {}
+
+/// Analytics that logs nothing.
+final class FixtureAnalytics implements AnalyticsService {
+  /// Creates the service.
+  const FixtureAnalytics();
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) async {}
+
+  @override
+  Future<void> logSignIn({
+    String? method,
+    Map<String, Object>? parameters,
+  }) async {}
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) async {}
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setUserId(String? userId) async {}
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) async {}
+}
+=== lib/core/fixture_codegen/fixture_model.dart (fake_codegen) ===
+import 'package:json_annotation/json_annotation.dart';
+
+part 'fixture_model.g.dart';
+
+/// A model whose JSON code build_runner generates.
+@JsonSerializable()
+final class FixtureModel {
+  /// Creates the model.
+  const FixtureModel(this.name);
+
+  /// Creates the model from [json].
+  factory FixtureModel.fromJson(Map<String, dynamic> json) =>
+      _$FixtureModelFromJson(json);
+
+  /// The name.
+  final String name;
+
+  /// The model as JSON.
+  Map<String, dynamic> toJson() => _$FixtureModelToJson(this);
+}
+=== lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
+import 'package:flutter/foundation.dart';
+
+import '../crash_reporting/crash_reporter.dart';
+
+/// Creates the crash reporter of the fixture once it is ready.
+Future<CrashReporter> initFixtureCrashReporter() async =>
+    const FixtureCrashReporter();
+
+/// Crash reporting that records nothing.
+final class FixtureCrashReporter implements CrashReporter {
+  /// Creates the reporter.
+  const FixtureCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) async {}
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) async {}
+
+  @override
+  Future<void> log(String message) async {}
+
+  @override
+  Future<void> setUserId(String? userId) async {}
+}
+=== lib/core/fixture_events/fixture_events.dart (fake_events) ===
+import 'dart:async';
+
+import '../events/communication_service.dart';
+
+/// Opens the event channel of the fixture, which takes a moment.
+Future<CommunicationService> openFixtureEvents() async => FixtureEvents();
+
+/// Delivers events to the listeners of their type through one stream.
+final class FixtureEvents implements CommunicationService {
+  final _events = StreamController<AppEvent>.broadcast();
+
+  @override
+  void fire(AppEvent event) => _events.add(event);
+
+  @override
+  Stream<T> on<T extends AppEvent>() =>
+      _events.stream.where((event) => event is T).cast<T>();
+}
+=== lib/core/fixture_parent/fixture_parent.dart (fake_parent) ===
+import 'package:flutter/foundation.dart';
+
+/// Sets up the parent and the modules that depend on it.
+void setUpFixtureParent() {
+  debugPrint('child set up');
+  _openAlerts();
+  _openNews();
+}
+
+void _openAlerts() {
+  debugPrint('child alerts');
+}
+
+void _openNews() {}
+=== lib/core/fixture_services/fixture_services.dart (fake_registrations) ===
+/// The configuration of the fixture's services.
+final class FixtureConfig {
+  /// Creates the configuration.
+  const FixtureConfig(this.name);
+
+  /// The name of the app.
+  final String name;
+}
+
+/// A client that needs the configuration.
+final class FixtureApi {
+  /// Creates the client.
+  const FixtureApi(this.config);
+
+  /// The configuration.
+  final FixtureConfig config;
+}
+
+/// A session that takes time to open.
+final class FixtureSession {
+  /// Creates the session.
+  const FixtureSession();
+}
+
+/// A cache that waits for the session and must be closed.
+final class FixtureCache {
+  /// Creates the cache.
+  FixtureCache(this.api);
+
+  /// The client.
+  final FixtureApi api;
+
+  /// Whether the cache was closed.
+  bool closed = false;
+}
+
+/// A greeting built from parameters for every call.
+final class FixtureGreeting {
+  /// Creates the greeting.
+  const FixtureGreeting(this.config, this.name, this.times);
+
+  /// The configuration.
+  final FixtureConfig config;
+
+  /// Who to greet.
+  final String name;
+
+  /// How many times.
+  final int times;
+}
+
+/// A label built from a text for every call.
+final class FixtureLabel {
+  /// Creates the label.
+  const FixtureLabel(this.config, this.text);
+
+  /// The configuration.
+  final FixtureConfig config;
+
+  /// The text of the label.
+  final String text;
+}
+
+/// A clock for one time zone.
+final class FixtureZone {
+  /// Creates the clock of [zone].
+  const FixtureZone(this.zone);
+
+  /// The time zone.
+  final String zone;
+}
+
+/// Creates the configuration.
+FixtureConfig createFixtureConfig() => const FixtureConfig('fixture');
+
+/// Creates the client.
+FixtureApi createFixtureApi(FixtureConfig config) => FixtureApi(config);
+
+/// Opens the session.
+Future<FixtureSession> openFixtureSession() async => const FixtureSession();
+
+/// Creates the cache.
+FixtureCache createFixtureCache(FixtureApi api) => FixtureCache(api);
+
+/// Closes the cache.
+void closeFixtureCache(FixtureCache cache) => cache.closed = true;
+
+/// Creates a greeting for [name], [times] times.
+FixtureGreeting createFixtureGreeting(
+  FixtureConfig config,
+  String name,
+  int times,
+) => FixtureGreeting(config, name, times);
+
+/// Creates a label with [text].
+FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
+    FixtureLabel(config, text);
+
+/// Creates the clock of UTC.
+FixtureZone createUtcZone() => const FixtureZone('UTC');
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace(AppLocation location);
+}
+=== lib/core/router/app_router_factory.dart (fake_router) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:flutter/material.dart';
+import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
+    as screen0;
+import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
+    as screen1;
+
+import '../app/fallback_start_screen.dart';
+import 'app_router.dart';
+import 'navigation.dart';
+
+/// Creates the router of the app: a plain navigator whose stack is a list
+/// of locations (fixture).
+AppRouter createAppRouter() => _FixtureRouter();
+
+final class _FixtureRouter implements AppRouter {
+  final _FixtureDelegate _delegate = _FixtureDelegate();
+
+  @override
+  late final RouterConfig<Object> config = RouterConfig(
+    routerDelegate: _delegate,
+  );
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => _delegate;
+}
+
+final class _FixtureDelegate extends RouterDelegate<Object>
+    with ChangeNotifier
+    implements AppNavigator {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey();
+
+  final List<NavigatorObserver> _observers = [
+    for (final create in <NavigatorObserver Function()>[
+      () => FixtureObserver(),
+    ])
+      create(),
+  ];
+
+  final List<AppLocation> _stack = [const FakeFeatureHomeLocation()];
+
+  final Map<AppLocation, Completer<Object?>> _results = {};
+
+  @override
+  Widget build(BuildContext context) => Navigator(
+    key: _navigatorKey,
+    observers: _observers,
+    pages: [
+      if (_stack.isEmpty)
+        const MaterialPage<Object?>(child: FallbackStartScreen()),
+      for (final location in _stack)
+        MaterialPage<Object?>(
+          key: ObjectKey(location),
+          name: location.routeName,
+          child: _screen(location),
+        ),
+    ],
+    onDidRemovePage: (page) {
+      final location = (page.key as ObjectKey?)?.value;
+      if (location is AppLocation && _stack.remove(location)) {
+        _results.remove(location)?.complete();
+      }
+    },
+  );
+
+  @override
+  Future<bool> popRoute() async {
+    if (_stack.length < 2) return false;
+    final location = _stack.removeLast();
+    _results.remove(location)?.complete();
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<void> setNewRoutePath(Object configuration) async {}
+
+  @override
+  void go(AppLocation location) {
+    _stack
+      ..clear()
+      ..addAll(location.chain);
+    notifyListeners();
+  }
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    final result = Completer<Object?>();
+    _results[location] = result;
+    _stack.add(location);
+    notifyListeners();
+    return result.future.then((value) => value as T?);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    if (_stack.isNotEmpty) _stack.removeLast();
+    _stack.add(location);
+    notifyListeners();
+  }
+}
+
+/// The screen of [location].
+Widget _screen(AppLocation location) => switch (location) {
+  FakeFeatureHomeLocation() => const screen0.FixtureHomeScreen(),
+  FakeFeatureDetailsLocation(:final id, :final tab) =>
+    screen1.FixtureDetailsScreen(id: id, tab: tab),
+};
+=== lib/core/router/fixture_annotations.dart (fake_router) ===
+import 'package:meta/meta_meta.dart';
+
+/// Marks the class of a screen; the analyzer rejects it anywhere else, so
+/// a misplaced tag of the screen annotations does not compile cleanly.
+@Target({TargetKind.classType})
+final class FixtureScreen {
+  /// Marks the screen of the route [route].
+  const FixtureScreen(this.route);
+
+  /// The full name of the route.
+  final String route;
+}
+
+/// Marks a parameter of the constructor of a screen; the analyzer rejects
+/// it anywhere else.
+@Target({TargetKind.parameter})
+final class FixtureParam {
+  /// Marks the parameter [name].
+  const FixtureParam(this.name);
+
+  /// The name of the parameter of the route.
+  final String name;
+}
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// The location of `fake_feature.home`: `/fake_feature`.
+final class FakeFeatureHomeLocation extends AppLocation {
+  /// Creates the location.
+  const FakeFeatureHomeLocation();
+
+  @override
+  String get routeName => 'fake_feature.home';
+
+  @override
+  String get path => '/fake_feature';
+}
+
+/// The location of `fake_feature.details`: `/fake_feature/details/:id`.
+final class FakeFeatureDetailsLocation extends AppLocation {
+  /// Creates the location with the values of the route.
+  const FakeFeatureDetailsLocation({required this.id, this.tab});
+
+  /// The value of the path parameter `id`.
+  final int id;
+
+  /// The value of the query parameter `tab`.
+  final String? tab;
+
+  @override
+  String get routeName => 'fake_feature.details';
+
+  @override
+  String get path => _withQuery('/fake_feature/details/$id', {'tab': tab});
+
+  @override
+  AppLocation get parent => const FakeFeatureHomeLocation();
+}
+
+String _withQuery(String path, Map<String, String?> query) {
+  query.removeWhere((key, value) => value == null);
+  return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => AppNav._(this);
+}
+
+/// The routes of the app by module, as `context.nav`.
+final class AppNav {
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `fake_feature`.
+  FakeFeatureRoutes get fakeFeature => FakeFeatureRoutes._(_context);
+}
+
+/// The routes of the module `fake_feature`.
+final class FakeFeatureRoutes {
+  const FakeFeatureRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_feature.home`: `/fake_feature`.
+  NavLink home() => NavLink(_context, const FakeFeatureHomeLocation());
+
+  /// The route `fake_feature.details`: `/fake_feature/details/:id`.
+  NavLink details({required int id, String? tab}) =>
+      NavLink(_context, FakeFeatureDetailsLocation(id: id, tab: tab));
+}
+=== lib/features/fake_feature/fake_feature_composition.dart (fake_feature (fake_riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/analytics/analytics_service.dart';
+import '../../core/di/service_locator.dart';
+
+/// The analytics service for the widgets of the feature: a bridge from the
+/// service locator to Riverpod.
+final fixtureAnalyticsProvider = Provider<AnalyticsService>(
+  (_) => resolve<AnalyticsService>(),
+);
+
+/// Counts the taps on the details screen.
+final fixtureTapsProvider = NotifierProvider<FixtureTaps, int>(FixtureTaps.new);
+
+/// Counts the taps on the details screen and logs them.
+class FixtureTaps extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Counts a tap.
+  Future<void> tap() async {
+    await ref.read(fixtureAnalyticsProvider).logEvent('fixture_tap');
+    state++;
+  }
+}
+=== lib/features/fake_feature/fixture_details_screen.dart (fake_feature (fake_riverpod)) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'fake_feature_composition.dart';
+
+/// The details of an item, with a counter in a notifier.
+@FixtureScreen('fake_feature.details')
+class FixtureDetailsScreen extends ConsumerWidget {
+  /// Creates the screen of the item [id], on the tab [tab].
+  const FixtureDetailsScreen({
+    @FixtureParam('id') required this.id,
+    @FixtureParam('tab') this.tab,
+    super.key,
+  });
+
+  /// The item.
+  final int id;
+
+  /// The tab, if any.
+  final String? tab;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => TextButton(
+    onPressed: () => ref.read(fixtureTapsProvider.notifier).tap(),
+    child: Text('$id ${tab ?? ''} ${ref.watch(fixtureTapsProvider)}'),
+  );
+}
+=== lib/features/fake_feature/fixture_home_screen.dart (fake_feature) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/router/navigation.dart';
+
+/// The start screen of the fixture: it navigates with the facade.
+@FixtureScreen('fake_feature.home')
+class FixtureHomeScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Column(
+      children: [
+        TextButton(
+          onPressed: () => context.nav.fakeFeature.details(id: 1).go(),
+          child: const Text('Go'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await context.nav.fakeFeature.details(id: 2, tab: 'a').push<void>();
+          },
+          child: const Text('Push'),
+        ),
+        TextButton(
+          onPressed: () => context.nav.fakeFeature.details(id: 3).replace(),
+          child: const Text('Replace'),
+        ),
+      ],
+    ),
+  );
+}
+=== lib/l10n/app_en.arb (fake_sockets) ===
+{
+  "@@locale": "en",
+  "fixtureTitle": "Fixture",
+  "@fixtureTitle": {
+    "description": "A string of the fixture that uses every socket."
+  }
+}
+=== lib/main.dart (fake_scaffold) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(ProviderScope(child: RepaintBoundary(child: const App())));
+}
+=== pubspec.yaml (fake_scaffold) ===
+name: fixture_app
+description: "An app of the fixtures of the SMF pipeline."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.8.1"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: "^3.0.0"
+  intl: "any"
+  json_annotation: "^4.9.0"
+  meta: "any"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: "^2.7.0"
+  flutter_lints: "^6.0.0"
+  json_serializable: "^6.9.0"
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - "assets/fixture/"
+  fonts:
+    - family: "FixtureSans"
+      fonts:
+        - asset: "fonts/FixtureSans.ttf"
+          weight: 400
