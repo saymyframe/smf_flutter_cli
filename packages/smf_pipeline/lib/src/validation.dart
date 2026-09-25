@@ -1,4 +1,5 @@
 import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/order.dart';
@@ -33,8 +34,42 @@ final class ValidationResult {
   bool get hasErrors => issues.any((issue) => issue.isError);
 }
 
-/// Brick variables that the pipeline sets itself.
+/// Brick variables that the pipeline sets itself, besides the tags of
+/// sockets, `smf_…`, and the presence flags of roles, `has_…`; see
+/// [isReservedVar].
 const _reservedVars = {'app_name', 'org_name'};
+
+/// Whether the pipeline sets the brick variable [name] itself, so neither a
+/// brick nor a render hook may set it.
+bool isReservedVar(String name) =>
+    _reservedVars.contains(name) ||
+    name.startsWith('smf_') ||
+    name.startsWith('has_');
+
+/// The dev dependency the pipeline adds when a [CodegenRequest] applies.
+///
+/// `build_runner` 2.7 and later always delete conflicting outputs, so the
+/// pipeline runs `build_runner build` without flags.
+const codegenDependency =
+    PubspecContribution.hosted('build_runner', '^2.7.0', dev: true);
+
+/// The names of the brick variables among [vars] whose text mason would
+/// change, since it removes a backslash before a line break or a non-ASCII
+/// character from everything it renders; see
+/// [Fragment.hasStrippedBackslash]. Lists and maps are searched too.
+List<String> strippedVars(Map<String, Object?> vars) {
+  bool strips(Object? value) => switch (value) {
+        final String text => Fragment.hasStrippedBackslash(text),
+        final Iterable<Object?> items => items.any(strips),
+        final Map<Object?, Object?> map =>
+          map.keys.any(strips) || map.values.any(strips),
+        _ => false,
+      };
+  return [
+    for (final MapEntry(:key, :value) in vars.entries)
+      if (strips(value)) key,
+  ];
+}
 
 /// Stage 5 of the pipeline: checks the contributions against the rules of
 /// the lego model and the hooks of the roles, orders the contributions of
@@ -43,9 +78,12 @@ const _reservedVars = {'app_name', 'org_name'};
 /// Checks, in this order:
 /// - the rules of the pipeline for each contribution: who may use which
 ///   socket, role and [Contribution.when], bricks without hooks and with one
-///   owner per file, reserved brick variables;
+///   owner per file, brick variables that are not reserved and that mason
+///   renders as they are;
 /// - the rules of each module's kind;
-/// - the pubspec, and that the app is not named like a dependency;
+/// - the pubspec, with [codegenDependency] if code generation is requested:
+///   it has a Dart SDK constraint, and the app is not named like a
+///   dependency;
 /// - the `validate` hooks of the present roles' templates and providers,
 ///   and the module rules of the roles;
 /// - the tags of the sockets in the bricks (see [checkTemplateTags]), and
@@ -66,14 +104,29 @@ ValidationResult validate({
   final issues = <SmfIssue>[
     ...collection.issues,
     for (final collected in collection.all)
-      ..._contributionIssues(collected, registry, resolution),
+      ...contributionIssues(collected, registry, resolution),
     ..._ownerIssues(collection),
     ..._preflightIssues(collection),
     for (final module in resolution.modules) ..._kindIssues(module, collection),
   ];
 
-  final merged = mergePubspec(collection.all);
+  final codegen = collection.applyingOf<CodegenRequest>().isNotEmpty;
+  final merged = mergePubspec([
+    ...collection.all,
+    if (codegen)
+      const Collected(codegenDependency, PipelineOrigin(), applies: true),
+  ]);
   final pubspec = merged.pubspec;
+  if (pubspec.sdk == null && merged.issues.isEmpty) {
+    issues.add(
+      const SmfIssue(
+        'No module sets the Dart SDK constraint of the app, which pub needs '
+        'in every pubspec.yaml.',
+        hint: 'The module that generates pubspec.yaml contributes '
+            'PubspecContribution.environment(sdk: ...).',
+      ),
+    );
+  }
   final clash = pubspec.dependencies[context.appName] ??
       pubspec.devDependencies[context.appName];
   if (clash != null) {
@@ -173,35 +226,19 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
   );
 }
 
-/// The roles whose sockets, symbols and data [origin] may use, and those it
-/// may list in [Contribution.when].
-({Set<Role> access, Set<Role> when}) _rolesOf(
-  ContributionOrigin origin,
-  ModuleRegistry registry,
-  Resolution resolution,
-) {
-  final open = registry.openRoles;
-  switch (origin) {
-    case ModuleOrigin(:final module):
-      final roles =
-          resolution.module(module)?.descriptor.roles ?? const <Role>{};
-      return (access: {...roles, ...open}, when: roles);
-    case RoleTemplateOrigin(:final role):
-      final roles = {role, ...role.visibleRoles};
-      return (access: {...roles, ...open}, when: roles);
-    case PipelineOrigin():
-      return (access: open, when: const {});
-  }
-}
-
-Iterable<SmfIssue> _contributionIssues(
+/// The problems of [collected] with the rules of the pipeline: the roles in
+/// its [Contribution.when], who may use which role and socket, and, for a
+/// brick, its hooks, variables and files.
+///
+/// Stage 8 checks the fragments of the render hooks with it too.
+Iterable<SmfIssue> contributionIssues(
   Collected collected,
   ModuleRegistry registry,
   Resolution resolution,
 ) sync* {
   final origin = collected.origin;
   final contribution = collected.contribution;
-  final roles = _rolesOf(origin, registry, resolution);
+  final roles = rolesOf(origin, registry, resolution);
 
   for (final role in contribution.when) {
     if (!roles.when.contains(role)) {
@@ -241,15 +278,21 @@ Iterable<SmfIssue> _contributionIssues(
         );
       }
       for (final name in brick.vars.keys) {
-        if (_reservedVars.contains(name) ||
-            name.startsWith('smf_') ||
-            name.startsWith('has_')) {
+        if (isReservedVar(name)) {
           yield SmfIssue(
             'The brick ${brick.bundle.name} of $origin sets the variable '
             '$name, which the pipeline sets itself.',
             origin: origin,
           );
         }
+      }
+      for (final name in strippedVars(brick.vars)) {
+        yield SmfIssue(
+          'The variable $name of the brick ${brick.bundle.name} of $origin '
+          'has a backslash before a line break or a non-ASCII character, '
+          'which mason removes.',
+          origin: origin,
+        );
       }
       if (origin case ModuleOrigin(:final module)) {
         final kind = resolution.module(module)?.descriptor.kind;
@@ -450,7 +493,7 @@ Iterable<SmfIssue> _hookIssues(
     data: [
       for (final data in collection.roleData)
         if (data.role.accepts(data.value) &&
-            _rolesOf(data.origin!, registry, resolution)
+            rolesOf(data.origin!, registry, resolution)
                 .access
                 .contains(data.role))
           data,

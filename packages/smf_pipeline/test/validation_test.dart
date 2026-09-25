@@ -340,6 +340,38 @@ void main() {
       expect(result.issues.last.path, 'lib/main.dart');
     });
 
+    test('variables that mason would change are errors', () {
+      final result = _validate([
+        entry,
+        TestModule(
+          'home',
+          contributions: [
+            BrickContribution(
+              bundle('home', paths: ['lib/a.dart']),
+              vars: const {
+                'text': 'a\\\nb',
+                'items': ['fine', r'caf\é'],
+                'map': {'k': 'fine'},
+                'number': 1,
+              },
+            ),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'home: The variable text of the brick home of home has a backslash '
+          'before a line break or a non-ASCII character, which mason removes.',
+        ),
+        equals(
+          'home: The variable items of the brick home of home has a '
+          'backslash before a line break or a non-ASCII character, which '
+          'mason removes.',
+        ),
+      ]);
+    });
+
     test('every file has one brick', () {
       final result = _validate([
         scaffold(
@@ -449,6 +481,42 @@ void main() {
       'package cannot depend on itself.',
     );
     expect(result.issues.single.origin, isNull);
+  });
+
+  test('the pubspec needs a Dart SDK constraint', () {
+    final result = _validate([
+      TestModule(
+        'bare',
+        kind: ModuleKinds.scaffold,
+        providers: [const RoleProvider.plain(appEntryRole)],
+        contributions: [AppEntryRole.iosDeploymentTarget.value('13.0')],
+      ),
+    ]);
+
+    expect(
+      result.issues.single.message,
+      'No module sets the Dart SDK constraint of the app, which pub needs in '
+      'every pubspec.yaml.',
+    );
+    expect(result.issues.single.origin, isNull);
+  });
+
+  test('code generation adds build_runner to the dev dependencies', () {
+    final result = _validate([
+      scaffold(
+        contributions: const [
+          CodegenRequest(),
+          PubspecContribution.hosted('json_serializable', '^6.9.0', dev: true),
+        ],
+      ),
+    ]);
+    final without = _validate([entry]);
+
+    expect(result.issues, isEmpty);
+    final builder = result.pubspec.devDependencies['build_runner']!;
+    expect(builder.constraintText, '^2.7.0');
+    expect(builder.origins, [const PipelineOrigin()]);
+    expect(without.pubspec.devDependencies, isNot(contains('build_runner')));
   });
 
   test('pubspec problems are reported', () {
@@ -565,6 +633,9 @@ void main() {
           'bare',
           kind: ModuleKinds.scaffold,
           providers: [const RoleProvider.plain(appEntryRole)],
+          contributions: [
+            const PubspecContribution.environment(sdk: '^3.8.1'),
+          ],
         ),
       ]);
 

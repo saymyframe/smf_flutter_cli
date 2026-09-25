@@ -114,7 +114,7 @@ void main() {
     // The base value of the minimum iOS version, from the scaffold.
     expect(plan.socketOrders.keys, [AppEntryRole.iosDeploymentTarget]);
     expect(plan.postGenOrder.contributions, isEmpty);
-    expect(plan.pubspec.dependencies, isEmpty);
+    expect(plan.pubspec.dependencies.keys, ['flutter']);
     expect(plan.request.appName, 'my_app');
     await plan.environment.dispose();
   });
@@ -490,8 +490,13 @@ void main() {
       expect(
         report,
         contains(
-          'Dependencies\n  core_lib ^1.2.0 (core)\n\n'
-          'Dev dependencies\n  flutter_test from the flutter SDK (core)',
+          'Dependencies\n'
+          '  core_lib ^1.2.0 (core)\n'
+          '  flutter from the flutter SDK (scaffold)\n\n'
+          'Dev dependencies\n'
+          '  flutter_test from the flutter SDK (core)\n'
+          // Code generation needs build_runner, which the pipeline adds.
+          '  build_runner ^2.7.0 (pipeline)',
         ),
       );
       expect(

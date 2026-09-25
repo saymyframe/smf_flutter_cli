@@ -219,4 +219,73 @@ void main() {
     expect(result.issues.single.origin, const ModuleOrigin(ModuleId('c')));
     expect(result.issues.single.message, contains('another weight or style'));
   });
+
+  group('pubspecSocketTexts', () {
+    test('renders every section, quoted and in a stable order', () {
+      final result = mergePubspec([
+        _by('a', const PubspecContribution.hosted('zeta', '^1.0.0')),
+        _by('a', const PubspecContribution.sdk('flutter_localizations')),
+        _by('b', const PubspecContribution.hosted('alpha', '>=1.0.0 <3.0.0')),
+        _by('b', const PubspecContribution.sdk('flutter')),
+        _by('b', const PubspecContribution.hosted('mock', 'any', dev: true)),
+        _by(
+          'b',
+          const PubspecContribution.environment(
+            sdk: '^3.8.1',
+            flutter: '>=3.32.0',
+          ),
+        ),
+        _by(
+          'c',
+          const PubspecContribution.flutter(
+            generate: true,
+            assets: ['assets/a b/'],
+            fonts: [
+              PubspecFont('Inter "UI"', [
+                PubspecFontAsset('fonts/Inter.ttf'),
+                PubspecFontAsset(
+                  'fonts/Inter-BoldItalic.ttf',
+                  weight: 700,
+                  style: 'italic',
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ]);
+
+      expect(pubspecSocketTexts(result.pubspec), {
+        'smf_pubspec_environment': 'environment:\n'
+            '  sdk: "^3.8.1"\n'
+            '  flutter: ">=3.32.0"',
+        'smf_pubspec_dependencies': 'dependencies:\n'
+            '  flutter:\n'
+            '    sdk: flutter\n'
+            '  flutter_localizations:\n'
+            '    sdk: flutter\n'
+            '  alpha: ">=1.0.0 <3.0.0"\n'
+            '  zeta: "^1.0.0"',
+        'smf_pubspec_dev_dependencies': 'dev_dependencies:\n'
+            '  mock: "any"',
+        'smf_pubspec_flutter': 'flutter:\n'
+            '  generate: true\n'
+            '  assets:\n'
+            '    - "assets/a b/"\n'
+            '  fonts:\n'
+            '    - family: "Inter \\"UI\\""\n'
+            '      fonts:\n'
+            '        - asset: "fonts/Inter.ttf"\n'
+            '        - asset: "fonts/Inter-BoldItalic.ttf"\n'
+            '          weight: 700\n'
+            '          style: "italic"',
+      });
+    });
+
+    test('an empty section renders to nothing', () {
+      expect(
+        pubspecSocketTexts(const MergedPubspec()).values.toSet(),
+        {''},
+      );
+    });
+  });
 }

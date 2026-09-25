@@ -47,6 +47,12 @@ void f() {{{{smf_after__brace}}}
         ],
       );
       expect(scan.delimiterLine, isNull);
+      expect(scan.sections.map((section) => '$section'), [
+        '#has_router (lib/main.dart:3)',
+        '^has_layout (lib/main.dart:5)',
+      ]);
+      expect(scan.sections.last.inverted, isTrue);
+      expect(scan.partialLines, [7]);
       expect(tags.first.path, 'lib/main.dart');
       expect(tags.first.offset, text.indexOf('{{{smf_app'));
       expect('${tags.first}', 'smf_app_entry__top_level (lib/main.dart:2)');
@@ -207,6 +213,75 @@ void f() {{{{smf_after__brace}}}
           equals(
             'scaffold: The template lib/b.dart:1 of scaffold changes the '
             'mustache delimiters, which the pipeline does not support.',
+          ),
+        ],
+      );
+    });
+
+    test('paths use only variables, and templates no partials', () {
+      expect(
+        check(
+          [
+            scaffold(
+              contributions: [
+                brick({
+                  'lib/{{app_name}}.dart': '',
+                  '{{#has_router}}lib/r.dart{{/has_router}}': '',
+                  '{{~ header }}': 'partial',
+                  r'lib\{{% url %}}': '',
+                  'lib/a.dart': 'a\n{{> header}}\n',
+                }),
+              ],
+            ),
+          ],
+          complete: false,
+        ),
+        [
+          contains('The path {{#has_router}}lib/r.dart{{/has_router}} in the '
+              'brick b of scaffold has a mustache section'),
+          contains('The path {{~ header }} in the brick b'),
+          contains('The path lib/{{% url %}} in the brick b'),
+          equals(
+            'scaffold: The template lib/a.dart:2 of scaffold includes a '
+            'partial, which the pipeline does not support.',
+          ),
+        ],
+      );
+    });
+
+    test("presence flags are of the roles of the brick's owner", () {
+      final nav = TestRole<NoDsl>('nav');
+      final other = TestRole<NoDsl>('other');
+      expect(
+        check(
+          [
+            scaffold(contributions: [entryBrick()]),
+            TestModule('go', providers: [RoleProvider.plain(nav)]),
+            TestModule('elsewhere', providers: [RoleProvider.plain(other)]),
+            TestModule(
+              'home',
+              uses: {nav},
+              contributions: [
+                brick({
+                  'lib/home.dart': '{{#has_nav}}a{{/has_nav}}\n'
+                      '{{^has_app_entry}}b{{/has_app_entry}}\n'
+                      '{{#has_other}}c{{/has_other}}\n'
+                      '{{has_nothing}}\n',
+                }),
+              ],
+            ),
+          ],
+          complete: false,
+        ),
+        [
+          equals(
+            'home: The section has_other in lib/home.dart:3 of home is the '
+            'flag of the other, which home does not provide, require or use, '
+            'so the pipeline does not set it.',
+          ),
+          equals(
+            'home: The tag has_nothing in lib/home.dart:4 of home names no '
+            'role.',
           ),
         ],
       );

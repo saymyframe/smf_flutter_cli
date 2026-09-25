@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/collector.dart';
@@ -330,4 +332,69 @@ final class _Dependency {
   _Constraint? constraint;
   final String? sdk;
   final List<ContributionOrigin> origins;
+}
+
+/// The text of every socket of the pipeline in `pubspec.yaml`, by tag: each
+/// section of [pubspec] headed by its key, or nothing if the section has no
+/// entries.
+///
+/// SDK dependencies come first, then the others, each by name, so the
+/// pubspec does not depend on the order of the modules. Every string is
+/// quoted, since a constraint such as `>=1.0.0 <2.0.0` cannot stand bare in
+/// YAML.
+Map<String, String> pubspecSocketTexts(MergedPubspec pubspec) {
+  String quoted(String text) => jsonEncode(text);
+
+  List<String> dependencyLines(Map<String, MergedDependency> dependencies) {
+    int byName(MergedDependency a, MergedDependency b) =>
+        a.package.compareTo(b.package);
+    final sdk = [
+      for (final dependency in dependencies.values)
+        if (dependency.source == PubspecSource.sdk) dependency,
+    ]..sort(byName);
+    final hosted = [
+      for (final dependency in dependencies.values)
+        if (dependency.source != PubspecSource.sdk) dependency,
+    ]..sort(byName);
+    return [
+      for (final dependency in sdk) ...[
+        '  ${dependency.package}:',
+        '    sdk: ${dependency.sdk}',
+      ],
+      for (final dependency in hosted)
+        '  ${dependency.package}: ${quoted(dependency.constraintText!)}',
+    ];
+  }
+
+  String section(String key, List<String> lines) =>
+      lines.isEmpty ? '' : ['$key:', ...lines].join('\n');
+
+  return {
+    PipelineSockets.pubspecEnvironment.tag: section('environment', [
+      if (pubspec.sdkText case final sdk?) '  sdk: ${quoted(sdk)}',
+      if (pubspec.flutterText case final flutter?)
+        '  flutter: ${quoted(flutter)}',
+    ]),
+    PipelineSockets.pubspecDependencies.tag:
+        section('dependencies', dependencyLines(pubspec.dependencies)),
+    PipelineSockets.pubspecDevDependencies.tag:
+        section('dev_dependencies', dependencyLines(pubspec.devDependencies)),
+    PipelineSockets.pubspecFlutter.tag: section('flutter', [
+      if (pubspec.usesMaterialDesign) '  uses-material-design: true',
+      if (pubspec.generate) '  generate: true',
+      if (pubspec.assets.isNotEmpty) '  assets:',
+      for (final asset in pubspec.assets) '    - ${quoted(asset)}',
+      if (pubspec.fonts.isNotEmpty) '  fonts:',
+      for (final font in pubspec.fonts) ...[
+        '    - family: ${quoted(font.family)}',
+        '      fonts:',
+        for (final asset in font.assets) ...[
+          '        - asset: ${quoted(asset.asset)}',
+          if (asset.weight case final weight?) '          weight: $weight',
+          if (asset.style case final style?)
+            '          style: ${quoted(style)}',
+        ],
+      ],
+    ]),
+  };
 }

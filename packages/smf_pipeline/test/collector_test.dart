@@ -103,10 +103,11 @@ void main() {
       testContext,
     );
 
-    // The scaffold contributes the minimum iOS version first.
+    // The scaffold contributes the minimum iOS version, the SDK constraint
+    // and the dependency on Flutter first.
     expect(
       [for (final c in collection.all) c.applies],
-      [true, true, false, true],
+      [true, true, true, true, false, true],
     );
   });
 
