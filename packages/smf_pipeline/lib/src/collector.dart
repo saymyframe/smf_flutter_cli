@@ -1,5 +1,4 @@
 import 'package:smf_contracts/lego_core.dart';
-import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
 /// A contribution with who made it and whether it applies in the app.
@@ -24,12 +23,15 @@ final class Collected {
 /// variants that apply, and of the templates of the present roles.
 final class Collection {
   /// Creates the collection.
-  const Collection(this.all);
+  const Collection(this.all, {this.issues = const []});
 
   /// All contributions, in the order of the modules, then of the role
   /// templates in the order of the present roles; each module's variant
   /// comes after the module's own contributions.
   final List<Collected> all;
+
+  /// A problem for every module or template that failed to contribute.
+  final List<SmfIssue> issues;
 
   /// The contributions that apply in the app.
   Iterable<Collected> get applying => all.where((c) => c.applies);
@@ -63,11 +65,12 @@ final class Collection {
 /// Like data, code for a socket of a role applies only when the role is
 /// present: without the role, no template has the socket's tag.
 ///
-/// Throws a [GenerationFailedException] if a module or template fails to
-/// contribute.
+/// A module or template that fails to contribute gets an issue with its
+/// origin instead, so lenient mode can leave the module out.
 Collection collect(Resolution resolution, ModuleContext context) {
   final present = resolution.presentRoles;
   final all = <Collected>[];
+  final issues = <SmfIssue>[];
 
   void addAll(
     ContributionOrigin origin,
@@ -77,7 +80,10 @@ Collection collect(Resolution resolution, ModuleContext context) {
     try {
       contributions = contribute();
     } on Object catch (error) {
-      throw GenerationFailedException('$origin failed to contribute: $error');
+      issues.add(
+        SmfIssue('$origin failed to contribute: $error', origin: origin),
+      );
+      return;
     }
     for (final contribution in contributions) {
       final role = switch (contribution) {
@@ -121,5 +127,5 @@ Collection collect(Resolution resolution, ModuleContext context) {
       addAll(RoleTemplateOrigin(role), () => template.contribute(context));
     }
   }
-  return Collection(List.unmodifiable(all));
+  return Collection(List.unmodifiable(all), issues: List.unmodifiable(issues));
 }

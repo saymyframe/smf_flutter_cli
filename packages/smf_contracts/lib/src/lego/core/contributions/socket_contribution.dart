@@ -18,19 +18,22 @@ part of '../contributions.dart';
 /// ## Order
 ///
 /// The pipeline renders the contributions of a socket, and runs every
-/// [PostGenStep], in this order:
-/// 1. After the contributions of the modules the contributor depends on,
-///    directly or not.
-/// 2. If the contributor requires a role, or has it in [Contribution.when],
-///    after the contributions of the role's providers.
-/// 3. Contributions of a role's template come after those of the role's
-///    providers and of the modules those depend on, directly or not.
-/// 4. Otherwise, by the id of the contributor.
+/// [PostGenStep], in an order given by edges between all modules of the app
+/// and the templates of its roles:
+/// 1. A module comes after the modules it depends on.
+/// 2. If a module requires a role, or has it in [Contribution.when], it
+///    comes after the role's providers and the role's template.
+/// 3. A role's template comes after the role's providers, and after the
+///    providers and templates of the roles its role requires or has in its
+///    [Contribution.when].
 ///
-/// Only edges between the contributors of the socket count, and two
-/// contributors with edges both ways are ordered by id. A cycle of edges is
-/// an error. Phases, such as the start-up phases of the app entry, are
-/// separate sockets.
+/// Two contributors with edges both ways ignore both edges, unless one
+/// depends on the other, which then comes after it. A contributor
+/// comes after every contributor it reaches through the edges, also through
+/// modules that do not contribute to the socket: a module that requires a
+/// role comes after the modules the role's provider depends on. Otherwise
+/// contributors are ordered by id. A cycle of edges is an error. Phases,
+/// such as the start-up phases of the app entry, are separate sockets.
 final class SocketContribution extends Contribution {
   /// Adds [fragment] to a [CodeSocket].
   const SocketContribution.code(

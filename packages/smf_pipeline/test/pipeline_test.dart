@@ -225,6 +225,40 @@ void main() {
     });
   });
 
+  test('a retry of lenient mode asks nothing again', () async {
+    final other = TestRole<NoDsl>('other');
+    final host = FakeHost(answers: ['go'], terminal: true);
+    final modules = [
+      scaffold(),
+      TestModule('home', requires: {nav}, contributions: [nav.data('/')]),
+      TestModule('go', providers: [RoleProvider.plain(nav)]),
+      TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      TestModule(
+        'broken',
+        contributions: [
+          CodegenRequest(when: {other}),
+        ],
+      ),
+      TestModule('uses_other', uses: {other}),
+    ];
+
+    final plan = (await pipeline(modules, host).plan(
+      const CreateRequest(
+        appName: 'my_app',
+        org: 'com.example',
+        modules: [ModuleId('home'), ModuleId('broken')],
+      ),
+    ))!;
+
+    expect(plan.leftOut.single.module, const ModuleId('broken'));
+    expect(
+      host.prompter.asked.where((p) => p.message.contains('nav')),
+      hasLength(1),
+    );
+    expect(plan.resolution.module(const ModuleId('go')), isNotNull);
+    expect(host.prompter.done, isTrue);
+  });
+
   test('strict mode fails on every error', () async {
     final modules = [
       scaffold(),
@@ -251,6 +285,69 @@ void main() {
             .having((e) => '$e', 'toString', contains('lists the nav')),
       ),
     );
+  });
+
+  test('reports each warning once, also in a pass with errors', () async {
+    final host = FakeHost();
+    final modules = [
+      scaffold(),
+      TestModule(
+        'firebase',
+        contributions: [
+          Preflight([
+            TestCheck(
+              'cli',
+              status: const PreflightMissing(instructions: 'Install it.'),
+            ),
+          ]),
+        ],
+      ),
+      TestModule(
+        'strict_tool',
+        contributions: [
+          Preflight([
+            TestCheck(
+              'sdk',
+              status: const PreflightMissing(instructions: 'Get it.'),
+              required: true,
+            ),
+          ]),
+        ],
+      ),
+    ];
+
+    final plan = (await pipeline(modules, host)
+        .plan(request(['firebase', 'strict_tool'])))!;
+
+    expect(plan.leftOut.single.module, const ModuleId('strict_tool'));
+    expect(
+      host.logger.warnings.where((w) => w.contains('Tool cli is missing')),
+      hasLength(1),
+    );
+  });
+
+  test('leaves out a module whose variant is at fault', () async {
+    final state = TestRole<NoDsl>('state');
+    final host = FakeHost();
+    final modules = [
+      scaffold(),
+      TestModule(
+        'home',
+        variants: Variants(
+          role: state,
+          byProvider: {
+            const ModuleId('bloc'): (context) => [
+                  CodegenRequest(when: {nav}),
+                ],
+          },
+        ),
+      ),
+      TestModule('bloc', providers: [RoleProvider.plain(state)]),
+    ];
+
+    final plan = (await pipeline(modules, host).plan(request(['home'])))!;
+
+    expect(plan.leftOut.single.module, const ModuleId('home'));
   });
 
   test('warnings do not stop generation', () async {
@@ -326,7 +423,10 @@ void main() {
               AppEntryRole.bootstrapPlatform,
               Fragment('core();'),
             ),
-            const PostGenStep(ToolRef('a'), []),
+            const PostGenStep(ToolRef('a'), ['--flag']),
+            const PubspecContribution.hosted('core_lib', '^1.2.0'),
+            const PubspecContribution.sdk('flutter_test', dev: true),
+            const CodegenRequest(),
           ],
         ),
         TestModule(
@@ -385,6 +485,22 @@ void main() {
       expect(
         report,
         contains('  post-generation steps: core, analytics'),
+      );
+      expect(
+        report,
+        contains(
+          'Dependencies\n  core_lib ^1.2.0 (core)\n\n'
+          'Dev dependencies\n  flutter_test from the flutter SDK (core)',
+        ),
+      );
+      expect(
+        report,
+        contains(
+          'After generation\n'
+          '  dart run build_runner build (core)\n'
+          '  a --flag (core)\n'
+          '  b (analytics)',
+        ),
       );
       expect(report, isNot(contains('bootstrap_late')));
       expect(report, contains('  ✓ Flutter SDK'));
@@ -481,6 +597,7 @@ void main() {
       );
 
       expect(lines, contains('  home: requested, variant for bloc'));
+      expect(lines, contains('  Directory: /app'));
       expect(lines, contains('    cycle: a, b'));
       expect(lines, isNot(contains('Roles')));
     });

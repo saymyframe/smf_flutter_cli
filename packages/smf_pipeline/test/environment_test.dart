@@ -82,6 +82,29 @@ void main() {
       expect(environment.path, r'C:\tools;C:\sdk\bin');
     });
 
+    test('on Windows drops quotes and takes / as a separator', () async {
+      final host = FakeHost(
+        operatingSystem: HostOperatingSystem.windows,
+        environment: {'PATH': r'"C:\Program Files\node";C:\sdk\bin'},
+      );
+      host.fileSystem
+          .file(r'C:\Program Files\node\node.exe')
+          .createSync(recursive: true);
+      host.fileSystem
+          .file(r'C:\work\tools\run.bat')
+          .createSync(recursive: true);
+      final environment = host.environment();
+
+      expect(
+        await environment.findExecutable('node'),
+        r'C:\Program Files\node\node.exe',
+      );
+      expect(
+        await environment.findExecutable('tools/run'),
+        r'C:\work\tools\run.bat',
+      );
+    });
+
     test('on Windows defaults PATHEXT', () async {
       final host = FakeHost(
         operatingSystem: HostOperatingSystem.windows,
@@ -95,7 +118,63 @@ void main() {
     });
   });
 
+  group('with the SDK found', () {
+    test('flutter and dart are the SDK', () async {
+      final environment = FakeHost().environment()
+        ..sdk = const FlutterSdk(flutter: '/f/flutter', dart: '/f/dart');
+
+      expect(await environment.findExecutable('flutter'), '/f/flutter');
+      expect(await environment.findExecutable('dart'), '/f/dart');
+      expect(
+        await environment.findExecutable('/sdk/bin/dart'),
+        '/sdk/bin/dart',
+      );
+      expect(environment.path, '/f:/sdk/bin');
+    });
+
+    test('commands get the PATH unless they set one', () async {
+      final runner = ScriptedProcessRunner({
+        'firebase': const SmfProcessResult(exitCode: 0),
+      });
+      final seen = <Map<String, String>>[];
+      final host = FakeHost(processRunner: _Recording(runner, seen));
+      final environment = host.environment()..addBinDirs(['/npm/bin']);
+
+      await environment.processRunner.run('firebase', ['login:list']);
+      await environment.processRunner
+          .run('firebase', [], environment: const {'PATH': '/mine'});
+      await environment.processRunner.runInteractive('firebase', ['login']);
+
+      expect(seen, [
+        {'PATH': '/npm/bin:/sdk/bin'},
+        {'PATH': '/mine'},
+        {'PATH': '/npm/bin:/sdk/bin'},
+      ]);
+    });
+
+    test('on Windows a Path of any case counts', () {
+      final host = FakeHost(
+        operatingSystem: HostOperatingSystem.windows,
+        environment: {'Path': r'C:\sdk\bin'},
+      );
+      final environment = host.environment();
+
+      expect(environment.withPath(const {'path': 'x'}), {'path': 'x'});
+      expect(environment.withPath(const {}), {'Path': r'C:\sdk\bin'});
+    });
+  });
+
   group('resolveTool', () {
+    test("puts the tool's own PATH first", () async {
+      final environment = FakeHost().environment();
+
+      final resolved = await environment.resolveTool(
+        const ToolRef('/sdk/bin/dart', environment: {'PATH': '/tool'}),
+      );
+
+      expect(resolved.environment, {'PATH': '/tool:/sdk/bin'});
+    });
+
     test('takes flutter and dart from the SDK', () async {
       final environment = FakeHost().environment()
         ..sdk = const FlutterSdk(flutter: '/f/flutter', dart: '/f/dart')
@@ -120,7 +199,7 @@ void main() {
       ]);
       expect(resolved.environment, {
         'FOO': 'bar',
-        'PATH': '/opt/node:/sdk/bin',
+        'PATH': '/f:/opt/node:/sdk/bin',
       });
       expect(
         (await environment.resolveTool(const ToolRef('flutter'))).executable,
@@ -151,16 +230,16 @@ void main() {
     final host = FakeHost();
     final environment = host.environment();
 
-    final first = await environment.writeTempFile('a.sh', 'echo a');
-    final second = await environment.writeTempFile('b.sh', 'echo b');
+    final first = await environment.writeTempFile('install.sh', 'echo a');
+    final second = await environment.writeTempFile('install.sh', 'echo b');
 
+    expect(first, endsWith('install.sh'));
+    expect(second, isNot(first));
     expect(host.fileSystem.file(first).readAsStringSync(), 'echo a');
-    expect(
-      host.fileSystem.file(second).parent.path,
-      host.fileSystem.file(first).parent.path,
-    );
+    expect(host.fileSystem.file(second).readAsStringSync(), 'echo b');
     await environment.dispose();
     expect(host.fileSystem.file(first).existsSync(), isFalse);
+    expect(host.fileSystem.file(second).existsSync(), isFalse);
     await environment.dispose();
   });
 
@@ -173,7 +252,39 @@ void main() {
     expect(environment.operatingSystem, HostOperatingSystem.linux);
     expect(environment.prompter, same(host.prompter));
     expect(environment.logger, same(host.logger));
-    expect(environment.processRunner, isA<NoProcessRunner>());
+    expect(environment.processRunner, isNot(same(host.processRunner)));
     expect(environment.fileSystem, same(host.fileSystem));
   });
+}
+
+/// Records the environment of every call, then delegates.
+final class _Recording implements SmfProcessRunner {
+  _Recording(this._runner, this._seen);
+
+  final SmfProcessRunner _runner;
+  final List<Map<String, String>> _seen;
+
+  @override
+  Future<SmfProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) {
+    _seen.add(environment);
+    return _runner.run(executable, arguments);
+  }
+
+  @override
+  Future<int> runInteractive(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    _seen.add(environment);
+    return 0;
+  }
 }

@@ -1,5 +1,4 @@
 import 'package:smf_contracts/lego.dart';
-import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/templates.dart';
 import 'package:test/test.dart';

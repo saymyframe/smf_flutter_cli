@@ -263,6 +263,41 @@ void main() {
       return (selection, host);
     }
 
+    test('asks again for a name or organization that cannot work', () async {
+      final (selection, host) = await run([
+        'class',
+        'Good App',
+        'com.1up',
+        'com.acme',
+        <String>[],
+        <String>[],
+        'None',
+        'None',
+        <String>[],
+      ]);
+
+      expect(selection.appName, 'Good App');
+      expect(selection.org, 'com.acme');
+      expect(host.logger.warnings, [
+        contains('must start with a letter'),
+        contains('every part must start with a letter'),
+      ]);
+    });
+
+    test('checks -m before asking anything', () {
+      final host = FakeHost(terminal: true);
+
+      expect(
+        select(
+          const CreateRequest(modules: [ModuleId('nope')]),
+          registry,
+          host.environment(),
+        ),
+        throwsA(isA<SmfUsageException>()),
+      );
+      expect(host.prompter.asked, isEmpty);
+    });
+
     test('asks for everything', () async {
       final (selection, host) = await run([
         'Cool App', // name
@@ -302,9 +337,9 @@ void main() {
       expect(asked[4].shown, contains('None'));
       expect(asked[5].shown, isNot(contains('None')));
       expect(
-        host.logger.infos,
-        contains('Adding scaffold: every app needs the app_entry.'),
-      );
+          asked[5].message,
+          'Test role nav: home requires the nav. Which '
+          'module provides it?');
     });
 
     test('takes the only provider of a required role', () async {
@@ -328,10 +363,67 @@ void main() {
       );
 
       expect(ids(selection), ['home', 'scaffold', 'go']);
-      expect(
-        host.logger.infos,
-        contains('Adding go: home requires the nav.'),
+      expect(host.prompter.asked, hasLength(1));
+    });
+
+    test('a role that a later answer needs is asked again', () async {
+      final session = TestRole<NoDsl>('session');
+      final crash = TestRole<NoDsl>('crash');
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('auth', providers: [RoleProvider.plain(session)]),
+        TestModule('keys', providers: [RoleProvider.plain(session)]),
+        TestModule('logger', providers: [RoleProvider.plain(crash)]),
+        TestModule(
+          'sentry',
+          dependsOn: {'sentry_core'},
+          providers: [RoleProvider.plain(crash)],
+        ),
+        TestModule('sentry_core', requires: {session}),
+      ]);
+      // The session is asked first: only a dependency of a provider of the
+      // crash reporting requires it.
+      final host = FakeHost(
+        answers: [<String>[], 'None', 'sentry', 'keys'],
+        terminal: true,
       );
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      expect(ids(selection), ['scaffold', 'sentry', 'keys']);
+      expect(selection.declined, isEmpty);
+      expect(host.prompter.asked[1].shown, contains('None'));
+      expect(host.prompter.asked.last.shown, isNot(contains('None')));
+    });
+
+    test('a module chosen by kind brings its dependencies', () async {
+      final nav = TestRole<NoDsl>('nav');
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('links', dependsOn: {'go'}),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      ]);
+      final host = FakeHost(
+        answers: [
+          ['links'],
+        ],
+        terminal: true,
+      );
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      // go provides the nav through links, so the nav is not asked.
+      expect(ids(selection), ['links', 'scaffold']);
+      expect(host.prompter.asked, hasLength(1));
     });
 
     test('records roles declined with "None"', () async {
@@ -376,6 +468,32 @@ void main() {
         ),
         throwsA(isA<SmfUsageException>()),
       );
+    });
+
+    test('asks for a role after the roles whose providers need it', () async {
+      final session = TestRole<NoDsl>('session');
+      final nav = TestRole<NoDsl>('nav');
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('auth', providers: [RoleProvider.plain(session)]),
+        TestModule('keys', providers: [RoleProvider.plain(session)]),
+        TestModule(
+          'auth_router',
+          requires: {session},
+          providers: [RoleProvider.plain(nav)],
+        ),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+      ]);
+      final host = FakeHost(answers: ['auth_router', 'keys'], terminal: true);
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      expect(ids(selection), ['scaffold', 'auth_router', 'keys']);
+      expect(host.prompter.asked.last.shown, isNot(contains('None')));
     });
 
     test('names the role of a provider that requires another', () async {

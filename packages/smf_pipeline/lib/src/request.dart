@@ -87,7 +87,7 @@ abstract final class CreateOptions {
         abbr: 'o',
         valueHelp: 'directory',
         defaultsTo: '.',
-        help: 'The directory to create the app in.',
+        help: "The directory to create the app's own directory in.",
       )
       ..addOption(
         onConflict,

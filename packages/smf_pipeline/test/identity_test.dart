@@ -1,6 +1,7 @@
 import 'package:smf_contracts/lego_core.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
+
+import 'support.dart';
 
 void main() {
   group('packageName', () {
@@ -13,7 +14,20 @@ void main() {
     });
 
     test('rejects names that cannot be package names', () {
-      for (final name in ['2048', '', '---', 'class']) {
+      for (final name in [
+        '2048',
+        '',
+        '---',
+        'class',
+        'import',
+        'dynamic',
+        'flutter',
+        'flutter_test',
+        'meta',
+        'package',
+        'fun',
+        'Café',
+      ]) {
         expect(
           () => AppNames.packageName(name),
           throwsA(isA<SmfUsageException>()),
@@ -24,20 +38,26 @@ void main() {
   });
 
   group('orgSegments', () {
-    test('converts each part to snake_case', () {
+    test('lowercases each part as it is written', () {
       expect(AppNames.orgSegments('com.example'), ['com', 'example']);
-      expect(AppNames.orgSegments('Com.MyCompany.'), ['com', 'my_company']);
+      expect(AppNames.orgSegments('Com.MyCompany.'), ['com', 'mycompany']);
+      expect(AppNames.orgSegments('io.my-org'), ['io', 'my-org']);
     });
 
-    test('rejects parts that do not start with a letter', () {
-      expect(
-        () => AppNames.orgSegments('com.1up'),
-        throwsA(isA<SmfUsageException>()),
-      );
-      expect(
-        () => AppNames.orgSegments('...'),
-        throwsA(isA<SmfUsageException>()),
-      );
+    test('rejects parts that cannot be identifiers', () {
+      for (final org in [
+        'com.1up',
+        '...',
+        'com.new',
+        r'com.my$org',
+        'com.-x',
+      ]) {
+        expect(
+          () => AppNames.orgSegments(org),
+          throwsA(isA<SmfUsageException>()),
+          reason: org,
+        );
+      }
     });
   });
 
@@ -49,5 +69,10 @@ void main() {
     expect(context.appIdentity.androidApplicationId, 'com.acme_corp.my_app');
     expect(context.appIdentity.androidNamespace, 'com.acme_corp.my_app');
     expect(context.appIdentity.iosBundleId, 'com.acme-corp.my-app');
+
+    final hyphens = AppNames.contextOf(name: 'app', org: 'io.my-org');
+    expect(hyphens.orgName, 'io.my_org');
+    expect(hyphens.appIdentity.androidApplicationId, 'io.my_org.app');
+    expect(hyphens.appIdentity.iosBundleId, 'io.my-org.app');
   });
 }

@@ -1,5 +1,4 @@
 import 'package:smf_contracts/lego.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -59,7 +58,7 @@ void main() {
     final order = orderContributions([of('c'), of('a')], resolution);
 
     expect(codes(order), ['a', 'c']);
-    expect(order.edges.single.reason, 'c depends on a');
+    expect(order.edges.single.reason, 'b depends on a; c depends on b');
   });
 
   test('after the providers of required and conditional roles', () {
@@ -115,13 +114,43 @@ void main() {
     expect(codes(order), ['xxx', 'yyy', 'zzz', 'template']);
     expect(
       order.edges.map((e) => '$e'),
-      containsAll([
-        'zzz → role:aaa (role:aaa comes after the providers of the aaa)',
-        equals(
-            'yyy → role:aaa (role:aaa comes after the providers of the aaa and '
-            'the modules they depend on)'),
+      [
         'xxx → role:aaa (role:aaa requires the dep)',
-      ]),
+        'xxx → zzz (zzz requires the dep)',
+        equals(
+          'yyy → role:aaa (zzz depends on yyy; role:aaa comes after the '
+          'providers of the aaa)',
+        ),
+        'yyy → zzz (zzz depends on yyy)',
+        'zzz → role:aaa (role:aaa comes after the providers of the aaa)',
+      ],
+    );
+  });
+
+  test('edges pass through modules that do not contribute', () {
+    // app_open requires analytics, whose provider depends on firebase_core;
+    // only app_open and firebase_core contribute to the socket.
+    final analytics = TestRole<NoDsl>('analytics');
+    final resolution = resolutionOf([
+      TestModule('app_open', requires: {analytics}),
+      TestModule(
+        'firebase_analytics',
+        dependsOn: {'firebase_core'},
+        providers: [RoleProvider.plain(analytics)],
+      ),
+      TestModule('firebase_core'),
+    ]);
+
+    final order = orderContributions(
+      [of('app_open'), of('firebase_core')],
+      resolution,
+    );
+
+    expect(codes(order), ['firebase_core', 'app_open']);
+    expect(
+      order.edges.single.reason,
+      'firebase_analytics depends on firebase_core; app_open requires the '
+      'analytics',
     );
   });
 
@@ -144,25 +173,52 @@ void main() {
     expect(order.edges.single.reason, 'role:aaa uses the di');
   });
 
-  test('edges both ways cancel out', () {
-    final role = TestRole<NoDsl>('thing');
+  test('role edges both ways cancel out', () {
+    final x = TestRole<NoDsl>('x');
+    final y = TestRole<NoDsl>('y');
     final resolution = resolutionOf([
-      TestModule('b', dependsOn: {'a'}),
-      TestModule('a', requires: {role}),
-      TestModule('bb', providers: [RoleProvider.plain(role)]),
-    ]);
-    final roleOfB = resolutionOf([
-      TestModule('b', dependsOn: {'a'}, providers: [RoleProvider.plain(role)]),
-      TestModule('a', requires: {role}),
+      TestModule('b', requires: {x}, providers: [RoleProvider.plain(y)]),
+      TestModule('a', requires: {y}, providers: [RoleProvider.plain(x)]),
     ]);
 
-    expect(codes(orderContributions([of('b'), of('a')], resolution)), [
-      'a',
-      'b',
-    ]);
-    final order = orderContributions([of('b'), of('a')], roleOfB);
+    final order = orderContributions([of('b'), of('a')], resolution);
+
     expect(codes(order), ['a', 'b']);
     expect(order.edges, isEmpty);
+    expect(order.cycle, isEmpty);
+  });
+
+  test('a module comes after its dependency even against a role edge', () {
+    final role = TestRole<NoDsl>('thing');
+    final resolution = resolutionOf([
+      TestModule(
+        'core',
+        dependsOn: {'zbase'},
+        providers: [RoleProvider.plain(role)],
+      ),
+      TestModule('zbase', requires: {role}),
+    ]);
+
+    final order = orderContributions([of('core'), of('zbase')], resolution);
+
+    expect(codes(order), ['zbase', 'core']);
+    expect(order.edges.single.reason, 'core depends on zbase');
+  });
+
+  test('a module comes after the template of a role it requires', () {
+    final analytics = TestRole<NoDsl>('analytics');
+    final resolution = resolutionOf([
+      TestModule('consent', requires: {analytics}),
+      TestModule('provider', providers: [RoleProvider.plain(analytics)]),
+    ]);
+
+    final order = orderContributions(
+      [of('consent'), contribution(RoleTemplateOrigin(analytics), 'init')],
+      resolution,
+    );
+
+    expect(codes(order), ['init', 'consent']);
+    expect(order.edges.single.reason, 'consent requires the analytics');
   });
 
   test('a cycle is reported and ordered by name', () {
@@ -182,8 +238,9 @@ void main() {
       resolution,
     );
 
-    expect(codes(order), ['e', 'a', 'b', 'c', 'd']);
-    expect(order.cycle, ['a', 'b', 'c', 'd']);
+    // d comes after the cycle, which it depends on through a.
+    expect(codes(order), ['a', 'b', 'c', 'd', 'e']);
+    expect(order.cycle, ['a', 'b', 'c']);
   });
 
   test('a contributor keeps the order of its contributions and variant', () {

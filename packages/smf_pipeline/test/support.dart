@@ -4,6 +4,21 @@ import 'package:file/memory.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/src/resolver.dart';
+
+// The tests reach the stages of the pipeline, which the public library
+// keeps internal, through this file.
+export 'package:smf_pipeline/src/choices.dart';
+export 'package:smf_pipeline/src/collector.dart';
+export 'package:smf_pipeline/src/errors.dart';
+export 'package:smf_pipeline/src/explain.dart';
+export 'package:smf_pipeline/src/identity.dart';
+export 'package:smf_pipeline/src/order.dart';
+export 'package:smf_pipeline/src/preflight.dart';
+export 'package:smf_pipeline/src/pubspec.dart';
+export 'package:smf_pipeline/src/resolver.dart';
+export 'package:smf_pipeline/src/selection.dart';
+export 'package:smf_pipeline/src/validation.dart';
 
 /// A role for tests, configured through its constructor.
 final class TestRole<D extends Object> extends Role<D> {
@@ -325,6 +340,40 @@ final class ScriptedPrompter implements SmfPrompter {
   }
 }
 
+/// A process runner that answers `run` from [results], by executable, and
+/// records the calls.
+final class ScriptedProcessRunner implements SmfProcessRunner {
+  ScriptedProcessRunner(this.results);
+
+  final Map<String, SmfProcessResult> results;
+
+  /// The calls, as the executable followed by the arguments.
+  final List<List<String>> calls = [];
+
+  @override
+  Future<SmfProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    calls.add([executable, ...arguments]);
+    return results[executable] ??
+        (throw StateError('Unexpected command $executable'));
+  }
+
+  @override
+  Future<int> runInteractive(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) =>
+      throw UnimplementedError('runInteractive $executable');
+}
+
 /// A process runner that fails on every call; the stages 1 to 7 run no
 /// commands themselves.
 final class NoProcessRunner implements SmfProcessRunner {
@@ -359,7 +408,9 @@ final class FakeHost {
     bool flutter = true,
     Map<String, String>? environment,
     this.operatingSystem = HostOperatingSystem.linux,
+    SmfProcessRunner? processRunner,
   })  : prompter = ScriptedPrompter(answers),
+        processRunner = processRunner ?? NoProcessRunner(),
         _terminal = terminal,
         fileSystem = MemoryFileSystem.test(
           style: operatingSystem == HostOperatingSystem.windows
@@ -383,6 +434,7 @@ final class FakeHost {
   }
 
   final ScriptedPrompter prompter;
+  final SmfProcessRunner processRunner;
   final FakeLogger logger = FakeLogger();
   final MemoryFileSystem fileSystem;
   final HostOperatingSystem operatingSystem;
@@ -391,7 +443,7 @@ final class FakeHost {
 
   SmfHost get host => SmfHost(
         prompter: prompter,
-        processRunner: NoProcessRunner(),
+        processRunner: processRunner,
         logger: logger,
         fileSystem: fileSystem,
         environmentVariables: variables,

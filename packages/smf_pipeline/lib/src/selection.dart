@@ -66,30 +66,45 @@ Future<Selection> select(
   PipelineEnvironment environment,
 ) async {
   final interactive = environment.interactive;
-  final prompter = environment.prompter;
+  final given = request.modules;
+  if (given != null) _checkRegistered(given, registry);
 
-  final appName = request.appName ??
-      (interactive
-          ? await prompter.input('App name', defaultValue: 'my_app')
-          : throw const SmfUsageException(
-              'Give the name of the app, as in "smf create my_app".',
-            ));
+  final String appName;
+  if (request.appName case final name?) {
+    appName = name;
+    AppNames.packageName(name);
+  } else if (interactive) {
+    appName = await _askValid(
+      environment,
+      'App name',
+      'my_app',
+      AppNames.packageName,
+    );
+  } else {
+    throw const SmfUsageException(
+      'Give the name of the app, as in "smf create my_app".',
+    );
+  }
   final package = AppNames.packageName(appName);
 
   final target = await _decideTarget(request, package, environment);
 
-  final org = request.org ??
-      (interactive
-          ? await prompter.input(
-              'Organization (reverse domain)',
-              defaultValue: AppNames.defaultOrg,
-            )
-          : AppNames.defaultOrg);
-  AppNames.orgSegments(org);
+  final String org;
+  if (request.org case final given?) {
+    org = given;
+    AppNames.orgSegments(org);
+  } else if (interactive) {
+    org = await _askValid(
+      environment,
+      'Organization (reverse domain)',
+      AppNames.defaultOrg,
+      AppNames.orgSegments,
+    );
+  } else {
+    org = AppNames.defaultOrg;
+  }
 
-  final given = request.modules;
   if (given != null) {
-    _checkRegistered(given, registry);
     return Selection(
       appName: appName,
       org: org,
@@ -99,8 +114,11 @@ Future<Selection> select(
   }
   if (!interactive) {
     environment.logger.info(
-      'No modules were given with -m, so the app has only what every app '
-      'needs.',
+      request.explain
+          ? 'No modules were given with -m, so this explains an app with only '
+              'what every app needs; a run in a terminal would ask for them.'
+          : 'No modules were given with -m, so the app has only what every '
+              'app needs.',
     );
     return Selection(
       appName: appName,
@@ -117,6 +135,27 @@ Future<Selection> select(
     requested: requested,
     declined: declined,
   );
+}
+
+/// Asks for text until [check] accepts it, reporting why it did not.
+Future<String> _askValid(
+  PipelineEnvironment environment,
+  String message,
+  String defaultValue,
+  Object Function(String text) check,
+) async {
+  while (true) {
+    final text = await environment.prompter.input(
+      message,
+      defaultValue: defaultValue,
+    );
+    try {
+      check(text);
+      return text;
+    } on SmfUsageException catch (error) {
+      environment.logger.warn(error.message);
+    }
+  }
 }
 
 void _checkRegistered(List<ModuleId> ids, ModuleRegistry registry) {
@@ -230,71 +269,104 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
   final prompter = environment.prompter;
   final chosen = <SmfModule>[];
   final declined = <Role>{};
+  final asked = <Role>{};
 
-  final byKind = <ModuleKind, List<SmfModule>>{};
+  final byKind = <String, List<SmfModule>>{};
   for (final module in registry.modules) {
     if (module.descriptor.providers.isEmpty) {
-      byKind.putIfAbsent(module.descriptor.kind, () => []).add(module);
+      byKind.putIfAbsent(module.descriptor.kind.id, () => []).add(module);
     }
   }
-  for (final MapEntry(key: kind, value: modules) in byKind.entries) {
+  for (final modules in byKind.values) {
     chosen.addAll(
       await prompter.multiSelect(
-        '${kind.label}: which do you want?',
+        '${modules.first.descriptor.kind.label}: which do you want?',
         modules,
         display: _display,
       ),
     );
   }
 
-  for (final role in _promptOrder(registry)) {
-    final providers = registry.providersOf(role);
-    if (providers.isEmpty) continue;
-    if (chosen.any((module) => module.descriptor.provides.contains(role))) {
-      continue;
-    }
-    final requiredBy = _requirer(role, chosen);
-    if (requiredBy != null && providers.length == 1) {
-      environment.logger
-          .info('Adding ${providers.single.descriptor.id}: $requiredBy.');
-      chosen.add(providers.single);
-      continue;
-    }
-    final question = '${role.description}: which module provides it?';
-    if (role.cardinality.allowsMany) {
-      final picked = await prompter.multiSelect<SmfModule>(
-        question,
-        providers,
-        display: _display,
-        defaultValues: requiredBy == null ? const [] : [providers.first],
-      );
-      if (picked.isEmpty && requiredBy != null) {
-        throw SmfUsageException(
-          'The app needs a module that provides the ${role.id}: '
-          '$requiredBy.',
-        );
+  // Asks until the answers need no more roles: a later answer can need a
+  // role that was declined before, which is then asked again without
+  // "None".
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (final role in _promptOrder(registry)) {
+      final providers = registry.providersOf(role);
+      if (providers.isEmpty) continue;
+      final app = _withDependencies(chosen, registry);
+      if (app.any((module) => module.descriptor.provides.contains(role))) {
+        continue;
       }
-      if (picked.isEmpty) declined.add(role);
-      chosen.addAll(picked);
-      continue;
-    }
-    final picked = await prompter.select<_Choice>(
-      question,
-      [
-        for (final provider in providers) _Choice(provider),
-        if (requiredBy == null) const _Choice(null),
-      ],
-      display: (choice) =>
-          choice.module == null ? 'None' : _display(choice.module!),
-    );
-    final module = picked.module;
-    if (module == null) {
-      declined.add(role);
-    } else {
-      chosen.add(module);
+      final requiredBy = _requirer(role, app);
+      if (asked.contains(role) && requiredBy == null) continue;
+      asked.add(role);
+      declined.remove(role);
+      if (requiredBy != null && providers.length == 1) {
+        chosen.add(providers.single);
+        changed = true;
+        continue;
+      }
+      final question = requiredBy == null
+          ? '${role.description}: which module provides it?'
+          : '${role.description}: $requiredBy. Which module provides it?';
+      if (role.cardinality.allowsMany) {
+        final picked = await prompter.multiSelect<SmfModule>(
+          question,
+          providers,
+          display: _display,
+          defaultValues: requiredBy == null ? const [] : [providers.first],
+        );
+        if (picked.isEmpty && requiredBy != null) {
+          throw SmfUsageException(
+            'The app needs a module that provides the ${role.id}: '
+            '$requiredBy.',
+          );
+        }
+        if (picked.isEmpty) declined.add(role);
+        chosen.addAll(picked);
+        changed |= picked.isNotEmpty;
+        continue;
+      }
+      final picked = await prompter.select<_Choice>(
+        question,
+        [
+          for (final provider in providers) _Choice(provider),
+          if (requiredBy == null) const _Choice(null),
+        ],
+        display: (choice) =>
+            choice.module == null ? 'None' : _display(choice.module!),
+      );
+      final module = picked.module;
+      if (module == null) {
+        declined.add(role);
+      } else {
+        chosen.add(module);
+        changed = true;
+      }
     }
   }
   return ([for (final module in chosen) module.descriptor.id], declined);
+}
+
+/// [chosen] and the modules they depend on, directly or not.
+List<SmfModule> _withDependencies(
+  List<SmfModule> chosen,
+  ModuleRegistry registry,
+) {
+  final all = <ModuleId, SmfModule>{};
+  void add(SmfModule module) {
+    if (all.containsKey(module.descriptor.id)) return;
+    all[module.descriptor.id] = module;
+    for (final dependency in module.descriptor.dependsOn) {
+      if (registry[dependency] case final dependency?) add(dependency);
+    }
+  }
+
+  chosen.forEach(add);
+  return all.values.toList();
 }
 
 final class _Choice {
@@ -321,15 +393,21 @@ String? _requirer(Role role, List<SmfModule> chosen) {
   return null;
 }
 
-/// The roles in the order they are asked: a role that another role
-/// requires comes after it, otherwise the order of the registry.
+/// The roles in the order they are asked: a role comes after the roles
+/// that require it, or whose providers do, so its question knows whether
+/// the answers so far need it; otherwise the order of the registry.
 List<Role> _promptOrder(ModuleRegistry registry) {
   final ordered = <Role>[];
   final visiting = <Role>{};
+  bool needs(Role other, Role role) =>
+      other.requires.contains(role) ||
+      registry.providersOf(other).any(
+            (module) => module.descriptor.effectiveRequires.contains(role),
+          );
   void visit(Role role) {
     if (ordered.contains(role) || !visiting.add(role)) return;
     for (final other in registry.roles) {
-      if (other.requires.contains(role)) visit(other);
+      if (!identical(other, role) && needs(other, role)) visit(other);
     }
     ordered.add(role);
   }

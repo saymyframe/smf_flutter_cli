@@ -66,15 +66,60 @@ void main() {
         'the only provider of the nav (analytics requires the nav)',
       ],
     );
-    expect(
-      host.logger.infos,
-      contains('Adding go: analytics requires the nav.'),
-    );
+    // The pipeline reports the additions once the app is resolved.
+    expect(host.logger.infos, isEmpty);
     expect(resolution.module(const ModuleId('core')), isNotNull);
     expect(resolution.module(const ModuleId('none')), isNull);
     expect(
       resolution.dependencyClosure(const ModuleId('analytics')),
       {const ModuleId('core')},
+    );
+  });
+
+  test('a provider of several roles is added once', () async {
+    final a = TestRole<NoDsl>('a');
+    final b = TestRole<NoDsl>('b');
+    final registry = ModuleRegistry([
+      scaffold(),
+      TestModule(
+        'm',
+        providers: [RoleProvider.plain(a), RoleProvider.plain(b)],
+      ),
+      TestModule('n', providers: [RoleProvider.plain(b)]),
+      TestModule('f', requires: {a, b}),
+    ]);
+
+    final result = await run(registry, ['f']);
+
+    expect(result.issues, isEmpty);
+    expect(names(result), ['f', 'scaffold', 'm']);
+    expect(
+      '${result.resolution!.modules.last.reason}',
+      'the only provider of the a (f requires the a)',
+    );
+  });
+
+  test('--explain takes the first of several providers', () async {
+    final nav = TestRole<NoDsl>('nav');
+    final registry = ModuleRegistry([
+      scaffold(),
+      TestModule('home', requires: {nav}),
+      TestModule('go', providers: [RoleProvider.plain(nav)]),
+      TestModule('auto', providers: [RoleProvider.plain(nav)]),
+    ]);
+
+    final result = await resolve(
+      requested: const [ModuleId('home')],
+      registry: registry,
+      environment: FakeHost().environment(),
+      explain: true,
+    );
+
+    expect(names(result), ['home', 'scaffold', 'go']);
+    expect(
+      '${result.resolution!.modules.last.reason}',
+      'the first provider of the nav (home requires the nav); a run asks '
+          'which one, also offering auto',
     );
   });
 
@@ -263,6 +308,38 @@ void main() {
 
       expect(result.issues.single.message, contains('No module provides'));
     });
+  });
+
+  test('asks again when the remembered provider was left out', () async {
+    final registry = ModuleRegistry([
+      scaffold(),
+      TestModule('home', requires: {nav}),
+      TestModule('go', providers: [RoleProvider.plain(nav)]),
+      TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      TestModule('beamer', providers: [RoleProvider.plain(nav)]),
+    ]);
+    final host = FakeHost(answers: ['beamer'], terminal: true);
+
+    final result = await run(
+      registry,
+      ['home'],
+      host: host,
+      excluded: {'auto'},
+      answers: {nav: const ModuleId('auto')},
+    );
+
+    expect(names(result), ['home', 'scaffold', 'beamer']);
+    expect(host.prompter.asked.single.shown, [
+      'go — The module go',
+      'beamer — The module beamer',
+    ]);
+  });
+
+  test('rejects a module that is not in the registry', () {
+    expect(
+      run(ModuleRegistry([scaffold()]), ['nope']),
+      throwsArgumentError,
+    );
   });
 
   test('providerObject finds the provider of a role', () {

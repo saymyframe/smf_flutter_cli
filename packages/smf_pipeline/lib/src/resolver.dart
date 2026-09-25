@@ -32,7 +32,12 @@ final class DependencyOf extends SelectionReason {
 final class ProviderOf extends SelectionReason {
   /// Creates the reason: the module provides [role], which [requiredBy]
   /// needs.
-  const ProviderOf(this.role, this.requiredBy, {this.chosen = false});
+  const ProviderOf(
+    this.role,
+    this.requiredBy, {
+    this.chosen = false,
+    this.alternatives = const [],
+  });
 
   /// The role the module provides.
   final Role role;
@@ -43,10 +48,20 @@ final class ProviderOf extends SelectionReason {
   /// Whether the user chose the module among several providers.
   final bool chosen;
 
+  /// The other providers a run would offer, if `--explain` took the first
+  /// one instead of asking.
+  final List<ModuleId> alternatives;
+
   @override
-  String toString() => chosen
-      ? 'chosen to provide the ${role.id} ($requiredBy)'
-      : 'the only provider of the ${role.id} ($requiredBy)';
+  String toString() {
+    if (alternatives.isNotEmpty) {
+      return 'the first provider of the ${role.id} ($requiredBy); a run '
+          'asks which one, also offering ${alternatives.join(', ')}';
+    }
+    return chosen
+        ? 'chosen to provide the ${role.id} ($requiredBy)'
+        : 'the only provider of the ${role.id} ($requiredBy)';
+  }
 }
 
 /// A module of the app, with why it is there and which of its variants
@@ -152,6 +167,9 @@ final class ResolverResult {
 /// - A module with variants gets the variant of the selected provider of
 ///   their role.
 ///
+/// With [explain], a role with several providers takes the first one and
+/// records the others, since `--explain` asks nothing.
+///
 /// Modules in [excluded], which lenient mode left out, are never added.
 /// Problems caused by a module carry its origin, so lenient mode can leave
 /// it out too. [answers] keeps the user's picks between runs of the stage.
@@ -162,6 +180,7 @@ Future<ResolverResult> resolve({
   Set<Role> declined = const {},
   Set<ModuleId> excluded = const {},
   Map<Role, ModuleId>? answers,
+  bool explain = false,
 }) async {
   final selected = <ModuleId, ResolvedModule>{};
   // Keyed by message: the loop may find a problem more than once.
@@ -173,7 +192,9 @@ Future<ResolverResult> resolve({
       selected[module.descriptor.id] = ResolvedModule(module, reason);
 
   for (final id in requested) {
-    if (!excluded.contains(id)) add(registry[id]!, const Requested());
+    final module = registry[id] ??
+        (throw ArgumentError.value(id, 'requested', 'Not in the registry'));
+    if (!excluded.contains(id)) add(module, const Requested());
   }
 
   var changed = true;
@@ -228,19 +249,22 @@ Future<ResolverResult> resolve({
         );
         continue;
       }
+      // A module added here may provide or require other roles, so every
+      // addition starts a new pass.
       if (candidates.length == 1) {
-        final module = candidates.single;
-        environment.logger
-            .info('Adding ${module.descriptor.id}: ${need.phrase}.');
-        add(module, ProviderOf(role, need.phrase));
+        add(candidates.single, ProviderOf(role, need.phrase));
         changed = true;
-        continue;
+        break;
       }
       final remembered = picks[role];
       final SmfModule module;
+      var others = const <ModuleId>[];
       if (remembered != null &&
           candidates.any((c) => c.descriptor.id == remembered)) {
         module = registry[remembered]!;
+      } else if (explain) {
+        module = candidates.first;
+        others = [for (final other in candidates.skip(1)) other.descriptor.id];
       } else if (environment.interactive) {
         module = await environment.prompter.select(
           '${role.description}: ${need.phrase}. Which module provides it?',
@@ -256,8 +280,12 @@ Future<ResolverResult> resolve({
           'of them to -m.',
         );
       }
-      add(module, ProviderOf(role, need.phrase, chosen: true));
+      add(
+        module,
+        ProviderOf(role, need.phrase, chosen: true, alternatives: others),
+      );
       changed = true;
+      break;
     }
   }
 

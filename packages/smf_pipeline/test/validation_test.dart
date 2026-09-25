@@ -93,22 +93,24 @@ void main() {
     });
 
     test('data goes only to the roles of the contributor', () {
+      final template = TestTemplate<String>();
+      final routes = TestRole<String>('routes', template: template);
       final result = _validate([
         entry,
         TestModule(
           'home',
-          contributions: [nav.data('x')],
+          contributions: [routes.data('x')],
         ),
-        TestModule('prov', providers: [RoleProvider.plain(nav)]),
+        TestModule('prov', providers: [RoleProvider.plain(routes)]),
       ]);
 
       expect(
-        _messages(result),
-        contains(
-          'home: home contributes data to the nav, but does not provide, '
-          'require or use it.',
-        ),
+        _messages(result).single,
+        'home: home contributes data to the routes, but does not provide, '
+        'require or use it.',
       );
+      // The template does not see it.
+      expect(template.validated.single.data, isEmpty);
     });
 
     test('data of the wrong type is reported and not passed to hooks', () {
@@ -335,7 +337,7 @@ void main() {
       expect(result.issues.last.path, 'lib/main.dart');
     });
 
-    test('every file has one owner', () {
+    test('every file has one brick', () {
       final result = _validate([
         scaffold(
           contributions: [
@@ -354,22 +356,37 @@ void main() {
 
       expect(_messages(result), [
         equals(
-            'other: Both scaffold and other generate lib/main.dart; every file '
-            'has one owner.'),
+          'other: Both scaffold and other generate lib/main.dart; every file '
+          'has one brick.',
+        ),
+        equals(
+          'other: Two bricks of other generate lib/c.dart; every file has one '
+          'brick.',
+        ),
       ]);
     });
   });
 
-  test('preflight checks need unique snake_case ids', () {
+  test('preflight checks need snake_case ids unique for the module', () {
     final result = _validate([
       scaffold(
         contributions: const [
-          Preflight([_Check('tool'), _Check('tool'), _Check('Bad')]),
+          Preflight([_Check('tool'), _Check('Bad')]),
+          Preflight([_Check('tool')]),
+        ],
+      ),
+      TestModule(
+        'other',
+        contributions: const [
+          Preflight([_Check('tool')]),
         ],
       ),
     ]);
 
-    expect(result.issues, hasLength(2));
+    expect(_messages(result), [
+      contains('"Bad" of scaffold'),
+      contains('"tool" of scaffold'),
+    ]);
   });
 
   test('kinds require and forbid data', () {
@@ -406,6 +423,29 @@ void main() {
       equals('sneaky: The module sneaky is of the infra kind, so it must not '
           'contribute data to the nav.'),
     ]);
+  });
+
+  test('the app may not be named like a dependency', () {
+    final registry = ModuleRegistry([
+      scaffold(
+        contributions: const [PubspecContribution.hosted('my_app', 'any')],
+      ),
+    ]);
+    final resolution = resolutionOf(registry.modules);
+
+    final result = validate(
+      registry: registry,
+      resolution: resolution,
+      collection: collect(resolution, testContext),
+      context: testContext,
+    );
+
+    expect(
+      result.issues.single.message,
+      'The app is named my_app, like its dependency from scaffold, and a '
+      'package cannot depend on itself.',
+    );
+    expect(result.issues.single.origin, isNull);
   });
 
   test('pubspec problems are reported', () {
@@ -473,6 +513,44 @@ void main() {
         startsWith('prov: A check of prov failed: Bad state: hook broke'),
       );
     });
+  });
+
+  test('a step that cannot run must be skippable', () {
+    final modules = [
+      scaffold(
+        contributions: const [
+          PostGenStep(ToolRef('a'), [], interactive: true),
+          PostGenStep(ToolRef('b'), [], external: true, description: 'Log in'),
+          PostGenStep(ToolRef('c'), [], interactive: true, skippable: true),
+        ],
+      ),
+    ];
+    final registry = ModuleRegistry(modules);
+    final resolution = resolutionOf(modules);
+    ValidationResult run({required bool interactive, bool skip = false}) =>
+        validate(
+          registry: registry,
+          resolution: resolution,
+          collection: collect(resolution, testContext),
+          context: testContext,
+          interactive: interactive,
+          skipExternalSetup: skip,
+        );
+
+    expect(run(interactive: true).issues, isEmpty);
+    expect(
+      run(interactive: false, skip: true).issues.map((i) => i.message),
+      [
+        equals(
+          'The step a of scaffold cannot run without a terminal, and the app '
+          'is not complete without it.',
+        ),
+        equals(
+          'The step Log in of scaffold cannot run with --skip-external-setup, '
+          'and the app is not complete without it.',
+        ),
+      ],
+    );
   });
 
   group('sockets', () {

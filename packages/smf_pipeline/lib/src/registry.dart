@@ -94,6 +94,10 @@ final class ModuleRegistry {
       for (final module in modules) ..._descriptorProblems(module, modules),
       ..._socketProblems(roles, modules),
       ..._optionProblems(roles),
+      for (final role in roles)
+        if (role.cardinality == RoleCardinality.exactlyOne &&
+            !modules.any((m) => m.descriptor.provides.contains(role)))
+          'Every app needs the ${role.id}, but no module provides it.',
     ];
   }
 }
@@ -115,6 +119,12 @@ List<String> _moduleIdProblems(List<SmfModule> modules) {
     if (!seen.add(id)) {
       problems.add('Two modules have the id $id.');
       continue;
+    }
+    if (id.value == 'pipeline') {
+      problems.add(
+        'The module id pipeline names the pipeline in the order of '
+        'contributions and in diagnostics.',
+      );
     }
     final identifier = id.lowerCamelCase;
     if (!SmfNames.isDartIdentifier(identifier) ||
@@ -164,6 +174,14 @@ List<String> _roleIdProblems(List<Role> roles, List<SmfModule> modules) {
 List<String> _dependencyProblems(List<SmfModule> modules) {
   final problems = <String>[];
   final byId = {for (final module in modules) module.descriptor.id: module};
+  final kinds = <String, ModuleKind>{};
+  for (final module in modules) {
+    final kind = module.descriptor.kind;
+    if (kinds.putIfAbsent(kind.id, () => kind) case final other
+        when !identical(other, kind)) {
+      problems.add('Two different module kinds have the id ${kind.id}.');
+    }
+  }
   for (final module in modules) {
     final descriptor = module.descriptor;
     for (final dependency in descriptor.dependsOn) {
@@ -370,10 +388,18 @@ List<String> _optionProblems(List<Role> roles) {
           'The option --$name of the ${role.id} is not lower kebab-case.',
         );
       }
-      if (CreateOptions.names.contains(name) || name == 'help') {
+      if (CreateOptions.names.contains(name) ||
+          name == 'help' ||
+          name.startsWith('no-')) {
         problems.add(
           'The option --$name of the ${role.id} is an option of the '
-          'pipeline.',
+          'pipeline, or starts with no-, which negates its flags.',
+        );
+      }
+      if (role.template == null) {
+        problems.add(
+          'The ${role.id} has the option --$name but no template, whose '
+          'choose hook would read it.',
         );
       }
       if (owners.putIfAbsent(name, () => role) case final other

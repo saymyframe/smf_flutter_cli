@@ -1,7 +1,8 @@
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/lego_core.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
+
+import 'support.dart';
 
 Collected _by(
   String module,
@@ -32,6 +33,51 @@ void main() {
     expect(goRouter.origins.map((o) => '$o'), ['a', 'b', 'c']);
     expect(dependencies['flutter']!.sdk, 'flutter');
     expect(dependencies['flutter']!.constraint, isNull);
+  });
+
+  test('keeps the text of a contributed constraint', () {
+    final result = mergePubspec([
+      _by('feature', const PubspecContribution.hosted('bloc', 'any')),
+      _by('provider', const PubspecContribution.hosted('bloc', '^9.1.0')),
+      _by('other', const PubspecContribution.hosted('bloc', '^9.1.0')),
+      _by('a', const PubspecContribution.hosted('mixed', '^1.2.0')),
+      _by('b', const PubspecContribution.hosted('mixed', '>=1.3.0')),
+      _by('c', const PubspecContribution.hosted('wide', '^1.2.0')),
+      _by('d', const PubspecContribution.hosted('wide', '>=1.0.0')),
+      _by('e', const PubspecContribution.environment(sdk: '^3.8.0')),
+    ]);
+
+    final dependencies = result.pubspec.dependencies;
+    expect(dependencies['bloc']!.constraintText, '^9.1.0');
+    expect(dependencies['mixed']!.constraintText, '>=1.3.0 <2.0.0');
+    expect(dependencies['wide']!.constraintText, '^1.2.0');
+    expect(result.pubspec.sdkText, '^3.8.0');
+    expect(result.pubspec.flutterText, isNull);
+  });
+
+  test('names the contributors of the conflicting constraint', () {
+    final result = mergePubspec([
+      _by('a', const PubspecContribution.hosted('x', '^1.0.0')),
+      _by('b', const PubspecContribution.hosted('x', 'any')),
+      _by('c', const PubspecContribution.hosted('x', '^1.0.0')),
+      _by('d', const PubspecContribution.hosted('x', '^2.0.0')),
+    ]);
+
+    expect(
+      result.issues.single.message,
+      'The constraints "^1.0.0" (from a, c) and "^2.0.0" (from d) of x have '
+      'no version in common.',
+    );
+  });
+
+  test('a dependency from another source stays a dev dependency', () {
+    final result = mergePubspec([
+      _by('a', const PubspecContribution.hosted('x', '^1.0.0', dev: true)),
+      _by('b', const PubspecContribution.sdk('x')),
+    ]);
+
+    expect(result.pubspec.devDependencies.keys, ['x']);
+    expect(result.issues, hasLength(1));
   });
 
   test('a dependency that is also a dev dependency is a dependency', () {

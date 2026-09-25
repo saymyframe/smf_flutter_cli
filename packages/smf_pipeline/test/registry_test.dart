@@ -76,6 +76,13 @@ void main() {
       expect(_problems([TestModule('hash_code')]), _hasProblem('reserved'));
     });
 
+    test('must not be pipeline', () {
+      expect(
+        _problems([TestModule('pipeline')]),
+        _hasProblem('The module id pipeline names the pipeline'),
+      );
+    });
+
     test('must not become the same Dart name', () {
       expect(
         _problems([TestModule('a_b1'), TestModule('a_b_1')]),
@@ -353,6 +360,42 @@ void main() {
         ]),
       );
     });
+  });
+
+  test('role options need a template and must not start with no-', () {
+    final role = TestRole<NoDsl>(
+      'a',
+      options: const [RoleOption(name: 'no-input', help: '')],
+    );
+
+    expect(
+      _problems([
+        TestModule('m', uses: {role}),
+      ]),
+      allOf(
+        _hasProblem('starts with no-, which negates its flags'),
+        _hasProblem('has the option --no-input but no template'),
+      ),
+    );
+  });
+
+  test('two different kinds must not share an id', () {
+    expect(
+      _problems([
+        TestModule('a', kind: const ModuleKind(id: 'same', label: 'A')),
+        TestModule('b', kind: const ModuleKind(id: 'same', label: 'B')),
+      ]),
+      _hasProblem('Two different module kinds have the id same'),
+    );
+  });
+
+  test('a role every app needs must have a provider', () {
+    expect(
+      _problems([
+        TestModule('home', uses: {appEntryRole}),
+      ]),
+      _hasProblem('Every app needs the app_entry, but no module provides it'),
+    );
   });
 
   test('the built-in roles pass', () {

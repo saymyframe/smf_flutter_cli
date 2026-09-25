@@ -1,5 +1,4 @@
 import 'package:smf_contracts/lego.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -127,13 +126,20 @@ void main() {
     expect([for (final c in collection.all) c.applies], [true, true, false]);
   });
 
-  test('a module that fails to contribute stops generation', () {
+  test('a module that fails to contribute gets an issue', () {
+    final collection = collect(
+      resolutionOf([_ThrowingModule(), TestModule('fine')]),
+      testContext,
+    );
+
+    expect(collection.all, isEmpty);
     expect(
-      () => collect(resolutionOf([_ThrowingModule()]), testContext),
-      throwsA(
-        isA<GenerationFailedException>()
-            .having((e) => e.message, 'message', contains('broken')),
-      ),
+      collection.issues.single.message,
+      'broken failed to contribute: Bad state: boom',
+    );
+    expect(
+      collection.issues.single.origin,
+      const ModuleOrigin(ModuleId('broken')),
     );
   });
 }

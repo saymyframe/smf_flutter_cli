@@ -2,6 +2,7 @@ import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pipeline.dart';
 import 'package:smf_pipeline/src/preflight.dart';
+import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/selection.dart';
 import 'package:smf_pipeline/src/validation.dart';
@@ -17,6 +18,8 @@ import 'package:smf_pipeline/src/validation.dart';
 /// - for every socket with more than one contributor, the order of the
 ///   contributors and the edges that decide it, and the same for the
 ///   post-generation steps;
+/// - the dependencies of the merged pubspec, and the commands that run
+///   after generation;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do.
 List<String> explain({
@@ -27,13 +30,17 @@ List<String> explain({
   required PreflightReport preflight,
   required List<LeftOut> leftOut,
   required bool strict,
+  OnConflict onConflict = OnConflict.prompt,
+  List<SmfIssue> sdkIssues = const [],
+  List<ContributionOrigin> codegen = const [],
 }) {
   final target = selection.target;
+  final conflict = target.conflict ? _conflicts[onConflict]! : '';
   final lines = <String>[
     'App ${context.appName} of ${context.orgName}',
     '  Android application id: ${context.appIdentity.androidApplicationId}',
     '  iOS bundle id: ${context.appIdentity.iosBundleId}',
-    '  Directory: ${target.path}${target.conflict ? _conflict : ''}',
+    '  Directory: ${target.path}$conflict',
     '',
     'Modules',
     for (final module in resolution.modules)
@@ -81,6 +88,43 @@ List<String> explain({
     }
   }
 
+  final pubspec = validation.pubspec;
+  for (final (title, dependencies) in [
+    ('Dependencies', pubspec.dependencies),
+    ('Dev dependencies', pubspec.devDependencies),
+  ]) {
+    if (dependencies.isEmpty) continue;
+    lines
+      ..add('')
+      ..add(title);
+    for (final dependency in dependencies.values) {
+      final version = dependency.source == PubspecSource.sdk
+          ? 'from the ${dependency.sdk} SDK'
+          : dependency.constraintText ?? 'any';
+      lines.add(
+        '  ${dependency.package} $version '
+        '(${dependency.origins.toSet().join(', ')})',
+      );
+    }
+  }
+
+  final steps = [
+    if (codegen.isNotEmpty)
+      '  dart run build_runner build (${codegen.toSet().join(', ')})',
+    for (final collected in validation.postGenOrder.contributions)
+      if (collected.contribution case final PostGenStep step)
+        '  ${[
+          step.tool.executable,
+          ...step.tool.argumentsFor(step.arguments),
+        ].join(' ')} (${collected.origin})',
+  ];
+  if (steps.isNotEmpty) {
+    lines
+      ..add('')
+      ..add('After generation')
+      ..addAll(steps);
+  }
+
   lines
     ..add('')
     ..add('Machine');
@@ -109,10 +153,21 @@ List<String> explain({
       );
     }
   }
+  for (final issue in sdkIssues) {
+    lines.add('  ✗ ${issue.message}');
+  }
   return lines;
 }
 
-const _conflict = ' (exists and is not empty; see --on-conflict)';
+const Map<OnConflict, String> _conflicts = {
+  OnConflict.prompt: ' (exists and is not empty; a run asks what to do, '
+      'or --on-conflict decides)',
+  OnConflict.replace: ' (exists and is not empty; the new app would replace '
+      'it)',
+  OnConflict.copy: ' (exists and is not empty; the app would go into a new '
+      'directory next to it)',
+  OnConflict.cancel: ' (exists and is not empty; generation would stop)',
+};
 
 String _variant(ResolvedModule module) =>
     module.variant == null ? '' : ', variant for ${module.variant}';

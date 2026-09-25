@@ -44,29 +44,48 @@ const _reservedVars = {'app_name', 'org_name'};
 ///   socket, role and [Contribution.when], bricks without hooks and with one
 ///   owner per file, reserved brick variables;
 /// - the rules of each module's kind;
-/// - the pubspec;
+/// - the pubspec, and that the app is not named like a dependency;
 /// - the `validate` hooks of the present roles' templates and providers,
 ///   and the module rules of the roles;
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
-///   generated.
+///   generated;
+/// - that every post-generation step can run in this run, [interactive]
+///   and with [skipExternalSetup] as given, or may be skipped.
 ValidationResult validate({
   required ModuleRegistry registry,
   required Resolution resolution,
   required Collection collection,
   required ModuleContext context,
+  bool interactive = true,
+  bool skipExternalSetup = false,
 }) {
   final issues = <SmfIssue>[
+    ...collection.issues,
     for (final collected in collection.all)
       ..._contributionIssues(collected, registry, resolution),
     ..._ownerIssues(collection),
+    ..._preflightIssues(collection),
     for (final module in resolution.modules) ..._kindIssues(module, collection),
   ];
 
   final merged = mergePubspec(collection.all);
+  final pubspec = merged.pubspec;
+  final clash = pubspec.dependencies[context.appName] ??
+      pubspec.devDependencies[context.appName];
+  if (clash != null) {
+    issues.add(
+      SmfIssue(
+        'The app is named ${context.appName}, like its dependency from '
+        '${clash.origins.join(', ')}, and a package cannot depend on '
+        'itself.',
+        hint: 'Name the app differently.',
+      ),
+    );
+  }
   issues
     ..addAll(merged.issues)
-    ..addAll(_hookIssues(resolution, collection, context));
+    ..addAll(_hookIssues(registry, resolution, collection, context));
 
   final bySocket = <SocketRef, List<Collected>>{};
   final postGen = <Collected>[];
@@ -74,8 +93,23 @@ ValidationResult validate({
     switch (collected.contribution) {
       case final SocketContribution socket:
         bySocket.putIfAbsent(socket.socket, () => []).add(collected);
-      case PostGenStep():
+      case final PostGenStep step:
         postGen.add(collected);
+        final needsTerminal = step.interactive && !interactive;
+        final needsSetup = step.external && skipExternalSetup;
+        if ((needsTerminal || needsSetup) && !step.skippable) {
+          final why = needsTerminal
+              ? 'without a terminal'
+              : 'with --skip-external-setup';
+          issues.add(
+            SmfIssue(
+              'The step ${step.description ?? step.tool.executable} of '
+              '${collected.origin} cannot run $why, and the app is not '
+              'complete without it.',
+              origin: collected.origin,
+            ),
+          );
+        }
       default:
         break;
     }
@@ -219,18 +253,8 @@ Iterable<SmfIssue> _contributionIssues(
           }
         }
       }
-    case final Preflight preflight:
-      final ids = <String>{};
-      for (final check in preflight.checks) {
-        if (!SmfNames.isSnakeCase(check.id) || !ids.add(check.id)) {
-          yield SmfIssue(
-            'The preflight check "${check.id}" of $origin needs a unique '
-            'lower snake_case id.',
-            origin: origin,
-          );
-        }
-      }
-    case PubspecContribution() || CodegenRequest() || PostGenStep():
+    case Preflight() || PubspecContribution() || CodegenRequest():
+    case PostGenStep():
       break;
   }
 }
@@ -295,17 +319,41 @@ Iterable<SmfIssue> _socketIssues(
 bool _isMember(SocketFamily<Object?, SocketKind> family, SocketRef socket) =>
     family.name == socket.name && family.memberOfTag(socket.tag) == socket;
 
+/// Preflight checks whose ids are not lower snake_case or not unique for
+/// their contributor, which the pipeline keys their results by.
+Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
+  final ids = <String, Set<String>>{};
+  for (final collected in collection.all) {
+    if (collected.contribution case Preflight(:final checks)) {
+      final origin = collected.origin;
+      final seen = ids.putIfAbsent(contributorName(origin), () => {});
+      for (final check in checks) {
+        if (!SmfNames.isSnakeCase(check.id) || !seen.add(check.id)) {
+          yield SmfIssue(
+            'The preflight check "${check.id}" of $origin needs a lower '
+            'snake_case id that its other checks do not have.',
+            origin: origin,
+          );
+        }
+      }
+    }
+  }
+}
+
 /// Two bricks that generate the same file.
 Iterable<SmfIssue> _ownerIssues(Collection collection) sync* {
   final owners = <String, ContributionOrigin>{};
   for (final collected in collection.applyingOf<BrickContribution>()) {
     final brick = collected.contribution as BrickContribution;
     for (final file in brick.bundle.files) {
-      final existing = owners.putIfAbsent(file.path, () => collected.origin);
-      if (existing != collected.origin) {
+      final existing = owners[file.path];
+      owners[file.path] = collected.origin;
+      if (existing != null) {
+        final who = existing == collected.origin
+            ? 'Two bricks of $existing generate'
+            : 'Both $existing and ${collected.origin} generate';
         yield SmfIssue(
-          'Both $existing and ${collected.origin} generate ${file.path}; '
-          'every file has one owner.',
+          '$who ${file.path}; every file has one brick.',
           origin: collected.origin,
           path: file.path,
         );
@@ -352,16 +400,23 @@ Iterable<SmfIssue> _kindIssues(
 /// Runs the `validate` hooks of the present roles' templates and providers
 /// and the module rules of the roles.
 Iterable<SmfIssue> _hookIssues(
+  ModuleRegistry registry,
   Resolution resolution,
   Collection collection,
   ModuleContext context,
 ) sync* {
-  // Data of the wrong type is reported with its contribution and left out
-  // here, so building the hooks' input cannot fail.
+  // Data of the wrong type, or for a role its contributor has no access
+  // to, is reported with its contribution and left out here: the hooks
+  // would only add confusing problems about it, and building their input
+  // cannot fail on the type.
   final request = RoleHookRequest(
     data: [
       for (final data in collection.roleData)
-        if (data.role.accepts(data.value)) data,
+        if (data.role.accepts(data.value) &&
+            _rolesOf(data.origin!, registry, resolution)
+                .access
+                .contains(data.role))
+          data,
     ],
     presentRoles: resolution.presentRoles,
     context: context,

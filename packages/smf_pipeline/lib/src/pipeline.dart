@@ -61,7 +61,11 @@ final class GenerationPlan {
   /// The contributions of the modules and role templates.
   final Collection collection;
 
-  /// The contributions of each socket that apply, in their final order.
+  /// The contributions of each socket that apply, in order.
+  ///
+  /// These are the contributions known before rendering; stage 8 adds the
+  /// fragments of the render hooks of roles and providers, and orders the
+  /// sockets again.
   final Map<SocketRef, ContributionOrder> socketOrders;
 
   /// The post-generation steps that apply, in the order they run.
@@ -141,11 +145,10 @@ final class CreatePipeline {
     final context =
         AppNames.contextOf(name: selection.appName, org: selection.org);
 
-    final excluded = <ModuleId>{};
-    final leftOut = <LeftOut>[];
+    final lenience = _Lenience(strict: request.strict, logger: logger);
     final answers = <Role, ModuleId>{};
-    final passed = <String>{};
-    final sdkCheck = FlutterSdkCheck();
+    final checked = <String, CheckResult>{};
+    final sdkCheck = FlutterSdkCheck(environment.fileSystem);
 
     while (true) {
       final resolved = await resolve(
@@ -153,10 +156,11 @@ final class CreatePipeline {
         registry: registry,
         environment: environment,
         declined: selection.declined,
-        excluded: excluded,
+        excluded: lenience.excluded,
         answers: answers,
+        explain: request.explain,
       );
-      if (_leaveOut(resolved.issues, request, excluded, leftOut, logger)) {
+      if (lenience.leaveOut(resolved.issues)) {
         continue;
       }
       final resolution = resolved.resolution!;
@@ -167,8 +171,12 @@ final class CreatePipeline {
         resolution: resolution,
         collection: collection,
         context: context,
+        // --explain asks nothing, but tells what a run with the same
+        // terminal would do.
+        interactive: host.hasTerminal && request.input,
+        skipExternalSetup: request.skipExternalSetup,
       );
-      if (_leaveOut(validation.issues, request, excluded, leftOut, logger)) {
+      if (lenience.leaveOut(validation.issues)) {
         continue;
       }
 
@@ -176,11 +184,15 @@ final class CreatePipeline {
         plannedChecks(collection, sdkCheck),
         environment,
         explain: request.explain,
-        passed: passed,
+        strict: request.strict,
+        known: checked,
       );
-      if (sdkCheck.found case final sdk?) environment.sdk = sdk;
+      final versionIssues = sdkVersionIssues(
+        environment.sdk,
+        validation.pubspec,
+      );
       if (!request.explain &&
-          _leaveOut(preflight.issues, request, excluded, leftOut, logger)) {
+          lenience.leaveOut([...preflight.issues, ...versionIssues])) {
         continue;
       }
 
@@ -191,13 +203,24 @@ final class CreatePipeline {
           resolution: resolution,
           validation: validation,
           preflight: preflight,
-          leftOut: leftOut,
+          leftOut: lenience.leftOut,
           strict: request.strict,
+          onConflict: request.onConflict,
+          sdkIssues: versionIssues,
+          codegen: [
+            for (final collected in collection.applyingOf<CodegenRequest>())
+              collected.origin,
+          ],
         ).forEach(logger.info);
         await environment.dispose();
         return null;
       }
 
+      for (final module in resolution.modules) {
+        if (module.reason is! Requested) {
+          logger.info('Adding ${module.id}: ${module.reason}.');
+        }
+      }
       final choices = await chooseRoles(
         registry: registry,
         resolution: resolution,
@@ -218,32 +241,36 @@ final class CreatePipeline {
         preflight: preflight,
         choices: choices,
         environment: environment,
-        leftOut: List.unmodifiable(leftOut),
+        leftOut: List.unmodifiable(lenience.leftOut),
       );
     }
   }
+}
 
-  /// Reports the warnings among [issues] and decides what their errors
-  /// mean: nothing if there are none, a retry without the modules at fault
-  /// if lenient mode can leave them all out (returns `true`), or a
-  /// [GenerationFailedException] otherwise.
-  bool _leaveOut(
-    List<SmfIssue> issues,
-    CreateRequest request,
-    Set<ModuleId> excluded,
-    List<LeftOut> leftOut,
-    SmfLogger logger,
-  ) {
+/// What lenient mode has decided so far in a run: the modules it left out
+/// and the warnings already reported.
+final class _Lenience {
+  _Lenience({required this.strict, required this.logger});
+
+  final bool strict;
+  final SmfLogger logger;
+  final Set<ModuleId> excluded = {};
+  final List<LeftOut> leftOut = [];
+  final Set<String> _warned = {};
+
+  /// Reports the warnings among [issues], each once per run, and decides
+  /// what their errors mean: nothing if there are none, a retry without the
+  /// modules at fault if lenient mode can leave them all out (returns
+  /// `true`), or a [GenerationFailedException] otherwise.
+  bool leaveOut(List<SmfIssue> issues) {
+    for (final issue in issues) {
+      if (!issue.isError && _warned.add('$issue')) logger.warn('$issue');
+    }
     final errors = [
       for (final issue in issues)
         if (issue.isError) issue,
     ];
-    if (errors.isEmpty) {
-      for (final issue in issues) {
-        logger.warn('$issue');
-      }
-      return false;
-    }
+    if (errors.isEmpty) return false;
     final culprits = <ModuleId, String>{};
     for (final error in errors) {
       if (error.origin case ModuleOrigin(:final module)
@@ -254,7 +281,7 @@ final class CreatePipeline {
         break;
       }
     }
-    if (request.strict || culprits.isEmpty) {
+    if (strict || culprits.isEmpty) {
       throw GenerationFailedException(
         errors.length == 1
             ? 'Generation stopped because of an error.'

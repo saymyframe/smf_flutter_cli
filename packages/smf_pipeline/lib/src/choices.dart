@@ -1,6 +1,7 @@
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
+import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
@@ -50,7 +51,15 @@ Future<Map<Role, Object?>> chooseRoles({
     if (template == null) continue;
     // The context's runtime type argument is the role's data type, which
     // the hook of the role's template takes.
-    choices[role] = await template.choose(role.choiceContext(request));
+    try {
+      choices[role] = await template.choose(role.choiceContext(request));
+    } on SmfUsageException {
+      rethrow;
+    } on Object catch (error) {
+      throw GenerationFailedException(
+        'The template of the ${role.id} failed to choose: $error',
+      );
+    }
   }
   return choices;
 }

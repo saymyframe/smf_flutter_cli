@@ -10,6 +10,7 @@ final class MergedDependency {
     required this.source,
     required this.origins,
     this.constraint,
+    this.constraintText,
     this.sdk,
   });
 
@@ -21,6 +22,11 @@ final class MergedDependency {
 
   /// The intersection of the constraints of a hosted package.
   final VersionConstraint? constraint;
+
+  /// [constraint] as a contribution wrote it, such as `^9.1.0`, when the
+  /// intersection is one of the contributed constraints; otherwise as
+  /// `pub_semver` prints it, such as `>=9.2.0 <10.0.0`.
+  final String? constraintText;
 
   /// The SDK of an SDK package.
   final String? sdk;
@@ -37,6 +43,8 @@ final class MergedPubspec {
     this.devDependencies = const {},
     this.sdk,
     this.flutter,
+    this.sdkText,
+    this.flutterText,
     this.assets = const [],
     this.fonts = const [],
     this.generate = false,
@@ -54,6 +62,12 @@ final class MergedPubspec {
 
   /// The Flutter SDK constraint, if any contribution sets one.
   final VersionConstraint? flutter;
+
+  /// [sdk] as written; see [MergedDependency.constraintText].
+  final String? sdkText;
+
+  /// [flutter] as written; see [MergedDependency.constraintText].
+  final String? flutterText;
 
   /// The assets, in the order first contributed.
   final List<String> assets;
@@ -96,21 +110,16 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
   final issues = <SmfIssue>[];
   final all = <String, _Dependency>{};
   final devOnly = <String>{};
-  VersionConstraint? sdk;
-  VersionConstraint? flutter;
-  final sdkOrigins = <String, ContributionOrigin>{};
+  _Constraint? sdk;
+  _Constraint? flutter;
   final assets = <String>{};
   final fonts = <String, Map<String, (PubspecFontAsset, ContributionOrigin)>>{};
   var generate = false;
   var usesMaterialDesign = false;
 
-  VersionConstraint? parse(
-    String text,
-    String what,
-    ContributionOrigin origin,
-  ) {
+  _Constraint? parse(String text, String what, ContributionOrigin origin) {
     try {
-      return VersionConstraint.parse(text);
+      return _Constraint(VersionConstraint.parse(text), text, [origin]);
     } on FormatException {
       issues.add(
         SmfIssue('The constraint "$text" of $what is invalid.', origin: origin),
@@ -119,27 +128,29 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
     }
   }
 
-  VersionConstraint? intersect(
-    VersionConstraint? existing,
-    VersionConstraint incoming,
+  _Constraint? merge(
+    _Constraint? existing,
+    String? text,
     String what,
-    ContributionOrigin? existingOrigin,
     ContributionOrigin origin,
   ) {
+    if (text == null) return existing;
+    final incoming = parse(text, what, origin);
+    if (incoming == null) return existing;
     if (existing == null) return incoming;
-    final result = existing.intersect(incoming);
-    if (result.isEmpty) {
+    final merged = existing.merge(incoming);
+    if (merged == null) {
       issues.add(
         SmfIssue(
-          'The constraints "$existing" (from ${existingOrigin ?? 'unknown'}) '
-          'and "$incoming" (from $origin) of $what have no version in '
-          'common.',
+          'The constraints "${existing.text}" (from '
+          '${existing.origins.join(', ')}) and "$text" (from $origin) of '
+          '$what have no version in common.',
           origin: origin,
         ),
       );
       return existing;
     }
-    return result;
+    return merged;
   }
 
   for (final collected in contributions) {
@@ -158,10 +169,8 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
         }
         final existing = all[package];
         if (existing == null) {
-          final constraint = switch (contribution.constraint) {
-            final text? => parse(text, package, origin),
-            null => null,
-          };
+          final constraint =
+              merge(null, contribution.constraint, package, origin);
           if (contribution.source == PubspecSource.hosted &&
               constraint == null) {
             continue;
@@ -176,7 +185,6 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
           if (contribution.dev) devOnly.add(package);
           continue;
         }
-        if (!contribution.dev) devOnly.remove(package);
         if (existing.source != contribution.source ||
             existing.sdk != contribution.sdk) {
           issues.add(
@@ -190,46 +198,18 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
           );
           continue;
         }
-        if (contribution.constraint case final text?) {
-          final constraint = parse(text, package, origin);
-          if (constraint != null) {
-            existing.constraint = intersect(
-              existing.constraint,
-              constraint,
-              package,
-              existing.origins.last,
-              origin,
-            );
-          }
-        }
-        existing.origins.add(origin);
+        if (!contribution.dev) devOnly.remove(package);
+        existing
+          ..constraint = merge(
+            existing.constraint,
+            contribution.constraint,
+            package,
+            origin,
+          )
+          ..origins.add(origin);
       case PubspecEnvironment(sdk: final dart, flutter: final flutterText):
-        if (dart != null) {
-          final constraint = parse(dart, 'the Dart SDK', origin);
-          if (constraint != null) {
-            sdk = intersect(
-              sdk,
-              constraint,
-              'the Dart SDK',
-              sdkOrigins['sdk'],
-              origin,
-            );
-            sdkOrigins['sdk'] = origin;
-          }
-        }
-        if (flutterText != null) {
-          final constraint = parse(flutterText, 'the Flutter SDK', origin);
-          if (constraint != null) {
-            flutter = intersect(
-              flutter,
-              constraint,
-              'the Flutter SDK',
-              sdkOrigins['flutter'],
-              origin,
-            );
-            sdkOrigins['flutter'] = origin;
-          }
-        }
+        sdk = merge(sdk, dart, 'the Dart SDK', origin);
+        flutter = merge(flutter, flutterText, 'the Flutter SDK', origin);
       case PubspecFlutter():
         assets.addAll(contribution.assets);
         generate |= contribution.generate;
@@ -258,7 +238,8 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
   MergedDependency merged(_Dependency dependency) => MergedDependency(
         dependency.package,
         source: dependency.source,
-        constraint: dependency.constraint,
+        constraint: dependency.constraint?.value,
+        constraintText: dependency.constraint?.text,
         sdk: dependency.sdk,
         origins: List.unmodifiable(dependency.origins),
       );
@@ -273,8 +254,10 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
         for (final MapEntry(key: package, value: dependency) in all.entries)
           if (devOnly.contains(package)) package: merged(dependency),
       },
-      sdk: sdk,
-      flutter: flutter,
+      sdk: sdk?.value,
+      flutter: flutter?.value,
+      sdkText: sdk?.text,
+      flutterText: flutter?.text,
       assets: List.unmodifiable(assets),
       fonts: [
         for (final MapEntry(key: family, value: files) in fonts.entries)
@@ -285,6 +268,37 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
     ),
     issues,
   );
+}
+
+/// A constraint merged from contributions: its value, its text, and the
+/// contributors whose constraints make it what it is.
+final class _Constraint {
+  _Constraint(this.value, this.text, this.origins);
+
+  final VersionConstraint value;
+  final String text;
+  final List<ContributionOrigin> origins;
+
+  /// The intersection with [incoming], or `null` if it is empty.
+  ///
+  /// When the intersection is one of the two constraints, it keeps that
+  /// one's text and contributors; a constraint that allows every version,
+  /// such as `any`, narrows nothing and adds no contributor.
+  _Constraint? merge(_Constraint incoming) {
+    final result = value.intersect(incoming.value);
+    if (result.isEmpty) return null;
+    if (incoming.value.isAny || result == value) {
+      return result == incoming.value && !incoming.value.isAny
+          ? _Constraint(value, text, [...origins, ...incoming.origins])
+          : this;
+    }
+    if (value.isAny || result == incoming.value) return incoming;
+    return _Constraint(
+      result,
+      '$result',
+      [...origins, ...incoming.origins],
+    );
+  }
 }
 
 String _sourceOf(PubspecSource source, String? sdk) => switch (source) {
@@ -303,7 +317,7 @@ final class _Dependency {
 
   final String package;
   final PubspecSource source;
-  VersionConstraint? constraint;
+  _Constraint? constraint;
   final String? sdk;
   final List<ContributionOrigin> origins;
 }

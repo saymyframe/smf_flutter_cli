@@ -57,6 +57,32 @@ void main() {
     ]);
   });
 
+  test('a template that fails to choose stops generation', () async {
+    final failing = TestRole<String>('failing', template: _Failing());
+    final modules = [
+      TestModule('prov', providers: [RoleProvider.plain(failing)]),
+    ];
+    final resolution = resolutionOf(modules);
+
+    await expectLater(
+      chooseRoles(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        optionValues: const {},
+        environment: FakeHost().environment(),
+        context: testContext,
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          'The template of the failing failed to choose: Bad state: no',
+        ),
+      ),
+    );
+  });
+
   test('the router asks for the start screen or takes --start', () async {
     final modules = [
       TestModule(
@@ -120,4 +146,10 @@ void main() {
       throwsA(isA<SmfUsageException>()),
     );
   });
+}
+
+final class _Failing extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      throw StateError('no');
 }
