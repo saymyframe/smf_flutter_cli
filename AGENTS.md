@@ -10,24 +10,25 @@ The module model is being replaced step by step on the branch `feat/lego`. Until
 
 - The new model is `package:smf_contracts/lego.dart`, with its code in `packages/smf_contracts/lib/src/lego/`. `lego_core.dart` is its core without concrete roles.
 - In the new model, a module declares the roles it provides, requires or uses (router, DI, state management, ...) instead of depending on the modules that implement them. It puts code into typed sockets instead of patching files, and never learns which provider of a role was selected.
-- `packages/smf_pipeline/` is the new generation pipeline of `smf create`. It imports only `lego_core.dart` and knows no concrete module or role; `test/architecture_test.dart` checks this. The CLI switches to it later in the rework.
-- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. Within `smf_contracts`, `test/lego/architecture_test.dart` checks this and keeps the core free of concrete roles; the other packages are checked as they move to the new model.
-- A module package that has moved keeps its old module next to the new one until the CLI switches, because the CLI still uses it. `smf_flutter_core` is the first: `FlutterCoreModule` (brick `bricks/flutter_core`) provides the app entry, and `SmfFlutterCoreFactory` with the older bricks stays for the CLI. Its `test/architecture_test.dart` keeps the two apart.
-- The rest of this file describes the old model, which the CLI still uses. `ModuleProfile`, the DSLs (`RouteGroup`, `DiDependencyGroup`), `MustacheSlots`, mustachex strings and brick hooks go away as their modules move to the new model.
+- `packages/smf_pipeline/` is the generation pipeline of `smf create`. It imports only `lego_core.dart` and knows no concrete module or role; `test/architecture_test.dart` checks this.
+- `smf create` runs on the new pipeline. The CLI offers only the modules that have moved to the new model, listed in `packages/smf_flutter_cli/lib/src/modules.dart`: so far `smf_flutter_core`, whose `FlutterCoreModule` (brick `bricks/flutter_core`) provides the app entry. The other module packages still use the old model, which the rest of this file describes, and the CLI does not offer them until they move. Their own tests keep running.
+- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. Within `smf_contracts`, `test/lego/architecture_test.dart` checks this and keeps the core free of concrete roles; a module package that has moved checks it in its own `test/architecture_test.dart`.
+- `ModuleProfile`, the DSLs (`RouteGroup`, `DiDependencyGroup`), `MustacheSlots`, mustachex strings and brick hooks go away as their modules move to the new model.
 
 ## Layout
 
 ```
 packages/
   smf_contracts/              # public API that modules implement (descriptors, DSLs, contributions)
+  smf_pipeline/               # the generation pipeline of `smf create` and the contract test harness
   smf_modules/
     smf_contribution_engine/  # AST engine that patches Dart files (imports, statements, widgets)
     smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core
-  smf_flutter_cli/            # the `smf` CLI: prompts, module selection, generation pipeline
+  smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
 tools/                        # bundle_bricks.dart, sync_cli_version.dart
 ```
 
-Dependencies point one way only: `smf_contracts` ← modules ← `smf_flutter_cli`. Contracts never depend on modules or the CLI.
+Dependencies point one way only: `smf_contracts` ← `smf_pipeline` and modules ← `smf_flutter_cli`. Contracts never depend on modules, the pipeline or the CLI; the pipeline never depends on a module. Modules use `smf_pipeline` only in their tests, for the contract harness.
 
 ## The core principle: modules are independent
 
@@ -53,12 +54,14 @@ melos run test              # dart test in every package with a test/ dir
 melos run check             # format:check + analyze + analyze:hooks + test
 ```
 
-Run the CLI from source (the post-gen hook needs `flutter` on PATH):
+Run the CLI from source. It finds the Flutter SDK through `flutter` on the `PATH` before it generates anything, and runs `flutter pub get`, `dart fix` and `dart format` in the new app:
 
 ```bash
 cd packages/smf_flutter_cli
-dart run bin/smf_flutter.dart create my_app -o /tmp/out --org com.example -m get_it,go_router,home -s bloc --on-conflict replace
+dart run bin/smf_flutter.dart create my_app -o /tmp/out --org com.example --no-input --on-conflict replace
 ```
+
+Modules are chosen with `-m`, and every option of `create` comes from the command line with `--no-input`. `--explain` prints what would be generated and whether the machine is ready, without changing anything.
 
 ## Generated files and templates
 
@@ -66,19 +69,13 @@ dart run bin/smf_flutter.dart create my_app -o /tmp/out --org com.example -m get
 - **`bricks/**/__brick__/**` holds mason templates, not Dart.** They are excluded from analysis and formatting. They use mason syntax: `{{app_name.snakeCase()}}`.
 - **Dart-side template strings** in module code (e.g. `InsertImport`, `Import.core`) are rendered by mustachex and use `{{app_name_sc}}` (`_sc` = snake_case). `PatchEngine` renders only the text a contribution inserts, never the user's file.
 - **Some template sections are DSL slots** (`MustacheSlots` in contracts, e.g. `{{#tabsWidget}}`, `{{#imports}}`). They are deliberately left unrendered by mason and filled later by the router/DI generators.
-- **`bricks/*/hooks/` are standalone Dart packages** with their own pubspec.
+- **Brick hooks** (`bricks/*/hooks/`) are standalone Dart packages with their own pubspec. Only bricks of the old model have them; the new pipeline rejects a brick with hooks and runs no hooks, since modules check the machine and run tools through `Preflight` and `PostGenStep` contributions.
 - **Firebase modules** run the Firebase/FlutterFire CLIs in their hooks and need an interactive `firebase login`, so they can't be generated in non-interactive runs.
 
 ## Tests
 
 - Tests live in each package's `test/`. Sonar counts coverage only within the package that runs the tests, so a module's code needs tests in that module.
-- `packages/smf_flutter_cli/test/modules/module_contract_test.dart` checks every registered module for both state managers:
-  - bundle hygiene (no machine-local files)
-  - bricks render without stray mustache
-  - imports resolve within the module's `dependsOn` closure
-  - valid dependency constraints
-
-  New modules must pass it.
+- The contract harness of `package:smf_pipeline/testing.dart` checks a module against the rules of the roles it declares and renders every app it can be part of. `packages/smf_flutter_cli/test/modules_test.dart` runs it over every module the CLI offers, and a module package runs it over itself in its own tests. New modules must pass it.
 - Generator tests check generated code for real: they parse it or type-check it with the analyzer, not just string-match.
 - Tests are hermetic: no network, no Flutter SDK, temp dirs cleaned up.
 - **A bug found but not fixed** gets a test for the *correct* behavior, marked `skip: 'Bug: <description>'`. Never write a test that locks buggy behavior in. The fix removes the `skip`.
