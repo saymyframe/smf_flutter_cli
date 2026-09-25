@@ -14,20 +14,33 @@ import 'package:smf_pipeline/src/pubspec.dart';
 /// SDK, so the formatter and `dart fix` match the Flutter that builds the
 /// app; see [PipelineEnvironment.sdk]:
 /// - the `dart` next to `flutter` once symbolic links are resolved, as in
-///   `/usr/local/bin/flutter -> ~/flutter/bin/flutter`;
+///   `/usr/local/bin/flutter -> ~/flutter/bin/flutter`, if that directory
+///   is the `bin` of a Flutter SDK: it has `cache/dart-sdk` or `internal`;
 /// - otherwise, for a launcher such as the one of the snap, the `dart` of
 ///   the SDK that `flutter --version --machine` reports as `flutterRoot`.
 ///
-/// A `dart` elsewhere on the `PATH` may belong to another SDK, so it is
-/// never taken.
+/// A `dart` elsewhere, even next to a launcher, may belong to another SDK,
+/// so it is never taken.
+///
+/// Running the launcher is more than reading the machine, since Flutter may
+/// update itself or report analytics; with [explain], the check does not
+/// run it and only records that the SDK is behind a launcher.
 final class FlutterSdkCheck extends PreflightCheck {
   /// Creates the check, which reads [fileSystem].
-  FlutterSdkCheck(FileSystem fileSystem) : _fileSystem = fileSystem;
+  FlutterSdkCheck(FileSystem fileSystem, {this.explain = false})
+      : _fileSystem = fileSystem;
 
   final FileSystem _fileSystem;
 
+  /// Whether the run only explains, so the check must not run a launcher.
+  final bool explain;
+
   /// The SDK the last [check] found, or `null` if it found none.
   FlutterSdk? found;
+
+  /// The launcher of Flutter that the last [check] found and, with
+  /// [explain], did not run, or `null`.
+  String? launcher;
 
   @override
   String get id => 'flutter_sdk';
@@ -41,6 +54,7 @@ final class FlutterSdkCheck extends PreflightCheck {
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
     found = null;
+    launcher = null;
     final flutter = await environment.findExecutable('flutter');
     if (flutter == null) {
       return const PreflightMissing(
@@ -53,14 +67,22 @@ final class FlutterSdkCheck extends PreflightCheck {
     final name = windows ? 'dart.bat' : 'dart';
     final context = _fileSystem.path;
 
-    Future<String?> dartIn(String directory) async {
-      final path = context.join(directory, name);
-      return await _fileSystem.isFile(path) ? path : null;
+    /// The `dart` of [bin], if it is the `bin` directory of a Flutter SDK.
+    Future<String?> dartIn(String bin) async {
+      final path = context.join(bin, name);
+      final isSdk = await _fileSystem
+              .isDirectory(context.join(bin, 'cache', 'dart-sdk')) ||
+          await _fileSystem.isDirectory(context.join(bin, 'internal'));
+      return isSdk && await _fileSystem.isFile(path) ? path : null;
     }
 
     var dart = await dartIn(
       context.dirname(await _fileSystem.file(flutter).resolveSymbolicLinks()),
     );
+    if (dart == null && explain) {
+      launcher = flutter;
+      return const PreflightPassed();
+    }
     if (dart == null) {
       final root = await _flutterRoot(flutter, environment);
       if (root != null) dart = await dartIn(context.join(root, 'bin'));
@@ -128,10 +150,18 @@ final class FlutterSdkCheck extends PreflightCheck {
 /// The problems of the Flutter [sdk] with the SDK constraints of the merged
 /// [pubspec]: a Dart or Flutter version outside them fails `pub get`, so it
 /// is an error before anything is generated.
+///
+/// A constraint that one module narrowed is that module's problem, so
+/// lenient mode can leave it out.
 List<SmfIssue> sdkVersionIssues(FlutterSdk? sdk, MergedPubspec pubspec) {
   if (sdk == null) return const [];
   final issues = <SmfIssue>[];
-  void check(String name, String? version, VersionConstraint? constraint) {
+  void check(
+    String name,
+    String? version,
+    VersionConstraint? constraint,
+    List<ContributionOrigin> origins,
+  ) {
     if (version == null || constraint == null) return;
     final Version parsed;
     try {
@@ -139,20 +169,28 @@ List<SmfIssue> sdkVersionIssues(FlutterSdk? sdk, MergedPubspec pubspec) {
     } on FormatException {
       return;
     }
-    if (!constraint.allows(parsed)) {
-      issues.add(
-        SmfIssue(
-          'The modules need $name $constraint, but the Flutter SDK at '
-          '${sdk.flutter} has $name $version.',
-          hint: 'Upgrade Flutter, or leave out the module that needs a newer '
-              'one.',
-        ),
-      );
-    }
+    if (constraint.allows(parsed)) return;
+    final distinct = origins.toSet();
+    final single = distinct.length == 1 ? distinct.single : null;
+    final who = switch (distinct.length) {
+      0 => 'The app needs',
+      1 => '$single needs',
+      _ => '${distinct.join(', ')} need',
+    };
+    issues.add(
+      SmfIssue(
+        '$who $name $constraint, but the Flutter SDK at ${sdk.flutter} has '
+        '$name $version.',
+        hint: single == null
+            ? 'Upgrade Flutter.'
+            : 'Upgrade Flutter, or leave out $single.',
+        origin: single,
+      ),
+    );
   }
 
-  check('Dart', sdk.dartVersion, pubspec.sdk);
-  check('Flutter', sdk.flutterVersion, pubspec.flutter);
+  check('Dart', sdk.dartVersion, pubspec.sdk, pubspec.sdkOrigins);
+  check('Flutter', sdk.flutterVersion, pubspec.flutter, pubspec.flutterOrigins);
   return issues;
 }
 
@@ -192,14 +230,22 @@ final class CheckResult {
 /// The result of stage 6.
 final class PreflightReport {
   /// Creates the report.
-  const PreflightReport(this.results, this.issues);
+  const PreflightReport(
+    this.results,
+    this.issues, {
+    this.versionIssues = const [],
+  });
 
   /// The result of every check, in the order they ran.
   final List<CheckResult> results;
 
-  /// A problem for every check that failed: an error for a required check,
-  /// a warning otherwise.
+  /// A problem for every check that failed, an error for a required check
+  /// and a warning otherwise, followed by [versionIssues].
   final List<SmfIssue> issues;
+
+  /// The problems of the versions of the Flutter SDK with the SDK
+  /// constraints of the pubspec; see [sdkVersionIssues].
+  final List<SmfIssue> versionIssues;
 }
 
 /// The checks of the machine that the app needs: the Flutter SDK, then the
@@ -232,6 +278,10 @@ List<PlannedCheck> plannedChecks(
 /// leave out for such a check. Anything still missing gets instructions: an
 /// error for a [PreflightCheck.required] check, a warning otherwise.
 ///
+/// The versions of the SDK are compared with the SDK constraints of
+/// [pubspec] right after the checks, before anything is installed; see
+/// [sdkVersionIssues].
+///
 /// [known] holds the results of an earlier run of the stage by
 /// [PlannedCheck.key]: a check with a result there is not run again, so the
 /// user is asked about an installation once. The results of this run are
@@ -241,6 +291,7 @@ Future<PreflightReport> runPreflight(
   PipelineEnvironment environment, {
   bool explain = false,
   bool strict = false,
+  MergedPubspec? pubspec,
   Map<String, CheckResult>? known,
 }) async {
   final logger = environment.logger;
@@ -271,6 +322,12 @@ Future<PreflightReport> runPreflight(
         !installableBefore) {
       doomed.add(result.planned.origin);
     }
+  }
+  final versionIssues = pubspec == null
+      ? const <SmfIssue>[]
+      : sdkVersionIssues(environment.sdk, pubspec);
+  for (final issue in versionIssues) {
+    doomed.add(issue.origin ?? const PipelineOrigin());
   }
   final hopeless = doomed.any((origin) => origin is PipelineOrigin) ||
       (strict && doomed.isNotEmpty);
@@ -320,7 +377,11 @@ Future<PreflightReport> runPreflight(
           : SmfIssue.warning(problem, origin: issueOrigin),
     );
   }
-  return PreflightReport(results, issues);
+  return PreflightReport(
+    results,
+    [...issues, ...versionIssues],
+    versionIssues: versionIssues,
+  );
 }
 
 bool _installable(CheckResult result) => switch (result.status) {

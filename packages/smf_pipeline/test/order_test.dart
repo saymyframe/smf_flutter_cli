@@ -241,6 +241,10 @@ void main() {
     // d comes after the cycle, which it depends on through a.
     expect(codes(order), ['a', 'b', 'c', 'd', 'e']);
     expect(order.cycle, ['a', 'b', 'c']);
+
+    // A cycle through modules that do not contribute names them too.
+    final through = orderContributions([of('a')], resolution);
+    expect(through.cycle, ['a', 'b', 'c']);
   });
 
   test('a contributor keeps the order of its contributions and variant', () {

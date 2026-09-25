@@ -5,65 +5,93 @@ import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
-/// The tag of a socket in a template file, as the scan found it.
+/// A mustache variable in a template file, as the scan found it: the tag of
+/// a socket, whose name starts with `smf`, or another variable, such as a
+/// variable of a role's render hook.
 final class TemplateTag {
-  /// Creates the tag [name] found at [offset] of the file at [path].
+  /// Creates the variable [name] found at [offset] of the file at [path].
   const TemplateTag({
     required this.name,
     required this.path,
     required this.offset,
     required this.line,
     required this.triple,
+    this.column = 0,
     this.sections = const [],
     this.afterBrace = false,
   });
 
-  /// The name of the tag, such as `smf_app_entry__bootstrap_platform`.
+  /// The name of the variable, such as `smf_app_entry__bootstrap_platform`.
   final String name;
 
   /// The path of the template file in its brick.
   final String path;
 
-  /// The offset of the tag's opening braces in the file.
+  /// The offset of the variable's opening braces in the file.
   final int offset;
 
-  /// The line of the tag, from 1.
+  /// The line of the variable, from 1.
   final int line;
 
-  /// Whether the tag has three braces, which mustache does not escape.
+  /// The column of the variable's opening braces in its line, from 0.
+  final int column;
+
+  /// Whether the variable has three braces, which mustache does not escape.
+  /// `{{& name}}`, which mustache does not escape either, counts as two.
   final bool triple;
 
-  /// The names of the mustache sections the tag is in, outermost first.
+  /// The names of the mustache sections the variable is in, outermost
+  /// first.
   final List<String> sections;
 
-  /// Whether a `{` comes right before the tag, which mustache reads as part
-  /// of the tag's braces.
+  /// Whether a `{` comes right before the variable, which mustache reads as
+  /// part of the variable's braces.
   final bool afterBrace;
+
+  /// Whether the name is meant as the tag of a socket: it starts with
+  /// `smf`.
+  bool get isSocketTag => name.startsWith('smf');
 
   @override
   String toString() => '$name ($path:$line)';
 }
 
-/// The text files of [brick], by path, decoded from its bundle.
+/// What [scanTemplate] found in a template file.
+final class TemplateScan {
+  /// Creates the result of a scan.
+  const TemplateScan(this.tags, {this.delimiterLine});
+
+  /// The variables, in the order of the file.
+  final List<TemplateTag> tags;
+
+  /// The line of a `{{=… …=}}` tag that changes the delimiters, after which
+  /// the scan stops, or `null` if the file has none.
+  final int? delimiterLine;
+}
+
+/// The text files of [brick], by path with forward slashes, decoded from
+/// its bundle.
 Map<String, String> templateFilesOf(BrickContribution brick) => {
       for (final file in brick.bundle.files)
         if (file.type == 'text')
-          file.path:
+          file.path.replaceAll(r'\', '/'):
               utf8.decode(base64.decode(file.data), allowMalformed: true),
     };
 
 final RegExp _tagName = RegExp(r'^smf_[a-z0-9_]+$');
 
-/// Finds the tags of sockets, the mustache tags whose names start with
-/// `smf_`, in [text], the template file at [path].
+/// Finds the variables in [text], the template file at [path].
 ///
-/// It follows mustache: `{{{name}}}` and `{{name}}` are variables, `{{#name}}`
-/// and `{{^name}}` open sections that `{{/name}}` closes, and `{{!` starts a
-/// comment. Four opening braces are a `{` followed by a tag.
-List<TemplateTag> scanTemplate(String path, String text) {
+/// It follows mustache: `{{{name}}}`, `{{name}}` and `{{& name}}` are
+/// variables, `{{#name}}` and `{{^name}}` open sections that `{{/name}}`
+/// closes, `{{!` starts a comment and `{{>` a partial. Four opening braces
+/// are a `{` followed by a variable. A delimiter change, `{{=… …=}}`, ends
+/// the scan, since the pipeline does not support it.
+TemplateScan scanTemplate(String path, String text) {
   final tags = <TemplateTag>[];
   final sections = <String>[];
   var index = 0;
+  int lineOf(int offset) => '\n'.allMatches(text.substring(0, offset)).length;
   while (true) {
     var start = text.indexOf('{{', index);
     if (start < 0) break;
@@ -78,38 +106,45 @@ List<TemplateTag> scanTemplate(String path, String text) {
     final end = text.indexOf(closing, contentStart);
     if (end < 0) break;
     index = end + closing.length;
-    final content = text.substring(contentStart, end).trim();
+    var content = text.substring(contentStart, end).trim();
     if (!triple && content.isNotEmpty) {
       final marker = content[0];
       final name = content.substring(1).trim();
-      if (marker == '#' || marker == '^') {
-        sections.add(name);
-        continue;
+      switch (marker) {
+        case '#' || '^':
+          sections.add(name);
+          continue;
+        case '/':
+          final open = sections.lastIndexOf(name);
+          if (open >= 0) sections.removeRange(open, sections.length);
+          continue;
+        case '!' || '>':
+          continue;
+        case '=':
+          return TemplateScan(tags, delimiterLine: lineOf(start) + 1);
+        case '&':
+          content = name;
       }
-      if (marker == '/') {
-        final open = sections.lastIndexOf(name);
-        if (open >= 0) sections.removeRange(open, sections.length);
-        continue;
-      }
-      if (marker == '!' || marker == '>' || marker == '=') continue;
     }
-    if (!_tagName.hasMatch(content)) continue;
+    if (content.isEmpty) continue;
+    final lineStart = text.lastIndexOf('\n', start) + 1;
     tags.add(
       TemplateTag(
         name: content,
         path: path,
         offset: start,
-        line: '\n'.allMatches(text.substring(0, start)).length + 1,
+        line: lineOf(start) + 1,
+        column: start - lineStart,
         triple: triple,
         sections: List.unmodifiable(sections),
         afterBrace: afterBrace,
       ),
     );
   }
-  return tags;
+  return TemplateScan(tags);
 }
 
-/// A socket whose tag a template holds, and who may hold it.
+/// A socket whose tag a template holds, and the family it is a member of.
 final class _KnownSocket {
   const _KnownSocket(this.socket, {this.family});
 
@@ -119,24 +154,17 @@ final class _KnownSocket {
   final SocketFamily<Object?, SocketKind>? family;
 }
 
-/// Checks the tags of the sockets in the bricks among [collection]'s
-/// contributions that apply, both ways:
-/// - every tag is `{{{smf_…}}}`, outside mustache sections, not right
-///   after a `{`, and names a socket that its brick's owner may hold: the
-///   template or a provider of the socket's role, a module whose roles
-///   include the role of a family member, the module that owns a socket of
-///   a module, or anyone for a socket of the pipeline;
-/// - a socket whose contributions carry imports, or a socket of the
-///   pipeline, has its tag in exactly one file; both tags of a wrapper are
-///   in the same file, the opening one first;
-/// - every socket of a present role has its tag in the bricks of the role's
-///   template or providers, and every socket of a module in the bricks of
-///   that module.
-List<SmfIssue> checkTemplateTags({
-  required ModuleRegistry registry,
-  required Resolution resolution,
-  required Collection collection,
-}) {
+/// The tags of sockets that the bricks among [collection]'s contributions
+/// hold, by socket and then by tag name, with who holds each, and the
+/// problems with them; see [checkTemplateTags].
+({
+  Map<SocketRef, Map<String, List<(TemplateTag, ContributionOrigin)>>> found,
+  List<SmfIssue> issues,
+}) _scanBricks(
+  ModuleRegistry registry,
+  Resolution resolution,
+  Collection collection,
+) {
   final issues = <SmfIssue>[];
   final byTag = <String, _KnownSocket>{};
   final families = <SocketFamily<Object?, SocketKind>>[];
@@ -175,38 +203,40 @@ List<SmfIssue> checkTemplateTags({
     final brick = collected.contribution as BrickContribution;
     for (final MapEntry(key: path, value: text)
         in templateFilesOf(brick).entries) {
-      for (final tag in scanTemplate(path, text)) {
+      final scan = scanTemplate(path, text);
+      if (scan.delimiterLine case final line?) {
+        issues.add(
+          SmfIssue(
+            'The template $path:$line of $origin changes the mustache '
+            'delimiters, which the pipeline does not support.',
+            origin: origin,
+            path: path,
+          ),
+        );
+      }
+      for (final tag in scan.tags) {
         final problems = <String>[];
-        if (!tag.triple) {
-          problems.add(
-            'must have three braces, {{{${tag.name}}}}, or mustache escapes '
-            'its code',
-          );
-        }
-        if (tag.sections.isNotEmpty) {
-          problems.add(
-            'is inside the mustache section ${tag.sections.last}; put the '
-            'section around the contributions instead',
-          );
-        }
         if (tag.afterBrace) {
           problems.add(
             'comes right after a {, which mustache reads as part of the '
             'tag; start a new line',
           );
         }
-        final known = socketOf(tag.name);
-        if (known == null) {
-          problems.add('names no socket');
-        } else if (!_mayHold(origin, known, resolution)) {
-          problems.add(
-            'is a tag of the ${known.socket}, which $origin may not hold',
-          );
-        } else {
-          found
-              .putIfAbsent(known.socket, () => {})
-              .putIfAbsent(tag.name, () => [])
-              .add((tag, origin));
+        if (tag.isSocketTag) {
+          problems.addAll(_socketTagProblems(tag));
+          final known = socketOf(tag.name);
+          if (known == null) {
+            if (_tagName.hasMatch(tag.name)) problems.add('names no socket');
+          } else if (!_mayHold(origin, known, resolution)) {
+            problems.add(
+              'is a tag of the ${known.socket}, which $origin may not hold',
+            );
+          } else {
+            found
+                .putIfAbsent(known.socket, () => {})
+                .putIfAbsent(tag.name, () => [])
+                .add((tag, origin));
+          }
         }
         for (final problem in problems) {
           issues.add(
@@ -223,83 +253,186 @@ List<SmfIssue> checkTemplateTags({
   }
 
   for (final MapEntry(key: socket, value: tags) in found.entries) {
-    final once = socket.kind.carriesImports || socket.isPipeline;
-    for (final MapEntry(key: name, value: places) in tags.entries) {
-      if (once && places.length > 1) {
-        issues.add(
-          SmfIssue(
-            'The tag $name of the $socket appears '
-            '${places.length} times (${places.map((p) => p.$1).join(', ')}); '
-            'its contributions carry imports into one file, so it must '
-            'appear once.',
-            origin: places.last.$2,
-            path: places.last.$1.path,
-          ),
-        );
-      }
+    issues.addAll(_placeIssues(socket, tags));
+  }
+  return (found: found, issues: issues);
+}
+
+/// Checks the tags of the sockets in the bricks among [collection]'s
+/// contributions that apply:
+/// - every tag is `{{{smf_…}}}` with a valid name, outside mustache
+///   sections, and names a socket that its brick's owner may hold: the
+///   template or a provider of the socket's role, a module whose roles
+///   include the role of a family member, the module that owns a socket of
+///   a module, or anyone for a socket of the pipeline;
+/// - no variable, a tag or not, comes right after a `{`, and no template
+///   changes the mustache delimiters;
+/// - only the tag of a socket for one value, such as a minimum version, may
+///   appear several times; a socket whose contributions carry imports has
+///   its tag in a Dart file, and a socket of the pipeline at the start of a
+///   line of `pubspec.yaml`; both tags of a wrapper are in the same file,
+///   the opening one first.
+///
+/// Stage 5 runs it; the contract harness adds [missingTemplateTags].
+List<SmfIssue> checkTemplateTags({
+  required ModuleRegistry registry,
+  required Resolution resolution,
+  required Collection collection,
+}) =>
+    _scanBricks(registry, resolution, collection).issues;
+
+/// Checks that the bricks among [collection]'s contributions that apply hold
+/// every tag they must: of every socket of a present role, in the bricks of
+/// the role's template or providers; of every socket of a module, in its
+/// bricks; of every socket of the pipeline; and of every member of a socket
+/// family that something contributes to.
+///
+/// The contract harness runs it; the pipeline leaves it to the contract
+/// tests of the modules.
+List<SmfIssue> missingTemplateTags({
+  required ModuleRegistry registry,
+  required Resolution resolution,
+  required Collection collection,
+}) =>
+    _missingTagIssues(
+      resolution,
+      collection,
+      _scanBricks(registry, resolution, collection).found,
+    ).toList();
+
+/// The problems with the form of [tag], the tag of a socket.
+Iterable<String> _socketTagProblems(TemplateTag tag) sync* {
+  if (!_tagName.hasMatch(tag.name)) {
+    yield 'is not a tag of a socket, which is smf_ followed by lowercase '
+        'letters, digits and underscores';
+  }
+  if (!tag.triple) {
+    yield 'must have three braces, {{{${tag.name}}}}, or mustache escapes '
+        'its code';
+  }
+  if (tag.sections.isNotEmpty) {
+    yield 'is inside the mustache section ${tag.sections.last}; put the '
+        'section around the contributions instead';
+  }
+}
+
+/// The problems with where the tags of [socket] are: [tags], by tag name,
+/// with who holds each.
+Iterable<SmfIssue> _placeIssues(
+  SocketRef socket,
+  Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
+) sync* {
+  for (final MapEntry(key: name, value: places) in tags.entries) {
+    final (last, lastOrigin) = places.last;
+    if (places.length > 1 && socket.kind is! ValueSocket) {
+      yield SmfIssue(
+        'The tag $name of the $socket appears ${places.length} times '
+        '(${places.map((p) => p.$1).join(', ')}); only the tag of a '
+        'socket for one value may appear more than once.',
+        origin: lastOrigin,
+        path: last.path,
+      );
     }
-    if (socket.kind is WrapperSocket) {
-      final [open, close] = socket.tags;
-      final opening = tags[open];
-      final closing = tags[close];
-      if (opening == null || closing == null) {
-        final (tag, origin) = (opening ?? closing)!.first;
-        issues.add(
-          SmfIssue(
-            'The $socket has only its tag ${tag.name} in ${tag.path}; a '
-            'wrapper needs both $open and $close.',
-            origin: origin,
-            path: tag.path,
-          ),
+    for (final (tag, origin) in places) {
+      if (socket.isPipeline &&
+          (tag.path.split('/').last != 'pubspec.yaml' || tag.column != 0)) {
+        yield SmfIssue(
+          'The tag $name in ${tag.path}:${tag.line} of $origin must be at '
+          'the start of a line of pubspec.yaml.',
+          origin: origin,
+          path: tag.path,
         );
-      } else if (opening.first.$1.path != closing.first.$1.path) {
-        issues.add(
-          SmfIssue(
-            'The tags of the $socket are in different files: '
-            '${opening.first.$1.path} and ${closing.first.$1.path}.',
-            origin: opening.first.$2,
-          ),
-        );
-      } else if (opening.first.$1.offset > closing.first.$1.offset) {
-        issues.add(
-          SmfIssue(
-            'The tag $close of the $socket comes before $open in '
-            '${opening.first.$1.path}.',
-            origin: opening.first.$2,
-            path: opening.first.$1.path,
-          ),
+      } else if (socket.kind.carriesImports &&
+          !socket.isPipeline &&
+          !tag.path.endsWith('.dart')) {
+        yield SmfIssue(
+          'The tag $name in ${tag.path}:${tag.line} of $origin is in a file '
+          'that is not Dart, but the contributions to the $socket carry '
+          'imports.',
+          origin: origin,
+          path: tag.path,
         );
       }
     }
   }
+  if (socket.kind is! WrapperSocket) return;
+  final [open, close] = socket.tags;
+  final opening = tags[open];
+  final closing = tags[close];
+  if (opening == null || closing == null) {
+    final (tag, origin) = (opening ?? closing)!.first;
+    yield SmfIssue(
+      'The $socket has only its tag ${tag.name} in ${tag.path}; a wrapper '
+      'needs both $open and $close.',
+      origin: origin,
+      path: tag.path,
+    );
+  } else if (opening.first.$1.path != closing.first.$1.path) {
+    yield SmfIssue(
+      'The tags of the $socket are in different files: '
+      '${opening.first.$1.path} and ${closing.first.$1.path}.',
+      origin: opening.first.$2,
+    );
+  } else if (opening.first.$1.offset > closing.first.$1.offset) {
+    yield SmfIssue(
+      'The tag $close of the $socket comes before $open in '
+      '${opening.first.$1.path}.',
+      origin: opening.first.$2,
+      path: opening.first.$1.path,
+    );
+  }
+}
 
+/// The problems of sockets whose tags the bricks lack; see
+/// [missingTemplateTags].
+Iterable<SmfIssue> _missingTagIssues(
+  Resolution resolution,
+  Collection collection,
+  Map<SocketRef, Object> found,
+) sync* {
   for (final role in resolution.presentRoles) {
     for (final socket in role.sockets) {
       if (found.containsKey(socket)) continue;
-      issues.add(
-        SmfIssue(
-          'No template of the ${role.id} or of its providers has the tag of '
-          'the $socket (${socket.tags.join(', ')}).',
-          origin: role.template == null
-              ? resolution.providersOf(role).firstOrNull?.origin
-              : RoleTemplateOrigin(role),
-        ),
+      yield SmfIssue(
+        'No template of the ${role.id} or of its providers has the tag of '
+        'the $socket (${socket.tags.join(', ')}).',
+        origin: role.template == null
+            ? resolution.providersOf(role).firstOrNull?.origin
+            : RoleTemplateOrigin(role),
       );
     }
   }
   for (final module in resolution.modules) {
     for (final socket in module.descriptor.sockets) {
       if (found.containsKey(socket)) continue;
-      issues.add(
-        SmfIssue(
-          'The bricks of ${module.id} lack the tag of its $socket '
-          '(${socket.tags.join(', ')}).',
-          origin: module.origin,
-        ),
+      yield SmfIssue(
+        'The bricks of ${module.id} lack the tag of its $socket '
+        '(${socket.tags.join(', ')}).',
+        origin: module.origin,
       );
     }
   }
-  return issues;
+  for (final socket in PipelineSockets.all) {
+    if (found.containsKey(socket)) continue;
+    yield SmfIssue(
+      'No brick has the tag ${socket.tag} of the pipeline; the owner of '
+      'pubspec.yaml puts it at the start of a line.',
+    );
+  }
+  final reported = <SocketRef>{};
+  for (final collected in collection.applyingOf<SocketContribution>()) {
+    final socket = (collected.contribution as SocketContribution).socket;
+    if (socket.familyKey.isEmpty ||
+        found.containsKey(socket) ||
+        !reported.add(socket)) {
+      continue;
+    }
+    yield SmfIssue(
+      '${collected.origin} contributes to the $socket, but no brick has its '
+      'tag ${socket.tag}.',
+      origin: collected.origin,
+    );
+  }
 }
 
 /// Whether the owner of a brick, [origin], may hold the tag of [known].

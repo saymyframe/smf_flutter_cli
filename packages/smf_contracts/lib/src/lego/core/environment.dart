@@ -48,7 +48,12 @@ abstract interface class SmfEnvironment {
   ///
   /// The search includes the directories of tools installed during the run
   /// (see [ToolInstall.binDirs]) and, on Windows, the usual extensions such
-  /// as `.exe` and `.bat`.
+  /// as `.exe` and `.bat`. Once the preflight checks found the Flutter SDK,
+  /// `flutter` and `dart` are the executables of that SDK, whatever else is
+  /// on the `PATH`.
+  ///
+  /// The commands of [processRunner] get a `PATH` with the same directories
+  /// unless a call sets its own.
   Future<String?> findExecutable(String name);
 
   /// Writes [contents] to a new temporary file whose name ends with [name],

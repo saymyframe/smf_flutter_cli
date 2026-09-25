@@ -5,6 +5,16 @@
 /// contract tests of the CLI can use it.
 library;
 
+export 'src/collector.dart' show Collected, Collection;
+export 'src/resolver.dart'
+    show
+        DependencyOf,
+        ProviderOf,
+        Requested,
+        Resolution,
+        ResolvedModule,
+        SelectionReason;
 export 'src/templates.dart';
 export 'src/testing/file_indexer.dart';
 export 'src/testing/harness.dart';
+export 'src/validation.dart' show ValidationResult;

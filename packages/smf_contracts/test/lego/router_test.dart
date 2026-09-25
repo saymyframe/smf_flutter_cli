@@ -1383,6 +1383,56 @@ class DetailsScreen extends StatelessWidget {
         isEmpty,
       );
     });
+
+    test('rejects the location classes of such modules, but not in the router',
+        () {
+      List<SmfIssue> locations(
+        ModuleOrigin owner, {
+        List<RoleProvider> providers = const [],
+      }) =>
+          routerRole.checkStructure(
+            StructuralRuleRequest(
+              hook: RoleHookRequest(
+                data: _data,
+                presentRoles: {routerRole},
+                context: testContext,
+              ),
+              files: {
+                'lib/a.dart': const DartFileIndex(
+                  path: 'lib/a.dart',
+                  invocations: [
+                    IndexedInvocation('NavLink'),
+                    IndexedInvocation('SettingsUserLocation'),
+                    IndexedInvocation('HomeRootLocation'),
+                  ],
+                ),
+              },
+              owners: {'lib/a.dart': owner},
+              modules: [
+                ModuleDescriptor(
+                  id: owner.module,
+                  description: 'Module',
+                  kind: ModuleKinds.infrastructure,
+                  providers: providers,
+                ),
+              ],
+            ),
+          );
+
+      final issues = [
+        for (final issue in locations(const ModuleOrigin(ModuleId('home'))))
+          if (issue.message.contains(' uses ')) issue,
+      ];
+      expect(issues.single.message, contains('uses SettingsUserLocation'));
+      expect(issues.single.origin, const ModuleOrigin(ModuleId('home')));
+      expect(
+        locations(
+          const ModuleOrigin(ModuleId('go_router')),
+          providers: [const RoleProvider.plain(routerRole)],
+        ).where((issue) => issue.message.contains(' uses ')),
+        isEmpty,
+      );
+    });
   });
 
   group('the structural rule router.screen_constructors', () {
@@ -1400,7 +1450,11 @@ class DetailsScreen extends StatelessWidget {
           ),
         );
 
-    List<String> checkDetails(List<IndexedParameter> parameters) => [
+    List<String> checkDetails(
+      List<IndexedParameter> parameters, {
+      bool isConst = true,
+    }) =>
+        [
           for (final issue in check({
             'lib/features/home/home_screen.dart': const DartFileIndex(
               path: 'lib/features/home/home_screen.dart',
@@ -1408,6 +1462,7 @@ class DetailsScreen extends StatelessWidget {
                 IndexedDeclaration(
                   name: 'HomeScreen',
                   kind: DeclarationKind.classType,
+                  constructors: [IndexedConstructor(isConst: true)],
                 ),
               ],
             ),
@@ -1417,7 +1472,12 @@ class DetailsScreen extends StatelessWidget {
                 IndexedDeclaration(
                   name: 'DetailsScreen',
                   kind: DeclarationKind.classType,
-                  constructors: [IndexedConstructor(parameters: parameters)],
+                  constructors: [
+                    IndexedConstructor(
+                      parameters: parameters,
+                      isConst: isConst,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1458,6 +1518,22 @@ class DetailsScreen extends StatelessWidget {
       expect(problems[0], contains('must accept the named parameter id'));
       expect(problems[1], contains('must not require the parameter title'));
       expect(problems[2], contains('tab of DetailsScreen must be nullable'));
+    });
+
+    test('rejects a screen without a const constructor', () {
+      final problems = checkDetails(
+        const [
+          IndexedParameter('id', kind: ParameterKind.requiredNamed),
+          IndexedParameter(
+            'tab',
+            kind: ParameterKind.optionalNamed,
+            type: 'String?',
+          ),
+        ],
+        isConst: false,
+      );
+
+      expect(problems.single, contains('must have a const unnamed'));
     });
 
     test('rejects a screen whose file is missing', () {

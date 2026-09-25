@@ -103,7 +103,11 @@ void main() {
       testContext,
     );
 
-    expect([for (final c in collection.all) c.applies], [true, false, true]);
+    // The scaffold contributes the minimum iOS version first.
+    expect(
+      [for (final c in collection.all) c.applies],
+      [true, true, false, true],
+    );
   });
 
   test('when needs every listed role', () {

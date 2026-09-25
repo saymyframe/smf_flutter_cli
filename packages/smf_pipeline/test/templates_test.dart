@@ -7,7 +7,7 @@ import 'support.dart';
 
 void main() {
   group('scanTemplate', () {
-    test('finds socket tags with their line and sections', () {
+    test('finds the variables with their line, column and sections', () {
       const text = '''
 import 'a.dart';
 {{{smf_app_entry__top_level}}}
@@ -15,45 +15,76 @@ import 'a.dart';
   {{{smf_router__observers}}}
   {{^has_layout}}{{smf_layout__x}}{{/has_layout}}
 {{/has_router}}
-{{app_name}} {{{facade}}} {{! {{{smf_in_comment}}} }}
+{{app_name}} {{{facade}}} {{! {{{smf_in_comment}}} }} {{> partial}}
 void f() {{{{smf_after__brace}}}
+{{& smf_unescaped}}
 ''';
 
-      final tags = scanTemplate('lib/main.dart', text);
+      final scan = scanTemplate('lib/main.dart', text);
+      final tags = scan.tags;
 
       expect(
         [
           for (final tag in tags)
-            [tag.name, tag.line, tag.triple, tag.sections, tag.afterBrace]
-                .join(':'),
+            [
+              tag.name,
+              tag.line,
+              tag.column,
+              tag.triple,
+              tag.sections,
+              tag.afterBrace,
+              tag.isSocketTag,
+            ].join(':'),
         ],
         [
-          'smf_app_entry__top_level:2:true:[]:false',
-          'smf_router__observers:4:true:[has_router]:false',
-          'smf_layout__x:5:false:[has_router, has_layout]:false',
-          'smf_after__brace:8:true:[]:true',
+          'smf_app_entry__top_level:2:0:true:[]:false:true',
+          'smf_router__observers:4:2:true:[has_router]:false:true',
+          'smf_layout__x:5:17:false:[has_router, has_layout]:false:true',
+          'app_name:7:0:false:[]:false:false',
+          'facade:7:13:true:[]:false:false',
+          'smf_after__brace:8:10:true:[]:true:true',
+          'smf_unescaped:9:0:false:[]:false:true',
         ],
       );
+      expect(scan.delimiterLine, isNull);
       expect(tags.first.path, 'lib/main.dart');
       expect(tags.first.offset, text.indexOf('{{{smf_app'));
       expect('${tags.first}', 'smf_app_entry__top_level (lib/main.dart:2)');
     });
 
-    test('stops at unclosed tags', () {
-      expect(scanTemplate('a', '{{{smf_a}}} {{{smf_b'), hasLength(1));
-      expect(scanTemplate('a', ''), isEmpty);
+    test('stops at unclosed tags and at a change of delimiters', () {
+      expect(scanTemplate('a', '{{{smf_a}}} {{{smf_b').tags, hasLength(1));
+      expect(scanTemplate('a', '').tags, isEmpty);
+      expect(scanTemplate('a', '{{}}').tags, isEmpty);
+
+      final changed = scanTemplate(
+        'a',
+        '{{{smf_a}}}\n{{=<% %>=}}\n<%{smf_b}%>{{{smf_c}}}',
+      );
+      expect(changed.tags.single.name, 'smf_a');
+      expect(changed.delimiterLine, 2);
     });
   });
 
   group('checkTemplateTags', () {
-    List<String> check(List<SmfModule> modules) {
+    List<String> check(List<SmfModule> modules, {bool complete = true}) {
       final resolution = resolutionOf(modules);
+      final registry = ModuleRegistry(modules);
+      final collection = collect(resolution, testContext);
       return [
-        for (final issue in checkTemplateTags(
-          registry: ModuleRegistry(modules),
-          resolution: resolution,
-          collection: collect(resolution, testContext),
-        ))
+        for (final issue in [
+          ...checkTemplateTags(
+            registry: registry,
+            resolution: resolution,
+            collection: collection,
+          ),
+          if (complete)
+            ...missingTemplateTags(
+              registry: registry,
+              resolution: resolution,
+              collection: collection,
+            ),
+        ])
           '${issue.origin}: ${issue.message}',
       ];
     }
@@ -80,19 +111,20 @@ void f() {{{{smf_after__brace}}}
         SocketRef<CodeSocket>.role(nav, 'a', const CodeSocket()),
         SocketRef<FactoryListSocket>.role(nav, 'b', const FactoryListSocket()),
       ]);
-      families.add(
-        SocketFamily<String, CodeSocket>.role(
-          nav,
-          'screens',
-          const CodeSocket(),
-          keyOf: (key) => [key],
-        ),
+      final screens = SocketFamily<String, CodeSocket>.role(
+        nav,
+        'screens',
+        const CodeSocket(),
+        keyOf: (key) => [key],
       );
+      families.add(screens);
       const parent = SocketRef<WrapperSocket>.module(
         ModuleId('parent'),
         'wrap',
         WrapperSocket(),
       );
+
+      const target = '{{{smf_app_entry__ios_deployment_target}}}';
 
       expect(
         check([
@@ -100,9 +132,8 @@ void f() {{{{smf_after__brace}}}
             contributions: [
               entryBrick(),
               brick({
-                'pubspec.yaml': '{{{smf_pubspec_dependencies}}}\n',
-                'ios/Podfile': '{{{smf_app_entry__ios_deployment_target}}}',
-                'ios/project': '{{{smf_app_entry__ios_deployment_target}}}',
+                'ios/Podfile': "platform :ios, '$target'",
+                'ios/project': target,
               }),
             ],
           ),
@@ -117,7 +148,11 @@ void f() {{{{smf_after__brace}}}
             'home',
             requires: {nav},
             contributions: [
-              brick({'lib/home.dart': '{{{smf_nav__screens__home}}}'}),
+              brick({
+                'lib/home.dart': '{{{smf_nav__screens__home}}}\n'
+                    'f() {{{app_name.snakeCase()}}}',
+              }),
+              SocketContribution.code(screens('home'), const Fragment('@A()')),
             ],
           ),
           TestModule(
@@ -137,30 +172,43 @@ void f() {{{{smf_after__brace}}}
 
     test('rejects malformed and unknown tags', () {
       expect(
-        check([
-          scaffold(
-            contributions: [
-              brick({
-                'lib/a.dart': '{{smf_app_entry__top_level}}\n'
-                    '{{#x}}{{{smf_app_entry__bootstrap_late}}}{{/x}}\n'
-                    'f() {{{{smf_app_entry__bootstrap_early}}}\n'
-                    '{{{smf_app_entry__boostrap_di}}}\n',
-              }),
-            ],
-          ),
-        ]),
+        check(
+          [
+            scaffold(
+              contributions: [
+                brick({
+                  'lib/a.dart': '{{smf_app_entry__top_level}}\n'
+                      '{{#x}}{{{smf_app_entry__bootstrap_late}}}{{/x}}\n'
+                      'f() {{{{smf_app_entry__bootstrap_early}}}\n'
+                      '{{{smf_app_entry__boostrap_di}}}\n'
+                      '{{{smf_X}}}\n'
+                      'g() {{{{labels}}}\n'
+                      '{{& smf_app_entry__bootstrap_platform}}\n',
+                  'lib/b.dart': '{{=<% %>=}}\n',
+                }),
+              ],
+            ),
+          ],
+          complete: false,
+        ),
         [
           contains('smf_app_entry__top_level in lib/a.dart:1 of scaffold '
               'must have three braces'),
           contains('inside the mustache section x'),
-          contains('comes right after a {'),
+          contains('smf_app_entry__bootstrap_early in lib/a.dart:3 of '
+              'scaffold comes right after a {'),
           contains('smf_app_entry__boostrap_di in lib/a.dart:4 of scaffold '
               'names no socket'),
-        ].followedBy([
-          // The other sockets of the app entry have no tags.
-          for (var i = 0; i < appEntryRole.sockets.length - 3; i++)
-            contains('No template of the app_entry'),
-        ]).toList(),
+          contains('smf_X in lib/a.dart:5 of scaffold is not a tag of a '
+              'socket'),
+          contains('labels in lib/a.dart:6 of scaffold comes right after'),
+          contains('smf_app_entry__bootstrap_platform in lib/a.dart:7 of '
+              'scaffold must have three braces'),
+          equals(
+            'scaffold: The template lib/b.dart:1 of scaffold changes the '
+            'mustache delimiters, which the pipeline does not support.',
+          ),
+        ],
       );
     });
 
@@ -208,26 +256,64 @@ void f() {{{{smf_after__brace}}}
       );
     });
 
-    test('tags with imports and pipeline tags appear once', () {
+    test('only tags of sockets for one value appear more than once', () {
       expect(
-        check([
-          scaffold(
-            contributions: [
-              entryBrick(),
-              brick({
-                'lib/a.dart': '{{{smf_app_entry__bootstrap_late}}}',
-                'lib/b.dart': '{{{smf_app_entry__bootstrap_late}}}',
-                'pubspec.yaml': '{{{smf_pubspec_flutter}}}'
-                    '{{{smf_pubspec_flutter}}}',
-              }),
-            ],
-          ),
-        ]),
+        check(
+          [
+            scaffold(
+              contributions: [
+                brick({
+                  'lib/a.dart': '{{{smf_app_entry__bootstrap_late}}}',
+                  'lib/b.dart': '{{{smf_app_entry__bootstrap_late}}}',
+                  'android/a.xml':
+                      '{{{smf_app_entry__android_manifest_permissions}}}\n'
+                          '{{{smf_app_entry__android_manifest_permissions}}}',
+                  'ios/a': '{{{smf_app_entry__ios_deployment_target}}}',
+                  'ios/b': '{{{smf_app_entry__ios_deployment_target}}}',
+                  'pubspec.yaml': '{{{smf_pubspec_flutter}}}\n'
+                      '{{{smf_pubspec_flutter}}}',
+                }),
+              ],
+            ),
+          ],
+          complete: false,
+        ),
         [
           contains('smf_app_entry__bootstrap_late of the socket '
-              'app_entry.bootstrap_late appears 3 times'),
+              'app_entry.bootstrap_late appears 2 times'),
+          contains('smf_app_entry__android_manifest_permissions of the socket '
+              'app_entry.android_manifest_permissions appears 2 times'),
           contains('smf_pubspec_flutter of the socket pipeline.pubspec_flutter '
               'appears 2 times'),
+        ],
+      );
+    });
+
+    test('sockets with imports are in Dart, and of the pipeline in pubspec',
+        () {
+      expect(
+        check(
+          [
+            scaffold(
+              contributions: [
+                brick({
+                  'lib/a.txt': '{{{smf_app_entry__bootstrap_late}}}',
+                  'pubspec.yaml': 'x: {{{smf_pubspec_flutter}}}\n'
+                      '{{{smf_pubspec_dependencies}}}',
+                  'other.yaml': '{{{smf_pubspec_environment}}}',
+                }),
+              ],
+            ),
+          ],
+          complete: false,
+        ),
+        [
+          contains('smf_app_entry__bootstrap_late in lib/a.txt:1 of scaffold '
+              'is in a file that is not Dart'),
+          contains('smf_pubspec_flutter in pubspec.yaml:1 of scaffold must be '
+              'at the start of a line of pubspec.yaml'),
+          contains('smf_pubspec_environment in other.yaml:1 of scaffold must '
+              'be at the start'),
         ],
       );
     });
@@ -274,10 +360,22 @@ void f() {{{{smf_after__brace}}}
       );
     });
 
-    test('every socket of a present role and module has its tag', () {
+    test('every socket that must have a tag has it', () {
       final sockets = <SocketRef>[];
-      final nav = TestRole<NoDsl>('nav', sockets: sockets);
+      final families = <SocketFamily<Object?, SocketKind>>[];
+      final nav = TestRole<NoDsl>(
+        'nav',
+        sockets: sockets,
+        socketFamilies: families,
+      );
       sockets.add(SocketRef<CodeSocket>.role(nav, 'a', const CodeSocket()));
+      final screens = SocketFamily<String, CodeSocket>.role(
+        nav,
+        'screens',
+        const CodeSocket(),
+        keyOf: (key) => [key],
+      );
+      families.add(screens);
       final templated = <SocketRef>[];
       final service = TestRole<NoDsl>(
         'service',
@@ -303,6 +401,13 @@ void f() {{{{smf_after__brace}}}
               ),
             ],
           ),
+          TestModule(
+            'home',
+            requires: {nav},
+            contributions: [
+              SocketContribution.code(screens('home'), const Fragment('@A()')),
+            ],
+          ),
         ]),
         [
           // The test scaffold has no bricks, so the app entry misses all.
@@ -322,6 +427,15 @@ void f() {{{{smf_after__brace}}}
           equals(
             'parent: The bricks of parent lack the tag of its socket '
             'parent.hook (smf_parent__hook).',
+          ),
+          for (final socket in PipelineSockets.all)
+            equals(
+              'null: No brick has the tag ${socket.tag} of the pipeline; the '
+              'owner of pubspec.yaml puts it at the start of a line.',
+            ),
+          equals(
+            'home: home contributes to the socket nav.screens.home, but no '
+            'brick has its tag smf_nav__screens__home.',
           ),
         ],
       );

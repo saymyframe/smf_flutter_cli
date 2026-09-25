@@ -64,13 +64,19 @@ final class AnalyticsRole extends Role<RoleImplementation> {
           description: 'Only the DI container calls createAnalyticsService().',
           check: _checkAnalyticsFactory,
         ),
+        StructuralRule(
+          id: 'analytics.implementation_factories',
+          description: 'The function of every implementation is in its file '
+              'and takes no arguments.',
+          check: _checkImplementationFactories,
+        ),
       ];
 }
 
 List<SmfIssue> _checkAnalyticsFactory(
   StructuralRuleInput<RoleImplementation> input,
 ) =>
-    _checkFactoryCalls(input, 'createAnalyticsService');
+    _checkFactoryCalls(input, 'createAnalyticsService', AnalyticsRole.file);
 
 final class _AnalyticsTemplate extends _ServiceTemplate {
   const _AnalyticsTemplate();

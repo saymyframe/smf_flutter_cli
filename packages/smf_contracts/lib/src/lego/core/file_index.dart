@@ -240,8 +240,9 @@ final class IndexedParameter {
   /// What kind of parameter it is.
   final ParameterKind kind;
 
-  /// The type as written, or `null` if it is not written, as in
-  /// `super.key`.
+  /// The type as written; for an initializing formal such as `this.tab`,
+  /// the type of the field it initializes, if the class declares it with
+  /// one; otherwise `null`, as in `super.key`.
   final String? type;
 
   /// The annotations, as written, such as `@PathParam('id')`.

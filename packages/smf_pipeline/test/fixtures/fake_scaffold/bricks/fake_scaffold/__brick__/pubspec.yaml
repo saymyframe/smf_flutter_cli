@@ -1,0 +1,12 @@
+name: {{app_name}}
+description: "An app of the fixtures of the SMF pipeline."
+publish_to: none
+version: 1.0.0+1
+
+{{{smf_pubspec_environment}}}
+
+{{{smf_pubspec_dependencies}}}
+
+{{{smf_pubspec_dev_dependencies}}}
+
+{{{smf_pubspec_flutter}}}

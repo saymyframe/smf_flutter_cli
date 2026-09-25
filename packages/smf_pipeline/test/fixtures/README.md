@@ -1,11 +1,29 @@
-# Fixtures of the pipeline tests
+# Test fixtures of smf_pipeline
 
-These packages are **not modules to use**. They exist only to test the SMF pipeline and the lego model: the tests of `smf_pipeline` and the "fixture registry" line of the Flutter job generate apps from them.
+Fake modules for the tests of the generation pipeline. **They are not modules to use in an app.**
 
-Together they use every mechanism of the lego model that no real module uses yet (basket B of the lego plan): every kind of socket and merge policy, `when`, variants, a third-party role, two roles with the same data type, a provider of two roles, a DI container with configurable capabilities, a feature with a composition file, every DI capability, code generation, navigator observers, the navigation facade, asynchronous service initialization, and the `flutter:` section of the pubspec.
+The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them.
 
-Rules:
+| Package | What it has |
+| --- | --- |
+| `fake_scaffold` | The app entry (`main.dart`, `bootstrap.dart`, `pubspec.yaml`) until the `flutter_core` module provides it. Its Android and iOS files only hold the tags of the native sockets and do not build. |
+| `fake_state` | Two providers of the state management role. |
+| `fake_roles` | Two roles defined outside `smf_contracts` with the same data type, one module that provides both, and a module that uses them under `when` and inside `{{#has_badge}}`. |
+| `fake_di` | A DI container whose capabilities each test sets. |
+| `fake_router` | A router with navigator observers and annotations on screens. |
+| `fake_feature` | A feature with a variant per state manager, a composition file and the navigation facade. |
+| `fake_infra` | Every socket of the app entry and the `flutter:` section of the pubspec; a second module with the same keys, so their values merge; analytics with navigator observers; crash reporting and events that start asynchronously; services with every DI capability; a module whose sockets a module that depends on it fills; code generation. |
 
-- Every fixture is a package of the workspace with `publish_to: none`, so `melos` bundles its bricks and analyzes it.
-- Fixtures are never part of the CLI's registry or of any published package; `smf_pipeline` excludes `test/fixtures/` from its archive.
-- A fixture follows the rules of a real module, so the contract harness checks it like one.
+## Rules
+
+- Each fixture is a workspace package with `publish_to: none`, so melos bundles its bricks and analyzes it like any other package.
+- A fixture follows the same rules as a real module, and the contract harness checks it like one.
+- Fixtures are never part of the CLI's module registry or of a published package. The `.pubignore` of `smf_pipeline` leaves `test/fixtures/` and `fixture_registry/` out of its archive.
+- Never run `dart format` on a `bricks/` folder: it breaks templates that parse as Dart, such as `<String>[{{{labels}}}]`.
+
+## Running the tests
+
+```bash
+cd packages/smf_pipeline/fixture_registry
+dart test
+```

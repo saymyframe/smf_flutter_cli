@@ -470,14 +470,20 @@ List<String> _braceProblems(String text, int at, String tag) {
 
 List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
   final issues = <SmfIssue>[];
+  final locations = {
+    for (final route in routerRole.facadeOf(input.roleInput).routes)
+      route.locationClass: route.feature.module,
+  };
   for (final MapEntry(key: path, value: file) in input.files.entries) {
     final owner = input.owners[path];
     if (owner is! ModuleOrigin) continue;
     final module = input.module(owner.module);
+    // The router builds the screens of every location.
+    if (module?.provides.contains(routerRole) ?? false) continue;
+    final dependsOn = module?.dependsOn ?? const <ModuleId>{};
     final allowed = {
       owner.module.lowerCamelCase,
-      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
-        dependency.lowerCamelCase,
+      for (final dependency in dependsOn) dependency.lowerCamelCase,
     };
     for (final access in file.memberAccesses) {
       final target = access.target;
@@ -497,6 +503,28 @@ List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
         );
       }
     }
+    final used = {
+      for (final call in file.invocations) call.name,
+      for (final reference in file.references) reference.name,
+      for (final access in file.memberAccesses) access.name,
+    };
+    for (final MapEntry(key: location, value: feature) in locations.entries) {
+      if (feature == owner.module ||
+          dependsOn.contains(feature) ||
+          !used.contains(location)) {
+        continue;
+      }
+      issues.add(
+        SmfIssue(
+          '$path uses $location, a location of $feature, but the module '
+          '$owner may only use its own routes and those of the modules it '
+          'depends on.',
+          hint: 'Declare $feature in dependsOn, or let it navigate.',
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
   }
   return issues;
 }
@@ -512,6 +540,8 @@ List<SmfIssue> _checkScreenConstructors(StructuralRuleInput<RoutesData> input) {
       screen.className,
       path: path,
       namedParameters: [for (final param in route.route.params) param.name],
+      // Routers create a screen without parameters as a constant.
+      constConstructor: true,
     );
     final problems = [
       ...required.checkIn(input.files),
@@ -533,8 +563,9 @@ List<SmfIssue> _checkScreenConstructors(StructuralRuleInput<RoutesData> input) {
 /// The problems with optional parameters of [route] that the constructor of
 /// its screen, in [file], declares with a non-nullable type.
 ///
-/// Only parameters with a written type are checked: the index has no type
-/// for an initializing formal such as `this.tab`, whose field decides.
+/// The index gives an initializing formal such as `this.tab` the type of
+/// its field; a parameter without any type, such as `super.key`, is not
+/// checked.
 List<SmfIssue> _nullabilityProblems(FacadeRoute route, DartFileIndex? file) {
   final screen = route.route.screen.className;
   final constructor = file?.declaration(screen)?.unnamedConstructor;

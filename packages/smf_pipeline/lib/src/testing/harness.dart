@@ -17,6 +17,7 @@ final class ContractCase {
     this.name, {
     required this.requested,
     this.picks = const {},
+    this.roleOptions = const {},
   });
 
   /// What the case checks, such as `home (bloc) with analytics`.
@@ -28,14 +29,24 @@ final class ContractCase {
   /// The provider of each role that has several in the registry.
   final Map<Role, ModuleId> picks;
 
+  /// Values of role options, as `--start /home` on the command line, for
+  /// the choices of the roles when the app of the case is rendered.
+  final Map<String, String?> roleOptions;
+
   @override
   String toString() => name;
 }
 
-/// The problems the harness found in one [ContractCase].
+/// What the harness found in one [ContractCase].
 final class ContractResult {
   /// Creates the result.
-  const ContractResult(this.contractCase, this.issues, {this.resolution});
+  const ContractResult(
+    this.contractCase,
+    this.issues, {
+    this.resolution,
+    this.collection,
+    this.validation,
+  });
 
   /// The case.
   final ContractCase contractCase;
@@ -46,22 +57,42 @@ final class ContractResult {
   /// The modules of the app, if the case resolved.
   final Resolution? resolution;
 
+  /// The contributions of the app, if the case resolved.
+  final Collection? collection;
+
+  /// The result of stage 5, with the order of every socket and the merged
+  /// pubspec, if the case resolved.
+  final ValidationResult? validation;
+
   /// The errors among [issues].
   List<SmfIssue> get errors => [
         for (final issue in issues)
           if (issue.isError) issue,
       ];
+
+  /// The modules of the app with their variants, which tell apart the apps
+  /// of different cases, or `null` if the case did not resolve.
+  String? get appKey => switch (resolution) {
+        null => null,
+        final resolution => ([
+            for (final module in resolution.modules)
+              '${module.id}(${module.variant ?? ''})',
+          ]..sort())
+              .join(','),
+      };
 }
 
 /// The contract test harness: checks that the modules and roles of a
 /// registry follow the rules of the lego model, the way the pipeline would
 /// generate them in every combination that matters.
 ///
-/// For a module it builds an app for each of its variants and each subset
-/// of the roles it only uses, adding a provider for every role the app
-/// needs; for a role, the same for each of its providers and each subset of
-/// the roles the role uses. Each app goes through the stages 3 to 5 of the
-/// pipeline, then [checkTemplateTags]. The checks of rendered code, such as
+/// For a module it builds an app for every provider of the role of its
+/// variants, every provider of each role it requires that has several, and
+/// each subset of the roles it only uses; for a role, the same for each of
+/// its providers. Each app goes through the stages 3 to 5 of the pipeline,
+/// in a run without a terminal that skips external setup, as the Flutter
+/// job generates apps; stage 5 includes [checkTemplateTags], and the
+/// harness adds [missingTemplateTags]. The checks of rendered code, such as
 /// the structural rules of the roles, run on files with [checkStructure].
 ///
 /// It depends on no test framework, so the tests of any package can use it.
@@ -87,34 +118,35 @@ final class ContractHarness {
   /// The context of the apps the harness builds.
   final ModuleContext context;
 
-  /// The cases of the module [id]: each variant of the module, and each
-  /// subset of the roles it only uses, with the first registered provider
-  /// of every role the case needs unless a variant decides.
+  /// The cases of the module [id]:
+  /// - every provider of the role of its variants, also one without a
+  ///   variant, which the pipeline rejects;
+  /// - every provider of each role the module requires that has several;
+  /// - each subset of the roles the module only uses, the largest first,
+  ///   with the first registered provider of each.
   ///
-  /// A role left out of a subset is still present when another module of
-  /// the case requires it.
+  /// A role left out of a subset is still present when a module of the case
+  /// brings it, such as a provider of several roles or a module that
+  /// requires it. [checkAll] then leaves out the case, since the case of a
+  /// larger subset built its app already and names the roles it has.
   List<ContractCase> casesOfModule(ModuleId id) {
     final module = registry[id];
     if (module == null) throw ArgumentError.value(id, 'id', 'Not registered');
     final descriptor = module.descriptor;
-    final variants = descriptor.variants;
-    final variantPicks = variants == null
-        ? const <Map<Role, ModuleId>>[{}]
-        : [
-            for (final provider in variants.byProvider.keys)
-              {variants.role: provider},
-          ];
     final used = [
       for (final role in descriptor.effectiveUses)
         if (registry.providersOf(role).isNotEmpty) role,
     ];
     return [
-      for (final picks in variantPicks)
+      for (final picks in _picksOf([
+        if (descriptor.variants case final variants?) variants.role,
+        ...descriptor.effectiveRequires,
+      ]))
         for (final subset in _subsets(used))
           _case(
             [
               id.value,
-              for (final provider in picks.values) '($provider)',
+              if (picks.isNotEmpty) '(${picks.values.join(', ')})',
               if (subset.isNotEmpty)
                 'with ${subset.map((role) => role.id).join(', ')}',
             ].join(' '),
@@ -125,8 +157,9 @@ final class ContractHarness {
     ];
   }
 
-  /// The cases of [role]: each of its providers with each subset of the
-  /// roles it uses.
+  /// The cases of [role]: each of its providers, with every provider of
+  /// each role the provider requires that has several, and each subset of
+  /// the roles the role uses.
   List<ContractCase> casesOfRole(Role role) {
     final used = [
       for (final other in role.uses)
@@ -134,18 +167,38 @@ final class ContractHarness {
     ];
     return [
       for (final provider in registry.providersOf(role))
-        for (final subset in _subsets(used))
-          _case(
-            [
-              '${role.id} by ${provider.descriptor.id}',
-              if (subset.isNotEmpty)
-                'with ${subset.map((role) => role.id).join(', ')}',
-            ].join(' '),
-            [provider.descriptor.id],
-            picks: {role: provider.descriptor.id},
-            present: subset,
-          ),
+        for (final picks in _picksOf(
+          provider.descriptor.effectiveRequires.toList(),
+        ))
+          for (final subset in _subsets(used))
+            _case(
+              [
+                '${role.id} by ${provider.descriptor.id}',
+                if (picks.isNotEmpty) '(${picks.values.join(', ')})',
+                if (subset.isNotEmpty)
+                  'with ${subset.map((role) => role.id).join(', ')}',
+              ].join(' '),
+              [provider.descriptor.id],
+              picks: {...picks, role: provider.descriptor.id},
+              present: subset,
+            ),
     ];
+  }
+
+  /// Every combination of providers of those [roles] that have several in
+  /// the registry.
+  List<Map<Role, ModuleId>> _picksOf(List<Role> roles) {
+    var combinations = <Map<Role, ModuleId>>[{}];
+    for (final role in {...roles}) {
+      final providers = registry.providersOf(role);
+      if (providers.length < 2) continue;
+      combinations = [
+        for (final combination in combinations)
+          for (final provider in providers)
+            {...combination, role: provider.descriptor.id},
+      ];
+    }
+    return combinations;
   }
 
   ContractCase _case(
@@ -172,7 +225,7 @@ final class ContractHarness {
     );
   }
 
-  /// Runs the stages 3 to 5 of the pipeline and [checkTemplateTags] for
+  /// Runs the stages 3 to 5 of the pipeline and [missingTemplateTags] for
   /// [contractCase].
   Future<ContractResult> check(ContractCase contractCase) async {
     final environment = PipelineEnvironment(
@@ -201,61 +254,84 @@ final class ContractHarness {
       resolution: resolution,
       collection: collection,
       context: context,
+      interactive: environment.interactive,
+      skipExternalSetup: environment.skipExternalSetup,
     );
     return ContractResult(
       contractCase,
       [
         ...resolved.issues,
         ...validation.issues,
-        ...checkTemplateTags(
+        ...missingTemplateTags(
           registry: registry,
           resolution: resolution,
           collection: collection,
         ),
       ],
       resolution: resolution,
+      collection: collection,
+      validation: validation,
     );
   }
 
-  /// Checks every case of every module and every role of the registry.
-  Future<List<ContractResult>> checkAll() async => [
-        for (final module in registry.modules)
-          for (final contractCase in casesOfModule(module.descriptor.id))
-            await check(contractCase),
-        for (final role in registry.roles)
-          for (final contractCase in casesOfRole(role))
-            await check(contractCase),
-      ];
+  /// Checks every case of every module and every role of the registry, and
+  /// returns the results of the cases whose app no case before built.
+  Future<List<ContractResult>> checkAll() async {
+    final results = <ContractResult>[];
+    final apps = <String>{};
+    for (final contractCase in [
+      for (final module in registry.modules)
+        ...casesOfModule(module.descriptor.id),
+      for (final role in registry.roles) ...casesOfRole(role),
+    ]) {
+      final result = await check(contractCase);
+      final key = result.appKey;
+      if (key == null || apps.add(key)) results.add(result);
+    }
+    return results;
+  }
 
-  /// Indexes the Dart files among [files], rendered text by path, and runs
-  /// the structural rules of the present roles of [resolution] and checks
-  /// the symbols of their interfaces.
+  /// Indexes the Dart files among [files], the rendered app of [result] by
+  /// path, runs the structural rules of its present roles with the data it
+  /// collected, and checks the symbols of their interfaces.
   ///
-  /// [owners] names who generated each file; [data] is the data of the
-  /// roles, as the pipeline collected it.
-  List<SmfIssue> checkStructure({
-    required Resolution resolution,
+  /// [owners] names who generated each file; the rules of the roles check
+  /// only files with an owner.
+  ///
+  /// Throws an [ArgumentError] if the case of [result] did not resolve.
+  List<SmfIssue> checkStructure(
+    ContractResult result, {
     required Map<String, String> files,
-    Map<String, ContributionOrigin> owners = const {},
-    List<RoleData<Object>> data = const [],
+    required Map<String, ContributionOrigin> owners,
   }) {
-    final indexes = {
-      for (final MapEntry(key: path, value: text) in files.entries)
-        if (path.endsWith('.dart')) path: DartFileIndexer.index(path, text),
-    };
-    final issues = <SmfIssue>[
-      for (final MapEntry(key: path, value: text) in files.entries)
-        if (path.endsWith('.dart'))
-          for (final error in DartFileIndexer.errorsOf(text))
-            SmfIssue(
-              '$path does not parse: $error',
-              path: path,
-              origin: owners[path],
-            ),
-    ];
+    final resolution = result.resolution;
+    final collection = result.collection;
+    if (resolution == null || collection == null) {
+      throw ArgumentError.value(
+        result,
+        'result',
+        'The case ${result.contractCase} did not resolve',
+      );
+    }
+    final issues = <SmfIssue>[];
+    final indexes = <String, DartFileIndex>{};
+    for (final MapEntry(key: path, value: text) in files.entries) {
+      if (!path.endsWith('.dart')) continue;
+      final (:index, :errors) = DartFileIndexer.parse(path, text);
+      indexes[path] = index;
+      for (final error in errors) {
+        issues.add(
+          SmfIssue(
+            '$path does not parse: $error',
+            path: path,
+            origin: owners[path],
+          ),
+        );
+      }
+    }
     final request = StructuralRuleRequest(
       hook: RoleHookRequest(
-        data: data,
+        data: collection.roleData,
         presentRoles: resolution.presentRoles,
         context: context,
       ),
@@ -273,13 +349,24 @@ final class ContractHarness {
 }
 
 /// Every subset of [roles], the empty one first, in a stable order.
+/// The subsets of [roles], the largest first.
 List<List<Role>> _subsets(List<Role> roles) => [
-      for (var mask = 0; mask < 1 << roles.length; mask++)
-        [
-          for (var i = 0; i < roles.length; i++)
-            if (mask & (1 << i) != 0) roles[i],
-        ],
+      for (var size = roles.length; size >= 0; size--)
+        for (var mask = 0; mask < 1 << roles.length; mask++)
+          if (_bitCount(mask) == size)
+            [
+              for (var i = 0; i < roles.length; i++)
+                if (mask & (1 << i) != 0) roles[i],
+            ],
     ];
+
+int _bitCount(int mask) {
+  var count = 0;
+  for (var rest = mask; rest != 0; rest &= rest - 1) {
+    count++;
+  }
+  return count;
+}
 
 final SmfHost _silentHost = SmfHost(
   prompter: const _NoPrompter(),

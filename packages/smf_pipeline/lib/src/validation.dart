@@ -5,6 +5,7 @@ import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
+import 'package:smf_pipeline/src/templates.dart';
 
 /// What stage 5 found and computed.
 final class ValidationResult {
@@ -47,6 +48,8 @@ const _reservedVars = {'app_name', 'org_name'};
 /// - the pubspec, and that the app is not named like a dependency;
 /// - the `validate` hooks of the present roles' templates and providers,
 ///   and the module rules of the roles;
+/// - the tags of the sockets in the bricks (see [checkTemplateTags]), and
+///   that every socket of a present role that needs a value has one;
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
 ///   generated;
@@ -85,7 +88,15 @@ ValidationResult validate({
   }
   issues
     ..addAll(merged.issues)
-    ..addAll(_hookIssues(registry, resolution, collection, context));
+    ..addAll(_hookIssues(registry, resolution, collection, context))
+    ..addAll(
+      checkTemplateTags(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+      ),
+    )
+    ..addAll(_requiredValueIssues(resolution, collection));
 
   final bySocket = <SocketRef, List<Collected>>{};
   final postGen = <Collected>[];
@@ -335,6 +346,32 @@ Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
             origin: origin,
           );
         }
+      }
+    }
+  }
+}
+
+/// A socket for one value of a present role that cannot render without one,
+/// such as the minimum iOS version, but got none: the providers of the role
+/// contribute its base value.
+Iterable<SmfIssue> _requiredValueIssues(
+  Resolution resolution,
+  Collection collection,
+) sync* {
+  final contributed = {
+    for (final collected in collection.applyingOf<SocketContribution>())
+      (collected.contribution as SocketContribution).socket,
+  };
+  for (final role in resolution.presentRoles) {
+    for (final socket in role.sockets) {
+      if (socket.kind case ValueSocket(required: true)
+          when !contributed.contains(socket)) {
+        final providers = resolution.providersOf(role);
+        yield SmfIssue(
+          'The $socket needs a value, but nothing contributes one; the '
+          'provider of the ${role.id} contributes its base value.',
+          origin: providers.length == 1 ? providers.single.origin : null,
+        );
       }
     }
   }

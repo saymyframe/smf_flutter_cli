@@ -63,13 +63,19 @@ final class EventsRole extends Role<RoleImplementation> {
               'Only the DI container calls createCommunicationService().',
           check: _checkEventsFactory,
         ),
+        StructuralRule(
+          id: 'events.implementation_factories',
+          description: 'The function of every implementation is in its file '
+              'and takes no arguments.',
+          check: _checkImplementationFactories,
+        ),
       ];
 }
 
 List<SmfIssue> _checkEventsFactory(
   StructuralRuleInput<RoleImplementation> input,
 ) =>
-    _checkFactoryCalls(input, 'createCommunicationService');
+    _checkFactoryCalls(input, 'createCommunicationService', EventsRole.file);
 
 final class _EventsTemplate extends _ServiceTemplate {
   const _EventsTemplate();

@@ -82,6 +82,12 @@ void main() {
           dispose: const FunctionRef('disposeF', import: _file),
         ).problems(),
         ..._registration('G', instanceName: '').problems(),
+        ..._registration(
+          'H',
+          lifetime: DiLifetime.factory,
+          params: [const TypeRef('String')],
+          instanceName: 'named',
+        ).problems(),
       ];
 
       expect(problems, [
@@ -91,6 +97,7 @@ void main() {
         contains('which only a singleton can do'),
         contains('does not keep to dispose of'),
         contains('empty instance name'),
+        contains('which resolveWith cannot ask for'),
       ]);
     });
 
@@ -503,8 +510,13 @@ void main() {
           ),
         );
 
+    const locator = IndexedImport(
+      'package:my_app/core/di/service_locator.dart',
+    );
+
     DartFileIndex resolving(String path) => DartFileIndex(
           path: path,
+          imports: const [locator],
           invocations: const [
             IndexedInvocation('resolve', typeArguments: ['AuthService']),
           ],
@@ -569,14 +581,20 @@ void main() {
         {
           screen: const DartFileIndex(
             path: screen,
+            imports: [locator],
             references: [IndexedReference('resolveWith')],
           ),
           infrastructure: const DartFileIndex(
             path: infrastructure,
-            memberAccesses: [IndexedMemberAccess('serviceLocator', 'resolve')],
+            imports: [IndexedImport('../di/service_locator.dart')],
+            invocations: [
+              IndexedInvocation('resolve', target: 'serviceLocator'),
+            ],
+            references: [IndexedReference('serviceLocator')],
           ),
           'lib/core/auth/other.dart': const DartFileIndex(
             path: 'lib/core/auth/other.dart',
+            imports: [locator],
             references: [IndexedReference('serviceLocator')],
           ),
         },
@@ -592,5 +610,187 @@ void main() {
       expect(issues[1].path, infrastructure);
       expect(issues.last.path, 'lib/core/auth/other.dart');
     });
+
+    test('ignores names that are not of the service locator', () {
+      expect(
+        check({
+          infrastructure: const DartFileIndex(
+            path: infrastructure,
+            imports: [IndexedImport('package:my_app/core/auth/api.dart')],
+            invocations: [
+              IndexedInvocation('resolve'),
+              IndexedInvocation('resolve', target: 'client'),
+            ],
+            references: [IndexedReference('serviceLocator')],
+          ),
+        }),
+        isEmpty,
+      );
+    });
+
+    test('lets the provider of the DI role use its locator', () {
+      final issues = diRole.checkStructure(
+        const StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: [],
+            presentRoles: {diRole},
+            context: testContext,
+          ),
+          files: {
+            DiRole.dependenciesFile: DartFileIndex(
+              path: DiRole.dependenciesFile,
+              imports: [IndexedImport('service_locator.dart')],
+              references: [IndexedReference('serviceLocator')],
+            ),
+          },
+          owners: {
+            DiRole.dependenciesFile: ModuleOrigin(ModuleId('container')),
+          },
+          modules: [
+            ModuleDescriptor(
+              id: ModuleId('container'),
+              description: 'Container',
+              kind: ModuleKinds.infrastructure,
+              providers: [_Container({})],
+            ),
+          ],
+        ),
+      );
+
+      expect(issues, isEmpty);
+    });
   });
+
+  group('the structural rule di.factories', () {
+    const file = ImportRef.app('core/auth/auth.dart');
+    const path = 'lib/core/auth/auth.dart';
+    const service = TypeRef('AuthService', import: file);
+    const client = TypeRef('Client', import: file);
+
+    List<SmfIssue> check(String source, List<DiRegistration> registrations) =>
+        diRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [
+                for (final registration in registrations)
+                  dataOf(diRole, registration, module: 'auth'),
+              ],
+              presentRoles: {diRole},
+              context: testContext,
+            ),
+            files: {path: _index(path, source)},
+          ),
+        );
+
+    test('accepts factories that take the dependencies and parameters', () {
+      expect(
+        check(
+          'AuthService createAuth(Client client, String name, [int? n]) => '
+          'AuthService();\n'
+          'Client createClient() => Client();\n'
+          'void close(AuthService service) {}\n',
+          const [
+            DiRegistration(
+              type: client,
+              create: FactoryRef('createClient', import: file),
+            ),
+            DiRegistration(
+              type: service,
+              create: FactoryRef(
+                'createAuth',
+                import: file,
+                deps: [ServiceRef(client)],
+              ),
+              lifetime: DiLifetime.factory,
+              params: [TypeRef('String')],
+            ),
+            DiRegistration(
+              type: TypeRef('Session', import: file),
+              create: FactoryRef(
+                'createSession',
+                import: ImportRef('package:auth/auth.dart'),
+              ),
+              dispose: FunctionRef('close', import: file),
+            ),
+          ],
+        ),
+        isEmpty,
+      );
+    });
+
+    test('rejects missing factories and wrong arities', () {
+      final issues = check(
+        'AuthService createAuth() => AuthService();\n'
+        'void close() {}\n',
+        const [
+          DiRegistration(
+            type: service,
+            create: FactoryRef(
+              'createAuth',
+              import: file,
+              deps: [ServiceRef(client)],
+            ),
+            dispose: FunctionRef('close', import: file),
+          ),
+          DiRegistration(
+            type: client,
+            create: FactoryRef('createClient', import: file),
+          ),
+        ],
+      );
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          contains('createAuth() in $path must accept 1 positional'),
+          contains('close() in $path must accept 1 positional'),
+          contains('does not declare function createClient()'),
+        ],
+      );
+      expect(issues.first.origin, const ModuleOrigin(ModuleId('auth')));
+      expect(issues.first.path, path);
+    });
+  });
+}
+
+/// The index of [source] as the harness builds it, by hand: only the
+/// top-level functions with their positional parameters.
+DartFileIndex _index(String path, String source) {
+  final functions = RegExp(r'^\w+ (\w+)\(([^)]*)\)', multiLine: true);
+  return DartFileIndex(
+    path: path,
+    declarations: [
+      for (final match in functions.allMatches(source))
+        IndexedDeclaration(
+          name: match.group(1)!,
+          kind: DeclarationKind.function,
+          parameters: [
+            for (final parameter in _parameters(match.group(2)!)) parameter,
+          ],
+        ),
+    ],
+  );
+}
+
+List<IndexedParameter> _parameters(String list) {
+  final parameters = <IndexedParameter>[];
+  var optional = false;
+  for (var part in list.split(',')) {
+    part = part.trim();
+    if (part.isEmpty) continue;
+    if (part.startsWith('[')) {
+      optional = true;
+      part = part.substring(1);
+    }
+    part = part.replaceAll(']', '').trim();
+    parameters.add(
+      IndexedParameter(
+        part.split(' ').last,
+        kind: optional
+            ? ParameterKind.optionalPositional
+            : ParameterKind.requiredPositional,
+      ),
+    );
+  }
+  return parameters;
 }

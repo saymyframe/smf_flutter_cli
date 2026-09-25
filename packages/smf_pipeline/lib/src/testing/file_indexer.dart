@@ -7,12 +7,36 @@ import 'package:smf_contracts/lego_core.dart';
 /// resolving any type.
 ///
 /// Parse errors do not stop it: the index holds what could be parsed, and
-/// [DartFileIndexer.errorsOf] reports the errors.
+/// [DartFileIndexer.parse] also returns the errors.
+///
+/// Doc comments and annotations are not uses of names: the index keeps
+/// annotations as text and skips comments.
 abstract final class DartFileIndexer {
   /// The index of [content], the file at [path] relative to the project
   /// root.
-  static DartFileIndex index(String path, String content) {
-    final unit = parseString(content: content, throwIfDiagnostics: false).unit;
+  static DartFileIndex index(String path, String content) =>
+      parse(path, content).index;
+
+  /// The index of [content], the file at [path], and its parse errors, each
+  /// with its offset.
+  static ({DartFileIndex index, List<String> errors}) parse(
+    String path,
+    String content,
+  ) {
+    final result = parseString(content: content, throwIfDiagnostics: false);
+    return (
+      index: _indexOf(path, result.unit),
+      errors: [
+        for (final error in result.errors)
+          '${error.message} (at ${error.offset})',
+      ],
+    );
+  }
+
+  /// The parse errors of [content], each with its offset.
+  static List<String> errorsOf(String content) => parse('', content).errors;
+
+  static DartFileIndex _indexOf(String path, CompilationUnit unit) {
     final visitor = _IndexVisitor();
     unit.accept(visitor);
     return DartFileIndex(
@@ -30,13 +54,6 @@ abstract final class DartFileIndexer {
       memberAccesses: List.unmodifiable(visitor.memberAccesses),
     );
   }
-
-  /// The parse errors of [content], each with its offset.
-  static List<String> errorsOf(String content) => [
-        for (final error
-            in parseString(content: content, throwIfDiagnostics: false).errors)
-          '${error.message} (at ${error.offset})',
-      ];
 }
 
 IndexedImport _import(ImportDirective directive) => IndexedImport(
@@ -160,18 +177,35 @@ Iterable<IndexedDeclaration> _declarations(
   }
 }
 
-List<IndexedConstructor> _constructors(NodeList<ClassMember> members) => [
-      for (final member in members)
-        if (member is ConstructorDeclaration)
-          IndexedConstructor(
-            name: member.name?.lexeme ?? '',
-            parameters: _parameters(member.parameters),
-            isConst: member.constKeyword != null,
-            isFactory: member.factoryKeyword != null,
-          ),
-    ];
+List<IndexedConstructor> _constructors(NodeList<ClassMember> members) {
+  // The types of the fields, for initializing formals such as `this.tab`.
+  final fields = <String, String>{};
+  for (final member in members) {
+    if (member is FieldDeclaration && !member.isStatic) {
+      final type = member.fields.type?.toSource();
+      if (type == null) continue;
+      for (final variable in member.fields.variables) {
+        fields[variable.name.lexeme] = type;
+      }
+    }
+  }
+  return [
+    for (final member in members)
+      if (member is ConstructorDeclaration)
+        IndexedConstructor(
+          name: member.name?.lexeme ?? '',
+          parameters: _parameters(member.parameters, fields),
+          isConst: member.constKeyword != null,
+          isFactory: member.factoryKeyword != null,
+        ),
+  ];
+}
 
-List<IndexedParameter> _parameters(FormalParameterList? list) => [
+List<IndexedParameter> _parameters(
+  FormalParameterList? list, [
+  Map<String, String> fields = const {},
+]) =>
+    [
       for (final parameter in list?.parameters ?? const <FormalParameter>[])
         IndexedParameter(
           parameter.name?.lexeme ?? '',
@@ -182,19 +216,20 @@ List<IndexedParameter> _parameters(FormalParameterList? list) => [
                   : parameter.isRequiredNamed
                       ? ParameterKind.requiredNamed
                       : ParameterKind.optionalNamed,
-          type: _typeOf(parameter),
+          type: _typeOf(parameter, fields),
           annotations: _annotations(parameter.metadata),
         ),
     ];
 
-String? _typeOf(FormalParameter parameter) {
+String? _typeOf(FormalParameter parameter, Map<String, String> fields) {
   final normal = switch (parameter) {
     DefaultFormalParameter(:final parameter) => parameter,
     NormalFormalParameter() => parameter,
   };
   return switch (normal) {
     SimpleFormalParameter(:final type) => type?.toSource(),
-    FieldFormalParameter(:final type) => type?.toSource(),
+    FieldFormalParameter(:final type, :final name) =>
+      type?.toSource() ?? fields[name.lexeme],
     SuperFormalParameter(:final type) => type?.toSource(),
     FunctionTypedFormalParameter() => normal.toSource(),
   };
@@ -294,36 +329,13 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
     super.visitInstanceCreationExpression(node);
   }
 
+  // Doc comments refer to names without using them.
   @override
-  void visitFunctionExpressionInvocation(FunctionExpressionInvocation node) {
-    final function = node.function;
-    final (name, target) = switch (function) {
-      SimpleIdentifier(:final name) => (name, null),
-      PrefixedIdentifier(:final prefix, :final identifier) => (
-          identifier.name,
-          prefix.name,
-        ),
-      PropertyAccess(:final realTarget, :final propertyName) => (
-          propertyName.name,
-          realTarget.toSource(),
-        ),
-      _ => (null, null),
-    };
-    if (name != null) {
-      invocations.add(
-        IndexedInvocation(
-          name,
-          target: target,
-          typeArguments: _typeArguments(node.typeArguments),
-          namedArguments: _namedArguments(node.argumentList),
-          enclosingDeclaration: _enclosing(node),
-          awaited: _isAwaited(node),
-          offset: node.offset,
-        ),
-      );
-    }
-    super.visitFunctionExpressionInvocation(node);
-  }
+  void visitComment(Comment node) {}
+
+  // Annotations are kept as text; the names in them are not uses.
+  @override
+  void visitAnnotation(Annotation node) {}
 
   @override
   void visitPropertyAccess(PropertyAccess node) {

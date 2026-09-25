@@ -9,6 +9,7 @@ library;
 import 'package:fake_roles/bundles/badge_role_bundle.dart';
 import 'package:fake_roles/bundles/clock_role_bundle.dart';
 import 'package:fake_roles/bundles/fake_clock_badge_bundle.dart';
+import 'package:fake_roles/bundles/fake_clock_user_bundle.dart';
 import 'package:smf_contracts/lego.dart';
 
 /// The clock role; see [ClockRole].
@@ -142,8 +143,9 @@ final class FakeClockBadgeModule extends SmfModule {
 }
 
 /// A module that works with the clock and the badge when they are present:
-/// it contributes data to both roles and code that refers to their
-/// symbols only under `when`.
+/// it contributes data to both roles, and code that refers to their
+/// symbols only under `when` or, in its brick, under the presence flag
+/// `{{#has_badge}}`.
 final class FakeClockUserModule extends SmfModule {
   /// Creates the module.
   const FakeClockUserModule();
@@ -161,6 +163,7 @@ final class FakeClockUserModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeClockUserBundle),
         clockRole.data("Europe/Kyiv's zone"),
         badgeRole.data('New'),
         const SocketContribution.code(
@@ -170,16 +173,16 @@ final class FakeClockUserModule extends SmfModule {
             imports: [ImportRef('package:flutter/foundation.dart')],
           ),
         ),
-        const SocketContribution.code(
+        SocketContribution.code(
           AppEntryRole.bootstrapLate,
           Fragment(
             'debugPrint(createBadge().labels.join());',
             imports: [
-              ImportRef('package:flutter/foundation.dart'),
-              ImportRef.app('core/badge/badge_factory.dart'),
+              const ImportRef('package:flutter/foundation.dart'),
+              BadgeRole.createBadge.importRef,
             ],
           ),
-          when: {badgeRole},
+          when: const {badgeRole},
         ),
       ];
 }

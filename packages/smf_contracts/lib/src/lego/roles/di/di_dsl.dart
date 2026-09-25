@@ -130,6 +130,8 @@ final class DiRegistration {
         '$label has an empty instance name.',
       if (params.isNotEmpty && lifetime != DiLifetime.factory)
         '$label takes parameters, which only a factory can.',
+      if (params.isNotEmpty && instanceName != null)
+        _namedFactoryProblem(label),
       if (isAsync && lifetime != DiLifetime.singleton)
         '$label is asynchronous, which only a singleton can be.',
     ];
@@ -156,3 +158,7 @@ final class DiRegistration {
   @override
   String toString() => 'registration of $key';
 }
+
+String _namedFactoryProblem(String label) =>
+    '$label takes parameters and has an instance name, which resolveWith '
+    'cannot ask for.';

@@ -37,8 +37,9 @@ final class ContributionOrder {
   /// The edges between the contributors, after mutual edges cancelled out.
   final List<OrderEdge> edges;
 
-  /// The contributors on a cycle of edges, or empty if there is none. With
-  /// a cycle, the contributors on it are ordered by name.
+  /// The modules and templates on a cycle of edges through contributors,
+  /// including those that do not contribute, or empty if there is none.
+  /// The contributors on a cycle are ordered by name among themselves.
   final List<String> cycle;
 }
 
@@ -146,10 +147,14 @@ ContributionOrder orderContributions(
   }
 
   final components = _components(raw);
-  final cycle = [
+  // The modules and templates on the cycles that reach the contributors,
+  // including those that do not contribute to the socket.
+  final cycle = {
     for (final name in names)
-      if ((components[name]?.length ?? 1) > 1) name,
-  ]..sort();
+      if (components[name] case final component? when component.length > 1)
+        ...component,
+  }.toList()
+    ..sort();
 
   // The edges between the contributors, through any path of the app.
   final edges = <OrderEdge>[];

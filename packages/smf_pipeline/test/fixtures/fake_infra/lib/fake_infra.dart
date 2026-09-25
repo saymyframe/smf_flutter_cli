@@ -5,6 +5,8 @@ library;
 import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
+import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:smf_contracts/lego.dart';
@@ -155,15 +157,69 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        // A plugin that only adds a task, so it builds with any version of
+        // the Android and Kotlin plugins.
         AppEntryRole.gradleSettingsPlugins.entry(
-          'org.jetbrains.kotlin.plugin.serialization',
-          '2.1.0',
+          'io.github.ben-manes.versions',
+          '0.64.0',
         ),
-        AppEntryRole.gradleAppPlugins
-            .key('org.jetbrains.kotlin.plugin.serialization'),
+        AppEntryRole.gradleAppPlugins.key('io.github.ben-manes.versions'),
         AppEntryRole.gradleAppDependencies.entry(
           'androidx.annotation:annotation',
           '1.9.1',
+        ),
+      ];
+}
+
+/// A module that puts into the sockets of the app entry some of the keys
+/// and values that [FakeSocketsModule] does, so an app with both merges
+/// them: equal permissions, meta-data and plist strings agree, the plist
+/// arrays are united, the highest versions win, and the supported locale
+/// appears once.
+final class FakeOverlapModule extends SmfModule {
+  /// Creates the module.
+  const FakeOverlapModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_overlap');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The keys of fake_sockets again (fixture)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        const SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'supportedLocales',
+          Fragment("Locale('en')", imports: [_material]),
+        ),
+        AppEntryRole.iosDeploymentTarget.value('13.0'),
+        AppEntryRole.androidManifestPermissions
+            .key('android.permission.INTERNET'),
+        AppEntryRole.androidManifestApplicationMeta.entry(
+          'com.example.fixture.KEY',
+          const AndroidMetaData.value('fixture'),
+        ),
+        AppEntryRole.infoPlist.entry(
+          'FixtureName',
+          const PlistString('Fixture'),
+        ),
+        AppEntryRole.infoPlist.entry(
+          'UIBackgroundModes',
+          const PlistStringArray(['remote-notification']),
+        ),
+        AppEntryRole.gradleSettingsPlugins.entry(
+          'io.github.ben-manes.versions',
+          '0.63.0',
+        ),
+        AppEntryRole.gradleAppPlugins.key('io.github.ben-manes.versions'),
+        AppEntryRole.gradleAppDependencies.entry(
+          'androidx.annotation:annotation',
+          '1.8.0',
         ),
       ];
 }
@@ -194,7 +250,7 @@ final class FakeAnalyticsModule extends SmfModule {
         BrickContribution(fakeAnalyticsBundle),
         analyticsRole.data(
           const RoleImplementation(
-            type: TypeRef('AnalyticsService'),
+            type: TypeRef('FixtureAnalytics', import: _file),
             create: FactoryRef('createFixtureAnalytics', import: _file),
           ),
         ),
@@ -215,6 +271,8 @@ final class FakeCrashModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('fake_crash');
 
+  static const _file = ImportRef.app('core/fixture_crash/fixture_crash.dart');
+
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
@@ -228,11 +286,41 @@ final class FakeCrashModule extends SmfModule {
         BrickContribution(fakeCrashBundle),
         crashReportingRole.data(
           const RoleImplementation.async(
-            type: TypeRef('CrashReporter'),
-            init: FactoryRef(
-              'initFixtureCrashReporter',
-              import: ImportRef.app('core/fixture_crash/fixture_crash.dart'),
-            ),
+            type: TypeRef('FixtureCrashReporter', import: _file),
+            init: FactoryRef('initFixtureCrashReporter', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the events role, which has at most one provider, whose
+/// channel opens asynchronously.
+final class FakeEventsModule extends SmfModule {
+  /// Creates the module.
+  const FakeEventsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_events');
+
+  static const _file = ImportRef.app(
+    'core/fixture_events/fixture_events.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Events that start asynchronously (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(eventsRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeEventsBundle),
+        eventsRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixtureEvents', import: _file),
+            init: FactoryRef('openFixtureEvents', import: _file),
           ),
         ),
       ];
@@ -255,6 +343,7 @@ final class FakeRegistrationsModule extends SmfModule {
   static const _session = TypeRef('FixtureSession', import: _file);
   static const _cache = TypeRef('FixtureCache', import: _file);
   static const _greeting = TypeRef('FixtureGreeting', import: _file);
+  static const _label = TypeRef('FixtureLabel', import: _file);
   static const _zone = TypeRef('FixtureZone', import: _file);
 
   @override
@@ -320,15 +409,14 @@ final class FakeRegistrationsModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
-            type: _greeting,
+            type: _label,
             create: FactoryRef(
-              'createSingleGreeting',
+              'createFixtureLabel',
               import: _file,
               deps: [ServiceRef(_config)],
             ),
             lifetime: DiLifetime.factory,
             params: [TypeRef('String')],
-            instanceName: 'single',
           ),
         ),
         diRole.data(
@@ -337,6 +425,83 @@ final class FakeRegistrationsModule extends SmfModule {
             create: FactoryRef('createUtcZone', import: _file),
             instanceName: 'utc',
           ),
+        ),
+      ];
+}
+
+/// A module with sockets of its own, which only the modules that depend on
+/// it fill: code that runs when it is set up, and a family with a member
+/// for each kind of channel it opens.
+final class FakeParentModule extends SmfModule {
+  /// Creates the module.
+  const FakeParentModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_parent');
+
+  /// Statements that run in `setUpFixtureParent()`, which the late phase of
+  /// `bootstrap()` calls.
+  static const setup = SocketRef<CodeSocket>.module(id, 'setup', CodeSocket());
+
+  /// Statements that run when the channels of a kind open; the kinds are
+  /// `alerts` and `news`.
+  static const channels = SocketFamily<String, CodeSocket>.module(
+    id,
+    'channels',
+    CodeSocket(),
+    keyOf: _channelSegments,
+    segments: 1,
+  );
+
+  static List<String> _channelSegments(String kind) => [kind];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sockets for the modules that depend on it (fixture)',
+        kind: ModuleKinds.infrastructure,
+        sockets: [setup],
+        socketFamilies: [channels],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeParentBundle),
+        const SocketContribution.code(
+          AppEntryRole.bootstrapLate,
+          Fragment(
+            'setUpFixtureParent();',
+            imports: [ImportRef.app('core/fixture_parent/fixture_parent.dart')],
+          ),
+        ),
+      ];
+}
+
+/// A module that depends on [FakeParentModule] and fills its sockets.
+final class FakeChildModule extends SmfModule {
+  /// Creates the module.
+  const FakeChildModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_child');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Fills the sockets of fake_parent (fixture)',
+        kind: ModuleKinds.infrastructure,
+        dependsOn: {FakeParentModule.id},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        const SocketContribution.code(
+          FakeParentModule.setup,
+          Fragment("debugPrint('child set up');", imports: [_foundation]),
+        ),
+        SocketContribution.code(
+          FakeParentModule.channels('alerts'),
+          const Fragment("debugPrint('child alerts');", imports: [_foundation]),
         ),
       ];
 }

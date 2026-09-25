@@ -49,6 +49,18 @@ final class FixtureGreeting {
   final int times;
 }
 
+/// A label built from a text for every call.
+final class FixtureLabel {
+  /// Creates the label.
+  const FixtureLabel(this.config, this.text);
+
+  /// The configuration.
+  final FixtureConfig config;
+
+  /// The text of the label.
+  final String text;
+}
+
 /// A clock for one time zone.
 final class FixtureZone {
   /// Creates the clock of [zone].
@@ -81,9 +93,9 @@ FixtureGreeting createFixtureGreeting(
 ) =>
     FixtureGreeting(config, name, times);
 
-/// Creates a greeting for [name] once.
-FixtureGreeting createSingleGreeting(FixtureConfig config, String name) =>
-    FixtureGreeting(config, name, 1);
+/// Creates a label with [text].
+FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
+    FixtureLabel(config, text);
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');

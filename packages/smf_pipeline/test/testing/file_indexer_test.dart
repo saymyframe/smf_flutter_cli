@@ -138,7 +138,8 @@ void main() {
     expect(
       [for (final p in parameters) '${p.name} ${p.kind.name} ${p.type}'],
       [
-        'id requiredNamed null',
+        // this.id takes the type of its field.
+        'id requiredNamed int',
         'key optionalNamed null',
         'tab optionalNamed String?',
       ],
@@ -190,6 +191,48 @@ void main() {
         index.invocationsOf(name).single.offset,
     ];
     expect(order, orderedEquals([...order]..sort()));
+  });
+
+  test('indexes named constructors called with const or new', () {
+    final index = DartFileIndexer.index('lib/a.dart', '''
+import 'package:flutter/widgets.dart' as w;
+
+final a = const Duration.zero();
+final b = new w.EdgeInsets.all(8);
+final c = const w.Text('c');
+''');
+
+    expect(
+      [for (final i in index.invocations) '${i.target}.${i.name}'],
+      ['Duration.zero', 'w.EdgeInsets.all', 'w.Text'],
+    );
+  });
+
+  test('doc comments and annotations are not uses', () {
+    final index = DartFileIndexer.index('lib/a.dart', '''
+import 'package:my_app/core/di/service_locator.dart';
+
+/// Registers what [resolve] returns; see [context.nav.settings].
+@Target({TargetKind.classType})
+@Deprecated(createAnalyticsService)
+class A {}
+''');
+
+    expect(index.references, isEmpty);
+    expect(index.memberAccesses, isEmpty);
+    expect(index.invocations, isEmpty);
+    expect(index.declaration('A')!.annotations, [
+      '@Target({TargetKind.classType})',
+      '@Deprecated(createAnalyticsService)',
+    ]);
+  });
+
+  test('parse returns the index and the errors at once', () {
+    final result = DartFileIndexer.parse('lib/b.dart', 'void f( {');
+
+    expect(result.index.path, 'lib/b.dart');
+    expect(result.index.declaration('f'), isNotNull);
+    expect(result.errors, isNotEmpty);
   });
 
   test('indexes references and member accesses', () {

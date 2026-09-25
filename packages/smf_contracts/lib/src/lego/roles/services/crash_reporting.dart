@@ -67,13 +67,19 @@ final class CrashReportingRole extends Role<RoleImplementation> {
           description: 'Only the DI container calls createCrashReporter().',
           check: _checkCrashReportingFactory,
         ),
+        StructuralRule(
+          id: 'crash_reporting.implementation_factories',
+          description: 'The function of every implementation is in its file '
+              'and takes no arguments.',
+          check: _checkImplementationFactories,
+        ),
       ];
 }
 
 List<SmfIssue> _checkCrashReportingFactory(
   StructuralRuleInput<RoleImplementation> input,
 ) =>
-    _checkFactoryCalls(input, 'createCrashReporter');
+    _checkFactoryCalls(input, 'createCrashReporter', CrashReportingRole.file);
 
 final class _CrashReportingTemplate extends _ServiceTemplate {
   const _CrashReportingTemplate();

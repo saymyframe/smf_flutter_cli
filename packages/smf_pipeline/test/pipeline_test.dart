@@ -111,7 +111,8 @@ void main() {
     expect(plan.preflight.results.single.passed, isTrue);
     expect(plan.leftOut, isEmpty);
     expect(plan.collection.roleData.single.value, '/home');
-    expect(plan.socketOrders, isEmpty);
+    // The base value of the minimum iOS version, from the scaffold.
+    expect(plan.socketOrders.keys, [AppEntryRole.iosDeploymentTarget]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies, isEmpty);
     expect(plan.request.appName, 'my_app');
@@ -600,6 +601,50 @@ void main() {
       expect(lines, contains('  Directory: /app'));
       expect(lines, contains('    cycle: a, b'));
       expect(lines, isNot(contains('Roles')));
+    });
+
+    test('notes a launcher of flutter and a Flutter too old', () {
+      final launched = FlutterSdkCheck(FakeHost().fileSystem, explain: true)
+        ..launcher = '/snap/bin/flutter';
+      final lines = explain(
+        selection: const Selection(
+          appName: 'app',
+          org: 'com.example',
+          target: TargetDecision(path: '/app'),
+          requested: [],
+        ),
+        context: testContext,
+        resolution: Resolution(const []),
+        validation: const ValidationResult(
+          issues: [],
+          socketOrders: {},
+          postGenOrder: ContributionOrder(contributions: [], edges: []),
+          pubspec: MergedPubspec(),
+        ),
+        preflight: PreflightReport(
+          [
+            CheckResult(
+              PlannedCheck(launched, const PipelineOrigin()),
+              const PreflightPassed(),
+            ),
+          ],
+          const [],
+        ),
+        leftOut: const [],
+        strict: false,
+        sdkIssues: const [SmfIssue('The app needs Dart ^3.99.0.')],
+      );
+
+      const note =
+          '    /snap/bin/flutter is a launcher; a run asks it where the SDK is.';
+      expect(
+        lines,
+        containsAllInOrder([
+          '  ✓ Flutter SDK',
+          note,
+          '  ✗ The app needs Dart ^3.99.0.',
+        ]),
+      );
     });
   });
 }

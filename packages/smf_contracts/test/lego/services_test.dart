@@ -405,6 +405,12 @@ void main() {
               ])
                 path: DartFileIndex(
                   path: path,
+                  imports: [
+                    IndexedImport(
+                      'package:my_app/'
+                      '${role.interface.files.single.substring(4)}',
+                    ),
+                  ],
                   invocations: [IndexedInvocation(factory)],
                 ),
             },
@@ -452,6 +458,7 @@ void main() {
         issuesOf(
           const DartFileIndex(
             path: 'lib/a.dart',
+            imports: [IndexedImport('core/analytics/analytics_service.dart')],
             references: [IndexedReference('createAnalyticsService')],
           ),
         ),
@@ -461,12 +468,128 @@ void main() {
         issuesOf(
           const DartFileIndex(
             path: 'lib/b.dart',
+            imports: [
+              IndexedImport(
+                'package:my_app/core/analytics/analytics_service.dart',
+                prefix: 'analytics',
+              ),
+            ],
             memberAccesses: [
               IndexedMemberAccess('analytics', 'createAnalyticsService'),
             ],
           ),
         ),
         hasLength(1),
+      );
+    });
+
+    test('are the functions of the role file, not same-named others', () {
+      expect(
+        analyticsRole.checkStructure(
+          const StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [],
+              presentRoles: {analyticsRole},
+              context: testContext,
+            ),
+            files: {
+              'lib/a.dart': DartFileIndex(
+                path: 'lib/a.dart',
+                imports: [
+                  IndexedImport(
+                    'package:my_app/core/analytics/analytics_service.dart',
+                    prefix: 'analytics',
+                  ),
+                ],
+                invocations: [
+                  IndexedInvocation('createAnalyticsService'),
+                  IndexedInvocation('createAnalyticsService', target: 'x'),
+                ],
+                references: [IndexedReference('createAnalyticsService')],
+              ),
+            },
+            owners: {'lib/a.dart': ModuleOrigin(ModuleId('home'))},
+            modules: [feature],
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('the functions of the implementations', () {
+    const file = ImportRef.app('core/fixture/fixture.dart');
+    const path = 'lib/core/fixture/fixture.dart';
+
+    List<SmfIssue> check(DartFileIndex index) => analyticsRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [
+                dataOf(
+                  analyticsRole,
+                  const RoleImplementation(
+                    type: TypeRef('FixtureAnalytics'),
+                    create: FactoryRef('createFixture', import: file),
+                  ),
+                  module: 'fixture',
+                ),
+                dataOf(
+                  analyticsRole,
+                  const RoleImplementation.async(
+                    type: TypeRef('OtherAnalytics'),
+                    init: FactoryRef(
+                      'initOther',
+                      import: ImportRef('package:other/other.dart'),
+                    ),
+                  ),
+                  module: 'other',
+                ),
+              ],
+              presentRoles: {analyticsRole},
+              context: testContext,
+            ),
+            files: {path: index},
+          ),
+        );
+
+    test('exist in their file and take no arguments', () {
+      expect(
+        check(
+          const DartFileIndex(
+            path: path,
+            declarations: [
+              IndexedDeclaration(
+                name: 'createFixture',
+                kind: DeclarationKind.function,
+              ),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+
+      final issues = check(
+        const DartFileIndex(
+          path: path,
+          declarations: [
+            IndexedDeclaration(
+              name: 'createFixture',
+              kind: DeclarationKind.function,
+              parameters: [
+                IndexedParameter(
+                  'name',
+                  kind: ParameterKind.requiredPositional,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(issues.single.message, contains('must not require more than 0'));
+      expect(issues.single.origin, const ModuleOrigin(ModuleId('fixture')));
+      expect(
+        check(const DartFileIndex(path: path)).single.message,
+        contains('does not declare function createFixture()'),
       );
     });
   });

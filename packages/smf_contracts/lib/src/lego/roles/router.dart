@@ -172,14 +172,15 @@ final class RouterRole extends Role<RoutesData> {
         StructuralRule(
           id: 'router.nav_access',
           description: 'Code of a module navigates only to its own routes '
-              'and to those of the modules it depends on.',
+              'and to those of the modules it depends on, through the facade '
+              'or through their location classes.',
           check: _checkNavAccess,
         ),
         StructuralRule(
           id: 'router.screen_constructors',
-          description: 'The unnamed constructor of every screen takes each '
-              'parameter of its route as a named parameter of the same name, '
-              'and nothing else that is required.',
+          description: 'The unnamed constructor of every screen is const '
+              'and takes each parameter of its route as a named parameter of '
+              'the same name, and nothing else that is required.',
           check: _checkScreenConstructors,
         ),
       ];

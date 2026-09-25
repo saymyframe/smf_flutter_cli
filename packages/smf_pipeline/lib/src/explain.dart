@@ -135,6 +135,11 @@ List<String> explain({
     switch (result.status) {
       case PreflightPassed():
         lines.add('  ✓ ${check.description}$by');
+        if (check case FlutterSdkCheck(:final launcher?)) {
+          lines.add(
+            '    $launcher is a launcher; a run asks it where the SDK is.',
+          );
+        }
       case PreflightMissing(:final instructions, :final installable):
         lines
           ..add('  ✗ ${check.description}$by: missing')

@@ -148,7 +148,10 @@ final class CreatePipeline {
     final lenience = _Lenience(strict: request.strict, logger: logger);
     final answers = <Role, ModuleId>{};
     final checked = <String, CheckResult>{};
-    final sdkCheck = FlutterSdkCheck(environment.fileSystem);
+    final sdkCheck = FlutterSdkCheck(
+      environment.fileSystem,
+      explain: request.explain,
+    );
 
     while (true) {
       final resolved = await resolve(
@@ -185,14 +188,10 @@ final class CreatePipeline {
         environment,
         explain: request.explain,
         strict: request.strict,
+        pubspec: validation.pubspec,
         known: checked,
       );
-      final versionIssues = sdkVersionIssues(
-        environment.sdk,
-        validation.pubspec,
-      );
-      if (!request.explain &&
-          lenience.leaveOut([...preflight.issues, ...versionIssues])) {
+      if (!request.explain && lenience.leaveOut(preflight.issues)) {
         continue;
       }
 
@@ -206,7 +205,7 @@ final class CreatePipeline {
           leftOut: lenience.leftOut,
           strict: request.strict,
           onConflict: request.onConflict,
-          sdkIssues: versionIssues,
+          sdkIssues: preflight.versionIssues,
           codegen: [
             for (final collected in collection.applyingOf<CodegenRequest>())
               collected.origin,

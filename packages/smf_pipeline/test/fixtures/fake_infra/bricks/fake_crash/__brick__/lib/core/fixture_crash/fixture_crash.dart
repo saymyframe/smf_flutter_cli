@@ -4,10 +4,12 @@ import '../crash_reporting/crash_reporter.dart';
 
 /// Creates the crash reporter of the fixture once it is ready.
 Future<CrashReporter> initFixtureCrashReporter() async =>
-    const _FixtureCrashReporter();
+    const FixtureCrashReporter();
 
-final class _FixtureCrashReporter implements CrashReporter {
-  const _FixtureCrashReporter();
+/// Crash reporting that records nothing.
+final class FixtureCrashReporter implements CrashReporter {
+  /// Creates the reporter.
+  const FixtureCrashReporter();
 
   @override
   Future<void> recordError(

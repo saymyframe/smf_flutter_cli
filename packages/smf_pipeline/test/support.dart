@@ -166,16 +166,21 @@ final class TestModule extends SmfModule {
 /// A kind without rules, for tests.
 const plainKind = ModuleKind(id: 'plain', label: 'Plain modules');
 
-/// The module that provides the app entry in tests.
+/// The module that provides the app entry in tests, with the base value of
+/// the minimum iOS version as flutter_core contributes it.
 TestModule scaffold({List<Contribution> contributions = const []}) =>
     TestModule(
       'scaffold',
       kind: ModuleKinds.scaffold,
       providers: [const RoleProvider.plain(appEntryRole)],
-      contributions: contributions,
+      contributions: [
+        AppEntryRole.iosDeploymentTarget.value('13.0'),
+        ...contributions,
+      ],
     );
 
-/// A brick with the tags of every socket of the app entry.
+/// A brick with the tags of every socket of the app entry, and of the
+/// pipeline in its pubspec.
 BrickContribution entryBrick() => BrickContribution(
       bundle(
         'entry',
@@ -183,6 +188,9 @@ BrickContribution entryBrick() => BrickContribution(
           'lib/entry.dart': [
             for (final socket in appEntryRole.sockets)
               for (final tag in socket.tags) '{{{$tag}}}',
+          ].join('\n'),
+          'pubspec.yaml': [
+            for (final socket in PipelineSockets.all) '{{{${socket.tag}}}}',
           ].join('\n'),
         },
       ),
@@ -429,6 +437,10 @@ final class FakeHost {
           in windows ? ['flutter.bat', 'dart.bat'] : ['flutter', 'dart']) {
         fileSystem.file(context.join(bin, name)).createSync(recursive: true);
       }
+      // What tells the bin directory of a Flutter SDK apart.
+      fileSystem
+          .directory(context.join(bin, 'cache', 'dart-sdk'))
+          .createSync(recursive: true);
     }
     variables = environment ?? {'PATH': bin};
   }

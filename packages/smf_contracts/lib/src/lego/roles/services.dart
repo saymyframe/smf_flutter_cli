@@ -4,6 +4,7 @@ import 'package:smf_contracts/bundles/analytics_role_bundle.dart';
 import 'package:smf_contracts/bundles/crash_reporting_role_bundle.dart';
 import 'package:smf_contracts/bundles/events_role_bundle.dart';
 import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/src/lego/roles/symbol_uses.dart';
 
 part 'services/analytics.dart';
 part 'services/crash_reporting.dart';
@@ -116,8 +117,8 @@ const _implementationsRule = ModuleRule<RoleImplementation>(
 );
 
 /// The problems of files of modules in [input] that call or tear off
-/// [factory], the function that returns the service of a service role,
-/// unless the module provides the DI role.
+/// [factory], the function in the role's [file] that returns the service of
+/// a service role, unless the module provides the DI role.
 ///
 /// Only the DI container creates the service; other code receives it through
 /// `resolve` in a composition file or through the dependencies of its own
@@ -125,14 +126,13 @@ const _implementationsRule = ModuleRule<RoleImplementation>(
 List<SmfIssue> _checkFactoryCalls(
   StructuralRuleInput<RoleImplementation> input,
   String factory,
+  String file,
 ) {
   final issues = <SmfIssue>[];
-  for (final MapEntry(key: path, value: file) in input.files.entries) {
+  for (final MapEntry(key: path, value: index) in input.files.entries) {
     final owner = input.owners[path];
     if (owner is! ModuleOrigin) continue;
-    final uses = file.invocations.any((call) => call.name == factory) ||
-        file.references.any((reference) => reference.name == factory) ||
-        file.memberAccesses.any((access) => access.name == factory);
+    final uses = usesSymbols(index, {factory}, file);
     final container =
         input.module(owner.module)?.provides.contains(diRole) ?? false;
     if (uses && !container) {
@@ -143,6 +143,36 @@ List<SmfIssue> _checkFactoryCalls(
               'or take it as a dependency of your own factory.',
           origin: owner,
           path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/// The problems with the functions that the implementations of the role in
+/// [input] name: a function missing from its file of the app, or one that
+/// needs arguments, since the template calls it without any.
+///
+/// Functions from other packages are left to the compiler.
+List<SmfIssue> _checkImplementationFactories(
+  StructuralRuleInput<RoleImplementation> input,
+) {
+  final issues = <SmfIssue>[];
+  for (final data in input.roleInput.data) {
+    final factory = data.value.factory;
+    if (!factory.import.isAppFile) continue;
+    final symbol = RequiredFunction(
+      factory.name,
+      path: 'lib/${factory.import.uri}',
+    );
+    for (final issue in symbol.checkIn(input.files)) {
+      issues.add(
+        SmfIssue(
+          issue.message,
+          hint: 'The template of the role calls it without arguments.',
+          origin: data.origin,
+          path: issue.path,
         ),
       );
     }

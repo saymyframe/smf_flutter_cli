@@ -45,6 +45,8 @@ final class MergedPubspec {
     this.flutter,
     this.sdkText,
     this.flutterText,
+    this.sdkOrigins = const [],
+    this.flutterOrigins = const [],
     this.assets = const [],
     this.fonts = const [],
     this.generate = false,
@@ -68,6 +70,12 @@ final class MergedPubspec {
 
   /// [flutter] as written; see [MergedDependency.constraintText].
   final String? flutterText;
+
+  /// The contributors whose constraints make [sdk] what it is.
+  final List<ContributionOrigin> sdkOrigins;
+
+  /// The contributors whose constraints make [flutter] what it is.
+  final List<ContributionOrigin> flutterOrigins;
 
   /// The assets, in the order first contributed.
   final List<String> assets;
@@ -258,6 +266,8 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
       flutter: flutter?.value,
       sdkText: sdk?.text,
       flutterText: flutter?.text,
+      sdkOrigins: List.unmodifiable(sdk?.origins ?? const []),
+      flutterOrigins: List.unmodifiable(flutter?.origins ?? const []),
       assets: List.unmodifiable(assets),
       fonts: [
         for (final MapEntry(key: family, value: files) in fonts.entries)

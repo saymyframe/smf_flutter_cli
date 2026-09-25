@@ -32,6 +32,7 @@ void main() {
     ),
     TestModule('bloc', providers: [RoleProvider.plain(state)]),
     TestModule('riverpod', providers: [RoleProvider.plain(state)]),
+    TestModule('signals', providers: [RoleProvider.plain(state)]),
     TestModule('a1', providers: [RoleProvider.plain(tracking)]),
     TestModule('a2', providers: [RoleProvider.plain(tracking)]),
     TestModule(
@@ -50,17 +51,21 @@ void main() {
     final cases = harness.casesOfModule(const ModuleId('home'));
 
     expect(cases.map((c) => '$c'), [
-      'home (bloc)',
+      'home (bloc) with tracking, nav',
       'home (bloc) with tracking',
       'home (bloc) with nav',
-      'home (bloc) with tracking, nav',
-      'home (riverpod)',
+      'home (bloc)',
+      'home (riverpod) with tracking, nav',
       'home (riverpod) with tracking',
       'home (riverpod) with nav',
-      'home (riverpod) with tracking, nav',
+      'home (riverpod)',
+      'home (signals) with tracking, nav',
+      'home (signals) with tracking',
+      'home (signals) with nav',
+      'home (signals)',
     ]);
     expect(
-      cases[3].requested.map((id) => id.value),
+      cases[0].requested.map((id) => id.value),
       ['home', 'a1', 'go'],
     );
     expect(cases[4].picks[state], const ModuleId('riverpod'));
@@ -82,7 +87,10 @@ void main() {
   });
 
   test('a module that follows the rules passes every case', () async {
-    for (final contractCase in harness.casesOfModule(const ModuleId('home'))) {
+    for (final contractCase in [
+      for (final contractCase in harness.casesOfModule(const ModuleId('home')))
+        if (!contractCase.name.contains('signals')) contractCase,
+    ]) {
       final result = await harness.check(contractCase);
       expect(result.errors, isEmpty, reason: '$contractCase');
       expect(result.resolution, isNotNull);
@@ -110,7 +118,20 @@ void main() {
     expect(unresolved.errors, isNotEmpty);
   });
 
-  test('checks every module and role', () async {
+  test(
+    'a provider of the role of the variants without a variant fails',
+    () async {
+      final result = await harness.check(
+        harness.casesOfModule(const ModuleId('home')).firstWhere(
+              (c) => c.name == 'home (signals)',
+            ),
+      );
+
+      expect(result.errors.single.message, contains('no variant for signals'));
+    },
+  );
+
+  test('checks every module and role, each app once', () async {
     final results = await harness.checkAll();
 
     expect(
@@ -118,21 +139,112 @@ void main() {
         for (final result in results)
           if (result.errors.isNotEmpty) '${result.contractCase}',
       },
-      {'broken', 'both'},
+      {
+        'broken',
+        'both',
+        'home (signals)',
+        'home (signals) with tracking',
+        'home (signals) with nav',
+        'home (signals) with tracking, nav',
+      },
+    );
+    final keys = [
+      for (final result in results)
+        if (result.appKey case final key?) key,
+    ];
+    expect(keys.toSet(), hasLength(keys.length));
+  });
+
+  test('keeps the case that names every role its app has', () async {
+    final clock = TestRole<NoDsl>('clock');
+    final badge = TestRole<NoDsl>('badge');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(contributions: [entryBrick()]),
+        TestModule('user', uses: {clock, badge}),
+        TestModule(
+          'both',
+          providers: [RoleProvider.plain(clock), RoleProvider.plain(badge)],
+        ),
+      ]),
+    );
+
+    final results = await harness.checkAll();
+
+    expect(
+      [
+        for (final result in results)
+          if (result.contractCase.name.startsWith('user'))
+            '${result.contractCase}',
+      ],
+      ['user with clock, badge', 'user'],
     );
   });
 
-  test('checks rendered code with the structural rules of the roles', () {
-    final resolution = resolutionOf([scaffold()]);
+  test('a role that uses another builds a case per subset', () {
+    final tracking = TestRole<NoDsl>(
+      'tracking',
+      cardinality: RoleCardinality.many,
+    );
+    final nav = TestRole<NoDsl>('nav', uses: {tracking});
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(contributions: [entryBrick()]),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('a1', providers: [RoleProvider.plain(tracking)]),
+      ]),
+    );
+
+    expect(
+      harness.casesOfRole(nav).map((c) => '$c'),
+      ['nav by go with tracking', 'nav by go'],
+    );
+  });
+
+  test('a required role with several providers takes each', () {
+    final session = TestRole<NoDsl>('session');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(contributions: [entryBrick()]),
+        TestModule('auth', requires: {session}),
+        TestModule('keys', providers: [RoleProvider.plain(session)]),
+        TestModule('vault', providers: [RoleProvider.plain(session)]),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('auth')).map((c) => '$c'),
+      ['auth (keys)', 'auth (vault)'],
+    );
+    expect(
+      harness.casesOfRole(session).map((c) => '$c'),
+      ['session by keys', 'session by vault'],
+    );
+  });
+
+  test('checks rendered code with the structural rules of the roles', () async {
+    final result = await harness.check(
+      const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+    );
+    expect(result.collection, isNotNull);
+    expect(result.validation, isNotNull);
 
     final issues = harness.checkStructure(
-      resolution: resolution,
+      result,
       files: {
         'lib/main.dart': 'Future<void> main() async { runApp(App()); }',
         'lib/bootstrap.dart': 'Future<void> bootstrap() async {',
         'README.md': '# not Dart',
       },
       owners: const {'lib/main.dart': ModuleOrigin(ModuleId('scaffold'))},
+    );
+    expect(
+      () => harness.checkStructure(
+        const ContractResult(ContractCase('x', requested: []), []),
+        files: const {},
+        owners: const {},
+      ),
+      throwsArgumentError,
     );
 
     expect(

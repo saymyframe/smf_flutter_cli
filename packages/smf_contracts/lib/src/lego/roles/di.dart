@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/di_role_bundle.dart';
 import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/src/lego/roles/symbol_uses.dart';
 
 part 'di/di_dsl.dart';
 part 'di/di_graph.dart';
@@ -84,6 +85,14 @@ final class DiRole extends Role<DiRegistration> {
               'services; other code receives them through its factory.',
           check: _checkResolve,
         ),
+        StructuralRule(
+          id: 'di.factories',
+          description: 'The factory of every registration is a top-level '
+              'function in its file that takes the dependencies and then the '
+              'parameters of the registration, and its dispose function '
+              'takes the service.',
+          check: _checkFactories,
+        ),
       ];
 
   /// The registrations of the app in [input], the input of a hook of this
@@ -150,34 +159,10 @@ abstract base class DiProvider extends RoleProvider<DiRegistration> {
 const _resolveNames = {'resolve', 'resolveWith', 'serviceLocator'};
 
 /// Whether [file] resolves services: it calls, tears off or reads `resolve`,
-/// `resolveWith` or `serviceLocator`, directly or through the prefix of an
-/// import of the service locator's file.
-bool _resolves(DartFileIndex file) {
-  bool isLocator(String uri) => uri.startsWith('package:')
-      ? uri.endsWith('/core/di/service_locator.dart')
-      : Uri.parse(file.path).resolve(uri).path == DiRole.serviceLocatorFile;
-  final prefixes = {
-    for (final import in file.imports)
-      if (import.prefix case final prefix? when isLocator(import.uri)) prefix,
-  };
-  bool ofLocator(String? target) => target == null || prefixes.contains(target);
-  bool viaLocator(String? target) =>
-      target == 'serviceLocator' ||
-      prefixes.any((prefix) => target == '$prefix.serviceLocator');
-  return file.invocations.any(
-        (call) =>
-            (ofLocator(call.target) && _resolveNames.contains(call.name)) ||
-            viaLocator(call.target),
-      ) ||
-      file.references
-          .any((reference) => _resolveNames.contains(reference.name)) ||
-      file.memberAccesses.any(
-        (access) =>
-            (prefixes.contains(access.target) &&
-                _resolveNames.contains(access.name)) ||
-            viaLocator(access.target),
-      );
-}
+/// `resolveWith` or `serviceLocator` of the service locator's file, which it
+/// imports with or without a prefix.
+bool _resolves(DartFileIndex file) =>
+    usesSymbols(file, _resolveNames, DiRole.serviceLocatorFile);
 
 List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
   final issues = <SmfIssue>[];
@@ -185,6 +170,8 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
     final owner = input.owners[path];
     if (owner is! ModuleOrigin) continue;
     final module = input.module(owner.module);
+    // The container implements resolving itself.
+    if (module?.provides.contains(diRole) ?? false) continue;
     final allowed = module?.kind.compositionFileOf(owner.module);
     if (!_resolves(file)) continue;
     if (path == allowed) {
@@ -210,6 +197,55 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
           path: path,
         ),
       );
+    }
+  }
+  return issues;
+}
+
+/// The problems with the functions that registrations name: a factory that
+/// is missing from its file of the app, or that cannot take its
+/// dependencies and parameters as positional arguments, and a dispose
+/// function that cannot take the service.
+///
+/// Functions from other packages are left to the compiler.
+List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
+  final issues = <SmfIssue>[];
+  void check(
+    String name,
+    ImportRef import,
+    int arguments,
+    ContributionOrigin? origin,
+  ) {
+    if (!import.isAppFile) return;
+    final symbol = RequiredFunction(
+      name,
+      path: 'lib/${import.uri}',
+      positionalArguments: arguments,
+    );
+    for (final issue in symbol.checkIn(input.files)) {
+      issues.add(
+        SmfIssue(
+          issue.message,
+          hint: 'The pipeline calls it with the dependencies of the '
+              'registration, then its parameters.',
+          origin: origin,
+          path: issue.path,
+        ),
+      );
+    }
+  }
+
+  for (final data in diRole.graphOf(input.roleInput).registrations) {
+    final registration = data.value;
+    final create = registration.create;
+    check(
+      create.name,
+      create.import,
+      create.deps.length + registration.params.length,
+      data.origin,
+    );
+    if (registration.dispose case final dispose?) {
+      check(dispose.name, dispose.import, 1, data.origin);
     }
   }
   return issues;

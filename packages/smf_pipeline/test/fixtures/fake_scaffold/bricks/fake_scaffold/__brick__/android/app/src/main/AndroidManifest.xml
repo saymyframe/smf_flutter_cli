@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+{{{smf_app_entry__android_manifest_permissions}}}
+    <application android:label="{{app_name}}">
+        <activity android:name=".MainActivity" android:exported="true">
+{{{smf_app_entry__main_activity_intent_filters}}}
+        </activity>
+{{{smf_app_entry__android_manifest_application_meta}}}
+    </application>
+</manifest>

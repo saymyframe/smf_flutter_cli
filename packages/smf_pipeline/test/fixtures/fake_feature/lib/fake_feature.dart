@@ -30,11 +30,17 @@ final class FakeFeatureModule extends SmfModule {
         requires: const {diRole, analyticsRole},
         variants: Variants(
           role: stateManagementRole,
+          // Each variant imports the package of its provider, whose
+          // constraint the provider owns.
           byProvider: {
-            const ModuleId('fake_bloc'): (context) =>
-                [BrickContribution(fakeFeatureBlocBundle)],
-            const ModuleId('fake_riverpod'): (context) =>
-                [BrickContribution(fakeFeatureRiverpodBundle)],
+            const ModuleId('fake_bloc'): (context) => [
+                  BrickContribution(fakeFeatureBlocBundle),
+                  const PubspecContribution.hosted('flutter_bloc', 'any'),
+                ],
+            const ModuleId('fake_riverpod'): (context) => [
+                  BrickContribution(fakeFeatureRiverpodBundle),
+                  const PubspecContribution.hosted('flutter_riverpod', 'any'),
+                ],
           },
         ),
       );

@@ -268,6 +268,9 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
 ) async {
   final prompter = environment.prompter;
   final chosen = <SmfModule>[];
+  // Providers the answers need that the user was not asked about: the
+  // resolver adds them with the reason, so they are not requested.
+  final implied = <SmfModule>[];
   final declined = <Role>{};
   final asked = <Role>{};
 
@@ -296,7 +299,7 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
     for (final role in _promptOrder(registry)) {
       final providers = registry.providersOf(role);
       if (providers.isEmpty) continue;
-      final app = _withDependencies(chosen, registry);
+      final app = _withDependencies([...chosen, ...implied], registry);
       if (app.any((module) => module.descriptor.provides.contains(role))) {
         continue;
       }
@@ -305,7 +308,7 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
       asked.add(role);
       declined.remove(role);
       if (requiredBy != null && providers.length == 1) {
-        chosen.add(providers.single);
+        implied.add(providers.single);
         changed = true;
         continue;
       }

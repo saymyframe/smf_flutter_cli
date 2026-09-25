@@ -312,10 +312,8 @@ void main() {
       expect(selection.appName, 'Cool App');
       expect(selection.org, 'com.example');
       expect(selection.target.path, '/work/cool_app');
-      expect(
-        ids(selection),
-        ['home', 'firebase', 'scaffold', 'tabs', 'go', 'a1'],
-      );
+      // The resolver adds the scaffold, which nobody was asked about.
+      expect(ids(selection), ['home', 'firebase', 'tabs', 'go', 'a1']);
       expect(selection.declined, isEmpty);
 
       final asked = host.prompter.asked;
@@ -362,7 +360,7 @@ void main() {
         host.environment(),
       );
 
-      expect(ids(selection), ['home', 'scaffold', 'go']);
+      expect(ids(selection), ['home']);
       expect(host.prompter.asked, hasLength(1));
     });
 
@@ -394,7 +392,7 @@ void main() {
         host.environment(),
       );
 
-      expect(ids(selection), ['scaffold', 'sentry', 'keys']);
+      expect(ids(selection), ['sentry', 'keys']);
       expect(selection.declined, isEmpty);
       expect(host.prompter.asked[1].shown, contains('None'));
       expect(host.prompter.asked.last.shown, isNot(contains('None')));
@@ -422,7 +420,7 @@ void main() {
       );
 
       // go provides the nav through links, so the nav is not asked.
-      expect(ids(selection), ['links', 'scaffold']);
+      expect(ids(selection), ['links']);
       expect(host.prompter.asked, hasLength(1));
     });
 
@@ -437,7 +435,7 @@ void main() {
         <String>[], // tracking
       ]);
 
-      expect(ids(selection), ['scaffold']);
+      expect(ids(selection), isEmpty);
       expect(selection.declined, {shell, nav, tracking});
     });
 
@@ -492,7 +490,7 @@ void main() {
         host.environment(),
       );
 
-      expect(ids(selection), ['scaffold', 'auth_router', 'keys']);
+      expect(ids(selection), ['auth_router', 'keys']);
       expect(host.prompter.asked.last.shown, isNot(contains('None')));
     });
 
@@ -513,7 +511,7 @@ void main() {
         host.environment(),
       );
 
-      expect(ids(selection), ['scaffold', 'tabs', 'auto']);
+      expect(ids(selection), ['tabs', 'auto']);
       expect(host.prompter.asked.last.shown, isNot(contains('None')));
     });
   });

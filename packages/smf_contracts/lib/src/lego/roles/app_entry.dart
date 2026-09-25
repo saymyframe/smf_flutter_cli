@@ -19,9 +19,10 @@ const appEntryRole = AppEntryRole._();
 /// - [fallbackStartScreen], the screen of an app without a router;
 /// - the Android and iOS projects.
 ///
-/// The keyed and value sockets of the native files render complete,
-/// indented lines, so their tags stand at the start of a line of their own,
-/// like the tags of [PipelineSockets].
+/// The keyed sockets of the native files render complete, indented lines,
+/// so their tags stand at the start of a line of their own, like the tags
+/// of [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
+/// version goes, such as `platform :ios, '{{{tag}}}'` in the Podfile.
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.

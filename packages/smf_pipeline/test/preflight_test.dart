@@ -38,6 +38,7 @@ void main() {
       final fs = host.fileSystem;
       fs.file('/opt/flutter/bin/flutter').createSync(recursive: true);
       fs.file('/opt/flutter/bin/dart').createSync();
+      fs.directory('/opt/flutter/bin/internal').createSync();
       fs.directory('/usr/local/bin').createSync(recursive: true);
       fs.link('/usr/local/bin/flutter').createSync('/opt/flutter/bin/flutter');
       fs.file('/usr/local/bin/dart').createSync();
@@ -63,10 +64,17 @@ void main() {
         processRunner: runner,
       );
       final fs = host.fileSystem;
-      fs.file('/snap/bin/flutter').createSync(recursive: true);
-      fs.file('/usr/bin/dart').createSync(recursive: true);
+      // The snap links every app to its launcher, next to which may lie a
+      // dart of another SDK.
+      fs.file('/usr/bin/snap').createSync(recursive: true);
+      fs.file('/usr/bin/dart').createSync();
+      fs.directory('/snap/bin').createSync(recursive: true);
+      fs.link('/snap/bin/flutter').createSync('/usr/bin/snap');
       fs
           .file('/home/me/snap/flutter/common/flutter/bin/dart')
+          .createSync(recursive: true);
+      fs
+          .directory('/home/me/snap/flutter/common/flutter/bin/cache/dart-sdk')
           .createSync(recursive: true);
       final check = FlutterSdkCheck(fs);
 
@@ -80,6 +88,16 @@ void main() {
         check.found!.dart,
         '/home/me/snap/flutter/common/flutter/bin/dart',
       );
+      expect(check.launcher, isNull);
+
+      final explaining = FlutterSdkCheck(fs, explain: true);
+      expect(
+        await explaining.check(host.environment()),
+        isA<PreflightPassed>(),
+      );
+      expect(explaining.launcher, '/snap/bin/flutter');
+      expect(explaining.found, isNull);
+      expect(runner.calls, hasLength(1));
     });
 
     test('reports a missing flutter or dart', () async {
@@ -153,24 +171,35 @@ void main() {
         ),
         isEmpty,
       );
+      final issues = sdkVersionIssues(
+        sdk,
+        MergedPubspec(
+          sdk: VersionConstraint.parse('^3.13.0'),
+          flutter: VersionConstraint.parse('>=3.47.0'),
+          sdkOrigins: const [_module],
+          flutterOrigins: const [_module, ModuleOrigin(ModuleId('other'))],
+        ),
+      );
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'firebase needs Dart ^3.13.0, but the Flutter SDK at /f/flutter has '
+          'Dart 3.12.2.',
+        ),
+        equals(
+          'firebase, other need Flutter >=3.47.0, but the Flutter SDK at '
+          '/f/flutter has Flutter 3.44.2.',
+        ),
+      ]);
+      // One module's constraint is its problem; lenient mode can drop it.
+      expect(issues.first.origin, _module);
+      expect(issues.first.hint, 'Upgrade Flutter, or leave out firebase.');
+      expect(issues.last.origin, isNull);
       expect(
         sdkVersionIssues(
           sdk,
-          MergedPubspec(
-            sdk: VersionConstraint.parse('^3.13.0'),
-            flutter: VersionConstraint.parse('>=3.47.0'),
-          ),
-        ).map((issue) => issue.message),
-        [
-          equals(
-            'The modules need Dart ^3.13.0, but the Flutter SDK at /f/flutter '
-            'has Dart 3.12.2.',
-          ),
-          equals(
-            'The modules need Flutter >=3.47.0, but the Flutter SDK at '
-            '/f/flutter has Flutter 3.44.2.',
-          ),
-        ],
+          MergedPubspec(sdk: VersionConstraint.parse('^3.13.0')),
+        ).single.message,
+        startsWith('The app needs Dart'),
       );
       expect(sdkVersionIssues(null, const MergedPubspec()), isEmpty);
       expect(
@@ -437,6 +466,31 @@ void main() {
       expect(cli.installs, 1);
       expect(login.checks, 2);
       expect(report.issues.single.message, contains('no firebase'));
+    });
+
+    test('installs nothing when the SDK is too old for the app', () async {
+      final host = FakeHost(terminal: true);
+      host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"dartSdkVersion": "3.0.0"}');
+      final cli = TestCheck('cli', status: _missing);
+
+      final report = await runPreflight(
+        [
+          PlannedCheck(
+            FlutterSdkCheck(host.fileSystem),
+            const PipelineOrigin(),
+          ),
+          PlannedCheck(cli, _module),
+        ],
+        host.environment(),
+        pubspec: MergedPubspec(sdk: VersionConstraint.parse('^3.8.0')),
+      );
+
+      expect(cli.installs, 0);
+      expect(host.prompter.asked, isEmpty);
+      expect(report.versionIssues.single.message, contains('Dart ^3.8.0'));
+      expect(report.issues, containsAll(report.versionIssues));
     });
 
     test('reuses known results, so the user is asked once', () async {

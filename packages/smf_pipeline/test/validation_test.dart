@@ -62,7 +62,10 @@ void main() {
 
     expect(result.issues, isEmpty);
     expect(result.hasErrors, isFalse);
-    expect(result.socketOrders.keys, [AppEntryRole.bootstrapEarly]);
+    expect(result.socketOrders.keys, [
+      AppEntryRole.iosDeploymentTarget,
+      AppEntryRole.bootstrapEarly,
+    ]);
     expect(result.pubspec.dependencies.keys, ['flutter']);
     expect(result.postGenOrder.contributions, isEmpty);
   });
@@ -554,6 +557,26 @@ void main() {
   });
 
   group('sockets', () {
+    test(
+        'a required value that nothing contributes is an error of the '
+        'provider', () {
+      final result = _validate([
+        TestModule(
+          'bare',
+          kind: ModuleKinds.scaffold,
+          providers: [const RoleProvider.plain(appEntryRole)],
+        ),
+      ]);
+
+      expect(
+        _messages(result).single,
+        'bare: The ${AppEntryRole.iosDeploymentTarget} needs a value, but '
+        'nothing contributes one; the provider of the app_entry contributes '
+        'its base value.',
+      );
+      expect(result.hasErrors, isTrue);
+    });
+
     test('are ordered, and conflicts name their contributors', () {
       final result = _validate([
         entry,
@@ -582,7 +605,7 @@ void main() {
       expect(
         result.socketOrders[AppEntryRole.iosDeploymentTarget]!.contributions
             .map((c) => '${c.origin}'),
-        ['a', 'b'],
+        ['a', 'b', 'scaffold'],
       );
       expect(result.issues.single.origin, const ModuleOrigin(ModuleId('b')));
       expect(result.issues.single.message, contains('from a and b'));
@@ -622,7 +645,7 @@ void main() {
       );
     });
 
-    test('a cycle of order edges is an error', () {
+    test('edges both ways between two modules are no cycle', () {
       final x = TestRole<NoDsl>('x');
       final y = TestRole<NoDsl>('y');
       final result = _validate([
