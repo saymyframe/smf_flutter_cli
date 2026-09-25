@@ -133,10 +133,13 @@ final class FlutterSdkCheck extends PreflightCheck {
         ['--version', '--machine'],
       );
       if (!result.succeeded) return null;
+      // Flutter may print more around the JSON, such as the notice about
+      // analytics that follows it on the first run.
       final output = result.stdout;
       final start = output.indexOf('{');
-      if (start < 0) return null;
-      final json = jsonDecode(output.substring(start));
+      final end = output.lastIndexOf('}');
+      if (start < 0 || end < start) return null;
+      final json = jsonDecode(output.substring(start, end + 1));
       return json is Map<String, Object?> && json['flutterRoot'] is String
           ? json['flutterRoot']! as String
           : null;

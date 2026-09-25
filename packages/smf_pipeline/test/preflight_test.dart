@@ -54,7 +54,9 @@ void main() {
         '/snap/bin/flutter': const SmfProcessResult(
           exitCode: 0,
           stdout: 'Waiting for another command...\n'
-              '{"flutterRoot": "/home/me/snap/flutter/common/flutter"}',
+              '{"flutterRoot": "/home/me/snap/flutter/common/flutter"}\n'
+              'The Flutter CLI developer tool uses Google Analytics to '
+              'report usage (https://policies.google.com/privacy).\n',
         ),
       });
       final host = FakeHost(
