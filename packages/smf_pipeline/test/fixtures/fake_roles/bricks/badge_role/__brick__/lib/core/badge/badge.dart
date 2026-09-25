@@ -5,10 +5,4 @@ abstract interface class Badge {
 }
 
 /// The labels the modules of the app asked for.
-const badgeLabels = <String>[
-  {
-    {
-      {labels}
-    }
-  }
-];
+const badgeLabels = <String>[{{{labels}}}];

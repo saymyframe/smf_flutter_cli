@@ -8,7 +8,7 @@ final badgeRoleBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "lib/core/badge/badge.dart",
       "data":
-          "Ly8vIEEgYmFkZ2Ugb2YgdGhlIGFwcCwgYSByb2xlIG9mIGEgdGhpcmQtcGFydHkgcGFja2FnZSAoZml4dHVyZSkuCmFic3RyYWN0IGludGVyZmFjZSBjbGFzcyBCYWRnZSB7CiAgLy8vIFRoZSBsYWJlbHMgdGhlIG1vZHVsZXMgb2YgdGhlIGFwcCBhc2tlZCBmb3IuCiAgTGlzdDxTdHJpbmc+IGdldCBsYWJlbHM7Cn0KCi8vLyBUaGUgbGFiZWxzIHRoZSBtb2R1bGVzIG9mIHRoZSBhcHAgYXNrZWQgZm9yLgpjb25zdCBiYWRnZUxhYmVscyA9IDxTdHJpbmc+WwogIHsKICAgIHsKICAgICAge2xhYmVsc30KICAgIH0KICB9Cl07Cg==",
+          "Ly8vIEEgYmFkZ2Ugb2YgdGhlIGFwcCwgYSByb2xlIG9mIGEgdGhpcmQtcGFydHkgcGFja2FnZSAoZml4dHVyZSkuCmFic3RyYWN0IGludGVyZmFjZSBjbGFzcyBCYWRnZSB7CiAgLy8vIFRoZSBsYWJlbHMgdGhlIG1vZHVsZXMgb2YgdGhlIGFwcCBhc2tlZCBmb3IuCiAgTGlzdDxTdHJpbmc+IGdldCBsYWJlbHM7Cn0KCi8vLyBUaGUgbGFiZWxzIHRoZSBtb2R1bGVzIG9mIHRoZSBhcHAgYXNrZWQgZm9yLgpjb25zdCBiYWRnZUxhYmVscyA9IDxTdHJpbmc+W3t7e2xhYmVsc319fV07Cg==",
       "type": "text"
     }
   ],
