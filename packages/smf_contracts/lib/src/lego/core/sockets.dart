@@ -21,8 +21,8 @@ sealed class SocketKind {
   ///
   /// The pipeline adds those imports to the file that holds the socket's
   /// tag, so such a tag must appear in exactly one file of the templates.
-  /// Tags of the other sockets may appear in several places, such as a
-  /// minimum iOS version used by both `project.pbxproj` and the `Podfile`.
+  /// Tags of the other sockets may appear in several places, such as the
+  /// minimum iOS version in each build configuration of `project.pbxproj`.
   bool get carriesImports;
 
   /// Describes what is wrong with the payload of [c], a contribution to

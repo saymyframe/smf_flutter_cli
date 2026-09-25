@@ -22,7 +22,7 @@ const appEntryRole = AppEntryRole._();
 /// The keyed sockets of the native files render complete, indented lines,
 /// so their tags stand at the start of a line of their own, like the tags
 /// of [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, such as `platform :ios, '{{{tag}}}'` in the Podfile.
+/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`.
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -105,9 +105,13 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The minimum iOS version of the app, such as `15.0`: the highest version
   /// any module needs.
   ///
-  /// Its tag appears in `ios/Podfile` and in the build settings of
-  /// `ios/Runner.xcodeproj/project.pbxproj`. The provider contributes the
-  /// version of its template, so the socket always has a value.
+  /// Its tag appears in the build settings of
+  /// `ios/Runner.xcodeproj/project.pbxproj`, once for each build
+  /// configuration. Flutter takes the minimum version of the Swift packages
+  /// of plugins from there, and so does CocoaPods for their pods, since the
+  /// Podfile that Flutter writes when a plugin needs one leaves the platform
+  /// unset. The provider contributes the version of its template, so the
+  /// socket always has a value.
   static const iosDeploymentTarget = SocketRef<ValueSocket<String>>.role(
     appEntryRole,
     'ios_deployment_target',
