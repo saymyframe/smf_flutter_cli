@@ -8,6 +8,7 @@ import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/lego.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -43,26 +44,65 @@ final _apps = <String, ContractCase>{
   ),
 };
 
+/// The files of flutter_core that the fixtures change: the Dart code, the
+/// pubspec, and the native files with sockets. The Xcode project shows only
+/// its minimum iOS versions.
+bool _shownOfScaffold(String path) =>
+    path.startsWith('lib/') ||
+    path.startsWith('test/') ||
+    const {
+      'pubspec.yaml',
+      AppEntryRole.androidManifestFile,
+      AppEntryRole.infoPlistFile,
+      AppEntryRole.gradleSettingsFile,
+      AppEntryRole.gradleAppFile,
+      AppEntryRole.xcodeProjectFile,
+    }.contains(path);
+
+/// The language version that `dart format` formats [app] with: the one of
+/// the lower bound of its SDK constraint, but no later than the formatter of
+/// the snapshots knows. Up to Dart 3.12, the styles of the versions after
+/// 3.10 differ only where trailing commas are preserved, which the apps do
+/// not ask for.
+Version _languageVersionOf(RenderedApp app) {
+  final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
+  final environment = pubspec['environment'] as YamlMap;
+  final sdk = VersionConstraint.parse(environment['sdk'] as String);
+  final lower = (sdk as VersionRange).min!;
+  final version = Version(lower.major, lower.minor, 0);
+  final latest = DartFormatter.latestLanguageVersion;
+  return version > latest ? latest : version;
+}
+
 /// The files of [app] as one text: each under a header with its path and
-/// owner. Dart files are formatted as `dart format` formats the app, and
-/// the pubspec, XML and plist files must parse.
+/// owner. Every file of the fixtures is shown, and the files of flutter_core
+/// that they change; see [_shownOfScaffold]. Dart files are formatted as
+/// `dart format` formats the app, and the pubspec, XML and plist files must
+/// parse.
 String _snapshotOf(RenderedApp app) {
-  final formatter = DartFormatter(languageVersion: Version(3, 8, 0));
+  final formatter = DartFormatter(languageVersion: _languageVersionOf(app));
   final buffer = StringBuffer();
   for (final file in app.files.values) {
-    buffer.writeln('=== ${file.path} (${file.owner}) ===');
+    final path = file.path;
+    final ofScaffold = file.owner == const ModuleOrigin(FlutterCoreModule.id);
+    if (ofScaffold && !_shownOfScaffold(path)) continue;
+    buffer.writeln('=== $path (${file.owner}) ===');
     if (!file.isText) {
       buffer.writeln('<${file.bytes.length} bytes>');
       continue;
     }
     var text = file.text;
-    final path = file.path;
     if (path.endsWith('.dart')) {
       text = formatter.format(text, uri: path);
     } else if (path.endsWith('.xml') || path.endsWith('.plist')) {
       XmlDocument.parse(text);
     } else if (path.endsWith('.yaml')) {
       loadYaml(text, sourceUrl: Uri.file(path));
+    } else if (path == AppEntryRole.xcodeProjectFile) {
+      text = [
+        for (final line in text.split('\n'))
+          if (line.contains('IPHONEOS_DEPLOYMENT_TARGET')) line.trim(),
+      ].join('\n');
     }
     buffer.write(text.endsWith('\n') ? text : '$text\n');
   }

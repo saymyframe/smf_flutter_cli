@@ -20,7 +20,6 @@ workspace:
   - packages/smf_pipeline/test/fixtures/fake_infra
   - packages/smf_pipeline/test/fixtures/fake_roles
   - packages/smf_pipeline/test/fixtures/fake_router
-  - packages/smf_pipeline/test/fixtures/fake_scaffold
   - packages/smf_pipeline/test/fixtures/fake_state
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_event_bus

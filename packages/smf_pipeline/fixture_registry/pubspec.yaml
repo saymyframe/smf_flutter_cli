@@ -14,9 +14,9 @@ dependencies:
   fake_infra: any
   fake_roles: any
   fake_router: any
-  fake_scaffold: any
   fake_state: any
   smf_contracts: ^0.2.0
+  smf_flutter_core: ^0.2.1
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.

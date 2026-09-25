@@ -121,7 +121,7 @@ final class FakeSocketsModule extends SmfModule {
             imports: [_material],
           ),
         ),
-        AppEntryRole.iosDeploymentTarget.value('14.0'),
+        AppEntryRole.iosDeploymentTarget.value('16.0'),
         AppEntryRole.androidManifestPermissions
             .key('android.permission.INTERNET'),
         AppEntryRole.androidManifestPermissions
@@ -197,7 +197,7 @@ final class FakeOverlapModule extends SmfModule {
           'supportedLocales',
           Fragment("Locale('en')", imports: [_material]),
         ),
-        AppEntryRole.iosDeploymentTarget.value('13.0'),
+        AppEntryRole.iosDeploymentTarget.value('15.4'),
         AppEntryRole.androidManifestPermissions
             .key('android.permission.INTERNET'),
         AppEntryRole.androidManifestApplicationMeta.entry(

@@ -10,14 +10,14 @@ import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
-import 'package:fake_scaffold/fake_scaffold.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:smf_contracts/lego.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 
-/// Every fixture module, with a DI container of all capabilities, or of
-/// [diCapabilities] if set.
+/// Every fixture module and flutter_core, which creates the app, with a DI
+/// container of all capabilities, or of [diCapabilities] if set.
 List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
-      const FakeScaffoldModule(),
+      const FlutterCoreModule(),
       const FakeRouterModule(),
       if (diCapabilities == null)
         const FakeDiModule()

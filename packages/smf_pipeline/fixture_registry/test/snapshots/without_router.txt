@@ -1,19 +1,83 @@
-=== analysis_options.yaml (fake_scaffold) ===
-include: package:flutter_lints/flutter.yaml
-=== android/app/build.gradle.kts (fake_scaffold) ===
+=== android/app/build.gradle.kts (flutter_core) ===
 plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
     id("io.github.ben-manes.versions")
+}
+
+android {
+    namespace = "com.example.fixture_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.fixture_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
 }
 
 dependencies {
     implementation("androidx.annotation:annotation:1.9.1")
 }
-=== android/app/src/main/AndroidManifest.xml (fake_scaffold) ===
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
-    <application android:label="fixture_app">
-        <activity android:name=".MainActivity" android:exported="true">
+    <application
+        android:label="Fixture App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
 <intent-filter>
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />
@@ -21,34 +85,131 @@ dependencies {
     <data android:scheme="fixture" />
 </intent-filter>
         </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
         <meta-data android:name="com.example.fixture.KEY" android:value="fixture"/>
         <meta-data android:name="com.example.fixture.ICON" android:resource="@mipmap/ic_launcher"/>
     </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
 </manifest>
-=== android/settings.gradle.kts (fake_scaffold) ===
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
     id("io.github.ben-manes.versions") version("0.64.0") apply false
 }
+
+include(":app")
 === assets/fixture/readme.txt (fake_sockets) ===
 An asset of the fixture that uses every socket.
 === fonts/FixtureSans.ttf (fake_sockets) ===
 <58 bytes>
-=== ios/Runner.xcodeproj/project.pbxproj (fake_scaffold) ===
-// !$*UTF8*$!
-{
-	objects = {
-		buildSettings = {
-			IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-		};
-	};
-}
-=== ios/Runner/Info.plist (fake_scaffold) ===
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+=== ios/Runner/Info.plist (flutter_core) ===
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Fixture App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>fixture_app</string>
+	<string>FixtureApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 	<key>FixtureName</key>
 	<string>Fixture</string>
 	<key>UIBackgroundModes</key>
@@ -66,7 +227,7 @@ An asset of the fixture that uses every socket.
 arb-dir: lib/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
-=== lib/app.dart (fake_scaffold) ===
+=== lib/app.dart (flutter_core) ===
 import 'package:fixture_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -75,11 +236,12 @@ import 'core/app/fallback_start_screen.dart';
 
 /// The root widget of the app.
 class App extends StatelessWidget {
-  /// Creates the app.
+  /// Creates the root widget.
   const App({super.key});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    title: 'Fixture App',
     theme: ThemeData(fontFamily: "FixtureSans"),
     darkTheme: ThemeData.dark(),
     localizationsDelegates: [
@@ -87,12 +249,11 @@ class App extends StatelessWidget {
       GlobalMaterialLocalizations.delegate,
     ],
     supportedLocales: [Locale('en')],
-    builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
-
     home: const FallbackStartScreen(),
+    builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
   );
 }
-=== lib/bootstrap.dart (fake_scaffold) ===
+=== lib/bootstrap.dart (flutter_core) ===
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
 import 'package:fixture_app/core/events/communication_service.dart';
 import 'package:fixture_app/core/fixture_parent/fixture_parent.dart';
@@ -101,7 +262,9 @@ import 'package:flutter/foundation.dart';
 @pragma('vm:entry-point')
 Future<void> fixtureBackgroundHandler() async {}
 
-/// Runs the start-up code of all modules before the app starts.
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
 Future<void> bootstrap() async {
   debugPrint('early');
   debugPrint('platform');
@@ -112,16 +275,17 @@ Future<void> bootstrap() async {
   setUpFixtureParent();
   debugPrint('late');
 }
-=== lib/core/app/fallback_start_screen.dart (fake_scaffold) ===
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 
-/// The screen of an app without a router or without a start route.
+/// The screen the app starts on when no route of the app can start it.
 class FallbackStartScreen extends StatelessWidget {
   /// Creates the screen.
   const FallbackStartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Placeholder();
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('Fixture App')));
 }
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
 /// The text that the clock user shows: the labels of the badge when the
@@ -374,7 +538,7 @@ void _openNews() {}
     "description": "A string of the fixture that uses every socket."
   }
 }
-=== lib/main.dart (fake_scaffold) ===
+=== lib/main.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -386,14 +550,15 @@ Future<void> main() async {
   await bootstrap();
   runApp(RepaintBoundary(child: const App()));
 }
-=== pubspec.yaml (fake_scaffold) ===
+=== pubspec.yaml (flutter_core) ===
 name: fixture_app
-description: "An app of the fixtures of the SMF pipeline."
+description: "A new Flutter project."
 publish_to: none
 version: 1.0.0+1
 
 environment:
-  sdk: "^3.8.1"
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
@@ -420,3 +585,17 @@ flutter:
       fonts:
         - asset: "fonts/FixtureSans.ttf"
           weight: 400
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fixture_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('Fixture App'), findsOneWidget);
+  });
+}

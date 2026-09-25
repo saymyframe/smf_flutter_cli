@@ -69,7 +69,7 @@ void main() {
       expect(
         resolution.modules.map((module) => module.id.value),
         containsAll([
-          'fake_scaffold',
+          'flutter_core',
           'fake_router',
           'fake_di',
           'fake_analytics',
@@ -126,7 +126,7 @@ void main() {
 
       expect(
         rendered(result, AppEntryRole.iosDeploymentTarget).values.single,
-        '14.0',
+        '16.0',
       );
       expect(
         rendered(result, AppEntryRole.appArgs).values.single,
@@ -273,8 +273,8 @@ const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 /// The cases of the harness over the fixtures, each building another app,
 /// so that a case that stops being built fails the test.
 const _cases = [
-  'fake_scaffold with router',
-  'fake_scaffold',
+  'flutter_core with router',
+  'flutter_core',
   'fake_di',
   'fake_bloc',
   'fake_riverpod',
