@@ -29,6 +29,17 @@ void main() {
       );
     });
 
+    test('builds the app of every fixture that fits in one app', () async {
+      final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+      final result = await harness.check(harness.caseOfAll());
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        result.resolution!.modules.map((module) => module.id.value),
+        allOf(contains('fake_bloc'), isNot(contains('fake_riverpod'))),
+      );
+    });
+
     test('finds no errors in any app, rendered code included', () {
       for (final result in results) {
         expect(

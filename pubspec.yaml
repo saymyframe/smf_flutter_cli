@@ -51,7 +51,7 @@ melos:
           dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
 
     # Quality gates. Formatting covers hand-written package code only
-    # (lib, test, bin): bricks/**/__brick__ holds mustache templates, and
+    # (lib, test, bin, tool): bricks/**/__brick__ holds mustache templates, and
     # lib/bundles is generated (CI checks it matches the bricks instead).
     # test/fixtures holds packages of their own, which melos formats
     # separately, with templates in their bricks.
@@ -65,9 +65,9 @@ melos:
           (cd "$hooks" && dart pub get > /dev/null && dart analyze --fatal-infos --fatal-warnings) || exit 1
         done
     format:
-      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
+      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
     format:check:
-      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
+      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
     test:
       run: melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded
     test:coverage:

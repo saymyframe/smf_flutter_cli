@@ -236,6 +236,31 @@ final class ContractHarness {
     ];
   }
 
+  /// The case of the app with as many modules as one app can have: every
+  /// module that provides no role, every provider of a role that takes
+  /// many, and the first registered provider of every other role.
+  ContractCase caseOfAll() {
+    final firsts = {
+      for (final role in registry.roles)
+        if (registry.providersOf(role) case [final first, ...]) role: first,
+    };
+    return ContractCase(
+      'every module',
+      requested: [
+        for (final module in registry.modules)
+          if (module.descriptor.provides.every(
+            (role) =>
+                role.cardinality.allowsMany || identical(firsts[role], module),
+          ))
+            module.descriptor.id,
+      ],
+      picks: {
+        for (final MapEntry(key: role, value: module) in firsts.entries)
+          role: module.descriptor.id,
+      },
+    );
+  }
+
   /// Every combination of providers of those [roles] that have several in
   /// the registry.
   List<Map<Role, ModuleId>> _picksOf(List<Role> roles) {

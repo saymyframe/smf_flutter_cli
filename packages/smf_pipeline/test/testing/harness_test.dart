@@ -86,6 +86,19 @@ void main() {
     ]);
   });
 
+  test('the case of every module takes one provider of a role that takes one',
+      () {
+    final all = harness.caseOfAll();
+
+    expect(all.name, 'every module');
+    expect(
+      all.requested.map((id) => id.value),
+      ['scaffold', 'home', 'bloc', 'a1', 'a2', 'broken', 'go', 'both'],
+    );
+    expect(all.picks[state], const ModuleId('bloc'));
+    expect(all.picks[nav], const ModuleId('go'));
+  });
+
   test('a module that follows the rules passes every case', () async {
     for (final contractCase in [
       for (final contractCase in harness.casesOfModule(const ModuleId('home')))
