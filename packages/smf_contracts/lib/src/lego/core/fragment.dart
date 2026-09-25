@@ -38,6 +38,14 @@ final class Fragment {
   static final RegExp _strippedBackslash =
       RegExp(r'\\(?:\r\n|\r|\n|[^\x00-\x7F])');
 
+  /// Whether mason would remove a backslash from [text] when it renders it:
+  /// a backslash right before a line break or a non-ASCII character.
+  ///
+  /// It applies to all text the pipeline passes to mason, not only to
+  /// fragments: rendered sockets and brick variables too.
+  static bool hasStrippedBackslash(String text) =>
+      _strippedBackslash.hasMatch(text);
+
   /// Describes what is wrong with this fragment, or returns an empty list.
   ///
   /// A fragment must not contain a backslash right before a line break or a
@@ -46,7 +54,7 @@ final class Fragment {
   List<String> problems() {
     final problems = <String>[];
     for (final part in [code, if (closing != null) closing!]) {
-      if (_strippedBackslash.hasMatch(part)) {
+      if (hasStrippedBackslash(part)) {
         problems.add(
           'The fragment contains a backslash before a line break or a '
           'non-ASCII character, which mason removes: "${_excerpt(part)}".',

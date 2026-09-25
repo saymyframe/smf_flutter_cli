@@ -227,7 +227,12 @@ enum ParameterKind {
 /// A parameter of an indexed function or constructor.
 final class IndexedParameter {
   /// Creates the index of the parameter [name].
-  const IndexedParameter(this.name, {required this.kind, this.type});
+  const IndexedParameter(
+    this.name, {
+    required this.kind,
+    this.type,
+    this.annotations = const [],
+  });
 
   /// The name of the parameter.
   final String name;
@@ -238,6 +243,9 @@ final class IndexedParameter {
   /// The type as written, or `null` if it is not written, as in
   /// `super.key`.
   final String? type;
+
+  /// The annotations, as written, such as `@PathParam('id')`.
+  final List<String> annotations;
 }
 
 /// An invocation in an indexed file, such as `getIt<A>()`,

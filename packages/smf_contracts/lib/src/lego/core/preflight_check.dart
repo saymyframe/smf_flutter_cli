@@ -28,7 +28,7 @@ abstract base class PreflightCheck {
   /// The pipeline calls it only after [check] reported
   /// [PreflightMissing.installable] and the user agreed. The default throws an
   /// [UnsupportedError].
-  Future<ToolInstall> install(SmfEnvironment environment) {
+  Future<ToolInstall> install(SmfEnvironment environment) async {
     throw UnsupportedError('The preflight check $id cannot install anything.');
   }
 }

@@ -38,6 +38,7 @@ final class ModuleDescriptor {
     this.providers = const [],
     this.variants,
     this.sockets = const [],
+    this.socketFamilies = const [],
   });
 
   /// The id of the module.
@@ -78,11 +79,18 @@ final class ModuleDescriptor {
   /// directly; see [SocketRef.module].
   final List<SocketRef> sockets;
 
+  /// Socket families of the module itself; see [SocketFamily.module].
+  final List<SocketFamily<Object?, SocketKind>> socketFamilies;
+
   /// The roles the module provides.
   Set<Role> get provides => {for (final provider in providers) provider.role};
 
   /// The roles the module requires, including those its [kind] implies, the
   /// role of its [variants], and those the roles it provides require.
+  ///
+  /// It goes one level deep: the roles a required role requires in turn are
+  /// the pipeline's concern, not the module's, so the module gets no access
+  /// to them.
   Set<Role> get effectiveRequires => {
         ...requires,
         ...kind.impliedRequires,
@@ -153,7 +161,7 @@ final class ModuleKind {
   const ModuleKind({
     required this.id,
     required this.label,
-    this.impliedProvides = const {},
+    this.mustProvide = const {},
     this.impliedRequires = const {},
     this.fileRoots = const [],
     this.forbiddenFileRoots = const [],
@@ -170,10 +178,15 @@ final class ModuleKind {
   /// grouped by kind, such as `Features`.
   final String label;
 
-  /// Roles every module of the kind must provide.
-  final Set<Role> impliedProvides;
+  /// Roles every module of the kind must provide, each with a provider in
+  /// [ModuleDescriptor.providers]; the pipeline checks it.
+  ///
+  /// Unlike [impliedRequires], these are not added to the module's roles,
+  /// because providing a role takes a provider object.
+  final Set<Role> mustProvide;
 
-  /// Roles every module of the kind requires without listing them.
+  /// Roles every module of the kind requires without listing them; they are
+  /// added to [ModuleDescriptor.effectiveRequires].
   final Set<Role> impliedRequires;
 
   /// Directories every generated file of the module must be in, or empty to

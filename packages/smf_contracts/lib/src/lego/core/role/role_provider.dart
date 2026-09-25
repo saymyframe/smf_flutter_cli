@@ -22,6 +22,9 @@ abstract base class RoleProvider<D extends Object> {
   /// Checks the data of the role against what this provider supports, such
   /// as the number of destinations a layout can show, and returns the
   /// problems found.
+  ///
+  /// It runs before [RoleTemplate.choose], so [RoleHookInput.choice] is
+  /// `null`.
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
   /// Returns the fragments and brick variables of the module's bricks that

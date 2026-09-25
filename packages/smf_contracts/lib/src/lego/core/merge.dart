@@ -13,6 +13,14 @@ abstract base class MergePolicy<V extends Object> {
   /// A short name of the policy for diagnostics, such as `max`.
   String get name;
 
+  /// Describes what is wrong with [value] for [key] on its own, or returns
+  /// `null` if the policy accepts it.
+  ///
+  /// The sockets check every contributed value, so a value that is never
+  /// merged, such as the only minimum version, is checked too. The default
+  /// accepts every value.
+  String? problemWith(String key, V value) => null;
+
   /// Merges [incoming] into [existing], the value merged from the earlier
   /// contributions for [key], and returns the result.
   ///
@@ -20,10 +28,21 @@ abstract base class MergePolicy<V extends Object> {
   V merge(String key, V existing, V incoming);
 }
 
-/// Thrown by a [MergePolicy] when two values for a key cannot be merged.
+/// Thrown when two values for a key cannot be merged.
+///
+/// A [MergePolicy] throws it without origins; the socket that merges the
+/// contributions adds them, so the pipeline can name, or in lenient mode
+/// drop, the module at fault.
 final class MergeConflict implements Exception {
   /// Creates a conflict between [existing] and [incoming] for [key].
-  const MergeConflict(this.key, this.existing, this.incoming, this.reason);
+  const MergeConflict(
+    this.key,
+    this.existing,
+    this.incoming,
+    this.reason, {
+    this.existingOrigin,
+    this.incomingOrigin,
+  });
 
   /// The key both values were contributed for.
   final String key;
@@ -37,10 +56,35 @@ final class MergeConflict implements Exception {
   /// Why the values cannot be merged.
   final String reason;
 
+  /// Who contributed [existing], if known.
+  final ContributionOrigin? existingOrigin;
+
+  /// Who contributed [incoming], if known.
+  final ContributionOrigin? incomingOrigin;
+
+  /// Returns a copy of this conflict with the origins of both values.
+  MergeConflict withOrigins({
+    required ContributionOrigin? existing,
+    required ContributionOrigin? incoming,
+  }) =>
+      MergeConflict(
+        key,
+        this.existing,
+        this.incoming,
+        reason,
+        existingOrigin: existing,
+        incomingOrigin: incoming,
+      );
+
   @override
-  String toString() =>
-      'MergeConflict: "$key" has conflicting values "$existing" and '
-      '"$incoming": $reason';
+  String toString() {
+    final by = existingOrigin == null && incomingOrigin == null
+        ? ''
+        : ' (from ${existingOrigin ?? 'unknown'} and '
+            '${incomingOrigin ?? 'unknown'})';
+    return 'MergeConflict: "$key" has conflicting values "$existing" and '
+        '"$incoming"$by: $reason';
+  }
 }
 
 /// Allows one value per key: equal values merge, different ones conflict.
@@ -75,6 +119,17 @@ final class MaxPolicy extends MergePolicy<String> {
   String get name => 'max';
 
   @override
+  String? problemWith(String key, String value) {
+    try {
+      compare(value, value);
+      return null;
+    } on FormatException catch (error) {
+      return 'The value "$value" of "$key" cannot be compared: '
+          '${error.message}';
+    }
+  }
+
+  @override
   String merge(String key, String existing, String incoming) {
     try {
       return compare(existing, incoming) >= 0 ? existing : incoming;
@@ -85,7 +140,7 @@ final class MaxPolicy extends MergePolicy<String> {
 }
 
 /// Unites lists of values, keeping the order of first appearance and
-/// dropping duplicates.
+/// dropping every repeated value.
 final class UnionPolicy<E extends Object> extends MergePolicy<List<E>> {
   /// Creates the policy.
   const UnionPolicy();
@@ -94,13 +149,8 @@ final class UnionPolicy<E extends Object> extends MergePolicy<List<E>> {
   String get name => 'union';
 
   @override
-  List<E> merge(String key, List<E> existing, List<E> incoming) {
-    return [
-      ...existing,
-      for (final value in incoming)
-        if (!existing.contains(value)) value,
-    ];
-  }
+  List<E> merge(String key, List<E> existing, List<E> incoming) =>
+      {...existing, ...incoming}.toList();
 }
 
 final RegExp _looseVersion = RegExp(r'^(\d+(?:\.\d+)*)(.*)$');

@@ -14,9 +14,14 @@ const appEntryRole = AppEntryRole._();
 ///   `WidgetsFlutterBinding.ensureInitialized()`, then awaits `bootstrap()`,
 ///   then calls `runApp()`;
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
-///   start-up code of all modules and imports no UI library;
+///   start-up code of all modules and imports neither `material` nor
+///   `cupertino`;
 /// - [fallbackStartScreen], the screen of an app without a router;
 /// - the Android and iOS projects.
+///
+/// The keyed and value sockets of the native files render complete,
+/// indented lines, so their tags stand at the start of a line of their own,
+/// like the tags of [PipelineSockets].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -34,16 +39,13 @@ final class AppEntryRole extends Role<NoDsl> {
       'lib/core/app/fallback_start_screen.dart';
 
   /// The screen an app shows when no router provides one, created as
-  /// `const FallbackStartScreen()`.
+  /// `const FallbackStartScreen()`; import it with
+  /// [RequiredSymbol.importRef].
   static const fallbackStartScreen = RequiredClass(
     'FallbackStartScreen',
     path: fallbackStartScreenFile,
     constConstructor: true,
   );
-
-  /// The import of [fallbackStartScreen].
-  static const fallbackStartScreenImport =
-      ImportRef.app('core/app/fallback_start_screen.dart');
 
   /// `Future<void> bootstrap()`, which runs the start-up code of all modules
   /// before the app starts.
@@ -103,11 +105,12 @@ final class AppEntryRole extends Role<NoDsl> {
   /// any module needs.
   ///
   /// Its tag appears in `ios/Podfile` and in the build settings of
-  /// `ios/Runner.xcodeproj/project.pbxproj`.
+  /// `ios/Runner.xcodeproj/project.pbxproj`. The provider contributes the
+  /// version of its template, so the socket always has a value.
   static const iosDeploymentTarget = SocketRef<ValueSocket<String>>.role(
     appEntryRole,
     'ios_deployment_target',
-    ValueSocket(policy: MaxPolicy(), renderer: _renderString),
+    ValueSocket(policy: MaxPolicy(), renderer: _renderString, required: true),
   );
 
   /// Top-level declarations in `lib/bootstrap.dart`, such as a handler of
@@ -152,9 +155,10 @@ final class AppEntryRole extends Role<NoDsl> {
   );
 
   /// `<meta-data>` elements of the `<application>` of the Android manifest,
-  /// keyed by `android:name`, with their `android:value`.
+  /// keyed by `android:name`, with an `android:value` or an
+  /// `android:resource`.
   static const androidManifestApplicationMeta =
-      SocketRef<KeyedSocket<String>>.role(
+      SocketRef<KeyedSocket<AndroidMetaData>>.role(
     appEntryRole,
     'android_manifest_application_meta',
     KeyedSocket(
@@ -164,11 +168,11 @@ final class AppEntryRole extends Role<NoDsl> {
   );
 
   /// `<intent-filter>` elements of the main activity of the Android
-  /// manifest, such as deep links, as XML fragments.
+  /// manifest, such as deep links, as XML without imports.
   static const mainActivityIntentFilters = SocketRef<CodeSocket>.role(
     appEntryRole,
     'main_activity_intent_filters',
-    CodeSocket(),
+    CodeSocket.text(),
   );
 
   /// Keys of the iOS `Info.plist`, such as `UIBackgroundModes`: scalar
@@ -183,6 +187,10 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// Gradle plugins declared in `android/settings.gradle.kts`, keyed by
   /// plugin id, with the highest version any module needs.
+  ///
+  /// They render as `id("<id>") version("<version>") apply false`, the form
+  /// flutterfire writes and looks for. flutterfire adds the Firebase plugins
+  /// itself when it configures the app.
   static const gradleSettingsPlugins = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'gradle_settings_plugins',
@@ -243,12 +251,13 @@ final class AppEntryRole extends Role<NoDsl> {
       );
 
   @override
-  List<StructuralRule> get structuralRules => const [
+  List<StructuralRule<NoDsl>> get structuralRules => const [
         StructuralRule(
-          id: 'app_entry.bootstrap_is_ui_free',
-          description: 'lib/bootstrap.dart imports no UI library, so start-up '
-              'code stays independent of widgets.',
-          check: _checkBootstrapIsUiFree,
+          id: 'app_entry.bootstrap_without_material',
+          description: 'lib/bootstrap.dart imports neither material nor '
+              'cupertino, so start-up code does not depend on a design '
+              'library.',
+          check: _checkBootstrapWithoutMaterial,
         ),
         StructuralRule(
           id: 'app_entry.main_sequence',
@@ -260,21 +269,23 @@ final class AppEntryRole extends Role<NoDsl> {
       ];
 }
 
-const _uiLibraries = {
+const _designLibraries = {
   'package:flutter/material.dart',
   'package:flutter/cupertino.dart',
 };
 
-List<SmfIssue> _checkBootstrapIsUiFree(StructuralRuleInput input) {
+List<SmfIssue> _checkBootstrapWithoutMaterial(
+  StructuralRuleInput<NoDsl> input,
+) {
   const path = AppEntryRole.bootstrapFile;
   final file = input.files[path];
   if (file == null) return const [];
   return [
     for (final import in file.imports)
-      if (_uiLibraries.contains(import.uri))
+      if (_designLibraries.contains(import.uri))
         SmfIssue(
           '$path imports ${import.uri}, but start-up code must not depend on '
-          'UI libraries.',
+          'a design library.',
           hint: 'Import package:flutter/widgets.dart or '
               'package:flutter/foundation.dart instead.',
           origin: input.owners[path],
@@ -287,7 +298,7 @@ const _outOfOrder =
     'main() must call WidgetsFlutterBinding.ensureInitialized(), '
     'bootstrap() and runApp() in this order.';
 
-List<SmfIssue> _checkMainSequence(StructuralRuleInput input) {
+List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   const path = AppEntryRole.mainFile;
   final file = input.files[path];
   if (file == null) return const [];

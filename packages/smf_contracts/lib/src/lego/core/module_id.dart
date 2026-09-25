@@ -12,11 +12,12 @@ import 'package:smf_contracts/lego_core.dart';
 /// }
 /// ```
 ///
-/// Other modules refer to that constant in [ModuleDescriptor.dependsOn], so a
-/// dependency on a module is also a pub dependency on its package, which the
-/// compiler checks. [Variants] key their variants by the id's value instead,
-/// because a feature must not depend on the packages of every provider it
-/// supports.
+/// Other modules refer to that constant in [ModuleDescriptor.dependsOn], so
+/// that a dependency on a module is also a pub dependency on its package;
+/// the contract tests check that the two agree, because writing
+/// `ModuleId('go_router')` by hand would bypass it. [Variants] key their
+/// variants by the id's value instead, because a feature must not depend on
+/// the packages of every provider it supports.
 ///
 /// The id is a zero-cost wrapper over the name: ids compare by name, work as
 /// keys of constant maps, and print as the plain name. The pipeline rejects

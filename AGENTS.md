@@ -9,8 +9,8 @@ SMF (Say My Frame) is a Flutter CLI (`smf create`) that scaffolds apps from inde
 The module model is being replaced step by step on the branch `feat/lego`. Until the branch is merged, two models live side by side:
 
 - The new model is `package:smf_contracts/lego.dart`, with its code in `packages/smf_contracts/lib/src/lego/`. `lego_core.dart` is its core without concrete roles.
-- In the new model, a module declares the roles it provides, requires or uses (app entry, router, DI, ...) instead of depending on the modules that implement them. It puts code into typed sockets instead of patching files, and never learns which provider of a role was selected.
-- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. `packages/smf_contracts/test/lego/architecture_test.dart` enforces this and keeps the core free of concrete roles.
+- In the new model, a module declares the roles it provides, requires or uses (router, DI, state management, ...) instead of depending on the modules that implement them. It puts code into typed sockets instead of patching files, and never learns which provider of a role was selected.
+- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. Within `smf_contracts`, `test/lego/architecture_test.dart` checks this and keeps the core free of concrete roles; the other packages are checked as they move to the new model.
 - The rest of this file describes the old model, which the CLI still uses. `ModuleProfile`, the DSLs (`RouteGroup`, `DiDependencyGroup`), `MustacheSlots`, mustachex strings and brick hooks go away as their modules move to the new model.
 
 ## Layout

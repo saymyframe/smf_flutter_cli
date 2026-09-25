@@ -100,7 +100,6 @@ void main() {
 
     expect(environment.interactive, isTrue);
     expect(environment.skipExternalSetup, isFalse);
-    expect(environment.explain, isFalse);
     expect(environment.operatingSystem, HostOperatingSystem.linux);
     expect(await environment.writeTempFile('a.sh', ''), '/tmp/a.sh');
     expect(() => environment.processRunner, throwsUnimplementedError);

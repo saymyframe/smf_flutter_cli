@@ -11,11 +11,17 @@ String _renderKeys(List<MapEntry<String, NoValue>> entries) =>
 
 String _renderValue(String value) => 'v$value';
 
+String _renderRaw(List<MapEntry<String, String>> entries) =>
+    entries.map((entry) => entry.value).join();
+
 void main() {
   final role = TestRole<String>('router');
   const module = ModuleId('firebase_core');
+  const home = ModuleOrigin(ModuleId('home'));
+  const settings = ModuleOrigin(ModuleId('settings'));
 
   final code = SocketRef<CodeSocket>.role(role, 'setup', const CodeSocket());
+  final xml = SocketRef<CodeSocket>.role(role, 'xml', const CodeSocket.text());
   final wrapper =
       SocketRef<WrapperSocket>.role(role, 'wrappers', const WrapperSocket());
   final factories = SocketRef<FactoryListSocket>.role(
@@ -38,10 +44,19 @@ void main() {
     'permissions',
     const KeyedSocket(policy: ConflictPolicy(), renderer: _renderKeys),
   );
-  final value = SocketRef<ValueSocket<String>>.role(
+  final minIos = SocketRef<ValueSocket<String>>.role(
     role,
     'min_ios',
     const ValueSocket(policy: MaxPolicy(), renderer: _renderValue),
+  );
+  final requiredIos = SocketRef<ValueSocket<String>>.role(
+    role,
+    'required_ios',
+    const ValueSocket(
+      policy: MaxPolicy(),
+      renderer: _renderValue,
+      required: true,
+    ),
   );
 
   group('SocketRef', () {
@@ -84,7 +99,7 @@ void main() {
       expect(pipeline.kind.carriesImports, isFalse);
     });
 
-    test('compares by owner, name and family key, not by kind', () {
+    test('compares by owner, name, kind and family key', () {
       expect(
         SocketRef<CodeSocket>.role(role, 'setup', const CodeSocket()),
         code,
@@ -105,6 +120,11 @@ void main() {
       expect(
         const SocketRef<CodeSocket>.module(module, 'setup', CodeSocket()),
         isNot(code),
+      );
+      expect(
+        SocketRef<ArgsSocket>.role(role, 'setup', const ArgsSocket({})),
+        isNot(code),
+        reason: 'a reference of another kind is another socket',
       );
     });
 
@@ -130,11 +150,48 @@ void main() {
     test('creates members whose tags end with the key', () {
       final member = family('home_screen');
 
+      expect(family.ownerName, 'router');
+      expect(family.tagPrefix, 'smf_router__screen_annotations__');
       expect(member.familyKey, ['home', 'home_screen']);
       expect(member.tag, 'smf_router__screen_annotations__home__home_screen');
       expect(member.problems(), isEmpty);
       expect(member, family('home_screen'));
       expect(member, isNot(family('details_screen')));
+    });
+
+    test('recognizes the tags of its members', () {
+      expect(
+        family.memberOfTag('smf_router__screen_annotations__home__home_screen'),
+        family('home_screen'),
+      );
+      expect(family.memberOfTag('smf_router__setup'), isNull);
+      expect(family.memberOfTag('smf_router__screen_annotations__'), isNull);
+      expect(
+        family.memberOfTag('smf_router__screen_annotations__Home'),
+        isNull,
+      );
+    });
+
+    test('recognizes both tags of a wrapper member', () {
+      final wrappers = SocketFamily<String, WrapperSocket>.role(
+        role,
+        'screen_wrappers',
+        const WrapperSocket(),
+        keyOf: (screen) => [screen],
+      );
+
+      expect(
+        wrappers.memberOfTag('smf_router__screen_wrappers__home_open'),
+        wrappers('home'),
+      );
+      expect(
+        wrappers.memberOfTag('smf_router__screen_wrappers__home_close'),
+        wrappers('home'),
+      );
+      expect(wrappers('home').tags, [
+        'smf_router__screen_wrappers__home_open',
+        'smf_router__screen_wrappers__home_close',
+      ]);
     });
 
     test('module families belong to the module', () {
@@ -146,6 +203,9 @@ void main() {
       );
       expect(moduleFamily(1).tag, 'smf_firebase_core__options__n1');
       expect(moduleFamily.role, isNull);
+      expect(moduleFamily.module, module);
+      expect(moduleFamily.name, 'options');
+      expect(moduleFamily.kind, const CodeSocket());
     });
 
     test('rejects keys that are empty or not lower snake_case', () {
@@ -191,18 +251,19 @@ void main() {
     test('accepts contributions made for the socket', () {
       final valid = [
         (code, SocketContribution.code(code, const Fragment('a();'))),
+        (xml, SocketContribution.code(xml, const Fragment('<a/>'))),
         (
           wrapper,
           SocketContribution.wrap(wrapper, const Fragment.wrap('A(', ')')),
         ),
         (
           factories,
-          SocketContribution.item(factories, const Fragment('A.new'))
+          SocketContribution.item(factories, const Fragment('A.new')),
         ),
         (args, SocketContribution.arg(args, 'theme', const Fragment('t'))),
-        (keyed, SocketContribution.entry(keyed, 'a', '1.0')),
-        (keysOnly, SocketContribution.key(keysOnly, 'INTERNET')),
-        (value, SocketContribution.value(value, '15.0')),
+        (keyed, keyed.entry('a', '1.0')),
+        (keysOnly, keysOnly.key('INTERNET')),
+        (minIos, minIos.value('15.0')),
       ];
       for (final (socket, contribution) in valid) {
         expect(socket.problemsWith(contribution), isEmpty, reason: '$socket');
@@ -217,6 +278,20 @@ void main() {
         ),
       );
       expect(problems.single, contains('socket router.other'));
+    });
+
+    test('rejects a contribution for a socket of another kind', () {
+      final forged =
+          SocketRef<ArgsSocket>.role(role, 'setup', const ArgsSocket({}));
+      final problems = code.problemsWith(
+        SocketContribution.arg(forged, 'theme', const Fragment('t')),
+      );
+
+      expect(problems.first, contains('is for the socket router.setup'));
+      expect(
+        problems,
+        contains('socket router.setup takes no argument names.'),
+      );
     });
 
     test('rejects fragments of the wrong shape', () {
@@ -240,6 +315,18 @@ void main() {
       );
     });
 
+    test('rejects imports in a text socket', () {
+      expect(
+        xml.problemsWith(
+          SocketContribution.code(
+            xml,
+            const Fragment('<a/>', imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        ['socket router.xml is not Dart code and takes no imports.'],
+      );
+    });
+
     test('rejects an unknown argument', () {
       final problems = args.problemsWith(
         SocketContribution.arg(args, 'darkTeme', const Fragment('t')),
@@ -252,20 +339,47 @@ void main() {
     });
 
     test('rejects values of the wrong type', () {
-      // A contribution can reach a socket of another value type only
-      // through an upcast, which the static factories cannot prevent.
-      final wrongKeyed = SocketContribution.entry<Object>(
-        keyed as SocketRef<KeyedSocket<Object>>,
-        'a',
-        1,
+      // The value type comes from the static type of the socket, so a
+      // wrong value compiles only through an upcast of the socket.
+      final wideKeyed = keyed as SocketRef<KeyedSocket<Object>>;
+      expect(
+        keyed.problemsWith(wideKeyed.entry('a', 1)).single,
+        'socket router.plugins takes values of type String, not 1.',
       );
-      expect(keyed.problemsWith(wrongKeyed).single, contains('right type'));
 
-      final wrongValue = SocketContribution.value<Object>(
-        value as SocketRef<ValueSocket<Object>>,
-        15,
+      final wideValue = minIos as SocketRef<ValueSocket<Object>>;
+      expect(
+        minIos.problemsWith(wideValue.value(15)).single,
+        'socket router.min_ios takes values of type String, not 15.',
       );
-      expect(value.problemsWith(wrongValue).single, contains('right type'));
+    });
+
+    test('rejects values the merge policy cannot use', () {
+      expect(
+        keyed.problemsWith(keyed.entry('a', 'latest')).single,
+        contains('"latest" of "a" cannot be compared'),
+      );
+      expect(
+        minIos.problemsWith(minIos.value('x')).single,
+        contains('"x" of "smf_router__min_ios" cannot be compared'),
+      );
+    });
+
+    test('rejects payloads of another kind', () {
+      final forged =
+          SocketRef<KeyedSocket<String>>.role(role, 'setup', keyed.kind);
+      expect(
+        code.problemsWith(forged.entry('a', '1.0')),
+        contains('socket router.setup takes no keyed entries or values.'),
+      );
+      expect(
+        minIos.problemsWith(keyed.entry('a', '1.0')),
+        contains('socket router.min_ios takes a single value.'),
+      );
+      expect(
+        keyed.problemsWith(minIos.value('15.0')),
+        contains('socket router.plugins takes keyed entries.'),
+      );
     });
 
     test('reports the problems of the fragment', () {
@@ -289,6 +403,7 @@ void main() {
         ]),
         {'smf_router__setup': 'a();\nb();'},
       );
+      expect(code.render(const []), {'smf_router__setup': ''});
     });
 
     test('nests wrappers, the first one outermost', () {
@@ -346,50 +461,107 @@ void main() {
               "theme: t,\nlocales: [Locale('en'), Locale('uk')],",
         },
       );
-    });
-
-    test('renders no arguments as an empty string', () {
       expect(args.render(const []), {'smf_router__args': ''});
     });
 
-    test('rejects two values of a scalar argument', () {
+    test('names both contributors of two values of a scalar argument', () {
       expect(
         () => args.render([
-          SocketContribution.arg(args, 'theme', const Fragment('a')),
-          SocketContribution.arg(args, 'theme', const Fragment('b')),
+          SocketContribution.arg(args, 'theme', const Fragment('a'))
+              .withOrigin(home),
+          SocketContribution.arg(args, 'theme', const Fragment('b'))
+              .withOrigin(settings),
         ]),
-        throwsA(isA<MergeConflict>()),
+        throwsA(
+          isA<MergeConflict>()
+              .having((c) => c.existingOrigin, 'existing', home)
+              .having((c) => c.incomingOrigin, 'incoming', settings),
+        ),
       );
     });
 
     test('merges keyed entries with the policy, keeping key order', () {
       expect(
         keyed.render([
-          SocketContribution.entry(keyed, 'b', '1.0'),
-          SocketContribution.entry(keyed, 'a', '2.0'),
-          SocketContribution.entry(keyed, 'b', '1.2'),
+          keyed.entry('b', '1.0'),
+          keyed.entry('a', '2.0'),
+          keyed.entry('b', '1.2'),
         ]),
         {'smf_router__plugins': 'b=1.2;a=2.0'},
       );
       expect(
         keysOnly.render([
-          SocketContribution.key(keysOnly, 'INTERNET'),
-          SocketContribution.key(keysOnly, 'CAMERA'),
-          SocketContribution.key(keysOnly, 'INTERNET'),
+          keysOnly.key('INTERNET'),
+          keysOnly.key('CAMERA'),
+          keysOnly.key('INTERNET'),
         ]),
         {'smf_router__permissions': 'INTERNET,CAMERA'},
       );
     });
 
+    test('names the contributors of conflicting keyed entries', () {
+      final strict = SocketRef<KeyedSocket<String>>.role(
+        role,
+        'strict',
+        const KeyedSocket(policy: ConflictPolicy(), renderer: _renderPairs),
+      );
+      expect(
+        () => strict.render([
+          strict.entry('a', 'x').withOrigin(home),
+          strict.entry('a', 'y').withOrigin(settings),
+        ]),
+        throwsA(
+          isA<MergeConflict>()
+              .having((c) => c.key, 'key', 'a')
+              .having((c) => c.existingOrigin, 'existing', home)
+              .having((c) => c.incomingOrigin, 'incoming', settings),
+        ),
+      );
+    });
+
+    test('blames the contributor of the value that won so far', () {
+      const third = ModuleOrigin(ModuleId('third'));
+
+      expect(
+        () => keyed.render([
+          keyed.entry('a', '1.0-jre').withOrigin(home),
+          keyed.entry('a', '2.0-jre').withOrigin(settings),
+          keyed.entry('a', '2.0-android').withOrigin(third),
+        ]),
+        throwsA(
+          isA<MergeConflict>()
+              .having((c) => c.existingOrigin, 'existing', settings)
+              .having((c) => c.incomingOrigin, 'incoming', third),
+        ),
+      );
+      expect(
+        () => minIos.render([
+          minIos.value('13.0-a').withOrigin(home),
+          minIos.value('15.0-a').withOrigin(settings),
+          minIos.value('15.0-b').withOrigin(third),
+        ]),
+        throwsA(
+          isA<MergeConflict>()
+              .having((c) => c.existingOrigin, 'existing', settings)
+              .having((c) => c.incomingOrigin, 'incoming', third),
+        ),
+      );
+    });
+
     test('merges values with the policy', () {
       expect(
-        value.render([
-          SocketContribution.value(value, '13.0'),
-          SocketContribution.value(value, '15.0'),
-        ]),
+        minIos.render([minIos.value('13.0'), minIos.value('15.0')]),
         {'smf_router__min_ios': 'v15.0'},
       );
-      expect(value.render(const []), {'smf_router__min_ios': ''});
+      expect(minIos.render(const []), {'smf_router__min_ios': ''});
+    });
+
+    test('a required value socket needs a contribution', () {
+      expect(
+        requiredIos.render([requiredIos.value('13.0')]),
+        {'smf_router__required_ios': 'v13.0'},
+      );
+      expect(() => requiredIos.render(const []), throwsStateError);
     });
 
     test('rejects contributions the socket does not take', () {
@@ -400,32 +572,65 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('rejects rendered text that mason would change', () {
+      final raw = SocketRef<KeyedSocket<String>>.role(
+        role,
+        'raw',
+        const KeyedSocket(policy: ConflictPolicy(), renderer: _renderRaw),
+      );
+      expect(() => raw.render([raw.entry('a', r'x\é')]), throwsArgumentError);
+    });
   });
 
   group('socket kinds', () {
-    test('only fragment kinds carry imports', () {
+    test('only kinds for Dart code carry imports', () {
       expect(const CodeSocket().carriesImports, isTrue);
+      expect(const CodeSocket.text().carriesImports, isFalse);
       expect(const WrapperSocket().carriesImports, isTrue);
       expect(const FactoryListSocket().carriesImports, isTrue);
       expect(const ArgsSocket({}).carriesImports, isTrue);
       expect(keyed.kind.carriesImports, isFalse);
-      expect(value.kind.carriesImports, isFalse);
+      expect(minIos.kind.carriesImports, isFalse);
     });
 
     test('keyed and value sockets check the type of their values', () {
+      final wideKeyed = keyed as SocketRef<KeyedSocket<Object>>;
+      final wideValue = minIos as SocketRef<ValueSocket<Object>>;
+
       expect(keyed.kind.accepts('1.0'), isTrue);
       expect(keyed.kind.accepts(1), isFalse);
-      expect(value.kind.accepts('15.0'), isTrue);
-      expect(value.kind.accepts(null), isFalse);
-      expect(() => keyed.kind.merge([('a', 1)]), throwsArgumentError);
-      expect(() => value.kind.merge([1], key: 'v'), throwsArgumentError);
-    });
-
-    test('an args socket rejects an unknown argument when rendering', () {
+      expect(minIos.kind.accepts('15.0'), isTrue);
+      expect(minIos.kind.accepts(null), isFalse);
       expect(
-        () => const ArgsSocket({}).render([('theme', const Fragment('t'))]),
+        () => keyed.kind.merge([wideKeyed.entry('a', 1)]),
         throwsArgumentError,
       );
+      expect(
+        () => keyed.kind.merge([minIos.value('15.0')]),
+        throwsArgumentError,
+      );
+      expect(
+        () => minIos.kind.merge([wideValue.value(1)], key: 'v'),
+        throwsArgumentError,
+      );
+    });
+
+    test('merge returns the merged entries and value', () {
+      expect(
+        keyed.kind
+            .merge([keyed.entry('a', '1.0'), keyed.entry('a', '1.1')])
+            .single
+            .value,
+        '1.1',
+      );
+      expect(
+        minIos.kind.merge([minIos.value('15'), minIos.value('15.0')], key: 'v'),
+        '15',
+      );
+      expect(minIos.kind.merge(const [], key: 'v'), isNull);
+      expect(requiredIos.kind.required, isTrue);
+      expect(minIos.kind.required, isFalse);
     });
 
     test('NoValue is a single value', () {

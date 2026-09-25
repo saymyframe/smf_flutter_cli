@@ -81,18 +81,20 @@ void main() {
       expect(contribution.fragment?.code, 't');
     });
 
-    test('entry, key and value hold values', () {
+    test('entry, key and value hold values of the socket type', () {
       String render(List<MapEntry<String, Object>> entries) => '';
       final keyed = SocketRef<KeyedSocket<String>>.role(
         role,
         'keyed',
         KeyedSocket(policy: const ConflictPolicy(), renderer: render),
       );
-      final entry = SocketContribution.entry(keyed, 'k', 'v', when: {role});
+      final entry = keyed.entry('k', 'v', when: {role});
 
+      expect(entry.socket, keyed);
       expect(entry.entryKey, 'k');
       expect(entry.entryValue, 'v');
       expect(entry.fragment, isNull);
+      expect(entry.argName, isNull);
       expect(entry.when, {role});
 
       final keys = SocketRef<KeyedSocket<NoValue>>.role(
@@ -100,16 +102,42 @@ void main() {
         'keys',
         KeyedSocket(policy: const ConflictPolicy(), renderer: render),
       );
-      expect(SocketContribution.key(keys, 'k').entryValue, const NoValue());
+      final key = keys.key('k', when: {role});
+      expect(key.entryValue, const NoValue());
+      expect(key.when, {role});
 
       final value = SocketRef<ValueSocket<String>>.role(
         role,
         'value',
         ValueSocket(policy: const MaxPolicy(), renderer: (v) => v),
       );
-      final contribution = SocketContribution.value(value, '15.0');
+      final contribution = value.value('15.0', when: {role});
       expect(contribution.entryKey, isNull);
       expect(contribution.entryValue, '15.0');
+      expect(contribution.when, {role});
+    });
+
+    test('gets an origin from the pipeline', () {
+      final args = SocketRef<ArgsSocket>.role(
+        role,
+        'args',
+        const ArgsSocket({'theme': ArgShape.scalar}),
+      );
+      final contribution = SocketContribution.arg(
+        args,
+        'theme',
+        const Fragment('t'),
+        when: {role},
+      );
+      expect(contribution.origin, isNull);
+
+      const origin = ModuleOrigin(ModuleId('home'));
+      final stamped = contribution.withOrigin(origin);
+      expect(stamped.origin, origin);
+      expect(stamped.socket, args);
+      expect(stamped.argName, 'theme');
+      expect(stamped.fragment?.code, 't');
+      expect(stamped.when, {role});
     });
   });
 

@@ -31,9 +31,6 @@ abstract interface class SmfEnvironment {
   /// instead.
   bool get skipExternalSetup;
 
-  /// Whether the run only explains what it would do (`--explain`).
-  bool get explain;
-
   /// The operating system the pipeline runs on.
   HostOperatingSystem get operatingSystem;
 
@@ -56,6 +53,9 @@ abstract interface class SmfEnvironment {
 
   /// Writes [contents] to a new temporary file whose name ends with [name],
   /// such as an install script, and returns its absolute path.
+  ///
+  /// The pipeline deletes the file at the end of the run. The file is not
+  /// executable; run a script through its interpreter, such as `bash`.
   Future<String> writeTempFile(String name, String contents);
 }
 
@@ -175,7 +175,9 @@ final class ToolRef {
   /// Creates a way to run [executable].
   ///
   /// [executable] is an absolute path or a name that the pipeline looks up
-  /// with [SmfEnvironment.findExecutable] before running it.
+  /// with [SmfEnvironment.findExecutable] before running it. The names
+  /// `flutter` and `dart` stand for the Flutter SDK that the pipeline
+  /// checked before generation, whatever else is on the `PATH`.
   const ToolRef(
     this.executable, {
     this.prefixArgs = const [],

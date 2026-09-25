@@ -61,6 +61,7 @@ void main() {
       expect(role.uses, isEmpty);
       expect(role.visibleRoles, isEmpty);
       expect(role.sockets, isEmpty);
+      expect(role.socketFamilies, isEmpty);
       expect(role.interface.files, isEmpty);
       expect(role.interface.symbols, isEmpty);
       expect(role.options, isEmpty);
@@ -140,9 +141,28 @@ void main() {
     test('lets a role read the data of roles it requires or uses', () {
       final input = router.hookInput(request);
 
-      expect(layout.dataIn(input).single.value, 5);
       expect(di.dataIn(input).single.value, 1.5);
       expect(router.dataIn(input), hasLength(2));
+      expect(
+        layout.dataIn(input),
+        isEmpty,
+        reason: 'the data of an absent role does not apply',
+      );
+      expect(
+        layout
+            .dataIn(
+              router.hookInput(
+                RoleHookRequest(
+                  data: request.data,
+                  presentRoles: {router, di, layout},
+                  context: testContext,
+                ),
+              ),
+            )
+            .single
+            .value,
+        5,
+      );
       expect(
         () => hidden.dataIn(input),
         throwsA(
@@ -187,6 +207,22 @@ void main() {
       ]);
     });
 
+    test('leaves out data whose when roles are absent', () {
+      final conditional = RoleHookRequest(
+        data: [
+          RoleData<String>(router, 'always'),
+          RoleData<String>(router, 'with layout', when: {layout}),
+          RoleData<double>(di, 2.5, when: {layout}),
+        ],
+        presentRoles: {router, di},
+        context: testContext,
+      );
+      final input = router.hookInput(conditional);
+
+      expect(input.data.map((data) => data.value), ['always']);
+      expect(di.dataIn(input), isEmpty);
+    });
+
     test('rejects data of another type and names the contributor', () {
       // Role<String> is a Role<Object>, so data of the wrong type compiles.
       final wrong = RoleHookRequest(
@@ -213,7 +249,7 @@ void main() {
           RoleData<Object>(router, 'routes', when: {di}).withOrigin(home),
           RoleData<Object>(router, 'plain'),
         ],
-        presentRoles: {router},
+        presentRoles: {router, di},
         context: testContext,
       );
 
@@ -238,8 +274,10 @@ void main() {
     RoleChoiceRequest request(String? start) => RoleChoiceRequest(
           data: [
             RoleData<String>(router, '/home'),
+            RoleData<String>(router, '/absent', when: {other}),
             RoleData<String>(other, '/other'),
           ],
+          presentRoles: {router},
           optionValues: {'start': start, 'unrelated': 'x'},
           environment: environment,
           context: testContext,
@@ -288,6 +326,7 @@ void main() {
           role.choiceContext(
             RoleChoiceRequest(
               data: const [],
+              presentRoles: {role},
               optionValues: const {},
               environment: FakeEnvironment(),
               context: testContext,

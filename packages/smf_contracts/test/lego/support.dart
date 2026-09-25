@@ -10,6 +10,8 @@ final class TestRole<D extends Object> extends Role<D> {
     this.sockets = const [],
     this.options = const [],
     this.template,
+    this.moduleRules = const [],
+    this.structuralRules = const [],
   })  : _requires = requires,
         _uses = uses;
 
@@ -39,6 +41,12 @@ final class TestRole<D extends Object> extends Role<D> {
 
   @override
   final RoleTemplate<D>? template;
+
+  @override
+  final List<ModuleRule<D>> moduleRules;
+
+  @override
+  final List<StructuralRule<D>> structuralRules;
 }
 
 /// A role that overrides nothing but what it must, to test the defaults.
@@ -86,9 +94,6 @@ final class FakeEnvironment implements SmfEnvironment {
 
   @override
   bool get skipExternalSetup => false;
-
-  @override
-  bool get explain => false;
 
   @override
   HostOperatingSystem get operatingSystem => HostOperatingSystem.linux;

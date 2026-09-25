@@ -4,9 +4,10 @@ part of '../role.dart';
 /// the interface a router's providers implement.
 ///
 /// The pipeline treats the template as a pseudo-module named `role:<id>`
-/// (see [RoleTemplateOrigin]). It may put code into the sockets of the app
-/// entry and of the roles its role requires or uses. Its hooks run at these
-/// stages of generation:
+/// (see [RoleTemplateOrigin]). It may put code into the sockets of its own
+/// role, of the roles its role requires or uses, and of the roles open to
+/// all modules (see [Role.openToAllModules]). Its hooks run at these stages
+/// of generation:
 /// 1. [contribute], while contributions are collected;
 /// 2. [validate], during validation;
 /// 3. [choose], after preflight checks, to ask the user what only the user
@@ -27,14 +28,17 @@ abstract base class RoleTemplate<D extends Object> {
   List<Contribution> contribute(ModuleContext context) => const [];
 
   /// Checks the data of the role and returns the problems found.
+  ///
+  /// It runs before [choose], so [RoleHookInput.choice] is `null`.
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
   /// Asks the user, or reads the role's options, for a decision that the
   /// data leaves open, such as the start screen of the app.
   ///
-  /// The result reaches [render] and the providers' hooks as
-  /// [RoleHookInput.choice]. Throws an [SmfUsageException] if the run is
-  /// not interactive and no option decides.
+  /// The result reaches [render] and the providers' render hooks as
+  /// [RoleHookInput.choice]. The hook checks the decision itself: it throws
+  /// an [SmfUsageException] for an option value that does not fit the data,
+  /// or if the run is not interactive and no option decides.
   Future<Object?> choose(RoleChoiceContext<D> context) async => null;
 
   /// Returns the fragments and brick variables that depend on the data,

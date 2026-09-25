@@ -28,6 +28,7 @@ void main() {
       expect(descriptor.providers, isEmpty);
       expect(descriptor.variants, isNull);
       expect(descriptor.sockets, isEmpty);
+      expect(descriptor.socketFamilies, isEmpty);
       expect(descriptor.provides, isEmpty);
       expect(descriptor.roles, isEmpty);
     });
@@ -61,6 +62,21 @@ void main() {
         providers: [RoleProvider<String>.plain(routerWithUses)],
       );
       expect(routerModule.effectiveUses, {layout});
+    });
+
+    test('inherits the requirements of provided roles one level deep', () {
+      final bottom = TestRole<NoDsl>('bottom');
+      final middle = TestRole<NoDsl>('middle', requires: {bottom});
+      final top = TestRole<NoDsl>('top', requires: {middle});
+      final descriptor = ModuleDescriptor(
+        id: const ModuleId('tabs'),
+        description: 'Tabs',
+        kind: plainKind,
+        providers: [RoleProvider<NoDsl>.plain(top)],
+      );
+
+      expect(descriptor.effectiveRequires, {middle});
+      expect(descriptor.roles, {top, middle});
     });
 
     test('adds the roles its kind implies and its variants need', () {
@@ -139,7 +155,7 @@ void main() {
     const home = ModuleId('home');
 
     test('defaults to no rules', () {
-      expect(plainKind.impliedProvides, isEmpty);
+      expect(plainKind.mustProvide, isEmpty);
       expect(plainKind.impliedRequires, isEmpty);
       expect(plainKind.requiredData, isEmpty);
       expect(plainKind.forbiddenData, isEmpty);

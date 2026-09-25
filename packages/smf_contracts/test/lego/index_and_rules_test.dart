@@ -3,14 +3,19 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-List<SmfIssue> _flagsResolve(StructuralRuleInput input) => [
+List<SmfIssue> _flagsResolve(StructuralRuleInput<String> input) => [
       for (final file in input.files.values)
-        if (file.uses('resolve')) SmfIssue('resolve', path: file.path),
+        if (file.uses('resolve'))
+          SmfIssue(
+            'resolve in ${input.roleInput.data.length} routes',
+            origin: input.owners[file.path],
+            path: file.path,
+          ),
     ];
 
-List<SmfIssue> _flagsModulesWithData(ModuleRuleInput input) => [
-      if (input.contributions.whereType<RoleData<Object>>().isNotEmpty)
-        SmfIssue('data', origin: ModuleOrigin(input.module.id)),
+List<SmfIssue> _flagsModulesWithData(ModuleRuleInput<String> input) => [
+      for (final data in input.data)
+        SmfIssue(data.value, origin: ModuleOrigin(input.module.id)),
     ];
 
 void main() {
@@ -149,7 +154,7 @@ void main() {
       'createAppRouter',
       path: 'lib/router.dart',
       returnType: 'AppRouter',
-      parameters: [RequiredParameter('observers')],
+      namedParameters: ['observers'],
     );
 
     Map<String, DartFileIndex> declaring(IndexedDeclaration declaration) => {
@@ -173,11 +178,23 @@ void main() {
                   kind: ParameterKind.requiredNamed,
                 ),
                 IndexedParameter('debug', kind: ParameterKind.optionalNamed),
+                IndexedParameter(
+                  'extra',
+                  kind: ParameterKind.optionalPositional,
+                ),
               ],
             ),
           ),
         ),
         isEmpty,
+      );
+    });
+
+    test('imports its file as a file of the app', () {
+      expect(symbol.importRef, const ImportRef.app('router.dart'));
+      expect(
+        const RequiredFunction('f', path: 'tool/f.dart').importRef,
+        const ImportRef.app('tool/f.dart'),
       );
     });
 
@@ -241,37 +258,73 @@ void main() {
       const prefix = 'function createAppRouter() in lib/router.dart must';
       expect(issues.map((issue) => issue.message), [
         '$prefix return AppRouter, not an undeclared type.',
+        '$prefix not require more than 0 positional arguments.',
         '$prefix accept the named parameter observers.',
         '$prefix not require the parameter debug.',
       ]);
       expect(issues.first.path, 'lib/router.dart');
     });
 
-    test('checks positional parameters too', () {
-      const positional = RequiredFunction(
+    group('with positional arguments', () {
+      const twoArguments = RequiredFunction(
         'f',
         path: 'lib/f.dart',
-        parameters: [RequiredParameter('a', named: false)],
+        positionalArguments: 2,
       );
 
-      expect(
-        positional.checkIn(const {
-          'lib/f.dart': DartFileIndex(
-            path: 'lib/f.dart',
-            declarations: [
-              IndexedDeclaration(
-                name: 'f',
-                kind: DeclarationKind.function,
-                type: 'void',
-                parameters: [
-                  IndexedParameter('a', kind: ParameterKind.requiredPositional),
-                ],
-              ),
-            ],
-          ),
-        }),
-        isEmpty,
-      );
+      List<String> problemsOf(List<ParameterKind> kinds) => twoArguments
+          .checkIn({
+            'lib/f.dart': DartFileIndex(
+              path: 'lib/f.dart',
+              declarations: [
+                IndexedDeclaration(
+                  name: 'f',
+                  kind: DeclarationKind.function,
+                  parameters: [
+                    for (final (i, kind) in kinds.indexed)
+                      IndexedParameter('p$i', kind: kind),
+                  ],
+                ),
+              ],
+            ),
+          })
+          .map((issue) => issue.message)
+          .toList();
+
+      test('accepts any names, and optional ones after required ones', () {
+        expect(
+          problemsOf([
+            ParameterKind.requiredPositional,
+            ParameterKind.requiredPositional,
+          ]),
+          isEmpty,
+        );
+        expect(
+          problemsOf([
+            ParameterKind.requiredPositional,
+            ParameterKind.optionalPositional,
+            ParameterKind.optionalPositional,
+          ]),
+          isEmpty,
+        );
+      });
+
+      test('rejects too few or too many required positional parameters', () {
+        const tooFew =
+            'function f() in lib/f.dart must accept 2 positional arguments.';
+        const tooMany = 'function f() in lib/f.dart must not require more '
+            'than 2 positional arguments.';
+
+        expect(problemsOf([ParameterKind.requiredPositional]), [tooFew]);
+        expect(
+          problemsOf([
+            ParameterKind.requiredPositional,
+            ParameterKind.requiredPositional,
+            ParameterKind.requiredPositional,
+          ]),
+          [tooMany],
+        );
+      });
     });
   });
 
@@ -279,10 +332,7 @@ void main() {
     const symbol = RequiredClass(
       'AppShell',
       path: 'lib/shell.dart',
-      constructorParameters: [
-        RequiredParameter('destinations'),
-        RequiredParameter('body'),
-      ],
+      namedParameters: ['destinations', 'body'],
       constConstructor: true,
     );
 
@@ -309,7 +359,12 @@ void main() {
                       kind: ParameterKind.requiredNamed,
                     ),
                     IndexedParameter('body', kind: ParameterKind.requiredNamed),
-                    IndexedParameter('key', kind: ParameterKind.optionalNamed),
+                    IndexedParameter(
+                      'key',
+                      kind: ParameterKind.optionalNamed,
+                      type: 'Key?',
+                      annotations: ['@override'],
+                    ),
                   ],
                 ),
               ],
@@ -374,80 +429,175 @@ void main() {
     });
   });
 
-  group('StructuralRule', () {
-    test('runs over the indexed files of an app', () {
-      const rule = StructuralRule(
-        id: 'di.resolve_only_in_composition',
-        description: 'resolve is called only in composition files.',
-        check: _flagsResolve,
-      );
-      const input = StructuralRuleInput(
-        files: {
-          'lib/a.dart': DartFileIndex(
-            path: 'lib/a.dart',
-            invocations: [IndexedInvocation('resolve')],
+  group('Role.checkStructure', () {
+    const home = ModuleOrigin(ModuleId('home'));
+    final role = TestRole<String>(
+      'di',
+      structuralRules: const [
+        StructuralRule(
+          id: 'di.resolve_only_in_composition',
+          description: 'resolve is called only in composition files.',
+          check: _flagsResolve,
+        ),
+      ],
+    );
+    final files = {
+      'lib/a.dart': const DartFileIndex(
+        path: 'lib/a.dart',
+        invocations: [IndexedInvocation('resolve')],
+      ),
+      'lib/b.dart': const DartFileIndex(path: 'lib/b.dart'),
+    };
+
+    test('runs the rules over the indexed files and the role data', () {
+      final issues = role.checkStructure(
+        StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: [RoleData<String>(role, 'a'), RoleData<String>(role, 'b')],
+            presentRoles: {role},
+            context: testContext,
           ),
-          'lib/b.dart': DartFileIndex(path: 'lib/b.dart'),
-        },
+          files: files,
+          owners: const {'lib/a.dart': home},
+        ),
       );
 
-      expect(rule.id, 'di.resolve_only_in_composition');
-      expect(rule.description, isNotEmpty);
-      expect(rule.check(input).single.path, 'lib/a.dart');
-      expect(input.owners, isEmpty);
-      expect(input.modules, isEmpty);
-      expect(input.presentRoles, isEmpty);
+      expect(issues.single.message, 'resolve in 2 routes');
+      expect(issues.single.origin, home);
+      expect(issues.single.path, 'lib/a.dart');
     });
 
-    test('its input finds the descriptors of modules', () {
-      const home = ModuleDescriptor(
+    test('gives the rules the descriptors of the modules', () {
+      const descriptor = ModuleDescriptor(
         id: ModuleId('home'),
         description: 'Home',
         kind: plainKind,
       );
-      final router = TestRole<String>('router');
-      final input = StructuralRuleInput(
-        files: const {},
-        owners: const {'lib/a.dart': ModuleOrigin(ModuleId('home'))},
-        modules: const [home],
-        presentRoles: {router},
+      late StructuralRuleInput<String> seen;
+      final spy = TestRole<String>(
+        'spy',
+        structuralRules: [
+          StructuralRule(
+            id: 'spy.input',
+            description: 'Keeps its input.',
+            check: (input) {
+              seen = input;
+              return const [];
+            },
+          ),
+        ],
       );
 
-      expect(input.module(const ModuleId('home')), same(home));
-      expect(input.module(const ModuleId('other')), isNull);
-      expect(input.owners['lib/a.dart'], const ModuleOrigin(ModuleId('home')));
-      expect(input.presentRoles, {router});
+      spy.checkStructure(
+        StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {spy},
+            context: testContext,
+          ),
+          files: files,
+          modules: const [descriptor],
+        ),
+      );
+
+      expect(seen.roleInput.role, same(spy));
+      expect(seen.files.keys, ['lib/a.dart', 'lib/b.dart']);
+      expect(seen.owners, isEmpty);
+      expect(seen.modules, [descriptor]);
+      expect(seen.module(const ModuleId('home')), same(descriptor));
+      expect(seen.module(const ModuleId('other')), isNull);
+      expect(spy.structuralRules.single.id, 'spy.input');
+      expect(spy.structuralRules.single.description, 'Keeps its input.');
     });
   });
 
-  test('ModuleRule runs over the contributions of a module', () {
-    const rule = ModuleRule(
-      id: 'test.no_data',
-      description: 'Modules contribute no data.',
-      check: _flagsModulesWithData,
+  group('Role.checkModule', () {
+    final other = TestRole<NoDsl>('other');
+    final role = TestRole<String>(
+      'router',
+      uses: {other},
+      moduleRules: const [
+        ModuleRule(
+          id: 'router.echo',
+          description: 'Reports every route of the module.',
+          check: _flagsModulesWithData,
+        ),
+      ],
     );
-    final role = TestRole<String>('router');
-    const module = ModuleDescriptor(
+    const descriptor = ModuleDescriptor(
       id: ModuleId('home'),
       description: 'Home',
       kind: plainKind,
     );
 
-    expect(rule.id, 'test.no_data');
-    expect(rule.description, isNotEmpty);
-    expect(
-      rule.check(const ModuleRuleInput(module: module, contributions: [])),
-      isEmpty,
-    );
-    final input = ModuleRuleInput(
-      module: module,
-      contributions: [RoleData<String>(role, 'routes')],
-      presentRoles: {role},
-    );
-    expect(
-      rule.check(input).single.origin,
-      const ModuleOrigin(ModuleId('home')),
-    );
-    expect(input.presentRoles, {role});
+    test('runs the rules over the data of one module', () {
+      final issues = role.checkModule(
+        ModuleRuleRequest(
+          hook: RoleHookRequest(
+            data: [
+              RoleData<String>(role, '/home')
+                  .withOrigin(const ModuleOrigin(ModuleId('home'))),
+              RoleData<String>(role, '/home/bloc').withOrigin(
+                const ModuleOrigin(
+                  ModuleId('home'),
+                  variant: ModuleId('bloc'),
+                ),
+              ),
+              RoleData<String>(role, '/settings')
+                  .withOrigin(const ModuleOrigin(ModuleId('settings'))),
+            ],
+            presentRoles: {role},
+            context: testContext,
+          ),
+          module: descriptor,
+          contributions: const [],
+        ),
+      );
+
+      expect(issues.map((issue) => issue.message), ['/home', '/home/bloc']);
+      expect(
+        role.moduleRules.single.description,
+        'Reports every route of the module.',
+      );
+    });
+
+    test('gives the rules only the contributions that apply', () {
+      late ModuleRuleInput<String> seen;
+      final spy = TestRole<String>(
+        'spy',
+        uses: {other},
+        moduleRules: [
+          ModuleRule(
+            id: 'spy.input',
+            description: 'Keeps its input.',
+            check: (input) {
+              seen = input;
+              return const [];
+            },
+          ),
+        ],
+      );
+      const always = PubspecContribution.hosted('a', 'any');
+      final withOther = PubspecContribution.hosted('b', 'any', when: {other});
+      final dataOfSpy = RoleData<String>(spy, 'routes');
+      final dataOfOther = RoleData<String>(TestRole<String>('absent'), 'x');
+
+      spy.checkModule(
+        ModuleRuleRequest(
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {spy},
+            context: testContext,
+          ),
+          module: descriptor,
+          contributions: [always, withOther, dataOfSpy, dataOfOther],
+        ),
+      );
+
+      expect(seen.module, same(descriptor));
+      expect(seen.contributions, [always, dataOfSpy]);
+      expect(seen.data, isEmpty);
+      expect(seen.roleInput.has(other), isFalse);
+    });
   });
 }

@@ -46,6 +46,7 @@ void main() {
       const policy = ConflictPolicy<String>();
 
       expect(policy.name, 'conflict');
+      expect(policy.problemWith('k', 'anything'), isNull);
       expect(policy.merge('k', 'a', 'a'), 'a');
       expect(
         () => policy.merge('k', 'a', 'b'),
@@ -60,6 +61,16 @@ void main() {
   });
 
   group('MaxPolicy', () {
+    test('accepts only values its comparator can order', () {
+      const policy = MaxPolicy();
+
+      expect(policy.problemWith('ios', '15.0'), isNull);
+      expect(
+        policy.problemWith('ios', 'latest'),
+        startsWith('The value "latest" of "ios" cannot be compared'),
+      );
+    });
+
     test('keeps the higher version and the earlier of equal ones', () {
       const policy = MaxPolicy();
 
@@ -87,6 +98,7 @@ void main() {
       const policy = UnionPolicy<String>();
 
       expect(policy.name, 'union');
+      expect(policy.merge('k', ['a', 'a'], ['b', 'a', 'b']), ['a', 'b']);
       expect(
         policy.merge('modes', [
           'fetch',
@@ -105,6 +117,25 @@ void main() {
       '${const MergeConflict('theme', 'a', 'b', 'one value only')}',
       'MergeConflict: "theme" has conflicting values "a" and "b": '
           'one value only',
+    );
+  });
+
+  test('MergeConflict names the contributors when they are known', () {
+    const conflict = MergeConflict('theme', 'a', 'b', 'one value only');
+    const home = ModuleOrigin(ModuleId('home'));
+    final attributed = conflict.withOrigins(existing: home, incoming: null);
+
+    expect(conflict.existingOrigin, isNull);
+    expect(attributed.existingOrigin, home);
+    expect(attributed.incomingOrigin, isNull);
+    expect(attributed.key, 'theme');
+    expect(attributed.existing, 'a');
+    expect(attributed.incoming, 'b');
+    expect(attributed.reason, 'one value only');
+    expect(
+      '$attributed',
+      'MergeConflict: "theme" has conflicting values "a" and "b" '
+          '(from home and unknown): one value only',
     );
   });
 }

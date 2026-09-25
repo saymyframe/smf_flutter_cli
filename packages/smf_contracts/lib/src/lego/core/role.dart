@@ -4,6 +4,7 @@ import 'package:smf_contracts/lego_core.dart';
 part 'role/role_hooks.dart';
 part 'role/role_provider.dart';
 part 'role/role_template.dart';
+part 'role/rules.dart';
 
 /// How many providers of a role an app can have.
 enum RoleCardinality {
@@ -91,9 +92,18 @@ abstract base class Role<D extends Object> {
 
   /// The sockets of the role.
   ///
-  /// Every socket has exactly one tag in the templates of the app: in the
-  /// role's own template files, or in the files of its provider.
+  /// Their tags are in the role's template files or in the files of its
+  /// provider; a socket whose contributions carry imports has its tag in
+  /// exactly one file (see [SocketKind.carriesImports]).
   List<SocketRef> get sockets => const [];
+
+  /// The socket families of the role, such as the annotations of every
+  /// screen of the router.
+  ///
+  /// The tags of their members may be in the files of the modules whose
+  /// data creates them; the pipeline recognizes them with
+  /// [SocketFamily.memberOfTag].
+  List<SocketFamily<Object?, SocketKind>> get socketFamilies => const [];
 
   /// The files the role's template generates and the symbols every provider
   /// must generate.
@@ -109,11 +119,12 @@ abstract base class Role<D extends Object> {
   RoleTemplate<D>? get template => null;
 
   /// Checks of the data of modules that provide, require or use the role,
-  /// run during validation.
-  List<ModuleRule> get moduleRules => const [];
+  /// run during validation with [checkModule].
+  List<ModuleRule<D>> get moduleRules => const [];
 
-  /// Checks of the generated code, run by the contract test harness.
-  List<StructuralRule> get structuralRules => const [];
+  /// Checks of the generated code, run by the contract test harness with
+  /// [checkStructure].
+  List<StructuralRule<D>> get structuralRules => const [];
 
   /// The name of the brick variable that is `true` when the role is
   /// present: `has_<id>`.
@@ -166,17 +177,20 @@ abstract base class Role<D extends Object> {
   ///
   /// The input holds the data of this role, typed as [D], and only as much
   /// of the rest of the app as the role may see: the data and presence of
-  /// its [visibleRoles]. This is the only place where data is cast to [D],
-  /// and data of another type fails here with an [ArgumentError] that names
-  /// the contributor.
+  /// its [visibleRoles]. Data that does not apply, because its role or a
+  /// role in its [Contribution.when] is absent, is left out.
+  ///
+  /// This is the only place where data is cast to [D], and data of another
+  /// type fails here with an [ArgumentError] that names the contributor.
   @nonVirtual
   RoleHookInput<D> hookInput(RoleHookRequest request) {
     final visible = visibleRoles;
+    final applies = _appliesIn(request.presentRoles);
     return RoleHookInput<D>._(
       role: this,
       data: List.unmodifiable([
         for (final data in request.data)
-          if (identical(data.role, this)) _typed(data),
+          if (identical(data.role, this) && applies(data)) _typed(data),
       ]),
       present: {
         for (final role in request.presentRoles)
@@ -185,7 +199,9 @@ abstract base class Role<D extends Object> {
       visibleData: {
         for (final role in visible)
           role: List<RoleData<Object>>.unmodifiable(
-            request.data.where((data) => identical(data.role, role)),
+            request.data.where(
+              (data) => identical(data.role, role) && applies(data),
+            ),
           ),
       },
       choice: request.choices[this],
@@ -193,15 +209,59 @@ abstract base class Role<D extends Object> {
     );
   }
 
+  /// Runs the [structuralRules] over the app in [request] and returns the
+  /// problems found.
+  ///
+  /// Each rule gets the role's data as [hookInput] builds it.
+  @nonVirtual
+  List<SmfIssue> checkStructure(StructuralRuleRequest request) {
+    final input = StructuralRuleInput<D>._(
+      roleInput: hookInput(request.hook),
+      files: Map.unmodifiable(request.files),
+      owners: Map.unmodifiable(request.owners),
+      modules: List.unmodifiable(request.modules),
+    );
+    return [for (final rule in structuralRules) ...rule.check(input)];
+  }
+
+  /// Runs the [moduleRules] for the module in [request] and returns the
+  /// problems found.
+  ///
+  /// Each rule gets the role's data as [hookInput] builds it, the part of
+  /// it the module contributed, and the module's contributions that apply.
+  @nonVirtual
+  List<SmfIssue> checkModule(ModuleRuleRequest request) {
+    final roleInput = hookInput(request.hook);
+    final applies = _appliesIn(request.hook.presentRoles);
+    final id = request.module.id;
+    final input = ModuleRuleInput<D>._(
+      roleInput: roleInput,
+      module: request.module,
+      data: List.unmodifiable([
+        for (final data in roleInput.data)
+          if (data.origin case ModuleOrigin(:final module) when module == id)
+            data,
+      ]),
+      contributions: List.unmodifiable([
+        for (final contribution in request.contributions)
+          if (contribution.when.every(applies.isPresent) &&
+              (contribution is! RoleData<Object> || applies(contribution)))
+            contribution,
+      ]),
+    );
+    return [for (final rule in moduleRules) ...rule.check(input)];
+  }
+
   /// Builds the input of [RoleTemplate.choose] from the pipeline's
   /// [request]; see [hookInput].
   @nonVirtual
   RoleChoiceContext<D> choiceContext(RoleChoiceRequest request) {
+    final applies = _appliesIn(request.presentRoles);
     return RoleChoiceContext<D>._(
       role: this,
       data: List.unmodifiable([
         for (final data in request.data)
-          if (identical(data.role, this)) _typed(data),
+          if (identical(data.role, this) && applies(data)) _typed(data),
       ]),
       optionValues: {
         for (final option in options)
@@ -211,6 +271,8 @@ abstract base class Role<D extends Object> {
       context: request.context,
     );
   }
+
+  _Applies _appliesIn(Set<Role> presentRoles) => _Applies(this, presentRoles);
 
   RoleData<D> _typed(RoleData<Object> data) {
     if (data is RoleData<D>) return data;
@@ -230,6 +292,21 @@ abstract base class Role<D extends Object> {
 
   @override
   String toString() => 'role $id';
+}
+
+/// Whether data applies in an app: its role and the roles in its
+/// [Contribution.when] are present. The role whose hook runs is present.
+final class _Applies {
+  _Applies(this._role, this._present);
+
+  final Role _role;
+  final Set<Role> _present;
+
+  bool isPresent(Role role) =>
+      identical(role, _role) || _present.contains(role);
+
+  bool call(RoleData<Object> data) =>
+      isPresent(data.role) && data.when.every(isPresent);
 }
 
 /// A command line option of a role, such as `--start` of the router.

@@ -8,8 +8,15 @@ part of '../contributions.dart';
 /// and its providers receive the data of all modules in the order the modules
 /// were selected (see [RoleHookInput.data]).
 ///
-/// Data applies only when [role] is present, in addition to [when]: a
-/// module that only uses a role can contribute data to it unconditionally.
+/// A module may contribute data only to its own roles (see
+/// [ModuleDescriptor.roles]). Data applies only when [role] is present, in
+/// addition to [when], so a module that only uses a role can contribute data
+/// to it unconditionally; hooks and rules never see data that does not
+/// apply.
+///
+/// Prefer [Role.data] to the constructor: it takes a value of the role's
+/// data type only, while the constructor also accepts a wider type argument
+/// that fails only at run time.
 final class RoleData<D extends Object> extends Contribution {
   /// Creates the data [value] for [role].
   const RoleData(this.role, this.value, {super.when}) : origin = null;

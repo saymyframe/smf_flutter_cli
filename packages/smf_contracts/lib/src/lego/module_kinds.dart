@@ -9,6 +9,6 @@ abstract final class ModuleKinds {
   static const scaffold = ModuleKind(
     id: 'scaffold',
     label: 'App scaffold',
-    impliedProvides: {appEntryRole},
+    mustProvide: {appEntryRole},
   );
 }

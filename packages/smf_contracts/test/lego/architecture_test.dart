@@ -105,6 +105,22 @@ void main() {
     }
   });
 
+  test('tests of each API use only that API', () {
+    const package = 'package:smf_contracts/';
+    final separator = Platform.pathSeparator;
+    for (final file in _dartFiles('test')) {
+      final testsLego = file.path.contains('${separator}lego$separator');
+      for (final uri in _directives(file)) {
+        if (!uri.startsWith(package)) continue;
+        expect(
+          _isLego(uri.substring(package.length)),
+          testsLego,
+          reason: '${file.path} must not use $uri',
+        );
+      }
+    }
+  });
+
   test('the old API does not use the lego model', () {
     for (final file in old) {
       for (final uri in _directives(file)) {

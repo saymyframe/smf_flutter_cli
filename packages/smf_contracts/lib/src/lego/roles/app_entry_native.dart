@@ -1,5 +1,40 @@
 part of 'app_entry.dart';
 
+/// The value of a `<meta-data>` element in
+/// [AppEntryRole.androidManifestApplicationMeta]: an `android:value` or an
+/// `android:resource`.
+@immutable
+final class AndroidMetaData {
+  /// An `android:value`, such as `true` or a string.
+  const AndroidMetaData.value(this.text) : isResource = false;
+
+  /// An `android:resource`, such as `@drawable/ic_notification`.
+  const AndroidMetaData.resource(this.text) : isResource = true;
+
+  /// The value or the resource.
+  final String text;
+
+  /// Whether this is an `android:resource`.
+  final bool isResource;
+
+  /// The attribute of the element, such as `android:value="true"`.
+  String get attribute =>
+      '${isResource ? 'android:resource' : 'android:value'}='
+      '"${_escapeXml(text)}"';
+
+  @override
+  bool operator ==(Object other) =>
+      other is AndroidMetaData &&
+      other.text == text &&
+      other.isResource == isResource;
+
+  @override
+  int get hashCode => Object.hash(text, isResource);
+
+  @override
+  String toString() => attribute;
+}
+
 /// A value of an `Info.plist` key in [AppEntryRole.infoPlist].
 @immutable
 sealed class PlistValue {
@@ -84,10 +119,11 @@ final class PlistStringArray extends PlistValue {
   /// The strings, in order.
   final List<String> values;
 
+  /// Renders each value once, in the order of first appearance.
   @override
   String toXml(String indent) => [
         '$indent<array>',
-        for (final value in values)
+        for (final value in {...values})
           '$indent\t<string>${_escapeXml(value)}</string>',
         '$indent</array>',
       ].join('\n');
@@ -141,12 +177,16 @@ String _renderAndroidPermissions(List<MapEntry<String, NoValue>> entries) =>
         )
         .join('\n');
 
-String _renderAndroidMetaData(List<MapEntry<String, String>> entries) => entries
-    .map(
-      (entry) => '        <meta-data android:name="${_escapeXml(entry.key)}" '
-          'android:value="${_escapeXml(entry.value)}"/>',
-    )
-    .join('\n');
+String _renderAndroidMetaData(
+  List<MapEntry<String, AndroidMetaData>> entries,
+) =>
+    entries
+        .map(
+          (entry) =>
+              '        <meta-data android:name="${_escapeXml(entry.key)}" '
+              '${entry.value.attribute}/>',
+        )
+        .join('\n');
 
 String _renderInfoPlist(List<MapEntry<String, PlistValue>> entries) => entries
     .map(
@@ -159,7 +199,7 @@ String _renderGradleSettingsPlugins(List<MapEntry<String, String>> entries) =>
     entries
         .map(
           (entry) => '    id("${_escapeKotlin(entry.key)}") '
-              'version "${_escapeKotlin(entry.value)}" apply false',
+              'version("${_escapeKotlin(entry.value)}") apply false',
         )
         .join('\n');
 

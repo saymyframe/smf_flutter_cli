@@ -45,8 +45,8 @@ final class RoleHookInput<D extends Object> {
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] from all modules, each with its origin, in the order
-  /// the modules were selected.
+  /// The data of [role] that applies in the app, each with its origin, in
+  /// the order the modules were selected.
   final List<RoleData<D>> data;
 
   /// The result of the role's [RoleTemplate.choose] hook, or `null` before
@@ -88,6 +88,7 @@ final class RoleChoiceRequest {
   /// Creates the request.
   const RoleChoiceRequest({
     required this.data,
+    required this.presentRoles,
     required this.optionValues,
     required this.environment,
     required this.context,
@@ -96,6 +97,9 @@ final class RoleChoiceRequest {
   /// The data of all roles, each with its origin, in the order the modules
   /// were selected.
   final List<RoleData<Object>> data;
+
+  /// The roles present in the app.
+  final Set<Role> presentRoles;
 
   /// The values of all role options given on the command line, by option
   /// name.
@@ -123,8 +127,8 @@ final class RoleChoiceContext<D extends Object> {
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] from all modules, in the order the modules were
-  /// selected.
+  /// The data of [role] that applies in the app, in the order the modules
+  /// were selected.
   final List<RoleData<D>> data;
 
   /// The machine and the user; ask only if [SmfEnvironment.interactive].

@@ -1,6 +1,8 @@
 import 'package:smf_contracts/lego.dart';
 import 'package:test/test.dart';
 
+import 'support.dart';
+
 /// Indexes of a minimal app that satisfies the app entry role.
 Map<String, DartFileIndex> _app({
   List<IndexedImport> bootstrapImports = const [
@@ -68,7 +70,12 @@ Map<String, DartFileIndex> _app({
 }
 
 List<SmfIssue> _check(Map<String, DartFileIndex> files) {
-  final input = StructuralRuleInput(
+  final request = StructuralRuleRequest(
+    hook: const RoleHookRequest(
+      data: [],
+      presentRoles: {appEntryRole},
+      context: testContext,
+    ),
     files: files,
     owners: {
       for (final path in files.keys)
@@ -77,7 +84,7 @@ List<SmfIssue> _check(Map<String, DartFileIndex> files) {
   );
   return [
     ...appEntryRole.interface.checkSymbols(files),
-    for (final rule in appEntryRole.structuralRules) ...rule.check(input),
+    ...appEntryRole.checkStructure(request),
   ];
 }
 
@@ -86,8 +93,7 @@ Map<String, String> _render<V extends Object>(
   List<(String, V)> entries,
 ) =>
     socket.render([
-      for (final (key, value) in entries)
-        SocketContribution.entry(socket, key, value),
+      for (final (key, value) in entries) socket.entry(key, value),
     ]);
 
 void main() {
@@ -143,8 +149,12 @@ void main() {
         ],
       );
       expect(
-        AppEntryRole.fallbackStartScreenImport.resolveUri('my_app'),
+        AppEntryRole.fallbackStartScreen.importRef.resolveUri('my_app'),
         'package:my_app/core/app/fallback_start_screen.dart',
+      );
+      expect(
+        appEntryRole.structuralRules.map((rule) => rule.id),
+        ['app_entry.bootstrap_without_material', 'app_entry.main_sequence'],
       );
     });
   });
@@ -164,7 +174,7 @@ void main() {
       );
     });
 
-    test('reject UI libraries in bootstrap.dart', () {
+    test('reject design libraries in bootstrap.dart', () {
       final issues = _check(
         _app(
           bootstrapImports: const [
@@ -271,11 +281,20 @@ void main() {
       const socket = AppEntryRole.iosDeploymentTarget;
       expect(
         socket.render([
-          SocketContribution.value(socket, '13.0'),
-          SocketContribution.value(socket, '15.0'),
-          SocketContribution.value(socket, '14'),
+          socket.value('13.0'),
+          socket.value('15.0'),
+          socket.value('14'),
         ]),
         {socket.tag: '15.0'},
+      );
+    });
+
+    test('the iOS deployment target always has a value', () {
+      const socket = AppEntryRole.iosDeploymentTarget;
+      expect(() => socket.render(const []), throwsStateError);
+      expect(
+        socket.problemsWith(socket.value('fifteen')).single,
+        contains('cannot be compared'),
       );
     });
 
@@ -283,9 +302,9 @@ void main() {
       const socket = AppEntryRole.androidManifestPermissions;
       expect(
         socket.render([
-          SocketContribution.key(socket, 'android.permission.INTERNET'),
-          SocketContribution.key(socket, 'android.permission.CAMERA'),
-          SocketContribution.key(socket, 'android.permission.INTERNET'),
+          socket.key('android.permission.INTERNET'),
+          socket.key('android.permission.CAMERA'),
+          socket.key('android.permission.INTERNET'),
         ]),
         {
           socket.tag:
@@ -299,15 +318,53 @@ void main() {
       const socket = AppEntryRole.androidManifestApplicationMeta;
 
       expect(
-        _render(socket, const [('a.key', 'x & "y"')]),
+        _render(socket, const [
+          ('a.key', AndroidMetaData.value('x & "y"')),
+          ('b.icon', AndroidMetaData.resource('@drawable/ic_notification')),
+        ]),
         {
           socket.tag: '        <meta-data android:name="a.key" '
-              'android:value="x &amp; &quot;y&quot;"/>',
+              'android:value="x &amp; &quot;y&quot;"/>\n'
+              '        <meta-data android:name="b.icon" '
+              'android:resource="@drawable/ic_notification"/>',
         },
       );
       expect(
-        () => _render(socket, const [('a.key', 'x'), ('a.key', 'y')]),
+        _render(socket, const [
+          ('a.key', AndroidMetaData.value('x')),
+          ('a.key', AndroidMetaData.value('x')),
+        ]),
+        hasLength(1),
+      );
+      expect(
+        () => _render(socket, const [
+          ('a.key', AndroidMetaData.value('x')),
+          ('a.key', AndroidMetaData.resource('x')),
+        ]),
         throwsA(isA<MergeConflict>()),
+      );
+    });
+
+    test('intent filters are XML without imports', () {
+      const socket = AppEntryRole.mainActivityIntentFilters;
+      const filter = '<intent-filter>\n'
+          '    <action android:name="android.intent.action.VIEW"/>\n'
+          '</intent-filter>';
+
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket
+            .render(const [SocketContribution.code(socket, Fragment(filter))]),
+        {socket.tag: filter},
+      );
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(filter, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        isNotEmpty,
       );
     });
 
@@ -363,16 +420,13 @@ void main() {
         ]),
         {
           AppEntryRole.gradleSettingsPlugins.tag:
-              '    id("com.google.gms.google-services") version "4.4.2" '
+              '    id("com.google.gms.google-services") version("4.4.2") '
                   'apply false',
         },
       );
       expect(
         AppEntryRole.gradleAppPlugins.render([
-          SocketContribution.key(
-            AppEntryRole.gradleAppPlugins,
-            'com.google.gms.google-services',
-          ),
+          AppEntryRole.gradleAppPlugins.key('com.google.gms.google-services'),
         ]),
         {
           AppEntryRole.gradleAppPlugins.tag:
@@ -390,6 +444,36 @@ void main() {
         },
       );
     });
+
+    test('Gradle settings plugins keep the anchor flutterfire looks for', () {
+      // `kotlinGoogleServicesPluginPattern` of flutterfire_cli 1.4.0
+      // (lib/src/firebase/firebase_android_writes.dart). flutterfire inserts
+      // the Crashlytics plugin after the line it matches.
+      final anchor = RegExp(
+        r'''id\((["']com\.google\.gms\.google-services["'])\) '''
+        r'''version\((["']\d+\.\d+\.\d+["'])\) apply false''',
+      );
+      final rendered = _render(AppEntryRole.gradleSettingsPlugins, const [
+        ('com.google.gms.google-services', '4.4.2'),
+      ]);
+
+      expect(rendered.values.single, matches(anchor));
+    });
+  });
+
+  test('AndroidMetaData compares by kind and text', () {
+    const value = AndroidMetaData.value('a');
+
+    expect(value, const AndroidMetaData.value('a'));
+    expect(value.hashCode, const AndroidMetaData.value('a').hashCode);
+    expect(value, isNot(const AndroidMetaData.resource('a')));
+    expect(value.isResource, isFalse);
+    expect(value.text, 'a');
+    expect('$value', 'android:value="a"');
+    expect(
+      '${const AndroidMetaData.resource('@color/accent')}',
+      'android:resource="@color/accent"',
+    );
   });
 
   group('PlistValue', () {
@@ -417,6 +501,10 @@ void main() {
         const PlistStringArray(['a']),
         isNot(const PlistStringArray(['a', 'b'])),
       );
+      expect(
+        const PlistStringArray(['fetch', 'fetch']).toXml(''),
+        '<array>\n\t<string>fetch</string>\n</array>',
+      );
       expect(const PlistStringArray(['a']), isNot(const PlistString('a')));
     });
 
@@ -432,6 +520,6 @@ void main() {
   test('the scaffold kind provides the app entry', () {
     expect(ModuleKinds.scaffold.id, 'scaffold');
     expect(ModuleKinds.scaffold.label, 'App scaffold');
-    expect(ModuleKinds.scaffold.impliedProvides, {appEntryRole});
+    expect(ModuleKinds.scaffold.mustProvide, {appEntryRole});
   });
 }

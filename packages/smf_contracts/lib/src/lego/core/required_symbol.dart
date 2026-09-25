@@ -4,11 +4,20 @@ import 'package:smf_contracts/lego_core.dart';
 /// `createAppRouter()` function of a router.
 ///
 /// Other code of the app refers to it by name, so it must be declared at
-/// the top level of the file at [path]. The contract test harness checks it
-/// structurally against the [DartFileIndex] of that file with [checkIn];
-/// types are checked by compiling the generated app.
+/// the top level of the file at [path]. It must be callable the way that
+/// code calls it: with [positionalArguments] positional arguments and the
+/// named arguments [namedParameters], and no other required parameters.
+///
+/// The contract test harness checks it structurally against the
+/// [DartFileIndex] of that file with [checkIn]; types are checked by
+/// compiling the generated app.
 sealed class RequiredSymbol {
-  const RequiredSymbol(this.name, {required this.path});
+  const RequiredSymbol(
+    this.name, {
+    required this.path,
+    required this.namedParameters,
+    required this.positionalArguments,
+  });
 
   /// The name of the symbol.
   final String name;
@@ -16,6 +25,18 @@ sealed class RequiredSymbol {
   /// The path of the file that declares it, relative to the project root,
   /// such as `lib/bootstrap.dart`.
   final String path;
+
+  /// The named parameters that callers pass; the symbol may have other
+  /// named parameters only if they are optional.
+  final List<String> namedParameters;
+
+  /// How many positional arguments callers pass.
+  final int positionalArguments;
+
+  /// The import of [path], for code that uses the symbol.
+  ImportRef get importRef => ImportRef.app(
+        path.startsWith('lib/') ? path.substring('lib/'.length) : path,
+      );
 
   /// Checks that [files], indexes by path, declare this symbol as required,
   /// and returns the problems found.
@@ -37,38 +58,49 @@ sealed class RequiredSymbol {
   }
 
   List<String> _problemsOf(IndexedDeclaration declaration);
-}
 
-/// A parameter a [RequiredSymbol] must accept.
-final class RequiredParameter {
-  /// Requires a parameter called [name], named unless [named] is `false`.
-  const RequiredParameter(this.name, {this.named = true});
-
-  /// The name of the parameter.
-  final String name;
-
-  /// Whether it is a named parameter.
-  final bool named;
+  List<String> _parameterProblems(List<IndexedParameter> parameters) {
+    final problems = <String>[];
+    final positional = parameters.where((p) => !p.kind.isNamed).toList();
+    final required = positional.where((p) => p.kind.isRequired).length;
+    if (required > positionalArguments) {
+      problems.add(
+        'must not require more than $positionalArguments positional '
+        'arguments',
+      );
+    }
+    if (positional.length < positionalArguments) {
+      problems.add('must accept $positionalArguments positional arguments');
+    }
+    for (final name in namedParameters) {
+      if (!parameters.any((p) => p.kind.isNamed && p.name == name)) {
+        problems.add('must accept the named parameter $name');
+      }
+    }
+    for (final parameter in parameters) {
+      if (parameter.kind == ParameterKind.requiredNamed &&
+          !namedParameters.contains(parameter.name)) {
+        problems.add('must not require the parameter ${parameter.name}');
+      }
+    }
+    return problems;
+  }
 }
 
 /// A top-level function that a provider must generate.
 final class RequiredFunction extends RequiredSymbol {
-  /// Requires the function [name] in [path], returning [returnType] if set
-  /// and callable with exactly [parameters].
+  /// Requires the function [name] in [path], returning [returnType] if set.
   const RequiredFunction(
     super.name, {
     required super.path,
     this.returnType,
-    this.parameters = const [],
+    super.namedParameters = const [],
+    super.positionalArguments = 0,
   });
 
   /// The return type as written, such as `Future<void>`, or `null` to allow
   /// any.
   final String? returnType;
-
-  /// The parameters the function must accept; it may have others only if
-  /// they are optional.
-  final List<RequiredParameter> parameters;
 
   @override
   List<String> _problemsOf(IndexedDeclaration declaration) {
@@ -80,7 +112,7 @@ final class RequiredFunction extends RequiredSymbol {
       if (returnType != null &&
           (type == null || _normalized(type) != _normalized(returnType!)))
         'must return $returnType, not ${type ?? 'an undeclared type'}',
-      ..._parameterProblems(declaration.parameters, parameters),
+      ..._parameterProblems(declaration.parameters),
     ];
   }
 
@@ -88,21 +120,18 @@ final class RequiredFunction extends RequiredSymbol {
   String toString() => 'function $name()';
 }
 
-/// A top-level class that a provider must generate.
+/// A top-level class that a provider must generate; the parameters are those
+/// of its unnamed constructor.
 final class RequiredClass extends RequiredSymbol {
-  /// Requires the class [name] in [path], whose unnamed constructor accepts
-  /// exactly [constructorParameters] and is `const` if [constConstructor]
-  /// is set.
+  /// Requires the class [name] in [path], whose unnamed constructor is
+  /// `const` if [constConstructor] is set.
   const RequiredClass(
     super.name, {
     required super.path,
-    this.constructorParameters = const [],
+    super.namedParameters = const [],
+    super.positionalArguments = 0,
     this.constConstructor = false,
   });
-
-  /// The parameters the unnamed constructor must accept; it may have others
-  /// only if they are optional.
-  final List<RequiredParameter> constructorParameters;
 
   /// Whether the unnamed constructor must be `const`, so other code can
   /// create constant instances.
@@ -118,35 +147,12 @@ final class RequiredClass extends RequiredSymbol {
     return [
       if (constConstructor && !constructor.isConst)
         'must have a const unnamed constructor',
-      ..._parameterProblems(constructor.parameters, constructorParameters),
+      ..._parameterProblems(constructor.parameters),
     ];
   }
 
   @override
   String toString() => 'class $name';
-}
-
-List<String> _parameterProblems(
-  List<IndexedParameter> actual,
-  List<RequiredParameter> required,
-) {
-  final problems = <String>[];
-  for (final parameter in required) {
-    final accepted = actual.any(
-      (p) => p.name == parameter.name && p.kind.isNamed == parameter.named,
-    );
-    if (!accepted) {
-      final kind = parameter.named ? 'named' : 'positional';
-      problems.add('must accept the $kind parameter ${parameter.name}');
-    }
-  }
-  for (final parameter in actual) {
-    if (parameter.kind.isRequired &&
-        !required.any((r) => r.name == parameter.name)) {
-      problems.add('must not require the parameter ${parameter.name}');
-    }
-  }
-  return problems;
 }
 
 String _normalized(String type) => type.replaceAll(RegExp(r'\s+'), '');

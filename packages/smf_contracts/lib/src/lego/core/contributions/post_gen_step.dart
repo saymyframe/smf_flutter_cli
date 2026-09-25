@@ -3,10 +3,18 @@ part of '../contributions.dart';
 /// A command the pipeline runs in the generated app after `flutter pub get`
 /// and code generation, such as `flutterfire configure`.
 ///
-/// Steps run in the order of fragments in a socket (see [SocketRef]): after
-/// the steps of the modules their module depends on, then by module id. The
-/// environment of a step includes, in its `PATH`, the directories of the
-/// tools that [Preflight] checks installed.
+/// Steps run in the order of the contributions of a socket (see
+/// [SocketContribution]). The environment of a step includes, in its `PATH`,
+/// the directories of the tools that [Preflight] checks installed.
+///
+/// A step runs unless:
+/// - it is [external] and the run skips external setup
+///   (`--skip-external-setup`);
+/// - it is [interactive] and the run is not.
+///
+/// Then the pipeline prints the command for the user to run later, or fails
+/// generation if the step is not [skippable]. In an interactive run, the
+/// user may also skip a [skippable] step.
 final class PostGenStep extends Contribution {
   /// Creates a step that runs [tool] with [arguments].
   const PostGenStep(
@@ -32,15 +40,11 @@ final class PostGenStep extends Contribution {
   /// terminal attached (see [SmfProcessRunner.runInteractive]).
   final bool interactive;
 
-  /// Whether the user may skip the step; the pipeline then prints the
-  /// command to run later.
+  /// Whether the app is complete without the step, so the pipeline may
+  /// print its command for later instead of running it.
   final bool skippable;
 
   /// Whether the step needs something outside the app, such as a network
   /// account.
-  ///
-  /// With `--skip-external-setup`, or in a non-interactive run of an
-  /// [interactive] step, the pipeline prints the command instead of running
-  /// it.
   final bool external;
 }

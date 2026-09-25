@@ -24,5 +24,4 @@ export 'src/lego/core/origin.dart';
 export 'src/lego/core/preflight_check.dart';
 export 'src/lego/core/required_symbol.dart';
 export 'src/lego/core/role.dart';
-export 'src/lego/core/rules.dart';
 export 'src/lego/core/sockets.dart';
