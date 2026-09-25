@@ -38,29 +38,6 @@ sealed class PubspecContribution extends Contribution {
     Set<Role> when,
   }) = PubspecDependency.sdk;
 
-  /// Depends on [package] from the git repository [url], at [ref] and in
-  /// the directory [path] of the repository, if they are set.
-  ///
-  /// Set [dev] for a dev dependency.
-  const factory PubspecContribution.git(
-    String package, {
-    required String url,
-    String? ref,
-    String? path,
-    bool dev,
-    Set<Role> when,
-  }) = PubspecDependency.git;
-
-  /// Depends on [package] in the local directory [path].
-  ///
-  /// Set [dev] for a dev dependency.
-  const factory PubspecContribution.path(
-    String package,
-    String path, {
-    bool dev,
-    Set<Role> when,
-  }) = PubspecDependency.path;
-
   /// Constrains the Dart [sdk] and [flutter] versions of the app.
   const factory PubspecContribution.environment({
     String? sdk,
@@ -85,12 +62,6 @@ enum PubspecSource {
 
   /// An SDK, such as `flutter`.
   sdk,
-
-  /// A git repository.
-  git,
-
-  /// A local directory.
-  path,
 }
 
 /// A dependency or dev dependency of the app.
@@ -102,11 +73,7 @@ final class PubspecDependency extends PubspecContribution {
     this.dev = false,
     super.when,
   })  : source = PubspecSource.hosted,
-        sdk = null,
-        gitUrl = null,
-        gitRef = null,
-        gitPath = null,
-        localPath = null;
+        sdk = null;
 
   /// See [PubspecContribution.sdk].
   const PubspecDependency.sdk(
@@ -115,41 +82,7 @@ final class PubspecDependency extends PubspecContribution {
     this.dev = false,
     super.when,
   })  : source = PubspecSource.sdk,
-        constraint = null,
-        gitUrl = null,
-        gitRef = null,
-        gitPath = null,
-        localPath = null;
-
-  /// See [PubspecContribution.git].
-  const PubspecDependency.git(
-    this.package, {
-    required String url,
-    String? ref,
-    String? path,
-    this.dev = false,
-    super.when,
-  })  : source = PubspecSource.git,
-        gitUrl = url,
-        gitRef = ref,
-        gitPath = path,
-        constraint = null,
-        sdk = null,
-        localPath = null;
-
-  /// See [PubspecContribution.path].
-  const PubspecDependency.path(
-    this.package,
-    String path, {
-    this.dev = false,
-    super.when,
-  })  : source = PubspecSource.path,
-        localPath = path,
-        constraint = null,
-        sdk = null,
-        gitUrl = null,
-        gitRef = null,
-        gitPath = null;
+        constraint = null;
 
   /// The name of the package.
   final String package;
@@ -165,19 +98,6 @@ final class PubspecDependency extends PubspecContribution {
 
   /// The SDK of a [PubspecSource.sdk] package.
   final String? sdk;
-
-  /// The repository URL of a [PubspecSource.git] package.
-  final String? gitUrl;
-
-  /// The git ref of a [PubspecSource.git] package, if set.
-  final String? gitRef;
-
-  /// The directory in the repository of a [PubspecSource.git] package, if
-  /// set.
-  final String? gitPath;
-
-  /// The directory of a [PubspecSource.path] package.
-  final String? localPath;
 }
 
 /// SDK constraints of the app, the `environment:` section.

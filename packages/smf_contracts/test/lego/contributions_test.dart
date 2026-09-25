@@ -168,6 +168,7 @@ void main() {
       expect(dependency.constraint, '^16.3.0');
       expect(dependency.dev, isFalse);
       expect(dependency.sdk, isNull);
+      expect(PubspecSource.values, [PubspecSource.hosted, PubspecSource.sdk]);
     });
 
     test('dev dependency', () {
@@ -187,30 +188,6 @@ void main() {
       expect(dependency.sdk, 'flutter');
       expect(dependency.dev, isTrue);
       expect(dependency.constraint, isNull);
-    });
-
-    test('git dependency', () {
-      const dependency = PubspecContribution.git(
-        'a',
-        url: 'https://example.com/a.git',
-        ref: 'main',
-        path: 'packages/a',
-      ) as PubspecDependency;
-
-      expect(dependency.source, PubspecSource.git);
-      expect(dependency.gitUrl, 'https://example.com/a.git');
-      expect(dependency.gitRef, 'main');
-      expect(dependency.gitPath, 'packages/a');
-      expect(dependency.localPath, isNull);
-    });
-
-    test('path dependency', () {
-      const dependency =
-          PubspecContribution.path('a', '../a') as PubspecDependency;
-
-      expect(dependency.source, PubspecSource.path);
-      expect(dependency.localPath, '../a');
-      expect(dependency.gitUrl, isNull);
     });
 
     test('environment', () {
