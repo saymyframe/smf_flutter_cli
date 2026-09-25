@@ -26,7 +26,11 @@ dependencies:
   smf_pipeline: ^0.2.0
 
 dev_dependencies:
+  # The snapshots are formatted with it, so they change only when it does.
+  dart_style: 3.1.3
   path: ^1.9.1
+  pub_semver: ^2.2.0
   test: ^1.24.0
   very_good_analysis: ^10.3.0
+  xml: ^7.0.0
   yaml: ^3.1.2
