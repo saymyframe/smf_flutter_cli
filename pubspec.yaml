@@ -14,6 +14,12 @@ workspace:
   - packages/smf_flutter_cli
   - packages/smf_contracts
   - packages/smf_pipeline
+  - packages/smf_pipeline/test/fixtures/fake_di
+  - packages/smf_pipeline/test/fixtures/fake_feature
+  - packages/smf_pipeline/test/fixtures/fake_infra
+  - packages/smf_pipeline/test/fixtures/fake_roles
+  - packages/smf_pipeline/test/fixtures/fake_router
+  - packages/smf_pipeline/test/fixtures/fake_state
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
@@ -46,6 +52,8 @@ melos:
     # Quality gates. Formatting covers hand-written package code only
     # (lib, test, bin): bricks/**/__brick__ holds mustache templates, and
     # lib/bundles is generated (CI checks it matches the bricks instead).
+    # test/fixtures holds packages of their own, which melos formats
+    # separately, with templates in their bricks.
     analyze:
       run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
     analyze:hooks:
@@ -56,9 +64,9 @@ melos:
           (cd "$hooks" && dart pub get > /dev/null && dart analyze --fatal-infos --fatal-warnings) || exit 1
         done
     format:
-      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
+      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
     format:check:
-      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
+      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
     test:
       run: melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded
     test:coverage:
