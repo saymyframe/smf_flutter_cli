@@ -2,6 +2,7 @@
 include: package:flutter_lints/flutter.yaml
 === android/app/build.gradle.kts (fake_scaffold) ===
 plugins {
+    id("com.android.application")
     id("io.github.ben-manes.versions")
 }
 
@@ -27,6 +28,7 @@ dependencies {
 </manifest>
 === android/settings.gradle.kts (fake_scaffold) ===
 plugins {
+    id("com.android.application") version "9.0.1" apply false
     id("io.github.ben-manes.versions") version("0.64.0") apply false
 }
 === assets/fixture/readme.txt (fake_sockets) ===

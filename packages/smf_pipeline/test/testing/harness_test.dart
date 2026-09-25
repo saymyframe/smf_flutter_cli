@@ -439,6 +439,47 @@ void main() {
         );
       });
 
+      test('Gradle files where flutterfire leaves plugins out are reported',
+          () async {
+        const path = 'android/app/build.gradle.kts';
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(
+              bricks: false,
+              contributions: [
+                BrickContribution(
+                  bundle(
+                    'entry',
+                    files: {
+                      ...entryFiles,
+                      path: entryFiles[path]!.replaceFirst(
+                        'id("com.android.application")',
+                        'alias(libs.plugins.android.application)',
+                      ),
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+        );
+
+        expect(result.errors, hasLength(1));
+        final issue = result.errors.single;
+        expect(
+          issue.message,
+          'flutterfire configure would leave the Firebase plugins out of '
+          '$path, because no line there starts with '
+          'id("com.android.application").',
+        );
+        expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+        expect(issue.path, path);
+      });
+
       test('braces that mason copies are reported in the template', () async {
         final harness = ContractHarness(
           ModuleRegistry([

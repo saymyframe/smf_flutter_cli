@@ -13,7 +13,7 @@ final fakeScaffoldBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "android/app/build.gradle.kts",
       "data":
-          "cGx1Z2lucyB7Cnt7e3NtZl9hcHBfZW50cnlfX2dyYWRsZV9hcHBfcGx1Z2luc319fQp9CgpkZXBlbmRlbmNpZXMgewp7e3tzbWZfYXBwX2VudHJ5X19ncmFkbGVfYXBwX2RlcGVuZGVuY2llc319fQp9Cg==",
+          "cGx1Z2lucyB7CiAgICBpZCgiY29tLmFuZHJvaWQuYXBwbGljYXRpb24iKQp7e3tzbWZfYXBwX2VudHJ5X19ncmFkbGVfYXBwX3BsdWdpbnN9fX0KfQoKZGVwZW5kZW5jaWVzIHsKe3t7c21mX2FwcF9lbnRyeV9fZ3JhZGxlX2FwcF9kZXBlbmRlbmNpZXN9fX0KfQo=",
       "type": "text"
     },
     {
@@ -25,7 +25,7 @@ final fakeScaffoldBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "android/settings.gradle.kts",
       "data":
-          "cGx1Z2lucyB7Cnt7e3NtZl9hcHBfZW50cnlfX2dyYWRsZV9zZXR0aW5nc19wbHVnaW5zfX19Cn0K",
+          "cGx1Z2lucyB7CiAgICBpZCgiY29tLmFuZHJvaWQuYXBwbGljYXRpb24iKSB2ZXJzaW9uICI5LjAuMSIgYXBwbHkgZmFsc2UKe3t7c21mX2FwcF9lbnRyeV9fZ3JhZGxlX3NldHRpbmdzX3BsdWdpbnN9fX0KfQo=",
       "type": "text"
     },
     {

@@ -28,5 +28,6 @@ export 'src/templates.dart'
         scanTemplate,
         templateFilesOf;
 export 'src/testing/file_indexer.dart';
+export 'src/testing/flutterfire.dart';
 export 'src/testing/harness.dart';
 export 'src/validation.dart' show ValidationResult;

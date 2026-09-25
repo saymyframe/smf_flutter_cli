@@ -269,11 +269,13 @@ class FallbackStartScreen extends StatelessWidget {
 ''',
   'android/settings.gradle.kts': '''
 plugins {
+    id("com.android.application") version "9.0.1" apply false
 {{{smf_app_entry__gradle_settings_plugins}}}
 }
 ''',
   'android/app/build.gradle.kts': '''
 plugins {
+    id("com.android.application")
 {{{smf_app_entry__gradle_app_plugins}}}
 }
 

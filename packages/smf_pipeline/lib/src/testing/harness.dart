@@ -12,6 +12,7 @@ import 'package:smf_pipeline/src/render.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/templates.dart';
 import 'package:smf_pipeline/src/testing/file_indexer.dart';
+import 'package:smf_pipeline/src/testing/flutterfire.dart';
 import 'package:smf_pipeline/src/validation.dart';
 import 'package:yaml/yaml.dart';
 
@@ -407,7 +408,9 @@ final class ContractHarness {
   ///   role, the files of those who contribute data to the role, which they
   ///   render. The cases the harness builds have one provider of each
   ///   role, so there a provider cannot reach the files of another through
-  ///   the data.
+  ///   the data;
+  /// - `flutterfire configure` finds its places in the Gradle files of the
+  ///   app, if the app has them in the Kotlin DSL (see [FlutterfireGradle]).
   ///
   /// Throws an [ArgumentError] if the case of [result] did not resolve.
   List<SmfIssue> checkRendered(ContractResult result, RenderedApp app) {
@@ -416,7 +419,8 @@ final class ContractHarness {
     final (:indexes, :issues) = _index(texts, owners);
     issues
       ..addAll(_structureIssues(result, indexes, owners))
-      ..addAll(_importIssues(result, app, indexes));
+      ..addAll(_importIssues(result, app, indexes))
+      ..addAll(_flutterfireIssues(app));
     return issues;
   }
 
@@ -639,6 +643,29 @@ final class ContractHarness {
       }
     }
     return issues;
+  }
+}
+
+/// The problem of a Gradle file of [app] where `flutterfire configure` would
+/// leave a Firebase plugin out, if the app has its Gradle files in the
+/// Kotlin DSL; see [FlutterfireGradle].
+List<SmfIssue> _flutterfireIssues(RenderedApp app) {
+  final settings = app.files[FlutterfireGradle.settingsPath];
+  final build = app.files[FlutterfireGradle.appPath];
+  if (settings == null || build == null) return const [];
+  try {
+    FlutterfireGradle.configure(settings: settings.text, app: build.text);
+    return const [];
+  } on FlutterfireGradleException catch (error) {
+    return [
+      SmfIssue(
+        error.message,
+        hint: 'Keep the lines of the Flutter template that flutterfire looks '
+            'for.',
+        origin: app.files[error.path]?.owner,
+        path: error.path,
+      ),
+    ];
   }
 }
 
