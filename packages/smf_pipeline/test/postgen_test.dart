@@ -78,7 +78,7 @@ void main() {
     expect(skipped, isEmpty);
     expect(runner.lines, [
       'flutter pub get',
-      'dart run build_runner build',
+      'dart run build_runner build --force-jit',
       'firebase --version',
       'dart pub global run x:x go',
       cleanup,
@@ -196,7 +196,7 @@ void main() {
         isA<GenerationFailedException>().having(
           (e) => e.message,
           'message',
-          contains('dart run build_runner build failed'),
+          contains('dart run build_runner build --force-jit failed'),
         ),
       ),
     );
@@ -223,7 +223,8 @@ void main() {
         isA<GenerationFailedException>().having(
           (e) => e.message,
           'message',
-          'dart run build_runner build failed: it exited with code 1:\n'
+          'dart run build_runner build --force-jit failed: it exited with code '
+              '1:\n'
               'Building package executable...\n'
               '[SEVERE] lib/model.g.dart: bad',
         ),
@@ -232,7 +233,7 @@ void main() {
     expect(host.logger.details, [
       'Running /sdk/bin/flutter pub get in /tmp/app',
       'Got dependencies!',
-      'Running /sdk/bin/dart run build_runner build in /tmp/app',
+      'Running /sdk/bin/dart run build_runner build --force-jit in /tmp/app',
       'Building package executable...\n[SEVERE] lib/model.g.dart: bad',
     ]);
   });

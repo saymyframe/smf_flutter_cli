@@ -264,7 +264,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  build_runner: "^2.7.0"
+  build_runner: "^2.10.0"
 
 flutter:
   uses-material-design: true

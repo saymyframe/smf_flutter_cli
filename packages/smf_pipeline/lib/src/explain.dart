@@ -1,6 +1,7 @@
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pipeline.dart';
+import 'package:smf_pipeline/src/postgen.dart';
 import 'package:smf_pipeline/src/preflight.dart';
 import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/resolver.dart';
@@ -110,7 +111,7 @@ List<String> explain({
 
   final steps = [
     if (codegen.isNotEmpty)
-      '  dart run build_runner build (${codegen.toSet().join(', ')})',
+      '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
     for (final collected in validation.postGenOrder.contributions)
       if (collected.contribution case final PostGenStep step)
         '  ${[

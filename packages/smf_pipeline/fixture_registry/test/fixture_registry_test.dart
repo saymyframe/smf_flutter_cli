@@ -209,7 +209,7 @@ void main() {
       expect(created?.skippedSteps, isEmpty);
       expect(runner.lines, [
         'flutter pub get',
-        'dart run build_runner build',
+        'dart run build_runner build --force-jit',
         'dart fix --apply --code=$_importCodes',
         'dart fix --apply',
         'dart format .',
@@ -224,7 +224,7 @@ void main() {
       );
       expect(
         files.file('/work/fixture_app/pubspec.yaml').readAsStringSync(),
-        contains('build_runner: "^2.7.0"'),
+        contains('build_runner: "^2.10.0"'),
       );
     });
 

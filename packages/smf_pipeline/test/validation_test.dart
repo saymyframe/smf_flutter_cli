@@ -681,7 +681,7 @@ void main() {
 
     expect(result.issues, isEmpty);
     final builder = result.pubspec.devDependencies['build_runner']!;
-    expect(builder.constraintText, '^2.7.0');
+    expect(builder.constraintText, '^2.10.0');
     expect(builder.origins, [const PipelineOrigin()]);
     expect(without.pubspec.devDependencies, isNot(contains('build_runner')));
 
@@ -692,7 +692,7 @@ void main() {
           CodegenRequest(),
           PubspecContribution.hosted(
             'build_runner',
-            '>=2.4.0 <2.7.0',
+            '>=2.4.0 <2.10.0',
             dev: true,
           ),
         ],

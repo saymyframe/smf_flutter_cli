@@ -67,7 +67,7 @@ void main() {
     expect(app.skippedSteps, isEmpty);
     expect(runner.lines, [
       'flutter pub get',
-      'dart run build_runner build',
+      'dart run build_runner build --force-jit',
       'dart run tool',
       'dart fix --apply --code=${importCleanupCodes.join(',')}',
       'dart fix --apply',
@@ -86,7 +86,7 @@ void main() {
     expect(files.file('/work/my_app/lib/main.dart').existsSync(), isTrue);
     expect(
       files.file('/work/my_app/pubspec.yaml').readAsStringSync(),
-      contains('build_runner: "^2.7.0"'),
+      contains('build_runner: "^2.10.0"'),
     );
     // Written again by pub get in the app's place, not moved.
     expect(

@@ -495,7 +495,7 @@ void main() {
           '  flutter from the flutter SDK (scaffold)\n\n'
           'Dev dependencies\n'
           // Code generation needs build_runner, which the pipeline adds.
-          '  build_runner ^2.7.0 (pipeline)\n'
+          '  build_runner ^2.10.0 (pipeline)\n'
           '  flutter_test from the flutter SDK (core)',
         ),
       );
@@ -503,7 +503,7 @@ void main() {
         report,
         contains(
           'After generation\n'
-          '  dart run build_runner build (core)\n'
+          '  dart run build_runner build --force-jit (core)\n'
           '  a --flag (core)\n'
           '  b (analytics)',
         ),

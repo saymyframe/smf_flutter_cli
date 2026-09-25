@@ -25,6 +25,16 @@ final class SkippedStep {
   String toString() => '$description: $command ($reason)';
 }
 
+/// The arguments of `dart` that generate code in the app.
+///
+/// `build_runner` compiles its builders into a program that it runs. By
+/// default it compiles them ahead of time, which pays off only over many
+/// builds, and runs the result as machine code from the directory of the
+/// app, which a temporary directory mounted without execution, as `/tmp`
+/// often is on hardened Linux machines, forbids. The pipeline builds once,
+/// so it asks for the Dart VM's compiler instead.
+const codegenArguments = ['run', 'build_runner', 'build', '--force-jit'];
+
 /// The codes of the diagnostics that the import cleanup fixes.
 ///
 /// A template may import a library that only some of its branches use, and
@@ -41,7 +51,8 @@ const importCleanupCodes = [
 /// [directory], the temporary directory it was rendered into:
 /// 1. `flutter pub get`;
 /// 2. `dart run build_runner build`, once, if [codegen] has requests, and
-///    checks that it generated the outputs they name;
+///    checks that it generated the outputs they name; see
+///    [codegenArguments];
 /// 3. the post-generation [steps] of the modules, in their order;
 /// 4. `dart fix --apply` for the imports only; see [importCleanupCodes];
 /// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
@@ -78,7 +89,7 @@ Future<List<SkippedStep>> runPostGen({
     await commands.require(
       'Generating code with build_runner',
       const ToolRef('dart'),
-      const ['run', 'build_runner', 'build'],
+      codegenArguments,
     );
     final fileSystem = environment.fileSystem;
     for (final collected in codegen) {

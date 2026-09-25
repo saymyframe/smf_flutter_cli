@@ -100,10 +100,10 @@ List<String> nonPlainVars(Map<String, Object?> vars) {
 
 /// The dev dependency the pipeline adds when a [CodegenRequest] applies.
 ///
-/// `build_runner` 2.7 and later always delete conflicting outputs, so the
-/// pipeline runs `build_runner build` without flags.
+/// `build_runner` 2.7 and later always delete conflicting outputs, and 2.10
+/// and later take `--force-jit`; see `codegenArguments`.
 const codegenDependency =
-    PubspecContribution.hosted('build_runner', '^2.7.0', dev: true);
+    PubspecContribution.hosted('build_runner', '^2.10.0', dev: true);
 
 /// The names of the brick variables among [vars] whose text mason would
 /// change, since it removes a backslash before a line break or a non-ASCII
