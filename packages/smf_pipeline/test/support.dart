@@ -342,6 +342,10 @@ final class FakeLogger implements SmfLogger {
   final List<String> errors = [];
   final List<String> successes = [];
 
+  /// What happened to progress indicators: `start`, `update`, `complete`
+  /// or `fail`, each with its message.
+  final List<String> progresses = [];
+
   @override
   void info(String message) => infos.add(message);
 
@@ -358,18 +362,25 @@ final class FakeLogger implements SmfLogger {
   void success(String message) => successes.add(message);
 
   @override
-  SmfProgress progress(String message) => _Progress();
+  SmfProgress progress(String message) {
+    progresses.add('start: $message');
+    return _Progress(progresses);
+  }
 }
 
 final class _Progress implements SmfProgress {
-  @override
-  void complete([String? message]) {}
+  _Progress(this._events);
+
+  final List<String> _events;
 
   @override
-  void fail([String? message]) {}
+  void complete([String? message]) => _events.add('complete: $message');
 
   @override
-  void update(String message) {}
+  void fail([String? message]) => _events.add('fail: $message');
+
+  @override
+  void update(String message) => _events.add('update: $message');
 }
 
 /// A question the [ScriptedPrompter] was asked.
@@ -390,7 +401,8 @@ final class Prompt {
 
 /// A prompter that answers from a script and records the questions.
 ///
-/// Each answer is, by kind of question:
+/// An answer that is an [Exception] is thrown instead, as when the user
+/// cancels the question. Each other answer is, by kind of question:
 /// - `confirm`: a bool;
 /// - `input`: a string, or `null` for the default value;
 /// - `select`: the start of the displayed choice to pick, or `null` for the
@@ -407,7 +419,9 @@ final class ScriptedPrompter implements SmfPrompter {
   Object? _next(Prompt prompt) {
     asked.add(prompt);
     if (_answers.isEmpty) throw StateError('Unexpected question: $prompt');
-    return _answers.removeAt(0);
+    final answer = _answers.removeAt(0);
+    if (answer is Exception) throw answer;
+    return answer;
   }
 
   /// Whether every answer was used.
@@ -474,6 +488,7 @@ final class ScriptedProcessRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) async {
     calls.add([executable, ...arguments]);
     return results[executable] ??
@@ -501,6 +516,7 @@ final class NoProcessRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) =>
       throw UnimplementedError('run $executable');
 
@@ -639,6 +655,7 @@ final class RecordedCall {
     required this.environment,
     required this.runInShell,
     required this.interactive,
+    this.onOutput,
   });
 
   final String executable;
@@ -647,6 +664,10 @@ final class RecordedCall {
   final Map<String, String> environment;
   final bool runInShell;
   final bool interactive;
+
+  /// What gets the lines of the output as they come, if the caller of
+  /// `run` wants them.
+  final void Function(String line)? onOutput;
 
   /// The executable's name and the arguments, as a line.
   String get line => [executable.split('/').last, ...arguments].join(' ');
@@ -679,6 +700,7 @@ final class RecordingRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) async {
     final call = RecordedCall(
       executable: executable,
@@ -687,6 +709,7 @@ final class RecordingRunner implements SmfProcessRunner {
       environment: environment,
       runInShell: runInShell,
       interactive: false,
+      onOutput: onOutput,
     );
     calls.add(call);
     return onRun?.call(call) ?? const SmfProcessResult(exitCode: 0);

@@ -99,6 +99,22 @@ void main() {
       expect(runner.calls, hasLength(1));
     });
 
+    test('a launcher the user interrupts cancels the run', () async {
+      final host = FakeHost(
+        flutter: false,
+        environment: {'PATH': '/snap/bin'},
+        processRunner: RecordingRunner(
+          onRun: (call) => throw const SmfCancelledException(),
+        ),
+      );
+      host.fileSystem.file('/snap/bin/flutter').createSync(recursive: true);
+
+      await expectLater(
+        FlutterSdkCheck(host.fileSystem).check(host.environment()),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
     test('reports a missing flutter or dart', () async {
       final none = FakeHost(flutter: false);
       final noFlutter = FlutterSdkCheck(none.fileSystem);
@@ -362,6 +378,35 @@ void main() {
       expect(checkFails.issues.single.message, contains('cannot check'));
     });
 
+    test('a check or an installation the user cancels cancels the run',
+        () async {
+      await expectLater(
+        runPreflight(
+          [
+            PlannedCheck(
+              _Probe((_) => throw const SmfCancelledException()),
+              _module,
+            ),
+          ],
+          FakeHost().environment(),
+        ),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      final host = FakeHost(answers: [true], terminal: true);
+      await expectLater(
+        runPreflight(
+          [
+            PlannedCheck(
+              _ThrowingCheck(installs: true, cancels: true),
+              _module,
+            ),
+          ],
+          host.environment(),
+        ),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
     test('checks after the SDK check find the SDK', () async {
       final host = FakeHost();
       final environment = host.environment();
@@ -540,9 +585,12 @@ void main() {
 }
 
 final class _ThrowingCheck extends PreflightCheck {
-  _ThrowingCheck({this.installs = false});
+  _ThrowingCheck({this.installs = false, this.cancels = false});
 
   final bool installs;
+
+  /// Whether the installation throws as when the user cancels the run.
+  final bool cancels;
 
   @override
   String get id => 'throwing';
@@ -559,8 +607,9 @@ final class _ThrowingCheck extends PreflightCheck {
   }
 
   @override
-  Future<ToolInstall> install(SmfEnvironment environment) async =>
-      throw StateError('no npm');
+  Future<ToolInstall> install(SmfEnvironment environment) async => cancels
+      ? throw const SmfCancelledException()
+      : throw StateError('no npm');
 }
 
 final class _Probe extends PreflightCheck {

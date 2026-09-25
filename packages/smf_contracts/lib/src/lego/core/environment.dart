@@ -64,7 +64,25 @@ abstract interface class SmfEnvironment {
   Future<String> writeTempFile(String name, String contents);
 }
 
+/// Thrown when the user cancels the run, such as with Ctrl-C.
+///
+/// [SmfPrompter] throws it when the user cancels a question, and
+/// [SmfProcessRunner.run] when the user interrupts the run while a command
+/// runs. Hooks let it through: the pipeline stops, deletes what it has
+/// generated so far, and the CLI exits with code 130.
+final class SmfCancelledException implements Exception {
+  /// Creates the exception.
+  const SmfCancelledException();
+
+  @override
+  String toString() => 'SmfCancelledException: the user cancelled the run.';
+}
+
 /// Asks the user questions in the terminal.
+///
+/// Every method throws an [SmfCancelledException] when the user cancels the
+/// question instead of answering it, such as with Ctrl-C, or when the input
+/// ends.
 abstract interface class SmfPrompter {
   /// Asks a yes or no question.
   Future<bool> confirm(String message, {bool defaultValue = false});
@@ -119,19 +137,34 @@ final class SmfProcessResult {
 /// `flutter.bat`; the runner starts it the way the host needs.
 ///
 /// Both methods throw if the command cannot start, as when the file is not
-/// executable.
+/// executable. The variables of `environment` are added to those of the
+/// process running the pipeline.
 abstract interface class SmfProcessRunner {
   /// Runs [executable] with [arguments] and captures its output.
+  ///
+  /// [onOutput], if given, gets each line of the standard output and error
+  /// of the command as it comes, such as a message that the command waits
+  /// for something; the result has the whole output anyway. A carriage
+  /// return ends a line too, since tools use it to rewrite their last line.
+  ///
+  /// Throws an [SmfCancelledException] when the user interrupts the run
+  /// while the command runs, such as with Ctrl-C; the command is stopped
+  /// then.
   Future<SmfProcessResult> run(
     String executable,
     List<String> arguments, {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   });
 
   /// Runs [executable] with [arguments] attached to the terminal, so the
   /// command can ask the user, and returns its exit code.
+  ///
+  /// The command owns the terminal while it runs: Ctrl-C goes to it, and its
+  /// exit code tells what happened, so the user can stop the command without
+  /// cancelling the run.
   Future<int> runInteractive(
     String executable,
     List<String> arguments, {

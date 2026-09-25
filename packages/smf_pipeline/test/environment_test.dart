@@ -276,6 +276,7 @@ final class _Recording implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) {
     _seen.add(environment);
     return _runner.run(executable, arguments);

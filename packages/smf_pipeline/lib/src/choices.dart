@@ -12,7 +12,7 @@ import 'package:smf_pipeline/src/resolver.dart';
 /// The hooks read the role options in [optionValues] and ask the user if
 /// the run is interactive. An option of a role that is not present is
 /// reported as a warning, since nothing reads it. An [SmfUsageException]
-/// from a hook stops generation.
+/// or an [SmfCancelledException] from a hook stops generation.
 Future<Map<Role, Object?>> chooseRoles({
   required ModuleRegistry registry,
   required Resolution resolution,
@@ -54,6 +54,8 @@ Future<Map<Role, Object?>> chooseRoles({
     try {
       choices[role] = await template.choose(role.choiceContext(request));
     } on SmfUsageException {
+      rethrow;
+    } on SmfCancelledException {
       rethrow;
     } on Object catch (error) {
       throw GenerationFailedException(

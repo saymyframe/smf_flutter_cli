@@ -60,6 +60,7 @@ final class _NoProcessRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) =>
       throw StateError('Unexpected command: $executable');
 
@@ -117,6 +118,7 @@ final class RecordingRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) async {
     lines.add([executable.split('/').last, ...arguments].join(' '));
     return const SmfProcessResult(exitCode: 0);

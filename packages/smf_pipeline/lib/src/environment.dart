@@ -278,6 +278,7 @@ final class _PathRunner implements SmfProcessRunner {
     String? workingDirectory,
     Map<String, String> environment = const {},
     bool runInShell = false,
+    void Function(String line)? onOutput,
   }) =>
       _host.run(
         executable,
@@ -285,6 +286,7 @@ final class _PathRunner implements SmfProcessRunner {
         workingDirectory: workingDirectory,
         environment: _environment.withPath(environment),
         runInShell: runInShell,
+        onOutput: onOutput,
       );
 
   @override

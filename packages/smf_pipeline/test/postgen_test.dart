@@ -270,6 +270,46 @@ void main() {
     );
   });
 
+  test('a command the user interrupts cancels the run', () async {
+    runner.onRun = (call) => throw const SmfCancelledException();
+
+    await expectLater(
+      runPostGen(directory: '/tmp/app', environment: environment, steps: []),
+      throwsA(isA<SmfCancelledException>()),
+    );
+    expect(host.logger.progresses, [
+      'start: Getting the packages of the app',
+      'fail: Getting the packages of the app',
+    ]);
+  });
+
+  test('flutter waiting for the startup lock shows in the progress', () async {
+    runner.onRun = (call) {
+      call.onOutput!('Resolving dependencies...');
+      for (var i = 0; i < 2; i++) {
+        const lock = 'Waiting for another flutter command to release the '
+            'startup lock...';
+        call.onOutput!(lock);
+      }
+      return const SmfProcessResult(exitCode: 0);
+    };
+
+    await runPostGen(
+      directory: '/tmp/app',
+      environment: environment,
+      steps: [],
+      fullDartFix: false,
+    );
+
+    const waiting = 'update: Getting the packages of the app: waiting for '
+        'another flutter command to finish, such as one of an IDE';
+    expect(host.logger.progresses.take(3), [
+      'start: Getting the packages of the app',
+      waiting,
+      'complete: Getting the packages of the app',
+    ]);
+  });
+
   test('keeps only the last lines of a long output', () async {
     runner.onRun = (call) => SmfProcessResult(
           exitCode: 1,
@@ -504,6 +544,20 @@ void main() {
       );
     });
 
+    test('an interactive step in a cancelled run cancels it', () async {
+      environment = environmentOf(interactive: true, answers: [true]);
+      runner.onInteractive = (call) => throw const SmfCancelledException();
+
+      await expectLater(
+        runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', login)],
+        ),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
     test('a step that is not skippable stops generation when it fails',
         () async {
       environment = environmentOf(interactive: true);
@@ -534,6 +588,19 @@ void main() {
         ),
       );
     });
+  });
+
+  test('pub get in the place of the app only warns when it is interrupted',
+      () async {
+    runner.onRun = (call) => throw const SmfCancelledException();
+
+    await getPackagesInPlace(environment, '/work/app');
+
+    expect(
+      host.logger.warnings.single,
+      'The app is complete, but getting its packages was interrupted; run '
+      '"flutter pub get" in it.',
+    );
   });
 
   test('pub get in the place of the app only warns when it fails', () async {

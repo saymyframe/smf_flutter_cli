@@ -260,6 +260,19 @@ void main() {
     );
   });
 
+  test('a run the user cancels exits with 130', () async {
+    host = FakeHost(
+      processRunner: runner,
+      terminal: true,
+      answers: [const SmfCancelledException()],
+    );
+
+    expect(await smf(['create']), SmfExitCodes.cancelled);
+    expect(host.logger.infos.last, 'Cancelled. No app was created.');
+    expect(host.logger.errors, isEmpty);
+    expect(created, isEmpty);
+  });
+
   test('modules that break the rules of the registry exit with 70', () async {
     modules = [...modulesWith(), TestModule('extra')];
 

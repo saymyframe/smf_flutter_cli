@@ -34,6 +34,13 @@ void main() {
     );
   });
 
+  test('SmfCancelledException says that the user cancelled the run', () {
+    expect(
+      '${const SmfCancelledException()}',
+      'SmfCancelledException: the user cancelled the run.',
+    );
+  });
+
   test('ToolRef puts its prefix arguments first', () {
     const flutterfire = ToolRef(
       'dart',

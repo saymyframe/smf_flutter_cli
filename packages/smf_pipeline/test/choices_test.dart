@@ -83,6 +83,29 @@ void main() {
     );
   });
 
+  test('a template whose question the user cancels cancels the run', () async {
+    final asking = TestRole<String>('asking', template: _Asking());
+    final modules = [
+      TestModule('prov', providers: [RoleProvider.plain(asking)]),
+    ];
+    final resolution = resolutionOf(modules);
+
+    await expectLater(
+      chooseRoles(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        optionValues: const {},
+        environment: FakeHost(
+          terminal: true,
+          answers: [const SmfCancelledException()],
+        ).environment(),
+        context: testContext,
+      ),
+      throwsA(isA<SmfCancelledException>()),
+    );
+  });
+
   test('the router asks for the start screen or takes --start', () async {
     final modules = [
       TestModule(
@@ -152,4 +175,10 @@ final class _Failing extends RoleTemplate<String> {
   @override
   Future<Object?> choose(RoleChoiceContext<String> context) async =>
       throw StateError('no');
+}
+
+final class _Asking extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) =>
+      context.environment.prompter.input('Which one?');
 }

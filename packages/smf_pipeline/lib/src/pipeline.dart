@@ -146,10 +146,12 @@ final class CreatePipeline {
   ///    again there.
   ///
   /// If a stage after rendering fails, the app stays in the temporary
-  /// directory, which the error names.
+  /// directory, which the error names. If the user cancels the run before
+  /// the app is in its place, nothing of it stays.
   ///
-  /// Throws a [GenerationFailedException] with the errors found, or an
-  /// [SmfUsageException] for a problem of the command line.
+  /// Throws a [GenerationFailedException] with the errors found, an
+  /// [SmfUsageException] for a problem of the command line, or an
+  /// [SmfCancelledException] when the user cancels the run.
   Future<GeneratedApp?> run(CreateRequest request) async {
     final plan = await this.plan(request);
     if (plan == null) return null;
@@ -219,6 +221,10 @@ final class CreatePipeline {
         'The app could not be written: $error\nThe app so far is in '
         '${directory.path}.',
       );
+    } on SmfCancelledException {
+      // The user stopped the run, so nothing of it stays behind.
+      await _deleteTemporary(temporary, logger);
+      rethrow;
     } on Object {
       // A bug; the app is still worth finding.
       logger.warn('The app so far is in ${directory.path}.');
@@ -232,20 +238,26 @@ final class CreatePipeline {
       target: target,
       logger: logger,
     );
-    try {
-      await temporary.delete(recursive: true);
-    } on FileSystemException catch (error) {
-      logger.warn(
-        'The temporary directory ${temporary.path} could not be deleted: '
-        '$error',
-      );
-    }
+    await _deleteTemporary(temporary, logger);
     await getPackagesInPlace(environment, target.path);
     return GeneratedApp(
       name: plan.context.appName,
       path: target.path,
       leftOut: plan.leftOut,
       skippedSteps: skipped,
+    );
+  }
+}
+
+/// Deletes [temporary], the temporary directory of a run, or warns if it
+/// cannot.
+Future<void> _deleteTemporary(Directory temporary, SmfLogger logger) async {
+  try {
+    await temporary.delete(recursive: true);
+  } on FileSystemException catch (error) {
+    logger.warn(
+      'The temporary directory ${temporary.path} could not be deleted: '
+      '$error',
     );
   }
 }

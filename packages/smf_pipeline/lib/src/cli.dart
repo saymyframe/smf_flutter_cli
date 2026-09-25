@@ -23,6 +23,10 @@ abstract final class SmfExitCodes {
   /// An error that is a bug in the CLI or a module, like `EX_SOFTWARE` of
   /// `sysexits.h`.
   static const software = 70;
+
+  /// The user cancelled the run, as with Ctrl-C: 128 plus the number of
+  /// `SIGINT`, as shells report a command that Ctrl-C stopped.
+  static const cancelled = 130;
 }
 
 /// Creates the host of a run, which may report more with [verbose].
@@ -41,8 +45,9 @@ typedef SmfHostFactory = SmfHost Function({required bool verbose});
 ///
 /// Every error is reported through the host's logger and becomes an exit
 /// code: a usage error of the command line or of a module's choice is 64, a
-/// failed generation is 1, and anything else, which is a bug, is 70. So are
-/// [modules] that break the rules of the registry; see [ModuleRegistry].
+/// failed generation is 1, a run the user cancelled is 130, and anything
+/// else, which is a bug, is 70. So are [modules] that break the rules of the
+/// registry; see [ModuleRegistry].
 Future<int> runSmf(
   List<String> arguments, {
   required List<SmfModule> modules,
@@ -116,6 +121,9 @@ Future<int> runSmf(
       logger.error('  $issue');
     }
     return SmfExitCodes.generationFailed;
+  } on SmfCancelledException {
+    logger.info('Cancelled. No app was created.');
+    return SmfExitCodes.cancelled;
   } on Object catch (error, stackTrace) {
     logger
       ..error('$executableName stopped because of an unexpected error: $error')

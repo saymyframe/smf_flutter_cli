@@ -140,6 +140,8 @@ final class FlutterSdkCheck extends PreflightCheck {
       return json is Map<String, Object?> && json['flutterRoot'] is String
           ? json['flutterRoot']! as String
           : null;
+    } on SmfCancelledException {
+      rethrow;
     } on Object {
       return null;
     }
@@ -410,6 +412,8 @@ Future<CheckResult> _install(
       await _statusOf(check, environment),
       installed: true,
     );
+  } on SmfCancelledException {
+    rethrow;
   } on Object catch (error) {
     return CheckResult(
       planned,
@@ -424,6 +428,8 @@ Future<PreflightStatus> _statusOf(
 ) async {
   try {
     return await check.check(environment);
+  } on SmfCancelledException {
+    rethrow;
   } on Object catch (error) {
     return PreflightFailed('$error');
   }

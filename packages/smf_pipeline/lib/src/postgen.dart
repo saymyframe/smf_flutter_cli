@@ -56,8 +56,9 @@ const importCleanupCodes = [
 /// their commands for later.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
-/// a step that is not skippable fails. `dart fix` and `dart format` only
-/// warn when they fail, since the app is complete without them.
+/// a step that is not skippable fails, and an [SmfCancelledException] when
+/// the user cancels the run. `dart fix` and `dart format` only warn when
+/// they fail, since the app is complete without them.
 Future<List<SkippedStep>> runPostGen({
   required String directory,
   required PipelineEnvironment environment,
@@ -164,17 +165,30 @@ Future<List<SkippedStep>> runPostGen({
 /// Runs `flutter pub get` in [directory], the app in its final place, so
 /// Flutter writes its files with the right paths; see `flutterToolFiles`.
 ///
-/// It only warns if the command fails, since the next `flutter` command in
-/// the app runs it again.
+/// It only warns if the command fails or the user interrupts it, since the
+/// app is complete and the next `flutter` command in it runs it again.
 Future<void> getPackagesInPlace(
   PipelineEnvironment environment,
   String directory,
-) =>
-    _Commands(environment, directory).tryRun(
+) async {
+  try {
+    await _Commands(environment, directory).tryRun(
       'Getting the packages of the app in its directory',
       const ToolRef('flutter'),
       const ['pub', 'get'],
     );
+  } on SmfCancelledException {
+    environment.logger.warn(
+      'The app is complete, but getting its packages was interrupted; run '
+      '"flutter pub get" in it.',
+    );
+  }
+}
+
+/// What `flutter` writes while it waits for another `flutter` command, such
+/// as one of an IDE, which may take long.
+const _startupLock =
+    'Waiting for another flutter command to release the startup lock';
 
 /// Why a command failed: the [reason] for a summary, such as `it exited
 /// with code 1`, and the [detail] with the end of its output.
@@ -251,12 +265,15 @@ final class _Commands {
           workingDirectory: _directory,
           environment: resolved.environment,
         );
+      } on SmfCancelledException {
+        rethrow;
       } on Object catch (error) {
         return _Failure('it could not start', 'it could not start: $error');
       }
       return code == 0 ? null : _Failure('it exited with code $code');
     }
     final progress = logger.progress(description);
+    var waiting = false;
     final SmfProcessResult result;
     try {
       result = await runner.run(
@@ -264,19 +281,30 @@ final class _Commands {
         resolved.arguments,
         workingDirectory: _directory,
         environment: resolved.environment,
+        onOutput: (line) {
+          if (waiting || !line.contains(_startupLock)) return;
+          waiting = true;
+          progress.update(
+            '$description: waiting for another flutter command to finish, '
+            'such as one of an IDE',
+          );
+        },
       );
+    } on SmfCancelledException {
+      progress.fail(description);
+      rethrow;
     } on Object catch (error) {
-      progress.fail();
+      progress.fail(description);
       return _Failure('it could not start', 'it could not start: $error');
     }
     final streams = [result.stderr.trim(), result.stdout.trim()]
       ..removeWhere((text) => text.isEmpty);
     if (streams.isNotEmpty) logger.detail(streams.join('\n'));
     if (result.succeeded) {
-      progress.complete();
+      progress.complete(description);
       return null;
     }
-    progress.fail();
+    progress.fail(description);
     final reason = 'it exited with code ${result.exitCode}';
     return streams.isEmpty
         ? _Failure(reason)

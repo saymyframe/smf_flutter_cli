@@ -166,6 +166,43 @@ void main() {
     expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
   });
 
+  test('a run the user cancels leaves nothing behind', () async {
+    host.fileSystem.directory('/work/my_app/old').createSync(recursive: true);
+    final temporary = host.fileSystem.systemTempDirectory;
+    final before = temporary.listSafely().length;
+    runner.onRun = (call) => throw const SmfCancelledException();
+
+    await expectLater(
+      pipeline(modulesWith()).run(request(onConflict: OnConflict.replace)),
+      throwsA(isA<SmfCancelledException>()),
+    );
+    expect(temporary.listSafely(), hasLength(before));
+    expect(
+      host.fileSystem.directory('/work/my_app/old').existsSync(),
+      isTrue,
+    );
+    expect(host.logger.warnings, [
+      '/work/my_app will be replaced once the app has been generated.',
+    ]);
+  });
+
+  test('an interrupted pub get in the place of the app still creates it',
+      () async {
+    final onRun = runner.onRun!;
+    runner.onRun = (call) => call.workingDirectory == '/work/my_app'
+        ? throw const SmfCancelledException()
+        : onRun(call);
+
+    final app = await pipeline(modulesWith()).run(request());
+
+    expect(app?.path, '/work/my_app');
+    expect(host.logger.warnings.single, contains('was interrupted'));
+    expect(
+      host.fileSystem.file('/work/my_app/lib/main.dart').existsSync(),
+      isTrue,
+    );
+  });
+
   test('a directory that appears meanwhile keeps the app where it is',
       () async {
     final onRun = runner.onRun!;
