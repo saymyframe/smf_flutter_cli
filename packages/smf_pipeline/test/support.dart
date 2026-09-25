@@ -160,6 +160,19 @@ TestModule scaffold({List<Contribution> contributions = const []}) =>
       contributions: contributions,
     );
 
+/// A brick with the tags of every socket of the app entry.
+BrickContribution entryBrick() => BrickContribution(
+      bundle(
+        'entry',
+        files: {
+          'lib/entry.dart': [
+            for (final socket in appEntryRole.sockets)
+              for (final tag in socket.tags) '{{{$tag}}}',
+          ].join('\n'),
+        },
+      ),
+    );
+
 /// The context of a test app.
 const testContext = ModuleContext(
   appName: 'my_app',
