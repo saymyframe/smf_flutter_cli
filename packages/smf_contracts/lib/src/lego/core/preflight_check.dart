@@ -4,7 +4,8 @@ import 'package:smf_contracts/lego_core.dart';
 ///
 /// The pipeline runs [check]. If it reports [PreflightMissing] with an
 /// installer and the run is interactive, the pipeline asks the user and
-/// calls [install]; otherwise it prints the instructions. A failed [required]
+/// calls [install]; otherwise it prints the instructions. With `--explain`
+/// the pipeline only runs [check] and reports the result. A failed [required]
 /// check stops generation, or drops the module in lenient mode; any other
 /// failed check is a warning.
 abstract base class PreflightCheck {
@@ -20,7 +21,13 @@ abstract base class PreflightCheck {
   /// Whether the module cannot work without it.
   bool get required => false;
 
-  /// Checks the machine.
+  /// Checks the machine, and only reads it: it must not install anything,
+  /// log in, ask the user or change files outside the temporary files of
+  /// [SmfEnvironment.writeTempFile].
+  ///
+  /// `--explain` runs it to report the state of the machine without running
+  /// anything else of the check, and the pipeline runs it again after
+  /// [install] to confirm the installation.
   Future<PreflightStatus> check(SmfEnvironment environment);
 
   /// Installs what [check] found missing and returns where it is.
