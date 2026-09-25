@@ -13,16 +13,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "pub"
-    directory: "/packages/smf_flutter_cli/bricks/smf_cli_brick/hooks"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
-      dart-deps:
-        patterns:
-          - "*"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

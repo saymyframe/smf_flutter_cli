@@ -16,29 +16,17 @@ executables:
   smf: smf_flutter
 
 dependencies:
-  ansi_styles: ^0.3.2+1
-  args: ^2.7.0
-  cli_util: ^0.4.2
+  ffi: ^2.1.0
   file: ^7.0.1
-  interact: ^2.2.0
-  mason: ^0.1.1
-  meta: ^1.17.0
-  path: ^1.9.1
-  yaml_edit: ^2.2.2
+  mason_logger: ^0.3.3
 
   # SMF packages
-  smf_contribution_engine: ^0.2.0
   smf_contracts: ^0.2.0
-  smf_event_bus: ^0.2.0
-  smf_firebase_analytics: ^0.2.0
-  smf_firebase_core: ^0.2.1
   smf_flutter_core: ^0.2.1
-  smf_get_it: ^0.2.0
-  smf_go_router: ^0.2.0
-  smf_home_flutter: ^0.2.0
-  smf_firebase_crashlytics: ^0.0.1
+  smf_pipeline: ^0.2.0
 
 dev_dependencies:
-  mocktail: ^1.0.4
+  path: ^1.9.1
   test: ^1.24.0
   very_good_analysis: ^10.3.0
+  yaml: ^3.1.2
