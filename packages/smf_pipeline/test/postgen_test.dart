@@ -177,6 +177,10 @@ void main() {
         ),
       ),
     );
+    expect(host.logger.progresses, [
+      'start: Getting the packages of the app',
+      'fail: Getting the packages of the app',
+    ]);
 
     runner.onRun = (call) => call.arguments.contains('build_runner')
         ? const SmfProcessResult(exitCode: 1, stdout: 'bad builder')
@@ -268,6 +272,10 @@ void main() {
         ),
       ),
     );
+    expect(host.logger.progresses, [
+      'start: Getting the packages of the app',
+      'fail: Getting the packages of the app',
+    ]);
   });
 
   test('a command the user interrupts cancels the run', () async {
@@ -291,6 +299,7 @@ void main() {
             'startup lock...';
         call.onOutput!(lock);
       }
+      call.onOutput!('Got dependencies!');
       return const SmfProcessResult(exitCode: 0);
     };
 
@@ -301,11 +310,10 @@ void main() {
       fullDartFix: false,
     );
 
-    const waiting = 'update: Getting the packages of the app: waiting for '
-        'another flutter command to finish, such as one of an IDE';
-    expect(host.logger.progresses.take(3), [
+    expect(host.logger.progresses.take(4), [
       'start: Getting the packages of the app',
-      waiting,
+      'update: Waiting for another flutter command to finish',
+      'update: Getting the packages of the app',
       'complete: Getting the packages of the app',
     ]);
   });
@@ -556,6 +564,19 @@ void main() {
         ),
         throwsA(isA<SmfCancelledException>()),
       );
+    });
+
+    test('a step that a signal stopped says so', () async {
+      environment = environmentOf(interactive: true, answers: [true]);
+      runner.onInteractive = (call) => -2;
+
+      final skipped = await runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [_step('firebase', login)],
+      );
+
+      expect(skipped.single.reason, 'it was stopped by signal 2');
     });
 
     test('a step that is not skippable stops generation when it fails',

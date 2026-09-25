@@ -25,10 +25,11 @@ final class IoLogger implements SmfLogger {
   _IoProgress? _active;
 
   /// Clears the line of the animated progress, so that a message does not
-  /// land after it; the progress draws itself again below the message.
+  /// land after it, and lets long lines wrap again, which the animation
+  /// stops; the progress draws itself again below the message.
   void _clearProgress() {
     if (_terminal && (_active?.running ?? false)) {
-      _stdout.write('\u001b[2K\r');
+      _stdout.write('\u001b[2K\r\u001b[?7h');
     }
   }
 

@@ -272,11 +272,12 @@ void main() {
         '/work/out/app copy',
       );
 
+      // Cancel is the user's, as Ctrl-C is.
       final cancel = FakeHost(answers: ['Cancel']);
       cancel.fileSystem.file('/work/out/app/a').createSync(recursive: true);
       expect(
         decide(cancel, interactive: true),
-        throwsA(isA<GenerationFailedException>()),
+        throwsA(isA<SmfCancelledException>()),
       );
     });
   });

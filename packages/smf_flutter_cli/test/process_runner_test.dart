@@ -33,6 +33,17 @@ import 'dart:io';
 void main(List<String> arguments) => exitCode = int.parse(arguments.first);
 ''';
 
+/// A Dart script that reads its input to the end.
+const _reader = r'''
+import 'dart:convert';
+import 'dart:io';
+
+Future<void> main() async {
+  final input = await stdin.transform(utf8.decoder).join();
+  stdout.write('read ${input.length} characters');
+}
+''';
+
 /// A Dart script that waits until it is stopped.
 const _sleeper = '''
 Future<void> main() => Future<void>.delayed(const Duration(minutes: 1));
@@ -96,6 +107,12 @@ void main() {
           .resolveSymbolicLinksSync(),
       temporary.resolveSymbolicLinksSync(),
     );
+  });
+
+  test('a command gets no input, so one that reads it ends', () async {
+    final result = await runner.run(dart, [scriptOf('reader.dart', _reader)]);
+
+    expect(result.stdout, 'read 0 characters');
   });
 
   test('a command that cannot start throws', () async {
@@ -195,13 +212,22 @@ void main() {
           isA<ProcessException>().having(
             (e) => e.message,
             'message',
-            '"a&b" cannot go to a batch file safely: cmd.exe would read "&" '
-                'as the end of the command.',
+            '"a&b" cannot go to cmd.exe safely: cmd.exe would read "&" as '
+                'the end of the command.',
           ),
         ),
       );
       await expectLater(
         windows.runInteractive(r'C:\A&B\flutter.bat', ['pub']),
+        throwsA(isA<ProcessException>()),
+      );
+      // In a shell, any command's line goes through cmd.exe.
+      await expectLater(
+        windows.run(
+          r'C:\git\git.exe',
+          ['commit', '-m', '100%'],
+          runInShell: true,
+        ),
         throwsA(isA<ProcessException>()),
       );
     });

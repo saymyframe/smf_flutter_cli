@@ -39,7 +39,10 @@ enum PromptControl {
   /// Ctrl-C.
   interrupt,
 
-  /// Ctrl-D, or the end of the input.
+  /// Ctrl-D, which cancels an empty line, as in a shell.
+  ctrlD,
+
+  /// The end of the input, as when the terminal is gone.
   endOfInput,
 
   /// Any other key.
@@ -68,9 +71,9 @@ abstract interface class PromptTerminal {
 /// Asks the user in a terminal: a choice with the arrow keys, several with
 /// the space bar, a line of text, or yes or no.
 ///
-/// Ctrl-C, Ctrl-D or the end of the input cancel the question: it throws an
-/// [SmfCancelledException] and marks the run interrupted.
-/// The terminal is restored whatever happens.
+/// Ctrl-C, the end of the input, or Ctrl-D at an empty line cancel the
+/// question: it throws an [SmfCancelledException] and marks the run
+/// interrupted. The terminal is restored whatever happens.
 final class TerminalPrompter implements SmfPrompter {
   /// Creates the prompter that asks in a terminal, and says [greeting]
   /// before its first question, if given.
@@ -93,16 +96,27 @@ final class TerminalPrompter implements SmfPrompter {
   static String _upAndClear(int lines) =>
       '${lines > 0 ? '\x1b[${lines}A' : ''}\r\x1b[J';
 
+  /// The line that asks [question], which the answer replaces.
+  static String _asking(String question) => '${green.wrap('?')} $question';
+
+  /// How many rows of the terminal [line] takes, a line without line breaks
+  /// that the terminal wraps at its width.
+  int _rowsOf(String line) {
+    final visible = line.replaceAll(RegExp(r'\x1b\[[0-9;?]*[A-Za-z]'), '');
+    final width = max(_terminal.columns, 1);
+    return max((visible.runes.length + width - 1) ~/ width, 1);
+  }
+
   Future<T> _ask<T>(String question, T Function() answer) async {
     _interruption.throwIfInterrupted();
     if (_greeting case final greeting?) {
       _terminal.write('$greeting\n');
       _greeting = null;
     }
-    _terminal
-      ..enterRawMode()
-      ..write('${green.wrap('?')} $question');
     try {
+      _terminal
+        ..enterRawMode()
+        ..write(_asking(question));
       return answer();
     } on SmfCancelledException {
       _interruption.markInterrupted();
@@ -118,36 +132,45 @@ final class TerminalPrompter implements SmfPrompter {
   /// lines up.
   void _answered(String question, String answer, {int lines = 0}) =>
       _terminal.write(
-        '${_upAndClear(lines)}${green.wrap('?')} $question '
+        '${_upAndClear(lines)}${_asking(question)} '
         '${lightCyan.wrap(answer)}\n',
       );
 
-  /// Throws an [SmfCancelledException] if [key] cancels the question.
-  void _cancelOn(PromptKey key, {bool endOfInput = true}) {
+  /// Throws an [SmfCancelledException] if [key] cancels the question, which
+  /// Ctrl-D does unless [ctrlD] is `false`.
+  void _cancelOn(PromptKey key, {bool ctrlD = true}) {
     if (key.control == PromptControl.interrupt ||
-        (endOfInput && key.control == PromptControl.endOfInput)) {
+        key.control == PromptControl.endOfInput ||
+        (ctrlD && key.control == PromptControl.ctrlD)) {
       _terminal.write('\n');
       throw const SmfCancelledException();
     }
   }
 
   @override
-  Future<bool> confirm(String message, {bool defaultValue = false}) =>
-      _ask('$message ${darkGray.wrap(defaultValue ? '(Y/n)' : '(y/N)')} ', () {
-        while (true) {
-          final key = _terminal.readKey();
-          _cancelOn(key);
-          final answer = switch ((key.control, key.character?.toLowerCase())) {
-            (PromptControl.enter, _) => defaultValue,
-            (_, 'y') => true,
-            (_, 'n') => false,
-            _ => null,
-          };
-          if (answer == null) continue;
-          _answered(message, answer ? 'Yes' : 'No');
-          return answer;
-        }
-      });
+  Future<bool> confirm(String message, {bool defaultValue = false}) {
+    final question =
+        '$message ${darkGray.wrap(defaultValue ? '(Y/n)' : '(y/N)')} ';
+    return _ask(question, () {
+      while (true) {
+        final key = _terminal.readKey();
+        _cancelOn(key);
+        final answer = switch ((key.control, key.character?.toLowerCase())) {
+          (PromptControl.enter, _) => defaultValue,
+          (_, 'y') => true,
+          (_, 'n') => false,
+          _ => null,
+        };
+        if (answer == null) continue;
+        _answered(
+          message,
+          answer ? 'Yes' : 'No',
+          lines: _rowsOf(_asking(question)) - 1,
+        );
+        return answer;
+      }
+    });
+  }
 
   @override
   Future<String> input(String message, {String? defaultValue}) {
@@ -158,12 +181,16 @@ final class TerminalPrompter implements SmfPrompter {
       final typed = <String>[];
       while (true) {
         final key = _terminal.readKey();
-        _cancelOn(key, endOfInput: typed.isEmpty);
+        _cancelOn(key, ctrlD: typed.isEmpty);
         switch (key) {
           case PromptKey(control: PromptControl.enter):
             final text = typed.join().trim();
             final answer = text.isEmpty ? defaultValue ?? '' : text;
-            _answered(message, answer);
+            _answered(
+              message,
+              answer,
+              lines: _rowsOf('${_asking('$question ')}${typed.join()}') - 1,
+            );
             return answer;
           case PromptKey(control: PromptControl.backspace):
             if (typed.isNotEmpty) {
@@ -190,9 +217,10 @@ final class TerminalPrompter implements SmfPrompter {
     final labels = [
       for (final choice in choices) display?.call(choice) ?? '$choice',
     ];
+    final question =
+        '$message ${darkGray.wrap('(↑↓ to move, enter to choose)')}';
     return _ask(
-      '$message ${darkGray.wrap('(↑↓ to move, enter to choose)')}\n'
-      '$_hideCursor',
+      '$question\n$_hideCursor',
       () {
         var index =
             defaultValue == null ? 0 : max(choices.indexOf(defaultValue), 0);
@@ -208,7 +236,11 @@ final class TerminalPrompter implements SmfPrompter {
                   PromptKey(character: 'j'):
               index = (index + 1) % choices.length;
             case PromptKey(control: PromptControl.enter):
-              _answered(message, labels[index], lines: labels.length + 1);
+              _answered(
+                message,
+                labels[index],
+                lines: labels.length + _rowsOf(_asking(question)),
+              );
               return choices[index];
             case _:
               continue;
@@ -229,10 +261,10 @@ final class TerminalPrompter implements SmfPrompter {
     final labels = [
       for (final choice in choices) display?.call(choice) ?? '$choice',
     ];
+    final question = '$message '
+        '${darkGray.wrap('(↑↓ to move, space to select, enter to confirm)')}';
     return _ask(
-      '$message '
-      '${darkGray.wrap('(↑↓ to move, space to select, enter to confirm)')}\n'
-      '$_hideCursor',
+      '$question\n$_hideCursor',
       () {
         final selected = {
           for (final value in defaultValues)
@@ -268,7 +300,7 @@ final class TerminalPrompter implements SmfPrompter {
                 chosen.isEmpty
                     ? 'none'
                     : [for (final i in chosen) labels[i]].join(', '),
-                lines: labels.length + 1,
+                lines: labels.length + _rowsOf(_asking(question)),
               );
               return [for (final i in chosen) choices[i]];
             case _:
@@ -294,8 +326,9 @@ final class TerminalPrompter implements SmfPrompter {
     // A line that wraps would move the list; keep each within the width.
     final width = max(_terminal.columns - 5, 10);
     for (var i = 0; i < labels.length; i++) {
-      final label = labels[i].length > width
-          ? '${labels[i].substring(0, width - 1)}…'
+      final runes = labels[i].runes;
+      final label = runes.length > width
+          ? '${String.fromCharCodes(runes.take(width - 1))}…'
           : labels[i];
       final pointer = current(i) ? green.wrap('❯')! : ' ';
       final mark = !marks

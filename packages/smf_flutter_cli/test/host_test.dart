@@ -21,14 +21,16 @@ void main() {
     expect(host.environmentVariables, Platform.environment);
     expect(
       host.operatingSystem,
-      switch (Platform.operatingSystem) {
-        'macos' => HostOperatingSystem.macos,
-        'linux' => HostOperatingSystem.linux,
-        'windows' => HostOperatingSystem.windows,
-        _ => HostOperatingSystem.other,
-      },
+      IoHost.operatingSystemOf(Platform.operatingSystem),
     );
-    // The tests run without a terminal.
     expect(host.hasTerminal, stdin.hasTerminal && stdout.hasTerminal);
+    expect(machine.host, same(host));
+  });
+
+  test('knows the operating systems by their names', () {
+    expect(IoHost.operatingSystemOf('macos'), HostOperatingSystem.macos);
+    expect(IoHost.operatingSystemOf('linux'), HostOperatingSystem.linux);
+    expect(IoHost.operatingSystemOf('windows'), HostOperatingSystem.windows);
+    expect(IoHost.operatingSystemOf('fuchsia'), HostOperatingSystem.other);
   });
 }

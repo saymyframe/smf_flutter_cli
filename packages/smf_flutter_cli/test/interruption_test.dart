@@ -75,25 +75,73 @@ void main() {
     );
   });
 
-  test('a second Ctrl-C quits at once with 130', () async {
-    final errors = <Object>[];
-    final twice = StreamController<ProcessSignal>();
+  /// Sends [sent] to a new interruption, forwarding them to a command that
+  /// owns the terminal if [forwarding], and returns what happened: `restore`
+  /// before it quits, and `exit <code>`.
+  Future<List<String>> quitting(
+    List<ProcessSignal> sent, {
+    bool forwarding = false,
+  }) async {
+    final events = <String>[];
+    final stream = StreamController<ProcessSignal>();
+    late Interruption quitting;
     // The listener runs in the zone that listens, which catches the exit.
     runZonedGuarded(
-      () => Interruption(
-        signals: twice.stream,
+      () => quitting = Interruption(
+        signals: stream.stream,
         exit: (code) => throw _Exited(code),
-      ).listen(),
-      (error, _) => errors.add(error),
+        beforeQuit: () => events.add('restore'),
+      )..listen(),
+      (error, _) => events.add('exit ${(error as _Exited).code}'),
     );
-
-    twice
-      ..add(ProcessSignal.sigint)
-      ..add(ProcessSignal.sigint);
+    final done = Completer<void>();
+    if (forwarding) {
+      unawaited(quitting.whileForwarding(() => done.future));
+    }
+    sent.forEach(stream.add);
     await pumpEventQueue();
+    done.complete();
+    await stream.close();
+    return events;
+  }
 
-    expect(errors, [isA<_Exited>().having((e) => e.code, 'code', 130)]);
-    await twice.close();
+  test('a second Ctrl-C restores the terminal and quits with 130', () async {
+    expect(
+      await quitting([ProcessSignal.sigint, ProcessSignal.sigint]),
+      ['restore', 'exit 130'],
+    );
+  });
+
+  test('SIGTERM stops the run like Ctrl-C', () async {
+    expect(await quitting([ProcessSignal.sigterm]), isEmpty);
+    expect(
+      await quitting([ProcessSignal.sigterm, ProcessSignal.sigint]),
+      ['restore', 'exit 130'],
+    );
+  });
+
+  test('a command that owns the terminal keeps two Ctrl-C, not three',
+      () async {
+    expect(
+      await quitting(
+        [ProcessSignal.sigint, ProcessSignal.sigint],
+        forwarding: true,
+      ),
+      isEmpty,
+    );
+    expect(
+      await quitting(
+        [ProcessSignal.sigint, ProcessSignal.sigint, ProcessSignal.sigint],
+        forwarding: true,
+      ),
+      ['restore', 'exit 130'],
+    );
+    // SIGTERM does not go to the command.
+    final events = await quitting(
+      [ProcessSignal.sigterm, ProcessSignal.sigterm],
+      forwarding: true,
+    );
+    expect(events, ['restore', 'exit 130']);
   });
 
   test('a command that started after Ctrl-C is stopped at once', () async {

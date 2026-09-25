@@ -4,6 +4,7 @@ updates:
     directories:
       - "/packages/smf_flutter_cli"
       - "/packages/smf_contracts"
+      - "/packages/smf_pipeline"
       - "/packages/smf_modules/*"
     schedule:
       interval: "weekly"

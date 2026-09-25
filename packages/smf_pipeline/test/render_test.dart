@@ -764,7 +764,7 @@ flutter:
                 version: '0.1.0',
                 files: [
                   MasonBundledFile(
-                    'android/app/upload.keystore',
+                    'assets/fixture.bin',
                     base64.encode(bytes),
                     'text',
                   ),
@@ -776,7 +776,7 @@ flutter:
         ),
       ]);
 
-      final file = app.files['android/app/upload.keystore']!;
+      final file = app.files['assets/fixture.bin']!;
       expect(file.bytes, bytes);
       expect(file.isText, isFalse);
     });

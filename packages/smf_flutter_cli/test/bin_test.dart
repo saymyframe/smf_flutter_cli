@@ -8,33 +8,54 @@ import 'package:path/path.dart' as p;
 import 'package:smf_flutter_cli/version.dart';
 import 'package:test/test.dart';
 
-/// Runs `bin/smf_flutter.dart` in its own Dart VM, with only [path] as the
-/// `PATH`, so the real exit code and output of the executable are checked.
-Future<ProcessResult> _smf(
-  List<String> arguments, {
-  String path = '',
-  Map<String, String> environment = const {},
-}) async {
+/// The kernel of `bin/smf_flutter.dart`, which [_compile] writes once, so
+/// that each run starts without compiling the CLI again.
+late String _kernel;
+
+Future<void> _compile(Directory directory) async {
   final lib = await Isolate.resolvePackageUri(
     Uri.parse('package:smf_flutter_cli/'),
   );
   final packageConfig = await Isolate.packageConfig;
-  return Process.run(
-    Platform.resolvedExecutable,
-    [
-      '--packages=${packageConfig!.toFilePath()}',
-      p.join(p.dirname(lib!.toFilePath()), 'bin', 'smf_flutter.dart'),
-      ...arguments,
-    ],
-    environment: {
-      'PATH': path,
-      if (Platform.environment['TMPDIR'] case final temporary?)
-        'TMPDIR': temporary,
-      ...environment,
-    },
-    includeParentEnvironment: false,
-  );
+  _kernel = p.join(directory.path, 'smf.dill');
+  final result = await Process.run(Platform.resolvedExecutable, [
+    'compile',
+    'kernel',
+    '--packages=${packageConfig!.toFilePath()}',
+    p.join(p.dirname(lib!.toFilePath()), 'bin', 'smf_flutter.dart'),
+    '-o',
+    _kernel,
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError('The CLI does not compile: ${result.stderr}');
+  }
 }
+
+/// Runs the CLI in its own Dart VM, with only [path] as the `PATH`, so the
+/// real exit code and output of the executable are checked.
+Future<ProcessResult> _smf(
+  List<String> arguments, {
+  String path = '',
+  Map<String, String> environment = const {},
+}) =>
+    Process.run(
+      Platform.resolvedExecutable,
+      [_kernel, ...arguments],
+      environment: {
+        'PATH': path,
+        // What the Dart VM and temporary files need, on Windows too.
+        for (final name in [
+          'TMPDIR',
+          'TEMP',
+          'TMP',
+          'SYSTEMROOT',
+          'SystemRoot',
+        ])
+          if (Platform.environment[name] case final value?) name: value,
+        ...environment,
+      },
+      includeParentEnvironment: false,
+    );
 
 /// A Flutter SDK in [directory] whose `flutter` and `dart` write their
 /// arguments and working directory to `calls.log` next to them and
@@ -57,7 +78,14 @@ String _fakeSdk(Directory directory) {
 
 void main() {
   const timeout = Timeout(Duration(minutes: 2));
+  late Directory kernel;
   late Directory temporary;
+
+  setUpAll(() async {
+    kernel = Directory.systemTemp.createTempSync('smf_bin_kernel_');
+    await _compile(kernel);
+  });
+  tearDownAll(() => kernel.deleteSync(recursive: true));
 
   setUp(() => temporary = Directory.systemTemp.createTempSync('smf_bin_'));
   tearDown(() => temporary.deleteSync(recursive: true));

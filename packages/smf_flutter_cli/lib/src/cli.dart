@@ -1,9 +1,10 @@
 import 'dart:io' as io;
 
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_flutter_cli/src/banner.dart';
 import 'package:smf_flutter_cli/src/io/host.dart';
 import 'package:smf_flutter_cli/src/io/interruption.dart';
+import 'package:smf_flutter_cli/src/io/terminal.dart';
 import 'package:smf_flutter_cli/src/modules.dart';
 import 'package:smf_flutter_cli/version.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -19,7 +20,7 @@ Future<int> runCli(
   List<SmfModule> modules = smfModules,
   void Function(GeneratedApp app)? onCreated,
 }) async {
-  final interruption = Interruption()..listen();
+  final interruption = Interruption(beforeQuit: restoreTerminal)..listen();
   IoHost? machine;
   try {
     return await runSmf(

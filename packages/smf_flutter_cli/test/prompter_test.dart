@@ -12,6 +12,7 @@ const _down = PromptKey.control(PromptControl.down);
 const _backspace = PromptKey.control(PromptControl.backspace);
 const _ctrlC = PromptKey.control(PromptControl.interrupt);
 const _end = PromptKey.control(PromptControl.endOfInput);
+const _ctrlD = PromptKey.control(PromptControl.ctrlD);
 const _other = PromptKey.control(PromptControl.other);
 
 PromptKey _key(String character) => PromptKey.character(character);
@@ -105,6 +106,18 @@ void main() {
       );
     });
 
+    test('writes the answer over a question that wraps', () async {
+      final terminal = _Terminal([_down, _enter], columns: 20);
+
+      // "? " and 30 characters and the hint of 31: 63 characters, 4 rows.
+      await prompter(terminal).select('x' * 30, ['a', 'b']);
+
+      expect(
+        terminal.output.toString(),
+        contains('\x1b[6A\r\x1b[J? ${'x' * 30} b\n'),
+      );
+    });
+
     test('shortens a label that would wrap', () async {
       final terminal = _Terminal([_enter], columns: 20);
 
@@ -162,6 +175,18 @@ void main() {
       expect(terminal.output.toString(), contains('\b \b'));
     });
 
+    test('writes the answer over a line that wraps', () async {
+      final terminal = _Terminal([..._typed('a' * 21), _enter], columns: 20);
+
+      // "? Name: " and 21 characters: 29 characters, 2 rows.
+      await prompter(terminal).input('Name');
+
+      expect(
+        terminal.output.toString(),
+        contains('\x1b[1A\r\x1b[J? Name ${'a' * 21}\n'),
+      );
+    });
+
     test('takes the default for an empty line', () async {
       final terminal = _Terminal([_backspace, _key(' '), _enter]);
 
@@ -172,12 +197,17 @@ void main() {
       expect(terminal.output.toString(), contains('? App name (my_app): '));
     });
 
-    test('ends only at the end of an empty line', () async {
-      final terminal = _Terminal([_key('a'), _end, _enter]);
+    test('Ctrl-D cancels only an empty line, the end of the input any',
+        () async {
+      final terminal = _Terminal([_key('a'), _ctrlD, _enter]);
 
       expect(await prompter(terminal).input('Name'), 'a');
       expect(
-        prompter(_Terminal([_end])).input('Name'),
+        prompter(_Terminal([_ctrlD])).input('Name'),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      expect(
+        prompter(_Terminal([_key('a'), _end])).input('Name'),
         throwsA(isA<SmfCancelledException>()),
       );
     });
@@ -224,8 +254,8 @@ void main() {
     };
 
     for (final MapEntry(key: kind, value: ask) in questions.entries) {
-      test('Ctrl-C or the end of the input cancels $kind', () async {
-        for (final key in [_ctrlC, _end]) {
+      test('Ctrl-C, Ctrl-D or the end of the input cancels $kind', () async {
+        for (final key in [_ctrlC, _ctrlD, _end]) {
           interruption = Interruption(
             signals: const Stream.empty(),
             exit: (code) => throw StateError('exit $code'),

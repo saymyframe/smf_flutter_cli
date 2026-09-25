@@ -142,14 +142,17 @@ final class SmfProcessResult {
 abstract interface class SmfProcessRunner {
   /// Runs [executable] with [arguments] and captures its output.
   ///
+  /// The command gets no input: its standard input is closed, so a command
+  /// that would ask the user ends instead of waiting.
+  ///
   /// [onOutput], if given, gets each line of the standard output and error
   /// of the command as it comes, such as a message that the command waits
   /// for something; the result has the whole output anyway. A carriage
   /// return ends a line too, since tools use it to rewrite their last line.
   ///
   /// Throws an [SmfCancelledException] when the user interrupts the run
-  /// while the command runs, such as with Ctrl-C; the command is stopped
-  /// then.
+  /// before or while the command runs, such as with Ctrl-C; the command is
+  /// stopped then.
   Future<SmfProcessResult> run(
     String executable,
     List<String> arguments, {
@@ -165,6 +168,9 @@ abstract interface class SmfProcessRunner {
   /// The command owns the terminal while it runs: Ctrl-C goes to it, and its
   /// exit code tells what happened, so the user can stop the command without
   /// cancelling the run.
+  ///
+  /// Throws an [SmfCancelledException] when the user interrupted the run
+  /// before the command starts.
   Future<int> runInteractive(
     String executable,
     List<String> arguments, {

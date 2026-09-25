@@ -20,13 +20,16 @@ final class IoHost {
         _interruption = interruption;
 
   /// Reports to the terminal.
-  final IoLogger logger;
+  final SmfLogger logger;
 
   final Interruption _interruption;
 
   /// The operating system of this machine.
   static HostOperatingSystem get operatingSystem =>
-      switch (io.Platform.operatingSystem) {
+      operatingSystemOf(io.Platform.operatingSystem);
+
+  /// The operating system that `Platform.operatingSystem` calls [name].
+  static HostOperatingSystem operatingSystemOf(String name) => switch (name) {
         'macos' => HostOperatingSystem.macos,
         'linux' => HostOperatingSystem.linux,
         'windows' => HostOperatingSystem.windows,
@@ -37,17 +40,17 @@ final class IoHost {
   static bool get hasTerminal => io.stdin.hasTerminal && io.stdout.hasTerminal;
 
   /// The host of the pipeline.
-  SmfHost get host => SmfHost(
-        prompter: TerminalPrompter(
-          IoPromptTerminal(),
-          interruption: _interruption,
-          greeting: greeting,
-        ),
-        processRunner: IoProcessRunner(_interruption),
-        logger: logger,
-        fileSystem: const LocalFileSystem(),
-        environmentVariables: io.Platform.environment,
-        operatingSystem: operatingSystem,
-        hasTerminal: hasTerminal,
-      );
+  late final SmfHost host = SmfHost(
+    prompter: TerminalPrompter(
+      IoPromptTerminal(),
+      interruption: _interruption,
+      greeting: greeting,
+    ),
+    processRunner: IoProcessRunner(_interruption),
+    logger: logger,
+    fileSystem: const LocalFileSystem(),
+    environmentVariables: io.Platform.environment,
+    operatingSystem: operatingSystem,
+    hasTerminal: hasTerminal,
+  );
 }

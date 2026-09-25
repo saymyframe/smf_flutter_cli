@@ -270,7 +270,7 @@ final class _Commands {
       } on Object catch (error) {
         return _Failure('it could not start', 'it could not start: $error');
       }
-      return code == 0 ? null : _Failure('it exited with code $code');
+      return code == 0 ? null : _Failure(_exitReason(code));
     }
     final progress = logger.progress(description);
     var waiting = false;
@@ -282,11 +282,14 @@ final class _Commands {
         workingDirectory: _directory,
         environment: resolved.environment,
         onOutput: (line) {
-          if (waiting || !line.contains(_startupLock)) return;
-          waiting = true;
+          // Any other line means that flutter has moved on.
+          final locked = line.contains(_startupLock);
+          if (locked == waiting) return;
+          waiting = locked;
           progress.update(
-            '$description: waiting for another flutter command to finish, '
-            'such as one of an IDE',
+            locked
+                ? 'Waiting for another flutter command to finish'
+                : description,
           );
         },
       );
@@ -299,13 +302,15 @@ final class _Commands {
     }
     final streams = [result.stderr.trim(), result.stdout.trim()]
       ..removeWhere((text) => text.isEmpty);
-    if (streams.isNotEmpty) logger.detail(streams.join('\n'));
+    // After the progress, which a terminal redraws on its line.
     if (result.succeeded) {
       progress.complete(description);
-      return null;
+    } else {
+      progress.fail(description);
     }
-    progress.fail(description);
-    final reason = 'it exited with code ${result.exitCode}';
+    if (streams.isNotEmpty) logger.detail(streams.join('\n'));
+    if (result.succeeded) return null;
+    final reason = _exitReason(result.exitCode);
     return streams.isEmpty
         ? _Failure(reason)
         : _Failure(reason, '$reason:\n${streams.map(_tail).join('\n')}');
@@ -350,6 +355,12 @@ final class _Commands {
     );
   }
 }
+
+/// Why a command that ended with [code] failed. A negative code is the
+/// signal that stopped the command, as `dart:io` reports it.
+String _exitReason(int code) => code < 0
+    ? 'it was stopped by signal ${-code}'
+    : 'it exited with code $code';
 
 /// The last lines of [output], which say what went wrong. Both streams of a
 /// command count: tools such as `build_runner` report their errors on the

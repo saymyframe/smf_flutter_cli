@@ -8,10 +8,11 @@ import 'package:smf_flutter_cli/src/io/interruption.dart';
 /// Runs external commands on this machine with `dart:io`.
 ///
 /// On Windows, a batch file such as `flutter.bat` starts without a shell:
-/// Windows runs it with `cmd.exe` itself, and quotes a path with spaces, so
-/// the pipeline never needs `runInShell`. `cmd.exe` reads some characters of
-/// the command line as its own, though, so a batch file never gets an
-/// argument with them; see `batchArgumentProblem`.
+/// Windows runs it with `cmd.exe` itself, and Dart quotes a path with
+/// spaces, so the pipeline never needs `runInShell`. `cmd.exe` reads some
+/// characters of the command line as its own, though, so neither a batch
+/// file nor a command in a shell gets an argument with them; see
+/// `batchArgumentProblem`.
 final class IoProcessRunner implements SmfProcessRunner {
   /// Creates the runner of a run, which stops its commands when the run is
   /// interrupted.
@@ -33,7 +34,7 @@ final class IoProcessRunner implements SmfProcessRunner {
     void Function(String line)? onOutput,
   }) async {
     _interruption.throwIfInterrupted();
-    _checkBatchFile(executable, arguments);
+    _checkCommandLine(executable, arguments, runInShell: runInShell);
     final process = await io.Process.start(
       executable,
       arguments,
@@ -42,6 +43,9 @@ final class IoProcessRunner implements SmfProcessRunner {
       runInShell: runInShell,
     );
     _interruption.track(process);
+    // The command gets no input, so one that reads it ends instead of
+    // waiting; Process.run does the same.
+    unawaited(process.stdin.close());
     final stdout = _read(process.stdout, onOutput);
     final stderr = _read(process.stderr, onOutput);
     final exitCode = await process.exitCode;
@@ -63,7 +67,7 @@ final class IoProcessRunner implements SmfProcessRunner {
     bool runInShell = false,
   }) async {
     _interruption.throwIfInterrupted();
-    _checkBatchFile(executable, arguments);
+    _checkCommandLine(executable, arguments, runInShell: runInShell);
     return _interruption.whileForwarding(() async {
       final process = await io.Process.start(
         executable,
@@ -77,17 +81,22 @@ final class IoProcessRunner implements SmfProcessRunner {
     });
   }
 
-  /// Throws a [io.ProcessException] if [executable] is a batch file on
-  /// Windows and it or an argument has characters that `cmd.exe` would read
-  /// as its own.
-  void _checkBatchFile(String executable, List<String> arguments) {
-    if (!_isWindows || !isBatchFile(executable)) return;
+  /// Throws a [io.ProcessException] if `cmd.exe` would read the command
+  /// line of [executable] on Windows, as it does for a batch file or with
+  /// [runInShell], and the executable or an argument has characters that
+  /// it reads as its own.
+  void _checkCommandLine(
+    String executable,
+    List<String> arguments, {
+    required bool runInShell,
+  }) {
+    if (!_isWindows || !(runInShell || isBatchFile(executable))) return;
     for (final text in [executable, ...arguments]) {
       if (batchArgumentProblem(text) case final problem?) {
         throw io.ProcessException(
           executable,
           arguments,
-          '"$text" cannot go to a batch file safely: $problem.',
+          '"$text" cannot go to cmd.exe safely: $problem.',
         );
       }
     }

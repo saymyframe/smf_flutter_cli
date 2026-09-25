@@ -92,6 +92,13 @@ abstract final class CreateOptions {
       ..addOption(
         onConflict,
         allowed: [for (final value in OnConflict.values) value.name],
+        allowedHelp: {
+          OnConflict.prompt.name: 'Ask, in a terminal.',
+          OnConflict.replace.name:
+              'Replace the directory once the app is generated.',
+          OnConflict.copy.name: 'Create the app next to it.',
+          OnConflict.cancel.name: 'Generate nothing and exit with code 1.',
+        },
         defaultsTo: OnConflict.prompt.name,
         help: "What to do if the app's directory exists and is not empty.",
       )

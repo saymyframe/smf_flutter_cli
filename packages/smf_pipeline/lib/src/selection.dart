@@ -224,7 +224,8 @@ Future<TargetDecision> _decideTarget(
   if (request.explain) return TargetDecision(path: path, conflict: true);
 
   var decision = request.onConflict;
-  if (decision == OnConflict.prompt) {
+  final asked = decision == OnConflict.prompt;
+  if (asked) {
     if (!environment.interactive) {
       throw SmfUsageException(
         '$path already exists. Choose what to do with --on-conflict: '
@@ -259,6 +260,9 @@ Future<TargetDecision> _decideTarget(
       return TargetDecision(path: copy);
     case OnConflict.prompt:
     case OnConflict.cancel:
+      // The user's answer cancels the run as Ctrl-C does; the option makes
+      // a script fail.
+      if (asked) throw const SmfCancelledException();
       throw GenerationFailedException(
         '$path already exists, and the run was cancelled.',
       );

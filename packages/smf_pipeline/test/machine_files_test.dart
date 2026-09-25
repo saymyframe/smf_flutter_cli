@@ -23,6 +23,19 @@ void main() {
       'packages/local/pubspec.lock',
       'tool/.dart_tool/x',
       'macos/DerivedData/x',
+      'android/app/.cxx/Debug/x',
+      'android/key.properties',
+      'android/app/upload-keystore.jks',
+      'android/app/release.keystore',
+      'ios/Flutter/.last_build_id',
+      'ios/Flutter/App.framework/App',
+      'ios/Flutter/Flutter.framework/Flutter',
+      'ios/Flutter/Flutter.podspec',
+      'ios/Runner.xcworkspace/.swiftpm/configuration/x',
+      '.idea/workspace.xml',
+      'my_app.iml',
+      'android/my_app_android.iml',
+      'web/build/x.js',
     ];
 
     for (final path in paths) {
@@ -46,6 +59,8 @@ void main() {
       'ios/Runner/AppDelegate.swift',
       'lib/features/build/build_screen.dart',
       'test/build/build_test.dart',
+      'assets/build/logo.png',
+      'integration_test/build/app_test.dart',
       'lib/local_properties.dart',
       'pubspec.yaml',
       '.metadata',
