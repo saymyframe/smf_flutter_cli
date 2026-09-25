@@ -2,9 +2,10 @@ import 'package:file/memory.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 
-/// A host without a terminal, with a Flutter SDK in `/sdk` and nothing else:
-/// asking the user or running a command fails the test.
-SmfHost testHost() {
+/// A host without a terminal, with a Flutter SDK in `/sdk` and nothing else,
+/// whose current directory is `/work`: asking the user fails the test, and
+/// so does running a command unless [processRunner] runs it.
+SmfHost testHost({SmfProcessRunner? processRunner}) {
   final fileSystem = MemoryFileSystem.test();
   fileSystem.currentDirectory = fileSystem.directory('/work')..createSync();
   for (final name in ['flutter', 'dart']) {
@@ -14,7 +15,7 @@ SmfHost testHost() {
   fileSystem.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
   return SmfHost(
     prompter: _NoPrompter(),
-    processRunner: _NoProcessRunner(),
+    processRunner: processRunner ?? _NoProcessRunner(),
     logger: _SilentLogger(),
     fileSystem: fileSystem,
     environmentVariables: const {'PATH': '/sdk/bin'},
@@ -102,4 +103,34 @@ final class _SilentProgress implements SmfProgress {
 
   @override
   void fail([String? message]) {}
+}
+
+/// A process runner that records every command and lets it succeed.
+final class RecordingRunner implements SmfProcessRunner {
+  /// The commands, as the name of the executable followed by the arguments.
+  final List<String> lines = [];
+
+  @override
+  Future<SmfProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    lines.add([executable.split('/').last, ...arguments].join(' '));
+    return const SmfProcessResult(exitCode: 0);
+  }
+
+  @override
+  Future<int> runInteractive(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String> environment = const {},
+    bool runInShell = false,
+  }) async {
+    lines.add([executable.split('/').last, ...arguments].join(' '));
+    return 0;
+  }
 }

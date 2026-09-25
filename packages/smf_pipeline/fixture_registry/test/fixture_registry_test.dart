@@ -41,42 +41,33 @@ void main() {
     });
   });
 
-  group('the pipeline plans an app of every fixture', () {
-    Future<GenerationPlan> planOf(
-      List<ModuleId> modules, {
-      Set<DiCapability>? capabilities,
-      bool strict = false,
-    }) async {
-      final plan = await CreatePipeline(
-        registry: ModuleRegistry(
-          fixtureModules(diCapabilities: capabilities),
-        ),
-        host: testHost(),
-      ).plan(
-        CreateRequest(
-          appName: 'fixture_app',
-          modules: modules,
-          strict: strict,
-        ),
+  group('an app of every fixture', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+
+    Future<ContractResult> checked(List<ModuleId> modules) async {
+      final result = await harness.check(
+        ContractCase('every fixture', requested: modules),
       );
-      await plan!.environment.dispose();
-      return plan;
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
     }
 
-    /// What the contributions to [socket] render to, before stage 8 adds the
-    /// fragments of the render hooks.
-    Map<String, String> rendered(GenerationPlan plan, SocketRef socket) =>
+    /// What the contributions of the modules and role templates to [socket]
+    /// render to, before the render hooks add their fragments.
+    Map<String, String> rendered(ContractResult result, SocketRef socket) =>
         socket.render([
-          for (final collected in plan.socketOrders[socket]!.contributions)
+          for (final collected
+              in result.validation!.socketOrders[socket]!.contributions)
             collected.contribution as SocketContribution,
         ]);
 
     test('with BLoC', () async {
-      final plan = await planOf(everyFixture());
+      final result = await checked(everyFixture());
+      final resolution = result.resolution!;
+      final pubspec = result.validation!.pubspec;
 
-      expect(plan.leftOut, isEmpty);
       expect(
-        plan.resolution.modules.map((module) => module.id.value),
+        resolution.modules.map((module) => module.id.value),
         containsAll([
           'fake_scaffold',
           'fake_router',
@@ -86,136 +77,193 @@ void main() {
         ]),
       );
       expect(
-        plan.resolution.module(const ModuleId('fake_feature'))!.variant,
+        resolution.module(const ModuleId('fake_feature'))!.variant,
         FakeBlocModule.id,
       );
       expect(
-        (plan.choices[routerRole]! as RouterChoice).startPath,
+        (result.choices![routerRole]! as RouterChoice).startPath,
         '/fake_feature',
       );
       expect(
-        plan.socketOrders[AppEntryRole.bootstrapPlatform]!.contributions.map(
-          (collected) => '${collected.origin}',
-        ),
-        // The templates of the roles add their fragments when they render,
-        // at stage 8.
+        result.validation!.socketOrders[AppEntryRole.bootstrapPlatform]!
+            .contributions
+            .map((collected) => '${collected.origin}'),
+        // The templates of the roles add their fragments when they render.
         ['fake_sockets'],
       );
       // The variant takes any version of flutter_bloc; its provider owns the
       // constraint.
       expect(
-        plan.pubspec.dependencies['flutter_bloc']!.constraintText,
+        pubspec.dependencies['flutter_bloc']!.constraintText,
         '^9.1.1',
       );
-      expect(plan.pubspec.devDependencies.keys, contains('json_serializable'));
-      expect(plan.pubspec.generate, isTrue);
-      expect(plan.pubspec.usesMaterialDesign, isTrue);
-      expect(plan.collection.applyingOf<CodegenRequest>(), hasLength(1));
+      expect(pubspec.devDependencies.keys, contains('json_serializable'));
+      expect(pubspec.generate, isTrue);
+      expect(pubspec.usesMaterialDesign, isTrue);
+      expect(result.collection!.applyingOf<CodegenRequest>(), hasLength(1));
     });
 
     test('with Riverpod', () async {
-      final plan = await planOf(
+      final result = await checked(
         everyFixture(stateManager: FakeRiverpodModule.id),
       );
 
-      expect(plan.leftOut, isEmpty);
       expect(
-        plan.socketOrders[AppEntryRole.rootWrappers]!.contributions.map(
-          (collected) => '${collected.origin}',
-        ),
+        result
+            .validation!.socketOrders[AppEntryRole.rootWrappers]!.contributions
+            .map((collected) => '${collected.origin}'),
         ['fake_riverpod', 'fake_sockets'],
       );
       expect(
-        plan.pubspec.dependencies['flutter_riverpod']!.constraintText,
+        result.validation!.pubspec.dependencies['flutter_riverpod']!
+            .constraintText,
         '^3.0.0',
       );
     });
 
     test('merges what two modules put into the same keys', () async {
-      final plan = await planOf(everyFixture());
+      final result = await checked(everyFixture());
 
       expect(
-        rendered(plan, AppEntryRole.iosDeploymentTarget).values.single,
+        rendered(result, AppEntryRole.iosDeploymentTarget).values.single,
         '14.0',
       );
       expect(
-        rendered(plan, AppEntryRole.appArgs).values.single,
+        rendered(result, AppEntryRole.appArgs).values.single,
         contains("supportedLocales: [Locale('en')],"),
       );
       expect(
-        rendered(plan, AppEntryRole.androidManifestPermissions).values.single,
+        rendered(result, AppEntryRole.androidManifestPermissions).values.single,
         '    <uses-permission android:name="android.permission.INTERNET"/>\n'
         '    <uses-permission android:name="android.permission.VIBRATE"/>',
       );
       expect(
         'com.example.fixture.KEY'.allMatches(
           rendered(
-            plan,
+            result,
             AppEntryRole.androidManifestApplicationMeta,
           ).values.single,
         ),
         hasLength(1),
       );
-      final plist = rendered(plan, AppEntryRole.infoPlist).values.single;
+      final plist = rendered(result, AppEntryRole.infoPlist).values.single;
       expect(plist, contains('<string>fetch</string>'));
       expect(plist, contains('<string>remote-notification</string>'));
       expect('<key>FixtureName</key>'.allMatches(plist), hasLength(1));
       expect(
-        rendered(plan, AppEntryRole.gradleSettingsPlugins).values.single,
+        rendered(result, AppEntryRole.gradleSettingsPlugins).values.single,
         '    id("io.github.ben-manes.versions") version("0.64.0") apply false',
       );
       expect(
-        rendered(plan, AppEntryRole.gradleAppPlugins).values.single,
+        rendered(result, AppEntryRole.gradleAppPlugins).values.single,
         '    id("io.github.ben-manes.versions")',
       );
       expect(
-        rendered(plan, AppEntryRole.gradleAppDependencies).values.single,
+        rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
     });
 
     test('a module that depends on another fills its sockets', () async {
-      final plan = await planOf(everyFixture());
+      final result = await checked(everyFixture());
+      final orders = result.validation!.socketOrders;
 
       expect(
-        plan.socketOrders[FakeParentModule.setup]!.contributions.map(
-          (collected) => '${collected.origin}',
-        ),
+        orders[FakeParentModule.setup]!.contributions.map(
+              (collected) => '${collected.origin}',
+            ),
         ['fake_child'],
       );
       expect(
-        plan.socketOrders[FakeParentModule.channels('alerts')]!.contributions
-            .map((collected) => '${collected.origin}'),
+        orders[FakeParentModule.channels('alerts')]!.contributions.map(
+              (collected) => '${collected.origin}',
+            ),
         ['fake_child'],
       );
     });
+  });
 
-    test(
-      'a DI container without a capability leaves out what needs it',
-      () async {
-        final lenient = await planOf(
-          everyFixture(),
-          capabilities: {DiCapability.instanceName},
-        );
-        expect(
-          lenient.leftOut.map((leftOut) => '${leftOut.module}'),
-          ['fake_registrations'],
-        );
+  group('smf create', () {
+    test('generates an app of every fixture', () async {
+      final runner = RecordingRunner();
+      final host = testHost(processRunner: runner);
 
-        await expectLater(
-          planOf(everyFixture(), capabilities: const {}, strict: true),
-          throwsA(
-            isA<GenerationFailedException>().having(
-              (e) => e.issues.map((issue) => issue.message),
-              'issues',
-              contains(contains('which the selected DI container does not')),
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          everyFixture().join(','),
+          '--no-input',
+          '--skip-external-setup',
+        ],
+        registry: ModuleRegistry(fixtureModules()),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.success);
+      expect(runner.lines, [
+        'flutter pub get',
+        'dart run build_runner build',
+        'dart fix --apply --code=$_importCodes',
+        'dart fix --apply',
+        'dart format .',
+        'flutter pub get',
+      ]);
+      final files = host.fileSystem;
+      expect(
+        files
+            .file('/work/fixture_app/lib/core/di/dependencies.dart')
+            .existsSync(),
+        isTrue,
+      );
+      expect(
+        files.file('/work/fixture_app/pubspec.yaml').readAsStringSync(),
+        contains('build_runner: "^2.7.0"'),
+      );
+    });
+
+    test('a DI container without a capability leaves out what needs it',
+        () async {
+      Future<GeneratedApp?> create(
+        Set<DiCapability> capabilities, {
+        bool strict = false,
+      }) =>
+          CreatePipeline(
+            registry: ModuleRegistry(
+              fixtureModules(diCapabilities: capabilities),
             ),
+            host: testHost(processRunner: RecordingRunner()),
+          ).run(
+            CreateRequest(
+              appName: 'fixture_app',
+              modules: everyFixture(),
+              strict: strict,
+            ),
+          );
+
+      final lenient = await create({DiCapability.instanceName});
+      expect(
+        lenient!.leftOut.map((leftOut) => '${leftOut.module}'),
+        ['fake_registrations'],
+      );
+
+      await expectLater(
+        create(const {}, strict: true),
+        throwsA(
+          isA<GenerationFailedException>().having(
+            (e) => e.issues.map((issue) => issue.message),
+            'issues',
+            contains(contains('which the selected DI container does not')),
           ),
-        );
-      },
-    );
+        ),
+      );
+    });
   });
 }
+
+/// The codes of the diagnostics that the import cleanup fixes.
+const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 
 /// The cases of the harness over the fixtures, each building another app,
 /// so that a case that stops being built fails the test.

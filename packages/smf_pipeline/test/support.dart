@@ -4,6 +4,7 @@ import 'package:file/memory.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
 // The tests reach the stages of the pipeline, which the public library

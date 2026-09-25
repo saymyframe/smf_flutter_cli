@@ -6,7 +6,17 @@ The generation pipeline of the [SMF CLI](https://pub.dev/packages/smf_flutter_cl
 
 The pipeline knows no concrete module or role. It depends only on the core of the lego model, `package:smf_contracts/lego_core.dart`, and receives the modules and the machine it runs on from the CLI.
 
-Most users use it through the SMF CLI.
+Most users use it through the SMF CLI, which passes its modules and the machine to `runSmf`:
+
+```dart
+exitCode = await runSmf(
+  arguments,
+  registry: ModuleRegistry(modules),
+  hostFor: ({required verbose}) => host,
+);
+```
+
+`smf create` renders the app in memory, finishes it in a temporary directory (`flutter pub get`, code generation, the steps of the modules, `dart fix` and `dart format`), and then moves it into place. `package:smf_pipeline/testing.dart` has the contract test harness, which checks that modules follow the rules of their roles and renders the apps they make.
 
 ## 🌐 Links
 [Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_pipeline) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
