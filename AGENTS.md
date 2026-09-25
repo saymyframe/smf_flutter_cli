@@ -47,12 +47,15 @@ Dart **3.12.2** is pinned in CI (`.github/workflows/build.yml`). The formatter o
 
 ```bash
 melos bootstrap             # resolve the workspace and re-bundle every brick
-melos run format            # format lib/test/bin of every package
+melos run format            # format lib/test/bin/tool of every package
 melos run analyze           # dart analyze --fatal-infos --fatal-warnings, every package
 melos run analyze:hooks     # brick hooks are separate packages; pub get + analyze each
+melos run banlist           # no file uses the names the module model replaced (tools/banlist.dart)
 melos run test              # dart test in every package with a test/ dir
-melos run check             # format:check + analyze + analyze:hooks + test
+melos run check             # format:check + analyze + analyze:hooks + banlist + test
 ```
+
+A second CI job generates apps with Flutter and runs `flutter analyze` on each: `packages/smf_flutter_cli/tool/matrix.dart` for the modules of the CLI and `packages/smf_pipeline/fixture_registry/tool/matrix.dart` for the fixture modules. Each takes a directory for the apps and needs `flutter` on the `PATH`.
 
 Run the CLI from source. It finds the Flutter SDK through `flutter` on the `PATH` before it generates anything, and runs `flutter pub get`, `dart fix` and `dart format` in the new app:
 

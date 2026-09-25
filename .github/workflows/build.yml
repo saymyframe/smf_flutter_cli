@@ -47,11 +47,14 @@ jobs:
       - name: Bootstrap workspace
         run: melos bootstrap
 
-      - name: Check brick bundles are up to date
+      # melos bootstrap bundles every brick; a new, changed or stale bundle
+      # shows up as a change of the working tree.
+      - name: Check generated files are up to date
         run: |
-          if ! git diff --quiet -- '*_bundle.dart'; then
-            git diff --stat -- '*_bundle.dart'
-            echo "::error::Brick bundles are out of date. Run 'melos bootstrap' and commit the regenerated bundles."
+          changes="$(git status --porcelain --untracked-files=all)"
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::melos bootstrap changed files, such as brick bundles. Run 'melos bootstrap' and commit what it generates."
             exit 1
           fi
 
@@ -64,6 +67,9 @@ jobs:
       - name: Analyze brick hooks
         run: melos run analyze:hooks
 
+      - name: Banned names
+        run: melos run banlist
+
       - name: Install coverage tool
         run: dart pub global activate coverage
 
@@ -74,3 +80,67 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  flutter:
+    name: Generated apps (${{ matrix.registry }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # real: the modules of the CLI; fixtures: the fake modules that use
+        # the features of the module model that no real module uses yet.
+        registry: [real, fixtures]
+    env:
+      FLUTTER_VERSION: "3.44.2"
+      PUB_ENVIRONMENT: ci
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # The Flutter the apps are checked with, and its Dart, which formats
+      # them, must be the pinned ones.
+      - name: Check the versions of Flutter and Dart
+        run: |
+          flutter --version --machine > "$RUNNER_TEMP/flutter.json"
+          cat "$RUNNER_TEMP/flutter.json"
+          jq -e --arg flutter "$FLUTTER_VERSION" --arg dart "$DART_SDK" \
+            '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
+            "$RUNNER_TEMP/flutter.json"
+
+      - name: Cache pub packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-
+
+      - name: Get the packages of the workspace
+        run: dart pub get
+
+      # Every app is generated with `smf create --no-input
+      # --skip-external-setup --no-dart-fix --strict` and must pass
+      # `flutter analyze`.
+      - name: Generate and analyze the apps of the CLI's modules
+        if: matrix.registry == 'real'
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/apps"
+
+      - name: Compare the brick of flutter_core with flutter create
+        if: matrix.registry == 'real'
+        run: |
+          (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example my_app)
+          cd packages/smf_modules/smf_flutter_core
+          SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
+
+      - name: Generate and analyze the apps of the fixture modules
+        if: matrix.registry == 'fixtures'
+        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/apps"
