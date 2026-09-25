@@ -257,4 +257,294 @@ void main() {
       ]),
     );
   });
+
+  group('rendering', () {
+    test('renders the app of a case with its role options', () async {
+      final pick = TestRole<String>(
+        'pick',
+        options: const [RoleOption(name: 'pick', help: 'What to pick.')],
+        template: _PickTemplate(),
+      );
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(contributions: [entryBrick()]),
+          TestModule('picker', providers: [RoleProvider.plain(pick)]),
+        ]),
+      );
+
+      final result = await harness.check(
+        const ContractCase(
+          'picker',
+          requested: [ModuleId('picker')],
+          roleOptions: {'pick': 'blue'},
+        ),
+      );
+
+      expect(result.errors, isEmpty);
+      expect(result.choices, {pick: 'blue'});
+      expect(result.app!.files['lib/pick.dart']!.text, '// blue\n');
+      expect(result.app!.files['lib/main.dart'], isNotNull);
+
+      final unchosen = await harness.check(
+        const ContractCase('picker', requested: [ModuleId('picker')]),
+      );
+      expect(unchosen.errors.single.message, 'Give --pick.');
+      expect(unchosen.app, isNull);
+      expect(unchosen.collection, isNotNull);
+    });
+
+    test('a harness that does not render leaves the app out', () async {
+      final harness = ContractHarness(registry, render: false);
+      final result = await harness.check(
+        const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+      );
+
+      expect(result.errors, isEmpty);
+      expect(result.app, isNull);
+      expect(result.choices, isNull);
+    });
+
+    test('problems of rendering become issues', () async {
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(contributions: [entryBrick()]),
+          TestModule(
+            'broken',
+            contributions: [
+              BrickContribution(bundle('b', files: {'lib/b.dart': '{{#x}}'})),
+            ],
+          ),
+        ]),
+      );
+
+      final result = await harness.check(
+        const ContractCase('broken', requested: [ModuleId('broken')]),
+      );
+
+      expect(result.app, isNull);
+      expect(
+        result.errors.single.message,
+        startsWith('The template lib/b.dart in the brick b of broken cannot '
+            'be rendered'),
+      );
+    });
+
+    group('checkRendered', () {
+      final nav = TestRole<NoDsl>('nav');
+      BrickContribution dart(String path, String text) =>
+          BrickContribution(bundle(path, files: {path: text}));
+      final modules = <SmfModule>[
+        scaffold(contributions: [entryBrick()]),
+        TestModule(
+          'lib_a',
+          contributions: [dart('lib/a/a.dart', 'class A {}\n')],
+        ),
+        TestModule(
+          'go',
+          providers: [RoleProvider.plain(nav)],
+          contributions: [dart('lib/nav/nav.dart', 'class Nav {}\n')],
+        ),
+        TestModule(
+          'user',
+          uses: {nav},
+          contributions: [
+            dart(
+              'lib/user/user.dart',
+              "import 'package:contract_app/a/a.dart';\n"
+                  "import 'package:contract_app/nowhere.dart';\n"
+                  "import 'package:zeta/zeta.dart';\n"
+                  "import '../nav/nav.dart';\n"
+                  "import '../main.dart';\n"
+                  '\n'
+                  'final a = A();\n'
+                  "const braces = '{{a,b}}';\n",
+            ),
+            const SocketContribution.code(
+              AppEntryRole.bootstrapLate,
+              Fragment('A();', imports: [ImportRef.app('a/a.dart')]),
+            ),
+          ],
+        ),
+        TestModule(
+          'dependent',
+          dependsOn: {'lib_a'},
+          contributions: [
+            dart(
+              'lib/dependent/dependent.dart',
+              "import '../a/a.dart';\n\nfinal a = A();\n",
+            ),
+          ],
+        ),
+      ];
+
+      test('reports imports outside the reach of their user', () async {
+        final harness = ContractHarness(ModuleRegistry(modules));
+        final result = await harness.check(
+          const ContractCase(
+            'user',
+            requested: [
+              ModuleId('user'),
+              ModuleId('lib_a'),
+              ModuleId('go'),
+              ModuleId('dependent'),
+            ],
+          ),
+        );
+
+        expect(
+          [for (final issue in result.errors) issue.message],
+          [
+            equals(
+              'lib/user/user.dart:8 has "{{" left after rendering: mason did '
+              'not render the template, or the template writes the braces '
+              'itself.',
+            ),
+            equals(
+              'lib/bootstrap.dart imports lib/a/a.dart for a fragment of user, '
+              'but that file is of lib_a, which user neither depends on nor '
+              'knows through a role.',
+            ),
+            equals(
+              'lib/user/user.dart imports lib/a/a.dart in the template of '
+              'user, but that file is of lib_a, which user neither depends '
+              'on nor knows through a role.',
+            ),
+            equals(
+              'lib/user/user.dart imports package:contract_app/nowhere.dart, '
+              'but the app has no lib/nowhere.dart.',
+            ),
+            equals(
+              'lib/user/user.dart imports package:zeta/zeta.dart, but the app '
+              'does not depend on zeta.',
+            ),
+            equals(
+              'lib/user/user.dart imports lib/nav/nav.dart in the template of '
+              'user, but that file is of go, which user neither depends on '
+              'nor knows through a role.',
+            ),
+          ],
+        );
+      });
+
+      test('roles and the data of roles open the files of others', () async {
+        final shelf = TestRole<String>(
+          'shelf',
+          template: TestTemplate(
+            contributions: [dart('lib/shelf/shelf.dart', 'class Shelf {}\n')],
+          ),
+        );
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(contributions: [entryBrick()]),
+            TestModule(
+              'store',
+              providers: [RoleProvider.plain(shelf)],
+              contributions: [
+                dart(
+                  'lib/store/store.dart',
+                  "import '../book/book.dart';\n"
+                      "import '../other/other.dart';\n"
+                      "import '../shelf/shelf.dart';\n",
+                ),
+              ],
+            ),
+            TestModule(
+              'book',
+              requires: {shelf},
+              contributions: [
+                shelf.data('a book'),
+                dart(
+                  'lib/book/book.dart',
+                  "import '../shelf/shelf.dart';\n\nclass Book {}\n",
+                ),
+              ],
+            ),
+            TestModule(
+              'other',
+              contributions: [dart('lib/other/other.dart', 'class Other {}\n')],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'store',
+            requested: [ModuleId('store'), ModuleId('book'), ModuleId('other')],
+          ),
+        );
+
+        expect(
+          [for (final issue in result.errors) issue.message],
+          [
+            equals(
+              'lib/store/store.dart imports lib/other/other.dart in the template '
+              'of store, but that file is of other, which store neither '
+              'depends on nor knows through a role.',
+            ),
+          ],
+        );
+      });
+
+      test('the files of the localizations that Flutter generates count',
+          () async {
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(contributions: [entryBrick()]),
+            TestModule(
+              'l10n',
+              contributions: [
+                const PubspecContribution.sdk('flutter_localizations'),
+                const PubspecContribution.flutter(generate: true),
+                BrickContribution(
+                  bundle(
+                    'l10n',
+                    files: {
+                      'l10n.yaml': 'arb-dir: lib/translations\n'
+                          'output-dir: ./lib/generated/\n'
+                          'output-localization-file: strings.dart\n',
+                      'lib/l10n_user.dart': "import 'generated/strings.dart';\n"
+                          "import 'generated/other.dart';\n",
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase('l10n', requested: [ModuleId('l10n')]),
+        );
+
+        expect(
+          [for (final issue in result.errors) issue.message],
+          [
+            equals(
+              'lib/l10n_user.dart imports generated/other.dart, but the app '
+              'has no lib/generated/other.dart.',
+            ),
+          ],
+        );
+      });
+    });
+  });
+}
+
+/// A template that picks what the option `--pick` says, and renders it
+/// into a brick.
+final class _PickTemplate extends RoleTemplate<String> {
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundle('pick', files: {'lib/pick.dart': '// {{picked}}\n'}),
+        ),
+      ];
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      context.option('pick') ?? (throw const SmfUsageException('Give --pick.'));
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) =>
+      RoleOutput(vars: {'picked': input.choice});
 }

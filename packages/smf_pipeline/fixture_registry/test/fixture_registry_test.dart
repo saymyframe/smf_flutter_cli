@@ -29,13 +29,14 @@ void main() {
       );
     });
 
-    test('finds no errors in any app', () {
+    test('finds no errors in any app, rendered code included', () {
       for (final result in results) {
         expect(
           result.errors.map((issue) => '$issue'),
           isEmpty,
           reason: '${result.contractCase}',
         );
+        expect(result.app, isNotNull, reason: '${result.contractCase}');
       }
     });
   });

@@ -1,13 +1,19 @@
 import 'package:file/memory.dart';
 import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_pipeline/src/access.dart';
+import 'package:smf_pipeline/src/choices.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
+import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/host.dart';
+import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
+import 'package:smf_pipeline/src/render.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/templates.dart';
 import 'package:smf_pipeline/src/testing/file_indexer.dart';
 import 'package:smf_pipeline/src/validation.dart';
+import 'package:yaml/yaml.dart';
 
 /// One app the harness builds to check a module or a role: the modules
 /// asked for and the provider picked for each role.
@@ -29,8 +35,9 @@ final class ContractCase {
   /// The provider of each role that has several in the registry.
   final Map<Role, ModuleId> picks;
 
-  /// Values of role options, as `--start /home` on the command line, for
-  /// the choices of the roles when the app of the case is rendered.
+  /// Values of role options by name, as `--start /home` on the command
+  /// line, for the choices of the roles when the app of the case is
+  /// rendered.
   final Map<String, String?> roleOptions;
 
   @override
@@ -46,6 +53,8 @@ final class ContractResult {
     this.resolution,
     this.collection,
     this.validation,
+    this.choices,
+    this.app,
   });
 
   /// The case.
@@ -63,6 +72,30 @@ final class ContractResult {
   /// The result of stage 5, with the order of every socket and the merged
   /// pubspec, if the case resolved.
   final ValidationResult? validation;
+
+  /// The results of the roles' choices, if the harness rendered the app.
+  final Map<Role, Object?>? choices;
+
+  /// The rendered app, if the harness rendered it: when it renders apps and
+  /// the stages before found no error.
+  final RenderedApp? app;
+
+  /// This result with [more] issues, and with the [choices] and the [app]
+  /// if they are given.
+  ContractResult _with(
+    List<SmfIssue> more, {
+    Map<Role, Object?>? choices,
+    RenderedApp? app,
+  }) =>
+      ContractResult(
+        contractCase,
+        [...issues, ...more],
+        resolution: resolution,
+        collection: collection,
+        validation: validation,
+        choices: choices ?? this.choices,
+        app: app ?? this.app,
+      );
 
   /// The errors among [issues].
   List<SmfIssue> get errors => [
@@ -92,14 +125,20 @@ final class ContractResult {
 /// its providers. Each app goes through the stages 3 to 5 of the pipeline,
 /// in a run without a terminal that skips external setup, as the Flutter
 /// job generates apps; stage 5 includes [checkTemplateTags], and the
-/// harness adds [missingTemplateTags]. The checks of rendered code, such as
-/// the structural rules of the roles, run on files with [checkStructure].
+/// harness adds [missingTemplateTags]. Unless [render] is off, the harness
+/// then makes the roles' choices (stage 7) with the options of the case,
+/// renders the app in memory (stage 8) and checks the rendered code with
+/// [checkRendered].
 ///
 /// It depends on no test framework, so the tests of any package can use it.
 final class ContractHarness {
   /// Creates the harness for [registry], generating apps described by
-  /// [context].
-  ContractHarness(this.registry, {this.context = defaultContext});
+  /// [context], and rendering them unless [render] is `false`.
+  ContractHarness(
+    this.registry, {
+    this.context = defaultContext,
+    this.render = true,
+  });
 
   /// The context of the apps the harness builds.
   static const defaultContext = ModuleContext(
@@ -117,6 +156,10 @@ final class ContractHarness {
 
   /// The context of the apps the harness builds.
   final ModuleContext context;
+
+  /// Whether the harness renders the app of every case that has no errors
+  /// and checks the rendered code.
+  final bool render;
 
   /// The cases of the module [id]:
   /// - every provider of the role of its variants, also one without a
@@ -226,7 +269,8 @@ final class ContractHarness {
   }
 
   /// Runs the stages 3 to 5 of the pipeline and [missingTemplateTags] for
-  /// [contractCase].
+  /// [contractCase], then, if [render] is on and they found no error, the
+  /// stages 7 and 8 and [checkRendered].
   Future<ContractResult> check(ContractCase contractCase) async {
     final environment = PipelineEnvironment(
       _silentHost,
@@ -257,7 +301,7 @@ final class ContractHarness {
       interactive: environment.interactive,
       skipExternalSetup: environment.skipExternalSetup,
     );
-    return ContractResult(
+    final checked = ContractResult(
       contractCase,
       [
         ...resolved.issues,
@@ -272,6 +316,37 @@ final class ContractHarness {
       collection: collection,
       validation: validation,
     );
+    if (!render || checked.errors.isNotEmpty) return checked;
+
+    final Map<Role, Object?> choices;
+    final RenderedApp app;
+    try {
+      choices = await chooseRoles(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+        optionValues: contractCase.roleOptions,
+        environment: environment,
+        context: context,
+      );
+      app = renderApp(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+        context: context,
+        choices: choices,
+        pubspec: validation.pubspec,
+      );
+    } on SmfUsageException catch (error) {
+      return checked._with([SmfIssue(error.message)]);
+    } on GenerationFailedException catch (error) {
+      return checked._with([
+        if (error.issues.isEmpty) SmfIssue(error.message),
+        ...error.issues,
+      ]);
+    }
+    final rendered = checked._with(const [], choices: choices, app: app);
+    return rendered._with(checkRendered(rendered, app));
   }
 
   /// Checks every case of every module and every role of the registry, and
@@ -304,15 +379,55 @@ final class ContractHarness {
     required Map<String, String> files,
     required Map<String, ContributionOrigin> owners,
   }) {
-    final resolution = result.resolution;
-    final collection = result.collection;
-    if (resolution == null || collection == null) {
-      throw ArgumentError.value(
-        result,
-        'result',
-        'The case ${result.contractCase} did not resolve',
+    final (:indexes, :issues) = _index(files, owners);
+    return [...issues, ..._structureIssues(result, indexes, owners)];
+  }
+
+  /// Checks [app], the rendered app of [result]:
+  /// - the structural rules and symbols of the roles, see [checkStructure];
+  /// - no text file has `{{` left, which a template that mason did not
+  ///   render leaves;
+  /// - every import of a file of the app finds the file;
+  /// - every import of a package is of a dependency of the app;
+  /// - a file imports only files that its owner may use, and the pipeline
+  ///   added only imports that the contributors of the fragments may use:
+  ///   their own files, the files of the modules they depend on, directly or
+  ///   not, the files of the roles they provide, require or use (the files
+  ///   of each role's template and the files of its required symbols), and,
+  ///   for the template and the providers of a role, the files of those who
+  ///   contribute data to the role, which they render.
+  ///
+  /// Throws an [ArgumentError] if the case of [result] did not resolve.
+  List<SmfIssue> checkRendered(ContractResult result, RenderedApp app) {
+    final owners = app.owners;
+    final texts = app.texts;
+    final (:indexes, :issues) = _index(texts, owners);
+    issues.addAll(_structureIssues(result, indexes, owners));
+    for (final MapEntry(key: path, value: text) in texts.entries) {
+      final offset = text.indexOf('{{');
+      if (offset < 0) continue;
+      final line = '\n'.allMatches(text.substring(0, offset)).length + 1;
+      issues.add(
+        SmfIssue(
+          '$path:$line has "{{" left after rendering: mason did not render '
+          'the template, or the template writes the braces itself.',
+          hint: 'mason renders a file only if a tag in it has no ",", ";" '
+              'or "=".',
+          origin: owners[path],
+          path: path,
+        ),
       );
     }
+    issues.addAll(_importIssues(result, app, indexes));
+    return issues;
+  }
+
+  /// The indexes of the Dart files among [files], and a problem for every
+  /// file that does not parse.
+  ({Map<String, DartFileIndex> indexes, List<SmfIssue> issues}) _index(
+    Map<String, String> files,
+    Map<String, ContributionOrigin> owners,
+  ) {
     final issues = <SmfIssue>[];
     final indexes = <String, DartFileIndex>{};
     for (final MapEntry(key: path, value: text) in files.entries) {
@@ -329,26 +444,223 @@ final class ContractHarness {
         );
       }
     }
+    return (indexes: indexes, issues: issues);
+  }
+
+  List<SmfIssue> _structureIssues(
+    ContractResult result,
+    Map<String, DartFileIndex> indexes,
+    Map<String, ContributionOrigin> owners,
+  ) {
+    final (:resolution, :collection) = _resolved(result);
     final request = StructuralRuleRequest(
       hook: RoleHookRequest(
         data: collection.roleData,
         presentRoles: resolution.presentRoles,
         context: context,
+        choices: result.choices ?? const {},
       ),
       files: indexes,
       owners: owners,
       modules: [for (final module in resolution.modules) module.descriptor],
     );
-    for (final role in resolution.presentRoles) {
-      issues
-        ..addAll(role.checkStructure(request))
-        ..addAll(role.interface.checkSymbols(indexes));
+    return [
+      for (final role in resolution.presentRoles) ...[
+        ...role.checkStructure(request),
+        ...role.interface.checkSymbols(indexes),
+      ],
+    ];
+  }
+
+  ({Resolution resolution, Collection collection}) _resolved(
+    ContractResult result,
+  ) {
+    final resolution = result.resolution;
+    final collection = result.collection;
+    if (resolution == null || collection == null) {
+      throw ArgumentError.value(
+        result,
+        'result',
+        'The case ${result.contractCase} did not resolve',
+      );
+    }
+    return (resolution: resolution, collection: collection);
+  }
+
+  /// The problems of the imports of the Dart files of [app]; see
+  /// [checkRendered].
+  List<SmfIssue> _importIssues(
+    ContractResult result,
+    RenderedApp app,
+    Map<String, DartFileIndex> indexes,
+  ) {
+    final (:resolution, :collection) = _resolved(result);
+    final appName = context.appName;
+    final pubspec = result.validation?.pubspec;
+    final packages = {
+      appName,
+      ...?pubspec?.dependencies.keys,
+      ...?pubspec?.devDependencies.keys,
+    };
+
+    // The template and the providers of a role render the data of its
+    // contributors, so they may import their files.
+    final dataContributors = <Role, Set<ContributionOrigin>>{};
+    for (final data in collection.roleData) {
+      if (data.origin case final origin?) {
+        dataContributors.putIfAbsent(data.role, () => {}).add(_owner(origin));
+      }
+    }
+
+    bool mayImport(ContributionOrigin who, String target) {
+      final owner = _owner(app.files[target]!.owner);
+      final user = _owner(who);
+      if (owner == user) return true;
+      if ((user, owner)
+          case (ModuleOrigin(:final module), ModuleOrigin(module: final other))
+          when resolution.dependencyClosure(module).contains(other)) {
+        return true;
+      }
+      final roles = rolesOf(who, registry, resolution).access;
+      for (final role in roles) {
+        if (owner == RoleTemplateOrigin(role) ||
+            role.interface.files.contains(target) ||
+            role.interface.symbols.any((symbol) => symbol.path == target)) {
+          return true;
+        }
+      }
+      for (final role in resolution.presentRoles) {
+        final renders = user == RoleTemplateOrigin(role) ||
+            resolution.providersOf(role).any((module) => module.origin == user);
+        if (renders && (dataContributors[role]?.contains(owner) ?? false)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final generated = _flutterOutputs(app, pubspec);
+    final issues = <SmfIssue>[];
+    for (final MapEntry(key: path, value: index) in indexes.entries) {
+      final file = app.files[path];
+      if (file == null) continue;
+      final added = <String, Set<ContributionOrigin>>{};
+      for (final import in file.addedImports) {
+        added
+            .putIfAbsent(
+              '${import.import.uri} as ${import.import.prefix}',
+              () => {},
+            )
+            .add(import.contributor);
+      }
+      for (final import in index.imports) {
+        final uri = import.uri;
+        if (uri.startsWith('dart:')) continue;
+        final target = _appPathOf(uri, path, appName);
+        if (target == null) {
+          final package = uri.startsWith('package:')
+              ? uri.substring('package:'.length).split('/').first
+              : null;
+          if (package != null && !packages.contains(package)) {
+            issues.add(
+              SmfIssue(
+                '$path imports $uri, but the app does not depend on '
+                '$package.',
+                origin: file.owner,
+                path: path,
+              ),
+            );
+          }
+          continue;
+        }
+        if (generated.contains(target)) continue;
+        if (!app.files.containsKey(target)) {
+          issues.add(
+            SmfIssue(
+              '$path imports $uri, but the app has no $target.',
+              origin: file.owner,
+              path: path,
+            ),
+          );
+          continue;
+        }
+        final key = '${_packageUriOf(uri, path, appName)} as ${import.prefix}';
+        for (final who in added[key] ?? {file.owner}) {
+          if (mayImport(who, target)) continue;
+          final by = added.containsKey(key)
+              ? 'for a fragment of $who'
+              : 'in the template of $who';
+          issues.add(
+            SmfIssue(
+              '$path imports $target $by, but that file is of '
+              '${app.files[target]!.owner}, which $who neither depends on '
+              'nor knows through a role.',
+              origin: who,
+              path: path,
+            ),
+          );
+        }
+      }
     }
     return issues;
   }
 }
 
-/// Every subset of [roles], the empty one first, in a stable order.
+/// The files of the app that Flutter generates when `flutter pub get` runs
+/// after rendering: with `generate: true` in [pubspec], the localizations
+/// that `l10n.yaml` describes, in `output-dir`, or else in `arb-dir`, which
+/// is `lib/l10n` unless set.
+Set<String> _flutterOutputs(RenderedApp app, MergedPubspec? pubspec) {
+  final l10n = app.files['l10n.yaml'];
+  if (!(pubspec?.generate ?? false) || l10n == null) return const {};
+  final Object? yaml;
+  try {
+    yaml = loadYaml(l10n.text);
+  } on YamlException {
+    return const {};
+  }
+  String? read(String key) => switch (yaml) {
+        YamlMap(:final nodes) => switch (nodes[key]?.value) {
+            final String value => value,
+            _ => null,
+          },
+        _ => null,
+      };
+  String clean(String path) => [
+        for (final segment in path.split('/'))
+          if (segment.isNotEmpty && segment != '.') segment,
+      ].join('/');
+  final directory = clean(read('output-dir') ?? read('arb-dir') ?? 'lib/l10n');
+  final file = read('output-localization-file') ?? 'app_localizations.dart';
+  return {'$directory/$file'};
+}
+
+/// [origin] as the owner of files: a module's variant owns what the module
+/// owns.
+ContributionOrigin _owner(ContributionOrigin origin) => switch (origin) {
+      ModuleOrigin(:final module) => ModuleOrigin(module),
+      _ => origin,
+    };
+
+/// The path relative to the root of the app of the file of the app that
+/// [uri] imports in the file at [from], or `null` for a library outside the
+/// app.
+String? _appPathOf(String uri, String from, String appName) {
+  if (uri.startsWith('package:$appName/')) {
+    return 'lib/${uri.substring('package:$appName/'.length)}';
+  }
+  if (uri.contains(':')) return null;
+  return Uri.parse(from).resolve(uri).path;
+}
+
+/// [uri] as a `package:` URI when it imports a file of the app in `lib/`
+/// relatively from [from], which is in `lib/` too; otherwise [uri].
+String _packageUriOf(String uri, String from, String appName) {
+  final path = _appPathOf(uri, from, appName);
+  if (path == null || !path.startsWith('lib/')) return uri;
+  return 'package:$appName/${path.substring('lib/'.length)}';
+}
+
 /// The subsets of [roles], the largest first.
 List<List<Role>> _subsets(List<Role> roles) => [
       for (var size = roles.length; size >= 0; size--)
