@@ -158,6 +158,40 @@ void main() {
       ]);
     });
 
+    test('rejects needing a factory that takes parameters', () {
+      final issue = _graph([
+        _registration(
+          'Report',
+          lifetime: DiLifetime.factory,
+          params: [const TypeRef('String')],
+        ),
+        _registration('Reader', deps: [_service('Report')]),
+      ]).issues.single;
+
+      expect(issue.message, contains('only resolveWith can pass'));
+      expect(issue.origin, const ModuleOrigin(ModuleId('module_1')));
+    });
+
+    test('knows a type by its file, whatever prefix imports it', () {
+      final issues = _graph([
+        _registration('A'),
+        DiRegistration(
+          type: _type('B'),
+          create: FactoryRef(
+            'createB',
+            import: _file,
+            deps: [
+              ServiceRef(
+                TypeRef('A', import: _file.withPrefix('services')),
+              ),
+            ],
+          ),
+        ),
+      ]).issues;
+
+      expect(issues, isEmpty);
+    });
+
     test('rejects cycles', () {
       final issues = _graph([
         _registration('A', deps: [_service('B')]),
@@ -498,6 +532,36 @@ void main() {
 
       expect(issue.message, contains('must require the DI role'));
       expect(issue.origin, const ModuleOrigin(ModuleId('home')));
+    });
+
+    test('sees resolving through a prefix of the service locator', () {
+      final issues = check(
+        {
+          screen: const DartFileIndex(
+            path: screen,
+            imports: [
+              IndexedImport(
+                'package:my_app/core/di/service_locator.dart',
+                prefix: 'di',
+              ),
+            ],
+            invocations: [
+              IndexedInvocation('resolve', target: 'di'),
+              IndexedInvocation('resolve', target: 'di.serviceLocator'),
+            ],
+          ),
+          infrastructure: const DartFileIndex(
+            path: infrastructure,
+            imports: [
+              IndexedImport('../di/service_locator.dart', prefix: 'locator'),
+            ],
+            memberAccesses: [IndexedMemberAccess('locator', 'serviceLocator')],
+          ),
+        },
+        homeRequires: {diRole},
+      );
+
+      expect(issues.map((issue) => issue.path), [screen, infrastructure]);
     });
 
     test('rejects resolving anywhere else', () {

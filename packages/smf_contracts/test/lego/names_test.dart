@@ -62,6 +62,8 @@ void main() {
       expect(SmfNames.snakeCaseOf('userId'), 'user_id');
       expect(SmfNames.snakeCaseOf('HTTPClient'), 'http_client');
       expect(SmfNames.snakeCaseOf('Screen2'), 'screen2');
+      expect(SmfNames.snakeCaseOf('HTTP2Client'), 'http_2_client');
+      expect(SmfNames.snakeCaseOf('userID'), SmfNames.snakeCaseOf('userId'));
       expect(SmfNames.snakeCaseOf('ID'), 'id');
       expect(SmfNames.snakeCaseOf('a'), 'a');
     });

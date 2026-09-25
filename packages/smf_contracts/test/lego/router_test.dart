@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
+import 'package:smf_contracts/bundles/router_role_bundle.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:test/test.dart';
 
@@ -149,6 +150,50 @@ MasonBundle _bundle(Map<String, String> files) => MasonBundle(
       ],
     );
 
+/// A stand-in for the router of the app, which prints what it is asked.
+const _vmRouter = r'''
+final class _Navigator {
+  void go(AppLocation location) => print('go ${location.path}');
+  Future<T?> push<T extends Object?>(AppLocation location) async {
+    print('push ${location.path}');
+    return null;
+  }
+  void replace(AppLocation location) => print('replace ${location.path}');
+}
+
+final class _Router {
+  _Navigator navigatorOf(BuildContext context) => _Navigator();
+}
+
+final appRouter = _Router();
+''';
+
+/// Prints the locations of some links and navigates with three of them.
+const _vmMain = '''
+Future<void> main() async {
+  final context = BuildContext();
+  final links = [
+    context.nav.home.root(),
+    context.nav.home.details(id: 5),
+    context.nav.home.details(id: 5, tab: 'a b&c'),
+    context.nav.settings.post(userId: 'ann/bo', postId: 7),
+    context.nav.settings.search(q: 'dart', page: 2),
+    context.nav.settings.search(q: ''),
+  ];
+  for (final link in links) {
+    final location = link.location;
+    print([
+      location.routeName,
+      location.path,
+      location.chain.map((l) => l.path).join(' > '),
+    ].join(' | '));
+  }
+  links[1].go();
+  await links[3].push<bool>();
+  links[4].replace();
+}
+''';
+
 void main() {
   group('the routes DSL', () {
     test('RouteParam names the supported types', () {
@@ -292,19 +337,63 @@ void main() {
       );
     });
 
-    test('rejects routes that do not come from a module', () {
-      expect(
-        () => RouterFacade.of([
-          routerRole
-              .data(_homeRoutes)
-              .withOrigin(const RoleTemplateOrigin(layoutRole)),
-        ]),
-        throwsArgumentError,
-      );
-      expect(
-        () => RouterFacade.of([routerRole.data(_homeRoutes)]),
-        throwsArgumentError,
-      );
+    test('leaves out routes that do not come from a module', () {
+      final facade = RouterFacade.of([
+        routerRole
+            .data(_homeRoutes)
+            .withOrigin(const RoleTemplateOrigin(layoutRole)),
+        routerRole.data(_homeRoutes),
+        routerRole
+            .data(_settingsRoutes)
+            .withOrigin(const ModuleOrigin(ModuleId('settings'))),
+      ]);
+
+      expect([for (final f in facade.features) '${f.module}'], ['settings']);
+    });
+
+    test('passes path parameters of parents on, each once', () {
+      final facade = _facade([
+        dataOf(
+          routerRole,
+          RoutesData([
+            Route(
+              '/users/:userId',
+              name: 'user',
+              screen: _screen('UserScreen', 'home'),
+              params: const [RouteParam.path('userId', type: String)],
+              children: [
+                Route(
+                  'posts/:postId',
+                  name: 'post',
+                  screen: _screen('PostScreen', 'home'),
+                  params: const [
+                    RouteParam.path('userId', type: String),
+                    RouteParam.path('postId', type: int),
+                  ],
+                ),
+              ],
+            ),
+          ]),
+        ),
+      ]);
+      final post = facade.routeAt('/home/users/:userId/posts/:postId')!;
+
+      expect(post.pathParams.map((p) => p.name), ['userId', 'postId']);
+      expect(post.params.map((p) => p.name), ['userId', 'postId']);
+      expect(post.isInherited(post.route.params.first), isTrue);
+      expect(post.isInherited(post.route.params.last), isFalse);
+      expectParses(facade.toDart());
+    });
+
+    test('names the location of a route without a name', () {
+      final facade = _facade([
+        dataOf(
+          routerRole,
+          RoutesData([Route('/', name: '', screen: _screen('A', 'home'))]),
+        ),
+      ]);
+
+      expect(facade.routes.single.locationClass, 'HomeLocation');
     });
   });
 
@@ -355,6 +444,39 @@ void main() {
       expectParses(plain);
     });
 
+    test('rebuilds a parent without its query for a child', () {
+      final code = _facade([
+        dataOf(
+          routerRole,
+          RoutesData([
+            Route(
+              '/search',
+              name: 'search',
+              screen: _screen('SearchScreen', 'home'),
+              params: const [
+                RouteParam.query('q', type: String, optional: true),
+              ],
+              children: [
+                Route(
+                  'results/:id',
+                  name: 'result',
+                  screen: _screen('ResultScreen', 'home'),
+                  params: const [RouteParam.path('id', type: int)],
+                ),
+              ],
+            ),
+          ]),
+        ),
+      ]).toDart();
+
+      expectParses(code);
+      expect(
+        code,
+        contains('AppLocation get parent => const HomeSearchLocation();'),
+      );
+      expect(code, contains("_withQuery('/home/search', {'q': q})"));
+    });
+
     test('generates an empty facade for an app without routes', () {
       final code = _facade(const []).toDart();
 
@@ -363,47 +485,22 @@ void main() {
       expect(code, isNot(contains('_context')));
     });
 
-    test('builds the paths of the locations at run time', () async {
+    test('builds the locations and navigates at run time', () async {
       final directory = await Directory.systemTemp.createTemp('smf_facade');
       addTearDown(() => directory.delete(recursive: true));
+      // The brick's navigation.dart with the facade, where stand-ins
+      // replace Flutter and the router of the app.
+      final navigation = (await renderBundle(routerRoleBundle, {
+        'facade': _facade().toDart(),
+      }))[RouterRole.navigationFile]!;
+      final source = navigation
+          .replaceFirst(
+            "import 'package:flutter/widgets.dart';",
+            'class BuildContext {}',
+          )
+          .replaceFirst("import 'app_router.dart';", _vmRouter);
       final file = File('${directory.path}/facade.dart');
-      await file.writeAsString('''
-// Stand-ins for Flutter and the static part of navigation.dart.
-class BuildContext {}
-
-class NavLink {
-  const NavLink(Object context, this.location);
-  final AppLocation location;
-}
-
-sealed class AppLocation {
-  const AppLocation();
-  String get routeName;
-  String get path;
-  AppLocation? get parent => null;
-  List<AppLocation> get chain => [...?parent?.chain, this];
-}
-${_facade().toDart()}
-void main() {
-  final context = BuildContext();
-  final links = [
-    context.nav.home.root(),
-    context.nav.home.details(id: 5),
-    context.nav.home.details(id: 5, tab: 'a b&c'),
-    context.nav.settings.post(userId: 'ann/bo', postId: 7),
-    context.nav.settings.search(q: 'dart', page: 2),
-    context.nav.settings.search(q: ''),
-  ];
-  for (final link in links) {
-    final location = link.location;
-    print([
-      location.routeName,
-      location.path,
-      location.chain.map((l) => l.path).join(' > '),
-    ].join(' | '));
-  }
-}
-''');
+      await file.writeAsString('$source$_vmMain');
       final result = await Process.run(
         Platform.resolvedExecutable,
         ['run', file.path],
@@ -411,7 +508,7 @@ void main() {
 
       expect(result.stderr, isEmpty);
       final lines = (result.stdout as String).trim().split('\n');
-      expect(lines, hasLength(6));
+      expect(lines, hasLength(9));
       expect(lines[0], 'home.root | /home | /home');
       expect(
         lines[1],
@@ -433,9 +530,14 @@ void main() {
         '/settings/search?q=dart&page=2',
       );
       expect(
-          lines[5],
-          'settings.search | /settings/search?q | '
-          '/settings/search?q');
+        lines[5],
+        'settings.search | /settings/search?q | /settings/search?q',
+      );
+      expect(lines.sublist(6), [
+        'go /home/details/5',
+        'push /settings/users/ann%2Fbo/posts/7',
+        'replace /settings/search?q=dart&page=2',
+      ]);
     });
   });
 
@@ -493,33 +595,6 @@ void main() {
       expect(issues.first.message, contains('context.nav.class'));
       expect(issues.first.origin, const ModuleOrigin(ModuleId('class')));
       expect(issues.last.message, contains('context.nav.toString'));
-    });
-
-    test('rejects two routes at the same full path', () {
-      final issues = template.validate(
-        inputOf(
-          routerRole,
-          data: [
-            dataOf(
-              routerRole,
-              RoutesData([
-                Route('/a', name: 'a', screen: _screen('A', 'home')),
-                Route(
-                  '/',
-                  name: 'b',
-                  screen: _screen('B', 'home'),
-                  children: [
-                    Route('a', name: 'c', screen: _screen('C', 'home')),
-                  ],
-                ),
-              ]),
-            ),
-          ],
-        ),
-      );
-
-      expect(issues.single.message, contains('have the same path /home/a'));
-      expect(issues.single.origin, const ModuleOrigin(ModuleId('home')));
     });
 
     test('rejects two routes that need the same location class', () {
@@ -607,15 +682,21 @@ void main() {
       expect(pathOf(await choose([_data.first])), '/home');
     });
 
-    test('has no start route without candidates', () async {
-      final choice = await choose([
-        dataOf(
-          routerRole,
-          RoutesData([Route('/', name: 'root', screen: _screen('A', 'a'))]),
-        ),
-      ]);
+    test('has no start route without candidates, and warns', () async {
+      final environment = PromptingEnvironment();
+      final choice = await choose(
+        [
+          dataOf(
+            routerRole,
+            RoutesData([Route('/', name: 'root', screen: _screen('A', 'a'))]),
+          ),
+        ],
+        environment: environment,
+      );
 
       expect(pathOf(choice), isNull);
+      expect(environment.warnings.single, contains('--start'));
+      expect(pathOf(await choose(const [])), isNull);
     });
 
     test('asks the user to pick one of several candidates', () async {
@@ -830,38 +911,179 @@ void main() {
             RouteParam.path('id', type: int),
             RouteParam.path('missing', type: int),
             RouteParam.query('path', type: String),
+            RouteParam.query('int', type: String),
             RouteParam.query('at', type: DateTime),
           ],
         ),
       ]);
 
-      expect(problems, hasLength(5));
+      expect(problems, hasLength(6));
       expect(problems[0], contains('declares the parameter "id" twice'));
-      expect(problems[1], contains('has no :missing segment'));
+      expect(problems[1], contains('nor the path of a parent has a :missing'));
       expect(problems[2], contains('a parameter name is a lowerCamelCase'));
-      expect(problems[3], contains('use String, int, double or bool'));
-      expect(problems[4], contains('segment :other but no RouteParam.path'));
+      expect(problems[3], contains('a parameter name is a lowerCamelCase'));
+      expect(problems[4], contains('use String, int, double or bool'));
+      expect(problems[5], contains('segment :other but no RouteParam.path'));
     });
 
-    test('rejects a child parameter that its parent already has', () {
+    test('rejects a parameter whose name a parent already has', () {
+      final problems = _routeProblems([
+        Route(
+          '/:id',
+          name: 'a',
+          screen: _screen('A', 'h'),
+          params: const [
+            RouteParam.path('id', type: int),
+            RouteParam.query('q', type: String, optional: true),
+          ],
+          children: [
+            Route(
+              'b',
+              name: 'b',
+              screen: _screen('B', 'h'),
+              params: const [
+                RouteParam.query('id', type: int, optional: true),
+                RouteParam.query('q', type: String, optional: true),
+              ],
+            ),
+            Route(
+              'c/:id',
+              name: 'c',
+              screen: _screen('C', 'h'),
+              params: const [RouteParam.path('id', type: int)],
+            ),
+          ],
+        ),
+      ]);
+
+      expect(problems, hasLength(3));
+      expect(problems, everyElement(contains('which a parent already has')));
+    });
+
+    test('lets a child pass a path parameter of a parent to its screen', () {
+      expect(
+        _routeProblems([
+          Route(
+            '/users/:userId',
+            name: 'user',
+            screen: _screen('UserScreen', 'h'),
+            params: const [RouteParam.path('userId', type: String)],
+            children: [
+              Route(
+                'posts/:postId',
+                name: 'post',
+                screen: _screen('PostScreen', 'h'),
+                params: const [
+                  RouteParam.path('userId', type: String),
+                  RouteParam.path('postId', type: int),
+                ],
+              ),
+            ],
+          ),
+        ]),
+        isEmpty,
+      );
+      expect(
+        _routeProblems([
+          Route(
+            '/users/:userId',
+            name: 'user',
+            screen: _screen('UserScreen', 'h'),
+            params: const [RouteParam.path('userId', type: String)],
+            children: [
+              Route(
+                'posts',
+                name: 'posts',
+                screen: _screen('PostsScreen', 'h'),
+                params: const [RouteParam.path('userId', type: int)],
+              ),
+            ],
+          ),
+        ]).single,
+        contains('but the parent declares it as String'),
+      );
+    });
+
+    test('rejects route names that hide members or types', () {
+      final problems = _routeProblems([
+        Route('/a', name: 'int', screen: _screen('A', 'h')),
+        Route('/b', name: 'hashCode', screen: _screen('B', 'h')),
+      ]);
+
+      expect(problems, hasLength(2));
+      expect(
+        problems,
+        everyElement(contains('lowerCamelCase Dart identifier')),
+      );
+    });
+
+    test('rejects paths that match the same locations', () {
+      expect(
+        _routeProblems([
+          Route(
+            '/:id',
+            name: 'a',
+            screen: _screen('A', 'h'),
+            params: const [RouteParam.path('id', type: int)],
+          ),
+          Route(
+            '/:slug',
+            name: 'b',
+            screen: _screen('B', 'h'),
+            params: const [RouteParam.path('slug', type: String)],
+          ),
+        ]).single,
+        'The routes "a" and "b" have the paths "/:id" and "/:slug", which '
+        'match the same locations.',
+      );
+    });
+
+    test('rejects names that would share the tags of annotations', () {
+      final problems = _routeProblems([
+        Route(
+          '/a',
+          name: 'a',
+          screen: _screen('ABScreen', 'h'),
+          params: const [
+            RouteParam.query('userId', type: String, optional: true),
+            RouteParam.query('userID', type: String, optional: true),
+          ],
+        ),
+        Route('/b', name: 'b', screen: _screen('AbScreen', 'h')),
+      ]);
+
+      expect(problems, hasLength(2));
+      expect(problems[0], contains('"userId" and "userID"'));
+      expect(problems[1], contains('ABScreen and AbScreen'));
+    });
+
+    test('rejects destinations that need values', () {
       final problems = _routeProblems([
         Route(
           '/:id',
           name: 'a',
           screen: _screen('A', 'h'),
           params: const [RouteParam.path('id', type: int)],
-          children: [
-            Route(
-              'b',
-              name: 'b',
-              screen: _screen('B', 'h'),
-              params: const [RouteParam.query('id', type: int, optional: true)],
-            ),
-          ],
+          destination: _destination('A'),
+        ),
+        Route(
+          '/b',
+          name: 'b',
+          screen: _screen('B', 'h'),
+          params: const [RouteParam.query('q', type: String)],
+          destination: _destination('B'),
+        ),
+        Route(
+          '/c',
+          name: 'c',
+          screen: _screen('C', 'h'),
+          params: const [RouteParam.query('q', type: String, optional: true)],
+          destination: _destination('C'),
         ),
       ]);
 
-      expect(problems.single, contains('a parent already has it'));
+      expect(problems, hasLength(2));
+      expect(problems, everyElement(contains('is a destination of the main')));
     });
 
     test('rejects start candidates that need values', () {
@@ -945,6 +1167,31 @@ void main() {
         '{{{smf_router__param_annotations__home__details_screen__tab}}}';
     final details = _homeRoutes.routes.single.children.single;
 
+    /// A screen template with the tags where they belong.
+    const screen = '''
+import 'package:flutter/widgets.dart';
+
+/// The details of an item; the rule looks for class DetailsScreen only in
+/// declarations.
+$screenTag
+// The annotations of the router go above.
+@immutable
+class DetailsScreen extends StatelessWidget {
+  const DetailsScreen({
+    $idTag required this.id,
+    $tabTag this.tab,
+    super.key,
+  });
+
+  final int id;
+
+  final String? tab;
+
+  @override
+  Widget build(BuildContext context) => Text('\$id \$tab');
+}
+''';
+
     List<String> problems(String? template) => [
           for (final issue in _moduleIssues(
             'router.screen_sockets',
@@ -960,22 +1207,34 @@ void main() {
         ];
 
     test('accepts a screen with the tags of its annotations', () {
-      expect(
-        problems('''
-$screenTag
-class DetailsScreen extends StatelessWidget {
-  const DetailsScreen({$idTag required this.id, $tabTag this.tab});
-}
-'''),
-        isEmpty,
-      );
+      expect(problems(screen), isEmpty);
+    });
+
+    test('accepts a screen that renders to valid Dart', () async {
+      final bundle = _bundle({'lib/features/home/details_screen.dart': screen});
+      String name(String tag) => tag.substring(3, tag.length - 3);
+
+      for (final vars in [
+        {name(screenTag): '', name(idTag): '', name(tabTag): ''},
+        {
+          name(screenTag): '@RoutePage()',
+          name(idTag): "@PathParam('id')",
+          name(tabTag): "@QueryParam('tab')",
+        },
+      ]) {
+        final rendered = await renderBundle(bundle, vars);
+        final code = rendered['lib/features/home/details_screen.dart']!;
+
+        expectParses(code);
+        expect(code, contains('${vars[name(idTag)]} required this.id,'));
+      }
     });
 
     test('rejects a screen that the bricks do not generate', () {
       expect(problems(null).single, contains('do not generate'));
     });
 
-    test('rejects missing and misplaced tags', () {
+    test('rejects missing tags and a missing class', () {
       expect(
         problems('''
 class DetailsScreen extends StatelessWidget {
@@ -989,21 +1248,57 @@ class DetailsScreen extends StatelessWidget {
         ],
       );
       expect(
-        problems('''
-$idTag
-class DetailsScreen extends StatelessWidget {
-  $screenTag
-  const DetailsScreen({required this.id, $tabTag this.tab});
-}
-'''),
-        [
-          contains('must come before the declaration'),
-          contains('must be in the constructor'),
-        ],
+        problems('$screenTag\n$idTag $tabTag').first,
+        contains('does not declare the class DetailsScreen'),
+      );
+    });
+
+    test('rejects a tag that follows a brace, which mustache would eat', () {
+      expect(
+        problems(
+          screen.replaceFirst('({\n    $idTag', '({$idTag'),
+        ).single,
+        contains('follows a "{"'),
+      );
+    });
+
+    test('rejects a class tag away from the class', () {
+      expect(
+        problems(
+          screen.replaceFirst(
+            '$screenTag\n',
+            '$screenTag\nclass Helper {}\n',
+          ),
+        ).single,
+        contains('must come right before the declaration'),
       );
       expect(
-        problems('$screenTag $idTag $tabTag').single,
-        contains('does not declare the class DetailsScreen'),
+        problems(
+          screen.replaceFirst('$screenTag\n', '').replaceFirst(
+                'super.key,\n  });',
+                'super.key,\n  });\n$screenTag',
+              ),
+        ).single,
+        contains('must come right before the declaration'),
+      );
+    });
+
+    test('rejects a parameter tag outside its parameter', () {
+      expect(
+        problems(
+          screen
+              .replaceFirst('$idTag required this.id', 'required this.id')
+              .replaceFirst('final int id;', '$idTag final int id;'),
+        ).single,
+        contains('right before the parameter id'),
+      );
+      expect(
+        problems(
+          screen
+              .replaceFirst('$idTag required this.id', 'required this.id')
+              .replaceFirst('$tabTag this.tab', '$idTag $tabTag this.tab'),
+        ).single,
+        contains('right before the parameter id'),
       );
     });
 

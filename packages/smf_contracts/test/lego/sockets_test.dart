@@ -208,6 +208,27 @@ void main() {
       expect(moduleFamily.kind, const CodeSocket());
     });
 
+    test('can require a number of key segments', () {
+      final pairs = SocketFamily<List<String>, CodeSocket>.role(
+        role,
+        'pairs',
+        const CodeSocket(),
+        keyOf: (key) => key,
+        segments: 2,
+      );
+
+      expect(pairs.segments, 2);
+      expect(
+        pairs(const ['home', 'screen']).tag,
+        'smf_router__pairs__home__screen',
+      );
+      expect(() => pairs(const ['home']), throwsArgumentError);
+      expect(pairs.memberOfTag('smf_router__pairs__home'), isNull);
+      expect(pairs.memberOfTag('smf_router__pairs__a__b__c'), isNull);
+      expect(pairs.memberOfTag('smf_router__pairs__a__b'), isNotNull);
+      expect(family.segments, isNull);
+    });
+
     test('rejects keys that are empty or not lower snake_case', () {
       final bad = SocketFamily<List<String>, CodeSocket>.role(
         role,

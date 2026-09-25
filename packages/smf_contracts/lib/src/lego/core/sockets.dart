@@ -586,22 +586,26 @@ final class SocketRef<K extends SocketKind> {
 @immutable
 final class SocketFamily<Key, K extends SocketKind> {
   /// Creates the family [name] of [role]; [keyOf] turns a key into the lower
-  /// snake_case segments of a member's tag.
+  /// snake_case segments of a member's tag, of which there are [segments] if
+  /// that is set.
   const SocketFamily.role(
     Role this.role,
     this.name,
     this.kind, {
     required List<String> Function(Key key) keyOf,
+    this.segments,
   })  : module = null,
         _keyOf = keyOf;
 
   /// Creates the family [name] of the module [module]; [keyOf] turns a key
-  /// into the lower snake_case segments of a member's tag.
+  /// into the lower snake_case segments of a member's tag, of which there
+  /// are [segments] if that is set.
   const SocketFamily.module(
     ModuleId this.module,
     this.name,
     this.kind, {
     required List<String> Function(Key key) keyOf,
+    this.segments,
   })  : role = null,
         _keyOf = keyOf;
 
@@ -617,6 +621,13 @@ final class SocketFamily<Key, K extends SocketKind> {
   /// What every member of the family accepts.
   final K kind;
 
+  /// How many segments the key of every member has, or `null` for any
+  /// number.
+  ///
+  /// With a fixed number, [memberOfTag] tells a member's tag from a tag
+  /// that only starts like one, such as a misspelled tag.
+  final int? segments;
+
   final List<String> Function(Key key) _keyOf;
 
   /// The name of the owner: the id of the role or module.
@@ -628,16 +639,16 @@ final class SocketFamily<Key, K extends SocketKind> {
 
   /// Returns the member of the family for [key].
   ///
-  /// Throws an [ArgumentError] if the key has no segments or a segment that
-  /// is not lower snake_case.
+  /// Throws an [ArgumentError] if the key has no segments, a segment that is
+  /// not lower snake_case, or a number of segments other than [segments].
   SocketRef<K> call(Key key) {
     final member = _member(_keyOf(key));
     if (member == null) {
       throw ArgumentError.value(
         key,
         'key',
-        'The key of a member of $name must be non-empty lower snake_case '
-            'segments',
+        'The key of a member of $name must be '
+            '${segments ?? 'one or more'} lower snake_case segments',
       );
     }
     return member;
@@ -661,8 +672,10 @@ final class SocketFamily<Key, K extends SocketKind> {
     return _member(base.substring(tagPrefix.length).split('__'));
   }
 
-  SocketRef<K>? _member(List<String> segments) {
-    if (segments.isEmpty || !segments.every(SmfNames.isSnakeCase)) {
+  SocketRef<K>? _member(List<String> key) {
+    if (key.isEmpty ||
+        (segments != null && key.length != segments) ||
+        !key.every(SmfNames.isSnakeCase)) {
       return null;
     }
     return SocketRef<K>._family(
@@ -670,7 +683,7 @@ final class SocketFamily<Key, K extends SocketKind> {
       module: module,
       name: name,
       kind: kind,
-      familyKey: List.unmodifiable(segments),
+      familyKey: List.unmodifiable(key),
     );
   }
 }

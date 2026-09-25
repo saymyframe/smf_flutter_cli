@@ -35,8 +35,9 @@ final class DiGraph {
   DiRegistration? registrationOf(ServiceRef service) => _byKey[service]?.value;
 
   /// The problems of the registrations: those of each one alone, services
-  /// registered twice, services needed but not registered, cycles, and
-  /// services a singleton waits for that are not created asynchronously.
+  /// registered twice, services needed but not registered or created with
+  /// parameters, cycles, and services a singleton waits for that are not
+  /// created asynchronously.
   List<SmfIssue> get issues {
     final issues = <SmfIssue>[];
     for (final data in registrations) {
@@ -61,11 +62,21 @@ final class DiGraph {
         ...registration.create.deps,
         ...registration.dependsOn,
       ]) {
-        if (!_byKey.containsKey(service)) {
+        final target = _byKey[service]?.value;
+        if (target == null) {
           issues.add(
             SmfIssue(
               'The registration of ${registration.key} needs $service, which '
               'no module registers.',
+              origin: origin,
+            ),
+          );
+        } else if (target.params.isNotEmpty) {
+          // The container would create it without the values it takes.
+          issues.add(
+            SmfIssue(
+              'The registration of ${registration.key} needs $service, which '
+              'takes parameters that only resolveWith can pass.',
               origin: origin,
             ),
           );

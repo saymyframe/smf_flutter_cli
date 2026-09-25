@@ -111,6 +111,13 @@ final class ImportRef {
 
   static final RegExp _identifier = RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$');
 
+  /// This import with [prefix] instead of its own prefix and without a
+  /// `show` combinator, such as a template's own prefix for the file of
+  /// another module, which keeps the names of that file apart from its own.
+  ImportRef withPrefix(String prefix) => isAppFile
+      ? ImportRef.app(uri, prefix: prefix)
+      : ImportRef(uri, prefix: prefix);
+
   /// The URI of the import in an app whose package is named [appName].
   String resolveUri(String appName) =>
       isAppFile ? 'package:$appName/$uri' : uri;

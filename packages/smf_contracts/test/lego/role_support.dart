@@ -200,6 +200,9 @@ final class PromptingEnvironment implements SmfEnvironment {
   /// The displayed choices of the last selection.
   List<String> shown = const [];
 
+  /// The warnings reported to the user, in order.
+  final List<String> warnings = [];
+
   @override
   bool get interactive => true;
 
@@ -216,7 +219,7 @@ final class PromptingEnvironment implements SmfEnvironment {
   SmfPrompter get prompter => _Prompter(this);
 
   @override
-  SmfLogger get logger => throw UnimplementedError();
+  SmfLogger get logger => _Logger(warnings);
 
   @override
   Future<String?> findExecutable(String name) async => null;
@@ -224,6 +227,30 @@ final class PromptingEnvironment implements SmfEnvironment {
   @override
   Future<String> writeTempFile(String name, String contents) async =>
       throw UnimplementedError();
+}
+
+final class _Logger implements SmfLogger {
+  _Logger(this._warnings);
+
+  final List<String> _warnings;
+
+  @override
+  void warn(String message) => _warnings.add(message);
+
+  @override
+  void detail(String message) {}
+
+  @override
+  void error(String message) {}
+
+  @override
+  void info(String message) {}
+
+  @override
+  SmfProgress progress(String message) => throw UnimplementedError();
+
+  @override
+  void success(String message) {}
 }
 
 final class _Prompter implements SmfPrompter {

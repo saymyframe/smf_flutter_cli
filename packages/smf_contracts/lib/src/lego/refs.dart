@@ -6,7 +6,9 @@ import 'package:smf_contracts/lego_core.dart';
 /// `ImportRef.app('core/analytics/analytics_service.dart')`.
 ///
 /// [name] is a plain type name without type arguments. Two references are
-/// the same type when they have the same name and import.
+/// the same type when they have the same name and import the same file: the
+/// prefix and `show` of the import only say how one piece of code refers to
+/// the type.
 @immutable
 final class TypeRef {
   /// Refers to the type [name], declared by [import], or by `dart:core` if
@@ -22,7 +24,10 @@ final class TypeRef {
 
   /// The type as code refers to it: [name], after the prefix of [import]
   /// if it has one.
-  String get code => _prefixed(import, name);
+  String get code => codeWith(import?.prefix);
+
+  /// The type as code that imports its file with [prefix] refers to it.
+  String codeWith(String? prefix) => _prefixed(prefix, name);
 
   /// Describes what is wrong with this reference, or returns an empty list.
   List<String> problems() => [
@@ -33,10 +38,13 @@ final class TypeRef {
 
   @override
   bool operator ==(Object other) =>
-      other is TypeRef && other.name == name && other.import == import;
+      other is TypeRef &&
+      other.name == name &&
+      other.import?.uri == import?.uri &&
+      other.import?.isAppFile == import?.isAppFile;
 
   @override
-  int get hashCode => Object.hash(name, import);
+  int get hashCode => Object.hash(name, import?.uri, import?.isAppFile);
 
   @override
   String toString() => name;
@@ -57,7 +65,10 @@ final class FunctionRef {
 
   /// The function as code refers to it: [name], after the prefix of
   /// [import] if it has one.
-  String get code => _prefixed(import, name);
+  String get code => codeWith(import.prefix);
+
+  /// The function as code that imports its file with [prefix] refers to it.
+  String codeWith(String? prefix) => _prefixed(prefix, name);
 
   /// Describes what is wrong with this reference, or returns an empty list.
   List<String> problems() => [
@@ -92,7 +103,10 @@ final class FactoryRef {
 
   /// The function as code refers to it: [name], after the prefix of
   /// [import] if it has one.
-  String get code => _prefixed(import, name);
+  String get code => codeWith(import.prefix);
+
+  /// The function as code that imports its file with [prefix] refers to it.
+  String codeWith(String? prefix) => _prefixed(prefix, name);
 
   /// Describes what is wrong with this reference, or returns an empty list.
   List<String> problems() => [
@@ -140,10 +154,8 @@ final class ServiceRef {
   String toString() => instanceName == null ? '$type' : '$type "$instanceName"';
 }
 
-String _prefixed(ImportRef? import, String name) {
-  final prefix = import?.prefix;
-  return prefix == null ? name : '$prefix.$name';
-}
+String _prefixed(String? prefix, String name) =>
+    prefix == null ? name : '$prefix.$name';
 
 bool _isPublicIdentifier(String name) =>
     SmfNames.isDartIdentifier(name) && !name.startsWith('_');

@@ -35,20 +35,14 @@ final class RouterFacade {
   /// Resolves [data], the routes of the modules in the order the modules
   /// were selected; data of the same module is merged.
   ///
-  /// Throws an [ArgumentError] for data without a module as its origin,
-  /// because routes live under the namespace of their module.
+  /// Routes live under the namespace of their module, so data without a
+  /// module as its origin is left out; the router's template reports it.
   factory RouterFacade.of(Iterable<RoleData<RoutesData>> data) {
     final routes = <ModuleId, List<Route>>{};
     for (final entry in data) {
-      final origin = entry.origin;
-      if (origin is! ModuleOrigin) {
-        throw ArgumentError.value(
-          entry,
-          'data',
-          'Routes need a module as their origin, not ${origin ?? 'none'}',
-        );
+      if (entry.origin case ModuleOrigin(:final module)) {
+        routes.putIfAbsent(module, () => []).addAll(entry.value.routes);
       }
-      routes.putIfAbsent(origin.module, () => []).addAll(entry.value.routes);
     }
     return RouterFacade._(
       List.unmodifiable([
@@ -253,8 +247,11 @@ final class FacadeRoute {
 
   /// The name of the location class of the route, such as
   /// `HomeDetailsLocation`.
-  String get locationClass => '${feature.module.upperCamelCase}'
-      '${route.name[0].toUpperCase()}${route.name.substring(1)}Location';
+  String get locationClass {
+    final name = route.name;
+    final upper = name.isEmpty ? '' : name[0].toUpperCase() + name.substring(1);
+    return '${feature.module.upperCamelCase}${upper}Location';
+  }
 
   /// The routes from the top-level route down to this one: the stack that
   /// going to this route shows.
@@ -268,13 +265,29 @@ final class FacadeRoute {
   List<FacadeRoute> get withDescendants =>
       [this, for (final child in children) ...child.withDescendants];
 
-  /// The path parameters of [chain], the parents' first: the values the
-  /// location needs to build its path.
-  List<RouteParam> get pathParams => [
-        for (final route in chain)
-          for (final param in route.route.params)
-            if (param.source == RouteParamSource.path) param,
-      ];
+  /// The path parameters of [chain], the parents' first, each once: the
+  /// values the location needs to build its path.
+  List<RouteParam> get pathParams {
+    final params = <String, RouteParam>{};
+    for (final route in chain) {
+      for (final param in route.route.params) {
+        if (param.source == RouteParamSource.path) {
+          params.putIfAbsent(param.name, () => param);
+        }
+      }
+    }
+    return List.unmodifiable(params.values);
+  }
+
+  /// Whether [param], a parameter of [route], is a path parameter of a
+  /// parent that the route also passes to its screen, such as `userId` of
+  /// `/users/:userId` for its child `posts/:postId`.
+  ///
+  /// A router that annotates parameters marks such a one as inherited, as
+  /// auto_route does with `@PathParam.inherit()`.
+  bool isInherited(RouteParam param) =>
+      param.source == RouteParamSource.path &&
+      !_segmentsOf(route.path).contains(param.name);
 
   /// The parameters of the location and of the facade's navigation method:
   /// [pathParams], then the query parameters of the route itself.
@@ -369,10 +382,13 @@ final class FacadeRoute {
   String _pathExpression() {
     final segments = fullPath.split('/').map((segment) {
       if (!segment.startsWith(':')) return segment;
-      final param = pathParams.firstWhere((p) => ':${p.name}' == segment);
-      return param.type == String
-          ? '\${Uri.encodeComponent(${param.name})}'
-          : '\$${param.name}';
+      final name = segment.substring(1);
+      // router.routes rejects a segment without a parameter; this keeps the
+      // code of invalid routes printable.
+      final isString = pathParams
+          .where((param) => param.name == name)
+          .every((param) => param.type == String);
+      return isString ? '\${Uri.encodeComponent($name)}' : '\$$name';
     });
     final path = "'${segments.join('/')}'";
     final query = [

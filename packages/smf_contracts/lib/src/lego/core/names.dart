@@ -83,7 +83,10 @@ abstract final class SmfNames {
   /// digits, to lower snake_case: `HomeScreen` becomes `home_screen`,
   /// `userId` becomes `user_id` and `HTTPClient` becomes `http_client`.
   ///
-  /// Digits stay with the word before them, so `Screen2` becomes `screen2`.
+  /// Digits stay with a word that has lowercase letters, so `Screen2`
+  /// becomes `screen2`, but `HTTP2Client` becomes `http_2_client`. Names
+  /// that differ only in case, such as `userId` and `userID`, convert to the
+  /// same name.
   /// Throws an [ArgumentError] if [identifier] does not start with a letter
   /// or has characters other than letters and digits.
   static String snakeCaseOf(String identifier) {

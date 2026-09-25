@@ -97,6 +97,32 @@ void main() {
       expect(const _AnyLayout().validate(input(9)), isEmpty);
     });
 
+    test('leaves out destinations that do not come from a module', () {
+      final input = inputOf(
+        layoutRole,
+        data: [
+          routerRole
+              .data(
+                const RoutesData([
+                  Route(
+                    '/a',
+                    name: 'a',
+                    screen: ScreenRef(
+                      'AScreen',
+                      import: ImportRef.app('a.dart'),
+                    ),
+                    destination: Destination(label: 'A', icon: _icon),
+                  ),
+                ]),
+              )
+              .withOrigin(const RoleTemplateOrigin(routerRole)),
+        ],
+        present: {routerRole},
+      );
+
+      expect(const _Tabs(0).validate(input), isEmpty);
+    });
+
     test('accepts up to its maximum of destinations', () {
       expect(const _Tabs(5).validate(input(5)), isEmpty);
     });

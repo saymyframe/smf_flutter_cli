@@ -58,6 +58,22 @@ void main() {
     });
   });
 
+  group('ImportRef.withPrefix', () {
+    test('keeps the file and replaces the prefix and show', () {
+      const app = ImportRef.app('a/b.dart', prefix: 'b', show: ['B']);
+      const package = ImportRef('package:x/x.dart', show: ['X']);
+
+      expect(
+        app.withPrefix('impl0'),
+        const ImportRef.app('a/b.dart', prefix: 'impl0'),
+      );
+      expect(
+        package.withPrefix('x'),
+        const ImportRef('package:x/x.dart', prefix: 'x'),
+      );
+    });
+  });
+
   group('ImportRef', () {
     test('renders a directive with prefix and shown names', () {
       expect(

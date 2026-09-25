@@ -59,7 +59,21 @@ final class CrashReportingRole extends Role<RoleImplementation> {
   @override
   List<ModuleRule<RoleImplementation>> get moduleRules =>
       const [_implementationsRule];
+
+  @override
+  List<StructuralRule<RoleImplementation>> get structuralRules => const [
+        StructuralRule(
+          id: 'crash_reporting.factory_calls',
+          description: 'Only the DI container calls createCrashReporter().',
+          check: _checkCrashReportingFactory,
+        ),
+      ];
 }
+
+List<SmfIssue> _checkCrashReportingFactory(
+  StructuralRuleInput<RoleImplementation> input,
+) =>
+    _checkFactoryCalls(input, 'createCrashReporter');
 
 final class _CrashReportingTemplate extends _ServiceTemplate {
   const _CrashReportingTemplate();

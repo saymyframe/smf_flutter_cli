@@ -83,6 +83,15 @@ List<SmfIssue> _checkImplementations(
   final provides = input.module.provides.contains(role);
   final origin = ModuleOrigin(input.module.id);
   return [
+    for (final contribution in input.contributions)
+      if (contribution is SocketContribution &&
+          identical(contribution.socket.role, role))
+        SmfIssue(
+          'The module contributes code to the ${contribution.socket}, which '
+          'the template of the role fills from the implementations.',
+          hint: 'Contribute a RoleImplementation instead.',
+          origin: origin,
+        ),
     if (!provides && input.data.isNotEmpty)
       SmfIssue(
         'The module contributes an implementation to the $role, which only '
@@ -101,9 +110,45 @@ List<SmfIssue> _checkImplementations(
 const _implementationsRule = ModuleRule<RoleImplementation>(
   id: 'services.implementations',
   description: 'Every provider of a service role, and only a provider, '
-      'contributes one implementation.',
+      'contributes one implementation, and no module contributes code to the '
+      'sockets of the role.',
   check: _checkImplementations,
 );
+
+/// The problems of files of modules in [input] that call or tear off
+/// [factory], the function that returns the service of a service role,
+/// unless the module provides the DI role.
+///
+/// Only the DI container creates the service; other code receives it through
+/// `resolve` in a composition file or through the dependencies of its own
+/// factory, so there is one way to get a service.
+List<SmfIssue> _checkFactoryCalls(
+  StructuralRuleInput<RoleImplementation> input,
+  String factory,
+) {
+  final issues = <SmfIssue>[];
+  for (final MapEntry(key: path, value: file) in input.files.entries) {
+    final owner = input.owners[path];
+    if (owner is! ModuleOrigin) continue;
+    final uses = file.invocations.any((call) => call.name == factory) ||
+        file.references.any((reference) => reference.name == factory) ||
+        file.memberAccesses.any((access) => access.name == factory);
+    final container =
+        input.module(owner.module)?.provides.contains(diRole) ?? false;
+    if (uses && !container) {
+      issues.add(
+        SmfIssue(
+          '$path calls $factory(), which only the DI container calls.',
+          hint: 'Resolve the service in the composition file of a feature, '
+              'or take it as a dependency of your own factory.',
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
 
 /// The template shared by the service roles: the brick with the service's
 /// interface, the implementations in the socket [implementations], and the
@@ -159,12 +204,20 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
             SmfIssue(problem, origin: data.origin),
       ];
 
+  /// Renders the implementations into [implementations].
+  ///
+  /// The file of each implementation is imported with a prefix of the
+  /// template's own, `impl0`, `impl1` and so on, so that no factory can hide
+  /// or be hidden by a name of the template or of another implementation.
   @override
   RoleOutput render(RoleHookInput<RoleImplementation> input) {
-    final all = [for (final data in input.data) data.value];
+    final all = [
+      for (final (index, data) in input.data.indexed)
+        (implementation: data.value, prefix: 'impl$index'),
+    ];
     final asynchronous = [
-      for (final implementation in all)
-        if (implementation.isAsync) implementation,
+      for (final entry in all)
+        if (entry.implementation.isAsync) entry,
     ];
     return RoleOutput(
       fragments: [
@@ -173,7 +226,8 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
           Fragment(
             single ? _single(all) : _many(all),
             imports: [
-              for (final implementation in all) implementation.factory.import,
+              for (final entry in all)
+                entry.implementation.factory.import.withPrefix(entry.prefix),
             ],
           ),
         ),
@@ -191,10 +245,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
-  String _single(List<RoleImplementation> all) {
+  String _single(List<_Prefixed> all) {
     if (all.isEmpty) return '';
-    final implementation = all.single;
-    final factory = implementation.factory.code;
+    final (:implementation, :prefix) = all.single;
+    final factory = implementation.factory.codeWith(prefix);
     if (!implementation.isAsync) {
       return 'final $service $variable = $factory();';
     }
@@ -208,17 +262,17 @@ Future<void> $initFunction() async {
 }''';
   }
 
-  String _many(List<RoleImplementation> all) {
+  String _many(List<_Prefixed> all) {
     final buffer = StringBuffer('final List<$service> $variable = [\n');
-    for (final implementation in all) {
+    for (final (:implementation, :prefix) in all) {
       if (!implementation.isAsync) {
-        buffer.writeln('  ${implementation.factory.code}(),');
+        buffer.writeln('  ${implementation.factory.codeWith(prefix)}(),');
       }
     }
     buffer.write('];');
     final asynchronous = [
-      for (final implementation in all)
-        if (implementation.isAsync) implementation,
+      for (final entry in all)
+        if (entry.implementation.isAsync) entry,
     ];
     if (asynchronous.isEmpty) return buffer.toString();
     buffer
@@ -229,8 +283,8 @@ Future<void> $initFunction() async {
       ..writeln('Future<void> $initFunction() async {')
       ..writeln('  $variable.addAll(')
       ..writeln('    await Future.wait<$service>([');
-    for (final implementation in asynchronous) {
-      buffer.writeln('      ${implementation.factory.code}(),');
+    for (final (:implementation, :prefix) in asynchronous) {
+      buffer.writeln('      ${implementation.factory.codeWith(prefix)}(),');
     }
     buffer
       ..writeln('    ]),')
@@ -239,3 +293,6 @@ Future<void> $initFunction() async {
     return buffer.toString();
   }
 }
+
+/// An implementation and the prefix of the import of its file.
+typedef _Prefixed = ({RoleImplementation implementation, String prefix});

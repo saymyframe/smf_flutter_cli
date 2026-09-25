@@ -9,6 +9,9 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
   List<Contribution> contribute(ModuleContext context) =>
       [BrickContribution(routerRoleBundle)];
 
+  /// Checks what the module rule `router.routes` cannot see from one module:
+  /// data of role templates, the getters of `context.nav` and the location
+  /// classes of all modules.
   @override
   List<SmfIssue> validate(RoleHookInput<RoutesData> input) {
     final issues = <SmfIssue>[
@@ -20,13 +23,12 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
             origin: data.origin,
           ),
     ];
-    if (issues.isNotEmpty) return issues;
 
     final facade = routerRole.facadeOf(input);
     for (final feature in facade.features) {
       final accessor = feature.accessor;
       if (!SmfNames.isDartIdentifier(accessor) ||
-          _objectMembers.contains(accessor)) {
+          _reservedMemberNames.contains(accessor)) {
         issues.add(
           SmfIssue(
             'The routes of the module ${feature.module} would be '
@@ -38,20 +40,10 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
       }
     }
 
-    final byPath = <String, FacadeRoute>{};
+    // Location classes join the module id and the route name, so routes of
+    // different modules can need the same class.
     final byClass = <String, FacadeRoute>{};
     for (final route in facade.routes) {
-      final origin = ModuleOrigin(route.feature.module);
-      if (byPath.putIfAbsent(route.fullPath, () => route) case final other
-          when other != route) {
-        issues.add(
-          SmfIssue(
-            'The $route and the $other have the same path '
-            '${route.fullPath}.',
-            origin: origin,
-          ),
-        );
-      }
       if (byClass.putIfAbsent(route.locationClass, () => route) case final other
           when other != route) {
         issues.add(
@@ -59,7 +51,7 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
             'The $route and the $other both need the location class '
             '${route.locationClass}.',
             hint: 'Rename one of the routes.',
-            origin: origin,
+            origin: ModuleOrigin(route.feature.module),
           ),
         );
       }
@@ -92,7 +84,16 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
       for (final route in facade.routes)
         if (route.route.startCandidate) route,
     ];
-    if (candidates.isEmpty) return const RouterChoice();
+    if (candidates.isEmpty) {
+      if (facade.routes.isNotEmpty) {
+        context.environment.logger.warn(
+          'No route is marked as a start candidate, so the app starts on '
+          'its fallback screen. Choose a start route with '
+          '--${RouterRole.startOption.name}.',
+        );
+      }
+      return const RouterChoice();
+    }
     if (candidates.length == 1) {
       return RouterChoice(startPath: candidates.single.fullPath);
     }

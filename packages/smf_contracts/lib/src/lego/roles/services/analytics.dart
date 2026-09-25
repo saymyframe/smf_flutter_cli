@@ -56,7 +56,21 @@ final class AnalyticsRole extends Role<RoleImplementation> {
   @override
   List<ModuleRule<RoleImplementation>> get moduleRules =>
       const [_implementationsRule];
+
+  @override
+  List<StructuralRule<RoleImplementation>> get structuralRules => const [
+        StructuralRule(
+          id: 'analytics.factory_calls',
+          description: 'Only the DI container calls createAnalyticsService().',
+          check: _checkAnalyticsFactory,
+        ),
+      ];
 }
+
+List<SmfIssue> _checkAnalyticsFactory(
+  StructuralRuleInput<RoleImplementation> input,
+) =>
+    _checkFactoryCalls(input, 'createAnalyticsService');
 
 final class _AnalyticsTemplate extends _ServiceTemplate {
   const _AnalyticsTemplate();

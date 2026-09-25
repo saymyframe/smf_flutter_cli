@@ -6,19 +6,42 @@ final RegExp _childPath = RegExp('^$_segment(?:/$_segment)*\$');
 final RegExp _lowerCamelCase = RegExp(r'^[a-z][a-zA-Z0-9]*$');
 final RegExp _upperCamelCase = RegExp(r'^[A-Z][a-zA-Z0-9]*$');
 
-/// Members of `Object`, which no generated class can declare again.
-const _objectMembers = {'hashCode', 'noSuchMethod', 'runtimeType', 'toString'};
+/// Names that no generated member can have: the members of `Object`, and
+/// the types of `dart:core` that the facade writes in lowercase, which a
+/// member of the same name would hide.
+const Set<String> _reservedMemberNames = {
+  'bool',
+  'double',
+  'dynamic',
+  'hashCode',
+  'int',
+  'noSuchMethod',
+  'num',
+  'runtimeType',
+  'toString',
+};
 
-/// Names a parameter cannot have: the members of the location classes and
-/// the `key` of a widget.
+/// Names a parameter cannot have: the reserved member names, the members of
+/// the location classes and the `key` of a widget.
 const Set<String> _reservedParamNames = {
-  ..._objectMembers,
+  ..._reservedMemberNames,
   'chain',
   'key',
   'parent',
   'path',
   'routeName',
 };
+
+bool _isMemberName(String name, Set<String> reserved) =>
+    _lowerCamelCase.hasMatch(name) &&
+    SmfNames.isDartIdentifier(name) &&
+    !reserved.contains(name);
+
+/// The path parameters of [path], a path of a route, by name.
+Set<String> _segmentsOf(String path) => {
+      for (final segment in path.split('/'))
+        if (segment.startsWith(':')) segment.substring(1),
+    };
 
 List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
@@ -29,14 +52,14 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   ];
   final names = <String, Route>{};
   final screens = <String, Route>{};
-  final paths = <String, Route>{};
+  final patterns = <String, (Route, String)>{};
 
   // The path of the module's root route `/` is empty, so a parent path does
   // not tell a child from a top-level route.
   void check(
     Route route, {
     required String? parentPath,
-    required List<RouteParam> inherited,
+    required List<RouteParam> ancestors,
   }) {
     final topLevel = parentPath == null;
     final path = topLevel
@@ -53,28 +76,41 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
                 'leading /, such as details/:id.',
       );
     }
-    if (!_lowerCamelCase.hasMatch(route.name) ||
-        !SmfNames.isDartIdentifier(route.name) ||
-        _objectMembers.contains(route.name)) {
+    if (!_isMemberName(route.name, _reservedMemberNames)) {
       problems.add(
         '$label needs a name that is a lowerCamelCase Dart identifier, such '
-        'as details.',
+        'as details, other than '
+        '${(_reservedMemberNames.toList()..sort()).join(', ')}.',
       );
     }
     if (names.putIfAbsent(route.name, () => route) != route) {
       problems.add('Two routes of the module are named "${route.name}".');
     }
-    if (paths.putIfAbsent(path, () => route) != route) {
-      problems.add('Two routes of the module have the path "$path".');
+    final pattern = path.replaceAll(RegExp(':[a-zA-Z0-9]+'), ':');
+    if (patterns.putIfAbsent(pattern, () => (route, path))
+        case (
+          final other,
+          final otherPath,
+        ) when other != route) {
+      problems.add(
+        otherPath == path
+            ? 'Two routes of the module have the path "$path".'
+            : 'The routes "${other.name}" and "${route.name}" have the paths '
+                '"$otherPath" and "$path", which match the same locations.',
+      );
     }
     problems
       ..addAll(_screenProblems(route, label, screens))
-      ..addAll(_paramProblems(route, label, inherited));
+      ..addAll(_paramProblems(route, label, ancestors));
 
-    final required = [
-      ...inherited,
-      ...route.params.where((param) => param.isRequired),
+    final ancestorPath = [
+      for (final param in ancestors)
+        if (param.source == RouteParamSource.path) param,
     ];
+    final required = {
+      for (final param in [...ancestorPath, ...route.params])
+        if (param.isRequired) param.name: param,
+    }.values;
     if (route.startCandidate && required.isNotEmpty) {
       problems.add(
         '$label is a start candidate but needs ${required.join(', ')}; the '
@@ -86,6 +122,12 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
         problems.add(
           '$label is a child, so it cannot be a destination of the main '
           'navigation.',
+        );
+      }
+      if (required.isNotEmpty) {
+        problems.add(
+          '$label is a destination of the main navigation but needs '
+          '${required.join(', ')}; a destination is reached without values.',
         );
       }
       if (destination.label.trim().isEmpty) {
@@ -110,17 +152,22 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
       );
     }
 
-    final pathParams = [
-      ...inherited,
-      ...route.params.where((param) => param.source == RouteParamSource.path),
-    ];
+    final known = {for (final param in ancestors) param.name};
     for (final child in route.children) {
-      check(child, parentPath: path, inherited: pathParams);
+      check(
+        child,
+        parentPath: path,
+        ancestors: [
+          ...ancestors,
+          for (final param in route.params)
+            if (!known.contains(param.name)) param,
+        ],
+      );
     }
   }
 
   for (final route in routes) {
-    check(route, parentPath: null, inherited: const []);
+    check(route, parentPath: null, ancestors: const []);
   }
   return [for (final problem in problems) SmfIssue(problem, origin: origin)];
 }
@@ -133,7 +180,8 @@ List<String> _screenProblems(
   final screen = route.screen;
   final import = screen.import;
   final problems = <String>[];
-  if (!_upperCamelCase.hasMatch(screen.className)) {
+  final valid = _upperCamelCase.hasMatch(screen.className);
+  if (!valid) {
     problems.add(
       '$label shows "${screen.className}", which is not an UpperCamelCase '
       'class name.',
@@ -152,55 +200,90 @@ List<String> _screenProblems(
     );
   }
   problems.addAll(import.problems());
-  if (screens.putIfAbsent(screen.className, () => route) case final other
+  // The tags of a screen's annotations name it in snake_case, so screens
+  // whose names differ only in case would share them.
+  final key = valid ? SmfNames.snakeCaseOf(screen.className) : screen.className;
+  if (screens.putIfAbsent(key, () => route) case final other
       when other != route) {
     problems.add(
-      'The routes "${other.name}" and "${route.name}" show the same screen '
-      '${screen.className}; a screen belongs to one route.',
+      other.screen.className == screen.className
+          ? 'The routes "${other.name}" and "${route.name}" show the same '
+              'screen ${screen.className}; a screen belongs to one route.'
+          : 'The screens ${other.screen.className} and ${screen.className} '
+              'of the routes "${other.name}" and "${route.name}" would share '
+              'the tags of their annotations; rename one of them.',
     );
   }
   return problems;
 }
 
+/// The problems with the parameters of [route], whose parents have the
+/// parameters [ancestors].
+///
+/// A path parameter is a `:<name>` segment of the route's own path, or one
+/// of a parent's path that the route also passes to its screen. No other
+/// name may repeat a name of the route or of its parents, because the
+/// query of a location is shared by the whole chain of pages.
 List<String> _paramProblems(
   Route route,
   String label,
-  List<RouteParam> inherited,
+  List<RouteParam> ancestors,
 ) {
   final problems = <String>[];
-  final seen = {for (final param in inherited) param.name};
-  final segments = {
-    for (final segment in route.path.split('/'))
-      if (segment.startsWith(':')) segment.substring(1),
-  };
+  final inherited = {for (final param in ancestors) param.name: param};
+  final segments = _segmentsOf(route.path);
+  final seen = <String>{};
+  final snakeNames = <String, String>{};
   for (final param in route.params) {
-    if (!_lowerCamelCase.hasMatch(param.name) ||
-        !SmfNames.isDartIdentifier(param.name) ||
-        _reservedParamNames.contains(param.name)) {
+    final name = param.name;
+    final valid = _isMemberName(name, _reservedParamNames);
+    if (!valid) {
       problems.add(
-        '$label has the parameter "${param.name}"; a parameter name is a '
+        '$label has the parameter "$name"; a parameter name is a '
         'lowerCamelCase Dart identifier other than '
         '${(_reservedParamNames.toList()..sort()).join(', ')}.',
       );
     }
-    if (!seen.add(param.name)) {
-      problems.add(
-        '$label declares the parameter "${param.name}" twice, or a parent '
-        'already has it.',
-      );
+    if (!seen.add(name)) {
+      problems.add('$label declares the parameter "$name" twice.');
     }
     if (param.typeName == null) {
       problems.add(
-        '$label has the parameter "${param.name}" of type ${param.type}; '
-        'use String, int, double or bool.',
+        '$label has the parameter "$name" of type ${param.type}; use String, '
+        'int, double or bool.',
       );
     }
-    if (param.source == RouteParamSource.path &&
-        !segments.contains(param.name)) {
+    final parents = inherited[name];
+    final fromParent = param.source == RouteParamSource.path &&
+        !segments.contains(name) &&
+        parents?.source == RouteParamSource.path;
+    if (fromParent) {
+      if (parents!.type != param.type) {
+        problems.add(
+          '$label passes the path parameter "$name" of a parent as '
+          '${param.type}, but the parent declares it as ${parents.type}.',
+        );
+      }
+    } else if (parents != null) {
       problems.add(
-        '$label declares the path parameter "${param.name}", but its path '
-        'has no :${param.name} segment.',
+        '$label has the parameter "$name", which a parent already has.',
       );
+    } else if (param.source == RouteParamSource.path &&
+        !segments.contains(name)) {
+      problems.add(
+        '$label declares the path parameter "$name", but neither its path '
+        'nor the path of a parent has a :$name segment.',
+      );
+    }
+    if (valid) {
+      final snake = SmfNames.snakeCaseOf(name);
+      final other = snakeNames.putIfAbsent(snake, () => name);
+      if (other != name) {
+        problems.add(
+          '$label has the parameters "$other" and "$name", which would share '
+          'the tag of their annotations; rename one of them.',
+        );
+      }
     }
   }
   for (final segment in segments) {
@@ -269,14 +352,30 @@ List<SmfIssue> _checkScreenSockets(ModuleRuleInput<RoutesData> input) {
   return issues;
 }
 
+/// What may stand between the tag of a class's annotations and the class:
+/// white space, comments and other annotations.
+final RegExp _onlyAnnotations = RegExp(
+  r'^(?:\s+|//[^\n]*|@[A-Za-z_$][\w$.]*(?:\([^()]*\))?)*$',
+);
+
 /// The problems with the annotation tags of the screen of [route] in [text],
 /// the template of the screen's file.
+///
+/// The tag of the class must come right before its declaration, with only
+/// white space, comments and other annotations between them. The tag of a
+/// parameter must be in the parameters of the class's unnamed constructor,
+/// before the parameter and after the previous one. No tag may follow a
+/// `{`: mustache would read the brace as part of the tag's name.
 List<String> _annotationProblems(ModuleId feature, Route route, String text) {
   final screen = route.screen.className;
-  final screenTag =
-      RouterRole.screenAnnotations((feature: feature, screen: screen)).tag;
-  final declaration = RegExp('\\bclass\\s+$screen\\b').firstMatch(text);
-  final screenAt = text.indexOf('{{{$screenTag}}}');
+  final screenSocket =
+      RouterRole.screenAnnotations((feature: feature, screen: screen));
+  final screenTag = '{{{${screenSocket.tag}}}}';
+  final declaration = RegExp(
+    r'^[ \t]*(?:(?:abstract|base|final|sealed|interface|mixin)\s+)*'
+    'class\\s+$screen\\b',
+    multiLine: true,
+  ).firstMatch(text);
   final problems = <String>[];
   if (declaration == null) {
     problems.add(
@@ -284,35 +383,89 @@ List<String> _annotationProblems(ModuleId feature, Route route, String text) {
       '"${route.name}".',
     );
   }
+
+  final screenAt = text.indexOf(screenTag);
   if (screenAt == -1) {
     problems.add(
-      'The template of $screen lacks the tag {{{$screenTag}}} for the '
-      'annotations of the class, which routers such as auto_route fill.',
+      'The template of $screen lacks the tag $screenTag for the annotations '
+      'of the class, which routers such as auto_route fill.',
     );
-  } else if (declaration != null && screenAt > declaration.start) {
-    problems.add(
-      'The tag {{{$screenTag}}} must come before the declaration of the '
-      'class $screen.',
-    );
+  } else {
+    problems.addAll(_braceProblems(text, screenAt, screenTag));
+    if (declaration != null) {
+      final placed = screenAt < declaration.start &&
+          _onlyAnnotations.hasMatch(
+            text.substring(screenAt + screenTag.length, declaration.start),
+          );
+      if (!placed) {
+        problems.add(
+          'The tag $screenTag must come right before the declaration of the '
+          'class $screen, with only other annotations and comments between '
+          'them.',
+        );
+      }
+    }
   }
+
+  final constructor = declaration == null
+      ? null
+      : _constructorParameters(text, screen, declaration.end);
   for (final param in route.params) {
-    final paramTag = RouterRole.paramAnnotations(
+    final paramSocket = RouterRole.paramAnnotations(
       (feature: feature, screen: screen, param: param.name),
-    ).tag;
-    final paramAt = text.indexOf('{{{$paramTag}}}');
-    if (paramAt == -1) {
+    );
+    final paramTag = '{{{${paramSocket.tag}}}}';
+    final at = text.indexOf(paramTag);
+    if (at == -1) {
       problems.add(
-        'The template of $screen lacks the tag {{{$paramTag}}} before the '
+        'The template of $screen lacks the tag $paramTag before the '
         'constructor parameter ${param.name}.',
       );
-    } else if (declaration != null && paramAt < declaration.start) {
+      continue;
+    }
+    problems.addAll(_braceProblems(text, at, paramTag));
+    final end = at + paramTag.length;
+    final placed = constructor != null &&
+        at > constructor.start &&
+        end <= constructor.end &&
+        RegExp('^[^,]*?\\b${param.name}\\b')
+            .hasMatch(text.substring(end, constructor.end));
+    if (!placed) {
       problems.add(
-        'The tag {{{$paramTag}}} must be in the constructor of $screen, '
-        'before the parameter ${param.name}.',
+        'The tag $paramTag must be in the parameters of the unnamed '
+        'constructor of $screen, right before the parameter ${param.name}.',
       );
     }
   }
   return problems;
+}
+
+List<String> _braceProblems(String text, int at, String tag) {
+  if (at == 0 || text[at - 1] != '{') return const [];
+  final problem = 'The tag $tag follows a "{", which mustache reads as part '
+      "of the tag's name; put a space or a line break before it.";
+  return [problem];
+}
+
+/// The range of the parameter list of the unnamed constructor of [screen]
+/// in [text], after the class declaration that ends at [from], or `null` if
+/// there is none.
+({int start, int end})? _constructorParameters(
+  String text,
+  String screen,
+  int from,
+) {
+  final opening = RegExp('(?<![\\w\$.])$screen\\s*\\(').firstMatch(
+    text.substring(from),
+  );
+  if (opening == null) return null;
+  final start = from + opening.end;
+  var depth = 1;
+  for (var i = start; i < text.length; i++) {
+    if (text[i] == '(') depth++;
+    if (text[i] == ')' && --depth == 0) return (start: start, end: i);
+  }
+  return null;
 }
 
 List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
@@ -336,7 +489,8 @@ List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
             '$target.${access.name}, but the module $owner may only use its '
             'own routes and those of the modules it depends on.',
             hint: 'Declare the module in dependsOn, or let the other module '
-                'navigate.',
+                'navigate. The rule matches by name, so rename a variable '
+                'called nav that is not the navigation facade.',
             origin: owner,
             path: path,
           ),
@@ -378,6 +532,9 @@ List<SmfIssue> _checkScreenConstructors(StructuralRuleInput<RoutesData> input) {
 
 /// The problems with optional parameters of [route] that the constructor of
 /// its screen, in [file], declares with a non-nullable type.
+///
+/// Only parameters with a written type are checked: the index has no type
+/// for an initializing formal such as `this.tab`, whose field decides.
 List<SmfIssue> _nullabilityProblems(FacadeRoute route, DartFileIndex? file) {
   final screen = route.route.screen.className;
   final constructor = file?.declaration(screen)?.unnamedConstructor;

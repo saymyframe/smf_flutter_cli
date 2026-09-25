@@ -22,18 +22,21 @@ abstract interface class CrashReporter {
   /// Adds [message] to the log sent with the next report.
   Future<void> log(String message);
 
-  /// Sets the id of the signed-in user for the next reports.
-  Future<void> setUserId(String userId);
+  /// Sets the id of the signed-in user for the next reports, or clears it
+  /// with `null`.
+  Future<void> setUserId(String? userId);
 }
 
 /// Returns the crash reporter of the app, which forwards every call to the
 /// crash reporters of all modules.
 CrashReporter createCrashReporter() => _crashReporter;
 
-/// Reports the errors that Flutter, the platform dispatcher and the current
-/// isolate do not handle.
+/// Reports the errors that Flutter and the platform dispatcher do not handle.
 ///
-/// `bootstrap()` calls it once the crash reporting services are ready.
+/// `bootstrap()` calls it once the crash reporting services are ready. In
+/// debug mode the errors also still reach the console. The listener on the
+/// current isolate is a safety net for errors that do not reach the platform
+/// dispatcher; isolates that the app starts need listeners of their own.
 void installCrashReporting() {
   final reporter = createCrashReporter();
   final presentError = FlutterError.onError;
@@ -45,7 +48,7 @@ void installCrashReporting() {
   };
   PlatformDispatcher.instance.onError = (error, stackTrace) {
     unawaited(reporter.recordError(error, stackTrace, fatal: true));
-    return true;
+    return !kDebugMode;
   };
   Isolate.current.addErrorListener(
     RawReceivePort((Object? message) {
@@ -101,7 +104,7 @@ final class _CrashReporters implements CrashReporter {
       _forAll((reporter) => reporter.log(message));
 
   @override
-  Future<void> setUserId(String userId) =>
+  Future<void> setUserId(String? userId) =>
       _forAll((reporter) => reporter.setUserId(userId));
 
   Future<void> _forAll(

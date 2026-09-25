@@ -59,6 +59,13 @@ List<SmfIssue> _moduleIssues(
       ),
     );
 
+final class _Container extends DiProvider {
+  const _Container();
+
+  @override
+  Set<DiCapability> get capabilities => const {};
+}
+
 void main() {
   group('RoleImplementation', () {
     test('is created by a factory or asynchronously by an init function', () {
@@ -183,12 +190,12 @@ void main() {
         code,
         contains(
           'final CommunicationService _communicationService = '
-          'createFakeEvents();',
+          'impl0.createFakeEvents();',
         ),
       );
       expect(
         code,
-        contains("import 'package:my_app/fakes/fake_events.dart';"),
+        contains("import 'package:my_app/fakes/fake_events.dart' as impl0;"),
       );
       expect(rendered.elsewhere, isEmpty);
     });
@@ -205,7 +212,10 @@ void main() {
         code,
         contains('late final CommunicationService _communicationService;'),
       );
-      expect(code, contains('_communicationService = await initFakeEvents();'));
+      expect(
+        code,
+        contains('_communicationService = await impl0.initFakeEvents();'),
+      );
       final start = rendered.elsewhere.single;
       expect(start.socket, AppEntryRole.bootstrapPlatform);
       expect(start.fragment!.code, 'await initEvents();');
@@ -232,8 +242,8 @@ void main() {
         code,
         contains(
           'final List<AnalyticsService> _analyticsServices = [\n'
-          '  createConsoleAnalytics(),\n'
-          '  createOtherAnalytics(),\n'
+          '  impl0.createConsoleAnalytics(),\n'
+          '  impl1.createOtherAnalytics(),\n'
           '];',
         ),
       );
@@ -254,10 +264,12 @@ void main() {
 
       expectParses(code);
       expect(code, contains('Future<void> initAnalytics() async {'));
-      expect(code, contains('initDelayedAnalytics(),'));
+      expect(code, contains('impl1.initDelayedAnalytics(),'));
       expect(
         code,
-        contains("import 'package:my_app/fakes/delayed_analytics.dart';"),
+        contains(
+          "import 'package:my_app/fakes/delayed_analytics.dart' as impl1;",
+        ),
       );
       expect(
         rendered.elsewhere.single.fragment!.code,
@@ -265,7 +277,7 @@ void main() {
       );
     });
 
-    test('refers to prefixed factories by their prefix', () async {
+    test('imports each implementation with its own prefix', () async {
       final rendered = await renderTemplate(
         analyticsRole,
         data: [
@@ -284,11 +296,9 @@ void main() {
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
-      expect(code, contains('vendor.createVendor(),'));
-      expect(
-        code,
-        contains("import 'package:my_app/vendor.dart' as vendor;"),
-      );
+      expect(code, contains('impl0.createVendor(),'));
+      expect(code, contains("import 'package:my_app/vendor.dart' as impl0;"));
+      expect(code, isNot(contains('vendor.createVendor')));
     });
   });
 
@@ -328,5 +338,147 @@ void main() {
         'await initCrashReporting();\ninstallCrashReporting();',
       );
     });
+  });
+
+  group('the closed sockets of the service roles', () {
+    test('reject code from modules, even from providers', () {
+      final issue = analyticsRole
+          .checkModule(
+            ModuleRuleRequest(
+              hook: RoleHookRequest(
+                data: [
+                  analyticsRole
+                      .data(_implementation('A'))
+                      .withOrigin(const ModuleOrigin(ModuleId('vendor'))),
+                ],
+                presentRoles: {analyticsRole},
+                context: testContext,
+              ),
+              module: const ModuleDescriptor(
+                id: ModuleId('vendor'),
+                description: 'Vendor',
+                kind: ModuleKinds.infrastructure,
+                providers: [RoleProvider.plain(analyticsRole)],
+              ),
+              contributions: const [
+                SocketContribution.code(
+                  AnalyticsRole.implementations,
+                  Fragment('createVendor(),'),
+                ),
+              ],
+            ),
+          )
+          .single;
+
+      expect(issue.message, contains('socket analytics.implementations'));
+      expect(issue.hint, contains('RoleImplementation'));
+    });
+  });
+
+  group('the factories of the service roles', () {
+    const di = ModuleDescriptor(
+      id: ModuleId('get_it'),
+      description: 'DI',
+      kind: ModuleKinds.infrastructure,
+      providers: [_Container()],
+    );
+    const feature = ModuleDescriptor(
+      id: ModuleId('home'),
+      description: 'Home',
+      kind: ModuleKinds.feature,
+      uses: {analyticsRole},
+    );
+
+    List<SmfIssue> check(Role<RoleImplementation> role, String factory) =>
+        role.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: const [],
+              presentRoles: {role},
+              context: testContext,
+            ),
+            files: {
+              for (final path in [
+                'lib/core/di/dependencies.dart',
+                'lib/features/home/home_screen.dart',
+                'lib/core/analytics/analytics_service.dart',
+              ])
+                path: DartFileIndex(
+                  path: path,
+                  invocations: [IndexedInvocation(factory)],
+                ),
+            },
+            owners: const {
+              'lib/core/di/dependencies.dart': ModuleOrigin(ModuleId('get_it')),
+              'lib/features/home/home_screen.dart':
+                  ModuleOrigin(ModuleId('home')),
+              'lib/core/analytics/analytics_service.dart':
+                  RoleTemplateOrigin(analyticsRole),
+            },
+            modules: const [di, feature],
+          ),
+        );
+
+    test('are called only by the DI container', () {
+      for (final (role, factory) in [
+        (eventsRole, 'createCommunicationService'),
+        (analyticsRole, 'createAnalyticsService'),
+        (crashReportingRole, 'createCrashReporter'),
+      ]) {
+        final issue = check(role, factory).single;
+
+        expect(issue.message, contains('calls $factory()'));
+        expect(issue.path, 'lib/features/home/home_screen.dart');
+        expect(issue.origin, const ModuleOrigin(ModuleId('home')));
+      }
+    });
+
+    test('are not torn off or read through a prefix elsewhere', () {
+      List<SmfIssue> issuesOf(DartFileIndex file) =>
+          analyticsRole.checkStructure(
+            StructuralRuleRequest(
+              hook: const RoleHookRequest(
+                data: [],
+                presentRoles: {analyticsRole},
+                context: testContext,
+              ),
+              files: {file.path: file},
+              owners: {file.path: const ModuleOrigin(ModuleId('home'))},
+              modules: const [feature],
+            ),
+          );
+
+      expect(
+        issuesOf(
+          const DartFileIndex(
+            path: 'lib/a.dart',
+            references: [IndexedReference('createAnalyticsService')],
+          ),
+        ),
+        hasLength(1),
+      );
+      expect(
+        issuesOf(
+          const DartFileIndex(
+            path: 'lib/b.dart',
+            memberAccesses: [
+              IndexedMemberAccess('analytics', 'createAnalyticsService'),
+            ],
+          ),
+        ),
+        hasLength(1),
+      );
+    });
+  });
+
+  test('the crash reporter lets the user id be cleared', () {
+    final brick = crashReportingRole.template
+        .contribute(testContext)
+        .whereType<BrickContribution>()
+        .single;
+    final code = templatesOf(brick.bundle)[CrashReportingRole.file]!;
+
+    expect(code, contains('Future<void> setUserId(String? userId);'));
+    expect(code, contains('return !kDebugMode;'));
   });
 }

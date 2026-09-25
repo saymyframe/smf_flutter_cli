@@ -114,7 +114,11 @@ final class _DiTemplate extends RoleTemplate<DiRegistration> {
 /// A module's implementation of the [DiRole], such as get_it.
 ///
 /// It declares what its container can do beyond the basics, and reports the
-/// registrations that need more.
+/// registrations that need more. Its `dependencies.dart` imports the file of
+/// every registered type and factory with a prefix of its own, such as the
+/// id of the contributing module, and refers to them with
+/// [TypeRef.codeWith] and [FactoryRef.codeWith], so names of different
+/// modules never collide.
 abstract base class DiProvider extends RoleProvider<DiRegistration> {
   /// Allows subclasses to have constant constructors.
   const DiProvider();
@@ -143,7 +147,37 @@ abstract base class DiProvider extends RoleProvider<DiRegistration> {
   }
 }
 
-const _resolveNames = {'resolve', 'resolveWith'};
+const _resolveNames = {'resolve', 'resolveWith', 'serviceLocator'};
+
+/// Whether [file] resolves services: it calls, tears off or reads `resolve`,
+/// `resolveWith` or `serviceLocator`, directly or through the prefix of an
+/// import of the service locator's file.
+bool _resolves(DartFileIndex file) {
+  bool isLocator(String uri) => uri.startsWith('package:')
+      ? uri.endsWith('/core/di/service_locator.dart')
+      : Uri.parse(file.path).resolve(uri).path == DiRole.serviceLocatorFile;
+  final prefixes = {
+    for (final import in file.imports)
+      if (import.prefix case final prefix? when isLocator(import.uri)) prefix,
+  };
+  bool ofLocator(String? target) => target == null || prefixes.contains(target);
+  bool viaLocator(String? target) =>
+      target == 'serviceLocator' ||
+      prefixes.any((prefix) => target == '$prefix.serviceLocator');
+  return file.invocations.any(
+        (call) =>
+            (ofLocator(call.target) && _resolveNames.contains(call.name)) ||
+            viaLocator(call.target),
+      ) ||
+      file.references
+          .any((reference) => _resolveNames.contains(reference.name)) ||
+      file.memberAccesses.any(
+        (access) =>
+            (prefixes.contains(access.target) &&
+                _resolveNames.contains(access.name)) ||
+            viaLocator(access.target),
+      );
+}
 
 List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
   final issues = <SmfIssue>[];
@@ -152,18 +186,7 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
     if (owner is! ModuleOrigin) continue;
     final module = input.module(owner.module);
     final allowed = module?.kind.compositionFileOf(owner.module);
-    final resolves = file.invocations.any(
-          (call) =>
-              (call.target == null && _resolveNames.contains(call.name)) ||
-              call.target == 'serviceLocator',
-        ) ||
-        file.references.any(
-          (reference) =>
-              _resolveNames.contains(reference.name) ||
-              reference.name == 'serviceLocator',
-        ) ||
-        file.memberAccesses.any((access) => access.target == 'serviceLocator');
-    if (!resolves) continue;
+    if (!_resolves(file)) continue;
     if (path == allowed) {
       if (!(module?.effectiveRequires.contains(diRole) ?? false)) {
         issues.add(

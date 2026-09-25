@@ -19,6 +19,10 @@ abstract interface class AppRouter {
 /// Moves between the locations of the app.
 abstract interface class AppNavigator {
   /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
   void go(AppLocation location);
 
   /// Shows [location] on top of the current stack and completes with the

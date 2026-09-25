@@ -21,6 +21,24 @@ void main() {
       expect('${const TypeRef('int')}', 'int');
     });
 
+    test('is the same type whatever prefix or show imports its file', () {
+      const plain = TypeRef('Dio', import: ImportRef('package:dio/dio.dart'));
+      const prefixed = TypeRef(
+        'Dio',
+        import: ImportRef('package:dio/dio.dart', prefix: 'dio', show: ['Dio']),
+      );
+
+      expect(prefixed, plain);
+      expect(prefixed.hashCode, plain.hashCode);
+      expect(const ServiceRef(prefixed), const ServiceRef(plain));
+      expect(prefixed.code, 'dio.Dio');
+      expect(plain.codeWith('http'), 'http.Dio');
+      expect(
+        plain,
+        isNot(const TypeRef('Dio', import: ImportRef.app('dio.dart'))),
+      );
+    });
+
     test('is the same type when the name and import are', () {
       expect(
         const TypeRef('A', import: _file),
@@ -56,6 +74,7 @@ void main() {
 
       expect(plain.code, 'disposeClient');
       expect(prefixed.code, 'x.dispose');
+      expect(prefixed.codeWith(null), 'dispose');
       expect('$plain', 'disposeClient()');
       expect(plain.problems(), isEmpty);
       expect(
@@ -74,6 +93,7 @@ void main() {
       );
 
       expect(factory.code, 'x.createGreeter');
+      expect(factory.codeWith('impl0'), 'impl0.createGreeter');
       expect('$factory', 'createGreeter()');
       expect(factory.problems(), isEmpty);
     });

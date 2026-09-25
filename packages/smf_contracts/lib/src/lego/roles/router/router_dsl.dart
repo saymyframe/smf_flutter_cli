@@ -54,9 +54,11 @@ final class Route {
   /// `:<name>` segments of [path] and of the query.
   ///
   /// The unnamed constructor of [screen] takes each of them as a named
-  /// parameter of the same name, which is nullable for an optional one.
-  /// The path parameters of the parents are part of the location but are
-  /// not passed to the screen.
+  /// parameter of the same name, which is nullable for an optional one. The
+  /// path parameters of the parents are part of the location; a child also
+  /// passes one to its screen by listing it here with the parent's type. No
+  /// other parameter may repeat the name of a parameter of a parent, because
+  /// all pages of a location share its query.
   final List<RouteParam> params;
 
   /// Pages shown on top of this one: going back from a child returns to
@@ -69,9 +71,10 @@ final class Route {
   /// How the route appears in the main navigation of the app, such as a
   /// tab, or `null` to keep it out.
   ///
-  /// Only a top-level route can be a destination. Its children stay in the
-  /// destination's branch; the other top-level routes are shown over the
-  /// main navigation.
+  /// Only a top-level route without required parameters can be a
+  /// destination: selecting it has no values to give. Its children stay in
+  /// the destination's branch; the other top-level routes are shown over the
+  /// main navigation, and going to one of them leaves the main navigation.
   final Destination? destination;
 
   /// Whether the app can start on this route; see the `--start` option of
@@ -173,7 +176,10 @@ final class Destination {
   /// The text of the item, such as `Home`.
   final String label;
 
-  /// An expression of type `IconData`, such as `Icons.home`, with the
-  /// imports it needs.
+  /// A constant expression of type `IconData`, such as `Icons.home`, with
+  /// the imports it needs.
+  ///
+  /// Routers create the destinations as constants, so a release build can
+  /// tree-shake the icon fonts.
   final Fragment icon;
 }

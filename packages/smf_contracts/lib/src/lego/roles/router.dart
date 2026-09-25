@@ -30,6 +30,8 @@ const routerRole = RouterRole._();
 ///
 /// A provider renders the routes from [facadeOf], so it agrees with the
 /// facade on every path and name. It:
+/// - names each route by its [FacadeRoute.fullName], which navigator
+///   observers such as analytics report as the screen name;
 /// - builds the start route of [startIn] at `/`, or the fallback screen of
 ///   the app entry if there is none;
 /// - puts the destinations of the main navigation into the `AppShell` of
@@ -78,28 +80,35 @@ final class RouterRole extends Role<RoutesData> {
   /// Annotations of the class of a screen, such as auto_route's
   /// `@RoutePage()`.
   ///
-  /// The template of the screen's feature puts the member's tag right
-  /// before the class, as in
-  /// `{{{smf_router__screen_annotations__home__home_screen}}}`; the module
-  /// rules check it for every screen of every route.
+  /// The template of the screen's feature puts the member's tag on its own
+  /// line right before the class, with only other annotations and comments
+  /// between them, as in
+  /// `{{{smf_router__screen_annotations__home__home_screen}}}`. The module
+  /// rule `router.screen_sockets` checks it for every screen of every
+  /// route.
   static const screenAnnotations = SocketFamily<ScreenKey, CodeSocket>.role(
     routerRole,
     'screen_annotations',
     CodeSocket(),
     keyOf: _screenSegments,
+    segments: 2,
   );
 
   /// Annotations of a parameter of the constructor of a screen, such as
   /// auto_route's `@PathParam('id')`.
   ///
-  /// The template of the screen's feature puts the member's tag right
-  /// before the parameter, as in
-  /// `{{{smf_router__param_annotations__home__details_screen__id}}}`.
+  /// The template of the screen's feature puts the member's tag in the
+  /// parameters of the screen's unnamed constructor, right before the
+  /// parameter, as in
+  /// `{{{smf_router__param_annotations__home__details_screen__id}}} required
+  /// this.id,`. A tag must not follow a `{`, which mustache would read as
+  /// part of it: put the parameters on lines of their own.
   static const paramAnnotations = SocketFamily<ParamKey, CodeSocket>.role(
     routerRole,
     'param_annotations',
     CodeSocket(),
     keyOf: _paramSegments,
+    segments: 3,
   );
 
   /// `--start`, the full path of the route the app starts on, such as

@@ -54,7 +54,22 @@ final class EventsRole extends Role<RoleImplementation> {
   @override
   List<ModuleRule<RoleImplementation>> get moduleRules =>
       const [_implementationsRule];
+
+  @override
+  List<StructuralRule<RoleImplementation>> get structuralRules => const [
+        StructuralRule(
+          id: 'events.factory_calls',
+          description:
+              'Only the DI container calls createCommunicationService().',
+          check: _checkEventsFactory,
+        ),
+      ];
 }
+
+List<SmfIssue> _checkEventsFactory(
+  StructuralRuleInput<RoleImplementation> input,
+) =>
+    _checkFactoryCalls(input, 'createCommunicationService');
 
 final class _EventsTemplate extends _ServiceTemplate {
   const _EventsTemplate();
