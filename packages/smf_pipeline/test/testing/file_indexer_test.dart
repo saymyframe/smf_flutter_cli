@@ -54,7 +54,7 @@ Future<void> main() async {
   runApp(const App());
   final cubit = di.resolve<HomeCubit>();
   final tearOff = di.resolveWith;
-  getIt<A>()..reset()..clear();
+  locator<A>()..reset()..clear();
   (() => 1)();
   handlers[0]();
   callbacks.first();
@@ -183,9 +183,9 @@ void main() {
         'null.runApp<>() in main',
         'null.App<>() in main',
         'di.resolve<HomeCubit>() in main',
-        'null.getIt<A>() in main',
-        'getIt<A>().reset<>() in main',
-        'getIt<A>().clear<>() in main',
+        'null.locator<A>() in main',
+        'locator<A>().reset<>() in main',
+        'locator<A>().clear<>() in main',
         'callbacks.first<>() in main',
         'value.handler<>() in main',
       ]),

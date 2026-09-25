@@ -68,6 +68,9 @@ melos:
       run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
     format:check:
       run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")'
+    banlist:
+      description: Check that no file uses what the module model replaced; see tools/banlist.dart.
+      run: dart tools/banlist.dart
     test:
       run: melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded
     test:coverage:
@@ -78,6 +81,7 @@ melos:
         melos run format:check && \
         melos run analyze && \
         melos run analyze:hooks && \
+        melos run banlist && \
         melos run test
 
   command:

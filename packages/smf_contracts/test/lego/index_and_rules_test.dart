@@ -28,7 +28,7 @@ void main() {
           'package:my_app/core/di/di.dart',
           prefix: 'di',
           show: ['resolve'],
-          hide: ['getIt'],
+          hide: ['locator'],
         ),
       ],
       declarations: [
@@ -69,7 +69,7 @@ void main() {
       expect(index.importsUri('package:flutter/material.dart'), isFalse);
       expect(index.imports.last.prefix, 'di');
       expect(index.imports.last.show, ['resolve']);
-      expect(index.imports.last.hide, ['getIt']);
+      expect(index.imports.last.hide, ['locator']);
       expect(index.declaration('createHomeCubit')?.type, 'HomeCubit');
       expect(index.declaration('Missing'), isNull);
     });
@@ -89,7 +89,7 @@ void main() {
       expect(index.uses('resolve'), isTrue);
       expect(index.uses('appRouter'), isTrue);
       expect(index.uses('nav'), isTrue);
-      expect(index.uses('getIt'), isFalse);
+      expect(index.uses('locator'), isFalse);
       expect(index.references.single.enclosingDeclaration, isNull);
       expect(index.memberAccesses.single.target, 'context');
       expect(index.memberAccesses.single.offset, 0);

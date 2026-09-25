@@ -253,7 +253,7 @@ final class IndexedParameter {
   final List<String> annotations;
 }
 
-/// An invocation in an indexed file, such as `getIt<A>()`,
+/// An invocation in an indexed file, such as `locator<A>()`,
 /// `context.nav.home.details(id: 1)` or `HomeScreen()`.
 final class IndexedInvocation {
   /// Creates the index of an invocation of [name].
