@@ -162,6 +162,11 @@ final class RoleOutput {
   final List<SocketContribution> fragments;
 
   /// Variables for the bricks of the hook's owner: the role's template or
-  /// the provider's module.
+  /// the provider's module, the bricks of its variant included.
+  ///
+  /// They are plain data, such as strings, numbers, booleans and lists and
+  /// maps of them, and follow the rules of [BrickContribution.vars]. A
+  /// variable that two hooks of one module, or a hook and a brick of its
+  /// owner, both set is an error.
   final Map<String, Object?> vars;
 }
