@@ -4,6 +4,15 @@ Guidance for AI coding agents working in this repository. Human contributors: se
 
 SMF (Say My Frame) is a Flutter CLI (`smf create`) that scaffolds apps from independent modules (routing, DI, Firebase, features, ...). It is a Dart pub workspace managed by Melos. Every package is versioned and published to pub.dev on its own.
 
+## Lego rework in progress
+
+The module model is being replaced step by step on the branch `feat/lego`. Until the branch is merged, two models live side by side:
+
+- The new model is `package:smf_contracts/lego.dart`, with its code in `packages/smf_contracts/lib/src/lego/`. `lego_core.dart` is its core without concrete roles.
+- In the new model, a module declares the roles it provides, requires or uses (app entry, router, DI, ...) instead of depending on the modules that implement them. It puts code into typed sockets instead of patching files, and never learns which provider of a role was selected.
+- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. `packages/smf_contracts/test/lego/architecture_test.dart` enforces this and keeps the core free of concrete roles.
+- The rest of this file describes the old model, which the CLI still uses. `ModuleProfile`, the DSLs (`RouteGroup`, `DiDependencyGroup`), `MustacheSlots`, mustachex strings and brick hooks go away as their modules move to the new model.
+
 ## Layout
 
 ```
