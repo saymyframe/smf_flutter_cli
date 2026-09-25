@@ -724,6 +724,7 @@ flutter:
                   'lib//{{nothing}}z.dart': '',
                   'lib/{{root}}.dart': '',
                   '{{{tool}}}/Generated.xcconfig': '',
+                  '{{{tool}}}/Pods/x.h': '',
                 },
                 vars: {'up': '..', 'root': '/etc', 'tool': 'ios/Flutter'},
               ),
@@ -742,6 +743,8 @@ flutter:
               'entity'),
           contains('renders to "ios/Flutter/Generated.xcconfig", which is '
               "written by Flutter's tools"),
+          contains('renders to "ios/Flutter/Pods/x.h", which is written when '
+              'the pods of the app are installed.'),
         ],
       );
     });

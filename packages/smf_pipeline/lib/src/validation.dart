@@ -2,6 +2,7 @@ import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
+import 'package:smf_pipeline/src/machine_files.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -377,6 +378,19 @@ Iterable<SmfIssue> contributionIssues(
           'of them.',
           origin: origin,
         );
+      }
+      for (final file in brick.bundle.files) {
+        // A path with a variable is checked once it is rendered.
+        if (file.path.contains('{{')) continue;
+        if (machineFileProblem(file.path) case final problem?) {
+          yield SmfIssue(
+            'The brick ${brick.bundle.name} of $origin generates '
+            '${file.path}, which $problem.',
+            hint: 'Remove the file from the brick.',
+            origin: origin,
+            path: file.path,
+          );
+        }
       }
       if (origin case ModuleOrigin(:final module)) {
         final kind = resolution.module(module)?.descriptor.kind;

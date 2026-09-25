@@ -6,7 +6,7 @@ import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/imports.dart';
-import 'package:smf_pipeline/src/move.dart';
+import 'package:smf_pipeline/src/machine_files.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -640,12 +640,7 @@ String? _pathProblem(String path) {
     return 'has an empty or "." segment';
   }
   if (segments.contains('..')) return 'leaves the directory of the app';
-  for (final tool in flutterToolFiles) {
-    if (path == tool || path.startsWith('$tool/')) {
-      return "is written by Flutter's tools, which the pipeline does not move "
-          'with the app';
-    }
-  }
+  if (machineFileProblem(path) case final problem?) return problem;
   if (_entity.hasMatch(path)) {
     return 'has an HTML entity: mustache escapes variables in two braces, '
         'so a variable with a slash needs three';

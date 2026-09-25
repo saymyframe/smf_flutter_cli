@@ -408,6 +408,41 @@ void main() {
       ]);
     });
 
+    test('files of one machine or build are errors', () {
+      final result = _validate([
+        entry,
+        TestModule(
+          'ios',
+          contributions: [
+            BrickContribution(
+              bundle(
+                'ios',
+                paths: [
+                  'ios/Runner.xcodeproj/xcuserdata/me.xcuserdatad/x.plist',
+                  'lib/.DS_Store',
+                  'ios/Pods/Manifest.lock',
+                  'lib/{{name}}/.DS_Store',
+                  'lib/ios.dart',
+                ],
+              ),
+            ),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals('ios: The brick ios of ios generates '
+            'ios/Runner.xcodeproj/xcuserdata/me.xcuserdatad/x.plist, which '
+            'holds the Xcode settings of one user.'),
+        equals('ios: The brick ios of ios generates lib/.DS_Store, which is '
+            'left behind by the operating system.'),
+        equals('ios: The brick ios of ios generates ios/Pods/Manifest.lock, '
+            'which is written when the pods of the app are installed.'),
+      ]);
+      expect(result.issues.first.path, startsWith('ios/Runner.xcodeproj/'));
+      expect(result.issues.first.hint, 'Remove the file from the brick.');
+    });
+
     test('paths with variables are left to the rendering', () {
       final result = _validate([
         entry,
