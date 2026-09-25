@@ -39,7 +39,8 @@ bool _shownOfAppEntry(String path) =>
 /// the lower bound of its SDK constraint, but no later than the formatter of
 /// the snapshots knows. Up to Dart 3.12, the styles of the versions after
 /// 3.10 differ only where trailing commas are preserved, which the apps do
-/// not ask for.
+/// not ask for. Code with the syntax of a later version fails to format
+/// until the formatter moves on with the analyzer of the pipeline.
 Version _languageVersionOf(RenderedApp app) {
   final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
   final environment = pubspec['environment'] as YamlMap;
@@ -145,7 +146,9 @@ Future<void> main() async {
     final expected = {for (final app in apps) _fileNameOf(app)};
     final stale = [
       for (final file in _directory.listSync())
-        if (!expected.contains(file.uri.pathSegments.last)) file.path,
+        if (file.path.endsWith('.txt') &&
+            !expected.contains(file.uri.pathSegments.last))
+          file.path,
     ];
 
     expect(stale, isEmpty, reason: 'Delete the snapshots of apps that went.');

@@ -27,7 +27,7 @@ This package is not intended to be installed directly. Use the SMF CLI to genera
 
 ## Updating the Flutter template
 
-The files in `bricks/flutter_core/__brick__` are those that `flutter create --platforms=android,ios --org com.example my_app` writes with Flutter 3.44.2, with these changes:
+The files in `bricks/flutter_core/__brick__` are those that `flutter create --platforms=android,ios --org com.example --no-pub my_app` writes with Flutter 3.44.2, with these changes:
 
 - The names and ids come from the app. `android:label` and `CFBundleDisplayName` are its name in title case, and `CFBundleName` in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
 - `IPHONEOS_DEPLOYMENT_TARGET`, in each build configuration of `project.pbxproj`, is the tag of the minimum iOS version, and the project has no `DEVELOPMENT_TEAM`.
@@ -36,12 +36,19 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 
 `gradlew`, `gradle-wrapper.jar`, `local.properties`, `.idea/` and the `.iml` files are left out: Flutter writes the Gradle wrapper when it builds the app, and the rest belongs to one machine.
 
-To move to a newer Flutter, run `flutter create` with it, copy its native files over these, make the changes above again, update the minimum Flutter and iOS versions of `FlutterCoreModule`, and bundle the bricks with `melos bootstrap`.
+To move to a newer Flutter:
 
-`test/flutter_create_test.dart` compares the brick with the app of `flutter create`, allowing only the changes above. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the Flutter job of CI does with the Flutter it pins:
+1. Run `flutter create` as above with it.
+2. Copy every file it writes over those of the brick, but for the files that SMF owns or leaves out. The files to copy include `.metadata`, which names the commit of Flutter, and both `.gitignore` files.
+3. Make the changes above again.
+4. Compare `pubspec.yaml` and `analysis_options.yaml` of the new app with the brick's. Their SDK constraint, the version of `flutter_lints` and the lints follow Flutter's template, but no test compares these files.
+5. Update the minimum Flutter and iOS versions of `FlutterCoreModule`, and the Flutter of the CI workflow with the SHA-256 of its archive.
+6. Bundle the bricks with `melos bootstrap`.
+
+`test/flutter_create_test.dart` compares the brick with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the Flutter job of CI does with the Flutter it pins:
 
 ```bash
-flutter create --platforms=android,ios --org com.example my_app
+flutter create --platforms=android,ios --org com.example --no-pub my_app
 SMF_FLUTTER_CREATE_APP=$PWD/my_app dart test test/flutter_create_test.dart
 ```
 

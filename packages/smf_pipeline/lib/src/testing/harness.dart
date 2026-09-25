@@ -170,8 +170,8 @@ final class ContractHarness {
   final Map<String, String?> roleOptions;
 
   /// The cases of the module [id]:
-  /// - every provider of the role of its variants, also one without a
-  ///   variant, which the pipeline rejects;
+  /// - every provider of the role of its variants, including a provider
+  ///   the module has no variant for, whose app the pipeline rejects;
   /// - every provider of each role the module requires that has several;
   /// - each subset of the roles the module only uses, the largest first,
   ///   with the first registered provider of each.
@@ -236,29 +236,70 @@ final class ContractHarness {
     ];
   }
 
-  /// The case of the app with as many modules as one app can have: every
-  /// module that provides no role, every provider of a role that takes
-  /// many, and the first registered provider of every other role.
-  ContractCase caseOfAll() {
-    final firsts = {
+  /// The cases of the apps with as many modules as one app can have, one
+  /// for every combination of providers of the roles that take at most one
+  /// and have several.
+  ///
+  /// Each has the provider of the combination of those roles, the first
+  /// registered provider of every other role that takes one, every provider
+  /// of a role that takes many, and every other module that fits: neither it
+  /// nor a module it depends on provides a role that takes one and has
+  /// another provider in the app, and each has a variant for the provider
+  /// of the role of its variants. A combination whose provider does not fit
+  /// has no case.
+  List<ContractCase> casesOfAll() => [
+        for (final picked in _picksOf([
+          for (final role in registry.roles)
+            if (!role.cardinality.allowsMany) role,
+        ]))
+          if (_caseOfAll(picked) case final contractCase?) contractCase,
+      ];
+
+  ContractCase? _caseOfAll(Map<Role, ModuleId> picked) {
+    final providers = {
       for (final role in registry.roles)
-        if (registry.providersOf(role) case [final first, ...]) role: first,
+        if (registry.providersOf(role) case [final first, ...])
+          role: picked[role] ?? first.descriptor.id,
     };
-    return ContractCase(
-      'every module',
-      requested: [
-        for (final module in registry.modules)
-          if (module.descriptor.provides.every(
+    bool fits(SmfModule module) {
+      final descriptor = module.descriptor;
+      final variants = descriptor.variants;
+      return descriptor.provides.every(
             (role) =>
-                role.cardinality.allowsMany || identical(firsts[role], module),
-          ))
-            module.descriptor.id,
-      ],
-      picks: {
-        for (final MapEntry(key: role, value: module) in firsts.entries)
-          role: module.descriptor.id,
-      },
+                role.cardinality.allowsMany || providers[role] == descriptor.id,
+          ) &&
+          (variants == null ||
+              variants.byProvider.containsKey(providers[variants.role]));
+    }
+
+    final requested = [
+      for (final module in registry.modules)
+        if (_withDependencies(module).every(fits)) module.descriptor.id,
+    ];
+    if (!picked.values.every(requested.contains)) return null;
+    return ContractCase(
+      picked.isEmpty
+          ? 'every module'
+          : 'every module (${picked.values.join(', ')})',
+      requested: requested,
+      picks: providers,
     );
+  }
+
+  /// [module] and the registered modules it depends on, directly or not.
+  List<SmfModule> _withDependencies(SmfModule module) {
+    final found = <ModuleId, SmfModule>{module.descriptor.id: module};
+    final pending = [module];
+    while (pending.isNotEmpty) {
+      for (final id in pending.removeLast().descriptor.dependsOn) {
+        final dependency = registry[id];
+        if (dependency != null && found[id] == null) {
+          found[id] = dependency;
+          pending.add(dependency);
+        }
+      }
+    }
+    return [...found.values];
   }
 
   /// Every combination of providers of those [roles] that have several in

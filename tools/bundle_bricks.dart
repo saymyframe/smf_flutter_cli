@@ -226,7 +226,8 @@ Future<void> _formatDart(File target) async {
   }
 }
 
-// Embed hook assets (e.g., .sh, .ps1) into a generated Dart file consumed by hooks.
+// Embed hook assets (e.g., .sh, .ps1) into a generated Dart file consumed by
+// hooks.
 Future<void> _embedHookAssets(Directory brickDir) async {
   final assetsDir = Directory('${brickDir.path}/hooks/assets');
   if (!assetsDir.existsSync()) return;
@@ -269,8 +270,8 @@ Future<void> _embedHookAssets(Directory brickDir) async {
   for (final f in files) {
     // Use relative path from assetsDir as key
     final relPath = f.path.length > assetsDir.path.length
-        ? f.path.substring(assetsDir.path.length + 1).replaceAll('\\', '/')
-        : f.path.replaceAll('\\', '/');
+        ? f.path.substring(assetsDir.path.length + 1).replaceAll(r'\', '/')
+        : f.path.replaceAll(r'\', '/');
     final bytes = await f.readAsBytes();
     final b64 = base64.encode(bytes);
     buffer.writeln('  ${jsonEncode(relPath)}: ${jsonEncode(b64)},');

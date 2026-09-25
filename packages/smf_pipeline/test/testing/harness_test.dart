@@ -86,17 +86,65 @@ void main() {
     ]);
   });
 
-  test('the case of every module takes one provider of a role that takes one',
+  test('the cases of every module take each provider of a role that takes one',
       () {
-    final all = harness.caseOfAll();
+    final cases = harness.casesOfAll();
 
-    expect(all.name, 'every module');
+    expect(cases.map((c) => '$c'), [
+      'every module (go, bloc)',
+      'every module (go, riverpod)',
+      'every module (go, signals)',
+      'every module (auto, bloc)',
+      'every module (auto, riverpod)',
+      'every module (auto, signals)',
+    ]);
+    ContractCase named(String name) =>
+        cases.singleWhere((c) => c.name == 'every module ($name)');
+    // Without the other providers, and without both, which depends on two
+    // providers of the same role.
+    final riverpod = named('auto, riverpod');
     expect(
-      all.requested.map((id) => id.value),
-      ['scaffold', 'home', 'bloc', 'a1', 'a2', 'broken', 'go', 'both'],
+      riverpod.requested.map((id) => id.value),
+      ['scaffold', 'home', 'riverpod', 'a1', 'a2', 'broken', 'auto'],
     );
-    expect(all.picks[state], const ModuleId('bloc'));
-    expect(all.picks[nav], const ModuleId('go'));
+    expect(riverpod.picks[state], const ModuleId('riverpod'));
+    expect(riverpod.picks[nav], const ModuleId('auto'));
+    expect(riverpod.picks[tracking], const ModuleId('a1'));
+    // Home has no variant for signals.
+    expect(
+      named('go, signals').requested.map((id) => id.value),
+      ['scaffold', 'signals', 'a1', 'a2', 'broken', 'go'],
+    );
+  });
+
+  test('a combination whose provider cannot be in its app has no case', () {
+    final x = TestRole<NoDsl>('x');
+    final y = TestRole<NoDsl>('y');
+    final cases = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('p1', providers: [RoleProvider.plain(x)]),
+        TestModule(
+          'p2',
+          dependsOn: {'q2'},
+          providers: [RoleProvider.plain(x)],
+        ),
+        TestModule('q1', providers: [RoleProvider.plain(y)]),
+        TestModule('q2', providers: [RoleProvider.plain(y)]),
+      ]),
+    ).casesOfAll();
+
+    expect(cases.map((c) => '$c'), [
+      'every module (p1, q1)',
+      'every module (p1, q2)',
+      'every module (p2, q2)',
+    ]);
+    expect(
+      ContractHarness(ModuleRegistry([scaffold()]))
+          .casesOfAll()
+          .map((c) => '$c'),
+      ['every module'],
+    );
   });
 
   test('a module that follows the rules passes every case', () async {

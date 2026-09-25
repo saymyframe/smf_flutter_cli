@@ -14,10 +14,11 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 ///
 /// [modules] are those `smf create` offers, [smfModules] by default.
 /// [onCreated] gets every app that `smf create` generated, after the
-/// community banner.
+/// community banner unless [banner] is `false`.
 Future<int> runCli(
   List<String> arguments, {
   List<SmfModule> modules = smfModules,
+  bool banner = true,
   void Function(GeneratedApp app)? onCreated,
 }) async {
   final interruption = Interruption(beforeQuit: restoreTerminal)..listen();
@@ -31,7 +32,7 @@ Future<int> runCli(
       version: packageVersion,
       usageLineLength: io.stdout.hasTerminal ? io.stdout.terminalColumns : 80,
       onCreated: (app) {
-        machine?.logger.info(communityBanner);
+        if (banner) machine?.logger.info(communityBanner);
         onCreated?.call(app);
       },
     );

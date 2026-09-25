@@ -25,7 +25,7 @@ packages/
     smf_contribution_engine/  # AST engine that patches Dart files (imports, statements, widgets)
     smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core
   smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
-tools/                        # bundle_bricks.dart, sync_cli_version.dart
+tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart
 ```
 
 Dependencies point one way only: `smf_contracts` ← `smf_pipeline` and modules ← `smf_flutter_cli`. Contracts never depend on modules, the pipeline or the CLI; the pipeline never depends on a module. Modules use `smf_pipeline` only in their tests, for the contract harness.
@@ -47,11 +47,11 @@ Dart **3.12.2** is pinned in CI (`.github/workflows/build.yml`). The formatter o
 
 ```bash
 melos bootstrap             # resolve the workspace and re-bundle every brick
-melos run format            # format lib/test/bin/tool of every package
-melos run analyze           # dart analyze --fatal-infos --fatal-warnings, every package
+melos run format            # format lib/test/bin/tool of every package, and tools/
+melos run analyze           # dart analyze --fatal-infos --fatal-warnings, every package and tools/
 melos run analyze:hooks     # brick hooks are separate packages; pub get + analyze each
 melos run banlist           # no file uses the names the module model replaced (tools/banlist.dart)
-melos run test              # dart test in every package with a test/ dir
+melos run test              # dart test in every package with a test/ dir, and in tools/
 melos run check             # format:check + analyze + analyze:hooks + banlist + test
 ```
 

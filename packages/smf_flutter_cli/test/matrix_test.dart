@@ -29,6 +29,20 @@ void main() {
     expect(apps.map((app) => '$app'), ['flutter_core (flutter_core)']);
   });
 
+  test('the options of roles reach every app', () async {
+    final (:apps, :failed) = await matrixOf(
+      smfModules,
+      roleOptions: {'flavor': 'dev'},
+    );
+
+    expect(failed, isEmpty);
+    expect(apps.single.roleOptions, {'flavor': 'dev'});
+    expect(
+      apps.single.createArguments('app_1', '/apps'),
+      contains('--flavor=dev'),
+    );
+  });
+
   test('an app of the matrix names every module and asks nothing', () {
     const app = MatrixApp(
       'home with router',
@@ -66,6 +80,7 @@ void main() {
       List<SmfModule> modules = smfModules,
       int createCode = 0,
       List<LeftOut> leftOut = const [],
+      List<SkippedStep> skippedSteps = const [],
       int analyzeCode = 0,
     }) =>
         runMatrix(
@@ -80,6 +95,7 @@ void main() {
                   name: arguments[1],
                   path: '/apps/${arguments[1]}',
                   leftOut: leftOut,
+                  skippedSteps: skippedSteps,
                 ),
               );
             }
@@ -116,6 +132,35 @@ void main() {
 
       expect(await run(analyzeCode: 3), 1);
       expect(log.last, contains('flutter analyze exited with 3.'));
+    });
+
+    test('fails when a step failed, not when CI leaves it for later', () async {
+      const later = SkippedStep(
+        'Log in',
+        'firebase login',
+        'the run skips external setup',
+      );
+      expect(await run(skippedSteps: const [later]), 0);
+
+      expect(
+        await run(
+          skippedSteps: const [
+            later,
+            SkippedStep(
+              'Configure',
+              'flutterfire configure',
+              'it exited with code 1',
+              failed: true,
+            ),
+          ],
+        ),
+        1,
+      );
+      expect(
+        log.last,
+        'app_1 (flutter_core (flutter_core)): the step Configure: '
+        'flutterfire configure (it exited with code 1).',
+      );
     });
 
     test('fails when the contract harness finds errors in a case', () async {

@@ -380,6 +380,7 @@ void main() {
         'Log in to Firebase: firebase login (the run skips external setup)',
         'firebase use: firebase use (the run cannot ask the user)',
       ]);
+      expect(skipped.map((step) => step.failed), [false, false]);
       expect(runner.lines, isNot(contains(startsWith('firebase'))));
     });
 
@@ -423,6 +424,7 @@ void main() {
         ),
         'firebase use: firebase use (you chose to run it later)',
       ]);
+      expect(skipped.map((step) => step.failed), [false, false]);
       expect(host.prompter.asked.map((prompt) => prompt.message), [
         equals(
           'Configure Firebase (flutterfire configure --platforms=android,ios '
@@ -492,6 +494,7 @@ void main() {
         'it exited with code 2',
         'flutterfire was not found',
       ]);
+      expect(skipped.map((step) => step.failed), [true, true]);
       expect(host.logger.warnings, [
         'The step "firebase use" failed: it exited with code 2',
       ]);
@@ -546,6 +549,7 @@ void main() {
       );
 
       expect(skipped.single.reason, 'it could not start');
+      expect(skipped.single.failed, isTrue);
       expect(
         host.logger.warnings.single,
         'The step "Log in to Firebase" failed: it could not start: '

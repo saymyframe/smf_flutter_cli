@@ -29,15 +29,30 @@ void main() {
       );
     });
 
-    test('builds the app of every fixture that fits in one app', () async {
+    test('builds an app of every fixture that fits for each state manager',
+        () async {
       final harness = ContractHarness(ModuleRegistry(fixtureModules()));
-      final result = await harness.check(harness.caseOfAll());
+      final cases = harness.casesOfAll();
 
-      expect(result.errors.map((issue) => '$issue'), isEmpty);
-      expect(
-        result.resolution!.modules.map((module) => module.id.value),
-        allOf(contains('fake_bloc'), isNot(contains('fake_riverpod'))),
-      );
+      expect(cases.map((c) => '$c'), [
+        'every module (fake_bloc)',
+        'every module (fake_riverpod)',
+      ]);
+      for (final (contractCase, stateManager, other) in [
+        (cases.first, 'fake_bloc', 'fake_riverpod'),
+        (cases.last, 'fake_riverpod', 'fake_bloc'),
+      ]) {
+        final result = await harness.check(contractCase);
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        expect(
+          result.resolution!.modules.map((module) => module.id.value),
+          allOf(
+            contains(stateManager),
+            isNot(contains(other)),
+            containsAll(['fake_sockets', 'fake_feature', 'fake_router']),
+          ),
+        );
+      }
     });
 
     test('finds no errors in any app, rendered code included', () {

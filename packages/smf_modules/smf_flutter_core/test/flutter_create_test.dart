@@ -96,16 +96,20 @@ void main() {
       final result = await harness.check(
         const ContractCase('flutter_core', requested: [FlutterCoreModule.id]),
       );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
       final rendered = {
         for (final file in result.app!.files.values)
           if (!_leftOut(file.path)) file.path: file,
       };
 
       final problems = <String>[];
+      final prefix = root.path.endsWith(Platform.pathSeparator)
+          ? root.path
+          : '${root.path}${Platform.pathSeparator}';
       for (final entity in root.listSync(recursive: true)) {
         if (entity is! File) continue;
         final path = entity.path
-            .substring(root.path.length + 1)
+            .substring(prefix.length)
             .replaceAll(Platform.pathSeparator, '/');
         if (_leftOut(path)) continue;
         final brick = rendered.remove(path);
@@ -114,6 +118,21 @@ void main() {
           continue;
         }
         final bytes = entity.readAsBytesSync();
+        if (path == AppEntryRole.xcodeProjectFile) {
+          // The brick may ask for a later iOS than Flutter, not an earlier.
+          final minimums = _iosVersionsOf(brick.text);
+          final above = {
+            for (final version in _iosVersionsOf(utf8.decode(bytes)))
+              if (minimums.every((minimum) => _compare(version, minimum) > 0))
+                version,
+          };
+          if (above.isNotEmpty) {
+            problems.add(
+              '$path: flutter create asks for iOS ${above.join(', ')}, more '
+              'than the brick',
+            );
+          }
+        }
         final same = brick.isText
             ? _normalized(path, brick.text) ==
                 _normalized(path, utf8.decode(bytes, allowMalformed: true))
@@ -134,6 +153,28 @@ void main() {
         ? 'Needs the app of flutter create in $_createdApp.'
         : false,
   );
+}
+
+/// The minimum iOS versions of the build configurations of the Xcode
+/// project [text], each as its parts.
+List<String> _iosVersionsOf(String text) => [
+      for (final match in RegExp(
+        r'IPHONEOS_DEPLOYMENT_TARGET = ([\d.]+);',
+      ).allMatches(text))
+        match[1]!,
+    ];
+
+/// Compares the versions [a] and [b], such as `13.0` and `15.0`, part by
+/// part.
+int _compare(String a, String b) {
+  final left = a.split('.').map(int.parse).toList();
+  final right = b.split('.').map(int.parse).toList();
+  for (var i = 0; i < left.length || i < right.length; i++) {
+    final order = (i < left.length ? left[i] : 0)
+        .compareTo(i < right.length ? right[i] : 0);
+    if (order != 0) return order;
+  }
+  return 0;
 }
 
 bool _sameBytes(List<int> a, List<int> b) {

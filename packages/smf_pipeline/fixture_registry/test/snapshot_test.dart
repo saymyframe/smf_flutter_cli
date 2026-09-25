@@ -47,7 +47,7 @@ final _apps = <String, ContractCase>{
 /// The files of flutter_core that the fixtures change: the Dart code, the
 /// pubspec, and the native files with sockets. The Xcode project shows only
 /// its minimum iOS versions.
-bool _shownOfScaffold(String path) =>
+bool _shownOfAppEntry(String path) =>
     path.startsWith('lib/') ||
     path.startsWith('test/') ||
     const {
@@ -63,7 +63,8 @@ bool _shownOfScaffold(String path) =>
 /// the lower bound of its SDK constraint, but no later than the formatter of
 /// the snapshots knows. Up to Dart 3.12, the styles of the versions after
 /// 3.10 differ only where trailing commas are preserved, which the apps do
-/// not ask for.
+/// not ask for. Code with the syntax of a later version fails to format
+/// until the formatter moves on with the analyzer of the pipeline.
 Version _languageVersionOf(RenderedApp app) {
   final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
   final environment = pubspec['environment'] as YamlMap;
@@ -76,7 +77,7 @@ Version _languageVersionOf(RenderedApp app) {
 
 /// The files of [app] as one text: each under a header with its path and
 /// owner. Every file of the fixtures is shown, and the files of flutter_core
-/// that they change; see [_shownOfScaffold]. Dart files are formatted as
+/// that they change; see [_shownOfAppEntry]. Dart files are formatted as
 /// `dart format` formats the app, and the pubspec, XML and plist files must
 /// parse.
 String _snapshotOf(RenderedApp app) {
@@ -84,8 +85,8 @@ String _snapshotOf(RenderedApp app) {
   final buffer = StringBuffer();
   for (final file in app.files.values) {
     final path = file.path;
-    final ofScaffold = file.owner == const ModuleOrigin(FlutterCoreModule.id);
-    if (ofScaffold && !_shownOfScaffold(path)) continue;
+    final ofAppEntry = file.owner == const ModuleOrigin(FlutterCoreModule.id);
+    if (ofAppEntry && !_shownOfAppEntry(path)) continue;
     buffer.writeln('=== $path (${file.owner}) ===');
     if (!file.isText) {
       buffer.writeln('<${file.bytes.length} bytes>');

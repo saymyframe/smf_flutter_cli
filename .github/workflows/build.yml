@@ -101,6 +101,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The repository allows only the actions of GitHub, of verified
+      # creators and a few others by name, so Flutter comes from its release
+      # archive rather than from a setup action.
       - name: Setup Flutter
         run: |
           archive="$RUNNER_TEMP/flutter.tar.xz"
@@ -124,6 +127,7 @@ jobs:
             '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
             "$RUNNER_TEMP/flutter.json"
 
+      # One cache per row: the apps of each row get their own packages.
       - name: Cache pub packages
         uses: actions/cache@v6
         with:
@@ -144,9 +148,9 @@ jobs:
         run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/apps"
 
       - name: Compare the brick of flutter_core with flutter create
-        if: matrix.registry == 'real'
+        if: ${{ !cancelled() && matrix.registry == 'real' }}
         run: |
-          (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example my_app)
+          (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example --no-pub my_app)
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
 

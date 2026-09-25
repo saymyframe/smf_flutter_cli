@@ -1,5 +1,8 @@
-/// The matrix of apps that CI generates with `smf create` and analyzes with
-/// Flutter, so that every combination of modules that matters compiles.
+/// The matrix of apps that the continuous integration of SMF generates
+/// with `smf create` and analyzes with Flutter: every app that the contract
+/// harness builds for a set of modules, and the apps with every module.
+///
+/// It serves the repository of SMF, and its API may change in any release.
 library;
 
 import 'dart:io';
@@ -50,18 +53,27 @@ final class MatrixApp {
 
 /// The apps of the matrix of [modules]: every app that the contract harness
 /// builds for them, which covers every module and every provider with each
-/// subset of the roles it uses, and the app with as many modules as one app
-/// can have.
+/// subset of the roles it uses, and the apps with every module, one for each
+/// combination of the providers of roles that take one
+/// (see [ContractHarness.casesOfAll]).
 ///
-/// A case that the harness finds errors in is among the `failed` ones, since
-/// its app could not be generated.
+/// [roleOptions] are the values of role options for every app, such as the
+/// start route of apps with several screens that can start them. The
+/// harness renders each app in memory first, so a case that it finds errors
+/// in, such as a choice of a role that no option makes, is among the
+/// `failed` ones, since its app could not be generated.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
-  List<SmfModule> modules,
-) async {
-  final harness = ContractHarness(ModuleRegistry(modules), render: false);
+  List<SmfModule> modules, {
+  Map<String, String?> roleOptions = const {},
+}) async {
+  final harness = ContractHarness(
+    ModuleRegistry(modules),
+    roleOptions: roleOptions,
+  );
   final results = [
     ...await harness.checkAll(),
-    await harness.check(harness.caseOfAll()),
+    for (final contractCase in harness.casesOfAll())
+      await harness.check(contractCase),
   ];
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
@@ -77,7 +89,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
       MatrixApp(
         '${result.contractCase}',
         [for (final module in resolution.modules) module.id],
-        roleOptions: result.contractCase.roleOptions,
+        roleOptions: {...roleOptions, ...result.contractCase.roleOptions},
       ),
     );
   }
@@ -95,10 +107,11 @@ typedef MatrixCreate = Future<int> Function(
 /// the analyzer.
 typedef MatrixAnalyze = Future<(int, String)> Function(String directory);
 
-/// Generates every app of the [matrixOf] of [modules] in [directory], with
-/// the options of CI, analyzes each with `flutter analyze`, and returns the
-/// exit code: 0 if every app was generated with every module and has no
-/// issue, 1 otherwise.
+/// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
+/// [directory], with the options of CI, analyzes each with
+/// `flutter analyze`, and returns the exit code: 0 if every app was
+/// generated with every module and every step that the options of CI do
+/// not leave for later, and has no issue; 1 otherwise.
 ///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory]. [create] and [analyze] are `smf create` of this CLI and
@@ -106,16 +119,21 @@ typedef MatrixAnalyze = Future<(int, String)> Function(String directory);
 Future<int> runMatrix(
   List<SmfModule> modules, {
   required String directory,
+  Map<String, String?> roleOptions = const {},
   void Function(String line)? log,
   MatrixCreate? create,
   MatrixAnalyze? analyze,
 }) async {
   final say = log ?? (String line) => stdout.writeln(line);
   final createApp = create ??
-      (arguments, onCreated) =>
-          runCli(arguments, modules: modules, onCreated: onCreated);
+      (arguments, onCreated) => runCli(
+            arguments,
+            modules: modules,
+            banner: false,
+            onCreated: onCreated,
+          );
   final analyzeApp = analyze ?? _flutterAnalyze;
-  final (:apps, :failed) = await matrixOf(modules);
+  final (:apps, :failed) = await matrixOf(modules, roleOptions: roleOptions);
   final problems = [
     for (final result in failed)
       '${result.contractCase}: ${result.errors.join('; ')}',
@@ -140,6 +158,9 @@ Future<int> runMatrix(
       );
       continue;
     }
+    for (final step in generated.skippedSteps) {
+      if (step.failed) problems.add('$name ($app): the step $step.');
+    }
     final (analyzed, output) = await analyzeApp(generated.path);
     say(output.trim());
     if (analyzed != 0) {
@@ -153,6 +174,8 @@ Future<int> runMatrix(
   return 1;
 }
 
+// Tests have no Flutter SDK.
+// coverage:ignore-start
 Future<(int, String)> _flutterAnalyze(String directory) async {
   final result = await Process.run(
     'flutter',
@@ -162,3 +185,4 @@ Future<(int, String)> _flutterAnalyze(String directory) async {
   );
   return (result.exitCode, '${result.stdout}${result.stderr}');
 }
+// coverage:ignore-end

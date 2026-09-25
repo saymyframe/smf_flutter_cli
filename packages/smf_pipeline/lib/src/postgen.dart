@@ -9,7 +9,12 @@ import 'package:smf_pipeline/src/shell.dart';
 final class SkippedStep {
   /// Creates the record of the step [description], which is not done
   /// because of [reason].
-  const SkippedStep(this.description, this.command, this.reason);
+  const SkippedStep(
+    this.description,
+    this.command,
+    this.reason, {
+    this.failed = false,
+  });
 
   /// What the step does.
   final String description;
@@ -20,6 +25,10 @@ final class SkippedStep {
   /// Why it is not done, as a phrase such as `the run skips external setup`
   /// or `it exited with code 1`.
   final String reason;
+
+  /// Whether the step could not run or failed, rather than being left for
+  /// later by the options of the run or by the user.
+  final bool failed;
 
   @override
   String toString() => '$description: $command ($reason)';
@@ -113,6 +122,7 @@ Future<List<SkippedStep>> runPostGen({
     final command = commands.display(step.tool, step.arguments, resolved);
     final description = step.description ?? command;
     String? reason;
+    var failed = false;
     if (step.external && environment.skipExternalSetup) {
       reason = 'the run skips external setup';
     } else if (step.interactive && !environment.interactive) {
@@ -125,6 +135,7 @@ Future<List<SkippedStep>> runPostGen({
         );
       }
       reason = '${step.tool.executable} was not found';
+      failed = true;
     } else if (step.skippable &&
         environment.interactive &&
         !await environment.prompter.confirm(
@@ -149,8 +160,9 @@ Future<List<SkippedStep>> runPostGen({
       }
       logger.warn('The step "$description" failed: ${failure.detail}');
       reason = failure.reason;
+      failed = true;
     }
-    skipped.add(SkippedStep(description, command, reason));
+    skipped.add(SkippedStep(description, command, reason, failed: failed));
   }
 
   await commands.tryRun(
