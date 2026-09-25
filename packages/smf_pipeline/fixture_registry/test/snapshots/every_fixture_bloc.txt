@@ -2,7 +2,6 @@
 include: package:flutter_lints/flutter.yaml
 === android/app/build.gradle.kts (fake_scaffold) ===
 plugins {
-    id("com.android.application")
     id("io.github.ben-manes.versions")
 }
 
@@ -28,15 +27,21 @@ dependencies {
 </manifest>
 === android/settings.gradle.kts (fake_scaffold) ===
 plugins {
-    id("com.android.application") version "9.0.1" apply false
     id("io.github.ben-manes.versions") version("0.64.0") apply false
 }
 === assets/fixture/readme.txt (fake_sockets) ===
 An asset of the fixture that uses every socket.
 === fonts/FixtureSans.ttf (fake_sockets) ===
 <58 bytes>
-=== ios/Podfile (fake_scaffold) ===
-platform :ios, '14.0'
+=== ios/Runner.xcodeproj/project.pbxproj (fake_scaffold) ===
+// !$*UTF8*$!
+{
+	objects = {
+		buildSettings = {
+			IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+		};
+	};
+}
 === ios/Runner/Info.plist (fake_scaffold) ===
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

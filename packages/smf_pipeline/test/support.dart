@@ -36,6 +36,7 @@ final class TestRole<D extends Object> extends Role<D> {
     this.options = const [],
     this.template,
     this.moduleRules = const [],
+    this.structuralRules = const [],
     this.openToAllModules = false,
   })  : _requires = requires,
         _uses = uses;
@@ -75,6 +76,9 @@ final class TestRole<D extends Object> extends Role<D> {
 
   @override
   final List<ModuleRule<D>> moduleRules;
+
+  @override
+  final List<StructuralRule<D>> structuralRules;
 }
 
 /// A template for tests that returns what it is given and records its
@@ -269,13 +273,11 @@ class FallbackStartScreen extends StatelessWidget {
 ''',
   'android/settings.gradle.kts': '''
 plugins {
-    id("com.android.application") version "9.0.1" apply false
 {{{smf_app_entry__gradle_settings_plugins}}}
 }
 ''',
   'android/app/build.gradle.kts': '''
 plugins {
-    id("com.android.application")
 {{{smf_app_entry__gradle_app_plugins}}}
 }
 

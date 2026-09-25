@@ -50,7 +50,7 @@ final class TestRouterModule extends SmfModule {
         BrickContribution(
           bundleOf('test_router', {
             RouterRole.appRouterFactoryFile: '''
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
 import 'app_router.dart';

@@ -52,7 +52,7 @@ void main() {
     test('builds the app with and without a router', () {
       expect(
         results.map((result) => result.contractCase.name),
-        ['flutter_core with router', 'flutter_core', 'every_socket'],
+        containsAll(['flutter_core with router', 'flutter_core']),
       );
     });
 

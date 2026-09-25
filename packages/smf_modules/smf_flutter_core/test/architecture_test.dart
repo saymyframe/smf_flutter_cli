@@ -3,6 +3,7 @@ library;
 
 import 'dart:io';
 
+import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 /// The model of modules that a file uses.
@@ -14,20 +15,9 @@ enum _Model {
   old,
 }
 
-/// The URIs of the import, export and part directives of a Dart file.
-List<String> _directives(File file) {
-  final directive = RegExp(
-    r'''^\s*(?:import|export|part)\s+['"]([^'"]+)['"]''',
-    multiLine: true,
-  );
-  return [
-    for (final match in directive.allMatches(file.readAsStringSync()))
-      match.group(1)!,
-  ];
-}
-
-/// The directives of the Dart files of the package in `lib/` and `test/`,
-/// by path relative to the package.
+/// The URIs of the imports and exports of the Dart files of the package in
+/// `lib/` and `test/`, by path relative to the package, as the parser of the
+/// analyzer reads them, so that text in strings does not count.
 Map<String, List<String>> _dartFiles() => {
       for (final directory in ['lib', 'test'])
         for (final file in Directory(directory).listSync(recursive: true))
@@ -35,6 +25,13 @@ Map<String, List<String>> _dartFiles() => {
             file.path.replaceAll(Platform.pathSeparator, '/'):
                 _directives(file),
     };
+
+List<String> _directives(File file) {
+  final index = DartFileIndexer.parse(file.path, file.readAsStringSync()).index;
+  return [
+    for (final directive in [...index.imports, ...index.exports]) directive.uri,
+  ];
+}
 
 /// The path relative to the package of the file of this package that [uri]
 /// in the file at [from] refers to, or `null` for a URI outside it.
@@ -60,19 +57,27 @@ void main() {
   // or through the files of this package it imports or exports.
   final files = _dartFiles();
 
-  final models = <String, Set<_Model>>{};
-  Set<_Model> modelsOf(String path) {
-    if (models[path] case final known?) return known;
-    final found = models[path] = <_Model>{};
-    for (final uri in files[path]!) {
-      if (_modelOfUri(uri) case final model?) found.add(model);
-      final target = _target(path, uri);
-      if (target != null && files.containsKey(target)) {
-        found.addAll(modelsOf(target));
+  /// The files of this package that [path] reaches through its imports and
+  /// exports, [path] included.
+  Set<String> reachable(String path) {
+    final found = <String>{};
+    final pending = [path];
+    while (pending.isNotEmpty) {
+      final next = pending.removeLast();
+      if (!found.add(next)) continue;
+      for (final uri in files[next]!) {
+        final target = _target(next, uri);
+        if (target != null && files.containsKey(target)) pending.add(target);
       }
     }
     return found;
   }
+
+  Set<_Model> modelsOf(String path) => {
+        for (final file in reachable(path))
+          for (final uri in files[file]!)
+            if (_modelOfUri(uri) case final model?) model,
+      };
 
   test('finds the lego module', () {
     expect(modelsOf('lib/smf_flutter_core.dart'), {_Model.lego});
@@ -85,20 +90,22 @@ void main() {
     }
   });
 
-  test('the lego module uses neither the engine nor mustachex', () {
-    for (final MapEntry(key: path, value: uris) in files.entries) {
+  test('the lego module reaches neither the engine nor mustachex', () {
+    for (final path in files.keys) {
       if (!modelsOf(path).contains(_Model.lego)) continue;
-      for (final uri in uris) {
-        expect(
-          uri,
-          isNot(
-            anyOf(
-              startsWith('package:smf_contribution_engine/'),
-              startsWith('package:mustachex/'),
+      for (final file in reachable(path)) {
+        for (final uri in files[file]!) {
+          expect(
+            uri,
+            isNot(
+              anyOf(
+                startsWith('package:smf_contribution_engine/'),
+                startsWith('package:mustachex/'),
+              ),
             ),
-          ),
-          reason: '$path must not use $uri',
-        );
+            reason: '$path reaches $file, which uses $uri',
+          );
+        }
       }
     }
   });

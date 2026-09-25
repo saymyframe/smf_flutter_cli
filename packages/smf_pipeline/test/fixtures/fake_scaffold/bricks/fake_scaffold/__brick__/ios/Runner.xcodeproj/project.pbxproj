@@ -1,0 +1,8 @@
+// !$*UTF8*$!
+{
+	objects = {
+		buildSettings = {
+			IPHONEOS_DEPLOYMENT_TARGET = {{{smf_app_entry__ios_deployment_target}}};
+		};
+	};
+}

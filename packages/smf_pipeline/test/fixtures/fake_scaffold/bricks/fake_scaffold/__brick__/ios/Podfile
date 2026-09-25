@@ -1,1 +1,0 @@
-platform :ios, '{{{smf_app_entry__ios_deployment_target}}}'

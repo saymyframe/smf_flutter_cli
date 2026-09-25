@@ -218,6 +218,7 @@ abstract base class Role<D extends Object> {
     final input = StructuralRuleInput<D>._(
       roleInput: hookInput(request.hook),
       files: Map.unmodifiable(request.files),
+      texts: Map.unmodifiable(request.texts),
       owners: Map.unmodifiable(request.owners),
       modules: List.unmodifiable(request.modules),
     );

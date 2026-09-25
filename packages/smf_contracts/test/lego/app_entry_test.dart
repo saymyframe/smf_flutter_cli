@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/lego.dart';
 import 'package:test/test.dart';
 
@@ -154,7 +157,15 @@ void main() {
       );
       expect(
         appEntryRole.structuralRules.map((rule) => rule.id),
-        ['app_entry.bootstrap_without_material', 'app_entry.main_sequence'],
+        [
+          'app_entry.bootstrap_without_material',
+          'app_entry.main_sequence',
+          'app_entry.native_keys',
+        ],
+      );
+      expect(
+        appEntryRole.moduleRules.map((rule) => rule.id),
+        ['app_entry.bootstrap_phases', 'app_entry.native_tag_lines'],
       );
     });
   });
@@ -415,22 +426,22 @@ void main() {
     test('Gradle plugins and dependencies take the highest version', () {
       expect(
         _render(AppEntryRole.gradleSettingsPlugins, const [
-          ('com.google.gms.google-services', '4.3.15'),
-          ('com.google.gms.google-services', '4.4.2'),
+          ('io.github.ben-manes.versions', '0.63.0'),
+          ('io.github.ben-manes.versions', '0.64.0'),
         ]),
         {
           AppEntryRole.gradleSettingsPlugins.tag:
-              '    id("com.google.gms.google-services") version("4.4.2") '
+              '    id("io.github.ben-manes.versions") version("0.64.0") '
                   'apply false',
         },
       );
       expect(
         AppEntryRole.gradleAppPlugins.render([
-          AppEntryRole.gradleAppPlugins.key('com.google.gms.google-services'),
+          AppEntryRole.gradleAppPlugins.key('io.github.ben-manes.versions'),
         ]),
         {
           AppEntryRole.gradleAppPlugins.tag:
-              '    id("com.google.gms.google-services")',
+              '    id("io.github.ben-manes.versions")',
         },
       );
       expect(
@@ -444,20 +455,277 @@ void main() {
         },
       );
     });
+  });
 
-    test('Gradle settings plugins keep the anchor flutterfire looks for', () {
-      // `kotlinGoogleServicesPluginPattern` of flutterfire_cli 1.4.0
-      // (lib/src/firebase/firebase_android_writes.dart). flutterfire inserts
-      // the Crashlytics plugin after the line it matches.
-      final anchor = RegExp(
-        r'''id\((["']com\.google\.gms\.google-services["'])\) '''
-        r'''version\((["']\d+\.\d+\.\d+["'])\) apply false''',
+  group('AppEntryRole native checks', () {
+    List<SmfIssue> checkTexts(Map<String, String> texts) =>
+        appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: texts,
+            owners: {
+              for (final path in texts.keys)
+                path: const ModuleOrigin(ModuleId('flutter_core')),
+            },
+          ),
+        );
+
+    List<String> messages(List<SmfIssue> issues) =>
+        [for (final issue in issues) issue.message];
+
+    test('accept native files that name every key once', () {
+      expect(
+        messages(
+          checkTexts({
+            AppEntryRole.infoPlistFile: _plist,
+            AppEntryRole.androidManifestFile: _manifest,
+            AppEntryRole.gradleSettingsFile: _settings,
+            AppEntryRole.gradleAppFile: _appGradle,
+          }),
+        ),
+        isEmpty,
       );
-      final rendered = _render(AppEntryRole.gradleSettingsPlugins, const [
-        ('com.google.gms.google-services', '4.4.2'),
-      ]);
+    });
 
-      expect(rendered.values.single, matches(anchor));
+    test('report a key of Info.plist that the dictionary has twice', () {
+      final issues = checkTexts({
+        AppEntryRole.infoPlistFile: _plist.replaceFirst(
+          '</dict>\n</plist>',
+          '\t<key>CFBundleName</key>\n\t<string>Again</string>\n'
+              '</dict>\n</plist>',
+        ),
+      });
+
+      expect(messages(issues), [
+        'ios/Runner/Info.plist has the key CFBundleName more than once.',
+      ]);
+      expect(
+        issues.single.origin,
+        const ModuleOrigin(ModuleId('flutter_core')),
+      );
+      expect(issues.single.path, AppEntryRole.infoPlistFile);
+    });
+
+    test('report permissions and meta-data of the application twice', () {
+      final manifest = _manifest
+          .replaceFirst(
+            '    <application',
+            '    <uses-permission android:name="android.permission.CAMERA"/>\n'
+                '    <application',
+          )
+          .replaceFirst(
+            '    </application>',
+            '        <meta-data android:name="flutterEmbedding" '
+                'android:value="2"/>\n'
+                '    </application>',
+          );
+
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals(
+            'android/app/src/main/AndroidManifest.xml has the permission '
+            'android.permission.CAMERA more than once.',
+          ),
+          equals(
+            'android/app/src/main/AndroidManifest.xml has the meta-data '
+            'flutterEmbedding more than once.',
+          ),
+        ],
+      );
+    });
+
+    test('tell the meta-data of an activity from those of the application', () {
+      final manifest = _manifest.replaceFirst(
+        '        </activity>',
+        '            <meta-data android:name="flutterEmbedding" '
+            'android:value="2"/>\n'
+            '        </activity>',
+      );
+
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        isEmpty,
+      );
+    });
+
+    test('report a plugin that a plugins block has twice', () {
+      final issues = checkTexts({
+        AppEntryRole.gradleSettingsFile: _settings.replaceFirst(
+          '2.3.20" apply false\n',
+          '2.3.20" apply false\n'
+              '    id("org.jetbrains.kotlin.android") version("2.3.21") '
+              'apply false\n',
+        ),
+        AppEntryRole.gradleAppFile:
+            '$_appGradle\nplugins {\n    id("com.android.application")\n}\n',
+      });
+
+      expect(messages(issues), [
+        equals(
+          'android/settings.gradle.kts has the plugin '
+          'org.jetbrains.kotlin.android more than once.',
+        ),
+      ]);
+    });
+
+    test('read no key out of comments', () {
+      expect(
+        messages(
+          checkTexts({
+            AppEntryRole.infoPlistFile: _plist.replaceFirst(
+              '</dict>',
+              '<!-- <key>CFBundleName</key> -->\n</dict>',
+            ),
+            AppEntryRole.androidManifestFile: _manifest.replaceFirst(
+              '    </application>',
+              '        <!-- <meta-data android:name="flutterEmbedding"/> -->\n'
+                  '    </application>',
+            ),
+            AppEntryRole.gradleSettingsFile: _settings.replaceFirst(
+              '\n}',
+              '\n    // id("com.android.application")\n}',
+            ),
+          }),
+        ),
+        isEmpty,
+      );
+    });
+
+    List<SmfIssue> checkModule(Map<String, String> templates) =>
+        appEntryRole.checkModule(
+          ModuleRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            module: const ModuleDescriptor(
+              id: ModuleId('scaffold'),
+              description: 'Scaffold',
+              kind: ModuleKinds.scaffold,
+              providers: [RoleProvider.plain(appEntryRole)],
+            ),
+            contributions: [BrickContribution(_bundle(templates))],
+          ),
+        );
+
+    const bootstrap = '''
+Future<void> bootstrap() async {
+{{{smf_app_entry__bootstrap_early}}}
+{{{smf_app_entry__bootstrap_platform}}}
+{{{smf_app_entry__bootstrap_di}}}
+{{{smf_app_entry__bootstrap_late}}}
+}
+''';
+
+    test('module rules accept the tags of a provider in place', () {
+      expect(
+        checkModule({
+          AppEntryRole.bootstrapFile: bootstrap,
+          AppEntryRole.androidManifestFile: _manifestTemplate,
+          AppEntryRole.infoPlistFile:
+              '<dict>\n{{{smf_app_entry__info_plist}}}\n</dict>\n',
+          AppEntryRole.gradleSettingsFile:
+              'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
+          AppEntryRole.gradleAppFile: 'plugins {\n'
+              '{{{smf_app_entry__gradle_app_plugins}}}\n}\n\n'
+              'dependencies {\n'
+              '{{{smf_app_entry__gradle_app_dependencies}}}\n}\n',
+        }),
+        isEmpty,
+      );
+    });
+
+    test('the phases of start-up are in order in bootstrap.dart', () {
+      final swapped = bootstrap
+          .replaceFirst('bootstrap_early', 'bootstrap_x')
+          .replaceFirst('bootstrap_late', 'bootstrap_early')
+          .replaceFirst('bootstrap_x', 'bootstrap_late');
+      final issues = checkModule({AppEntryRole.bootstrapFile: swapped});
+
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'The tags of the phases of start-up in lib/bootstrap.dart are not '
+          'in the order early, platform, di, late.',
+        ),
+      ]);
+      expect(issues.single.origin, const ModuleOrigin(ModuleId('scaffold')));
+
+      final moved = checkModule({
+        AppEntryRole.bootstrapFile:
+            bootstrap.replaceFirst('{{{smf_app_entry__bootstrap_late}}}', ''),
+        'lib/late.dart': '{{{smf_app_entry__bootstrap_late}}}\n',
+      });
+      expect(moved.map((issue) => issue.message), [
+        equals(
+          'The tag {{{smf_app_entry__bootstrap_late}}} is not in '
+          'lib/bootstrap.dart, where bootstrap() runs the phases of '
+          'start-up.',
+        ),
+      ]);
+    });
+
+    test('native tags stand alone at the start of a line of their file', () {
+      final issues = checkModule({
+        AppEntryRole.androidManifestFile: _manifestTemplate.replaceFirst(
+          '\n{{{smf_app_entry__android_manifest_permissions}}}',
+          '    {{{smf_app_entry__android_manifest_permissions}}}',
+        ),
+        'ios/Podfile': '{{{smf_app_entry__info_plist}}}\n',
+      });
+
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'The tag {{{smf_app_entry__android_manifest_permissions}}} must '
+          'stand alone at the start of a line of '
+          'android/app/src/main/AndroidManifest.xml, because its '
+          'contributions render as complete, indented lines.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
+          'lines belong in ios/Runner/Info.plist.',
+        ),
+      ]);
+    });
+
+    test('the Gradle sockets refuse the plugins every app declares', () {
+      expect(
+        AppEntryRole.gradleAppPlugins.problemsWith(
+          AppEntryRole.gradleAppPlugins.key('org.jetbrains.kotlin.android'),
+        ),
+        [
+          equals(
+            'socket app_entry.gradle_app_plugins does not take '
+            'org.jetbrains.kotlin.android: the Flutter Gradle plugin applies '
+            'the Kotlin plugin itself.',
+          ),
+        ],
+      );
+      expect(
+        AppEntryRole.gradleSettingsPlugins.problemsWith(
+          AppEntryRole.gradleSettingsPlugins
+              .entry('com.android.application', '9.1.0'),
+        ),
+        [
+          equals(
+            'socket app_entry.gradle_settings_plugins does not take '
+            'com.android.application: the provider of the app entry declares '
+            'it.',
+          ),
+        ],
+      );
+      expect(
+        AppEntryRole.gradleAppPlugins.problemsWith(
+          AppEntryRole.gradleAppPlugins.key('io.github.ben-manes.versions'),
+        ),
+        isEmpty,
+      );
     });
   });
 
@@ -523,3 +791,108 @@ void main() {
     expect(ModuleKinds.scaffold.mustProvide, {appEntryRole});
   });
 }
+
+/// An `Info.plist` like the one of `flutter create`, shortened.
+const _plist = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+				</dict>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+</dict>
+</plist>
+''';
+
+/// An Android manifest like the one of `flutter create`, shortened.
+const _manifest = r'''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <application
+        android:label="My App"
+        android:name="${applicationName}">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+        </activity>
+        <!-- Don't delete the meta-data below. -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+</manifest>
+''';
+
+/// The manifest of a provider, with the tags of its sockets.
+const _manifestTemplate = '''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+{{{smf_app_entry__android_manifest_permissions}}}
+    <application>
+        <activity android:name=".MainActivity">
+{{{smf_app_entry__main_activity_intent_filters}}}
+        </activity>
+{{{smf_app_entry__android_manifest_application_meta}}}
+    </application>
+</manifest>
+''';
+
+/// The Gradle settings of `flutter create` 3.44, shortened.
+const _settings = '''
+pluginManagement {
+    repositories {
+        google()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+''';
+
+/// The build script of the app module of `flutter create` 3.44, shortened.
+const _appGradle = '''
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+''';
+
+MasonBundle _bundle(Map<String, String> files) => MasonBundle(
+      name: 'scaffold',
+      description: 'scaffold',
+      version: '0.1.0',
+      files: [
+        for (final MapEntry(key: path, value: text) in files.entries)
+          MasonBundledFile(path, base64.encode(utf8.encode(text)), 'text'),
+      ],
+    );

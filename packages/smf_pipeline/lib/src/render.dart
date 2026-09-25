@@ -115,7 +115,8 @@ final class _HookOutput {
 ///    text of its tags. A socket that gets contributions but has no tag in
 ///    any brick is an error, since its code would be lost. The sockets of
 ///    the pipeline get the sections of the merged [pubspec], and the tags
-///    of sockets that get nothing render to nothing.
+///    of sockets that get nothing render to nothing: a line that holds
+///    nothing but such a tag goes away with it.
 /// 3. Renders every brick that applies with mason, with the variables of
 ///    [BrickContribution]: the names of the app, the presence flags of the
 ///    roles its owner provides, requires or uses, the tags, the variables of
@@ -563,7 +564,9 @@ void _renderBrick(
       }
       if (masonTag.hasMatch(text)) {
         try {
-          bytes = utf8.encode(text.render(vars));
+          bytes = utf8.encode(
+            _withoutEmptySocketLines(text, texts).render(vars),
+          );
         } on Object catch (error) {
           issues.add(
             SmfIssue(
@@ -607,6 +610,21 @@ void _renderBrick(
     renderedPaths[(origin, template)] = path;
   }
 }
+
+/// [text] without the lines that hold nothing but the tag of a socket whose
+/// text in [sockets] is empty, so that an empty socket leaves no blank line
+/// behind, such as in a native file that the pipeline does not format.
+String _withoutEmptySocketLines(String text, Map<String, String> sockets) =>
+    text.replaceAllMapped(
+      _socketLine,
+      (match) => sockets[match[1]] == '' ? '' : match[0]!,
+    );
+
+/// A line that holds nothing but the tag of a socket, with its line break.
+final RegExp _socketLine = RegExp(
+  r'^[ \t]*\{\{\{(smf_\w+)\}\}\}[ \t]*(?:\r?\n|$)',
+  multiLine: true,
+);
 
 /// What is wrong with [path], a rendered path of a file of the app, or
 /// `null` if it is a path inside the app.

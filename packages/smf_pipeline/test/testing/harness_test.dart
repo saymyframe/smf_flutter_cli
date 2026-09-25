@@ -439,25 +439,26 @@ void main() {
         );
       });
 
-      test('Gradle files where flutterfire leaves plugins out are reported',
-          () async {
-        const path = 'android/app/build.gradle.kts';
+      test('structural rules read every rendered file', () async {
+        final notes = TestRole<NoDsl>(
+          'notes',
+          structuralRules: const [
+            StructuralRule(
+              id: 'notes.readme',
+              description: 'The README names the app.',
+              check: _checkReadme,
+            ),
+          ],
+        );
         final harness = ContractHarness(
           ModuleRegistry([
-            scaffold(
-              bricks: false,
+            scaffold(),
+            TestModule(
+              'writer',
+              providers: [RoleProvider.plain(notes)],
               contributions: [
                 BrickContribution(
-                  bundle(
-                    'entry',
-                    files: {
-                      ...entryFiles,
-                      path: entryFiles[path]!.replaceFirst(
-                        'id("com.android.application")',
-                        'alias(libs.plugins.android.application)',
-                      ),
-                    },
-                  ),
+                  bundle('readme', files: {'README.md': '# Another app\n'}),
                 ),
               ],
             ),
@@ -465,19 +466,16 @@ void main() {
         );
 
         final result = await harness.check(
-          const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+          const ContractCase('writer', requested: [ModuleId('writer')]),
         );
 
-        expect(result.errors, hasLength(1));
-        final issue = result.errors.single;
+        expect(result.errors.map((issue) => issue.message), [
+          'README.md does not name contract_app.',
+        ]);
         expect(
-          issue.message,
-          'flutterfire configure would leave the Firebase plugins out of '
-          '$path, because no line there starts with '
-          'id("com.android.application").',
+          result.errors.single.origin,
+          const ModuleOrigin(ModuleId('writer')),
         );
-        expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
-        expect(issue.path, path);
       });
 
       test('braces that mason copies are reported in the template', () async {
@@ -691,3 +689,13 @@ final class _PickTemplate extends RoleTemplate<String> {
 
 /// A `{` in a mason template.
 const _brace = '{{__LEFT_CURLY_BRACKET__}}';
+
+List<SmfIssue> _checkReadme(StructuralRuleInput<NoDsl> input) => [
+      if (input.texts['README.md'] case final text?
+          when !text.contains(input.roleInput.context.appName))
+        SmfIssue(
+          'README.md does not name ${input.roleInput.context.appName}.',
+          origin: input.owners['README.md'],
+          path: 'README.md',
+        ),
+    ];

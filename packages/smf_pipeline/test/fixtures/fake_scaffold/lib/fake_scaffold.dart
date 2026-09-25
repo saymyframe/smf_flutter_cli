@@ -4,9 +4,9 @@
 /// It provides the app entry of the fixture apps in place of the
 /// flutter_core module: the Dart entry point with every socket of the app
 /// entry, the pubspec with the sockets of the pipeline, and native files
-/// that only hold the tags of the native sockets and, in the Gradle files,
-/// the lines that flutterfire looks for. They are not a buildable Android
-/// or iOS project, and the minimum iOS version appears only in the Podfile.
+/// that only hold the tags of the native sockets. They are not a buildable
+/// Android or iOS project: the Xcode project holds only the minimum iOS
+/// version.
 library;
 
 import 'package:fake_scaffold/bundles/fake_scaffold_bundle.dart';

@@ -224,3 +224,169 @@ String _escapeXml(String text) => text
 
 String _escapeKotlin(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
+
+/// The sockets that render complete lines of a native file, with the file.
+const _nativeLineSockets = <(SocketRef, String)>[
+  (
+    AppEntryRole.androidManifestPermissions,
+    AppEntryRole.androidManifestFile,
+  ),
+  (
+    AppEntryRole.androidManifestApplicationMeta,
+    AppEntryRole.androidManifestFile,
+  ),
+  (AppEntryRole.mainActivityIntentFilters, AppEntryRole.androidManifestFile),
+  (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
+  (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
+  (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
+  (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
+];
+
+List<SmfIssue> _checkNativeTagLines(ModuleRuleInput<NoDsl> input) {
+  final origin = ModuleOrigin(input.module.id);
+  final templates = _templatesOf(input.contributions);
+  final issues = <SmfIssue>[];
+  for (final (socket, path) in _nativeLineSockets) {
+    final tag = '{{{${socket.tag}}}}';
+    for (final MapEntry(key: template, value: text) in templates.entries) {
+      if (!text.contains(tag)) continue;
+      if (template != path) {
+        issues.add(
+          SmfIssue(
+            'The tag $tag is in $template, but its lines belong in $path.',
+            origin: origin,
+            path: template,
+          ),
+        );
+      } else if (tag.allMatches(text).length !=
+          text.split('\n').where((line) => line.trimRight() == tag).length) {
+        issues.add(
+          SmfIssue(
+            'The tag $tag must stand alone at the start of a line of $path, '
+            'because its contributions render as complete, indented lines.',
+            origin: origin,
+            path: path,
+          ),
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
+  final issues = <SmfIssue>[];
+  void once(String path, String what, List<String> keys) {
+    final seen = <String>{};
+    final reported = <String>{};
+    for (final key in keys) {
+      if (seen.add(key) || !reported.add(key)) continue;
+      issues.add(
+        SmfIssue(
+          '$path has $what $key more than once.',
+          hint: 'A module cannot contribute a key that the template of the '
+              'app entry has already.',
+          origin: input.owners[path],
+          path: path,
+        ),
+      );
+    }
+  }
+
+  final texts = input.texts;
+  if (texts[AppEntryRole.infoPlistFile] case final plist?) {
+    once(AppEntryRole.infoPlistFile, 'the key', _plistKeys(plist));
+  }
+  if (texts[AppEntryRole.androidManifestFile] case final manifest?) {
+    const path = AppEntryRole.androidManifestFile;
+    once(
+      path,
+      'the permission',
+      _childNames(manifest, 'manifest', 'uses-permission'),
+    );
+    once(
+      path,
+      'the meta-data',
+      _childNames(manifest, 'application', 'meta-data'),
+    );
+  }
+  for (final path in const [
+    AppEntryRole.gradleSettingsFile,
+    AppEntryRole.gradleAppFile,
+  ]) {
+    for (final plugins in _gradlePluginBlocks(texts[path] ?? '')) {
+      once(path, 'the plugin', plugins);
+    }
+  }
+  return issues;
+}
+
+/// [text] without its XML comments.
+String _withoutXmlComments(String text) =>
+    text.replaceAll(RegExp('<!--.*?-->', dotAll: true), '');
+
+/// [text] with the predefined entities of XML decoded.
+String _unescapeXml(String text) => text
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
+
+/// The keys of the top-level dictionary of the property list [text], in
+/// order.
+List<String> _plistKeys(String text) {
+  final keys = <String>[];
+  var depth = 0;
+  final tokens = RegExp(r'<(/?)(dict|array)\s*(/?)>|<key>([^<]*)</key>');
+  for (final match in tokens.allMatches(_withoutXmlComments(text))) {
+    if (match[4] case final key?) {
+      if (depth == 1) keys.add(_unescapeXml(key.trim()));
+    } else if (match[3] != '/') {
+      depth += match[1] == '/' ? -1 : 1;
+    }
+  }
+  return keys;
+}
+
+/// The `android:name` of every element [element] that is a child of the
+/// first element [parent] in the XML [text], in order.
+List<String> _childNames(String text, String parent, String element) {
+  final names = <String>[];
+  final name = RegExp(r'android:name\s*=\s*"([^"]*)"');
+  // -1 before the parent, 0 directly in it, more in its descendants.
+  var depth = -1;
+  final tags = RegExp(r'<(/?)([A-Za-z][\w:.-]*)((?:[^>"]|"[^"]*")*?)(/?)>');
+  for (final match in tags.allMatches(_withoutXmlComments(text))) {
+    final closing = match[1] == '/';
+    final selfClosing = match[4] == '/';
+    if (depth < 0) {
+      if (!closing && !selfClosing && match[2] == parent) depth = 0;
+      continue;
+    }
+    if (closing) {
+      if (depth == 0) break;
+      depth--;
+      continue;
+    }
+    if (depth == 0 && match[2] == element) {
+      if (name.firstMatch(match[3]!) case final attribute?) {
+        names.add(_unescapeXml(attribute[1]!));
+      }
+    }
+    if (!selfClosing) depth++;
+  }
+  return names;
+}
+
+/// The plugin ids of each top-level `plugins { … }` block of the Gradle
+/// script [text], which has no braces inside.
+List<List<String>> _gradlePluginBlocks(String text) {
+  final withoutComments = text.replaceAll(RegExp('//[^\n]*'), '');
+  final id = RegExp(r'''\bid\s*\(?\s*["']([^"']+)["']''');
+  return [
+    for (final block in RegExp(r'^plugins\s*\{([^{}]*)\}', multiLine: true)
+        .allMatches(withoutComments))
+      [for (final plugin in id.allMatches(block[1]!)) plugin[1]!],
+  ];
+}

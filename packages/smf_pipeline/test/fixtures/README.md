@@ -6,7 +6,7 @@ The real SMF modules do not yet use every feature of the module model in `packag
 
 | Package | What it has |
 | --- | --- |
-| `fake_scaffold` | The app entry (`main.dart`, `bootstrap.dart`, `pubspec.yaml`, the lints of a new Flutter app), in place of the `flutter_core` module. Its Android and iOS files only hold the tags of the native sockets and the lines that flutterfire looks for in Gradle files, and do not build. |
+| `fake_scaffold` | The app entry (`main.dart`, `bootstrap.dart`, `pubspec.yaml`, the lints of a new Flutter app), in place of the `flutter_core` module. Its Android and iOS files only hold the tags of the native sockets and do not build. |
 | `fake_state` | Two providers of the state management role. |
 | `fake_roles` | Two roles defined outside `smf_contracts` with the same data type, one module that provides both, and a module that uses them under `when` and inside `{{#has_badge}}`. |
 | `fake_di` | A DI container whose capabilities each test sets. |

@@ -190,14 +190,19 @@ final class FactoryListSocket extends SocketKind {
 final class KeyedSocket<V extends Object> extends SocketKind {
   /// Creates the kind with a merge [policy] and a [renderer] of the merged
   /// entries, which gets them in the order their keys were first
-  /// contributed.
+  /// contributed, and the [reservedKeys] it does not take.
   const KeyedSocket({
     required this.policy,
     required String Function(List<MapEntry<String, V>> entries) renderer,
+    this.reservedKeys = const {},
   }) : _renderer = renderer;
 
   /// How two values for one key merge.
   final MergePolicy<V> policy;
+
+  /// Keys that no contribution may have, each with the reason, such as the
+  /// Gradle plugins that the template of every Flutter app declares.
+  final Map<String, String> reservedKeys;
 
   final String Function(List<MapEntry<String, V>> entries) _renderer;
 
@@ -215,6 +220,9 @@ final class KeyedSocket<V extends Object> extends SocketKind {
       return ['$socket takes keyed entries.'];
     }
     if (value is! V) return ['$socket takes values of type $V, not $value.'];
+    if (reservedKeys[key] case final reason?) {
+      return ['$socket does not take $key: $reason.'];
+    }
     return [
       if (policy.problemWith(key, value) case final problem?) problem,
     ];

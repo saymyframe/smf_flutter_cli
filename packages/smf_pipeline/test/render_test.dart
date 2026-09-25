@@ -273,6 +273,47 @@ flutter:
 ''');
   });
 
+  test('a line with nothing but the tag of an empty socket goes away', () {
+    const setup = SocketRef<CodeSocket>.module(
+      ModuleId('parent'),
+      'setup',
+      CodeSocket(),
+    );
+    final app = _render([
+      scaffold(
+        contributions: [
+          AppEntryRole.androidManifestPermissions
+              .key('android.permission.CAMERA'),
+        ],
+      ),
+      TestModule(
+        'parent',
+        sockets: [setup],
+        contributions: [
+          _brick({
+            'lib/parent.dart': 'void setUp() {\n'
+                '  {{{smf_parent__setup}}}\n'
+                '}\n',
+          }),
+        ],
+      ),
+    ]);
+
+    expect(app.files['android/app/src/main/AndroidManifest.xml']!.text, '''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <application>
+        <activity android:name=".MainActivity">
+        </activity>
+    </application>
+</manifest>
+''');
+    expect(app.files['lib/parent.dart']!.text, 'void setUp() {\n}\n');
+    // A tag with other text on its line renders to nothing, and the line
+    // stays.
+    expect(app.files['lib/main.dart']!.text, contains('    const App(),\n'));
+  });
+
   test('the fragments of render hooks join the contributions in order', () {
     final rendering = _Rendering(
       templateOutput: const RoleOutput(

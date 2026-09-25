@@ -7,8 +7,10 @@ part of '../role.dart';
 /// result (see [DartFileIndex]) and runs the [Role.structuralRules] of every
 /// present role with [Role.checkStructure]. A rule gets the role's data, so
 /// it can compare the code with what modules declared, such as the
-/// parameters of a route with the constructor of its screen. Rules are pure
-/// functions of their input, so the harness needs no knowledge of any role.
+/// parameters of a route with the constructor of its screen. It also gets
+/// the text of every file, for files that are not Dart, such as the native
+/// projects. Rules are pure functions of their input, so the harness needs
+/// no knowledge of any role.
 final class StructuralRule<D extends Object> {
   /// Creates the rule [id] that runs [check].
   ///
@@ -39,6 +41,7 @@ final class StructuralRuleRequest {
   const StructuralRuleRequest({
     required this.hook,
     required this.files,
+    this.texts = const {},
     this.owners = const {},
     this.modules = const [],
   });
@@ -48,6 +51,10 @@ final class StructuralRuleRequest {
 
   /// The indexes of the Dart files, by path relative to the project root.
   final Map<String, DartFileIndex> files;
+
+  /// The text of every text file, Dart or not, by path relative to the
+  /// project root.
+  final Map<String, String> texts;
 
   /// Who generated each file, by path.
   final Map<String, ContributionOrigin> owners;
@@ -63,6 +70,7 @@ final class StructuralRuleInput<D extends Object> {
   StructuralRuleInput._({
     required this.roleInput,
     required this.files,
+    required this.texts,
     required this.owners,
     required this.modules,
   });
@@ -72,6 +80,10 @@ final class StructuralRuleInput<D extends Object> {
 
   /// The indexes of the Dart files, by path relative to the project root.
   final Map<String, DartFileIndex> files;
+
+  /// The text of every text file, Dart or not, by path relative to the
+  /// project root.
+  final Map<String, String> texts;
 
   /// Who generated each file, by path.
   final Map<String, ContributionOrigin> owners;

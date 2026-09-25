@@ -30,31 +30,6 @@ void main() {
             for (final _ in '{{{$tag}}}'.allMatches(text)) path,
         ];
 
-    test('put each native socket on a line of its own', () {
-      // Their contributions render as complete, indented lines.
-      for (final socket in const [
-        AppEntryRole.androidManifestPermissions,
-        AppEntryRole.androidManifestApplicationMeta,
-        AppEntryRole.mainActivityIntentFilters,
-        AppEntryRole.infoPlist,
-        AppEntryRole.gradleSettingsPlugins,
-        AppEntryRole.gradleAppPlugins,
-        AppEntryRole.gradleAppDependencies,
-      ]) {
-        final ownLine = RegExp(
-          '^${RegExp.escape('{{{${socket.tag}}}}')}\$',
-          multiLine: true,
-        );
-        final places = placesOf(socket.tag);
-        expect(places, hasLength(1), reason: socket.tag);
-        expect(
-          ownLine.allMatches(templates[places.single]!),
-          hasLength(1),
-          reason: socket.tag,
-        );
-      }
-    });
-
     test('set the minimum iOS version only in the Xcode project', () {
       const tag = '{{{smf_app_entry__ios_deployment_target}}}';
 
@@ -75,22 +50,6 @@ void main() {
         templates['ios/Flutter/AppFrameworkInfo.plist'],
         isNot(contains('MinimumOSVersion')),
       );
-    });
-
-    test('run the phases of bootstrap() in order', () {
-      final bootstrap = templates[AppEntryRole.bootstrapFile]!;
-      final offsets = [
-        for (final socket in const [
-          AppEntryRole.bootstrapEarly,
-          AppEntryRole.bootstrapPlatform,
-          AppEntryRole.bootstrapDi,
-          AppEntryRole.bootstrapLate,
-        ])
-          bootstrap.indexOf('{{{${socket.tag}}}}'),
-      ];
-
-      expect(offsets, everyElement(isNonNegative));
-      expect(offsets, orderedEquals([...offsets]..sort()));
     });
 
     test('hold nothing of the machine they were made on', () {
@@ -114,6 +73,22 @@ void main() {
       ]))
           .app!
           .texts;
+    });
+
+    test('leave no blank line where a socket is empty', () {
+      expect(
+        alone[manifest],
+        startsWith(
+          '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+          '    <application\n',
+        ),
+      );
+      expect(alone[appGradle], endsWith('dependencies {\n}\n'));
+      expect(alone[infoPlist], endsWith('\t</array>\n</dict>\n</plist>\n'));
+      expect(
+        alone[settingsGradle],
+        contains('apply false\n}\n'),
+      );
     });
 
     test('name the Kotlin package of MainActivity after the app', () {
@@ -213,38 +188,6 @@ void main() {
         _block(every[appGradle]!, 'dependencies'),
         '\n    implementation("androidx.annotation:annotation:1.9.1")\n',
       );
-    });
-
-    test('let flutterfire add the Firebase plugins to Gradle', () {
-      for (final (name, app) in [('alone', alone), ('every', every)]) {
-        final configured = FlutterfireGradle.configure(
-          settings: app[settingsGradle]!,
-          app: app[appGradle]!,
-        );
-
-        expect(
-          _block(configured.settings, 'plugins'),
-          allOf(
-            contains(
-              '    id("com.google.gms.google-services") version("4.3.15") '
-              'apply false\n',
-            ),
-            contains(
-              '    id("com.google.firebase.crashlytics") version("2.8.1") '
-              'apply false\n',
-            ),
-          ),
-          reason: name,
-        );
-        expect(
-          _block(configured.app, 'plugins'),
-          allOf(
-            contains('    id("com.google.gms.google-services")\n'),
-            contains('    id("com.google.firebase.crashlytics")\n'),
-          ),
-          reason: name,
-        );
-      }
     });
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/lego_core.dart';
 
@@ -17,12 +19,16 @@ const appEntryRole = AppEntryRole._();
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
 /// - [fallbackStartScreen], the screen of an app without a router;
-/// - the Android and iOS projects.
+/// - the Android and iOS projects, at the paths of Flutter's templates,
+///   such as [androidManifestFile].
 ///
-/// The keyed sockets of the native files render complete, indented lines,
-/// so their tags stand at the start of a line of their own, like the tags
-/// of [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`.
+/// The keyed sockets of the native files and [mainActivityIntentFilters]
+/// render complete, indented lines, so their tags stand alone at the start
+/// of a line of their file, like the tags of [PipelineSockets]. The tag of
+/// [iosDeploymentTarget] stands where the version goes, as in
+/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
+/// check these tags in the templates of its provider, and its structural
+/// rules check that the native files name every key once.
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -38,6 +44,21 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The path of the file with [fallbackStartScreen].
   static const fallbackStartScreenFile =
       'lib/core/app/fallback_start_screen.dart';
+
+  /// The path of the manifest of the Android app.
+  static const androidManifestFile = 'android/app/src/main/AndroidManifest.xml';
+
+  /// The path of the Gradle settings of the Android project.
+  static const gradleSettingsFile = 'android/settings.gradle.kts';
+
+  /// The path of the Gradle build script of the Android app module.
+  static const gradleAppFile = 'android/app/build.gradle.kts';
+
+  /// The path of the `Info.plist` of the iOS app.
+  static const infoPlistFile = 'ios/Runner/Info.plist';
+
+  /// The path of the Xcode project of the iOS app.
+  static const xcodeProjectFile = 'ios/Runner.xcodeproj/project.pbxproj';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -105,13 +126,13 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The minimum iOS version of the app, such as `15.0`: the highest version
   /// any module needs.
   ///
-  /// Its tag appears in the build settings of
-  /// `ios/Runner.xcodeproj/project.pbxproj`, once for each build
-  /// configuration. Flutter takes the minimum version of the Swift packages
-  /// of plugins from there, and so does CocoaPods for their pods, since the
-  /// Podfile that Flutter writes when a plugin needs one leaves the platform
-  /// unset. The provider contributes the version of its template, so the
-  /// socket always has a value.
+  /// Its tag appears in the build settings of [xcodeProjectFile], once for
+  /// each build configuration. When Flutter builds or runs the app, it
+  /// raises the minimum iOS version of the Swift package of the plugins to
+  /// this one. CocoaPods takes it for the pods through the Podfile that
+  /// Flutter writes when a plugin needs pods or Swift Package Manager is
+  /// off, which leaves the platform unset. The provider contributes the
+  /// version of its template, so the socket always has a value.
   static const iosDeploymentTarget = SocketRef<ValueSocket<String>>.role(
     appEntryRole,
     'ios_deployment_target',
@@ -149,6 +170,9 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// `<uses-permission>` elements of the Android manifest, keyed by
   /// permission, such as `android.permission.INTERNET`.
+  ///
+  /// A permission that the manifest of the provider has already cannot be
+  /// contributed: the manifest must not name one twice.
   static const androidManifestPermissions =
       SocketRef<KeyedSocket<NoValue>>.role(
     appEntryRole,
@@ -162,6 +186,9 @@ final class AppEntryRole extends Role<NoDsl> {
   /// `<meta-data>` elements of the `<application>` of the Android manifest,
   /// keyed by `android:name`, with an `android:value` or an
   /// `android:resource`.
+  ///
+  /// A name that the `<application>` of the provider has already, such as
+  /// `flutterEmbedding`, cannot be contributed.
   static const androidManifestApplicationMeta =
       SocketRef<KeyedSocket<AndroidMetaData>>.role(
     appEntryRole,
@@ -183,35 +210,60 @@ final class AppEntryRole extends Role<NoDsl> {
   /// Keys of the iOS `Info.plist`, such as `UIBackgroundModes`: scalar
   /// values must agree, string arrays are united.
   ///
-  /// The template's own keys cannot be contributed here.
+  /// The keys of the provider's `Info.plist`, such as `CFBundleName`, cannot
+  /// be contributed: the dictionary must not have a key twice.
   static const infoPlist = SocketRef<KeyedSocket<PlistValue>>.role(
     appEntryRole,
     'info_plist',
     KeyedSocket(policy: PlistMergePolicy(), renderer: _renderInfoPlist),
   );
 
-  /// Gradle plugins declared in `android/settings.gradle.kts`, keyed by
-  /// plugin id, with the highest version any module needs.
+  /// Gradle plugins declared in [gradleSettingsFile], keyed by plugin id,
+  /// with the highest version any module needs.
   ///
-  /// They render as `id("<id>") version("<version>") apply false`, the form
-  /// flutterfire writes and looks for. flutterfire adds the Firebase plugins
-  /// itself when it configures the app.
+  /// They render as `id("<id>") version("<version>") apply false`.
+  ///
+  /// The provider declares the Flutter plugin loader and the Android and
+  /// Kotlin plugins, with their versions in the form `version "<version>"`
+  /// that Flutter reads, so the socket does not take them.
   static const gradleSettingsPlugins = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'gradle_settings_plugins',
-    KeyedSocket(policy: MaxPolicy(), renderer: _renderGradleSettingsPlugins),
+    KeyedSocket(
+      policy: MaxPolicy(),
+      renderer: _renderGradleSettingsPlugins,
+      reservedKeys: {
+        'dev.flutter.flutter-plugin-loader': _declaredByProvider,
+        'com.android.application': _declaredByProvider,
+        'org.jetbrains.kotlin.android': _declaredByProvider,
+      },
+    ),
   );
 
-  /// Gradle plugins applied in `android/app/build.gradle.kts`, keyed by
-  /// plugin id; declare their versions in [gradleSettingsPlugins].
+  /// Gradle plugins applied in [gradleAppFile], keyed by plugin id; declare
+  /// their versions in [gradleSettingsPlugins].
+  ///
+  /// The provider applies them after the Flutter Gradle plugin, which
+  /// applies the Kotlin plugin itself when the block does not, so a plugin
+  /// that needs Kotlin finds it. The socket does not take the Kotlin plugin
+  /// or the plugins the provider applies.
   static const gradleAppPlugins = SocketRef<KeyedSocket<NoValue>>.role(
     appEntryRole,
     'gradle_app_plugins',
-    KeyedSocket(policy: ConflictPolicy(), renderer: _renderGradleAppPlugins),
+    KeyedSocket(
+      policy: ConflictPolicy(),
+      renderer: _renderGradleAppPlugins,
+      reservedKeys: {
+        'com.android.application': _appliedByProvider,
+        'dev.flutter.flutter-gradle-plugin': _appliedByProvider,
+        'kotlin-android': _appliedByFlutter,
+        'org.jetbrains.kotlin.android': _appliedByFlutter,
+      },
+    ),
   );
 
-  /// `implementation` dependencies of `android/app/build.gradle.kts`, keyed
-  /// by `group:artifact`, with the highest version any module needs.
+  /// `implementation` dependencies of [gradleAppFile], keyed by
+  /// `group:artifact`, with the highest version any module needs.
   static const gradleAppDependencies = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'gradle_app_dependencies',
@@ -256,6 +308,22 @@ final class AppEntryRole extends Role<NoDsl> {
       );
 
   @override
+  List<ModuleRule<NoDsl>> get moduleRules => const [
+        ModuleRule(
+          id: 'app_entry.bootstrap_phases',
+          description: 'The tags of the phases of start-up are in '
+              'lib/bootstrap.dart in the order early, platform, di, late.',
+          check: _checkBootstrapPhases,
+        ),
+        ModuleRule(
+          id: 'app_entry.native_tag_lines',
+          description: 'The tags of the sockets that render lines of a '
+              'native file stand alone at the start of a line of that file.',
+          check: _checkNativeTagLines,
+        ),
+      ];
+
+  @override
   List<StructuralRule<NoDsl>> get structuralRules => const [
         StructuralRule(
           id: 'app_entry.bootstrap_without_material',
@@ -271,7 +339,76 @@ final class AppEntryRole extends Role<NoDsl> {
               'awaits bootstrap(), then calls runApp(), in this order.',
           check: _checkMainSequence,
         ),
+        StructuralRule(
+          id: 'app_entry.native_keys',
+          description: 'The native files name every key once: the keys of '
+              'the top-level dictionary of Info.plist, the permissions and '
+              'the meta-data of the application in the Android manifest, and '
+              'the plugins of each plugins block of the Gradle files.',
+          check: _checkNativeKeys,
+        ),
       ];
+}
+
+const _declaredByProvider = 'the provider of the app entry declares it';
+const _appliedByProvider = 'the provider of the app entry applies it';
+const _appliedByFlutter =
+    'the Flutter Gradle plugin applies the Kotlin plugin itself';
+
+/// The templates of the text files of the bricks among [contributions], by
+/// path.
+Map<String, String> _templatesOf(List<Contribution> contributions) => {
+      for (final contribution in contributions)
+        if (contribution is BrickContribution)
+          for (final file in contribution.bundle.files)
+            if (file.type == 'text')
+              file.path.replaceAll(r'\', '/'): utf8.decode(
+                base64.decode(file.data),
+                allowMalformed: true,
+              ),
+    };
+
+List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.bootstrapFile;
+  const phases = [
+    AppEntryRole.bootstrapEarly,
+    AppEntryRole.bootstrapPlatform,
+    AppEntryRole.bootstrapDi,
+    AppEntryRole.bootstrapLate,
+  ];
+  final origin = ModuleOrigin(input.module.id);
+  final templates = _templatesOf(input.contributions);
+  final text = templates[path] ?? '';
+  final tags = [for (final socket in phases) '{{{${socket.tag}}}}'];
+  final issues = <SmfIssue>[
+    for (final tag in tags)
+      if (!text.contains(tag) &&
+          templates.values.any((template) => template.contains(tag)))
+        SmfIssue(
+          'The tag $tag is not in $path, where bootstrap() runs the phases '
+          'of start-up.',
+          origin: origin,
+          path: path,
+        ),
+  ];
+  final offsets = [
+    for (final tag in tags)
+      if (text.indexOf(tag) case final offset when offset >= 0) offset,
+  ];
+  for (var i = 1; i < offsets.length; i++) {
+    if (offsets[i - 1] > offsets[i]) {
+      issues.add(
+        SmfIssue(
+          'The tags of the phases of start-up in $path are not in the order '
+          'early, platform, di, late.',
+          origin: origin,
+          path: path,
+        ),
+      );
+      break;
+    }
+  }
+  return issues;
 }
 
 const _designLibraries = {

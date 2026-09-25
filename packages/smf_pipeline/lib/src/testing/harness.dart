@@ -12,7 +12,6 @@ import 'package:smf_pipeline/src/render.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/templates.dart';
 import 'package:smf_pipeline/src/testing/file_indexer.dart';
-import 'package:smf_pipeline/src/testing/flutterfire.dart';
 import 'package:smf_pipeline/src/validation.dart';
 import 'package:yaml/yaml.dart';
 
@@ -376,9 +375,10 @@ final class ContractHarness {
     return results;
   }
 
-  /// Indexes the Dart files among [files], the rendered app of [result] by
-  /// path, runs the structural rules of its present roles with the data it
-  /// collected, and checks the symbols of their interfaces.
+  /// Indexes the Dart files among [files], the text files of the rendered
+  /// app of [result] by path, runs the structural rules of its present roles
+  /// with the data it collected and the texts, and checks the symbols of
+  /// their interfaces.
   ///
   /// [owners] names who generated each file; the rules of the roles check
   /// only files with an owner.
@@ -390,7 +390,7 @@ final class ContractHarness {
     required Map<String, ContributionOrigin> owners,
   }) {
     final (:indexes, :issues) = _index(files, owners);
-    return [...issues, ..._structureIssues(result, indexes, owners)];
+    return [...issues, ..._structureIssues(result, indexes, files, owners)];
   }
 
   /// Checks [app], the rendered app of [result]:
@@ -408,9 +408,7 @@ final class ContractHarness {
   ///   role, the files of those who contribute data to the role, which they
   ///   render. The cases the harness builds have one provider of each
   ///   role, so there a provider cannot reach the files of another through
-  ///   the data;
-  /// - `flutterfire configure` finds its places in the Gradle files of the
-  ///   app, if the app has them in the Kotlin DSL (see [FlutterfireGradle]).
+  ///   the data.
   ///
   /// Throws an [ArgumentError] if the case of [result] did not resolve.
   List<SmfIssue> checkRendered(ContractResult result, RenderedApp app) {
@@ -418,9 +416,8 @@ final class ContractHarness {
     final texts = app.texts;
     final (:indexes, :issues) = _index(texts, owners);
     issues
-      ..addAll(_structureIssues(result, indexes, owners))
-      ..addAll(_importIssues(result, app, indexes))
-      ..addAll(_flutterfireIssues(app));
+      ..addAll(_structureIssues(result, indexes, texts, owners))
+      ..addAll(_importIssues(result, app, indexes));
     return issues;
   }
 
@@ -470,6 +467,7 @@ final class ContractHarness {
   List<SmfIssue> _structureIssues(
     ContractResult result,
     Map<String, DartFileIndex> indexes,
+    Map<String, String> texts,
     Map<String, ContributionOrigin> owners,
   ) {
     final (:resolution, :collection) = _resolved(result);
@@ -482,6 +480,7 @@ final class ContractHarness {
         choices: result.choices ?? const {},
       ),
       files: indexes,
+      texts: texts,
       owners: owners,
       modules: [for (final module in resolution.modules) module.descriptor],
     );
@@ -643,29 +642,6 @@ final class ContractHarness {
       }
     }
     return issues;
-  }
-}
-
-/// The problem of a Gradle file of [app] where `flutterfire configure` would
-/// leave a Firebase plugin out, if the app has its Gradle files in the
-/// Kotlin DSL; see [FlutterfireGradle].
-List<SmfIssue> _flutterfireIssues(RenderedApp app) {
-  final settings = app.files[FlutterfireGradle.settingsPath];
-  final build = app.files[FlutterfireGradle.appPath];
-  if (settings == null || build == null) return const [];
-  try {
-    FlutterfireGradle.configure(settings: settings.text, app: build.text);
-    return const [];
-  } on FlutterfireGradleException catch (error) {
-    return [
-      SmfIssue(
-        error.message,
-        hint: 'Keep the lines of the Flutter template that flutterfire looks '
-            'for.',
-        origin: app.files[error.path]?.owner,
-        path: error.path,
-      ),
-    ];
   }
 }
 
