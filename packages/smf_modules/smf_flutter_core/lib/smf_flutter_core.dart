@@ -1,5 +1,6 @@
-/// The core module of SMF: the Flutter app every generated project starts
-/// from.
+/// The module that creates the Flutter app every SMF app starts from:
+/// `FlutterCoreModule`, the provider of the app entry role of the lego
+/// model.
 library;
 
-export 'smf_flutter_core_factory.dart';
+export 'src/flutter_core_module.dart';

@@ -16,6 +16,10 @@ import 'package:smf_flutter_core/src/module.dart';
 
 /// Creates the core module for the profile's state manager: [SmfCoreModule]
 /// for bloc, [SmfCoreModuleRiverpod] for Riverpod.
+///
+/// These are modules of the older module model, which `smf create` uses
+/// until it moves to the lego model. In the lego model, `FlutterCoreModule`
+/// of `package:smf_flutter_core/smf_flutter_core.dart` creates the app.
 class SmfFlutterCoreFactory implements IModuleContributorFactory {
   @override
   IModuleCodeContributor create(ModuleProfile profile) {
