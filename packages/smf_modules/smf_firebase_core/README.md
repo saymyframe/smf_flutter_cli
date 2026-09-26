@@ -9,7 +9,7 @@ The module:
 - makes `bootstrap()`, which runs before the app starts, initialize Firebase with the options of the platform that runs the app: `await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);`, among the platform services, before the services of the app;
 - raises the minimum iOS version of the app to 15.0, the lowest that the Firebase SDKs support.
 
-`flutterfire configure` of the [FlutterFire CLI](https://firebase.google.com/docs/flutter/setup) registers the app in a Firebase project and writes its options. Until it runs, `lib/firebase_options.dart` is a placeholder in the form that the FlutterFire CLI writes for the platforms it has not configured: each platform throws an `UnsupportedError`, so the app compiles but stops at start-up. The FlutterFire CLI fills the placeholder in place.
+`flutterfire configure` of the [FlutterFire CLI](https://pub.dev/packages/flutterfire_cli) registers the app in a Firebase project and writes its options. Until it runs, `lib/firebase_options.dart` is a placeholder: the file that flutterfire_cli 1.4 writes for an app with no platform configured, where each platform throws an `UnsupportedError`, so the app compiles but stops at start-up. The FlutterFire CLI fills the placeholder in place.
 
 ## The machine
 

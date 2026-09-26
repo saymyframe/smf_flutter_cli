@@ -16,9 +16,9 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// services, so the services of the app can use it.
 ///
 /// `flutterfire configure` of the FlutterFire CLI writes the options. Until
-/// it runs, the file is a placeholder in the form that the FlutterFire CLI
-/// writes for platforms it has not configured: each platform throws an
-/// `UnsupportedError`, so the app compiles but stops at start-up. The
+/// it runs, the file is a placeholder: the file that flutterfire_cli 1.4
+/// writes for an app with no platform configured, where each platform throws
+/// an `UnsupportedError`, so the app compiles but stops at start-up. The
 /// FlutterFire CLI fills the placeholder in place.
 ///
 /// Before generation, the module checks that the machine can run
