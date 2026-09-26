@@ -11,8 +11,10 @@ import 'package:smf_riverpod/smf_riverpod.dart';
 ///
 /// A run in a terminal asks first which of the modules without a role the
 /// app has, one question for each kind, such as its features, and then which
-/// module provides each role. Each question lists its modules in the order
-/// of this list, and an answer keeps that order.
+/// module provides each role: the roles in the order they first appear in
+/// this list, each after the roles whose providers require it, such as the
+/// layout before the router. Each question lists its modules in the order of
+/// this list, and an answer keeps that order.
 const List<SmfModule> smfModules = [
   FlutterCoreModule(),
   GoRouterModule(),
