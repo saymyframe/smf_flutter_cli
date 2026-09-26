@@ -52,6 +52,27 @@ void main() {
       );
     });
 
+    test('have the projects of the platforms of the app entry role only', () {
+      // The directories of the platforms of flutter create.
+      const flutterPlatforms = {
+        'android',
+        'ios',
+        'linux',
+        'macos',
+        'web',
+        'windows',
+      };
+      final platforms = {
+        for (final path in templates.keys)
+          if (path.split('/') case [final top, _, ...]
+              when flutterPlatforms.contains(top))
+            top,
+      };
+
+      // Modules such as firebase_core configure the app for these.
+      expect(platforms, AppEntryRole.platforms.toSet());
+    });
+
     test('hold nothing of the machine they were made on', () {
       expect(templates[pbxproj], isNot(contains('DEVELOPMENT_TEAM')));
       for (final MapEntry(key: path, value: text) in templates.entries) {
