@@ -25,6 +25,7 @@ dependencies:
   smf_contracts: ^0.2.0
   smf_flutter_core: ^0.2.1
   smf_go_router: ^0.2.0
+  smf_home_flutter: ^0.2.0
   smf_pipeline: ^0.2.0
   smf_riverpod: ^0.2.0
 

@@ -24,8 +24,8 @@ final class _Broken extends SmfModule {
 void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
-      'router, one for each state manager, and one of every module for each',
-      () async {
+      'router, one for each state manager, the app of home, which gets the '
+      'router, and one of every module for each state manager', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
 
     expect(failed, isEmpty);
@@ -34,8 +34,9 @@ void main() {
       'flutter_core (flutter_core)',
       'bloc (bloc, flutter_core)',
       'riverpod (riverpod, flutter_core)',
-      'every module (bloc) (flutter_core, go_router, bloc)',
-      'every module (riverpod) (flutter_core, go_router, riverpod)',
+      'home (home, flutter_core, go_router)',
+      'every module (bloc) (flutter_core, go_router, bloc, home)',
+      'every module (riverpod) (flutter_core, go_router, riverpod, home)',
     ]);
   });
 

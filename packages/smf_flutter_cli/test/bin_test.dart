@@ -288,6 +288,43 @@ void main() {
       );
 
       test(
+        '--explain shows the router that a feature gets without asking',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'home',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // go_router is the only module that provides the router.
+          expect(
+            result.stdout,
+            allOf(
+              contains('  home: requested\n'),
+              contains(
+                '  go_router: the only provider of the router (home requires '
+                'the router)\n',
+              ),
+              contains('  router: go_router\n'),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(
@@ -309,6 +346,29 @@ void main() {
           expect(
             result.stderr,
             contains('The app has no routes, so it cannot start on /home.'),
+          );
+
+          final withHome = await _smf(
+            [
+              'create',
+              'my_app',
+              '--no-input',
+              '-m',
+              'home',
+              '--start',
+              '/settings',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(withHome.exitCode, 64);
+          expect(
+            withHome.stderr,
+            contains(
+              'The app has no route /settings to start on. Routes: /home.',
+            ),
           );
           expect(
             Directory(p.join(temporary.path, 'my_app')).existsSync(),

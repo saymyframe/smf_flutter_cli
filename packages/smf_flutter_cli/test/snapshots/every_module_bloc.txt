@@ -267,7 +267,7 @@ abstract interface class AppNavigator {
 === lib/core/router/app_router_factory.dart (go_router) ===
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
-import 'package:my_app/core/app/fallback_start_screen.dart';
+import 'package:my_app/features/home/home_screen.dart' as screen0;
 
 import 'app_router.dart' show AppNavigator, AppRouter;
 import 'navigation.dart' show AppLocation;
@@ -284,16 +284,18 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// can navigate, even one above the router.
   @override
   late final GoRouter config = GoRouter(
-    initialLocation: '/',
+    initialLocation: '/home',
     // An observer can watch only one navigator, so the navigator gets
     // instances of its own.
     observers: [
       for (final create in <NavigatorObserver Function()>[]) create(),
     ],
     routes: [
+      GoRoute(path: '/', redirect: (context, state) => '/home'),
       GoRoute(
-        path: '/',
-        builder: (context, state) => const FallbackStartScreen(),
+        path: '/home',
+        name: 'home.home',
+        builder: (context, state) => const screen0.HomeScreen(),
       ),
     ],
   );
@@ -362,15 +364,54 @@ final class NavLink {
   void replace() => appRouter.navigatorOf(_context).replace(location);
 }
 
+/// The location of `home.home`: `/home`.
+final class HomeHomeLocation extends AppLocation {
+  /// Creates the location.
+  const HomeHomeLocation();
+
+  @override
+  String get routeName => 'home.home';
+
+  @override
+  String get path => '/home';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
-  AppNav get nav => const AppNav._();
+  AppNav get nav => AppNav._(this);
 }
 
-/// The routes of the app by module; it has none.
+/// The routes of the app by module, as `context.nav`.
 final class AppNav {
-  const AppNav._();
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `home`.
+  HomeRoutes get home => HomeRoutes._(_context);
+}
+
+/// The routes of the module `home`.
+final class HomeRoutes {
+  const HomeRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `home.home`: `/home`.
+  NavLink home() => NavLink(_context, const HomeHomeLocation());
+}
+=== lib/features/home/home_screen.dart (home) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on, with the name of the app.
+class HomeScreen extends StatelessWidget {
+  /// Creates the screen.
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(appBar: AppBar(title: const Text('My App')));
 }
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
