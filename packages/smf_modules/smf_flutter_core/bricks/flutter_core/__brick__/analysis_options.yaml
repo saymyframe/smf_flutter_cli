@@ -1,1 +1,8 @@
 include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # What the Flutter tools write. On macOS, Flutter copies there the Swift
+    # packages of the plugins that depend on other plugins, with the
+    # examples of these plugins, which do not analyze in the app.
+    - build/**

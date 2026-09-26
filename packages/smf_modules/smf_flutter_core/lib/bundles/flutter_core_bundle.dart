@@ -19,7 +19,8 @@ final flutterCoreBundle = MasonBundle.fromJson(<String, dynamic>{
     },
     {
       "path": "analysis_options.yaml",
-      "data": "aW5jbHVkZTogcGFja2FnZTpmbHV0dGVyX2xpbnRzL2ZsdXR0ZXIueWFtbAo=",
+      "data":
+          "aW5jbHVkZTogcGFja2FnZTpmbHV0dGVyX2xpbnRzL2ZsdXR0ZXIueWFtbAoKYW5hbHl6ZXI6CiAgZXhjbHVkZToKICAgICMgV2hhdCB0aGUgRmx1dHRlciB0b29scyB3cml0ZS4gT24gbWFjT1MsIEZsdXR0ZXIgY29waWVzIHRoZXJlIHRoZSBTd2lmdAogICAgIyBwYWNrYWdlcyBvZiB0aGUgcGx1Z2lucyB0aGF0IGRlcGVuZCBvbiBvdGhlciBwbHVnaW5zLCB3aXRoIHRoZQogICAgIyBleGFtcGxlcyBvZiB0aGVzZSBwbHVnaW5zLCB3aGljaCBkbyBub3QgYW5hbHl6ZSBpbiB0aGUgYXBwLgogICAgLSBidWlsZC8qKgo=",
       "type": "text"
     },
     {

@@ -159,10 +159,21 @@ void main() {
         'flutter_lints': '^6.0.0',
       });
       expect(pubspec['flutter'], {'uses-material-design': true});
-      expect(
-        texts['analysis_options.yaml'],
-        'include: package:flutter_lints/flutter.yaml\n',
-      );
+    });
+
+    test(
+        'analyzes the app with the lints of a new Flutter app, without what '
+        'the Flutter tools write', () {
+      final options = loadYaml(texts['analysis_options.yaml']!) as YamlMap;
+
+      // On macOS, Flutter copies into build/ the Swift packages of plugins
+      // that depend on other plugins, with their examples.
+      expect(options, {
+        'include': 'package:flutter_lints/flutter.yaml',
+        'analyzer': {
+          'exclude': ['build/**'],
+        },
+      });
     });
 
     test('names the app in a README without sections', () {

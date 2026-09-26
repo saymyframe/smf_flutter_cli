@@ -7,7 +7,8 @@ The module that creates the Flutter app every SMF app starts from. It provides t
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
 - `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when a router module is present;
 - a fallback start screen with a widget test;
-- `pubspec.yaml` with the dependencies of all modules.
+- `pubspec.yaml` with the dependencies of all modules;
+- `analysis_options.yaml` with the lints of a new Flutter app, which leaves `build/` out of the analysis: on macOS, Flutter copies there the Swift packages of the plugins that depend on other plugins, with the examples of these plugins, which `flutter analyze` would report.
 
 The app needs Flutter 3.44 or newer, and runs on iOS 15 or newer.
 
@@ -41,7 +42,7 @@ To move to a newer Flutter:
 1. Run `flutter create` as above with it.
 2. Copy every file it writes over those of the brick, but for the files that SMF owns or leaves out. The files to copy include `.metadata`, which names the commit of Flutter, and both `.gitignore` files.
 3. Make the changes above again.
-4. Compare `pubspec.yaml` and `analysis_options.yaml` of the new app with the brick's. Their SDK constraint, the version of `flutter_lints` and the lints follow Flutter's template, but no test compares these files.
+4. Compare `pubspec.yaml` and `analysis_options.yaml` of the new app with the brick's. Their SDK constraint, the version of `flutter_lints` and the lints follow Flutter's template, but no test compares these files. The brick's `analysis_options.yaml` keeps leaving `build/` out.
 5. Update the minimum Flutter and iOS versions of `FlutterCoreModule`, and the Flutter of the CI workflow with the SHA-256 of its archive.
 6. Bundle the bricks with `melos bootstrap`.
 
