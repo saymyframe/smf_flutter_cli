@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The screen the app starts on, with the name of the app.
+/// A neutral screen with the name of the app, which the app can start on.
 {{{smf_router__screen_annotations__home__home_screen}}}
 class HomeScreen extends StatelessWidget {
   /// Creates the screen.

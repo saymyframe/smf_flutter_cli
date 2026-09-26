@@ -54,16 +54,24 @@ final class _Annotating extends SmfModule {
 }
 
 /// What the contract harness finds for the app of [modules] among
-/// [registry] and in [context], which has no errors and is rendered.
+/// [registry], in [context] and with [roleOptions], which has no errors and
+/// is rendered.
 Future<ContractResult> _rendered(
   List<ModuleId> modules, {
   List<SmfModule> registry = _modules,
   ModuleContext context = ContractHarness.defaultContext,
+  Map<String, String?> roleOptions = const {},
 }) async {
   final result = await ContractHarness(
     ModuleRegistry(registry),
     context: context,
-  ).check(ContractCase(modules.join(', '), requested: modules));
+  ).check(
+    ContractCase(
+      modules.join(', '),
+      requested: modules,
+      roleOptions: roleOptions,
+    ),
+  );
   if (result.errors.isNotEmpty || result.app == null) {
     throw StateError(
       'The app of $modules has errors: ${result.errors.join('\n')}',
@@ -122,6 +130,25 @@ List<MethodInvocation> _callsOf(CompilationUnit unit, String name) {
 /// The value of the string literal [expression].
 String? _string(Expression? expression) =>
     (expression as StringLiteral?)?.stringValue;
+
+/// The expression that the function [expression] returns.
+Expression _bodyOf(Expression expression) =>
+    ((expression as FunctionExpression).body as ExpressionFunctionBody)
+        .expression;
+
+/// The path of the route that the router role chose to start the app of
+/// [result] on.
+String? _startOf(ContractResult result) =>
+    (result.choices![routerRole]! as RouterChoice).startPath;
+
+/// The initial location of the `GoRouter` in the file of `createAppRouter()`
+/// of [app].
+String? _initialLocationOf(RenderedApp app) => _string(
+      _argument(
+        _callsOf(_parsed(app, _factory), 'GoRouter').single,
+        'initialLocation',
+      ),
+    );
 
 void main() {
   const module = HomeModule();
@@ -257,38 +284,36 @@ void main() {
       }
     });
 
+    test('starts on the route of home, the only one that can start it', () {
+      expect(_startOf(result), '/home');
+    });
+
     test('opens on the screen of home at /home, which / redirects to', () {
       final unit = _parsed(app, _factory);
-      final router = _callsOf(unit, 'GoRouter').single;
 
-      expect(_string(_argument(router, 'initialLocation')), '/home');
-      final routes = _callsOf(unit, 'GoRoute');
-      expect(routes, hasLength(2));
-      final [root, home] = routes;
-      expect(_string(_argument(root, 'path')), '/');
-      expect(
-        _argument(root, 'redirect')!.toSource(),
-        "(context, state) => '/home'",
-      );
-      expect(_argument(root, 'builder'), isNull);
-      expect(_string(_argument(home, 'path')), '/home');
+      expect(_initialLocationOf(app), '/home');
+      final routes = {
+        for (final route in _callsOf(unit, 'GoRoute'))
+          _string(_argument(route, 'path')): route,
+      };
+      expect(routes.keys, ['/', '/home']);
+      expect(_string(_bodyOf(_argument(routes['/']!, 'redirect')!)), '/home');
+      expect(_argument(routes['/']!, 'builder'), isNull);
+      final home = routes['/home']!;
       expect(_string(_argument(home, 'name')), 'home.home');
-      expect(
-        _argument(home, 'builder')!.toSource(),
-        '(context, state) => const screen0.HomeScreen()',
-      );
       expect(_argument(home, 'redirect'), isNull);
+      // The builder creates the screen from the file of home, whatever the
+      // prefix of its import.
+      final screenFile =
+          unit.directives.whereType<ImportDirective>().singleWhere(
+                (directive) =>
+                    directive.uri.stringValue ==
+                    'package:contract_app/features/home/home_screen.dart',
+              );
+      final prefix = screenFile.prefix?.name;
       expect(
-        app.files[_factory]!.addedImports.map(
-          (added) => (added.import.uri, added.import.prefix, added.contributor),
-        ),
-        [
-          (
-            'package:contract_app/features/home/home_screen.dart',
-            'screen0',
-            const ModuleOrigin(GoRouterModule.id),
-          ),
-        ],
+        _bodyOf(_argument(home, 'builder')!).toSource(),
+        prefix == null ? 'const HomeScreen()' : 'const $prefix.HomeScreen()',
       );
     });
 
@@ -357,6 +382,16 @@ void main() {
     );
   });
 
+  test('starts on /home when --start names it', () async {
+    final result = await _rendered(
+      const [HomeModule.id],
+      roleOptions: {RouterRole.startOption.name: '/home'},
+    );
+
+    expect(_startOf(result), '/home');
+    expect(_initialLocationOf(result.app!), '/home');
+  });
+
   test('keeps the annotations of the router role on the class of the screen',
       () async {
     final result = await _rendered(
@@ -371,7 +406,8 @@ void main() {
     );
     expect(
       screen.documentationComment!.tokens.single.lexeme,
-      '/// The screen the app starts on, with the name of the app.',
+      '/// A neutral screen with the name of the app, which the app can start '
+      'on.',
     );
   });
 }

@@ -1,5 +1,5 @@
 name: smf_home_flutter
-description: The SMF module of the start screen of the Flutter app that SMF generates. The screen shows the name of the app, and the app opens on it at /home.
+description: The SMF module of the start screen of the Flutter app that SMF generates. The screen shows the name of the app, and the app can open on it at /home.
 version: 0.2.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_home_flutter
