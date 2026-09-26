@@ -1,0 +1,10 @@
+name: firebase_crashlytics
+description: "The crash reporting of an SMF app with Firebase Crashlytics: the crash reporter on FirebaseCrashlytics."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

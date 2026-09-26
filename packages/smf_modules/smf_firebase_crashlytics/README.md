@@ -1,9 +1,32 @@
 # smf_firebase_crashlytics
 
-Firebase Crashlytics integration for SMF Flutter applications with ready-to-use setup templates.
+The SMF module of [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) with [firebase_crashlytics](https://pub.dev/packages/firebase_crashlytics). It provides the crash reporting role of the SMF module model: the app reports to Crashlytics the errors that it does not handle, and those that its code reports.
+
+The crash reporting role generates `lib/core/crash_reporting/crash_reporter.dart`:
+
+- the `CrashReporter` interface: `recordError` and `recordFlutterError` report an error, `log` adds a message to the log sent with the next report, and `setUserId` sets the id of the signed-in user, or clears it with `null`;
+- `createCrashReporter()`, which returns the reporter of the app: it forwards every call to the reporters of all the modules that provide crash reporting, so an app can report to more than one service;
+- `installCrashReporting()`, which reports as fatal the errors that Flutter, the platform dispatcher and the current isolate do not handle. In debug mode, these errors still reach the console.
+
+This module adds `firebase_crashlytics` to the dependencies of the app and implements the reporter in `lib/core/crash_reporting/crashlytics_crash_reporter.dart`, on `FirebaseCrashlytics.instance`:
+
+- an error of Flutter is reported with what `recordFlutterError` of Crashlytics reports, and any other error with `recordError`;
+- the reporter prints nothing: in debug mode, Crashlytics prints each report and presents each error of Flutter, so the errors that the handlers of the role leave in the console would appear twice;
+- `setUserId(null)` clears the id of the user with an empty one, as Crashlytics does.
+
+Crashlytics works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it: `bootstrap()` initializes Firebase, then calls `installCrashReporting()`. The reporter is created on first use, without waiting. When the app has a module that provides dependency injection, the crash reporting role registers the reporter in its container as a lazy singleton, and the code that creates what the screens of a feature need takes it with `resolve` in the composition file of the feature.
+
+The module adds nothing to the native projects of the app. The setup of Firebase that smf_firebase_core runs after generation sets up the native part of Crashlytics for an app that depends on firebase_crashlytics; see its README.
 
 ## Use with SMF CLI
-This package is not intended to be installed directly. The SMF CLI can scaffold Firebase setup and link modules automatically.
+
+`smf create` asks which modules provide the crash reporting of the app, and the answer may be none. To choose this one without the question, name it with `-m`; smf_firebase_core comes with it:
+
+```bash
+smf create my_app -m firebase_crashlytics
+```
+
+This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
 
 - SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
 

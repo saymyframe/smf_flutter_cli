@@ -192,10 +192,7 @@ const _migrating = [
     'The old contracts API uses the contribution engine.',
   ),
   _Exception(
-    [
-      'packages/smf_modules/smf_firebase_analytics/',
-      'packages/smf_modules/smf_firebase_crashlytics/',
-    ],
+    ['packages/smf_modules/smf_firebase_analytics/'],
     null,
     'The module has not moved to the new model yet.',
   ),
