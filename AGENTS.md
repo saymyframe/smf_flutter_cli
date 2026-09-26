@@ -37,7 +37,7 @@ Module independence is the foundation of the project. Never break it, not even t
 - A module knows **only** the modules it lists in `ModuleDescriptor.dependsOn`, and only in one direction. For example, `firebase_analytics` depends on `firebase_core`, but `firebase_core` knows nothing about its dependents.
 - A module never references another module's generated artifacts (classes, files, packages) unless it declares that dependency, and it should avoid needing to.
 - Nothing is hardcoded for a particular combination. Any selection of modules and variants (e.g. state manager `bloc` / `riverpod`) must generate an app that compiles.
-- Modules describe *what* they need through the DSLs in `smf_contracts`: routes (`RoutesData` of the router role), DI (`DiDependencyGroup`), shared-file patches (contribution-engine `Contribution`s) and bricks. The router and DI modules turn those descriptions into code. A feature module must not assume a specific router or DI container.
+- Modules describe *what* they need through the DSLs in `smf_contracts`: routes (`RoutesData` of the router role), DI (`DiRegistration` of the DI role), shared-file patches (contribution-engine `Contribution`s) and bricks. The router and DI modules turn those descriptions into code. A feature module must not assume a specific router or DI container.
 - Generated UI talks only to its state-management layer (a Cubit via `context.read`, a Riverpod provider via `ref`), never directly to a DI container or infrastructure service.
 - State-manager variants follow the existing pattern: the module factory picks a variant from `ModuleProfile.stateManager`, and each variant declares its own state-manager package (see `smf_firebase_analytics`).
 
@@ -71,7 +71,6 @@ Modules are chosen with `-m`, and every option of `create` comes from the comman
 - **`lib/bundles/*_bundle.dart` are generated** from `bricks/` by `tools/bundle_bricks.dart`, which `melos bootstrap` runs. Never edit them by hand. Change the brick, re-bundle and commit the result. CI fails if a committed bundle differs from what the bricks produce.
 - **`bricks/**/__brick__/**` holds mason templates, not Dart.** They are excluded from analysis and formatting. They use mason syntax: `{{app_name.snakeCase()}}`.
 - **Dart-side template strings** in module code (e.g. `InsertImport`, `Import.core`) are rendered by mustachex and use `{{app_name_sc}}` (`_sc` = snake_case). `PatchEngine` renders only the text a contribution inserts, never the user's file.
-- **Some template sections are DSL slots** (`MustacheSlots` in contracts, e.g. `{{#imports}}` in the brick of the DI module of the old model). They are deliberately left unrendered by mason and filled later by its generator.
 - **Brick hooks** (`bricks/*/hooks/`) are standalone Dart packages with their own pubspec. Only bricks of the old model have them; the new pipeline rejects a brick with hooks and runs no hooks, since modules check the machine and run tools through `Preflight` and `PostGenStep` contributions.
 - **Firebase modules** run the Firebase/FlutterFire CLIs in their hooks and need an interactive `firebase login`, so they can't be generated in non-interactive runs.
 
