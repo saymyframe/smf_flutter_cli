@@ -11,8 +11,8 @@ The module model is being replaced step by step on the branch `feat/lego`. Until
 - The new model is `package:smf_contracts/lego.dart`, with its code in `packages/smf_contracts/lib/src/lego/`. `lego_core.dart` is its core without concrete roles.
 - In the new model, a module declares the roles it provides, requires or uses (router, DI, state management, ...) instead of depending on the modules that implement them. It puts code into typed sockets instead of patching files, and never learns which provider of a role was selected.
 - `packages/smf_pipeline/` is the generation pipeline of `smf create`. It imports only `lego_core.dart` and knows no concrete module or role; `test/architecture_test.dart` checks this.
-- `smf create` runs on the new pipeline. The CLI offers only the modules that have moved to the new model, listed in `packages/smf_flutter_cli/lib/src/modules.dart`: so far `smf_flutter_core`, whose `FlutterCoreModule` (brick `bricks/flutter_core`) provides the app entry. The other module packages still use the old model, which the rest of this file describes, and the CLI does not offer them until they move. Their own tests keep running.
-- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. Within `smf_contracts`, `test/lego/architecture_test.dart` checks this and keeps the core free of concrete roles; a module package that has moved checks it in its own `test/architecture_test.dart`.
+- `smf create` runs on the new pipeline. The CLI offers only the modules that have moved to the new model, listed in `packages/smf_flutter_cli/lib/src/modules.dart`: so far `smf_flutter_core`, whose `FlutterCoreModule` (brick `bricks/flutter_core`) provides the app entry, and `smf_bloc` and `smf_riverpod`, which provide the state management role (`-m bloc` or `-m riverpod`; an app has at most one). The other module packages still use the old model, which the rest of this file describes, and the CLI does not offer them until they move. Their own tests keep running.
+- A file imports either `lego*.dart` or `smf_contracts.dart`, never both. Within `smf_contracts`, `test/lego/architecture_test.dart` checks this and keeps the core free of concrete roles; a module package that has moved checks it in its own `test/architecture_test.dart`. To render apps in its tests, such a package takes their app entry from `smf_flutter_core` as a dev dependency; its `lib/` never imports another module.
 - `ModuleProfile`, the DSLs (`RouteGroup`, `DiDependencyGroup`), `MustacheSlots`, mustachex strings and brick hooks go away as their modules move to the new model.
 
 ## Layout
@@ -23,7 +23,7 @@ packages/
   smf_pipeline/               # the generation pipeline of `smf create` and the contract test harness
   smf_modules/
     smf_contribution_engine/  # AST engine that patches Dart files (imports, statements, widgets)
-    smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core
+    smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core, bloc, riverpod
   smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
 tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart
 ```
