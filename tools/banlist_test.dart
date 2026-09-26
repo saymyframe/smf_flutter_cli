@@ -84,8 +84,8 @@ void main() {
     expect(
       problems,
       contains(
-        'The exception for packages/smf_modules/smf_home_flutter/ matches '
-        'nothing; remove it from tools/banlist.dart.',
+        'The exception for packages/smf_modules/smf_firebase_analytics/ '
+        'matches nothing; remove it from tools/banlist.dart.',
       ),
     );
     expect(
