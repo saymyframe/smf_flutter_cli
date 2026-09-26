@@ -55,7 +55,11 @@ final class FirebaseLoginCheck extends PreflightCheck {
           error.trim(),
         if (tailOf(result.stderr) case final tail when tail.isNotEmpty) tail,
       ];
-      final end = endOf(command, result.exitCode);
+      final end = endOf(
+        command,
+        result.exitCode,
+        environment.operatingSystem,
+      );
       return PreflightFailed(
         reasons.isEmpty ? '$end.' : '$end:\n${reasons.join('\n')}',
       );
@@ -87,7 +91,9 @@ final class FirebaseLoginCheck extends PreflightCheck {
       workingDirectory: await scratchDirectory(environment),
     );
     if (code != 0) {
-      throw PreflightSetupException('${endOf('firebase login', code)}.');
+      throw PreflightSetupException(
+        '${endOf('firebase login', code, environment.operatingSystem)}.',
+      );
     }
     return const ToolInstall();
   }

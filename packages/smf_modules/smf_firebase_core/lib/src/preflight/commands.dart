@@ -25,17 +25,24 @@ String directoryOf(String path) {
   return end <= 0 ? path.substring(0, end + 1) : path.substring(0, end);
 }
 
-/// How the command [command] ended with the exit code [code]: a negative
-/// code is the signal that stopped it, as `dart:io` reports it.
-String endOf(String command, int code) => code < 0
-    ? '"$command" was stopped by signal ${-code}'
-    : '"$command" exited with code $code';
+/// How the command [command] ended with the exit code [code] on [system]:
+/// outside Windows, a negative code is the signal that stopped it, as
+/// `dart:io` reports it; on Windows, it is an exit code with the highest
+/// bit set, such as that of a status code.
+String endOf(String command, int code, HostOperatingSystem system) =>
+    code < 0 && system != HostOperatingSystem.windows
+        ? '"$command" was stopped by signal ${-code}'
+        : '"$command" exited with code $code';
 
-/// Why the command [command] of [result] failed: how it ended, and the last
-/// lines of what it wrote, if anything; see [outputTail].
-String failureOf(String command, SmfProcessResult result) {
+/// Why the command [command] of [result] failed on [system]: how it ended,
+/// and the last lines of what it wrote, if anything; see [outputTail].
+String failureOf(
+  String command,
+  SmfProcessResult result,
+  HostOperatingSystem system,
+) {
   final tail = outputTail(result);
-  return '${endOf(command, result.exitCode)}'
+  return '${endOf(command, result.exitCode, system)}'
       '${tail.isEmpty ? '.' : ':\n$tail'}';
 }
 

@@ -69,7 +69,11 @@ final class FirebaseCliCheck extends PreflightCheck {
       return ToolInstall(binDirs: binDirsIn(result.stdout));
     }
     progress.fail(installing);
-    final failure = failureOf(script.fileName, result);
+    final failure = failureOf(
+      script.fileName,
+      result,
+      environment.operatingSystem,
+    );
     if (!script.standaloneFallback) throw PreflightSetupException(failure);
 
     logger.warn('Installing the Firebase CLI with npm failed: $failure');
@@ -85,9 +89,12 @@ final class FirebaseCliCheck extends PreflightCheck {
       workingDirectory: directoryOf(path),
     );
     if (code != 0) {
-      throw PreflightSetupException(
-        '${endOf(standaloneInstallCommand, code)}.',
+      final end = endOf(
+        standaloneInstallCommand,
+        code,
+        environment.operatingSystem,
       );
+      throw PreflightSetupException('$end.');
     }
     return const ToolInstall(binDirs: [standaloneBinDir]);
   }

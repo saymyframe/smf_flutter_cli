@@ -56,7 +56,11 @@ final class FlutterfireCliCheck extends PreflightCheck {
     );
     if (!result.succeeded) {
       return PreflightFailed(
-        '${endOf('dart pub global list', result.exitCode)}.',
+        '${endOf(
+          'dart pub global list',
+          result.exitCode,
+          environment.operatingSystem,
+        )}.',
       );
     }
     final active = RegExp(r'^flutterfire_cli (\S+)', multiLine: true)
@@ -120,7 +124,9 @@ final class FlutterfireCliCheck extends PreflightCheck {
     }
     if (!result.succeeded) {
       progress.fail(activating);
-      throw PreflightSetupException(failureOf(_activate, result));
+      throw PreflightSetupException(
+        failureOf(_activate, result, environment.operatingSystem),
+      );
     }
     progress.complete('Activated the FlutterFire CLI $flutterfireVersion');
     return const ToolInstall(tool: flutterfireTool);

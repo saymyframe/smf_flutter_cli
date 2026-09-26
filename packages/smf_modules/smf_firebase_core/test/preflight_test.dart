@@ -664,6 +664,26 @@ void main() {
       expect(directoryOf('file'), '');
     });
 
+    test('tell a signal from an exit code outside Windows only', () {
+      expect(
+        endOf('x', -2, HostOperatingSystem.macos),
+        '"x" was stopped by signal 2',
+      );
+      expect(
+        endOf('x', -15, HostOperatingSystem.linux),
+        '"x" was stopped by signal 15',
+      );
+      // STATUS_CONTROL_C_EXIT, 0xC000013A, as a signed 32-bit exit code.
+      expect(
+        endOf('x', -1073741510, HostOperatingSystem.windows),
+        '"x" exited with code -1073741510',
+      );
+      expect(
+        endOf('x', 3, HostOperatingSystem.windows),
+        '"x" exited with code 3',
+      );
+    });
+
     test('keep the last lines of each stream, the errors first', () {
       final result = _result(
         1,
