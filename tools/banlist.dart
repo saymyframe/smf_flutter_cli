@@ -197,7 +197,6 @@ const _migrating = [
       'packages/smf_modules/smf_firebase_analytics/',
       'packages/smf_modules/smf_firebase_core/',
       'packages/smf_modules/smf_firebase_crashlytics/',
-      'packages/smf_modules/smf_get_it/',
     ],
     null,
     'The module has not moved to the new model yet.',

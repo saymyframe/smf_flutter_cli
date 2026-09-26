@@ -1,0 +1,11 @@
+name: get_it
+description: "The DI container of an SMF app with get_it: registerDependencies() with the services of the modules of the app."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags; the module adds
+# registrations.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
