@@ -213,6 +213,39 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen to manage the state',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'riverpod',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          expect(
+            result.stdout,
+            allOf(
+              contains('  riverpod: requested\n'),
+              contains('  state_management: riverpod\n'),
+              contains('  flutter_riverpod ^3.4.3 (riverpod)\n'),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         '--on-conflict decides what happens to an existing directory',
         () async {
           final old = File(p.join(temporary.path, 'my_app', 'old.txt'))

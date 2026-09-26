@@ -21,9 +21,11 @@ dependencies:
   mason_logger: ^0.3.3
 
   # SMF packages
+  smf_bloc: ^0.2.0
   smf_contracts: ^0.2.0
   smf_flutter_core: ^0.2.1
   smf_pipeline: ^0.2.0
+  smf_riverpod: ^0.2.0
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.

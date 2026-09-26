@@ -66,6 +66,31 @@ void main() {
     expect(out, contains('--start=<path>'));
   });
 
+  test('two modules that manage the state are a usage error', () async {
+    final directory = Directory.systemTemp.createTempSync('smf_cli_');
+    addTearDown(() => directory.deleteSync(recursive: true));
+
+    final (code, _, err) = await _smf([
+      'create',
+      'my_app',
+      '--no-input',
+      '-m',
+      'bloc,riverpod',
+      '-o',
+      directory.path,
+    ]);
+
+    expect(code, 64);
+    expect(
+      err,
+      contains(
+        'An app can have one provider of the state_management, but it has '
+        'bloc (requested) and riverpod (requested). Keep one of them.',
+      ),
+    );
+    expect(directory.listSync(), isEmpty);
+  });
+
   test('the banner points to the community', () {
     expect(
       communityBanner,

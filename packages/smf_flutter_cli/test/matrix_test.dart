@@ -22,11 +22,17 @@ final class _Broken extends SmfModule {
 }
 
 void main() {
-  test('the matrix of the CLI is the app of flutter_core', () async {
+  test(
+      'the matrix of the CLI has the app of flutter_core and one for each '
+      'state manager', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
 
     expect(failed, isEmpty);
-    expect(apps.map((app) => '$app'), ['flutter_core (flutter_core)']);
+    expect(apps.map((app) => '$app'), [
+      'flutter_core (flutter_core)',
+      'bloc (bloc, flutter_core)',
+      'riverpod (riverpod, flutter_core)',
+    ]);
   });
 
   test('the options of roles reach every app', () async {
@@ -36,11 +42,15 @@ void main() {
     );
 
     expect(failed, isEmpty);
-    expect(apps.single.roleOptions, {'flavor': 'dev'});
-    expect(
-      apps.single.createArguments('app_1', '/apps'),
-      contains('--flavor=dev'),
-    );
+    expect(apps, isNotEmpty);
+    for (final app in apps) {
+      expect(app.roleOptions, {'flavor': 'dev'}, reason: '$app');
+      expect(
+        app.createArguments('app_1', '/apps'),
+        contains('--flavor=dev'),
+        reason: '$app',
+      );
+    }
   });
 
   test('an app of the matrix names every module and asks nothing', () {
@@ -77,7 +87,7 @@ void main() {
     });
 
     Future<int> run({
-      List<SmfModule> modules = smfModules,
+      List<SmfModule> modules = const [FlutterCoreModule()],
       int createCode = 0,
       List<LeftOut> leftOut = const [],
       List<SkippedStep> skippedSteps = const [],
