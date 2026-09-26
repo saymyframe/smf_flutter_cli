@@ -4,8 +4,10 @@
 /// Together the fake modules use the features of the module model that the
 /// real modules do not use yet; see the README of the fixtures. Real
 /// modules take part where the fixtures need them: flutter_core creates the
-/// app, and go_router routes the fake features too, so their routes compile
-/// with a real router.
+/// app, go_router routes the fake features too, so their routes compile
+/// with a real router, and bottom tabs show their destinations, so an app
+/// with the two fake features has a main navigation and two screens that
+/// can start it.
 library;
 
 import 'package:fake_di/fake_di.dart';
@@ -14,13 +16,14 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 
-/// Every fixture module, flutter_core, which creates the app, and go_router,
-/// a second router, with a DI container of all capabilities, or of
-/// [diCapabilities] if set.
+/// Every fixture module, flutter_core, which creates the app, go_router, a
+/// second router, and bottom tabs, with a DI container of all capabilities,
+/// or of [diCapabilities] if set.
 List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FlutterCoreModule(),
       const FakeRouterModule(),
@@ -32,6 +35,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeBlocModule(),
       const FakeRiverpodModule(),
       const FakeFeatureModule(),
+      const FakeSecondModule(),
       const FakeSocketsModule(),
       const FakeOverlapModule(),
       const FakeAnalyticsModule(),
@@ -43,6 +47,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeCodegenModule(),
       const FakeClockBadgeModule(),
       const FakeClockUserModule(),
+      const BottomTabsModule(),
     ];
 
 /// The modules to ask for so that an app has every fixture, with the
@@ -53,6 +58,7 @@ List<ModuleId> everyFixture({
 }) =>
     [
       FakeFeatureModule.id,
+      FakeSecondModule.id,
       router,
       stateManager,
       FakeSocketsModule.id,

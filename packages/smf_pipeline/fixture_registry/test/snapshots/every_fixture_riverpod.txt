@@ -970,6 +970,8 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
+import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
+    as screen2;
 import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
@@ -1072,6 +1074,7 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeFeatureHomeLocation() => const screen0.FixtureHomeScreen(),
   FakeFeatureDetailsLocation(:final id, :final tab) =>
     screen1.FixtureDetailsScreen(id: id, tab: tab),
+  FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -1180,6 +1183,18 @@ final class FakeFeatureDetailsLocation extends AppLocation {
   AppLocation get parent => const FakeFeatureHomeLocation();
 }
 
+/// The location of `fake_second.second`: `/fake_second`.
+final class FakeSecondSecondLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondSecondLocation();
+
+  @override
+  String get routeName => 'fake_second.second';
+
+  @override
+  String get path => '/fake_second';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -1199,6 +1214,9 @@ final class AppNav {
 
   /// The routes of the module `fake_feature`.
   FakeFeatureRoutes get fakeFeature => FakeFeatureRoutes._(_context);
+
+  /// The routes of the module `fake_second`.
+  FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
 }
 
 /// The routes of the module `fake_feature`.
@@ -1213,6 +1231,16 @@ final class FakeFeatureRoutes {
   /// The route `fake_feature.details`: `/fake_feature/details/:id`.
   NavLink details({required int id, String? tab}) =>
       NavLink(_context, FakeFeatureDetailsLocation(id: id, tab: tab));
+}
+
+/// The routes of the module `fake_second`.
+final class FakeSecondRoutes {
+  const FakeSecondRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_second.second`: `/fake_second`.
+  NavLink second() => NavLink(_context, const FakeSecondSecondLocation());
 }
 === lib/features/fake_feature/fake_feature_composition.dart (fake_feature (fake_riverpod)) ===
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1302,6 +1330,19 @@ class FixtureHomeScreen extends StatelessWidget {
       ],
     ),
   );
+}
+=== lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// The screen of the second fixture feature, which can start the app too.
+@FixtureScreen('fake_second.second')
+class FixtureSecondScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureSecondScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
 }
 === lib/l10n/app_en.arb (fake_sockets) ===
 {

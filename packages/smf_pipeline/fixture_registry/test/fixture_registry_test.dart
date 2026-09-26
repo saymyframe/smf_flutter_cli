@@ -1,7 +1,12 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/lego.dart';
+import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -53,11 +58,22 @@ void main() {
         expect(
           result.resolution!.modules.map((module) => module.id.value),
           allOf(
-            containsAll([stateManager, router, 'fake_sockets', 'fake_feature']),
+            containsAll([
+              stateManager,
+              router,
+              'fake_sockets',
+              'fake_feature',
+              'fake_second',
+              'bottom_tabs',
+            ]),
             isNot(contains(otherManager)),
             isNot(contains(otherRouter)),
           ),
         );
+        // Both features can start the app, so the harness answers the
+        // question of the router with the first, as the user who presses
+        // Enter would.
+        expect(result.answers, {'start': '/fake_feature'});
       }
     });
 
@@ -116,6 +132,7 @@ void main() {
         (result.choices![routerRole]! as RouterChoice).startPath,
         '/fake_feature',
       );
+      expect(result.answers, {'start': '/fake_feature'});
       expect(
         result.validation!.socketOrders[AppEntryRole.bootstrapPlatform]!
             .contributions
@@ -215,6 +232,83 @@ void main() {
     });
   });
 
+  group('an app of every fixture with bottom tabs and go_router', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    final modules = [
+      ...everyFixture(router: GoRouterModule.id),
+      const ModuleId('bottom_tabs'),
+    ];
+
+    /// The initial locations of the router of the app of [result] and then
+    /// of the branches of its main navigation.
+    List<String> initialLocationsOf(ContractResult result) {
+      final unit = parseString(
+        content: result.app!.files[RouterRole.appRouterFactoryFile]!.text,
+      ).unit;
+      final finder = _NamedArguments();
+      unit.accept(finder);
+      return finder.initialLocations;
+    }
+
+    test('starts on the first screen that can start it, which it answered',
+        () async {
+      final result = await harness.check(
+        ContractCase('tabs', requested: modules),
+      );
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(result.answers, {'start': '/fake_feature'});
+      expect(
+        initialLocationsOf(result),
+        ['/fake_feature', '/fake_feature', '/fake_second'],
+      );
+    });
+
+    test('starts on the second tab that --start names', () async {
+      final result = await harness.check(
+        ContractCase(
+          'tabs',
+          requested: modules,
+          roleOptions: const {'start': '/fake_second'},
+        ),
+      );
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(result.answers, isEmpty);
+      expect(
+        initialLocationsOf(result),
+        ['/fake_second', '/fake_feature', '/fake_second'],
+      );
+    });
+
+    test('is an app of the matrix, with the start that the harness answered',
+        () async {
+      final (:apps, :failed) = await matrixOf(fixtureModules());
+
+      expect(failed, isEmpty);
+      final every = [
+        for (final app in apps)
+          if (app.name.startsWith('every module')) app,
+      ];
+      expect(every, hasLength(4));
+      for (final app in every) {
+        expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
+        expect(
+          app.createArguments('app_1', '/apps'),
+          contains('--start=/fake_feature'),
+          reason: '$app',
+        );
+      }
+      // An app with one screen that can start it needs no answer.
+      expect(
+        apps
+            .singleWhere((app) => app.name == 'fake_second (go_router)')
+            .roleOptions,
+        isEmpty,
+      );
+    });
+  });
+
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
@@ -227,6 +321,8 @@ void main() {
           'fixture_app',
           '-m',
           everyFixture().join(','),
+          '--start',
+          '/fake_feature',
           '--no-input',
           '--skip-external-setup',
           '--strict',
@@ -260,6 +356,40 @@ void main() {
       );
     });
 
+    test(
+        'stops an app with several screens that can start it without '
+        '--start, since it cannot ask', () async {
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          everyFixture().join(','),
+          '--no-input',
+          '--skip-external-setup',
+          '--strict',
+        ],
+        modules: fixtureModules(),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.usage);
+      expect(
+        logger.errors,
+        contains(
+          'Several screens can start the app: /fake_feature, /fake_second. '
+          'Choose one with --start.',
+        ),
+      );
+      expect(
+        host.fileSystem.directory('/work/fixture_app').existsSync(),
+        isFalse,
+      );
+    });
+
     test('a DI container without a capability leaves out what needs it',
         () async {
       Future<GeneratedApp?> create(
@@ -276,6 +406,7 @@ void main() {
               appName: 'fixture_app',
               modules: everyFixture(),
               strict: strict,
+              roleOptions: const {'start': '/fake_feature'},
             ),
           );
 
@@ -307,6 +438,8 @@ const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 const _cases = [
   'flutter_core with router',
   'flutter_core',
+  'fake_router with layout',
+  'go_router with layout',
   'go_router',
   'fake_di',
   'fake_bloc',
@@ -315,6 +448,8 @@ const _cases = [
   'fake_feature (fake_bloc, go_router)',
   'fake_feature (fake_riverpod, fake_router)',
   'fake_feature (fake_riverpod, go_router)',
+  'fake_second (fake_router)',
+  'fake_second (go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_analytics with di, router',
@@ -333,3 +468,17 @@ const _cases = [
   'fake_clock_user with clock, badge',
   'fake_clock_user',
 ];
+
+/// Collects the values of the named arguments `initialLocation`, in the
+/// order of the code: that of `GoRouter`, then those of the branches.
+final class _NamedArguments extends RecursiveAstVisitor<void> {
+  final List<String> initialLocations = [];
+
+  @override
+  void visitNamedExpression(NamedExpression node) {
+    if (node.name.label.name == 'initialLocation') {
+      initialLocations.add((node.expression as StringLiteral).stringValue!);
+    }
+    super.visitNamedExpression(node);
+  }
+}

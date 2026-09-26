@@ -4,8 +4,9 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 
 /// A host without a terminal, with a Flutter SDK in `/sdk` and nothing else,
 /// whose current directory is `/work`: asking the user fails the test, and
-/// so does running a command unless [processRunner] runs it.
-SmfHost testHost({SmfProcessRunner? processRunner}) {
+/// so does running a command unless [processRunner] runs it. [logger] gets
+/// what the run reports, if set.
+SmfHost testHost({SmfProcessRunner? processRunner, SmfLogger? logger}) {
   final fileSystem = MemoryFileSystem.test();
   fileSystem.currentDirectory = fileSystem.directory('/work')..createSync();
   for (final name in ['flutter', 'dart']) {
@@ -16,7 +17,7 @@ SmfHost testHost({SmfProcessRunner? processRunner}) {
   return SmfHost(
     prompter: _NoPrompter(),
     processRunner: processRunner ?? _NoProcessRunner(),
-    logger: _SilentLogger(),
+    logger: logger ?? _SilentLogger(),
     fileSystem: fileSystem,
     environmentVariables: const {'PATH': '/sdk/bin'},
     operatingSystem: HostOperatingSystem.linux,
@@ -135,4 +136,28 @@ final class RecordingRunner implements SmfProcessRunner {
     lines.add([executable.split('/').last, ...arguments].join(' '));
     return 0;
   }
+}
+
+/// A logger that records the errors a run reports.
+final class RecordingLogger implements SmfLogger {
+  /// The errors, in the order they were reported.
+  final List<String> errors = [];
+
+  @override
+  void info(String message) {}
+
+  @override
+  void detail(String message) {}
+
+  @override
+  void warn(String message) {}
+
+  @override
+  void error(String message) => errors.add(message);
+
+  @override
+  void success(String message) {}
+
+  @override
+  SmfProgress progress(String message) => _SilentProgress();
 }

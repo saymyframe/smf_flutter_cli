@@ -1,15 +1,18 @@
-/// A fake feature for the tests of the SMF pipeline. Not a module to use.
+/// Fake features for the tests of the SMF pipeline. Not modules to use.
 ///
-/// It has a start route with a child that takes a path and a query
+/// The first has a start route with a child that takes a path and a query
 /// parameter, a destination of the main navigation, a variant for each
 /// fake state manager, and a composition file that resolves a service, so
 /// it uses the navigation facade, the annotation sockets of the router, and
-/// the rules for resolving services.
+/// the rules for resolving services. The second has another start route
+/// with a destination, so an app with both has two screens that can start
+/// it and two destinations.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_riverpod_bundle.dart';
+import 'package:fake_feature/bundles/fake_second_bundle.dart';
 import 'package:smf_contracts/lego.dart';
 
 /// A feature with a start screen and a details screen.
@@ -80,6 +83,52 @@ final class FakeFeatureModule extends SmfModule {
                   ],
                 ),
               ],
+            ),
+          ]),
+        ),
+      ];
+}
+
+/// A second feature with a start screen that is a destination of the main
+/// navigation.
+final class FakeSecondModule extends SmfModule {
+  /// Creates the module.
+  const FakeSecondModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_second');
+
+  static const _folder = 'features/fake_second';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A second start screen (fixture)',
+        kind: ModuleKinds.feature,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeSecondBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: 'second',
+              screen: ScreenRef(
+                'FixtureSecondScreen',
+                import: ImportRef.app('$_folder/fixture_second_screen.dart'),
+              ),
+              destination: Destination(
+                label: 'Second',
+                icon: Fragment(
+                  'Icons.looks_two',
+                  imports: [
+                    ImportRef('package:flutter/material.dart', show: ['Icons']),
+                  ],
+                ),
+              ),
+              startCandidate: true,
             ),
           ]),
         ),
