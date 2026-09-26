@@ -15,6 +15,11 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// can log the user in with `firebase login`, which asks its own questions
 /// in the terminal.
 ///
+/// `firebase login` waits for the browser to come back to a server on the
+/// machine, which a browser on another machine cannot reach, so the
+/// instructions give `firebase login --no-localhost` for a remote machine,
+/// such as one reached over SSH.
+///
 /// Like every command of the Firebase CLI, `login:list` keeps records of its
 /// own while it only reads the accounts: it notes the time of its last
 /// error in its configuration and fetches its message of the day once a
@@ -35,8 +40,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
     final firebase = await environment.findExecutable('firebase');
     if (firebase == null) {
       return const PreflightMissing(
-        instructions: 'Install the Firebase CLI, then log in with '
-            '"firebase login".',
+        instructions: 'Install the Firebase CLI, then log in $_howToLogIn.',
       );
     }
     const command = 'firebase login:list --json';
@@ -69,7 +73,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
           when accounts.isNotEmpty =>
         const PreflightPassed(),
       {'status': 'success'} => const PreflightMissing(
-          instructions: 'Log in with "firebase login".',
+          instructions: 'Log in $_howToLogIn.',
           installable: true,
         ),
       _ => const PreflightFailed(
@@ -98,6 +102,11 @@ final class FirebaseLoginCheck extends PreflightCheck {
     return const ToolInstall();
   }
 }
+
+/// How to log in with the Firebase CLI, in the terminal of the machine or of
+/// a remote one.
+const _howToLogIn = 'with "firebase login", or on a remote machine, such as '
+    'over SSH, with "firebase login --no-localhost"';
 
 /// The JSON that the Firebase CLI printed in [output], from its first `{`
 /// to its last `}`, after any warning; `null` if there is none.

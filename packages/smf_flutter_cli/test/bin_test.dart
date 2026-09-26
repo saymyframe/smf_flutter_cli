@@ -472,7 +472,8 @@ void main() {
               contains(
                 '  ✗ Firebase login (for firebase_core): missing\n'
                 '    Install the Firebase CLI, then log in with "firebase '
-                'login".\n',
+                'login", or on a remote machine, such as over SSH, with '
+                '"firebase login --no-localhost".\n',
               ),
               contains(
                 '  ✗ FlutterFire CLI (for firebase_core): missing\n'

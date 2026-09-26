@@ -165,7 +165,8 @@ void main() {
       contains('Firebase CLI is missing. Install it with "npm install -g '
           'firebase-tools"'),
       contains('Firebase login is missing. Install the Firebase CLI, then log '
-          'in with "firebase login".'),
+          'in with "firebase login", or on a remote machine, such as over SSH, '
+          'with "firebase login --no-localhost".'),
       contains('FlutterFire CLI is missing. Activate it with "dart pub global '
           'activate flutterfire_cli 1.4.1".'),
       _notConfigured('you chose to run it later'),

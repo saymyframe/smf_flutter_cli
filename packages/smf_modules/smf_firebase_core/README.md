@@ -16,7 +16,7 @@ The module:
 Before it generates the app, SMF checks that the machine can run `flutterfire configure`:
 
 - the [Firebase CLI](https://firebase.google.com/docs/cli), which the FlutterFire CLI runs to reach the Firebase projects;
-- a login of the Firebase CLI, which `firebase login:list --json` reports;
+- a login of the Firebase CLI, which `firebase login:list --json` reports. `firebase login` waits for the browser to come back to a server on the machine, so on a remote machine, such as over SSH, log in with `firebase login --no-localhost` instead;
 - the FlutterFire CLI, activated with `dart pub global activate flutterfire_cli`, in version 1.4.0 or a later 1.x. The tests of this module repeat the changes that 1.4 makes to the app; a later 1.x that is active already is used as it is;
 - on macOS, the Ruby gem xcodeproj 1.23.0 or newer, with which the FlutterFire CLI sets up the iOS app in its Xcode project. It does that only on macOS: elsewhere it registers the iOS app and writes its options, but leaves the Xcode project as it is, so SMF warns to run `flutterfire configure` again on a Mac.
 

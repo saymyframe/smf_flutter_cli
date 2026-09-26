@@ -276,7 +276,8 @@ void main() {
         await check.check(machine),
         _missing(
           instructions: 'Install the Firebase CLI, then log in with '
-              '"firebase login".',
+              '"firebase login", or on a remote machine, such as over SSH, '
+              'with "firebase login --no-localhost".',
           installable: false,
         ),
       );
@@ -305,7 +306,9 @@ void main() {
         expect(
           await check.check(machineWith(_result(0, stdout: output))),
           _missing(
-            instructions: 'Log in with "firebase login".',
+            instructions: 'Log in with "firebase login", or on a remote '
+                'machine, such as over SSH, with "firebase login '
+                '--no-localhost".',
             installable: true,
           ),
           reason: output,
