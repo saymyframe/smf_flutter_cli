@@ -86,8 +86,10 @@ String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
 }
 
 /// The name of the snapshot of the app of [app].
-String _fileNameOf(MatrixApp app) =>
-    '${app.name.replaceAll(RegExp('[^A-Za-z0-9]+'), '_')}.txt';
+String _fileNameOf(MatrixApp app) {
+  final words = app.name.split(RegExp('[^A-Za-z0-9]+'));
+  return '${words.where((word) => word.isNotEmpty).join('_')}.txt';
+}
 
 Future<void> main() async {
   final registry = ModuleRegistry(smfModules);
