@@ -64,6 +64,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
 
+  /// The platforms of the app, by the names of `flutter create --platforms`:
+  /// the provider generates the project of each at the paths of Flutter's
+  /// templates, such as [androidManifestFile] and [xcodeProjectFile].
+  static const platforms = ['android', 'ios'];
+
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
   /// [RequiredSymbol.importRef].

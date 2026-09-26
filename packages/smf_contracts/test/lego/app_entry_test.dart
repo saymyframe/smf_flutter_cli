@@ -116,6 +116,20 @@ void main() {
       expect(appEntryRole.openToAllModules, isTrue);
     });
 
+    test('has the projects of Android and iOS', () {
+      expect(AppEntryRole.platforms, ['android', 'ios']);
+      // Each native file is in the project of one of the platforms.
+      for (final file in const [
+        AppEntryRole.androidManifestFile,
+        AppEntryRole.gradleSettingsFile,
+        AppEntryRole.gradleAppFile,
+        AppEntryRole.infoPlistFile,
+        AppEntryRole.xcodeProjectFile,
+      ]) {
+        expect(AppEntryRole.platforms, contains(file.split('/').first));
+      }
+    });
+
     test('owns all its sockets, with valid and distinct tags', () {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
