@@ -17,6 +17,7 @@ dependencies:
   fake_state: any
   smf_contracts: ^0.2.0
   smf_flutter_core: ^0.2.1
+  smf_go_router: ^0.2.0
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.

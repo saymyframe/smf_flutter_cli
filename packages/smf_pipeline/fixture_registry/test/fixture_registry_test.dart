@@ -29,27 +29,33 @@ void main() {
       );
     });
 
-    test('builds an app of every fixture that fits for each state manager',
-        () async {
+    test(
+        'builds an app of every fixture that fits for each router and state '
+        'manager', () async {
       final harness = ContractHarness(ModuleRegistry(fixtureModules()));
       final cases = harness.casesOfAll();
 
       expect(cases.map((c) => '$c'), [
-        'every module (fake_bloc)',
-        'every module (fake_riverpod)',
+        'every module (fake_router, fake_bloc)',
+        'every module (fake_router, fake_riverpod)',
+        'every module (go_router, fake_bloc)',
+        'every module (go_router, fake_riverpod)',
       ]);
-      for (final (contractCase, stateManager, other) in [
-        (cases.first, 'fake_bloc', 'fake_riverpod'),
-        (cases.last, 'fake_riverpod', 'fake_bloc'),
-      ]) {
+      for (final (index, contractCase) in cases.indexed) {
+        final (router, otherRouter) = index < 2
+            ? ('fake_router', 'go_router')
+            : ('go_router', 'fake_router');
+        final (stateManager, otherManager) = index.isEven
+            ? ('fake_bloc', 'fake_riverpod')
+            : ('fake_riverpod', 'fake_bloc');
         final result = await harness.check(contractCase);
         expect(result.errors.map((issue) => '$issue'), isEmpty);
         expect(
           result.resolution!.modules.map((module) => module.id.value),
           allOf(
-            contains(stateManager),
-            isNot(contains(other)),
-            containsAll(['fake_sockets', 'fake_feature', 'fake_router']),
+            containsAll([stateManager, router, 'fake_sockets', 'fake_feature']),
+            isNot(contains(otherManager)),
+            isNot(contains(otherRouter)),
           ),
         );
       }
@@ -301,11 +307,14 @@ const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 const _cases = [
   'flutter_core with router',
   'flutter_core',
+  'go_router',
   'fake_di',
   'fake_bloc',
   'fake_riverpod',
-  'fake_feature (fake_bloc)',
-  'fake_feature (fake_riverpod)',
+  'fake_feature (fake_bloc, fake_router)',
+  'fake_feature (fake_bloc, go_router)',
+  'fake_feature (fake_riverpod, fake_router)',
+  'fake_feature (fake_riverpod, go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_analytics with di, router',
