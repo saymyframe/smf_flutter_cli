@@ -31,8 +31,9 @@ const _machineLibraries = {
 ///   leave `lib/`, conditional ones included;
 /// - of the SMF packages, the Dart files in `test/` use only the module
 ///   model of `smf_contracts` and the public libraries of the package
-///   itself, `smf_pipeline` and [testModules], and a relative URI does not
-///   leave `test/`, so a test uses no file of another package;
+///   itself, the packages among its [dependencies], such as a module it
+///   depends on, `smf_pipeline` and [testModules], and a relative URI does
+///   not leave `test/`, so a test uses no file of another package;
 /// - the package depends on `smf_contracts` and [dependencies], on no other
 ///   package, and on none that no file in `lib/` uses;
 /// - of the SMF packages, its dev dependencies are `smf_pipeline`, for the
@@ -65,7 +66,7 @@ final class ModulePackage {
 
   /// The packages besides `smf_contracts` that the code of the module uses,
   /// such as `mason` for the bundles of its bricks, or the package of a
-  /// module it depends on.
+  /// module it depends on, which the tests use too.
   final Set<String> dependencies;
 
   /// The packages of other modules that the tests use, besides
@@ -144,7 +145,14 @@ final class ModulePackage {
         '$name depends on $package, but no file in lib/ uses it.',
       );
     }
-    final testable = {name, ...tests};
+    // The tests may use the modules that the code depends on, as the code
+    // does: the registry of their apps needs them.
+    final testable = {
+      name,
+      ...tests,
+      for (final package in dependencies)
+        if (package.startsWith('smf_')) package,
+    };
     for (final (path, uri) in _directives(directory, 'test')) {
       if (!_isAllowed(uri, path, 'test', testable, others: true)) {
         problems.add(

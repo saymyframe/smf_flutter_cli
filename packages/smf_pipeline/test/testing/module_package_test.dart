@@ -191,6 +191,32 @@ void main() {
     );
   });
 
+  test('the tests use the public libraries of the modules it depends on', () {
+    const withCore = ModulePackage(
+      'smf_router',
+      dependencies: {'mason', 'smf_core'},
+      testModules: {'smf_flutter_core'},
+    );
+    final fileSystem = _package(
+      const {
+        'lib/src/core.dart': "import 'package:smf_core/smf_core.dart';\n",
+        'test/core_test.dart': "import 'package:smf_core/smf_core.dart';\n"
+            "import 'package:smf_core/src/core.dart';\n",
+      },
+      pubspec: _pubspec(dependencies: ['mason', 'smf_contracts', 'smf_core']),
+    );
+
+    expect(_problemsOf(fileSystem, package: withCore), [
+      equals(
+        'test/core_test.dart uses package:smf_core/src/core.dart, but of the '
+        'SMF packages the tests of a module use only the module model of '
+        'smf_contracts and the public libraries of smf_core, '
+        'smf_flutter_core, smf_pipeline and smf_router, and no file outside '
+        'test/ by a relative path.',
+      ),
+    ]);
+  });
+
   test('the package depends on nothing its code does not use', () {
     expect(
       _problemsOf(
