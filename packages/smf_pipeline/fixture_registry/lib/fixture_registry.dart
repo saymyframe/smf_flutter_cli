@@ -5,9 +5,10 @@
 /// real modules do not use yet; see the README of the fixtures. Real
 /// modules take part where the fixtures need them: flutter_core creates the
 /// app, go_router routes the fake features too, so their routes compile
-/// with a real router, and bottom tabs show their destinations, so an app
-/// with the two fake features has a main navigation and two screens that
-/// can start it.
+/// with a real router, and bottom tabs provide the layout, so an app with
+/// the two fake features and go_router has a main navigation; the fake
+/// router has none. Either way, the app has two screens that can start
+/// it.
 library;
 
 import 'package:fake_di/fake_di.dart';
