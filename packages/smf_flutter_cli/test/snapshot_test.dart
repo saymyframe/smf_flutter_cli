@@ -21,8 +21,8 @@ const _update = 'SMF_UPDATE_SNAPSHOTS';
 final _directory = Directory('test/snapshots');
 
 /// The files of the app entry that the snapshots show: the Dart code, the
-/// pubspec, and the native files with sockets. The Xcode project shows only
-/// its minimum iOS versions.
+/// pubspec, the README, and the native files with sockets. The Xcode project
+/// shows only its minimum iOS versions.
 bool _shownOfAppEntry(String path) =>
     path.startsWith('lib/') ||
     path.startsWith('test/') ||
@@ -33,6 +33,7 @@ bool _shownOfAppEntry(String path) =>
       AppEntryRole.gradleSettingsFile,
       AppEntryRole.gradleAppFile,
       AppEntryRole.xcodeProjectFile,
+      AppEntryRole.readmeFile,
     }.contains(path);
 
 /// The language version that `dart format` formats [app] with: the one of

@@ -1,3 +1,7 @@
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
