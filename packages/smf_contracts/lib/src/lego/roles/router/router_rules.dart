@@ -50,9 +50,12 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
     if (input.data.isNotEmpty && routes.isEmpty)
       'The module contributes routes data without routes.',
   ];
+  final warnings = <SmfIssue>[];
   final names = <String, Route>{};
   final screens = <String, Route>{};
   final patterns = <String, (Route, String)>{};
+  // The routes checked so far, in the order a router matches them.
+  final earlier = <_PlacedRoute>[];
 
   // The path of the module's root route `/` is empty, so a parent path does
   // not tell a child from a top-level route.
@@ -60,12 +63,14 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
     Route route, {
     required String? parentPath,
     required List<RouteParam> ancestors,
+    required List<Route> chain,
   }) {
     final topLevel = parentPath == null;
     final path = topLevel
         ? (route.path == '/' ? '' : route.path)
         : '$parentPath/${route.path}';
     final label = 'The route "${route.name}" (${route.path})';
+    final placed = _PlacedRoute(route, path, [...chain, route]);
 
     if (!(topLevel ? _topLevelPath : _childPath).hasMatch(route.path)) {
       problems.add(
@@ -98,7 +103,14 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
             : 'The routes "${other.name}" and "${route.name}" have the paths '
                 '"$otherPath" and "$path", which match the same locations.',
       );
+    } else {
+      final (:unreachable, :ambiguous) = _reachability(placed, earlier);
+      if (unreachable != null) problems.add(unreachable);
+      if (ambiguous != null) {
+        warnings.add(SmfIssue.warning(ambiguous, origin: origin));
+      }
     }
+    earlier.add(placed);
     problems
       ..addAll(_screenProblems(route, label, screens))
       ..addAll(_paramProblems(route, label, ancestors));
@@ -162,14 +174,110 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
           for (final param in route.params)
             if (!known.contains(param.name)) param,
         ],
+        chain: placed.chain,
       );
     }
   }
 
   for (final route in routes) {
-    check(route, parentPath: null, ancestors: const []);
+    check(route, parentPath: null, ancestors: const [], chain: const []);
   }
-  return [for (final problem in problems) SmfIssue(problem, origin: origin)];
+  return [
+    for (final problem in problems) SmfIssue(problem, origin: origin),
+    ...warnings,
+  ];
+}
+
+/// A route of a module with its path from the namespace of the module, such
+/// as `/items/:id`, which is empty for the route `/`, and the routes from
+/// the top level down to it.
+final class _PlacedRoute {
+  _PlacedRoute(this.route, this.path, this.chain);
+
+  final Route route;
+  final String path;
+  final List<Route> chain;
+
+  /// The segments of [path].
+  late final List<String> segments =
+      path.isEmpty ? const [] : path.substring(1).split('/');
+
+  /// The path as a message shows it.
+  String get shown => path.isEmpty ? '/' : path;
+
+  /// Whether this route matches every location that [other] matches: they
+  /// have as many segments, and each segment of this route is a parameter
+  /// or the same fixed segment as that of [other].
+  bool covers(_PlacedRoute other) {
+    if (segments.length != other.segments.length) return false;
+    for (var i = 0; i < segments.length; i++) {
+      final mine = segments[i];
+      if (!mine.startsWith(':') && mine != other.segments[i]) return false;
+    }
+    return true;
+  }
+
+  /// A location that both this route and [other] match, such as `/new/5`,
+  /// or `null` if there is none.
+  String? sharedLocation(_PlacedRoute other) {
+    if (segments.length != other.segments.length) return null;
+    final shared = <String>[];
+    for (var i = 0; i < segments.length; i++) {
+      final (mine, theirs) = (segments[i], other.segments[i]);
+      if (!mine.startsWith(':') && !theirs.startsWith(':') && mine != theirs) {
+        return null;
+      }
+      shared.add(mine.startsWith(':') ? theirs : mine);
+    }
+    return '/${shared.join('/')}';
+  }
+}
+
+/// Whether [route] can be reached behind the routes of its module that come
+/// before it, [earlier], in the order routers match a location: the
+/// top-level routes in the order they are declared, each followed by its
+/// children, depth first; the first route that matches the whole location
+/// takes it, go_router and auto_route alike.
+///
+/// A route is unreachable when an earlier route matches every location it
+/// does, such as `/:id` before `/new`: the route that takes the fixed
+/// segment has to come first. When an earlier route matches only some of
+/// its locations, as `/:section/about` and `/docs/:page` both match
+/// `/docs/about`, those go to the earlier route, which is worth a warning.
+/// Routes with the same pattern are reported by the caller.
+({String? unreachable, String? ambiguous}) _reachability(
+  _PlacedRoute route,
+  List<_PlacedRoute> earlier,
+) {
+  String? ambiguous;
+  for (final other in earlier) {
+    if (other.covers(route)) {
+      // The routes that hold each of them, right below where their chains
+      // part: siblings, the one of the earlier route declared first.
+      var at = 0;
+      while (at < route.chain.length - 1 &&
+          at < other.chain.length - 1 &&
+          identical(route.chain[at], other.chain[at])) {
+        at++;
+      }
+      return (
+        unreachable: 'The route "${route.route.name}" (${route.shown}) '
+            'cannot be reached: the route "${other.route.name}" '
+            '(${other.shown}) comes before it and matches every location it '
+            'does. Declare "${route.chain[at].name}" before '
+            '"${other.chain[at].name}".',
+        ambiguous: null,
+      );
+    }
+    if (ambiguous != null || route.covers(other)) continue;
+    if (other.sharedLocation(route) case final location?) {
+      ambiguous = 'The routes "${other.route.name}" (${other.shown}) and '
+          '"${route.route.name}" (${route.shown}) both match locations such '
+          'as $location, which go to "${other.route.name}", declared first. '
+          'Change a fixed segment so that no location matches both.';
+    }
+  }
+  return (unreachable: null, ambiguous: ambiguous);
 }
 
 List<String> _screenProblems(

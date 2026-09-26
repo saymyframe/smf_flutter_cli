@@ -1048,6 +1048,123 @@ void main() {
       );
     });
 
+    group('the order of the routes', () {
+      Route route(String path, String name, {List<Route> children = const []}) {
+        final params = [
+          for (final segment in path.split('/'))
+            if (segment.startsWith(':'))
+              RouteParam.path(segment.substring(1), type: int),
+        ];
+        return Route(
+          path,
+          name: name,
+          screen: _screen('${name[0].toUpperCase()}${name.substring(1)}', 'h'),
+          params: params,
+          children: children,
+        );
+      }
+
+      /// The problem of [route], a name and a path, which the earlier route
+      /// [other] leaves unreachable until [declare] comes before [before].
+      String unreachable(
+        (String, String) route,
+        (String, String) other, {
+        required String declare,
+        required String before,
+      }) =>
+          'The route "${route.$1}" (${route.$2}) cannot be reached: the route '
+          '"${other.$1}" (${other.$2}) comes before it and matches every '
+          'location it does. Declare "$declare" before "$before".';
+
+      test('accepts a fixed segment before a parameter in its place', () {
+        // At the top level, among the children of a route, and between a
+        // child and a later top-level route.
+        for (final routes in [
+          [route('/new', 'create'), route('/:id', 'user')],
+          [
+            route(
+              '/',
+              'users',
+              children: [route('new', 'create'), route(':id', 'user')],
+            ),
+          ],
+          [
+            route('/', 'users', children: [route('new', 'create')]),
+            route('/:id', 'user'),
+          ],
+          [
+            route('/new', 'create'),
+            route('/', 'users', children: [route(':id', 'user')]),
+          ],
+        ]) {
+          expect(_routeProblems(routes), isEmpty, reason: '$routes');
+        }
+      });
+
+      test('rejects a route that an earlier route leaves unreachable', () {
+        const create = ('create', '/new');
+        const user = ('user', '/:id');
+
+        // At the top level.
+        expect(
+          _routeProblems([route('/:id', 'user'), route('/new', 'create')]),
+          [unreachable(create, user, declare: 'create', before: 'user')],
+        );
+        // Among the children of a route.
+        expect(
+          _routeProblems([
+            route(
+              '/',
+              'users',
+              children: [route(':id', 'user'), route('new', 'create')],
+            ),
+          ]),
+          [unreachable(create, user, declare: 'create', before: 'user')],
+        );
+        // Between a child and a later top-level route.
+        expect(
+          _routeProblems([
+            route('/', 'users', children: [route(':id', 'user')]),
+            route('/new', 'create'),
+          ]),
+          [unreachable(create, user, declare: 'create', before: 'users')],
+        );
+        // A route whose every segment an earlier one matches.
+        expect(
+          _routeProblems([
+            route('/:group/:id', 'member'),
+            route('/', 'groups', children: [route('admins/:id', 'admin')]),
+          ]),
+          [
+            unreachable(
+              ('admin', '/admins/:id'),
+              ('member', '/:group/:id'),
+              declare: 'groups',
+              before: 'member',
+            ),
+          ],
+        );
+      });
+
+      test('warns about routes that share some locations', () {
+        final issues = _moduleIssues(
+          'router.routes',
+          _moduleInput([
+            route('/:section/about', 'about'),
+            route('/docs/:page', 'page'),
+          ]),
+        );
+
+        expect(issues.single.isError, isFalse);
+        expect(
+          issues.single.message,
+          'The routes "about" (/:section/about) and "page" (/docs/:page) both '
+          'match locations such as /docs/about, which go to "about", declared '
+          'first. Change a fixed segment so that no location matches both.',
+        );
+      });
+    });
+
     test('rejects names that would share the tags of annotations', () {
       final problems = _routeProblems([
         Route(
@@ -1070,7 +1187,7 @@ void main() {
     test('rejects destinations that need values', () {
       final problems = _routeProblems([
         Route(
-          '/:id',
+          '/a/:id',
           name: 'a',
           screen: _screen('A', 'h'),
           params: const [RouteParam.path('id', type: int)],
@@ -1099,7 +1216,7 @@ void main() {
     test('rejects start candidates that need values', () {
       final problems = _routeProblems([
         Route(
-          '/:id',
+          '/a/:id',
           name: 'a',
           screen: _screen('A', 'h'),
           params: const [RouteParam.path('id', type: int)],

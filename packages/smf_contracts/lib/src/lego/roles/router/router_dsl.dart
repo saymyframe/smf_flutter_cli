@@ -12,6 +12,13 @@ final class RoutesData {
   const RoutesData(this.routes);
 
   /// The top-level routes of the module, in the order the app lists them.
+  ///
+  /// A router matches a location against the routes in this order, each
+  /// followed by its children, and the first route that matches the whole
+  /// location takes it. So a route with a fixed segment, such as `/new`,
+  /// comes before a route with a parameter in its place, such as `/:id`,
+  /// which would take its locations otherwise; the module rule
+  /// `router.routes` reports a route that an earlier one leaves unreachable.
   final List<Route> routes;
 }
 

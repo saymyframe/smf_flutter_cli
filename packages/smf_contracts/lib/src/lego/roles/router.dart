@@ -155,7 +155,8 @@ final class RouterRole extends Role<RoutesData> {
         ModuleRule(
           id: 'router.routes',
           description: 'The routes of a module have valid paths, names, '
-              'screens, parameters and destinations.',
+              'screens, parameters and destinations, and a router can reach '
+              'each of them.',
           check: _checkRoutes,
         ),
         ModuleRule(
