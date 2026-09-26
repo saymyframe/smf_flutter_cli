@@ -18,6 +18,8 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^8.1.0
+  # The file system of the machine on which the tests run smf create.
+  file: ^7.0.1
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.2.1
   smf_pipeline: ^0.2.0

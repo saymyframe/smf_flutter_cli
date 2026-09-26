@@ -11,6 +11,17 @@ The module:
 
 `flutterfire configure` of the [FlutterFire CLI](https://firebase.google.com/docs/flutter/setup) registers the app in a Firebase project and writes its options. Until it runs, `lib/firebase_options.dart` is a placeholder in the form that the FlutterFire CLI writes for the platforms it has not configured: each platform throws an `UnsupportedError`, so the app compiles but stops at start-up. The FlutterFire CLI fills the placeholder in place.
 
+## The machine
+
+Before it generates the app, SMF checks that the machine can run `flutterfire configure`:
+
+- the [Firebase CLI](https://firebase.google.com/docs/cli), which the FlutterFire CLI runs to reach the Firebase projects;
+- a login of the Firebase CLI, which `firebase login:list --json` reports;
+- the FlutterFire CLI, activated with `dart pub global activate flutterfire_cli`, in version 1.4.0 or a later 1.x;
+- on macOS, the Ruby gem xcodeproj 1.23.0 or newer, with which the FlutterFire CLI sets up the iOS app in its Xcode project. It does that only on macOS: elsewhere it registers the iOS app and writes its options, but leaves the Xcode project as it is, so SMF warns to run `flutterfire configure` again on a Mac.
+
+The app compiles without any of them, so a missing one only brings a warning with instructions. In a run with a terminal, unless it skips external setup (`--skip-external-setup`), SMF offers to install the Firebase CLI with npm, and Node.js first when it is missing, to log in with `firebase login`, and to activate flutterfire_cli 1.4.1; it asks before each. When npm fails on macOS or Linux, it offers the standalone binary of the Firebase CLI instead.
+
 ## Use with SMF CLI
 
 This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.

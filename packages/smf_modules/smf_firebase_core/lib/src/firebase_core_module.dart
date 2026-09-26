@@ -1,5 +1,9 @@
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
+import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
+import 'package:smf_firebase_core/src/preflight/firebase_login.dart';
+import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
+import 'package:smf_firebase_core/src/preflight/xcode_project_tools.dart';
 
 /// The module that sets up Firebase in the app with the firebase_core
 /// package.
@@ -15,6 +19,12 @@ import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
 /// writes for platforms it has not configured: each platform throws an
 /// `UnsupportedError`, so the app compiles but stops at start-up. The
 /// FlutterFire CLI fills the placeholder in place.
+///
+/// Before generation, the module checks that the machine can run
+/// `flutterfire configure`: the Firebase CLI with a logged-in account, the
+/// FlutterFire CLI, and, on macOS, the Ruby gem that changes the Xcode
+/// project. In a run with a terminal, it offers to install the two CLIs and
+/// to log in; otherwise it tells how.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
@@ -51,5 +61,11 @@ final class FirebaseCoreModule extends SmfModule {
           ),
         ),
         AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
+        const Preflight([
+          FirebaseCliCheck(),
+          FirebaseLoginCheck(),
+          FlutterfireCliCheck(),
+          XcodeProjectToolsCheck(),
+        ]),
       ];
 }
