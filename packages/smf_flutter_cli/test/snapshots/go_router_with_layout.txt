@@ -336,12 +336,9 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
-import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
-import 'package:my_app/core/layout/app_shell.dart' show AppShell;
-import 'package:my_app/core/layout/destination.dart' show Destination;
-import 'package:my_app/features/home/home_screen.dart' as screen0;
+import 'package:my_app/core/app/fallback_start_screen.dart';
 
 import 'app_router.dart' show AppNavigator, AppRouter;
 import 'navigation.dart' show AppLocation;
@@ -358,33 +355,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// can navigate, even one above the router.
   @override
   late final GoRouter config = GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/',
     observers: _observers(),
     routes: [
-      GoRoute(path: '/', redirect: (context, state) => '/home'),
-      StatefulShellRoute.indexedStack(
-        // The navigator of each branch has observers of its own, so the
-        // observers of the root navigator are not told about its pages.
-        notifyRootObserver: false,
-        builder: (context, state, shell) => AppShell(
-          destinations: const [Destination(label: 'Home', icon: Icons.home)],
-          currentIndex: shell.currentIndex,
-          onSelect: shell.goBranch,
-          body: shell,
-        ),
-        branches: [
-          StatefulShellBranch(
-            initialLocation: '/home',
-            observers: _observers(),
-            routes: [
-              GoRoute(
-                path: '/home',
-                name: 'home.home',
-                builder: (context, state) => const screen0.HomeScreen(),
-              ),
-            ],
-          ),
-        ],
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
       ),
     ],
   );
@@ -459,58 +435,18 @@ final class NavLink {
   void replace() => appRouter.navigatorOf(_context).replace(location);
 }
 
-/// The location of `home.home`: `/home`.
-final class HomeHomeLocation extends AppLocation {
-  /// Creates the location.
-  const HomeHomeLocation();
-
-  @override
-  String get routeName => 'home.home';
-
-  @override
-  String get path => '/home';
-}
-
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
-  AppNav get nav => AppNav._(this);
+  AppNav get nav => const AppNav._();
 }
 
-/// The routes of the app by module, as `context.nav`.
+/// The routes of the app by module; it has none.
 final class AppNav {
-  const AppNav._(this._context);
-
-  final BuildContext _context;
-
-  /// The routes of the module `home`.
-  HomeRoutes get home => HomeRoutes._(_context);
-}
-
-/// The routes of the module `home`.
-final class HomeRoutes {
-  const HomeRoutes._(this._context);
-
-  final BuildContext _context;
-
-  /// The route `home.home`: `/home`.
-  NavLink home() => NavLink(_context, const HomeHomeLocation());
-}
-=== lib/features/home/home_screen.dart (home) ===
-import 'package:flutter/material.dart';
-
-/// A neutral screen with the name of the app, which the app can start on.
-class HomeScreen extends StatelessWidget {
-  /// Creates the screen.
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      Scaffold(appBar: AppBar(title: const Text('My App')));
+  const AppNav._();
 }
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 
 import 'app.dart';
 import 'bootstrap.dart';
@@ -518,7 +454,7 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(ProviderScope(child: const App()));
+  runApp(const App());
 }
 === pubspec.yaml (flutter_core) ===
 name: my_app
@@ -533,7 +469,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_riverpod: "^3.4.3"
   go_router: "^17.5.0"
 
 dev_dependencies:

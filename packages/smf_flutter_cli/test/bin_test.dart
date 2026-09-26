@@ -325,6 +325,44 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen for the layout',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'bottom_tabs',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The layout requires the router, which only go_router provides.
+          expect(
+            result.stdout,
+            allOf(
+              contains('  bottom_tabs: requested\n'),
+              contains(
+                '  go_router: the only provider of the router (bottom_tabs '
+                'requires the router)\n',
+              ),
+              contains('  layout: bottom_tabs\n'),
+              contains('  router: go_router\n'),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(

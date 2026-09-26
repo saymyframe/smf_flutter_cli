@@ -171,18 +171,24 @@ void main() {
       'router once the app has home', () async {
     final run = await _create({
       'Features': ['home'],
+      'Layout': ['None'],
       'State management': ['bloc'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Layout: which module provides it?',
       'State management: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
     ]);
     expect(run.asked[1].shown, [
+      'bottom_tabs — Tabs in a bar at the bottom of the app',
+      'None',
+    ]);
+    expect(run.asked[2].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -204,11 +210,93 @@ void main() {
       app
           .childFile('lib/core/router/app_router_factory.dart')
           .readAsStringSync(),
-      contains("initialLocation: '/home',"),
+      allOf(
+        contains("initialLocation: '/home',"),
+        isNot(contains('StatefulShellRoute')),
+      ),
     );
+    expect(app.childDirectory('lib/core/layout').existsSync(), isFalse);
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
       allOf(contains('  go_router: '), contains('  flutter_bloc: ')),
+    );
+  });
+
+  test(
+      'a run in a terminal offers bottom tabs as the layout, which shows the '
+      'features', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Layout': ['bottom_tabs'],
+      'State management': ['riverpod'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(run.asked.map((question) => question.message), [
+      'Features: which do you want?',
+      'Layout: which module provides it?',
+      'State management: which module provides it?',
+    ]);
+    expect(
+      run.lines,
+      contains(
+        'Adding go_router: the only provider of the router (home requires '
+        'the router).',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app.childFile('lib/core/layout/app_shell.dart').readAsStringSync(),
+      contains('class AppShell extends StatelessWidget'),
+    );
+    expect(
+      app
+          .childFile('lib/core/router/app_router_factory.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('StatefulShellRoute.indexedStack('),
+        contains("Destination(label: 'Home', icon: Icons.home)"),
+        contains("initialLocation: '/home',"),
+      ),
+    );
+  });
+
+  test(
+      'a run in a terminal adds the router that the layout requires without '
+      'a question', () async {
+    final run = await _create({
+      'Features': [],
+      'Layout': ['bottom_tabs'],
+      'State management': ['None'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(run.asked.map((question) => question.message), [
+      'Features: which do you want?',
+      'Layout: which module provides it?',
+      'State management: which module provides it?',
+    ]);
+    expect(
+      run.lines,
+      contains(
+        'Adding go_router: the only provider of the router (bottom_tabs '
+        'requires the router).',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    // Without features, the app has no destinations to show.
+    expect(
+      app.childFile('lib/core/layout/app_shell.dart').existsSync(),
+      isTrue,
+    );
+    expect(
+      app
+          .childFile('lib/core/router/app_router_factory.dart')
+          .readAsStringSync(),
+      allOf(
+        contains("initialLocation: '/',"),
+        isNot(contains('AppShell')),
+      ),
     );
   });
 
@@ -216,6 +304,7 @@ void main() {
       () async {
     final run = await _create({
       'Features': [],
+      'Layout': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
     });
@@ -223,10 +312,11 @@ void main() {
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Layout: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
     ]);
-    expect(run.asked[1].shown, [
+    expect(run.asked[2].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);

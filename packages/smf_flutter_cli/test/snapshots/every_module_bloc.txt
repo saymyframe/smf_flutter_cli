@@ -229,6 +229,72 @@ class FallbackStartScreen extends StatelessWidget {
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('My App')));
 }
+=== lib/core/layout/app_shell.dart (bottom_tabs) ===
+import 'package:flutter/material.dart';
+
+import 'destination.dart';
+
+/// The main navigation of the app: a bar at the bottom with a tab for each
+/// destination, below the screen of the selected one.
+///
+/// With one destination there is nothing to switch to, so the bar is
+/// hidden and the screen fills the app.
+class AppShell extends StatelessWidget {
+  /// Creates the main navigation with [destinations], the one at
+  /// [currentIndex] selected with [body] as its screen; selecting a tab
+  /// calls [onSelect] with its index.
+  const AppShell({
+    required this.destinations,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.body,
+    super.key,
+  });
+
+  /// The tabs of the bar, in order.
+  final List<Destination> destinations;
+
+  /// The index of the selected destination.
+  final int currentIndex;
+
+  /// Selects the destination at the given index.
+  final ValueChanged<int> onSelect;
+
+  /// The screen of the selected destination.
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: body,
+    bottomNavigationBar: destinations.length < 2
+        ? null
+        : NavigationBar(
+            selectedIndex: currentIndex,
+            onDestinationSelected: onSelect,
+            destinations: [
+              for (final destination in destinations)
+                NavigationDestination(
+                  icon: Icon(destination.icon),
+                  label: destination.label,
+                ),
+            ],
+          ),
+  );
+}
+=== lib/core/layout/destination.dart (role:layout) ===
+import 'package:flutter/widgets.dart';
+
+/// An item of the main navigation of the app, such as a tab of a bottom bar.
+final class Destination {
+  /// Creates an item labelled [label] with [icon].
+  const Destination({required this.label, required this.icon});
+
+  /// The text of the item.
+  final String label;
+
+  /// The icon of the item.
+  final IconData icon;
+}
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 
@@ -270,8 +336,11 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_app/core/layout/app_shell.dart' show AppShell;
+import 'package:my_app/core/layout/destination.dart' show Destination;
 import 'package:my_app/features/home/home_screen.dart' as screen0;
 
 import 'app_router.dart' show AppNavigator, AppRouter;
@@ -293,10 +362,29 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     observers: _observers(),
     routes: [
       GoRoute(path: '/', redirect: (context, state) => '/home'),
-      GoRoute(
-        path: '/home',
-        name: 'home.home',
-        builder: (context, state) => const screen0.HomeScreen(),
+      StatefulShellRoute.indexedStack(
+        // The navigator of each branch has observers of its own, so the
+        // observers of the root navigator are not told about its pages.
+        notifyRootObserver: false,
+        builder: (context, state, shell) => AppShell(
+          destinations: const [Destination(label: 'Home', icon: Icons.home)],
+          currentIndex: shell.currentIndex,
+          onSelect: shell.goBranch,
+          body: shell,
+        ),
+        branches: [
+          StatefulShellBranch(
+            initialLocation: '/home',
+            observers: _observers(),
+            routes: [
+              GoRoute(
+                path: '/home',
+                name: 'home.home',
+                builder: (context, state) => const screen0.HomeScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   );

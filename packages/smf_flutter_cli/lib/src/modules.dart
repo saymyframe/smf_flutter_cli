@@ -1,4 +1,5 @@
 import 'package:smf_bloc/smf_bloc.dart';
+import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -17,4 +18,5 @@ const List<SmfModule> smfModules = [
   BlocModule(),
   RiverpodModule(),
   HomeModule(),
+  BottomTabsModule(),
 ];
