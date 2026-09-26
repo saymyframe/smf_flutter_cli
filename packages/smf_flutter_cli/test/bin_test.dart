@@ -374,6 +374,36 @@ void main() {
             Directory(p.join(temporary.path, 'my_app')).existsSync(),
             isFalse,
           );
+
+          final started = await _smf(
+            [
+              'create',
+              'my_app',
+              '--no-input',
+              '-m',
+              'home',
+              '--start',
+              '/home',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(started.exitCode, 0, reason: '${started.stderr}');
+          expect(
+            File(
+              p.join(
+                temporary.path,
+                'my_app',
+                'lib',
+                'core',
+                'router',
+                'app_router_factory.dart',
+              ),
+            ).readAsStringSync(),
+            contains("initialLocation: '/home',"),
+          );
         },
         timeout: timeout,
       );
