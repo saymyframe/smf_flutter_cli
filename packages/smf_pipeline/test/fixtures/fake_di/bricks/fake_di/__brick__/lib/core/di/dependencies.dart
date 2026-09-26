@@ -1,4 +1,3 @@
-{{{imports}}}
 import 'service_locator.dart';
 
 /// Creates the service locator of the app: a map of factories (fixture).

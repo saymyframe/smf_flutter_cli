@@ -1088,4 +1088,251 @@ flutter:
       );
     });
   });
+
+  group('fragment variables', () {
+    const zeta = ImportRef('package:zeta/zeta.dart', prefix: 'z');
+
+    /// A module whose provider's render hook returns [vars], with the
+    /// brick of [files].
+    List<SmfModule> withVars(
+      Map<String, Object?> vars,
+      Map<String, String> files,
+    ) {
+      final rendering = _Rendering(providerOutput: RoleOutput(vars: vars));
+      return [
+        entry,
+        TestModule(
+          'store',
+          providers: [rendering.provider],
+          contributions: [_brick(files)],
+        ),
+      ];
+    }
+
+    test(
+        'render as their code and bring their imports into the Dart files '
+        'that read them', () {
+      final app = _render(
+        withVars(
+          {
+            'routes': const Fragment(
+              'final routes = [z.Zeta(), Timer];',
+              imports: [zeta, ImportRef('dart:async')],
+            ),
+            'title': 'Shelf',
+            'empty': const Fragment(''),
+          },
+          {
+            'lib/store.dart': "import 'dart:async';\n"
+                '\n'
+                '// {{title}}\n'
+                '{{{routes}}}\n'
+                '{{{empty}}}\n'
+                '// end\n',
+            'lib/again.dart': '{{{routes}}}\n',
+            'README.md': 'Empty: "{{{empty}}}"\n',
+          },
+        ),
+      );
+
+      final store = app.files['lib/store.dart']!;
+      expect(
+        store.text,
+        "import 'dart:async';\n"
+        '\n'
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        '// Shelf\n'
+        'final routes = [z.Zeta(), Timer];\n'
+        '// end\n',
+      );
+      expect(
+        [
+          for (final added in store.addedImports)
+            (added.import.uri, added.import.prefix, '${added.contributor}'),
+        ],
+        [('package:zeta/zeta.dart', 'z', 'store')],
+      );
+      expect(
+        app.files['lib/again.dart']!.text,
+        "import 'dart:async';\n"
+        '\n'
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        'final routes = [z.Zeta(), Timer];\n',
+      );
+      expect(app.files['README.md']!.text, 'Empty: ""\n');
+    });
+
+    test("go into the bricks of the owner's variant", () {
+      final state = TestRole<NoDsl>('state');
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(
+          vars: {
+            'code': Fragment('final zeta = z.Zeta();', imports: [zeta]),
+          },
+        ),
+      );
+      final app = _render(variants: {
+        'store': 'bloc',
+      }, [
+        entry,
+        TestModule('bloc', providers: [RoleProvider.plain(state)]),
+        TestModule(
+          'store',
+          providers: [rendering.provider],
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (context) => [
+                    _brick({'lib/v.dart': '{{{code}}}\n'}),
+                  ],
+            },
+          ),
+        ),
+      ]);
+
+      final variant = app.files['lib/v.dart']!;
+      expect(
+        variant.text,
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        'final zeta = z.Zeta();\n',
+      );
+      expect(
+        variant.addedImports.single.contributor,
+        const ModuleOrigin(ModuleId('store')),
+      );
+    });
+
+    test('are fragments of code with valid imports', () {
+      expect(
+        _failures(
+          withVars(
+            {
+              'wrapper': const Fragment.wrap('Wrap(child: ', ')'),
+              'bad': const Fragment('x', imports: [ImportRef('zeta.dart')]),
+              'nested': const [Fragment('x')],
+            },
+            {'lib/a.dart': '{{{wrapper}}} {{{bad}}} {{#nested}}{{/nested}}'},
+          ),
+        ),
+        [
+          equals(
+            'store: error [store]: The fragment variable wrapper of the '
+            'render hook of store is a Fragment.wrap, but a variable takes a '
+            'Fragment of code.',
+          ),
+          startsWith(
+            'store: error [store]: The fragment variable bad of the render '
+            'hook of store has an invalid import. The import "zeta.dart" '
+            'must be a dart: or package: URI',
+          ),
+          equals(
+            'store: error [store]: The brick variable nested of the render '
+            'hook of store is not plain data: strings, numbers, booleans, '
+            'and lists and maps of them, or a fragment of code.',
+          ),
+        ],
+      );
+    });
+
+    test('are read as they are, outside sections, and by Dart with imports',
+        () {
+      const code = Fragment('z.Zeta()', imports: [zeta]);
+      expect(
+        _failures(
+          withVars(
+            {
+              'code': code,
+              'items': const ['a'],
+              'flag': true,
+            },
+            {
+              'lib/two.dart': '{{code}}\n',
+              'lib/lambda.dart': '{{{code.upperCase()}}}\n',
+              'lib/section.dart': '{{#flag}}\n{{{code}}}\n{{/flag}}\n',
+              'lib/over.dart': '{{#code}}x{{/code}}\n',
+              'README.md': '{{{code}}}\n',
+            },
+          ),
+        ),
+        [
+          equals(
+            'store: error [store] lib/two.dart: The template lib/two.dart in '
+            'the brick b of store reads the fragment variable code as code '
+            'in two braces at line 1; read a fragment of code as it is, '
+            '{{{code}}}.',
+          ),
+          equals(
+            'store: error [store] lib/lambda.dart: The template '
+            'lib/lambda.dart in the brick b of store reads the fragment '
+            'variable code as code.upperCase() in three braces at line 1; '
+            'read a fragment of code as it is, {{{code}}}.',
+          ),
+          equals(
+            'store: error [store] lib/section.dart: The template '
+            'lib/section.dart in the brick b of store reads the fragment '
+            'variable code inside the mustache section flag at line 2; the '
+            'render hook decides what the variable holds instead.',
+          ),
+          equals(
+            'store: error [store] lib/over.dart: The template lib/over.dart '
+            'in the brick b of store opens a section over the fragment '
+            'variable code at line 1; read a fragment of code as it is, '
+            '{{{code}}}.',
+          ),
+          equals(
+            'store: error [store] README.md: The template README.md in the '
+            'brick b of store is not Dart, but it reads the fragment '
+            'variable code, whose imports can only go into a Dart file.',
+          ),
+        ],
+      );
+    });
+
+    test('that no template reads are an error', () {
+      expect(
+        _failures(
+          withVars(
+            {
+              'code': const Fragment('z.Zeta()', imports: [zeta]),
+            },
+            {'lib/a.dart': '// nothing\n'},
+          ),
+        ),
+        [
+          equals(
+            'store: error [store]: The render hook of store sets the fragment '
+            'variable code, which no template of store reads, so its code '
+            'would be lost.',
+          ),
+        ],
+      );
+    });
+
+    test('cannot bring imports into a part file', () {
+      expect(
+        _failures(
+          withVars(
+            {
+              'code': const Fragment('final a = z.Zeta();', imports: [zeta]),
+            },
+            {
+              'lib/store.dart': "part 'store_part.dart';\n",
+              'lib/store_part.dart': "part of 'store.dart';\n\n{{{code}}}\n",
+            },
+          ),
+        ),
+        [
+          equals(
+            'store: error [store] lib/store_part.dart: The imports of the '
+            'fragment variable code of store cannot go into '
+            'lib/store_part.dart, which reads it: it is a part of another '
+            'library. (Read the variable in the library file.)',
+          ),
+        ],
+      );
+    });
+  });
 }

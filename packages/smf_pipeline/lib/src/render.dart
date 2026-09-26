@@ -52,9 +52,9 @@ final class RenderedFile {
   final ContributionOrigin owner;
 
   /// The imports the pipeline added to the file for the fragments of the
-  /// sockets whose tags it holds, one for each fragment that needs it,
-  /// resolved in the app: an import the file already had is not among
-  /// them.
+  /// sockets whose tags it holds and of the fragment variables it reads,
+  /// one for each fragment that needs it, resolved in the app: an import
+  /// the file already had is not among them.
   final List<AddedImport> addedImports;
 
   /// The content as text.
@@ -100,8 +100,26 @@ final class _HookOutput {
   /// The fragments that apply, each with its origin.
   final List<Collected> fragments = [];
 
-  /// The brick variables of each owner: a module or a role template.
+  /// The brick variables of each owner: a module or a role template. A
+  /// variable that is a [Fragment] is its code here.
   final Map<ContributionOrigin, Map<String, Object?>> vars = {};
+
+  /// The brick variables of each owner that are fragments of code, by name.
+  final Map<ContributionOrigin, Map<String, Fragment>> fragmentVars = {};
+}
+
+/// The imports of the fragment variables that the templates of the bricks
+/// read, by owner and path of the template file.
+final class _VariableImports {
+  /// The imports for each template file.
+  final Map<(ContributionOrigin, String), List<AddedImport>> imports = {};
+
+  /// The fragment variables with imports that each template file reads.
+  final Map<(ContributionOrigin, String), Set<String>> names = {};
+
+  /// The fragment variables that a template of their owner reads, by owner
+  /// and name.
+  final Set<(ContributionOrigin, String)> read = {};
 }
 
 /// Stage 8 of the pipeline: renders the app in memory.
@@ -109,7 +127,8 @@ final class _HookOutput {
 /// 1. Runs the render hooks of the templates and providers of the present
 ///    roles, with the results of [choices]. Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
-///    not be reserved (see [isReservedVar]) or set twice for one owner.
+///    not be reserved (see [isReservedVar]) or set twice for one owner. A
+///    variable may be a [Fragment] of code, see [RoleOutput.vars].
 /// 2. Orders the contributions of every socket, those of the render hooks
 ///    included (see [orderContributions]), and renders each socket into the
 ///    text of its tags. A socket that gets contributions but has no tag in
@@ -122,9 +141,15 @@ final class _HookOutput {
 ///    roles its owner provides, requires or uses, the tags, the variables of
 ///    its owner's render hooks and its own. A template that mason cannot
 ///    render, a path that leaves the app, and a path that two bricks
-///    generate are errors.
+///    generate are errors. A fragment variable renders as its code, and a
+///    line that holds nothing but one with no code goes away with it. It
+///    must be read as it is, in three braces and outside mustache sections,
+///    and a template that is not Dart cannot read one with imports; a
+///    fragment variable that no template of its owner reads is an error,
+///    since its code would be lost.
 /// 4. Adds the imports of each socket's fragments to the Dart file that
-///    holds its tag; see [addImports].
+///    holds its tag, and those of each fragment variable to every Dart file
+///    of its owner that reads it; see [addImports].
 ///
 /// Throws a [GenerationFailedException] with every problem found.
 RenderedApp renderApp({
@@ -196,6 +221,7 @@ RenderedApp renderApp({
   final files = <String, RenderedFile>{};
   // The path each template file rendered to, by owner and template path.
   final renderedPaths = <(ContributionOrigin, String), String>{};
+  final variables = _VariableImports();
   for (final collected in collection.applyingOf<BrickContribution>()) {
     _renderBrick(
       collected,
@@ -203,33 +229,67 @@ RenderedApp renderApp({
       resolution: resolution,
       context: context,
       texts: texts.texts,
-      hookVars: hooks.vars,
+      hooks: hooks,
       files: files,
       renderedPaths: renderedPaths,
+      variables: variables,
       issues: issues,
     );
   }
-  stopOnErrors();
-
-  for (final MapEntry(key: (owner, template), value: added)
-      in texts.imports.entries) {
-    // Only text files hold tags, and every brick rendered.
-    final path = renderedPaths[(owner, template)] ??
-        (throw StateError('$template of $owner was not rendered.'));
-    try {
-      files[path] = _withImports(files[path]!, added, context.appName);
-    } on ImportTargetException catch (error) {
-      final sockets = texts.socketsByTemplate[(owner, template)]!;
+  for (final MapEntry(key: owner, value: fragments)
+      in hooks.fragmentVars.entries) {
+    for (final name in fragments.keys) {
+      if (variables.read.contains((owner, name))) continue;
       issues.add(
         SmfIssue(
-          'The imports of the ${sockets.join(', ')} cannot go into $path, '
-          'which holds ${sockets.length == 1 ? 'its tag' : 'their tags'}: '
-          '${error.reason}.',
-          hint: 'Put the tag into the library file.',
+          'The render hook of $owner sets the fragment variable $name, which '
+          'no template of $owner reads, so its code would be lost.',
           origin: owner,
-          path: path,
         ),
       );
+    }
+  }
+  stopOnErrors();
+
+  for (final template in {...texts.imports.keys, ...variables.imports.keys}) {
+    final (owner, templatePath) = template;
+    // Only text files hold tags and read variables, and every brick
+    // rendered.
+    final path = renderedPaths[template] ??
+        (throw StateError('$templatePath of $owner was not rendered.'));
+    try {
+      files[path] = _withImports(
+        files[path]!,
+        [...?texts.imports[template], ...?variables.imports[template]],
+        context.appName,
+      );
+    } on ImportTargetException catch (error) {
+      if (texts.socketsByTemplate[template] case final sockets?) {
+        issues.add(
+          SmfIssue(
+            'The imports of the ${sockets.join(', ')} cannot go into $path, '
+            'which holds ${sockets.length == 1 ? 'its tag' : 'their tags'}: '
+            '${error.reason}.',
+            hint: 'Put the tag into the library file.',
+            origin: owner,
+            path: path,
+          ),
+        );
+      }
+      if (variables.names[template] case final names?) {
+        issues.add(
+          SmfIssue(
+            'The imports of the fragment '
+            '${names.length == 1 ? 'variable' : 'variables'} '
+            '${names.join(', ')} of ${ownerOf(owner)} cannot go into $path, '
+            'which reads '
+            '${names.length == 1 ? 'it' : 'them'}: ${error.reason}.',
+            hint: 'Read the variable in the library file.',
+            origin: owner,
+            path: path,
+          ),
+        );
+      }
     }
   }
   stopOnErrors();
@@ -299,7 +359,14 @@ _HookOutput _runRenderHooks({
       return;
     }
     final vars = output.vars.putIfAbsent(origin, () => {});
-    for (final MapEntry(:key, :value) in result.vars.entries) {
+    final fragments = output.fragmentVars.putIfAbsent(origin, () => {});
+    // A fragment variable renders as its code, which must be text that
+    // mason keeps as it is, like the value of any other variable.
+    final values = {
+      for (final MapEntry(:key, :value) in result.vars.entries)
+        key: value is Fragment ? value.code : value,
+    };
+    for (final MapEntry(:key, :value) in values.entries) {
       if (isReservedVar(key)) {
         issues.add(
           SmfIssue(
@@ -317,9 +384,21 @@ _HookOutput _runRenderHooks({
         );
       } else {
         vars[key] = value;
+        if (result.vars[key] case final Fragment fragment) {
+          fragments[key] = fragment;
+          for (final problem in _fragmentVarProblems(fragment)) {
+            issues.add(
+              SmfIssue(
+                'The fragment variable $key of the render hook of $origin '
+                '$problem',
+                origin: origin,
+              ),
+            );
+          }
+        }
       }
     }
-    for (final name in strippedVars(result.vars)) {
+    for (final name in strippedVars(values)) {
       issues.add(
         SmfIssue(
           'The brick variable $name of the render hook of $origin has a '
@@ -329,12 +408,12 @@ _HookOutput _runRenderHooks({
         ),
       );
     }
-    for (final name in nonPlainVars(result.vars)) {
+    for (final name in nonPlainVars(values)) {
       issues.add(
         SmfIssue(
           'The brick variable $name of the render hook of $origin is not '
           'plain data: strings, numbers, booleans, and lists and maps of '
-          'them.',
+          'them, or a fragment of code.',
           origin: origin,
         ),
       );
@@ -366,6 +445,17 @@ _HookOutput _runRenderHooks({
   }
   return output;
 }
+
+/// What is wrong with [fragment], the value of a brick variable, besides
+/// what [strippedVars] finds in its code: a wrapper, and imports that are
+/// not valid.
+List<String> _fragmentVarProblems(Fragment fragment) => [
+      if (fragment.isWrapper)
+        'is a Fragment.wrap, but a variable takes a Fragment of code.',
+      for (final import in fragment.imports)
+        for (final problem in import.problems())
+          'has an invalid import. $problem',
+    ];
 
 /// The rendered sockets of an app: the text of every tag, and the imports
 /// for each template file that holds a tag of a socket with imports.
@@ -464,9 +554,10 @@ void _renderBrick(
   required Resolution resolution,
   required ModuleContext context,
   required Map<String, String> texts,
-  required Map<ContributionOrigin, Map<String, Object?>> hookVars,
+  required _HookOutput hooks,
   required Map<String, RenderedFile> files,
   required Map<(ContributionOrigin, String), String> renderedPaths,
+  required _VariableImports variables,
   required List<SmfIssue> issues,
 }) {
   final origin = collected.origin;
@@ -474,7 +565,8 @@ void _renderBrick(
   final name = brick.bundle.name;
   // A variant's bricks belong to its module and get the module's variables.
   final owner = ownerOf(origin);
-  final fromHooks = hookVars[owner] ?? const <String, Object?>{};
+  final fromHooks = hooks.vars[owner] ?? const <String, Object?>{};
+  final fragments = hooks.fragmentVars[owner] ?? const <String, Fragment>{};
   final present = resolution.presentRoles;
   final vars = <String, Object?>{
     'app_name': context.appName,
@@ -545,9 +637,9 @@ void _renderBrick(
     final text = templateTextOf(file);
     final isText = text != null;
     if (text != null) {
-      final unset = masonTag.hasMatch(text)
-          ? unsetNames(scanTemplate(template, text), vars)
-          : const <String>[];
+      final scan =
+          masonTag.hasMatch(text) ? scanTemplate(template, text) : null;
+      final unset = scan == null ? const <String>[] : unsetNames(scan, vars);
       if (unset.isNotEmpty) {
         issues.add(
           SmfIssue(
@@ -562,10 +654,48 @@ void _renderBrick(
         );
         continue;
       }
-      if (masonTag.hasMatch(text)) {
+      if (scan != null && fragments.isNotEmpty) {
+        final reads = _fragmentReads(scan, fragments);
+        for (final problem in reads.problems) {
+          issues.add(
+            SmfIssue(
+              'The template $template in the brick $name of $origin $problem',
+              origin: origin,
+              path: template,
+            ),
+          );
+        }
+        if (reads.problems.isNotEmpty) continue;
+        for (final variable in reads.names) {
+          variables.read.add((owner, variable));
+          final imports = fragments[variable]!.imports;
+          if (imports.isEmpty) continue;
+          if (!template.endsWith('.dart')) {
+            issues.add(
+              SmfIssue(
+                'The template $template in the brick $name of $origin is not '
+                'Dart, but it reads the fragment variable $variable, whose '
+                'imports can only go into a Dart file.',
+                origin: origin,
+                path: template,
+              ),
+            );
+            continue;
+          }
+          variables.names
+              .putIfAbsent((origin, template), () => {}).add(variable);
+          variables.imports.putIfAbsent((origin, template), () => []).addAll([
+            for (final import in imports) AddedImport(import, owner),
+          ]);
+        }
+      }
+      if (scan != null) {
         try {
           bytes = utf8.encode(
-            _withoutEmptySocketLines(text, texts).render(vars),
+            _withoutEmptyLines(
+              text,
+              (tag) => texts[tag] == '' || fragments[tag]?.code == '',
+            ).render(vars),
           );
         } on Object catch (error) {
           issues.add(
@@ -611,20 +741,64 @@ void _renderBrick(
   }
 }
 
-/// [text] without the lines that hold nothing but the tag of a socket whose
-/// text in [sockets] is empty, so that an empty socket leaves no blank line
-/// behind, such as in a native file that the pipeline does not format.
-String _withoutEmptySocketLines(String text, Map<String, String> sockets) =>
+/// [text] without the lines that hold nothing but a variable in three
+/// braces that [isEmpty] says renders to nothing, such as the tag of a
+/// socket that gets nothing, so that it leaves no blank line behind, such
+/// as in a native file that the pipeline does not format.
+String _withoutEmptyLines(String text, bool Function(String name) isEmpty) =>
     text.replaceAllMapped(
-      _socketLine,
-      (match) => sockets[match[1]] == '' ? '' : match[0]!,
+      _variableLine,
+      (match) => isEmpty(match[1]!) ? '' : match[0]!,
     );
 
-/// A line that holds nothing but the tag of a socket, with its line break.
-final RegExp _socketLine = RegExp(
-  r'^[ \t]*\{\{\{(smf_\w+)\}\}\}[ \t]*(?:\r?\n|$)',
+/// A line that holds nothing but a variable in three braces, with its line
+/// break.
+final RegExp _variableLine = RegExp(
+  r'^[ \t]*\{\{\{(\w+)\}\}\}[ \t]*(?:\r?\n|$)',
   multiLine: true,
 );
+
+/// The fragment variables among [fragments] that the template of [scan]
+/// reads, and the problems with how it reads them: each must be read as it
+/// is, `{{{name}}}`, which mustache does not escape, and outside mustache
+/// sections, since the render hook decides what the variable holds, and the
+/// imports of the fragment would otherwise go into the file for code that
+/// is not there.
+({Set<String> names, List<String> problems}) _fragmentReads(
+  TemplateScan scan,
+  Map<String, Fragment> fragments,
+) {
+  final names = <String>{};
+  final problems = <String>[];
+  for (final tag in scan.tags) {
+    final name = variableOf(tag.name);
+    if (!fragments.containsKey(name)) continue;
+    names.add(name);
+    if (!tag.triple || tag.name != name) {
+      problems.add(
+        'reads the fragment variable $name as ${tag.name} in '
+        '${tag.triple ? 'three' : 'two'} braces at line ${tag.line}; read '
+        'a fragment of code as it is, {{{$name}}}.',
+      );
+    }
+    if (tag.sections.isNotEmpty) {
+      problems.add(
+        'reads the fragment variable $name inside the mustache section '
+        '${tag.sections.last} at line ${tag.line}; the render hook decides '
+        'what the variable holds instead.',
+      );
+    }
+  }
+  for (final section in scan.sections) {
+    final name = variableOf(section.name);
+    if (!fragments.containsKey(name)) continue;
+    problems.add(
+      'opens a section over the fragment variable $name at line '
+      '${section.line}; read a fragment of code as it is, {{{$name}}}.',
+    );
+  }
+  return (names: names, problems: problems);
+}
 
 /// What is wrong with [path], a rendered path of a file of the app, or
 /// `null` if it is a path inside the app.

@@ -168,5 +168,16 @@ final class RoleOutput {
   /// maps of them, and follow the rules of [BrickContribution.vars]. A
   /// variable that two hooks of one module, or a hook and a brick of its
   /// owner, both set is an error.
+  ///
+  /// A variable may also be a [Fragment] of code with the imports it needs,
+  /// such as the routes a router renders from the data of its role. The
+  /// variable renders as the fragment's code, and the pipeline adds the
+  /// imports to every Dart file of the owner's bricks that reads it, as it
+  /// does for the fragments of a socket: an import the file has already is
+  /// not added again, and the harness knows who needs each. A template
+  /// reads such a variable as it is, `{{{routes}}}`, outside mustache
+  /// sections, and a line that holds nothing but a variable without code
+  /// goes away. A fragment variable that no template of the owner reads is
+  /// an error, since its code would be lost.
   final Map<String, Object?> vars;
 }

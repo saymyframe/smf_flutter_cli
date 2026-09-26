@@ -500,6 +500,70 @@ void main() {
         );
       });
 
+      test(
+          'imports of a fragment variable belong to the owner of its render '
+          'hook', () async {
+        final shelf = TestRole<String>('shelf');
+        final harness = ContractHarness(
+          ModuleRegistry([
+            ...modules,
+            TestModule(
+              'store',
+              providers: [
+                _VarsProvider(
+                  shelf,
+                  const {
+                    'code': Fragment(
+                      'final a = a0.A();\nfinal item = i0.Item();',
+                      imports: [
+                        ImportRef.app('a/a.dart', prefix: 'a0'),
+                        ImportRef.app('item/item.dart', prefix: 'i0'),
+                      ],
+                    ),
+                  },
+                ),
+              ],
+              contributions: [dart('lib/store/store.dart', '{{{code}}}\n')],
+            ),
+            TestModule(
+              'item',
+              requires: {shelf},
+              contributions: [
+                shelf.data('item'),
+                dart('lib/item/item.dart', 'class Item {}\n'),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'store',
+            requested: [ModuleId('store'), ModuleId('lib_a'), ModuleId('item')],
+          ),
+        );
+
+        // The provider renders the data of the role, so it may import the
+        // files of the module that contributes it, but no other.
+        expect(
+          result.errors.single.message,
+          'lib/store/store.dart imports lib/a/a.dart for a fragment of store, '
+          'but that file is of lib_a, which store neither depends on nor '
+          'knows through a role.',
+        );
+        expect(
+          [
+            for (final added
+                in result.app!.files['lib/store/store.dart']!.addedImports)
+              '${added.import.uri} ${added.contributor}',
+          ],
+          [
+            'package:contract_app/a/a.dart store',
+            'package:contract_app/item/item.dart store',
+          ],
+        );
+      });
+
       test('structural rules read every rendered file', () async {
         final notes = TestRole<NoDsl>(
           'notes',
@@ -746,6 +810,19 @@ final class _PickTemplate extends RoleTemplate<String> {
   @override
   RoleOutput render(RoleHookInput<String> input) =>
       RoleOutput(vars: {'picked': input.choice});
+}
+
+/// A provider whose render hook returns [vars].
+final class _VarsProvider extends RoleProvider<String> {
+  _VarsProvider(this.role, this.vars);
+
+  @override
+  final Role<String> role;
+
+  final Map<String, Object?> vars;
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) => RoleOutput(vars: vars);
 }
 
 /// A `{` in a mason template.

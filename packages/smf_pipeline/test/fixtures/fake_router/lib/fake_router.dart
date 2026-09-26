@@ -48,11 +48,13 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
   RoleOutput render(RoleHookInput<RoutesData> input) {
     final facade = routerRole.facadeOf(input);
     final appName = input.context.appName;
-    final prefixes = <String, String>{};
-    String prefixOf(ImportRef import) => prefixes.putIfAbsent(
+    final prefixes = <String, ImportRef>{};
+    String prefixOf(ImportRef import) => prefixes
+        .putIfAbsent(
           import.resolveUri(appName),
-          () => 'screen${prefixes.length}',
-        );
+          () => import.withPrefix('screen${prefixes.length}'),
+        )
+        .prefix!;
 
     final fragments = <SocketContribution>[];
     final cases = <String>[];
@@ -98,14 +100,15 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
     return RoleOutput(
       fragments: fragments,
       vars: {
-        'imports': [
-          for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
-            "import '$uri' as $prefix;",
-        ].join('\n'),
         'start': start == null ? '' : 'const ${start.locationClass}()',
-        'screen': cases.isEmpty
-            ? 'const FallbackStartScreen()'
-            : 'switch (location) {\n${cases.join('\n')}\n}',
+        // The screens come with the imports of their files, which the
+        // pipeline adds to the file that reads the variable.
+        'screen': Fragment(
+          cases.isEmpty
+              ? 'const FallbackStartScreen()'
+              : 'switch (location) {\n${cases.join('\n')}\n}',
+          imports: [...prefixes.values],
+        ),
       },
     );
   }

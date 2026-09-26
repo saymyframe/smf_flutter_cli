@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-{{{imports}}}
 
 import '../app/fallback_start_screen.dart';
 import 'app_router.dart';

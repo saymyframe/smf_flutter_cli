@@ -550,10 +550,11 @@ final class _CrashReporters implements CrashReporter {
   }
 }
 === lib/core/di/dependencies.dart (fake_di) ===
-import 'package:fixture_app/core/fixture_services/fixture_services.dart' as di0;
+import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:fixture_app/core/events/communication_service.dart' as di2;
-import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
+import 'package:fixture_app/core/fixture_services/fixture_services.dart' as di0;
+
 import 'service_locator.dart';
 
 /// Creates the service locator of the app: a map of factories (fixture).
@@ -960,11 +961,11 @@ abstract interface class AppNavigator {
 import 'dart:async';
 
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
-import 'package:flutter/material.dart';
-import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
-    as screen0;
 import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
+import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
+    as screen0;
+import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
 import 'app_router.dart';

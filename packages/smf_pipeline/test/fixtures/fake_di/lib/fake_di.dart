@@ -57,11 +57,13 @@ final class FakeDiProvider extends DiProvider {
   @override
   RoleOutput render(RoleHookInput<DiRegistration> input) {
     final appName = input.context.appName;
-    final prefixes = <String, String>{};
-    String prefixOf(ImportRef import) => prefixes.putIfAbsent(
+    final prefixes = <String, ImportRef>{};
+    String prefixOf(ImportRef import) => prefixes
+        .putIfAbsent(
           import.resolveUri(appName),
-          () => 'di${prefixes.length}',
-        );
+          () => import.withPrefix('di${prefixes.length}'),
+        )
+        .prefix!;
     String type(TypeRef ref) {
       final import = ref.import;
       return import == null ? ref.name : ref.codeWith(prefixOf(import));
@@ -116,16 +118,18 @@ final class FakeDiProvider extends DiProvider {
     }
     return RoleOutput(
       vars: {
-        'imports': [
-          for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
-            "import '$uri' as $prefix;",
-        ].join('\n'),
-        'registrations': lines.isEmpty
-            ? ''
-            : [
-                '  final locator = serviceLocator as _MapLocator;',
-                ...lines,
-              ].join('\n'),
+        // The registrations come with the imports of the files of their
+        // types and factories, which the pipeline adds to the file that
+        // reads the variable.
+        'registrations': Fragment(
+          lines.isEmpty
+              ? ''
+              : [
+                  '  final locator = serviceLocator as _MapLocator;',
+                  ...lines,
+                ].join('\n'),
+          imports: [...prefixes.values],
+        ),
       },
     );
   }
