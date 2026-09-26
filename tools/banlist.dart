@@ -166,7 +166,6 @@ const _lasting = [
     [
       'packages/smf_contracts/test/lego/architecture_test.dart',
       'packages/smf_flutter_cli/test/architecture_test.dart',
-      'packages/smf_modules/smf_flutter_core/test/architecture_test.dart',
     ],
     {'mustachex', 'smf_contribution_engine'},
     'The test checks that the package does not use them.',
