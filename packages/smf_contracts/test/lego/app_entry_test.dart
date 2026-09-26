@@ -474,15 +474,17 @@ void main() {
       const socket = AppEntryRole.readmeSections;
 
       expect(socket.kind.carriesImports, isFalse);
+      // In the order of the contributions, not of the headings.
       expect(
         _render(socket, const [
-          ('Firebase', 'Run `flutterfire configure`.\n'),
           ('Signing', 'The keys go into `android/key.properties`.'),
           ('Firebase', 'Run `flutterfire configure`.\n'),
+          ('Signing', 'The keys go into `android/key.properties`.'),
         ]),
         {
-          socket.tag: '\n## Firebase\n\nRun `flutterfire configure`.\n'
-              '\n## Signing\n\nThe keys go into `android/key.properties`.',
+          socket.tag: '\n## Signing\n\nThe keys go into '
+              '`android/key.properties`.\n'
+              '\n## Firebase\n\nRun `flutterfire configure`.',
         },
       );
       expect(
