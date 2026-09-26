@@ -2,6 +2,7 @@ import 'package:file/memory.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 /// A question that `smf create` asked: its message and the choices it
@@ -179,6 +180,7 @@ void main() {
       'State management': ['bloc'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -189,6 +191,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
@@ -245,6 +248,7 @@ void main() {
       'State management': ['riverpod'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -255,6 +259,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -290,6 +295,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -300,6 +306,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -335,6 +342,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -346,6 +354,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
     ]);
     expect(run.asked[3].shown, [
       'go_router — Routes and navigation with go_router',
@@ -371,6 +380,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -426,6 +436,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
+      'Crash reporting': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -485,6 +496,7 @@ void main() {
         'State management': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Crash reporting': [],
       },
       options: ['--skip-external-setup'],
     );
@@ -520,6 +532,89 @@ void main() {
         'flutterfire_cli:flutterfire configure --platforms=android,ios '
         '--overwrite-firebase-options',
       ),
+    );
+  });
+
+  test(
+      'a run in a terminal asks last which modules provide the crash '
+      'reporting, and offers Firebase Crashlytics, which brings Firebase',
+      () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Dependency injection': ['get_it'],
+        'Events': ['None'],
+        'Crash reporting': ['firebase_crashlytics'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The roles come in the order of the list of modules, and
+    // firebase_crashlytics is last. An app can report to more than one
+    // service, so the question takes any number of answers, none included.
+    expect(
+      run.asked.last.message,
+      'Crash reporting: which module provides it?',
+    );
+    expect(run.asked.last.shown, [
+      'firebase_crashlytics — Firebase Crashlytics with firebase_crashlytics',
+    ]);
+    // Firebase was not chosen among the infrastructure, but Crashlytics
+    // depends on it.
+    expect(
+      run.lines,
+      contains('Adding firebase_core: a dependency of firebase_crashlytics.'),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/crash_reporting/crash_reporter.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('abstract interface class CrashReporter'),
+        contains('createCrashlyticsCrashReporter()'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/crash_reporting/crashlytics_crash_reporter.dart')
+          .readAsStringSync(),
+      contains('FirebaseCrashlytics.instance'),
+    );
+    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    // Firebase starts first, then the crash reporting, then the services
+    // of the app.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initializeApp', 'installCrashReporting', 'registerDependencies'],
+    );
+    expect(
+      app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
+      contains('.createCrashReporter()'),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(
+        contains('  firebase_crashlytics: '),
+        contains('  firebase_core: '),
+      ),
+    );
+    expect(
+      run.lines,
+      contains(startsWith('Configuring Firebase with flutterfire is not done')),
     );
   });
 }

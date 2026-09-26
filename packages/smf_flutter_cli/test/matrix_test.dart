@@ -27,12 +27,13 @@ void main() {
       'router, the app of the router with the layout, one for each state '
       'manager, the app of home, which gets the router, the app of the DI '
       'container, the app of the events with the DI container and without, '
-      'the app of Firebase, and one of every module for each state manager',
-      () async {
+      'the app of Firebase, the app of Crashlytics with the DI container and '
+      'without, which gets Firebase, and one of every module for each state '
+      'manager', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
-        'event_bus, firebase_core)';
+        'event_bus, firebase_core, firebase_crashlytics)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -46,6 +47,14 @@ void main() {
       'event_bus with di (event_bus, get_it, flutter_core)',
       'event_bus (event_bus, flutter_core)',
       'firebase_core (firebase_core, flutter_core)',
+      equals(
+        'firebase_crashlytics with di (firebase_crashlytics, get_it, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_crashlytics (firebase_crashlytics, firebase_core, '
+        'flutter_core)',
+      ),
       everyModule('bloc'),
       everyModule('riverpod'),
     ]);

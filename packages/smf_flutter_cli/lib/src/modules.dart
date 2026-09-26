@@ -3,6 +3,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -27,4 +28,5 @@ const List<SmfModule> smfModules = [
   GetItModule(),
   EventBusModule(),
   FirebaseCoreModule(),
+  FirebaseCrashlyticsModule(),
 ];
