@@ -10,7 +10,7 @@ It adds `get_it` to the dependencies of the app and generates `lib/core/di/depen
 | A module declares | `registerDependencies()` calls |
 |---|---|
 | a singleton | `registerSingleton` |
-| a singleton that waits for services created asynchronously | `registerSingletonWithDependencies` with `dependsOn` |
+| a singleton that waits for services created asynchronously, or waiting themselves | `registerSingletonWithDependencies` with `dependsOn` |
 | a singleton created asynchronously | `registerSingletonAsync`, with `dependsOn` if it waits |
 | a lazy singleton | `registerLazySingleton` |
 | a factory | `registerFactory` |
@@ -18,7 +18,7 @@ It adds `get_it` to the dependencies of the app and generates `lib/core/di/depen
 | a name for one of several services of a type | `instanceName`, and `InitDependency` to wait for it |
 | a function that disposes of a service | `dispose` |
 
-The factory function of each service gets the services it declares from get_it, then the parameters of the call. get_it creates a singleton while it registers it, so every service is registered after the services it takes or waits for, and a singleton waits for the services created asynchronously that it takes, directly or through lazy singletons and factories, without declaring it. When some services are created asynchronously, `registerDependencies()` completes once all of them are ready.
+The factory function of each service gets the services it declares from get_it, then the parameters of the call. get_it creates a singleton while it registers it, so every service is registered after the services it takes or waits for, and a singleton waits for the services it takes that are created asynchronously or wait themselves, directly or through lazy singletons and factories, without declaring it. When some services are created asynchronously, `registerDependencies()` completes once all of them are ready.
 
 `GetIt.instance.reset()`, as tests may call it, disposes of the services that were created, in the reverse order of their registration, so each goes before the services it takes.
 
