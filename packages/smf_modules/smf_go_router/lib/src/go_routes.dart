@@ -11,7 +11,8 @@ final class GoRoutes {
   });
 
   /// Renders the routes of [facade] for an app that starts on [start], or
-  /// on the fallback screen of the app entry if it is `null`.
+  /// on the fallback screen of the app entry if it is `null`, with a main
+  /// navigation if [mainNavigation] is set, as a layout provides.
   ///
   /// The path `/` redirects to the start route, or shows the fallback
   /// screen. Every route of the facade becomes a `GoRoute` named by its
@@ -21,6 +22,17 @@ final class GoRoutes {
   /// screens are imported with prefixes of their own: `screen0`, `screen1`,
   /// and so on.
   ///
+  /// With a main navigation and destinations, the destinations go into a
+  /// `StatefulShellRoute.indexedStack`, a branch for each, in their order,
+  /// with the routes below them: its builder shows the `AppShell` of the
+  /// layout with the destinations as constants, the index of the selected
+  /// branch, and `goBranch` to select another. It comes right after `/`, so
+  /// the router matches the destinations first, and the other top-level
+  /// routes follow it, outside the main navigation. Each branch starts on
+  /// its destination and creates observers of its own, and so does the
+  /// root navigator; the branches do not notify the observers of the root
+  /// navigator, which would see their pages twice otherwise.
+  ///
   /// A screen gets the values of its parameters from the location, parsed
   /// with `tryParse`: a path parameter from the path, including one of a
   /// parent, and a query parameter from the query; a `bool` is `true` or
@@ -29,7 +41,11 @@ final class GoRoutes {
   /// not of its type redirects through [valueChecks], which throws a
   /// `GoException`, so that the router shows its error screen instead. The
   /// redirect of a parent checks its path parameters for its children.
-  factory GoRoutes.of(RouterFacade facade, {FacadeRoute? start}) {
+  factory GoRoutes.of(
+    RouterFacade facade, {
+    FacadeRoute? start,
+    bool mainNavigation = false,
+  }) {
     final screens = <String, ImportRef>{};
     String prefixOf(ImportRef import) => screens
         .putIfAbsent(
@@ -89,10 +105,41 @@ final class GoRoutes {
         ? '  builder: (context, state) => const ${fallback.name}(),'
         : '  redirect: (context, state) => '
             '${SmfNames.dartString(start.fullPath)},';
+    final destinations =
+        mainNavigation ? facade.destinations : const <FacadeRoute>[];
     final routes = [
       "GoRoute(\n  path: '/',\n$root\n)",
+      if (destinations.isNotEmpty)
+        [
+          'StatefulShellRoute.indexedStack(',
+          '  // The navigator of each branch has observers of its own, so the',
+          '  // observers of the root navigator are not told about its pages.',
+          '  notifyRootObserver: false,',
+          '  builder: (context, state, shell) => AppShell(',
+          '    destinations: const [',
+          for (final route in destinations)
+            '      ${_destinationOf(route.route.destination!)},',
+          '    ],',
+          '    currentIndex: shell.currentIndex,',
+          '    onSelect: shell.goBranch,',
+          '    body: shell,',
+          '  ),',
+          '  branches: [',
+          for (final route in destinations) ...[
+            '    StatefulShellBranch(',
+            '      initialLocation: ${SmfNames.dartString(route.fullPath)},',
+            '      observers: _observers(),',
+            '      routes: [',
+            '${_indented(code(route), '        ')},',
+            '      ],',
+            '    ),',
+          ],
+          '  ],',
+          ')',
+        ].join('\n'),
       for (final feature in facade.features)
-        for (final route in feature.routes) code(route),
+        for (final route in feature.routes)
+          if (!destinations.contains(route)) code(route),
     ];
     return GoRoutes._(
       routes: Fragment(
@@ -101,6 +148,18 @@ final class GoRoutes {
         imports: [
           if (start == null) fallback.importRef,
           ...screens.values,
+          if (destinations.isNotEmpty) ...[
+            ImportRef.app(
+              _appPathOf(LayoutRole.appShellFile),
+              show: [LayoutRole.appShell.name],
+            ),
+            ImportRef.app(
+              _appPathOf(LayoutRole.destinationFile),
+              show: const ['Destination'],
+            ),
+            for (final route in destinations)
+              ...route.route.destination!.icon.imports,
+          ],
         ],
       ),
       valueChecks: Fragment(checksValues ? _checkValues : ''),
@@ -144,6 +203,15 @@ final class GoRoutes {
   /// has it or the redirect of the route has checked it.
   static String _argumentOf(RouteParam param) =>
       param.isRequired ? '${_valueOf(param)}!' : _valueOf(param);
+
+  /// The constant `Destination` of the layout for [destination].
+  static String _destinationOf(Destination destination) =>
+      'Destination(label: ${SmfNames.dartString(destination.label)}, '
+      'icon: ${destination.icon.code})';
+
+  /// The path below `lib/` of [path], a path from the root of the app such
+  /// as `lib/core/layout/app_shell.dart`.
+  static String _appPathOf(String path) => path.substring('lib/'.length);
 
   static String _indented(String code, String indent) =>
       code.split('\n').map((line) => '$indent$line').join('\n');

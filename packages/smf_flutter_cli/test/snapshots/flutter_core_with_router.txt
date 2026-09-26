@@ -290,11 +290,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   @override
   late final GoRouter config = GoRouter(
     initialLocation: '/',
-    // An observer can watch only one navigator, so the navigator gets
-    // instances of its own.
-    observers: [
-      for (final create in <NavigatorObserver Function()>[]) create(),
-    ],
+    observers: _observers(),
     routes: [
       GoRoute(
         path: '/',
@@ -317,6 +313,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   void replace(AppLocation location) =>
       config.pushReplacement<Object?>(location.path);
 }
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[]) create(),
+];
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 

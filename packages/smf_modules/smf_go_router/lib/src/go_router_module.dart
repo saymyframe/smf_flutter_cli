@@ -15,6 +15,14 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// when no route can start the app, so an app without features shows that
 /// screen through the router. The app opens on the start route.
 ///
+/// When a module provides the layout role and the app has destinations,
+/// they form the main navigation: a `StatefulShellRoute.indexedStack` with
+/// a branch for each destination, in the order of the features, which
+/// shows the `AppShell` of the layout. Each branch keeps its stack, with the
+/// routes below its destination, while another is selected, and the app
+/// opens on the branch of its start route. The other top-level routes stay
+/// outside the main navigation, which the router matches first.
+///
 /// Screens get the values of their parameters from the location, parsed
 /// with `tryParse`, a `bool` being `true` or `false` exactly: an optional
 /// value that the location does not have, or not of its type, is `null`,
@@ -23,10 +31,14 @@ import 'package:smf_go_router/src/go_routes.dart';
 ///
 /// The navigation facade goes through the same router whatever the context
 /// it navigates from: `go()` goes to the path of a location, which makes
-/// the chain of its parents the stack, `push()` pushes it, and `replace()`
-/// replaces the top of the stack with it, as `pushReplacement` of go_router
-/// does. The root navigator creates its navigator observers from the
-/// factories of the router role once.
+/// the chain of its parents the stack, in the branch of the location in the
+/// main navigation, `push()` pushes it, and `replace()` replaces the top of
+/// the stack with it, as `pushReplacement` of go_router does. In the main
+/// navigation, `push()` shows a location on top of the stack of the
+/// selected branch, as go_router does, whichever branch it belongs to.
+/// Every navigator, the root one and that of each branch, creates
+/// navigator observers of its own from the factories of the router role
+/// once.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();
@@ -61,6 +73,7 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
     final routes = GoRoutes.of(
       routerRole.facadeOf(input),
       start: routerRole.startIn(input),
+      mainNavigation: input.has(layoutRole),
     );
     return RoleOutput(
       vars: {

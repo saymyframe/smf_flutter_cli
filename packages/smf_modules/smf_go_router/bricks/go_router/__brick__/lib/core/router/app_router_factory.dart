@@ -17,14 +17,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   @override
   late final GoRouter config = GoRouter(
     initialLocation: {{{initial_location}}},
-    // An observer can watch only one navigator, so the navigator gets
-    // instances of its own.
-    observers: [
-      for (final create in <NavigatorObserver Function()>[
-{{{smf_router__observers}}}
-      ])
-        create(),
-    ],
+    observers: _observers(),
     routes: [
 {{{routes}}}
     ],
@@ -44,4 +37,13 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   void replace(AppLocation location) =>
       config.pushReplacement<Object?>(location.path);
 }
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[
+{{{smf_router__observers}}}
+  ])
+    create(),
+];
 {{{value_checks}}}

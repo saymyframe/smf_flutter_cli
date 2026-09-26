@@ -8,14 +8,20 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
 /// The modules of the tests: flutter_core, which creates the app, this
-/// module, two features and a module with a navigator observer.
+/// module, three features, a module with a navigator observer, and a
+/// layout.
 const List<SmfModule> testModules = [
   FlutterCoreModule(),
   GoRouterModule(),
   CatalogFeature(),
   SettingsFeature(),
+  ProfileFeature(),
   ObservingModule(),
+  TabsLayout(),
 ];
+
+/// The import of the icons of the destinations of the features.
+const _icons = ImportRef('package:flutter/material.dart', show: ['Icons']);
 
 /// What the contract harness finds for the app of [modules] among
 /// [testModules], which has no errors and is rendered.
@@ -41,8 +47,8 @@ Future<ContractResult> renderedApp(
 /// A feature for the tests: a catalog that the app can start on, with
 /// routes whose parameters have every type and source a route can have.
 ///
-/// - `/catalog`: the start candidate, with optional query parameters of
-///   every type;
+/// - `/catalog`: the start candidate and the destination Catalog, with
+///   optional query parameters of every type;
 /// - `/catalog/items/:id` below it, with an `int` path parameter and an
 ///   optional query parameter, and `/catalog/items/:id/reviews/:reviewId`
 ///   below that, which passes the `id` of its parent to its screen;
@@ -61,6 +67,11 @@ final class CatalogFeature extends SmfModule {
   static const _folder = 'features/catalog';
 
   static const _more = ImportRef.app('$_folder/more_screens.dart');
+
+  static const _catalog = Destination(
+    label: 'Catalog',
+    icon: Fragment('Icons.list', imports: [_icons]),
+  );
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -111,6 +122,7 @@ final class CatalogFeature extends SmfModule {
                 'CatalogScreen',
                 import: ImportRef.app('$_folder/catalog_screen.dart'),
               ),
+              destination: _catalog,
               startCandidate: true,
               params: [
                 RouteParam.query('page', type: int, optional: true),
@@ -182,8 +194,9 @@ final class CatalogFeature extends SmfModule {
       ];
 }
 
-/// A feature for the tests with a route, `/settings`, and a child of it,
-/// `/settings/about`, neither of which is a start candidate.
+/// A feature for the tests with a route, `/settings`, the destination
+/// Settings, and a child of it, `/settings/about`, neither of which is a
+/// start candidate.
 final class SettingsFeature extends SmfModule {
   /// Creates the module.
   const SettingsFeature();
@@ -216,6 +229,10 @@ final class SettingsFeature extends SmfModule {
               '/',
               name: 'settings',
               screen: ScreenRef('SettingsScreen', import: ImportRef.app(_file)),
+              destination: Destination(
+                label: 'Settings',
+                icon: Fragment('Icons.settings', imports: [_icons]),
+              ),
               children: [
                 Route(
                   'about',
@@ -230,6 +247,112 @@ final class SettingsFeature extends SmfModule {
           ]),
         ),
       ];
+}
+
+/// A feature for the tests with one route, `/profile`, the destination
+/// Profile, which the app can start on too.
+final class ProfileFeature extends SmfModule {
+  /// Creates the module.
+  const ProfileFeature();
+
+  /// The id of the module.
+  static const id = ModuleId('profile');
+
+  static const _file = 'features/profile/profile_screen.dart';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A profile (test)',
+        kind: ModuleKinds.feature,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('profile', {
+            'lib/$_file': screen(id, 'ProfileScreen', const {}),
+          }),
+        ),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: 'profile',
+              screen: ScreenRef('ProfileScreen', import: ImportRef.app(_file)),
+              destination: Destination(
+                label: 'Profile',
+                icon: Fragment('Icons.person', imports: [_icons]),
+              ),
+              startCandidate: true,
+            ),
+          ]),
+        ),
+      ];
+}
+
+/// A layout for the tests, whose `AppShell` shows the screen of the selected
+/// destination and nothing else.
+final class TabsLayout extends SmfModule {
+  /// Creates the module.
+  const TabsLayout();
+
+  /// The id of the module.
+  static const id = ModuleId('tabs');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A main navigation (test)',
+        kind: ModuleKinds.layout,
+        providers: [_TabsProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('tabs', {
+            LayoutRole.appShellFile: [
+              "import 'package:flutter/widgets.dart';",
+              '',
+              "import 'destination.dart';",
+              '',
+              '/// The main navigation of the tests.',
+              'class AppShell extends StatelessWidget {',
+              '  /// Creates the main navigation.',
+              '  const AppShell({',
+              '    required this.destinations,',
+              '    required this.currentIndex,',
+              '    required this.onSelect,',
+              '    required this.body,',
+              '    super.key,',
+              '  });',
+              '',
+              '  /// The destinations.',
+              '  final List<Destination> destinations;',
+              '',
+              '  /// The index of the selected destination.',
+              '  final int currentIndex;',
+              '',
+              '  /// Selects the destination at an index.',
+              '  final ValueChanged<int> onSelect;',
+              '',
+              '  /// The screen of the selected destination.',
+              '  final Widget body;',
+              '',
+              '  @override',
+              '  Widget build(BuildContext context) => body;',
+              '}',
+              '',
+            ].join('\n'),
+          }),
+        ),
+      ];
+}
+
+/// The layout role, with any number of destinations.
+final class _TabsProvider extends LayoutProvider {
+  const _TabsProvider();
 }
 
 /// A module that watches the navigation of the app when it has a router,

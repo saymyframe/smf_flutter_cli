@@ -9,15 +9,22 @@ The modules of the app declare their routes, and the router role gives the app t
 - screens are imported with prefixes of their own, so their names never clash;
 - the app opens on its start route, and `/` redirects to it. When no route can start the app, as in an app without features, `/` shows the fallback screen of the app.
 
+When a module provides the layout role, such as bottom tabs, and the app has destinations, they form the main navigation of the app: a `StatefulShellRoute.indexedStack` with a branch for each destination, in the order of the features, which shows the `AppShell` of the layout:
+
+- the routes below a destination stay in its branch, which keeps its stack while another branch is selected;
+- the app opens on the branch of its start route;
+- the other top-level routes are outside the main navigation, and the router matches the destinations first;
+- without destinations, or without a layout, there is no main navigation.
+
 Screens get the values of their parameters from the location, parsed with `tryParse`, and a `bool` is `true` or `false` exactly. An optional value that the location does not have, or that is not of its type, is `null`. A location without a valid required value, such as `/home/details/abc` for an `int`, shows the error screen of go_router.
 
 `context.nav` navigates through this router whatever the context, even one above the router:
 
-- `go()` shows the location with the chain of its parents below it;
-- `push()` shows the location on top and completes with the value its page returns;
+- `go()` shows the location with the chain of its parents below it, in the branch of the location when it is in the main navigation;
+- `push()` shows the location on top and completes with the value its page returns; in the main navigation, it goes on top of the stack of the selected branch, whichever branch the location belongs to, as go_router does;
 - `replace()` replaces the top of the stack with the location, as go_router's `pushReplacement` does.
 
-The navigator of the router creates its observers from the factories that modules give the router role, such as `() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)`.
+Every navigator, the root one and that of each branch of the main navigation, creates observers of its own from the factories that modules give the router role, such as `() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)`. The branches do not notify the observers of the root navigator, so each page is reported once. Switching branches is no navigation event, though a branch shows its first page when it is first selected.
 
 go_router 17 works with the Material library of Flutter 3.44, which the apps of SMF use. go_router 18 has moved to the separate `material_ui` package, whose `MaterialApp` it looks for to choose Material pages.
 

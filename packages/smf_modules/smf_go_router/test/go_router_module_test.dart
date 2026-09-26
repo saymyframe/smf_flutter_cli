@@ -104,12 +104,65 @@ final class _GoRoute {
       };
 }
 
-/// The routes in the list of routes of `GoRouter` in [unit].
-List<_GoRoute> _routesOf(CompilationUnit unit) => [
+/// The items of the list of routes of `GoRouter` in [unit].
+List<MethodInvocation> _topLevelOf(CompilationUnit unit) => [
       for (final element
           in (_argument(_goRouterOf(unit), 'routes')! as ListLiteral).elements)
-        _GoRoute(element as MethodInvocation),
+        element as MethodInvocation,
     ];
+
+/// The `GoRoute`s in the list of routes of `GoRouter` in [unit].
+List<_GoRoute> _routesOf(CompilationUnit unit) => [
+      for (final route in _topLevelOf(unit))
+        if (route.target == null && route.methodName.name == 'GoRoute')
+          _GoRoute(route),
+    ];
+
+/// The `StatefulShellRoute.indexedStack` in the list of routes of
+/// `GoRouter` in [unit], or `null`.
+MethodInvocation? _shellOf(CompilationUnit unit) => [
+      for (final route in _topLevelOf(unit))
+        if (route.target?.toSource() == 'StatefulShellRoute' &&
+            route.methodName.name == 'indexedStack')
+          route,
+    ].singleOrNull;
+
+/// A `StatefulShellBranch(...)` of the generated code.
+final class _Branch {
+  _Branch(this.call);
+
+  final MethodInvocation call;
+
+  String get initialLocation =>
+      (_argument(call, 'initialLocation')! as StringLiteral).stringValue!;
+
+  /// The source of the observers.
+  String get observers => _argument(call, 'observers')!.toSource();
+
+  List<_GoRoute> get routes => [
+        for (final element
+            in (_argument(call, 'routes')! as ListLiteral).elements)
+          _GoRoute(element as MethodInvocation),
+      ];
+}
+
+/// The branches of [shell], a `StatefulShellRoute.indexedStack(...)`.
+List<_Branch> _branchesOf(MethodInvocation shell) => [
+      for (final element
+          in (_argument(shell, 'branches')! as ListLiteral).elements)
+        _Branch(element as MethodInvocation),
+    ];
+
+/// The source of the list that the function `_observers()` of [unit]
+/// returns.
+String _observersOf(CompilationUnit unit) {
+  final function = unit.declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((function) => function.name.lexeme == '_observers');
+  return (function.functionExpression.body as ExpressionFunctionBody)
+      .expression
+      .toSource();
+}
 
 /// Every route of [routes] and below them, parents first, each with the
 /// path of its parent.
@@ -184,12 +237,15 @@ void main() {
         'builds the apps with the router, its features and observers, and '
         'without them', () {
       // The app of go_router and of the router role by go_router is the app
-      // of flutter_core with the router.
+      // of flutter_core with the router, or with the layout too, which
+      // requires the router.
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router',
         'flutter_core',
+        'go_router with layout',
         'catalog',
         'settings',
+        'profile',
         'observing with router',
         'observing',
       ]);
@@ -276,8 +332,9 @@ void main() {
       );
       // No route has values to check, and no module gives an observer.
       expect(withRouter.files[_factory]!.text, isNot(contains('_checkValues')));
+      expect(_argument(router, 'observers')!.toSource(), '_observers()');
       expect(
-        _argument(router, 'observers')!.toSource(),
+        _observersOf(unit),
         '[for (final create in <NavigatorObserver Function()>[]) create()]',
       );
     });
@@ -493,10 +550,20 @@ void main() {
     test('creates the observers of the router role for its navigator', () {
       final observers = _argument(_goRouterOf(unit), 'observers')!;
 
+      // Every call creates instances of its own.
+      expect(observers.toSource(), '_observers()');
       expect(
-        observers.toSource(),
+        _observersOf(unit),
         '[for (final create in <NavigatorObserver Function()>[() => '
         'TestObserver()]) create()]',
+      );
+    });
+
+    test('has no main navigation without a layout', () {
+      expect(_shellOf(unit), isNull);
+      expect(
+        app.files[_factory]!.addedImports.map((added) => added.import.uri),
+        isNot(contains(contains('/core/layout/'))),
       );
     });
 
@@ -518,6 +585,210 @@ void main() {
         '=> config.pushReplacement<Object?>(location.path);',
       );
       expect(app.files[_factory]!.text, isNot(contains('GoRouter.of(')));
+    });
+  });
+
+  group('an app with a layout', () {
+    late ContractResult result;
+    late RenderedApp app;
+    late CompilationUnit unit;
+    late MethodInvocation shell;
+
+    setUpAll(() async {
+      result = await renderedApp(const [
+        CatalogFeature.id,
+        SettingsFeature.id,
+        ObservingModule.id,
+        TabsLayout.id,
+      ]);
+      app = result.app!;
+      unit = _factoryOf(app);
+      shell = _shellOf(unit)!;
+    });
+
+    test(
+        'puts the destinations into a shell of branches right after /, and '
+        'the other routes after it', () {
+      final topLevel = _topLevelOf(unit);
+
+      expect(topLevel.first.methodName.name, 'GoRoute');
+      expect(topLevel[1], shell);
+      expect(
+        [for (final route in _routesOf(unit)) route.path],
+        [
+          '/',
+          '/catalog/compare',
+          '/catalog/prices/:amount/:exact',
+          '/catalog/tags/:tag',
+          '/catalog/search',
+        ],
+      );
+      // The route that the router matches first is in the shell.
+      expect(
+        _routesOf(unit).first.redirect,
+        "(context, state) => '/catalog'",
+      );
+    });
+
+    test('has a branch for each destination, with the routes below it', () {
+      final branches = _branchesOf(shell);
+
+      expect(
+        [for (final branch in branches) branch.initialLocation],
+        ['/catalog', '/settings'],
+      );
+      final catalog = branches[0].routes.single;
+      expect(catalog.path, '/catalog');
+      expect(catalog.name, 'catalog.catalog');
+      expect(
+        [
+          for (final (route, parent) in _allOf([catalog]))
+            '$parent > ${route.name} (${route.path})',
+        ],
+        [
+          'null > catalog.catalog (/catalog)',
+          'catalog.catalog > catalog.item (items/:id)',
+          'catalog.item > catalog.review (reviews/:reviewId)',
+        ],
+      );
+      final settings = branches[1].routes.single;
+      expect(settings.path, '/settings');
+      expect(
+        [for (final child in settings.children) child.name],
+        ['settings.about'],
+      );
+    });
+
+    test('shows the shell of the layout with the destinations as constants',
+        () {
+      expect(
+        _argument(shell, 'builder')!.toSource(),
+        '(context, state, shell) => AppShell(destinations: const '
+        "[Destination(label: 'Catalog', icon: Icons.list), "
+        "Destination(label: 'Settings', icon: Icons.settings)], "
+        'currentIndex: shell.currentIndex, onSelect: shell.goBranch, body: '
+        'shell)',
+      );
+      expect(
+        {
+          for (final added in app.files[_factory]!.addedImports)
+            if (!added.import.uri.contains('/features/'))
+              added.import.uri: 'show ${added.import.show.join(', ')} for '
+                  '${added.contributor}',
+        },
+        {
+          'package:contract_app/core/layout/app_shell.dart':
+              'show AppShell for go_router',
+          'package:contract_app/core/layout/destination.dart':
+              'show Destination for go_router',
+          'package:flutter/material.dart': 'show Icons for go_router',
+          'package:contract_app/core/observing/test_observer.dart':
+              'show  for observing',
+        },
+      );
+    });
+
+    test(
+        'gives each navigator observers of its own, and the root navigator '
+        'none of the branches', () {
+      expect(_argument(shell, 'notifyRootObserver')!.toSource(), 'false');
+      expect(
+        [for (final branch in _branchesOf(shell)) branch.observers],
+        ['_observers()', '_observers()'],
+      );
+      expect(
+        _argument(_goRouterOf(unit), 'observers')!.toSource(),
+        '_observers()',
+      );
+      expect(
+        _observersOf(unit),
+        '[for (final create in <NavigatorObserver Function()>[() => '
+        'TestObserver()]) create()]',
+      );
+    });
+
+    test('renders code that type-checks', () async {
+      expect(await analysisProblems(app), isEmpty);
+    });
+
+    test('orders the branches as the features were asked for', () async {
+      final result = await renderedApp(
+        const [
+          SettingsFeature.id,
+          ProfileFeature.id,
+          CatalogFeature.id,
+          TabsLayout.id,
+        ],
+        roleOptions: {RouterRole.startOption.name: '/catalog'},
+      );
+      final shell = _shellOf(_factoryOf(result.app!))!;
+
+      expect(
+        [for (final branch in _branchesOf(shell)) branch.initialLocation],
+        ['/settings', '/profile', '/catalog'],
+      );
+      expect(
+        _argument(shell, 'builder')!.toSource(),
+        contains(
+          "[Destination(label: 'Settings', icon: Icons.settings), "
+          "Destination(label: 'Profile', icon: Icons.person), "
+          "Destination(label: 'Catalog', icon: Icons.list)]",
+        ),
+      );
+    });
+
+    test('starts on the branch of the start route, which --start chooses',
+        () async {
+      // Two routes can start the app, so the choice needs --start.
+      const modules = [
+        CatalogFeature.id,
+        SettingsFeature.id,
+        ProfileFeature.id,
+        TabsLayout.id,
+      ];
+      final unchosen = await ContractHarness(ModuleRegistry(testModules))
+          .check(const ContractCase('no start', requested: modules));
+      expect(
+        unchosen.errors.single.message,
+        'Several screens can start the app: /catalog, /profile. Choose one '
+        'with --start.',
+      );
+
+      final result = await renderedApp(
+        modules,
+        roleOptions: {RouterRole.startOption.name: '/profile'},
+      );
+      final unit = _factoryOf(result.app!);
+      final shell = _shellOf(unit)!;
+
+      expect(
+        (_argument(_goRouterOf(unit), 'initialLocation')! as StringLiteral)
+            .stringValue,
+        '/profile',
+      );
+      expect(
+        _routesOf(unit).first.redirect,
+        "(context, state) => '/profile'",
+      );
+      // The third branch, whose destination is the start route.
+      final branches = _branchesOf(shell);
+      expect(branches[2].initialLocation, '/profile');
+      expect(branches[2].routes.single.name, 'profile.profile');
+      expect(await analysisProblems(result.app!), isEmpty);
+    });
+
+    test('has no shell without destinations', () async {
+      final result = await renderedApp(const [TabsLayout.id]);
+      final unit = _factoryOf(result.app!);
+
+      expect(_shellOf(unit), isNull);
+      expect(_routesOf(unit).map((route) => route.path), ['/']);
+      expect(
+        result.app!.files[_factory]!.addedImports.map(
+          (added) => added.import.uri,
+        ),
+        isNot(contains(contains('/core/layout/'))),
+      );
     });
   });
 
