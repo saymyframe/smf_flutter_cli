@@ -5,7 +5,12 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 
-/// The modules that `smf create` offers, in the order it offers them.
+/// The modules that `smf create` offers.
+///
+/// A run in a terminal asks first which of the modules without a role the
+/// app has, one question for each kind, such as its features, and then which
+/// module provides each role. Each question lists its modules in the order
+/// of this list, and an answer keeps that order.
 const List<SmfModule> smfModules = [
   FlutterCoreModule(),
   GoRouterModule(),
