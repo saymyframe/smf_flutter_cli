@@ -293,7 +293,9 @@ final class _Commands {
       } on Object catch (error) {
         return _Failure('it could not start', 'it could not start: $error');
       }
-      return code == 0 ? null : _Failure(_exitReason(code));
+      return code == 0
+          ? null
+          : _Failure(_exitReason(code, _environment.operatingSystem));
     }
     final progress = logger.progress(description);
     var waiting = false;
@@ -333,7 +335,10 @@ final class _Commands {
     }
     if (streams.isNotEmpty) logger.detail(streams.join('\n'));
     if (result.succeeded) return null;
-    final reason = _exitReason(result.exitCode);
+    final reason = _exitReason(
+      result.exitCode,
+      _environment.operatingSystem,
+    );
     return streams.isEmpty
         ? _Failure(reason)
         : _Failure(reason, '$reason:\n${streams.map(_tail).join('\n')}');
@@ -379,11 +384,14 @@ final class _Commands {
   }
 }
 
-/// Why a command that ended with [code] failed. A negative code is the
-/// signal that stopped the command, as `dart:io` reports it.
-String _exitReason(int code) => code < 0
-    ? 'it was stopped by signal ${-code}'
-    : 'it exited with code $code';
+/// Why a command that ended with [code] on [system] failed. Outside
+/// Windows, a negative code is the signal that stopped the command, as
+/// `dart:io` reports it; on Windows, it is an exit code with the highest bit
+/// set, such as that of a status code.
+String _exitReason(int code, HostOperatingSystem system) =>
+    code < 0 && system != HostOperatingSystem.windows
+        ? 'it was stopped by signal ${-code}'
+        : 'it exited with code $code';
 
 /// The last lines of [output], which say what went wrong. Both streams of a
 /// command count: tools such as `build_runner` report their errors on the

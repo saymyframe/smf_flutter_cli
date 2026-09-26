@@ -584,6 +584,36 @@ void main() {
       expect(skipped.single.reason, 'it was stopped by signal 2');
     });
 
+    test('a negative exit code on Windows is no signal', () async {
+      environment = environmentOf(
+        interactive: true,
+        operatingSystem: HostOperatingSystem.windows,
+        answers: [true],
+      );
+      // STATUS_CONTROL_C_EXIT, 0xC000013A, as a signed 32-bit exit code.
+      runner.onInteractive = (call) => -1073741510;
+
+      final skipped = await runPostGen(
+        directory: r'C:\tmp\app',
+        environment: environment,
+        steps: [
+          _step(
+            'firebase',
+            const PostGenStep(
+              ToolRef('dart', prefixArgs: ['pub', 'global', 'run', 'x:x']),
+              ['login'],
+              description: 'Log in',
+              interactive: true,
+              skippable: true,
+              external: true,
+            ),
+          ),
+        ],
+      );
+
+      expect(skipped.single.reason, 'it exited with code -1073741510');
+    });
+
     test('a step that is not skippable stops generation when it fails',
         () async {
       environment = environmentOf(interactive: true);
