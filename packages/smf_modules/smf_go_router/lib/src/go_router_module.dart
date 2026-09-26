@@ -36,6 +36,9 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the stack with it, as `pushReplacement` of go_router does. In the main
 /// navigation, `push()` shows a location on top of the stack of the
 /// selected branch, as go_router does, whichever branch it belongs to.
+/// go_router shows the main navigation once, so `push()` and `replace()`
+/// of a location in it from a page shown over the main navigation throw a
+/// `StateError` that says to use `go()`, and leave the stack as it is.
 /// Every navigator, the root one and that of each branch, creates
 /// navigator observers of its own from the factories of the router role
 /// once.
@@ -78,6 +81,7 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
     return RoleOutput(
       vars: {
         'initial_location': routes.initialLocation,
+        'main_navigation': routes.hasMainNavigation,
         'routes': routes.routes,
         'value_checks': routes.valueChecks,
       },

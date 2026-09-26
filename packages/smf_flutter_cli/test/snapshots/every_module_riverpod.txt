@@ -403,12 +403,35 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   void go(AppLocation location) => config.go(location.path);
 
   @override
-  Future<T?> push<T extends Object?>(AppLocation location) =>
-      config.push<T>(location.path);
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    _checkMainNavigation(location, 'push');
+    return config.push<T>(location.path);
+  }
 
   @override
-  void replace(AppLocation location) =>
-      config.pushReplacement<Object?>(location.path);
+  void replace(AppLocation location) {
+    _checkMainNavigation(location, 'replace');
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Throws a [StateError] instead of showing [location] of the main
+  /// navigation on top of a page that is shown over the main navigation:
+  /// go_router shows the main navigation once, so a location in it goes
+  /// only on top of the main navigation itself.
+  void _checkMainNavigation(AppLocation location, String method) {
+    final matches = config.routerDelegate.currentConfiguration.matches;
+    if (matches.isEmpty ||
+        matches.last is ShellRouteMatch ||
+        !matches.any((match) => match is ShellRouteMatch)) {
+      return;
+    }
+    final target = config.configuration.findMatch(Uri.parse(location.path));
+    if (target.matches.firstOrNull is! ShellRouteMatch) return;
+    throw StateError(
+      'Cannot $method ${location.path}: it is in the main navigation, and a '
+      'page is shown over the main navigation. Use go() to show it there.',
+    );
+  }
 }
 
 /// Creates the observers of a navigator. An observer can watch only one

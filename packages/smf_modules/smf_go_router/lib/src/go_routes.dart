@@ -8,6 +8,7 @@ final class GoRoutes {
     required this.routes,
     required this.valueChecks,
     required this.initialLocation,
+    required this.hasMainNavigation,
   });
 
   /// Renders the routes of [facade] for an app that starts on [start], or
@@ -164,6 +165,7 @@ final class GoRoutes {
       ),
       valueChecks: Fragment(checksValues ? _checkValues : ''),
       initialLocation: SmfNames.dartString(start?.fullPath ?? '/'),
+      hasMainNavigation: destinations.isNotEmpty,
     );
   }
 
@@ -178,6 +180,10 @@ final class GoRoutes {
   /// The location the app opens with, as a Dart string: the full path of
   /// the start route, or `/`.
   final String initialLocation;
+
+  /// Whether the routes have a main navigation, which a location in it can
+  /// go on top of only while no page is shown over it.
+  final bool hasMainNavigation;
 
   /// Whether the value of [param] may be missing from a location that
   /// matches the route: every value but that of a path parameter of type

@@ -148,7 +148,21 @@ class StatefulShellRoute extends RouteBase {
   });
 }
 
-class RouteMatchList {}
+abstract class RouteMatchBase {}
+
+class ShellRouteMatch extends RouteMatchBase {}
+
+class RouteMatchList {
+  final List<RouteMatchBase> matches = const [];
+}
+
+class GoRouterDelegate {
+  RouteMatchList currentConfiguration = RouteMatchList();
+}
+
+class RouteConfiguration {
+  RouteMatchList findMatch(Uri uri, {Object? extra}) => RouteMatchList();
+}
 
 class GoRouter implements RouterConfig<RouteMatchList> {
   factory GoRouter({
@@ -157,6 +171,10 @@ class GoRouter implements RouterConfig<RouteMatchList> {
     List<NavigatorObserver>? observers,
   }) =>
       throw UnimplementedError();
+
+  late final RouteConfiguration configuration;
+
+  late final GoRouterDelegate routerDelegate;
 
   void go(String location, {Object? extra}) {}
 

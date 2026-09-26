@@ -24,6 +24,8 @@ Screens get the values of their parameters from the location, parsed with `tryPa
 - `push()` shows the location on top and completes with the value its page returns; in the main navigation, it goes on top of the stack of the selected branch, whichever branch the location belongs to, as go_router does;
 - `replace()` replaces the top of the stack with the location, as go_router's `pushReplacement` does.
 
+go_router shows the main navigation once, so a location in it goes only on top of the main navigation itself: from a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError` that says to use `go()`, and leave the stack as it is.
+
 Every navigator, the root one and that of each branch of the main navigation, creates observers of its own from the factories that modules give the router role, such as `() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)`. The branches do not notify the observers of the root navigator, so each page is reported once. Switching branches is no navigation event, though a branch shows its first page when it is first selected.
 
 go_router 17 works with the Material library of Flutter 3.44, which the apps of SMF use. go_router 18 has moved to the separate `material_ui` package, whose `MaterialApp` it looks for to choose Material pages.

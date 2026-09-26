@@ -313,12 +313,14 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   void go(AppLocation location) => config.go(location.path);
 
   @override
-  Future<T?> push<T extends Object?>(AppLocation location) =>
-      config.push<T>(location.path);
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    return config.push<T>(location.path);
+  }
 
   @override
-  void replace(AppLocation location) =>
-      config.pushReplacement<Object?>(location.path);
+  void replace(AppLocation location) {
+    config.pushReplacement<Object?>(location.path);
+  }
 }
 
 /// Creates the observers of a navigator. An observer can watch only one

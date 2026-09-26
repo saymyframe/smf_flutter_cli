@@ -26,6 +26,35 @@ String? _checkValues(Map<String, Object?> values) {
 ''',
 ).unit.declarations.single.toSource();
 
+/// `_checkMainNavigation` as the analyzer prints its declaration.
+final String _expectedCheckMainNavigation = parseString(
+  content: r'''
+class _GoAppRouter {
+  void _checkMainNavigation(AppLocation location, String method) {
+    final matches = config.routerDelegate.currentConfiguration.matches;
+    if (matches.isEmpty ||
+        matches.last is ShellRouteMatch ||
+        !matches.any((match) => match is ShellRouteMatch)) {
+      return;
+    }
+    final target = config.configuration.findMatch(Uri.parse(location.path));
+    if (target.matches.firstOrNull is! ShellRouteMatch) return;
+    throw StateError(
+      'Cannot $method ${location.path}: it is in the main navigation, and a '
+      'page is shown over the main navigation. Use go() to show it there.',
+    );
+  }
+}
+''',
+)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .single
+    .members
+    .single
+    .toSource();
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -579,12 +608,20 @@ void main() {
       expect(config.fields.isFinal, isTrue);
       expect(_bodyOf(router, 'navigatorOf'), '=> this;');
       expect(_bodyOf(router, 'go'), '=> config.go(location.path);');
-      expect(_bodyOf(router, 'push'), '=> config.push<T>(location.path);');
+      // Without a main navigation, nothing to check first.
+      expect(
+        _bodyOf(router, 'push'),
+        '{return config.push<T>(location.path);}',
+      );
       expect(
         _bodyOf(router, 'replace'),
-        '=> config.pushReplacement<Object?>(location.path);',
+        '{config.pushReplacement<Object?>(location.path);}',
       );
       expect(app.files[_factory]!.text, isNot(contains('GoRouter.of(')));
+      expect(
+        app.files[_factory]!.text,
+        isNot(contains('_checkMainNavigation')),
+      );
     });
   });
 
@@ -704,6 +741,32 @@ void main() {
         _observersOf(unit),
         '[for (final create in <NavigatorObserver Function()>[() => '
         'TestObserver()]) create()]',
+      );
+    });
+
+    test(
+        'lets push() and replace() show a location of the main navigation '
+        'only on top of it', () {
+      final router = _routerClassOf(unit);
+
+      expect(
+        _bodyOf(router, 'push'),
+        "{_checkMainNavigation(location, 'push'); return "
+        'config.push<T>(location.path);}',
+      );
+      expect(
+        _bodyOf(router, 'replace'),
+        "{_checkMainNavigation(location, 'replace'); "
+        'config.pushReplacement<Object?>(location.path);}',
+      );
+      expect(
+        router.members
+            .whereType<MethodDeclaration>()
+            .singleWhere(
+              (method) => method.name.lexeme == '_checkMainNavigation',
+            )
+            .toSource(),
+        _expectedCheckMainNavigation,
       );
     });
 
