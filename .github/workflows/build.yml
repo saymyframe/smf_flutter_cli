@@ -64,9 +64,6 @@ jobs:
       - name: Analyze
         run: melos run analyze
 
-      - name: Analyze brick hooks
-        run: melos run analyze:hooks
-
       - name: Banned names
         run: melos run banlist
 

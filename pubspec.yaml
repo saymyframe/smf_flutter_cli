@@ -64,13 +64,6 @@ melos:
       run: |
         melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings && \
         dart analyze --fatal-infos --fatal-warnings tools
-    analyze:hooks:
-      description: Analyze brick hooks, which are packages with their own pubspec.
-      run: |
-        for hooks in $(find packages -path '*/bricks/*/hooks/pubspec.yaml' -exec dirname {} \;); do
-          echo "Analyzing $hooks"
-          (cd "$hooks" && dart pub get > /dev/null && dart analyze --fatal-infos --fatal-warnings) || exit 1
-        done
     format:
       run: |
         melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
@@ -95,7 +88,6 @@ melos:
       run: |
         melos run format:check && \
         melos run analyze && \
-        melos run analyze:hooks && \
         melos run banlist && \
         melos run test
 

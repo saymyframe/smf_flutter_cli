@@ -199,11 +199,6 @@ const _migrating = [
     null,
     'The module has not moved to the new model yet.',
   ),
-  _Exception(
-    ['.github/workflows/build.yml', 'pubspec.yaml', 'tools/bundle_bricks.dart'],
-    {'analyze:hooks', 'hookAssetsB64'},
-    'The Firebase Core module still has brick hooks.',
-  ),
 ];
 
 /// Whether the check reads the tracked file [path]: Dart code but the
