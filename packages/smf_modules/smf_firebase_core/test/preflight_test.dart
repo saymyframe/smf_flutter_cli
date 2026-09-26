@@ -663,8 +663,9 @@ void main() {
   group('XcodeProjectOnMacCheck', () {
     const check = XcodeProjectOnMacCheck();
 
-    test('warns elsewhere than on macOS that the Xcode project stays as it is',
-        () async {
+    test(
+        'warns elsewhere than on macOS that the Xcode project stays as it is, '
+        'without the build phases of some Firebase packages', () async {
       for (final system in [
         HostOperatingSystem.linux,
         HostOperatingSystem.windows,
@@ -679,7 +680,9 @@ void main() {
                 'only on macOS. Elsewhere it registers the iOS app and writes '
                 'its options into lib/firebase_options.dart, but writes no '
                 'GoogleService-Info.plist and leaves the Xcode project as it '
-                'is: run flutterfire configure again on a Mac.',
+                'is, without the build phases that it adds for some Firebase '
+                'packages, such as the upload of the debug symbols of '
+                'Crashlytics: run flutterfire configure again on a Mac.',
             installable: false,
           ),
           reason: '$system',
