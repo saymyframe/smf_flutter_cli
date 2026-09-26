@@ -83,7 +83,9 @@ final class ContractResult {
   /// that can start the app; see [RoleTemplate.optionsOf].
   ///
   /// With the options of the case, they make a run without a terminal
-  /// generate the app that the harness rendered.
+  /// generate the app that the harness rendered: the harness makes the
+  /// choices again without a terminal with them, and a role whose answer
+  /// they do not reproduce is an error of the case.
   final Map<String, String> answers;
 
   /// The rendered app, if the harness rendered it: when it renders apps and
@@ -413,14 +415,17 @@ final class ContractHarness {
 
     final Map<Role, Object?> choices;
     final RenderedApp app;
+    final options = {...roleOptions, ...contractCase.roleOptions};
     final answering = _EnterPrompter();
-    final answers = <String, String>{};
+    // The choices of the roles that asked, which the harness answered.
+    final answered = <Role, Object?>{};
+    final Map<String, String> answers;
     try {
       choices = await chooseRoles(
         registry: registry,
         resolution: resolution,
         collection: collection,
-        optionValues: {...roleOptions, ...contractCase.roleOptions},
+        optionValues: options,
         environment: PipelineEnvironment(
           _answeringHost(answering),
           interactive: true,
@@ -430,9 +435,19 @@ final class ContractHarness {
         onChoice: (role, choice) {
           if (!answering.asked) return;
           answering.asked = false;
-          answers.addAll(role.template!.optionsOf(choice));
+          answered[role] = choice;
         },
       );
+      final (options: given, :problems) = await _answersOf(
+        answered,
+        resolution: resolution,
+        collection: collection,
+        options: options,
+      );
+      if (problems.isNotEmpty) {
+        return checked._with(problems, choices: choices);
+      }
+      answers = given;
       app = renderApp(
         registry: registry,
         resolution: resolution,
@@ -456,6 +471,95 @@ final class ContractHarness {
       app: app,
     );
     return rendered._with(checkRendered(rendered, app));
+  }
+
+  /// The options that the templates of the roles in [answered] give for the
+  /// choices that the harness answered, and the problems of those options:
+  /// a role that gives none, or one that it does not declare, and options
+  /// with which a run without a terminal, with [options] too, fails or
+  /// makes another choice.
+  Future<({Map<String, String> options, List<SmfIssue> problems})> _answersOf(
+    Map<Role, Object?> answered, {
+    required Resolution resolution,
+    required Collection collection,
+    required Map<String, String?> options,
+  }) async {
+    final given = <String, String>{};
+    final problems = <SmfIssue>[];
+    for (final MapEntry(key: role, value: choice) in answered.entries) {
+      final origin = RoleTemplateOrigin(role);
+      final ofChoice = role.template!.optionsOf(choice);
+      if (ofChoice.isEmpty) {
+        problems.add(
+          SmfIssue(
+            'The ${role.id} asks a question, but its template gives no '
+            'option for the answer, $choice, so a run without a terminal '
+            'cannot make the choice.',
+            hint: 'Give the options of the answer from optionsOf() of the '
+                'template.',
+            origin: origin,
+          ),
+        );
+      }
+      final declared = {for (final option in role.options) option.name};
+      for (final name in ofChoice.keys) {
+        if (!declared.contains(name)) {
+          problems.add(
+            SmfIssue(
+              'The template of the ${role.id} gives --$name for an answer, '
+              'but the ${role.id} has no such option.',
+              origin: origin,
+            ),
+          );
+        }
+      }
+      given.addAll(ofChoice);
+    }
+    if (answered.isEmpty || problems.isNotEmpty) {
+      return (options: given, problems: problems);
+    }
+
+    // A run without a terminal has to make the same choices with them.
+    final shown = [
+      for (final MapEntry(:key, :value) in given.entries) '--$key $value',
+    ].join(' ');
+    final Map<Role, Object?> again;
+    try {
+      again = await chooseRoles(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+        optionValues: {...options, ...given},
+        environment: PipelineEnvironment(
+          _silentHost,
+          interactive: false,
+          skipExternalSetup: true,
+        ),
+        context: context,
+      );
+    } on SmfUsageException catch (error) {
+      return (
+        options: given,
+        problems: [
+          SmfIssue(
+            'A run without a terminal cannot make the choices that the '
+            'harness answered with $shown: ${error.message}',
+          ),
+        ],
+      );
+    }
+    for (final MapEntry(key: role, value: choice) in answered.entries) {
+      if (again[role] != choice) {
+        problems.add(
+          SmfIssue(
+            'With $shown, the ${role.id} makes the choice ${again[role]} in a '
+            'run without a terminal, not $choice, which the harness answered.',
+            origin: RoleTemplateOrigin(role),
+          ),
+        );
+      }
+    }
+    return (options: given, problems: problems);
   }
 
   /// Checks every case of every module and every role of the registry, and

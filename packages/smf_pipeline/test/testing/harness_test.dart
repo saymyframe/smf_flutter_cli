@@ -373,71 +373,100 @@ void main() {
       expect(overridden.choices, {pick: 'blue'});
     });
 
-    test(
-        'answers a question of a role as a user who presses Enter, with the '
-        'options that make the same choice', () async {
-      final asked = TestRole<String>(
-        'asked',
-        options: const [RoleOption(name: 'color', help: 'The color.')],
-        template: _AskTemplate(),
-      );
-      // A role whose choice no option makes.
-      final unanswered = TestRole<String>(
-        'unanswered',
-        template: _AskTemplate(optionName: null),
-      );
-      final harness = ContractHarness(
-        ModuleRegistry([
-          scaffold(),
-          TestModule(
+    group('a question of a role', () {
+      /// The harness of an app whose one module provides the role [asking]
+      /// with the option `--color`.
+      ContractHarness harnessOf(TestRole<String> asking) => ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule('asker', providers: [RoleProvider.plain(asking)]),
+            ]),
+          );
+
+      TestRole<String> colors(RoleTemplate<String> template) =>
+          TestRole<String>(
+            'colors',
+            options: const [RoleOption(name: 'color', help: 'The color.')],
+            template: template,
+          );
+
+      const asker = ContractCase('asker', requested: [ModuleId('asker')]);
+
+      test(
+          'gets the answer of a user who presses Enter, and the options that '
+          'make the same choice', () async {
+        final asking = colors(_AskTemplate());
+        final harness = harnessOf(asking);
+
+        final answered = await harness.check(asker);
+        expect(answered.errors, isEmpty);
+        expect(answered.choices, {asking: 'green'});
+        expect(answered.answers, {'color': 'green'});
+        expect(answered.app, isNotNull);
+
+        // An option decides without a question.
+        final given = await harness.check(
+          const ContractCase(
             'asker',
-            providers: [
-              RoleProvider.plain(asked),
-              RoleProvider.plain(unanswered),
-            ],
+            requested: [ModuleId('asker')],
+            roleOptions: {'color': 'red'},
           ),
-        ]),
-      );
+        );
+        expect(given.errors, isEmpty);
+        expect(given.choices, {asking: 'red'});
+        expect(given.answers, isEmpty);
+      });
 
-      final answered = await harness.check(
-        const ContractCase('asker', requested: [ModuleId('asker')]),
-      );
-      expect(answered.errors, isEmpty);
-      expect(answered.choices, {asked: 'green', unanswered: 'green'});
-      expect(answered.answers, {'color': 'green'});
-      expect(answered.app, isNotNull);
+      test(
+          'is an error when the options of its role cannot make the answer '
+          'without a terminal', () async {
+        /// The only error of the app of a role with [template].
+        Future<String> errorOf(RoleTemplate<String> template) async {
+          final result = await harnessOf(colors(template)).check(asker);
+          expect(result.app, isNull);
+          return result.errors.single.message;
+        }
 
-      // An option decides without a question.
-      final given = await harness.check(
-        const ContractCase(
-          'asker',
-          requested: [ModuleId('asker')],
-          roleOptions: {'color': 'red'},
-        ),
-      );
-      expect(given.choices, {asked: 'red', unanswered: 'green'});
-      expect(given.answers, isEmpty);
-    });
+        expect(
+          await errorOf(_AskTemplate(optionsFor: (choice) => {})),
+          'The colors asks a question, but its template gives no option for '
+          'the answer, green, so a run without a terminal cannot make the '
+          'choice.',
+        );
+        expect(
+          await errorOf(
+            _AskTemplate(optionsFor: (choice) => {'colour': '$choice'}),
+          ),
+          'The template of the colors gives --colour for an answer, but the '
+          'colors has no such option.',
+        );
+        expect(
+          await errorOf(_AskTemplate(optionsFor: (choice) => {'color': 'red'})),
+          'With --color red, the colors makes the choice red in a run without '
+          'a terminal, not green, which the harness answered.',
+        );
+        expect(
+          await errorOf(_AskTemplate(needsTerminal: true)),
+          'A run without a terminal cannot make the choices that the harness '
+          'answered with --color green: The colors needs a terminal.',
+        );
+      });
 
-    test('answers every kind of question with its default or first choice',
-        () async {
-      final curious = TestRole<String>('curious', template: _CuriousTemplate());
-      final harness = ContractHarness(
-        ModuleRegistry([
-          scaffold(),
-          TestModule('asker', providers: [RoleProvider.plain(curious)]),
-        ]),
-      );
+      test('of every kind gets its default or first choice', () async {
+        final curious = TestRole<String>(
+          'curious',
+          options: const [RoleOption(name: 'answers', help: 'The answers.')],
+          template: _CuriousTemplate(),
+        );
 
-      final result = await harness.check(
-        const ContractCase('asker', requested: [ModuleId('asker')]),
-      );
+        final result = await harnessOf(curious).check(asker);
 
-      expect(result.errors, isEmpty);
-      // The defaults of confirm, input and multiSelect, and the first choice
-      // of a select without a default.
-      expect(result.choices, {curious: 'true, typed, b, one'});
-      expect(result.answers, isEmpty);
+        expect(result.errors, isEmpty);
+        // The defaults of confirm, input and multiSelect, and the first
+        // choice of a select without a default.
+        expect(result.choices, {curious: 'true, typed, b, one'});
+        expect(result.answers, {'answers': 'true, typed, b, one'});
+      });
     });
 
     test('a harness that does not render leaves the app out', () async {
@@ -879,18 +908,27 @@ final class _PickTemplate extends RoleTemplate<String> {
       RoleOutput(vars: {'picked': input.choice});
 }
 
-/// A template that asks which color, green or red, unless its option
-/// [optionName] gives one, and gives that option for its choice.
+/// A template that asks which color, green or red, unless the option
+/// `--color` gives one, and gives [optionsFor] of its answer. If
+/// [needsTerminal] is set, it fails without a terminal even with the
+/// option.
 final class _AskTemplate extends RoleTemplate<String> {
-  _AskTemplate({this.optionName = 'color'});
+  _AskTemplate({this.optionsFor = _colorOf, this.needsTerminal = false});
 
-  /// The name of the option of the color, or `null` if the role has none.
-  final String? optionName;
+  static Map<String, String> _colorOf(Object? choice) => {'color': '$choice'};
+
+  /// The options of an answer.
+  final Map<String, String> Function(Object? choice) optionsFor;
+
+  /// Whether the template cannot choose without a terminal.
+  final bool needsTerminal;
 
   @override
   Future<Object?> choose(RoleChoiceContext<String> context) async {
-    final name = optionName;
-    return (name == null ? null : context.option(name)) ??
+    if (!context.environment.interactive && needsTerminal) {
+      throw SmfUsageException('The ${context.role.id} needs a terminal.');
+    }
+    return context.option('color') ??
         await context.environment.prompter.select(
           'Which color?',
           const ['green', 'red'],
@@ -898,15 +936,15 @@ final class _AskTemplate extends RoleTemplate<String> {
   }
 
   @override
-  Map<String, String> optionsOf(Object? choice) => {
-        if (optionName case final name? when choice is String) name: choice,
-      };
+  Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
 }
 
-/// A template that asks a question of every kind and joins the answers.
+/// A template that asks a question of every kind and joins the answers,
+/// unless the option `--answers` gives them.
 final class _CuriousTemplate extends RoleTemplate<String> {
   @override
   Future<Object?> choose(RoleChoiceContext<String> context) async {
+    if (context.option('answers') case final answers?) return answers;
     final prompter = context.environment.prompter;
     final confirmed = await prompter.confirm('Sure?', defaultValue: true);
     final typed = await prompter.input('Name?', defaultValue: 'typed');
@@ -918,6 +956,9 @@ final class _CuriousTemplate extends RoleTemplate<String> {
     final selected = await prompter.select('Which one?', const ['one', 'two']);
     return '$confirmed, $typed, ${picked.join()}, $selected';
   }
+
+  @override
+  Map<String, String> optionsOf(Object? choice) => {'answers': '$choice'};
 }
 
 /// A provider whose render hook returns [vars].
