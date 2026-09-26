@@ -124,10 +124,11 @@ final class _DiTemplate extends RoleTemplate<DiRegistration> {
 ///
 /// It declares what its container can do beyond the basics, and reports the
 /// registrations that need more. Its `dependencies.dart` imports the file of
-/// every registered type and factory with a prefix of its own, such as the
-/// id of the contributing module, and refers to them with
-/// [TypeRef.codeWith] and [FactoryRef.codeWith], so names of different
-/// modules never collide.
+/// every type and function that the registrations name with a prefix of its
+/// own, such as `di0` for the first file, and refers to them with
+/// [TypeRef.codeWith], [FactoryRef.codeWith] and [FunctionRef.codeWith], so
+/// names of different modules never collide with each other or with the
+/// names of the file.
 abstract base class DiProvider extends RoleProvider<DiRegistration> {
   /// Allows subclasses to have constant constructors.
   const DiProvider();
