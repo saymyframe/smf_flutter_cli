@@ -370,6 +370,12 @@ void main() {
       // The global npm directory of nvm is in the home directory already.
       expect(machine.calls, isNot(contains(startsWith('npm config set'))));
       expect(binDirsIn('${result.stdout}'), [nodeBin]);
+      // nvm puts the directory of its Node.js on the PATH itself.
+      expect(
+        machine.homeFile('.bashrc'),
+        r'export PATH="$PATH:$HOME/.local/bin"'
+        '\n',
+      );
     });
 
     test('needs curl or wget to install nvm, and reaches nothing here', () {

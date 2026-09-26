@@ -195,6 +195,13 @@ set -euo pipefail
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
+path_contains() {
+  case ":$PATH:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # The file that new terminals of the shell of the user read.
 shell_rc() {
   if [[ "${SHELL:-}" = *zsh ]]; then
@@ -293,7 +300,10 @@ if ! command_exists firebase; then
   use_npm_prefix_in_home
   npm install -g firebase-tools
   npm_bin="$(npm prefix -g)/bin"
-  add_to_path_of_new_terminals "$npm_bin"
+  # nvm puts the directory of its Node.js on the PATH itself.
+  if ! path_contains "$npm_bin"; then
+    add_to_path_of_new_terminals "$npm_bin"
+  fi
   add_firebase_command
   export PATH="$npm_bin:$PATH"
 fi
