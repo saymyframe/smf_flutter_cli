@@ -72,7 +72,7 @@ Modules are chosen with `-m`, and every option of `create` comes from the comman
 - **`bricks/**/__brick__/**` holds mason templates, not Dart.** They are excluded from analysis and formatting. They use mason syntax: `{{app_name.snakeCase()}}`.
 - **Dart-side template strings** in module code (e.g. `InsertImport`, `Import.core`) are rendered by mustachex and use `{{app_name_sc}}` (`_sc` = snake_case). `PatchEngine` renders only the text a contribution inserts, never the user's file.
 - **Brick hooks** (`bricks/*/hooks/`) are standalone Dart packages with their own pubspec. Only bricks of the old model have them; the new pipeline rejects a brick with hooks and runs no hooks, since modules check the machine and run tools through `Preflight` and `PostGenStep` contributions.
-- **Firebase modules** run the Firebase/FlutterFire CLIs in their hooks and need an interactive `firebase login`, so they can't be generated in non-interactive runs.
+- **Firebase:** `smf_firebase_core` generates `lib/firebase_options.dart` as a placeholder in the form that `flutterfire configure` writes, which throws an `UnsupportedError` until the FlutterFire CLI fills it in, and initializes Firebase with it in `bootstrap()`.
 
 ## Tests
 

@@ -1,10 +1,10 @@
 name: smf_firebase_core
-description: Firebase Core integration for SMF Flutter applications with ready-to-use setup templates.
+description: The SMF module of Firebase for the Flutter app that SMF generates. It initializes firebase_core at start-up with the options that the FlutterFire CLI writes.
 version: 0.2.1+1
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_firebase_core
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
-topics: [ flutter, firebase ]
+topics: [flutter, firebase, flutterfire, scaffolding]
 license: Apache-2.0
 
 environment:
@@ -15,8 +15,12 @@ resolution: workspace
 dependencies:
   mason: ^0.1.1
   smf_contracts: ^0.2.0
-  smf_contribution_engine: ^0.2.0
 
 dev_dependencies:
+  analyzer: ^8.1.0
+  # The app entry of the apps that the tests render.
+  smf_flutter_core: ^0.2.1
+  smf_pipeline: ^0.2.0
   test: ^1.24.0
   very_good_analysis: ^10.3.0
+  yaml: ^3.1.2
