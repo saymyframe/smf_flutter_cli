@@ -17,10 +17,10 @@ Before it generates the app, SMF checks that the machine can run `flutterfire co
 
 - the [Firebase CLI](https://firebase.google.com/docs/cli), which the FlutterFire CLI runs to reach the Firebase projects;
 - a login of the Firebase CLI, which `firebase login:list --json` reports;
-- the FlutterFire CLI, activated with `dart pub global activate flutterfire_cli`, in version 1.4.0 or a later 1.x;
+- the FlutterFire CLI, activated with `dart pub global activate flutterfire_cli`, in version 1.4.0 or a later 1.x. The tests of this module repeat the changes that 1.4 makes to the app; a later 1.x that is active already is used as it is;
 - on macOS, the Ruby gem xcodeproj 1.23.0 or newer, with which the FlutterFire CLI sets up the iOS app in its Xcode project. It does that only on macOS: elsewhere it registers the iOS app and writes its options, but leaves the Xcode project as it is, so SMF warns to run `flutterfire configure` again on a Mac.
 
-The app compiles without any of them, so a missing one only brings a warning with instructions. In a run with a terminal, unless it skips external setup (`--skip-external-setup`), SMF offers to install the Firebase CLI with npm, and Node.js first when it is missing, to log in with `firebase login`, and to activate flutterfire_cli 1.4.1; it asks before each. When npm fails on macOS or Linux, it offers the standalone binary of the Firebase CLI instead.
+The app compiles without any of them, so a missing one only brings a warning with instructions. In a run with a terminal, unless it skips external setup (`--skip-external-setup`), SMF offers to install the Firebase CLI with npm, and Node.js first when it is missing, to log in with `firebase login`, and to activate flutterfire_cli 1.4.1 when no version or an older one is active, but never in place of a newer major version, which other apps may need; it asks before each. When npm fails on macOS or Linux, it offers the standalone binary of the Firebase CLI instead.
 
 ## After generation
 

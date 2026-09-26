@@ -25,8 +25,12 @@ const flutterfireTool = ToolRef(
 /// documentation installs it, in a version between
 /// [minimumFlutterfireVersion] and the next major one.
 ///
-/// `dart pub global list` tells, and the check can activate
-/// [flutterfireVersion].
+/// `dart pub global list` tells. The tests of the module repeat the changes
+/// that flutterfire_cli 1.4 makes to the app; a later 1.x version that is
+/// active already is used as it is. The check can activate
+/// [flutterfireVersion] in place of an older version, but never in place of
+/// a newer major one, which other apps of the user may need: the build
+/// phases that flutterfire adds to their Xcode projects run the active one.
 final class FlutterfireCliCheck extends PreflightCheck {
   /// Creates the check.
   const FlutterfireCliCheck();
@@ -63,15 +67,28 @@ final class FlutterfireCliCheck extends PreflightCheck {
         installable: true,
       );
     }
-    if (!isSupportedFlutterfireVersion(active)) {
-      return PreflightMissing(
-        instructions: 'flutterfire_cli $active is active, but the app needs '
-            '$minimumFlutterfireVersion or a later 1.x version: activate one '
-            'with "$_activate".',
-        installable: true,
+    final major = _numbersOf(active)?.first;
+    if (major == null) {
+      return PreflightFailed(
+        '"dart pub global list" reported flutterfire_cli "$active", which is '
+        'not a version.',
       );
     }
-    return const PreflightPassed();
+    if (isSupportedFlutterfireVersion(active)) return const PreflightPassed();
+    if (major > _numbersOf(minimumFlutterfireVersion)!.first) {
+      return PreflightMissing(
+        instructions: 'flutterfire_cli $active is active, but SMF works with '
+            '$minimumFlutterfireVersion or a later 1.x version, and does not '
+            'replace a newer one, which other apps may need. To use one, '
+            'activate it with "$_activate".',
+      );
+    }
+    return PreflightMissing(
+      instructions: 'flutterfire_cli $active is active, but the app needs '
+          '$minimumFlutterfireVersion or a later 1.x version: activate one '
+          'with "$_activate".',
+      installable: true,
+    );
   }
 
   /// Activates [flutterfireVersion] with `dart pub global activate`.

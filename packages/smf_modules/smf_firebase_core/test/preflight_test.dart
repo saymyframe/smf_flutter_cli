@@ -401,8 +401,8 @@ void main() {
       );
     });
 
-    test('offers to activate it when another version is active', () async {
-      for (final version in ['1.3.2', '2.0.0', '0.3.0-dev.1', 'main']) {
+    test('offers to activate it in place of an older version', () async {
+      for (final version in ['1.3.2', '0.3.0-dev.1']) {
         expect(
           await check.check(
             machineWith(
@@ -418,6 +418,37 @@ void main() {
           reason: version,
         );
       }
+    });
+
+    test('never replaces a newer major version, but tells how', () async {
+      for (final active in ['2.0.0', '2.1.0-dev.3 at path "/x"', '10.0.1']) {
+        final version = active.split(' ').first;
+        expect(
+          await check.check(
+            machineWith(_result(0, stdout: 'flutterfire_cli $active\n')),
+          ),
+          _missing(
+            instructions: 'flutterfire_cli $version is active, but SMF works '
+                'with 1.4.0 or a later 1.x version, and does not replace a '
+                'newer one, which other apps may need. To use one, activate '
+                'it with "dart pub global activate flutterfire_cli 1.4.1".',
+            installable: false,
+          ),
+          reason: active,
+        );
+      }
+    });
+
+    test('fails on a version it cannot read', () async {
+      expect(
+        await check.check(
+          machineWith(_result(0, stdout: 'flutterfire_cli main\n')),
+        ),
+        _failed(
+          '"dart pub global list" reported flutterfire_cli "main", which is '
+          'not a version.',
+        ),
+      );
     });
 
     test('fails without dart or when dart fails', () async {
