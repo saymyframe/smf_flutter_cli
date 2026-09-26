@@ -39,12 +39,21 @@ String failureOf(String command, SmfProcessResult result) {
       '${tail.isEmpty ? '.' : ':\n$tail'}';
 }
 
-/// The last lines of what the command of [result] wrote, the standard error
-/// first, which say what went wrong.
-String outputTail(SmfProcessResult result, {int lines = 20}) {
+/// The last lines of what the command of [result] wrote: those of the
+/// standard error first, which say what went wrong, then those of the
+/// standard output, up to [lines] of each, so that a long output does not
+/// push the errors out.
+String outputTail(SmfProcessResult result, {int lines = 20}) => [
+      for (final stream in [result.stderr, result.stdout])
+        if (tailOf(stream, lines: lines) case final tail when tail.isNotEmpty)
+          tail,
+    ].join('\n');
+
+/// The last [lines] lines of [output] that are not blank.
+String tailOf(String output, {int lines = 20}) {
   final all = [
-    for (final stream in [result.stderr, result.stdout])
-      ...stream.trim().split('\n').where((line) => line.trim().isNotEmpty),
+    for (final line in output.split('\n'))
+      if (line.trim().isNotEmpty) line.trimRight(),
   ];
   return (all.length <= lines ? all : ['…', ...all.sublist(all.length - lines)])
       .join('\n');

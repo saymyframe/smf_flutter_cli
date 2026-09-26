@@ -629,22 +629,33 @@ void main() {
       expect(directoryOf('file'), '');
     });
 
-    test('keep the last lines of the output, the errors first', () {
+    test('keep the last lines of each stream, the errors first', () {
       final result = _result(
         1,
-        stdout: [for (var i = 1; i <= 25; i++) 'out $i'].join('\n'),
+        stdout: [for (var i = 1; i <= 25; i++) 'out $i\r'].join('\n'),
         stderr: 'error 1\n\nerror 2\n',
       );
 
+      // A long output keeps the errors.
       expect(
         outputTail(result),
-        ['…', for (var i = 6; i <= 25; i++) 'out $i'].join('\n'),
+        [
+          'error 1',
+          'error 2',
+          '…',
+          for (var i = 6; i <= 25; i++) 'out $i',
+        ].join('\n'),
       );
       expect(outputTail(result, lines: 30).split('\n').take(3), [
         'error 1',
         'error 2',
         'out 1',
       ]);
+      expect(
+        outputTail(_result(1, stderr: 'e1\ne2\ne3'), lines: 2),
+        '…\ne2\ne3',
+      );
+      expect(outputTail(_result(1, stdout: ' \n')), isEmpty);
     });
 
     test('read each directory that an install script printed once', () {
