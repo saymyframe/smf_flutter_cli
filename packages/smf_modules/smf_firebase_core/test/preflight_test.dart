@@ -291,6 +291,7 @@ void main() {
       expect(call.line, '$_firebase login:list --json');
       // A directory of its own for firebase-debug.log.
       expect(call.workingDirectory, directoryOf(machine.tempFiles.keys.single));
+      expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
       expect(machine.reports, isEmpty);
     });
 

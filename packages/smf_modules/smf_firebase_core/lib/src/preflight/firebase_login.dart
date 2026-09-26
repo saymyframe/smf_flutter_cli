@@ -14,6 +14,12 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// standard error, such as that the Node.js version is too old. The check
 /// can log the user in with `firebase login`, which asks its own questions
 /// in the terminal.
+///
+/// Like every command of the Firebase CLI, `login:list` keeps records of its
+/// own while it only reads the accounts: it notes the time of its last
+/// error in its configuration and fetches its message of the day once a
+/// day. The check turns off the check for updates, which would run in the
+/// background after it.
 final class FirebaseLoginCheck extends PreflightCheck {
   /// Creates the check.
   const FirebaseLoginCheck();
@@ -39,6 +45,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
       const ['login:list', '--json'],
       // The Firebase CLI writes firebase-debug.log where it runs.
       workingDirectory: await scratchDirectory(environment),
+      environment: const {'NO_UPDATE_NOTIFIER': '1'},
     );
     final json = _jsonIn(result.stdout);
     if (!result.succeeded) {
