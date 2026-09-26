@@ -168,7 +168,8 @@ ValidationResult validate({
   }
   issues
     ..addAll(_ownerIssues(collection))
-    ..addAll(_preflightIssues(collection));
+    ..addAll(_preflightIssues(collection))
+    ..addAll(_needsIssues(collection));
   for (final module in resolution.modules) {
     issues.addAll(_kindIssues(module, collection));
   }
@@ -510,6 +511,37 @@ Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
             origin: origin,
           );
         }
+      }
+    }
+  }
+}
+
+/// Post-generation steps that need a preflight check that their contributor
+/// does not have; see [PostGenStep.needs]. A check of a [Preflight] that
+/// does not apply to the app is still one of the contributor.
+Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
+  final checks = <String, Set<String>>{};
+  for (final collected in collection.all) {
+    if (collected.contribution case Preflight(checks: final list)) {
+      checks
+          .putIfAbsent(contributorName(collected.origin), () => {})
+          .addAll(list.map((check) => check.id));
+    }
+  }
+  for (final collected in collection.all) {
+    if (collected.contribution case final PostGenStep step) {
+      final contributor = contributorName(collected.origin);
+      final own = checks[contributor] ?? const {};
+      for (final id in step.needs) {
+        if (own.contains(id)) continue;
+        yield SmfIssue(
+          'The step ${step.description ?? step.tool.executable} of '
+          '${collected.origin} needs the preflight check "$id", which '
+          '$contributor does not have.',
+          hint: 'A step needs only checks of the Preflight of its own '
+              'module.',
+          origin: collected.origin,
+        );
       }
     }
   }

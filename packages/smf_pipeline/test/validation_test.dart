@@ -512,6 +512,42 @@ void main() {
     ]);
   });
 
+  test('a post-generation step needs checks of its own module', () {
+    final nav = TestRole<String>('nav');
+    final result = _validate([
+      scaffold(
+        contributions: const [
+          Preflight([_Check('tool')]),
+          PostGenStep(ToolRef('tool'), ['a'], needs: ['tool']),
+          PostGenStep(
+            ToolRef('tool'),
+            ['b'],
+            description: 'Step b',
+            needs: ['login'],
+          ),
+        ],
+      ),
+      TestModule(
+        'other',
+        uses: {nav},
+        contributions: [
+          const Preflight([_Check('login')]),
+          // A check that does not apply is still one of the module.
+          Preflight(const [_Check('late')], when: {nav}),
+          const PostGenStep(ToolRef('x'), ['c'], needs: ['login', 'late']),
+          const PostGenStep(ToolRef('x'), ['d'], needs: ['tool']),
+        ],
+      ),
+    ]);
+
+    expect(_messages(result), [
+      equals('scaffold: The step Step b of scaffold needs the preflight check '
+          '"login", which scaffold does not have.'),
+      equals('other: The step x of other needs the preflight check "tool", '
+          'which other does not have.'),
+    ]);
+  });
+
   test('kinds require and forbid data', () {
     final nav = TestRole<String>('nav');
     final feature = ModuleKind(

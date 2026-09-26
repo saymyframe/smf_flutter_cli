@@ -209,6 +209,7 @@ final class CreatePipeline {
         environment: environment,
         steps: plan.postGenOrder.contributions,
         codegen: plan.collection.applyingOf<CodegenRequest>().toList(),
+        checks: plan.preflight.results,
         fullDartFix: plan.request.dartFix,
       );
     } on GenerationFailedException catch (error) {

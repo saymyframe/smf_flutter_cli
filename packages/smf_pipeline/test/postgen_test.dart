@@ -21,6 +21,24 @@ Collected _step(
 /// The command of the import cleanup.
 final cleanup = 'dart fix --apply --code=${importCleanupCodes.join(',')}';
 
+/// The origin of the contributions of the module `firebase`.
+const _firebase = ModuleOrigin(ModuleId('firebase'));
+
+/// A check [id] that looks for [description], whose result the tests give.
+final class _Check extends PreflightCheck {
+  const _Check(this.id, this.description);
+
+  @override
+  final String id;
+
+  @override
+  final String description;
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) =>
+      throw UnimplementedError('The tests give the result.');
+}
+
 void main() {
   late RecordingRunner runner;
   late FakeHost host;
@@ -569,6 +587,153 @@ void main() {
         ),
         throwsA(isA<SmfCancelledException>()),
       );
+    });
+
+    group('that need checks', () {
+      const tool = PlannedCheck(_Check('tool', 'Tool'), _firebase);
+      const account = PlannedCheck(_Check('account', 'Account'), _firebase);
+      const needsBoth = PostGenStep(
+        ToolRef('firebase'),
+        ['deploy'],
+        description: 'Deploy',
+        skippable: true,
+        needs: ['tool', 'account'],
+      );
+      const missing = PreflightMissing(instructions: 'Install it.');
+
+      test('run when the checks passed, asking first', () async {
+        environment = environmentOf(interactive: true, answers: [true]);
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          checks: const [
+            CheckResult(tool, PreflightPassed()),
+            CheckResult(account, PreflightPassed(), installed: true),
+          ],
+        );
+
+        expect(skipped, isEmpty);
+        expect(host.prompter.asked, hasLength(1));
+        expect(runner.lines, contains('firebase deploy'));
+      });
+
+      test('are left for later without a question when one did not pass',
+          () async {
+        environment = environmentOf(interactive: true);
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          checks: const [
+            CheckResult(tool, missing),
+            CheckResult(account, PreflightFailed('offline')),
+          ],
+        );
+
+        expect(
+          '${skipped.single}',
+          'Deploy: firebase deploy (Tool is missing, and Account could not be '
+              'checked)',
+        );
+        expect(skipped.single.failed, isTrue);
+        expect(host.prompter.asked, isEmpty);
+        expect(runner.lines, isNot(contains(startsWith('firebase'))));
+      });
+
+      test('name every check that is missing', () async {
+        environment = environmentOf(interactive: true);
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          checks: const [
+            CheckResult(tool, missing),
+            CheckResult(account, missing),
+          ],
+        );
+
+        expect(skipped.single.reason, 'Tool and Account are missing');
+      });
+
+      test('go by the checks of their own module only', () async {
+        environment = environmentOf(interactive: true, answers: [true]);
+        const other = PlannedCheck(
+          _Check('tool', 'Tool'),
+          ModuleOrigin(ModuleId('other')),
+        );
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          // The checks of firebase did not run, since they do not apply.
+          checks: const [CheckResult(other, missing)],
+        );
+
+        expect(skipped, isEmpty);
+        expect(runner.lines, contains('firebase deploy'));
+      });
+
+      test('keep the reasons of the run first', () async {
+        environment = environmentOf(skipExternalSetup: true);
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step(
+              'firebase',
+              const PostGenStep(
+                ToolRef('firebase'),
+                ['login'],
+                interactive: true,
+                skippable: true,
+                external: true,
+                needs: ['tool'],
+              ),
+            ),
+          ],
+          checks: const [CheckResult(tool, missing)],
+        );
+
+        expect(skipped.single.reason, 'the run skips external setup');
+        expect(skipped.single.failed, isFalse);
+      });
+
+      test('stop generation when the step is not skippable', () async {
+        environment = environmentOf(interactive: true);
+
+        await expectLater(
+          runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: [
+              _step(
+                'firebase',
+                const PostGenStep(
+                  ToolRef('firebase'),
+                  ['deploy'],
+                  description: 'Deploy',
+                  needs: ['tool'],
+                ),
+              ),
+            ],
+            checks: const [CheckResult(tool, missing)],
+          ),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => e.message,
+              'message',
+              'The step "Deploy" of firebase cannot run, because Tool is '
+                  'missing.',
+            ),
+          ),
+        );
+      });
     });
 
     test('a step that a signal stopped says so', () async {

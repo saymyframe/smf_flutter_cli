@@ -5,6 +5,21 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
+/// A check that finds its tool missing.
+final class _Missing extends PreflightCheck {
+  const _Missing();
+
+  @override
+  String get id => 'tool';
+
+  @override
+  String get description => 'Tool';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async =>
+      const PreflightMissing(instructions: 'Install the tool.');
+}
+
 void main() {
   late RecordingRunner runner;
   late FakeHost host;
@@ -127,6 +142,27 @@ void main() {
       app!.skippedSteps.map((step) => '$step'),
       ['Log in: firebase login (the run skips external setup)'],
     );
+  });
+
+  test('leaves a step for later when a check it needs did not pass', () async {
+    final app = await pipeline(
+      modulesWith([
+        const Preflight([_Missing()]),
+        const PostGenStep(
+          ToolRef('tool'),
+          ['go'],
+          description: 'Go',
+          skippable: true,
+          needs: ['tool'],
+        ),
+      ]),
+    ).run(request());
+
+    expect(
+      app!.skippedSteps.map((step) => '$step'),
+      ['Go: tool go (Tool is missing)'],
+    );
+    expect(runner.lines, isNot(contains(startsWith('tool'))));
   });
 
   test('replaces the directory of the app when asked to', () async {

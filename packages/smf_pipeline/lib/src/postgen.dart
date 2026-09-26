@@ -2,6 +2,8 @@ import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/errors.dart';
+import 'package:smf_pipeline/src/order.dart';
+import 'package:smf_pipeline/src/preflight.dart';
 import 'package:smf_pipeline/src/shell.dart';
 
 /// A post-generation step that did not run or did not succeed, with the
@@ -69,21 +71,25 @@ const importCleanupCodes = [
 ///
 /// A step that needs a terminal in a run that cannot ask the user, or
 /// external setup in a run that skips it, does not run; the pipeline checked
-/// before that such a step is skippable. In an interactive run the user may
-/// also leave a skippable step for later. A skippable step whose tool is
-/// missing, or that fails, is left for later too; a failure is reported with
-/// the output of the command. Returns the steps that are not done, with
-/// their commands for later.
+/// before that such a step is skippable. Nor does a step that
+/// [PostGenStep.needs] a check which has not passed among [checks], the
+/// results of stage 6, and the user is not asked about it. In an
+/// interactive run the user may also leave a skippable step for later. A
+/// skippable step whose tool is missing, or that fails, is left for later
+/// too; a failure is reported with the output of the command. Returns the
+/// steps that are not done, with their commands for later.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
-/// a step that is not skippable fails, and an [SmfCancelledException] when
-/// the user cancels the run. `dart fix` and `dart format` only warn when
-/// they fail, since the app is complete without them.
+/// a step that is not skippable fails or cannot run, and an
+/// [SmfCancelledException] when the user cancels the run. `dart fix` and
+/// `dart format` only warn when they fail, since the app is complete
+/// without them.
 Future<List<SkippedStep>> runPostGen({
   required String directory,
   required PipelineEnvironment environment,
   required List<Collected> steps,
   List<Collected> codegen = const [],
+  List<CheckResult> checks = const [],
   bool fullDartFix = true,
 }) async {
   final commands = _Commands(environment, directory);
@@ -121,12 +127,22 @@ Future<List<SkippedStep>> runPostGen({
     final resolved = await commands.resolve(step.tool, step.arguments);
     final command = commands.display(step.tool, step.arguments, resolved);
     final description = step.description ?? command;
+    final unmet = _unmetNeeds(step, collected.origin, checks);
     String? reason;
     var failed = false;
     if (step.external && environment.skipExternalSetup) {
       reason = 'the run skips external setup';
     } else if (step.interactive && !environment.interactive) {
       reason = 'the run cannot ask the user';
+    } else if (unmet.isNotEmpty) {
+      reason = _unmetReason(unmet);
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of ${collected.origin} cannot run, '
+          'because $reason.',
+        );
+      }
+      failed = true;
     } else if (resolved == null) {
       if (!step.skippable) {
         throw GenerationFailedException(
@@ -183,6 +199,46 @@ Future<List<SkippedStep>> runPostGen({
     const ['format', '.'],
   );
   return skipped;
+}
+
+/// The checks among [checks] that [step] of [origin] needs and that have
+/// not passed, in the order of [PostGenStep.needs]. A check that did not
+/// run, since its [Preflight] does not apply, is not among them.
+List<CheckResult> _unmetNeeds(
+  PostGenStep step,
+  ContributionOrigin origin,
+  List<CheckResult> checks,
+) {
+  final contributor = contributorName(origin);
+  return [
+    for (final id in step.needs)
+      for (final result in checks)
+        if (!result.passed &&
+            result.planned.check.id == id &&
+            contributorName(result.planned.origin) == contributor)
+          result,
+  ];
+}
+
+/// Why a step that needs the checks of [unmet] does not run, such as
+/// `Firebase CLI and Firebase login are missing`.
+String _unmetReason(List<CheckResult> unmet) {
+  String and(List<String> names) => names.length == 1
+      ? names.single
+      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
+  final missing = [
+    for (final result in unmet)
+      if (result.status is PreflightMissing) result.planned.check.description,
+  ];
+  final unchecked = [
+    for (final result in unmet)
+      if (result.status is PreflightFailed) result.planned.check.description,
+  ];
+  return [
+    if (missing.isNotEmpty)
+      '${and(missing)} ${missing.length == 1 ? 'is' : 'are'} missing',
+    if (unchecked.isNotEmpty) '${and(unchecked)} could not be checked',
+  ].join(', and ');
 }
 
 /// Runs `flutter pub get` in [directory], the app in its final place, so
