@@ -31,9 +31,16 @@ abstract interface class AppNavigator {
   /// In the main navigation, the current stack is that of the selected
   /// branch, whichever branch [location] belongs to, and the selected
   /// destination stays; a location outside the main navigation is shown
-  /// over it.
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead.
   Future<T?> push<T extends Object?>(AppLocation location);
 
   /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
 }
