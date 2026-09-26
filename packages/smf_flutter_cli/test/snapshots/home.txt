@@ -259,6 +259,11 @@ abstract interface class AppNavigator {
 
   /// Shows [location] on top of the current stack and completes with the
   /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it.
   Future<T?> push<T extends Object?>(AppLocation location);
 
   /// Replaces the top of the current stack with [location].
