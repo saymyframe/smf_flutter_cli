@@ -4,6 +4,7 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_login.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/preflight/xcode_project_tools.dart';
+import 'package:smf_firebase_core/src/readme.dart';
 
 /// The module that sets up Firebase in the app with the firebase_core
 /// package.
@@ -26,6 +27,12 @@ import 'package:smf_firebase_core/src/preflight/xcode_project_tools.dart';
 /// project. In a run with a terminal, it offers to install the two CLIs and
 /// to log in; otherwise it tells how.
 ///
+/// After generation, in a run with a terminal, the module runs
+/// `flutterfire configure` for the platforms of the app, which asks the user
+/// for the Firebase project; a run without one, or that skips external
+/// setup, prints the command to run later. The README of the app tells how
+/// to configure it again, such as on another machine.
+///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
 final class FirebaseCoreModule extends SmfModule {
@@ -46,26 +53,47 @@ final class FirebaseCoreModule extends SmfModule {
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(firebaseCoreBundle),
-        const PubspecContribution.hosted('firebase_core', '^4.15.0'),
-        const SocketContribution.code(
-          AppEntryRole.bootstrapPlatform,
-          Fragment(
-            'await Firebase.initializeApp(options: '
-            'DefaultFirebaseOptions.currentPlatform);',
-            imports: [
-              ImportRef('package:firebase_core/firebase_core.dart'),
-              ImportRef.app('firebase_options.dart'),
-            ],
-          ),
+  List<Contribution> contribute(ModuleContext context) {
+    final configure = [
+      'configure',
+      '--platforms=${AppEntryRole.platforms.join(',')}',
+      '--overwrite-firebase-options',
+    ];
+    return [
+      BrickContribution(firebaseCoreBundle),
+      const PubspecContribution.hosted('firebase_core', '^4.15.0'),
+      const SocketContribution.code(
+        AppEntryRole.bootstrapPlatform,
+        Fragment(
+          'await Firebase.initializeApp(options: '
+          'DefaultFirebaseOptions.currentPlatform);',
+          imports: [
+            ImportRef('package:firebase_core/firebase_core.dart'),
+            ImportRef.app('firebase_options.dart'),
+          ],
         ),
-        AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
-        const Preflight([
-          FirebaseCliCheck(),
-          FirebaseLoginCheck(),
-          FlutterfireCliCheck(),
-          XcodeProjectToolsCheck(),
-        ]),
-      ];
+      ),
+      AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
+      const Preflight([
+        FirebaseCliCheck(),
+        FirebaseLoginCheck(),
+        FlutterfireCliCheck(),
+        XcodeProjectToolsCheck(),
+      ]),
+      // flutterfire writes paths relative to the app, so it can run in the
+      // temporary directory of the app.
+      PostGenStep(
+        flutterfireTool,
+        configure,
+        description: 'Configuring Firebase with flutterfire',
+        interactive: true,
+        skippable: true,
+        external: true,
+      ),
+      AppEntryRole.readmeSections.entry(
+        readmeHeading,
+        readmeSection(['flutterfire', ...configure].join(' ')),
+      ),
+    ];
+  }
 }

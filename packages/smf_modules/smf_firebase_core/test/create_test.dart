@@ -13,6 +13,23 @@ import 'support/fake_machine.dart';
 const _dart = '/sdk/bin/dart';
 const _firebase = '/opt/npm/bin/firebase';
 
+/// `flutterfire configure` as the steps of the Flutter SDK run it.
+const _configure = '$_dart pub global run flutterfire_cli:flutterfire '
+    'configure --platforms=android,ios --overwrite-firebase-options';
+
+/// `flutterfire configure` as the user types it later.
+const _later = 'dart pub global run flutterfire_cli:flutterfire configure '
+    '--platforms=android,ios --overwrite-firebase-options';
+
+/// The question whether to configure Firebase now.
+const _configureNow = 'Configuring Firebase with flutterfire ($_later), for '
+    'firebase_core. Run it now?';
+
+/// The warning that Firebase is not configured, because of [reason].
+String _notConfigured(String reason) =>
+    'Configuring Firebase with flutterfire is not done, because $reason. Run '
+    'it in the app: $_later';
+
 /// A macOS machine with a Flutter SDK, bash and Ruby with xcodeproj
 /// 1.27.0, on which `smf create` runs in a terminal; the app goes to
 /// `/work/my_app`.
@@ -22,7 +39,10 @@ const _firebase = '/opt/npm/bin/firebase';
 /// `firebase login` logs in, and `dart pub global activate` activates
 /// flutterfire_cli. Every other command succeeds.
 final class _Machine {
-  _Machine({List<bool> confirmations = const []}) {
+  _Machine({
+    List<bool> confirmations = const [],
+    this.hasTerminal = true,
+  }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
           '{"flutterVersion": "3.44.2", "dartSdkVersion": "3.12.2"}',
@@ -36,6 +56,7 @@ final class _Machine {
   }
 
   final files = MemoryFileSystem.test();
+  final bool hasTerminal;
   late final FakeMachine fake;
   var _loggedIn = false;
   var _activated = false;
@@ -92,7 +113,7 @@ final class _Machine {
           fileSystem: files,
           environmentVariables: const {'PATH': '/sdk/bin:/bin'},
           operatingSystem: HostOperatingSystem.macos,
-          hasTerminal: true,
+          hasTerminal: hasTerminal,
         ),
       );
 
@@ -119,7 +140,7 @@ void main() {
   test(
       'a user who declines to install the CLIs gets no installation, but '
       'instructions, and the app', () async {
-    final machine = _Machine(confirmations: [false, false]);
+    final machine = _Machine(confirmations: [false, false, false]);
 
     final code = await machine.create();
 
@@ -128,6 +149,7 @@ void main() {
     expect(machine.fake.questions, [
       'Firebase CLI is missing (needed by firebase_core). Install it now?',
       'FlutterFire CLI is missing (needed by firebase_core). Install it now?',
+      _configureNow,
     ]);
     expect(machine.checks, [
       '$_dart pub global list',
@@ -140,6 +162,7 @@ void main() {
           'in with "firebase login".'),
       contains('FlutterFire CLI is missing. Activate it with "dart pub global '
           'activate flutterfire_cli 1.4.1".'),
+      _notConfigured('you chose to run it later'),
     ]);
     expect(
       machine.files.file('/work/my_app/lib/firebase_options.dart').existsSync(),
@@ -150,7 +173,7 @@ void main() {
   test(
       'a user who agrees gets the Firebase CLI, a login and the FlutterFire '
       'CLI, each checked again after the one before', () async {
-    final machine = _Machine(confirmations: [true, true, true]);
+    final machine = _Machine(confirmations: [true, true, true, true]);
 
     final code = await machine.create();
 
@@ -159,6 +182,7 @@ void main() {
       'Firebase CLI is missing (needed by firebase_core). Install it now?',
       'Firebase login is missing (needed by firebase_core). Install it now?',
       'FlutterFire CLI is missing (needed by firebase_core). Install it now?',
+      _configureNow,
     ]);
     expect(machine.checks, [
       '$_dart pub global list',
@@ -171,6 +195,7 @@ void main() {
       '$_dart pub global list',
       '$_dart pub global activate flutterfire_cli 1.4.1',
       '$_dart pub global list',
+      _configure,
     ]);
     final login = machine.fake.calls.firstWhere(
       (call) => call.line == '$_firebase login',
@@ -182,6 +207,19 @@ void main() {
       startsWith('/sdk/bin:/opt/npm/bin:/opt/node/bin:'),
     );
     expect(machine.warnings, isEmpty);
+
+    // After flutter pub get, in the temporary directory of the app, with the
+    // terminal, and with the Firebase CLI on the PATH.
+    final calls = machine.fake.calls;
+    final configure = calls.singleWhere((call) => call.line == _configure);
+    final pubGet = calls.indexWhere(
+      (call) => call.line == '/sdk/bin/flutter pub get',
+    );
+    expect(calls.indexOf(configure), greaterThan(pubGet));
+    expect(configure.interactive, isTrue);
+    expect(configure.workingDirectory, endsWith('/my_app'));
+    expect(configure.workingDirectory, isNot('/work/my_app'));
+    expect(configure.environment['PATH'], contains('/opt/npm/bin'));
   });
 
   test('a run that skips external setup installs nothing and asks nothing',
@@ -196,6 +234,24 @@ void main() {
       '$_dart pub global list',
       "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
     ]);
-    expect(machine.warnings, hasLength(3));
+    expect(machine.warnings, [
+      ...List.filled(3, contains('is missing.')),
+      _notConfigured('the run skips external setup'),
+    ]);
+  });
+
+  test('a run without a terminal prints the command to configure Firebase',
+      () async {
+    final machine = _Machine(hasTerminal: false);
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions, isEmpty);
+    expect(
+      machine.warnings.last,
+      _notConfigured('the run cannot ask the user'),
+    );
+    expect(machine.checks, isNot(contains(_configure)));
   });
 }

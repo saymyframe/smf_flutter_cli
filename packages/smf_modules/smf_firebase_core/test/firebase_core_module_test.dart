@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
+import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -99,6 +101,35 @@ void main() {
       expect(ios.entryValue, '15.0');
       expect(FirebaseCoreModule.minimumIosVersion, '15.0');
     });
+
+    test(
+        'configures Firebase with flutterfire after generation, for the '
+        'platforms of the app', () {
+      final step = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+
+      expect(step.tool, same(flutterfireTool));
+      expect(step.tool.executable, 'dart');
+      expect(
+        step.tool.prefixArgs,
+        ['pub', 'global', 'run', 'flutterfire_cli:flutterfire'],
+      );
+      expect(step.arguments, [
+        'configure',
+        '--platforms=android,ios',
+        '--overwrite-firebase-options',
+      ]);
+      expect(AppEntryRole.platforms, ['android', 'ios']);
+      expect(step.description, 'Configuring Firebase with flutterfire');
+      // It asks for the Firebase project, reaches the account of the user,
+      // and the app compiles without it.
+      expect(step.interactive, isTrue);
+      expect(step.external, isTrue);
+      expect(step.skippable, isTrue);
+      expect(step.when, isEmpty);
+    });
   });
 
   group('the contract harness', () {
@@ -137,8 +168,8 @@ void main() {
     });
 
     test(
-        'is the app without Firebase but for its options, start-up and '
-        'firebase_core', () {
+        'is the app without Firebase but for its options, start-up, README '
+        'and firebase_core', () {
       expect(
         withFirebase.files.keys.toSet(),
         {...without.files.keys, _options},
@@ -148,7 +179,11 @@ void main() {
         const ModuleOrigin(FirebaseCoreModule.id),
       );
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (path == 'pubspec.yaml' || path == AppEntryRole.bootstrapFile) {
+        if (const {
+          'pubspec.yaml',
+          AppEntryRole.bootstrapFile,
+          AppEntryRole.readmeFile,
+        }.contains(path)) {
           continue;
         }
         expect(withFirebase.files[path]!.bytes, file.bytes, reason: path);
@@ -163,6 +198,35 @@ void main() {
       expect(
         {...pubspec, 'dependencies': dependencies},
         _yamlOf(without.files['pubspec.yaml']!.text),
+      );
+    });
+
+    test('tells in the README how to configure Firebase', () {
+      final readme = withFirebase.files[AppEntryRole.readmeFile]!;
+
+      expect(readme.owner, const ModuleOrigin(FlutterCoreModule.id));
+      expect(
+        readme.text,
+        '${without.files[AppEntryRole.readmeFile]!.text}'
+        '\n'
+        '## Firebase\n'
+        '\n'
+        '${readmeSection('flutterfire configure --platforms=android,ios '
+            '--overwrite-firebase-options')}',
+      );
+      expect(
+        readme.text,
+        allOf(
+          contains(
+            '```bash\n'
+            'dart pub global activate flutterfire_cli\n'
+            'firebase login\n'
+            'flutterfire configure --platforms=android,ios '
+            '--overwrite-firebase-options\n'
+            '```\n',
+          ),
+          contains('run `flutterfire` from `~/.pub-cache/bin`'),
+        ),
       );
     });
 

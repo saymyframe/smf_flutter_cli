@@ -22,6 +22,12 @@ Before it generates the app, SMF checks that the machine can run `flutterfire co
 
 The app compiles without any of them, so a missing one only brings a warning with instructions. In a run with a terminal, unless it skips external setup (`--skip-external-setup`), SMF offers to install the Firebase CLI with npm, and Node.js first when it is missing, to log in with `firebase login`, and to activate flutterfire_cli 1.4.1; it asks before each. When npm fails on macOS or Linux, it offers the standalone binary of the Firebase CLI instead.
 
+## After generation
+
+Once the app has its packages, SMF runs `flutterfire configure --platforms=android,ios --overwrite-firebase-options` in it, through `dart pub global run flutterfire_cli:flutterfire`, with the terminal: it asks for the Firebase project and writes the options into `lib/firebase_options.dart`. It asks first, so you can leave it for later. A run without a terminal, or that skips external setup, prints the command to run later instead.
+
+The README of the app gets a section on Firebase: how to configure the app again, such as for another Firebase project or on another machine, and that the build phases that the FlutterFire CLI adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`.
+
 ## Use with SMF CLI
 
 This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
