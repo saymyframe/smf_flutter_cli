@@ -340,8 +340,8 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which module provides dependency '
-      'injection, and offers get_it', () async {
+      'a run in a terminal asks which module provides dependency injection '
+      'after the state management, and offers get_it', () async {
     final run = await _create({
       'Features': ['home'],
       'Layout': ['None'],
@@ -350,11 +350,19 @@ void main() {
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    expect(
-      run.asked.last.message,
+    final messages = [for (final question in run.asked) question.message];
+    final di = messages.indexOf(
       'Dependency injection: which module provides it?',
     );
-    expect(run.asked.last.shown, [
+    // The roles come in the order of the list of modules, and get_it is
+    // after the modules of the state management.
+    expect(
+      di,
+      greaterThan(
+        messages.indexOf('State management: which module provides it?'),
+      ),
+    );
+    expect(run.asked[di].shown, [
       'get_it — Service locator with get_it',
       'None',
     ]);
