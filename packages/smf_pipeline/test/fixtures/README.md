@@ -2,7 +2,14 @@
 
 Fake modules for the tests of the generation pipeline. **They are not modules to use in an app.**
 
-The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them, together with the real `flutter_core` module that creates the app, the real `go_router`, which routes the fake features as well as `fake_router` does, the real `bottom_tabs`, around which `go_router` builds the tabs of their destinations (`fake_router` has no tabs), and the real `get_it`, which registers their services as well as `fake_di` does, and keeps snapshots of the apps they render in `fixture_registry/test/snapshots/`. A CI job generates these apps and analyzes them with Flutter.
+The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them, together with real modules:
+
+- `flutter_core`, which creates the app;
+- `go_router`, which routes the fake features as well as `fake_router` does;
+- `bottom_tabs`, around which `go_router` builds the tabs of their destinations (`fake_router` has no tabs);
+- `get_it`, which registers their services as well as `fake_di` does.
+
+`fixture_registry` keeps snapshots of the apps they render in `fixture_registry/test/snapshots/`, and a CI job generates these apps and analyzes them with Flutter.
 
 | Package | What it has |
 | --- | --- |

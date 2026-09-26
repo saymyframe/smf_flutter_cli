@@ -3,13 +3,15 @@
 ///
 /// Together the fake modules use the features of the module model that the
 /// real modules do not use yet; see the README of the fixtures. Real
-/// modules take part where the fixtures need them: flutter_core creates the
-/// app, go_router routes the fake features too, so their routes compile
-/// with a real router, bottom tabs provide the layout, so an app with the
-/// two fake features and go_router has a main navigation, which the fake
-/// router does not have, and get_it registers the services of the fixtures
-/// too, so their registrations compile with a real container. Either way,
-/// the app has two screens that can start it.
+/// modules take part where the fixtures need them:
+/// - flutter_core creates the app;
+/// - go_router routes the fake features too, so their routes compile with a
+///   real router, and bottom tabs provide the layout, so an app with the two
+///   fake features and go_router has a main navigation, which the fake
+///   router does not have; with either router, the app has two screens that
+///   can start it;
+/// - get_it registers the services of the fixtures too, so their
+///   registrations compile with a real container.
 library;
 
 import 'package:fake_di/fake_di.dart';
@@ -24,9 +26,10 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 
-/// Every fixture module, flutter_core, which creates the app, go_router, a
-/// second router, bottom tabs, and get_it, a second DI container, with a
-/// fake DI container of all capabilities, or of [diCapabilities] if set.
+/// Every fixture module, with a fake DI container of all capabilities, or
+/// of [diCapabilities] if set, and the real modules: flutter_core, which
+/// creates the app, go_router, a second router, bottom tabs, and get_it, a
+/// second DI container.
 List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FlutterCoreModule(),
       const FakeRouterModule(),
