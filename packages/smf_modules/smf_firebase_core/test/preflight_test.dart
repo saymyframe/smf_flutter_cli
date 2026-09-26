@@ -231,6 +231,22 @@ void main() {
       expect(machine.questions, isEmpty);
     });
 
+    test('stops its progress when the user cancels the run', () async {
+      final machine = FakeMachine(
+        executables: {'bash': _bash},
+        reply: (_) => throw const SmfCancelledException(),
+      );
+
+      await expectLater(
+        check.install(machine),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      expect(machine.reports, [
+        'progress: Installing the Firebase CLI',
+        'fail: Installing the Firebase CLI',
+      ]);
+    });
+
     test('cannot install without a script or its shell', () async {
       await expectLater(
         check.install(FakeMachine(operatingSystem: HostOperatingSystem.other)),
@@ -442,6 +458,22 @@ void main() {
           '69:\nCould not resolve',
         ),
       );
+    });
+
+    test('stops its progress when the user cancels the run', () async {
+      final machine = FakeMachine(
+        executables: {'dart': _dart},
+        reply: (_) => throw const SmfCancelledException(),
+      );
+
+      await expectLater(
+        check.install(machine),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      expect(machine.reports, [
+        'progress: Activating the FlutterFire CLI',
+        'fail: Activating the FlutterFire CLI',
+      ]);
     });
 
     test('passes no character to dart.bat that cmd.exe reads itself', () {

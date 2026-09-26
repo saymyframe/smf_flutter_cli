@@ -36,12 +36,14 @@ String _notConfigured(String reason) =>
 ///
 /// The Firebase CLI and the FlutterFire CLI are missing until a command
 /// installs them: the install script puts `firebase` into `/opt/npm/bin`,
-/// `firebase login` logs in, and `dart pub global activate` activates
-/// flutterfire_cli. Every other command succeeds.
+/// `firebase login` logs in unless it exits with [loginCode], and `dart pub
+/// global activate` activates flutterfire_cli. Every other command
+/// succeeds.
 final class _Machine {
   _Machine({
     List<bool> confirmations = const [],
     this.hasTerminal = true,
+    this.loginCode = 0,
   }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
@@ -57,6 +59,7 @@ final class _Machine {
 
   final files = MemoryFileSystem.test();
   final bool hasTerminal;
+  final int loginCode;
   late final FakeMachine fake;
   var _loggedIn = false;
   var _activated = false;
@@ -78,7 +81,10 @@ final class _Machine {
             : '{"status": "success"}',
       );
     }
-    if (line == '$_firebase login') _loggedIn = true;
+    if (line == '$_firebase login') {
+      _loggedIn = loginCode == 0;
+      return SmfProcessResult(exitCode: loginCode);
+    }
     if (line == '$_dart pub global list') {
       return SmfProcessResult(
         exitCode: 0,
@@ -220,6 +226,31 @@ void main() {
     expect(configure.workingDirectory, endsWith('/my_app'));
     expect(configure.workingDirectory, isNot('/work/my_app'));
     expect(configure.environment['PATH'], contains('/opt/npm/bin'));
+  });
+
+  test('a login that fails leaves a warning that says how it ended', () async {
+    final machine = _Machine(
+      confirmations: [true, true, false, false],
+      loginCode: 1,
+    );
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.checks, [
+      '$_dart pub global list',
+      "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
+      '/bin/bash <script>',
+      '$_firebase login:list --json',
+      '$_firebase login',
+      '$_dart pub global list',
+    ]);
+    expect(machine.warnings, [
+      contains('Firebase login could not be checked: The installation '
+          'failed: "firebase login" exited with code 1.'),
+      contains('FlutterFire CLI is missing.'),
+      _notConfigured('you chose to run it later'),
+    ]);
   });
 
   test('a run that skips external setup installs nothing and asks nothing',
