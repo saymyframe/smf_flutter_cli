@@ -14,6 +14,11 @@ import 'package:smf_contracts/lego.dart';
 const _material = ImportRef('package:flutter/material.dart');
 const _foundation = ImportRef('package:flutter/foundation.dart');
 
+/// The section of the README that [FakeSocketsModule] and
+/// [FakeOverlapModule] both add.
+const _readmeSection = 'The app has something in every socket of its entry, '
+    'with `code` and a [link](https://example.com).';
+
 /// A module that puts something into every socket of the app entry that no
 /// real module uses yet, and into the `flutter:` section of the pubspec.
 final class FakeSocketsModule extends SmfModule {
@@ -168,14 +173,15 @@ final class FakeSocketsModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
       ];
 }
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data and plist strings agree, the plist
-/// arrays are united, the highest versions win, and the supported locale
-/// appears once.
+/// them: equal permissions, meta-data, plist strings and README sections
+/// agree, the plist arrays are united, the highest versions win, and the
+/// supported locale appears once.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -221,6 +227,7 @@ final class FakeOverlapModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.8.0',
         ),
+        AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
       ];
 }
 

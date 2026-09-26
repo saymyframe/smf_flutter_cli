@@ -1,3 +1,11 @@
+=== README.md (flutter_core) ===
+# fixture_app
+
+A new Flutter project.
+
+## Fixture
+
+The app has something in every socket of its entry, with `code` and a [link](https://example.com).
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
