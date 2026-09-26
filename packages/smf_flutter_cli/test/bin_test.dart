@@ -229,12 +229,18 @@ void main() {
           );
 
           expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The version of flutter_riverpod is the module's to choose.
           expect(
             result.stdout,
             allOf(
               contains('  riverpod: requested\n'),
               contains('  state_management: riverpod\n'),
-              contains('  flutter_riverpod ^3.4.3 (riverpod)\n'),
+              matches(
+                RegExp(
+                  r'^  flutter_riverpod \S+ \(riverpod\)$',
+                  multiLine: true,
+                ),
+              ),
             ),
           );
           expect(

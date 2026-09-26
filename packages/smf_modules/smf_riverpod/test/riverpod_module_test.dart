@@ -64,22 +64,59 @@ final class _RiverpodUser extends SmfModule {
       ];
 }
 
-/// The app of [modules] among [registry] that the contract harness renders,
-/// which has no errors.
-Future<RenderedApp> _appOf(
+/// A module with a variant for this one, as a module with screens has,
+/// which wraps the root widget in a `Consumer` that reads providers. Its id
+/// comes before `riverpod`.
+final class _VariantUser extends SmfModule {
+  const _VariantUser();
+
+  static const id = ModuleId('a_variant_user');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Reads providers',
+        // Infrastructure has no variants; a kind is data.
+        kind: ModuleKind(id: 'with_variants', label: 'With variants'),
+        variants: Variants(
+          role: stateManagementRole,
+          byProvider: {RiverpodModule.id: _withRiverpod},
+        ),
+      );
+
+  static List<Contribution> _withRiverpod(ModuleContext context) => const [
+        PubspecContribution.hosted('flutter_riverpod', 'any'),
+        SocketContribution.wrap(
+          AppEntryRole.rootWrappers,
+          Fragment.wrap(
+            'Consumer(builder: (context, ref, child) => child!, child: ',
+            ')',
+            imports: [
+              ImportRef(
+                'package:flutter_riverpod/flutter_riverpod.dart',
+                show: ['Consumer'],
+              ),
+            ],
+          ),
+        ),
+      ];
+}
+
+/// What the contract harness finds for the app of [modules] among
+/// [registry], which has no errors and is rendered.
+Future<ContractResult> _resultOf(
   List<ModuleId> modules, {
   List<SmfModule> registry = _modules,
 }) async {
   final result = await ContractHarness(ModuleRegistry(registry)).check(
     ContractCase(modules.join(', '), requested: modules),
   );
-  final app = result.app;
-  if (result.errors.isNotEmpty || app == null) {
+  if (result.errors.isNotEmpty || result.app == null) {
     throw StateError(
       'The app of $modules has errors: ${result.errors.join('\n')}',
     );
   }
-  return app;
+  return result;
 }
 
 /// The pubspec of [app] as plain maps and lists.
@@ -157,16 +194,6 @@ void main() {
     test('forms a valid registry with the provider of the app entry', () {
       expect(ModuleRegistry.problemsOf(_modules), isEmpty);
     });
-
-    test('asks for the Dart that flutter_riverpod 3.4 needs', () {
-      final environment = module
-          .contribute(ContractHarness.defaultContext)
-          .whereType<PubspecEnvironment>()
-          .single;
-
-      expect(environment.sdk, '^3.12.0');
-      expect(environment.flutter, isNull);
-    });
   });
 
   group('the contract harness', () {
@@ -196,12 +223,33 @@ void main() {
   });
 
   group('an app with Riverpod', () {
+    late ContractResult result;
     late RenderedApp withRiverpod;
     late RenderedApp without;
 
     setUpAll(() async {
-      withRiverpod = await _appOf(const [RiverpodModule.id]);
-      without = await _appOf(const [FlutterCoreModule.id]);
+      result = await _resultOf(const [RiverpodModule.id]);
+      withRiverpod = result.app!;
+      without = (await _resultOf(const [FlutterCoreModule.id])).app!;
+    });
+
+    test(
+        'gets flutter_riverpod and the ProviderScope from it, and nothing '
+        'else', () {
+      final contributions = [
+        for (final collected in result.collection!.ofModule(RiverpodModule.id))
+          collected.contribution,
+      ];
+
+      expect(contributions, hasLength(2));
+      final dependency = contributions.first as PubspecDependency;
+      expect(dependency.package, 'flutter_riverpod');
+      expect(dependency.constraint, '^3.4.3');
+      expect(dependency.dev, isFalse);
+      final wrapper = contributions.last as SocketContribution;
+      expect(wrapper.socket, AppEntryRole.rootWrappers);
+      expect(wrapper.fragment!.code, 'ProviderScope(child: ');
+      expect(wrapper.fragment!.closing, ')');
     });
 
     test('runs the app inside a ProviderScope', () {
@@ -246,15 +294,27 @@ void main() {
     test(
         'has the root wrappers of modules that can use Riverpod inside the '
         'ProviderScope', () async {
-      final app = await _appOf(
-        const [_StateUser.id, _RiverpodUser.id],
-        registry: const [..._modules, _StateUser(), _RiverpodUser()],
+      final result = await _resultOf(
+        const [_StateUser.id, _RiverpodUser.id, _VariantUser.id],
+        registry: const [
+          ..._modules,
+          _StateUser(),
+          _RiverpodUser(),
+          _VariantUser(),
+        ],
       );
 
       expect(
-        _rootWidgetsOf(app),
-        ['ProviderScope', 'KeyedSubtree', 'RepaintBoundary', 'App'],
+        result.resolution!.module(_VariantUser.id)!.variant,
+        RiverpodModule.id,
       );
+      expect(_rootWidgetsOf(result.app!), [
+        'ProviderScope',
+        'KeyedSubtree',
+        'RepaintBoundary',
+        'Consumer',
+        'App',
+      ]);
     });
   });
 }

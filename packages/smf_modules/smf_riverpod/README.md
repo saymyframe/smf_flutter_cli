@@ -5,14 +5,12 @@ The SMF module that manages the state of screens with [Riverpod](https://riverpo
 It adds `flutter_riverpod` to the dependencies of the app and wraps the root widget in a `ProviderScope`, in `lib/main.dart`:
 
 ```dart
-runApp(
-  ProviderScope(child: const App()),
-);
+runApp(ProviderScope(child: const App()));
 ```
 
 Modules with screens support Riverpod through a variant keyed by the id of this module, `riverpod`. The variant brings the providers of their screens. It depends on `flutter_riverpod` with the constraint `any`, so the version is the one of this module.
 
-The `ProviderScope` has to be above every widget that reads a provider. A module with such variants requires the state management role, and SMF orders the contributions of a module after those of the providers of the roles it requires, and after those of the modules it depends on. So when a module that can use Riverpod wraps the root widget too, its wrapper goes inside the `ProviderScope`.
+The `ProviderScope` has to be above every widget that reads a provider. SMF orders the contributions of a module after those of the providers of the roles it requires, and after those of the modules it depends on. A module uses Riverpod only through such a variant, which makes it require the state management role, or by depending on this module. So when a module that uses Riverpod wraps the root widget too, its wrapper goes inside the `ProviderScope`.
 
 ## Use with SMF CLI
 

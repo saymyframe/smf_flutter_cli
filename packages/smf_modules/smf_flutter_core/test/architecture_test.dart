@@ -69,4 +69,21 @@ void main() {
       {'smf_contracts'},
     );
   });
+
+  test('tests with no module package, so that other modules can', () {
+    // Modules render the apps of their tests with this module as a dev
+    // dependency, which pub resolves when the package is analyzed on
+    // pub.dev: a dev dependency back on a module would make a cycle.
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final devDependencies =
+        pubspec.substring(pubspec.indexOf('\ndev_dependencies:'));
+
+    expect(
+      RegExp(r'^\s+(smf_[a-z_]+):', multiLine: true)
+          .allMatches(devDependencies)
+          .map((match) => match.group(1))
+          .toSet(),
+      {'smf_pipeline'},
+    );
+  });
 }

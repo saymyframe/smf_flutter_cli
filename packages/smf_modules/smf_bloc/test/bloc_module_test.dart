@@ -10,19 +10,18 @@ import 'package:yaml/yaml.dart';
 /// app it becomes a part of.
 const List<SmfModule> _modules = [FlutterCoreModule(), BlocModule()];
 
-/// The app of [modules] that the contract harness renders, which has no
-/// errors.
-Future<RenderedApp> _appOf(List<ModuleId> modules) async {
+/// What the contract harness finds for the app of [modules], which has no
+/// errors and is rendered.
+Future<ContractResult> _resultOf(List<ModuleId> modules) async {
   final result = await ContractHarness(ModuleRegistry(_modules)).check(
     ContractCase(modules.join(', '), requested: modules),
   );
-  final app = result.app;
-  if (result.errors.isNotEmpty || app == null) {
+  if (result.errors.isNotEmpty || result.app == null) {
     throw StateError(
       'The app of $modules has errors: ${result.errors.join('\n')}',
     );
   }
-  return app;
+  return result;
 }
 
 /// The pubspec of [app] as plain maps and lists.
@@ -87,12 +86,26 @@ void main() {
   });
 
   group('an app with BLoC', () {
+    late ContractResult result;
     late RenderedApp withBloc;
     late RenderedApp without;
 
     setUpAll(() async {
-      withBloc = await _appOf(const [BlocModule.id]);
-      without = await _appOf(const [FlutterCoreModule.id]);
+      result = await _resultOf(const [BlocModule.id]);
+      withBloc = result.app!;
+      without = (await _resultOf(const [FlutterCoreModule.id])).app!;
+    });
+
+    test('gets flutter_bloc from it, and nothing else', () {
+      final contributions = [
+        for (final collected in result.collection!.ofModule(BlocModule.id))
+          collected.contribution,
+      ];
+
+      final dependency = contributions.single as PubspecDependency;
+      expect(dependency.package, 'flutter_bloc');
+      expect(dependency.constraint, '^9.1.1');
+      expect(dependency.dev, isFalse);
     });
 
     test('depends on flutter_bloc 9', () {

@@ -8,9 +8,7 @@ import 'package:smf_contracts/lego.dart';
 /// runs the app as:
 ///
 /// ```dart
-/// runApp(
-///   ProviderScope(child: const App()),
-/// );
+/// runApp(ProviderScope(child: const App()));
 /// ```
 ///
 /// Modules with screens support Riverpod through their variant for [id],
@@ -22,12 +20,12 @@ import 'package:smf_contracts/lego.dart';
 /// not above every other widget. The root wrappers of the modules come in
 /// the order of their contributions (see [SocketContribution]), the first
 /// outermost, and a module comes after the providers of the roles it
-/// requires and after the modules it depends on. A module that can use
-/// Riverpod does one of the two: a module with variants for the providers
-/// of the state management role requires the role, and any other has to
-/// depend on this module. So its root wrappers go inside the
-/// `ProviderScope`. The wrappers of other modules cannot read providers,
-/// and go on either side of it.
+/// requires and after the modules it depends on. By the rules of the module
+/// model, a module uses the packages of another module only through its
+/// variant for it, which makes the module require the role of that
+/// provider, or by depending on it. So the root wrappers of a module that
+/// uses Riverpod go inside the `ProviderScope`. The wrappers of the other
+/// modules read no provider, and their place around it follows their ids.
 final class RiverpodModule extends SmfModule {
   /// Creates the module.
   const RiverpodModule();
@@ -47,9 +45,6 @@ final class RiverpodModule extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) => const [
         PubspecContribution.hosted('flutter_riverpod', '^3.4.3'),
-        // The Dart that flutter_riverpod 3.4 needs, which the pipeline
-        // compares with the SDK before it generates the app.
-        PubspecContribution.environment(sdk: '^3.12.0'),
         SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(

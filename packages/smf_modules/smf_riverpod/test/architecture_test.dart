@@ -59,8 +59,8 @@ void main() {
   });
 
   test(
-      'the tests import only lego.dart of smf_contracts, and no files '
-      'of other packages', () {
+      'the tests import only lego.dart of smf_contracts, and reach no file '
+      'outside test/ by a relative path', () {
     for (final MapEntry(key: path, value: uris)
         in _directivesIn('test').entries) {
       for (final uri in uris) {
