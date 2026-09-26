@@ -5,8 +5,11 @@ import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 /// Checks that the Firebase CLI is installed, which `flutterfire configure`
 /// runs to reach the Firebase projects of the user.
 ///
-/// It can install it with npm, and Node.js first when it is missing: the
-/// pipeline asks the user before. On macOS and Linux, when that fails, it
+/// It can install it with npm, and Node.js first when it is missing or too
+/// old: the pipeline asks the user before. The progress shows what the
+/// installation is doing, which may take minutes, and the changes to the
+/// machine that outlive the run, such as a line in the profile of the shell,
+/// are listed after it. On macOS and Linux, when the installation fails, it
 /// offers the standalone binary of the Firebase CLI instead.
 final class FirebaseCliCheck extends PreflightCheck {
   /// Creates the check.
@@ -56,6 +59,15 @@ final class FirebaseCliCheck extends PreflightCheck {
         shell,
         [...script.arguments, path],
         workingDirectory: directoryOf(path),
+        onOutput: (line) {
+          final text = line.trim();
+          if (text.isEmpty ||
+              text.startsWith(binDirPrefix) ||
+              text.startsWith(notePrefix)) {
+            return;
+          }
+          progress.update('$installing: $text');
+        },
       );
     } on Object {
       progress.fail(installing);
@@ -63,15 +75,22 @@ final class FirebaseCliCheck extends PreflightCheck {
     }
     final output = [result.stdout.trim(), result.stderr.trim()]
       ..removeWhere((text) => text.isEmpty);
+    final notes = notesIn(result.stdout);
     if (result.succeeded) {
       progress.complete('Installed the Firebase CLI');
+      notes.forEach(logger.info);
       if (output.isNotEmpty) logger.detail(output.join('\n'));
       return ToolInstall(binDirs: binDirsIn(result.stdout));
     }
     progress.fail(installing);
+    notes.forEach(logger.info);
     final failure = failureOf(
       script.fileName,
-      result,
+      SmfProcessResult(
+        exitCode: result.exitCode,
+        stdout: withoutReports(result.stdout),
+        stderr: result.stderr,
+      ),
       environment.operatingSystem,
     );
     if (!script.standaloneFallback) throw PreflightSetupException(failure);

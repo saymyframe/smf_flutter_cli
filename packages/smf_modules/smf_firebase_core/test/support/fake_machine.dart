@@ -44,10 +44,11 @@ typedef Reply = FutureOr<SmfProcessResult> Function(Call call);
 ///
 /// The executables on its `PATH` are [executables], by name, which a reply
 /// may change, as an installation does. Every command runs the reply given
-/// to the constructor, which succeeds without output by default. The
-/// confirmations given to it answer the yes-or-no questions in order. It
-/// records the commands, the questions, what was reported and the temporary
-/// files.
+/// to the constructor, which succeeds without output by default; the lines
+/// of its output go to the `onOutput` of the caller, those of the standard
+/// output first. The confirmations given to it answer the yes-or-no
+/// questions in order. It records the commands, the questions, what was
+/// reported and the temporary files.
 final class FakeMachine implements SmfEnvironment {
   /// Creates the machine.
   FakeMachine({
@@ -128,7 +129,16 @@ final class _Runner implements SmfProcessRunner {
       environment: environment,
     );
     _machine.calls.add(call);
-    return _machine._reply(call);
+    final result = await _machine._reply(call);
+    if (onOutput != null) {
+      for (final stream in [result.stdout, result.stderr]) {
+        stream
+            .split(RegExp('[\r\n]'))
+            .where((line) => line.isNotEmpty)
+            .forEach(onOutput);
+      }
+    }
+    return result;
   }
 
   @override

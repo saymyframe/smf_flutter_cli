@@ -102,6 +102,7 @@ void main() {
           return _result(
             0,
             stdout: 'added 600 packages\n15.14.0\n'
+                'smf-note=Added /opt/npm/bin to the PATH in ~/.zprofile.\n'
                 'smf-bin-dir=/opt/npm/bin\n'
                 'smf-bin-dir=/opt/node/bin\n'
                 'smf-bin-dir=/opt/npm/bin\n',
@@ -123,9 +124,13 @@ void main() {
       expect(machine.calls.single.workingDirectory, directoryOf(script));
       expect(machine.calls.single.interactive, isFalse);
       expect(machine.questions, isEmpty);
+      // What the script is doing, then what it changed.
       expect(machine.reports, [
         'progress: Installing the Firebase CLI',
+        'update: Installing the Firebase CLI: added 600 packages',
+        'update: Installing the Firebase CLI: 15.14.0',
         'complete: Installed the Firebase CLI',
+        'info: Added /opt/npm/bin to the PATH in ~/.zprofile.',
         startsWith('detail: added 600 packages'),
       ]);
     });
@@ -161,7 +166,12 @@ void main() {
       final machine = FakeMachine(
         operatingSystem: HostOperatingSystem.linux,
         executables: {'bash': _bash},
-        reply: (_) => _result(1, stdout: 'npm ERR! code EACCES', stderr: 'x'),
+        reply: (_) => _result(
+          1,
+          stdout: 'smf-note=Installed nvm in /home/me/.nvm.\n'
+              'npm ERR! code EACCES',
+          stderr: 'x',
+        ),
         confirmations: [false],
       );
 
@@ -171,6 +181,11 @@ void main() {
           '"install_firebase_linux.sh" exited with code 1:\nx\nnpm ERR! code '
           'EACCES',
         ),
+      );
+      // What it changed before it failed.
+      expect(
+        machine.reports,
+        contains('info: Installed nvm in /home/me/.nvm.'),
       );
       expect(
         machine.questions.single,

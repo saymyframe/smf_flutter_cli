@@ -211,6 +211,10 @@ void main() {
           'export PATH="\$PATH:$prefix/bin"\n',
           reason: shell,
         );
+        final file = '${machine.home.path}/$profile';
+        expect(notesIn('${result.stdout}'), [
+          'Added $prefix/bin to the PATH in $file, for new terminals.',
+        ]);
       }
     });
 
@@ -225,6 +229,7 @@ void main() {
       expect(result, succeeded(), reason: '${result.stderr}');
       expect(machine.calls.first, 'brew install node');
       expect(binDirsIn('${result.stdout}'), [brew.path]);
+      expect(notesIn('${result.stdout}'), ['Installed Node.js with Homebrew.']);
     });
 
     test('installs Node.js 20 or newer when the one it finds is older', () {
@@ -276,6 +281,7 @@ void main() {
       expect(machine.calls, [
         'nvm install --lts',
         'node -v',
+        'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
       ]);
@@ -283,6 +289,10 @@ void main() {
         binDirsIn('${result.stdout}'),
         ['${nvm.path}/versions/node/v22.11.0/bin'],
       );
+      // nvm puts the directory of its Node.js on the PATH itself.
+      expect(notesIn('${result.stdout}'), [
+        'Installed the Firebase CLI with Node.js v22.11.0 of nvm.',
+      ]);
     });
 
     test('downloads nvm when there is no Node.js, Homebrew or nvm', () {
@@ -341,6 +351,16 @@ void main() {
         r'exec "$(npm prefix -g)/bin/firebase" "$@"'
         '\n',
       );
+      final rc = '$home/.bashrc';
+      final firebase = '$home/.local/bin';
+      final moved = 'Moved the global directory of npm to $home/.npm-global, '
+          'in ~/.npmrc, so that it needs no sudo.';
+      expect(notesIn('${result.stdout}'), [
+        moved,
+        'Added $home/.npm-global/bin to the PATH in $rc, for new terminals.',
+        'Added a firebase command to $firebase, which runs the one of npm.',
+        'Added \$HOME/.local/bin to the PATH in $rc, for new terminals.',
+      ]);
     });
 
     test('uses the rc file of zsh for zsh', () {
@@ -376,6 +396,10 @@ void main() {
         r'export PATH="$PATH:$HOME/.local/bin"'
         '\n',
       );
+      expect(
+        notesIn('${result.stdout}'),
+        contains('Installed the Firebase CLI with Node.js v22.11.0 of nvm.'),
+      );
     });
 
     test('needs curl or wget to install nvm, and reaches nothing here', () {
@@ -392,6 +416,8 @@ void main() {
     expect(script, contains('npm install -g firebase-tools'));
     expect(script, contains(r'Write-Output "smf-bin-dir=$(Split-Path'));
     expect(binDirPrefix, 'smf-bin-dir=');
+    expect(script, contains(r'Write-Output "smf-note=Added $pathEntry'));
+    expect(notePrefix, 'smf-note=');
   });
 
   test('the Windows script installs Node.js 20 or newer', () {
