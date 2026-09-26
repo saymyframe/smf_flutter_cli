@@ -14,7 +14,7 @@ This module adds `event_bus` to the dependencies of the app and implements the s
 - listeners get an event after the code that fires it has completed, not during `fire`;
 - a listener gets the events fired after it starts listening.
 
-The service is created on first use, without waiting, so the app starts as it would without it. When the app has a module that provides dependency injection, the events role registers the service in its container as a lazy singleton. The code that creates what the screens of a feature need, such as a Cubit, then takes the service with `resolve` in the composition file of the feature, and other services get it as a parameter of their factory function.
+The service is created on first use, without waiting, so the app starts as it would without it. When the app has a module that provides dependency injection, the events role registers the service in its container as a lazy singleton. The code that creates what the screens of a feature need, such as a Cubit, then takes the service with `resolve` in the composition file of the feature, and other services get it as a parameter of their factory function. Without a container, the code of the app gets the service from `createCommunicationService()`, which always returns the same one: the listeners of one service do not get the events fired into another, so the app does not create a second one with `createEventBusCommunicationService()`.
 
 ## Use with SMF CLI
 

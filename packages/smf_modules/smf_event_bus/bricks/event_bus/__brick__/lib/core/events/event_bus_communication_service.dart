@@ -2,8 +2,11 @@ import 'package:event_bus/event_bus.dart';
 
 import 'communication_service.dart';
 
-/// Creates the communication service of the app on an [EventBus] of the
-/// event_bus package.
+/// Creates a communication service on a new [EventBus] of the event_bus
+/// package.
+///
+/// The app has one service, which `createCommunicationService()` returns:
+/// the listeners of one service do not get the events fired into another.
 CommunicationService createEventBusCommunicationService() =>
     EventBusCommunicationService(EventBus());
 
