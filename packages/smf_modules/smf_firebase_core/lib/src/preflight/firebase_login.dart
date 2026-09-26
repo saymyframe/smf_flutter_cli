@@ -9,8 +9,11 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// `firebase login:list --json` tells: it prints `{"status": "success"}`
 /// with the accounts in `result`, and without `result` when there is none,
 /// exiting with code 0 either way. Its output holds the tokens of the
-/// accounts, so the check never shows it. The check can log the user in
-/// with `firebase login`, which asks its own questions in the terminal.
+/// accounts, so the check never shows it: when the command fails, it shows
+/// the error that the Firebase CLI reported in its JSON, and the end of the
+/// standard error, such as that the Node.js version is too old. The check
+/// can log the user in with `firebase login`, which asks its own questions
+/// in the terminal.
 final class FirebaseLoginCheck extends PreflightCheck {
   /// Creates the check.
   const FirebaseLoginCheck();
@@ -37,19 +40,18 @@ final class FirebaseLoginCheck extends PreflightCheck {
       // The Firebase CLI writes firebase-debug.log where it runs.
       workingDirectory: await scratchDirectory(environment),
     );
+    final json = _jsonIn(result.stdout);
     if (!result.succeeded) {
-      return PreflightFailed('${endOf(command, result.exitCode)}.');
-    }
-    final output = result.stdout;
-    final start = output.indexOf('{');
-    final end = output.lastIndexOf('}');
-    Object? json;
-    if (start >= 0 && end > start) {
-      try {
-        json = jsonDecode(output.substring(start, end + 1));
-      } on FormatException {
-        json = null;
-      }
+      final reasons = [
+        if (json case {'status': 'error', 'error': final String error}
+            when error.trim().isNotEmpty)
+          error.trim(),
+        if (tailOf(result.stderr) case final tail when tail.isNotEmpty) tail,
+      ];
+      final end = endOf(command, result.exitCode);
+      return PreflightFailed(
+        reasons.isEmpty ? '$end.' : '$end:\n${reasons.join('\n')}',
+      );
     }
     return switch (json) {
       {'status': 'success', 'result': final List<Object?> accounts}
@@ -81,5 +83,19 @@ final class FirebaseLoginCheck extends PreflightCheck {
       throw PreflightSetupException('${endOf('firebase login', code)}.');
     }
     return const ToolInstall();
+  }
+}
+
+/// The JSON that the Firebase CLI printed in [output], from its first `{`
+/// to its last `}`, after any warning; `null` if there is none.
+Object? _jsonIn(String output) {
+  final start = output.indexOf('{');
+  final end = output.lastIndexOf('}');
+  if (start < 0 || end < start) return null;
+  try {
+    return jsonDecode(output.substring(start, end + 1));
+  } on FormatException {
+    // Its text could hold the tokens of the accounts, so it goes unseen.
+    return null;
   }
 }

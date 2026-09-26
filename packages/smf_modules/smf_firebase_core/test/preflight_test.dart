@@ -313,11 +313,45 @@ void main() {
     });
 
     test('fails when the command fails or tells nothing', () async {
+      // The output of the accounts is never shown, even of a failed run.
       expect(
         await check.check(
           machineWith(_result(1, stdout: _accounts(['a@b.c']))),
         ),
         _failed('"firebase login:list --json" exited with code 1.'),
+      );
+      expect(
+        await check.check(
+          machineWith(
+            _result(
+              1,
+              stdout: '{\n  "status": "error",\n  "error": "Failed to fetch '
+                  'the accounts."\n}',
+              stderr: 'Update available 15.14.0 → 15.15.0\n',
+            ),
+          ),
+        ),
+        _failed(
+          '"firebase login:list --json" exited with code 1:\nFailed to fetch '
+          'the accounts.\nUpdate available 15.14.0 → 15.15.0',
+        ),
+      );
+      // The Firebase CLI stops before its JSON on an old Node.js.
+      expect(
+        await check.check(
+          machineWith(
+            _result(
+              1,
+              stderr: 'Firebase CLI v15.14.0 is incompatible with Node.js '
+                  'v18.20.0 Please upgrade Node.js to version >=20.0.0',
+            ),
+          ),
+        ),
+        _failed(
+          '"firebase login:list --json" exited with code 1:\nFirebase CLI '
+          'v15.14.0 is incompatible with Node.js v18.20.0 Please upgrade '
+          'Node.js to version >=20.0.0',
+        ),
       );
       for (final output in [
         '',
