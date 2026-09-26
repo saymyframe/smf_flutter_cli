@@ -369,7 +369,9 @@ if (-not $firebase) {
   Write-Error "The Firebase CLI was not found after its installation."
   exit 1
 }
+# The Firebase CLI stops at once on a Node.js that is too old for it.
 & $firebase.Source --version
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Output "smf-bin-dir=$(Split-Path $firebase.Source)"
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) { Write-Output "smf-bin-dir=$(Split-Path $node.Source)" }

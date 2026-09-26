@@ -346,4 +346,18 @@ void main() {
     expect(script, contains(r'Write-Output "smf-bin-dir=$(Split-Path'));
     expect(binDirPrefix, 'smf-bin-dir=');
   });
+
+  test('the Windows script fails when the Firebase CLI does not run', () {
+    final script = InstallScript.of(HostOperatingSystem.windows)!.text;
+
+    // As bash does under set -e in the other scripts.
+    expect(
+      script,
+      contains(
+        '& \$firebase.Source --version\n'
+        'if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }\n'
+        'Write-Output "smf-bin-dir=',
+      ),
+    );
+  });
 }
