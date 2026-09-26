@@ -77,20 +77,21 @@ void main() {
   });
 
   test('reports every path of an exception that matches nothing', () {
+    // Both exceptions last: neither goes as the packages move.
     final problems = problemsOf({
-      'packages/smf_modules/smf_event_bus/lib/a.dart': 'ModuleProfile',
+      'packages/smf_modules/smf_contribution_engine/lib/a.dart': 'mustachex',
     });
 
     expect(
       problems,
       contains(
-        'The exception for packages/smf_modules/smf_firebase_analytics/ '
-        'matches nothing; remove it from tools/banlist.dart.',
+        'The exception for pubspec.yaml matches nothing; remove it from '
+        'tools/banlist.dart.',
       ),
     );
     expect(
       problems,
-      isNot(contains(contains('smf_event_bus/ matches nothing'))),
+      isNot(contains(contains('smf_contribution_engine/ matches nothing'))),
     );
   });
 }
