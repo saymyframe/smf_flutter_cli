@@ -174,6 +174,7 @@ void main() {
       'Layout': ['None'],
       'State management': ['bloc'],
       'Dependency injection': ['None'],
+      'Events': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -182,6 +183,7 @@ void main() {
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
+      'Events: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
@@ -233,6 +235,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'State management': ['riverpod'],
       'Dependency injection': ['None'],
+      'Events': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -241,6 +244,7 @@ void main() {
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
+      'Events: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -274,6 +278,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'State management': ['None'],
       'Dependency injection': ['None'],
+      'Events': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -282,6 +287,7 @@ void main() {
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
+      'Events: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -315,6 +321,7 @@ void main() {
       'Router': ['go_router'],
       'State management': ['None'],
       'Dependency injection': ['None'],
+      'Events': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -324,6 +331,7 @@ void main() {
       'Router: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
+      'Events: which module provides it?',
     ]);
     expect(run.asked[2].shown, [
       'go_router — Routes and navigation with go_router',
@@ -347,6 +355,7 @@ void main() {
       'Layout': ['None'],
       'State management': ['None'],
       'Dependency injection': ['get_it'],
+      'Events': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -367,7 +376,7 @@ void main() {
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
-    // No module of the CLI registers a service yet.
+    // Without the events, no module of the app registers a service.
     expect(
       app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
       allOf(
@@ -387,6 +396,63 @@ void main() {
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
       contains('  get_it: '),
+    );
+  });
+
+  test(
+      'a run in a terminal asks which module provides the events after '
+      'dependency injection, and offers event_bus, whose service the DI '
+      'container registers', () async {
+    final run = await _create({
+      'Features': [],
+      'Layout': ['None'],
+      'Router': ['None'],
+      'State management': ['None'],
+      'Dependency injection': ['get_it'],
+      'Events': ['event_bus'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final events = messages.indexOf('Events: which module provides it?');
+    // The roles come in the order of the list of modules, and event_bus is
+    // after get_it.
+    expect(
+      events,
+      greaterThan(
+        messages.indexOf('Dependency injection: which module provides it?'),
+      ),
+    );
+    expect(run.asked[events].shown, [
+      'event_bus — Event bus with event_bus',
+      'None',
+    ]);
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/events/communication_service.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('abstract interface class CommunicationService'),
+        contains('createEventBusCommunicationService()'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/events/event_bus_communication_service.dart')
+          .readAsStringSync(),
+      contains('EventBus()'),
+    );
+    expect(
+      app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
+      allOf(
+        contains('.registerLazySingleton<'),
+        contains('.createCommunicationService()'),
+      ),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  event_bus: '), contains('  get_it: ')),
     );
   });
 }

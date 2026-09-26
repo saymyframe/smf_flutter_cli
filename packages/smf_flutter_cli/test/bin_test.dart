@@ -399,6 +399,42 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen for the events',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'event_bus',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The version of event_bus is the module's to choose.
+          expect(
+            result.stdout,
+            allOf(
+              contains('  event_bus: requested\n'),
+              contains('  events: event_bus\n'),
+              matches(
+                RegExp(r'^  event_bus \S+ \(event_bus\)$', multiLine: true),
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(

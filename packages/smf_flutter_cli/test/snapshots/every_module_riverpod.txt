@@ -235,6 +235,7 @@ class FallbackStartScreen extends StatelessWidget {
 }
 === lib/core/di/dependencies.dart (get_it) ===
 import 'package:get_it/get_it.dart';
+import 'package:my_app/core/events/communication_service.dart' as di0;
 
 import 'service_locator.dart';
 
@@ -248,7 +249,12 @@ ServiceLocator createServiceLocator() => _GetItServiceLocator(GetIt.instance);
 ///
 /// `GetIt.instance.reset()` removes them again and disposes of those that
 /// were created, in the reverse order of their registration.
-Future<void> registerDependencies() async {}
+Future<void> registerDependencies() async {
+  final getIt = GetIt.instance;
+  getIt.registerLazySingleton<di0.CommunicationService>(
+    () => di0.createCommunicationService(),
+  );
+}
 
 /// Finds the services of the app in get_it.
 final class _GetItServiceLocator implements ServiceLocator {
@@ -290,6 +296,59 @@ abstract interface class ServiceLocator {
   /// Returns a new service of type [T] from a factory that takes
   /// parameters, created with [param1] and [param2].
   T resolveWith<T extends Object>(Object? param1, [Object? param2]);
+}
+=== lib/core/events/communication_service.dart (role:events) ===
+import 'package:my_app/core/events/event_bus_communication_service.dart'
+    as impl0;
+
+/// A message that one part of the app sends to the others, such as
+/// `final class ItemAdded extends AppEvent`.
+abstract class AppEvent {
+  /// Allows the events to have constant constructors.
+  const AppEvent();
+}
+
+/// Delivers [AppEvent]s between parts of the app that do not know each
+/// other.
+abstract interface class CommunicationService {
+  /// Sends [event] to everyone listening to its type.
+  void fire(AppEvent event);
+
+  /// The events of type [T] sent from now on.
+  Stream<T> on<T extends AppEvent>();
+}
+
+/// Returns the communication service of the app.
+CommunicationService createCommunicationService() => _communicationService;
+
+final CommunicationService _communicationService = impl0
+    .createEventBusCommunicationService();
+=== lib/core/events/event_bus_communication_service.dart (event_bus) ===
+import 'package:event_bus/event_bus.dart';
+
+import 'communication_service.dart';
+
+/// Creates the communication service of the app on an [EventBus] of the
+/// event_bus package.
+CommunicationService createEventBusCommunicationService() =>
+    EventBusCommunicationService(EventBus());
+
+/// Delivers the events of the app through an [EventBus].
+///
+/// An event goes to everyone listening to its type, or to a type it extends
+/// or implements, after the code that fires it has completed. A listener
+/// gets the events fired after it starts listening.
+final class EventBusCommunicationService implements CommunicationService {
+  /// Creates the service on the given [EventBus].
+  EventBusCommunicationService(this._eventBus);
+
+  final EventBus _eventBus;
+
+  @override
+  void fire(AppEvent event) => _eventBus.fire(event);
+
+  @override
+  Stream<T> on<T extends AppEvent>() => _eventBus.on<T>();
 }
 === lib/core/layout/app_shell.dart (bottom_tabs) ===
 import 'package:flutter/material.dart';
@@ -626,6 +685,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  event_bus: "^2.0.1"
   flutter_riverpod: "^3.4.3"
   get_it: "^9.3.0"
   go_router: "^17.5.0"

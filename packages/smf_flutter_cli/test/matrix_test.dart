@@ -26,10 +26,12 @@ void main() {
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
       'manager, the app of home, which gets the router, the app of the DI '
-      'container, and one of every module for each state manager', () async {
+      'container, the app of the events with the DI container and without, '
+      'and one of every module for each state manager', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     String everyModule(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it)';
+        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
+        'event_bus)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -40,6 +42,8 @@ void main() {
       'riverpod (riverpod, flutter_core)',
       'home (home, flutter_core, go_router)',
       'get_it (get_it, flutter_core)',
+      'event_bus with di (event_bus, get_it, flutter_core)',
+      'event_bus (event_bus, flutter_core)',
       everyModule('bloc'),
       everyModule('riverpod'),
     ]);

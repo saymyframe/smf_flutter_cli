@@ -24,6 +24,7 @@ dependencies:
   smf_bloc: ^0.2.0
   smf_bottom_tabs: ^0.2.0
   smf_contracts: ^0.2.0
+  smf_event_bus: ^0.2.0
   smf_flutter_core: ^0.2.1
   smf_get_it: ^0.2.0
   smf_go_router: ^0.2.0
