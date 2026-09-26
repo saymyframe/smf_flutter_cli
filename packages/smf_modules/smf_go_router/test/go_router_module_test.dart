@@ -739,19 +739,21 @@ void main() {
 
     test('starts on the branch of the start route, which --start chooses',
         () async {
-      // Two routes can start the app, so the choice needs --start.
+      // Two routes can start the app, so the choice needs --start, or an
+      // answer to the question of the router.
       const modules = [
         CatalogFeature.id,
         SettingsFeature.id,
         ProfileFeature.id,
         TabsLayout.id,
       ];
-      final unchosen = await ContractHarness(ModuleRegistry(testModules))
-          .check(const ContractCase('no start', requested: modules));
+      final answered = await renderedApp(modules);
+      expect(answered.answers, {RouterRole.startOption.name: '/catalog'});
       expect(
-        unchosen.errors.single.message,
-        'Several screens can start the app: /catalog, /profile. Choose one '
-        'with --start.',
+        (_argument(_goRouterOf(_factoryOf(answered.app!)), 'initialLocation')!
+                as StringLiteral)
+            .stringValue,
+        '/catalog',
       );
 
       final result = await renderedApp(

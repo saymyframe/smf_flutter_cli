@@ -373,6 +373,52 @@ void main() {
       expect(overridden.choices, {pick: 'blue'});
     });
 
+    test(
+        'answers a question of a role as a user who presses Enter, with the '
+        'options that make the same choice', () async {
+      final asked = TestRole<String>(
+        'asked',
+        options: const [RoleOption(name: 'color', help: 'The color.')],
+        template: _AskTemplate(),
+      );
+      // A role whose choice no option makes.
+      final unanswered = TestRole<String>(
+        'unanswered',
+        template: _AskTemplate(optionName: null),
+      );
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(),
+          TestModule(
+            'asker',
+            providers: [
+              RoleProvider.plain(asked),
+              RoleProvider.plain(unanswered),
+            ],
+          ),
+        ]),
+      );
+
+      final answered = await harness.check(
+        const ContractCase('asker', requested: [ModuleId('asker')]),
+      );
+      expect(answered.errors, isEmpty);
+      expect(answered.choices, {asked: 'green', unanswered: 'green'});
+      expect(answered.answers, {'color': 'green'});
+      expect(answered.app, isNotNull);
+
+      // An option decides without a question.
+      final given = await harness.check(
+        const ContractCase(
+          'asker',
+          requested: [ModuleId('asker')],
+          roleOptions: {'color': 'red'},
+        ),
+      );
+      expect(given.choices, {asked: 'red', unanswered: 'green'});
+      expect(given.answers, isEmpty);
+    });
+
     test('a harness that does not render leaves the app out', () async {
       final harness = ContractHarness(registry, render: false);
       final result = await harness.check(
@@ -810,6 +856,30 @@ final class _PickTemplate extends RoleTemplate<String> {
   @override
   RoleOutput render(RoleHookInput<String> input) =>
       RoleOutput(vars: {'picked': input.choice});
+}
+
+/// A template that asks which color, green or red, unless its option
+/// [optionName] gives one, and gives that option for its choice.
+final class _AskTemplate extends RoleTemplate<String> {
+  _AskTemplate({this.optionName = 'color'});
+
+  /// The name of the option of the color, or `null` if the role has none.
+  final String? optionName;
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    final name = optionName;
+    return (name == null ? null : context.option(name)) ??
+        await context.environment.prompter.select(
+          'Which color?',
+          const ['green', 'red'],
+        );
+  }
+
+  @override
+  Map<String, String> optionsOf(Object? choice) => {
+        if (optionName case final name? when choice is String) name: choice,
+      };
 }
 
 /// A provider whose render hook returns [vars].

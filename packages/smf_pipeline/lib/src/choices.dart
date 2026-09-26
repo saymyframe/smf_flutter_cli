@@ -13,6 +13,9 @@ import 'package:smf_pipeline/src/resolver.dart';
 /// the run is interactive. An option of a role that is not present is
 /// reported as a warning, since nothing reads it. An [SmfUsageException]
 /// or an [SmfCancelledException] from a hook stops generation.
+///
+/// [onChoice] gets each role and its choice once the hook of the role has
+/// made it, before the next hook runs.
 Future<Map<Role, Object?>> chooseRoles({
   required ModuleRegistry registry,
   required Resolution resolution,
@@ -20,6 +23,7 @@ Future<Map<Role, Object?>> chooseRoles({
   required Map<String, String?> optionValues,
   required PipelineEnvironment environment,
   required ModuleContext context,
+  void Function(Role role, Object? choice)? onChoice,
 }) async {
   final present = resolution.presentRoles;
   for (final role in registry.roles) {
@@ -51,8 +55,9 @@ Future<Map<Role, Object?>> chooseRoles({
     if (template == null) continue;
     // The context's runtime type argument is the role's data type, which
     // the hook of the role's template takes.
+    final Object? choice;
     try {
-      choices[role] = await template.choose(role.choiceContext(request));
+      choice = await template.choose(role.choiceContext(request));
     } on SmfUsageException {
       rethrow;
     } on SmfCancelledException {
@@ -62,6 +67,8 @@ Future<Map<Role, Object?>> chooseRoles({
         'The template of the ${role.id} failed to choose: $error',
       );
     }
+    choices[role] = choice;
+    onChoice?.call(role, choice);
   }
   return choices;
 }

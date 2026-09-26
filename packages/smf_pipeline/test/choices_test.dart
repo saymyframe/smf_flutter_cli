@@ -34,6 +34,7 @@ void main() {
     ];
     final resolution = resolutionOf(modules);
     final host = FakeHost(terminal: true);
+    final reported = <(Role, Object?)>[];
 
     final choices = await chooseRoles(
       registry: ModuleRegistry(modules),
@@ -42,9 +43,12 @@ void main() {
       optionValues: const {'start': '/home', 'ignored': 'x'},
       environment: host.environment(),
       context: testContext,
+      onChoice: (role, choice) => reported.add((role, choice)),
     );
 
     expect(choices, {chooser: 'picked'});
+    // Each choice as it is made; the roles without a template make none.
+    expect(reported, [(chooser, 'picked')]);
     final context = template.chosen.single;
     expect(context.option('start'), '/home');
     expect(context.option('other'), isNull);

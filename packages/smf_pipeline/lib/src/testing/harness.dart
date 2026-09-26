@@ -54,6 +54,7 @@ final class ContractResult {
     this.collection,
     this.validation,
     this.choices,
+    this.answers = const {},
     this.app,
   });
 
@@ -76,15 +77,25 @@ final class ContractResult {
   /// The results of the roles' choices, if the harness rendered the app.
   final Map<Role, Object?>? choices;
 
+  /// The values of role options by name that make the choices of the roles
+  /// whose questions the harness answered, as a user who presses Enter,
+  /// without asking, such as `--start` for the first of several screens
+  /// that can start the app; see [RoleTemplate.optionsOf].
+  ///
+  /// With the options of the case, they make a run without a terminal
+  /// generate the app that the harness rendered.
+  final Map<String, String> answers;
+
   /// The rendered app, if the harness rendered it: when it renders apps and
   /// the stages before found no error.
   final RenderedApp? app;
 
-  /// This result with [more] issues, and with the [choices] and the [app]
-  /// if they are given.
+  /// This result with [more] issues, and with the [choices], the
+  /// [answers] and the [app] if they are given.
   ContractResult _with(
     List<SmfIssue> more, {
     Map<Role, Object?>? choices,
+    Map<String, String>? answers,
     RenderedApp? app,
   }) =>
       ContractResult(
@@ -94,6 +105,7 @@ final class ContractResult {
         collection: collection,
         validation: validation,
         choices: choices ?? this.choices,
+        answers: answers ?? this.answers,
         app: app ?? this.app,
       );
 
@@ -129,7 +141,11 @@ final class ContractResult {
 /// that mason would copy as they are. Unless [render] is off, the harness
 /// then makes the roles' choices (stage 7) with the options of the case,
 /// renders the app in memory (stage 8) and checks the rendered code with
-/// [checkRendered].
+/// [checkRendered]. A question of a role that the options leave open, such
+/// as the start screen of an app with several, gets the answer of a user
+/// who presses Enter: the default, or the first choice. The result has the
+/// options that make the same choice without asking
+/// ([ContractResult.answers]).
 ///
 /// It depends on no test framework, so the tests of any package can use it.
 final class ContractHarness {
@@ -164,9 +180,11 @@ final class ContractHarness {
   /// and checks the rendered code.
   final bool render;
 
-  /// Values of role options by name for every case, such as the start route
-  /// of an app with several screens that can start it; the options of a
-  /// case override them.
+  /// Values of role options by name for every case; the options of a case
+  /// override them.
+  ///
+  /// A question of a role that no option answers gets the answer of a user
+  /// who presses Enter; see [ContractResult.answers].
   final Map<String, String?> roleOptions;
 
   /// The cases of the module [id]:
@@ -395,14 +413,25 @@ final class ContractHarness {
 
     final Map<Role, Object?> choices;
     final RenderedApp app;
+    final answering = _EnterPrompter();
+    final answers = <String, String>{};
     try {
       choices = await chooseRoles(
         registry: registry,
         resolution: resolution,
         collection: collection,
         optionValues: {...roleOptions, ...contractCase.roleOptions},
-        environment: environment,
+        environment: PipelineEnvironment(
+          _answeringHost(answering),
+          interactive: true,
+          skipExternalSetup: true,
+        ),
         context: context,
+        onChoice: (role, choice) {
+          if (!answering.asked) return;
+          answering.asked = false;
+          answers.addAll(role.template!.optionsOf(choice));
+        },
       );
       app = renderApp(
         registry: registry,
@@ -420,7 +449,12 @@ final class ContractHarness {
         ...error.issues,
       ]);
     }
-    final rendered = checked._with(const [], choices: choices, app: app);
+    final rendered = checked._with(
+      const [],
+      choices: choices,
+      answers: answers,
+      app: app,
+    );
     return rendered._with(checkRendered(rendered, app));
   }
 
@@ -787,6 +821,58 @@ final SmfHost _silentHost = SmfHost(
   operatingSystem: HostOperatingSystem.other,
   hasTerminal: false,
 );
+
+/// A host like [_silentHost] whose user answers with [prompter].
+SmfHost _answeringHost(SmfPrompter prompter) => SmfHost(
+      prompter: prompter,
+      processRunner: const _NoProcessRunner(),
+      logger: const _SilentLogger(),
+      fileSystem: MemoryFileSystem(),
+      environmentVariables: const {},
+      operatingSystem: HostOperatingSystem.other,
+      hasTerminal: true,
+    );
+
+/// Answers every question as a user who presses Enter does: with its
+/// default, or with its first choice if it has no default.
+final class _EnterPrompter implements SmfPrompter {
+  /// Whether a question was asked since this was last set to `false`.
+  bool asked = false;
+
+  @override
+  Future<bool> confirm(String message, {bool defaultValue = false}) async {
+    asked = true;
+    return defaultValue;
+  }
+
+  @override
+  Future<String> input(String message, {String? defaultValue}) async {
+    asked = true;
+    return defaultValue ?? '';
+  }
+
+  @override
+  Future<T> select<T extends Object>(
+    String message,
+    List<T> choices, {
+    String Function(T choice)? display,
+    T? defaultValue,
+  }) async {
+    asked = true;
+    return defaultValue ?? choices.first;
+  }
+
+  @override
+  Future<List<T>> multiSelect<T extends Object>(
+    String message,
+    List<T> choices, {
+    String Function(T choice)? display,
+    List<T> defaultValues = const [],
+  }) async {
+    asked = true;
+    return defaultValues;
+  }
+}
 
 final class _NoPrompter implements SmfPrompter {
   const _NoPrompter();
