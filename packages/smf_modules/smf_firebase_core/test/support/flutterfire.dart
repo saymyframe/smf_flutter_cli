@@ -7,13 +7,15 @@
 /// files), `lib/src/flutter_app.dart` (the application id and the bundle
 /// id) and `lib/src/firebase/firebase_dart_configuration_write.dart` (the
 /// options) of flutterfire_cli 1.4.0, which 1.4.1 did not change. When the
-/// module activates a newer flutterfire_cli, compare these files of the two
-/// versions and update this file; the tests check that the module activates
-/// a 1.4 version.
+/// module activates another flutterfire_cli, compare these files of the two
+/// versions, update this file and add the version to
+/// [emulatedFlutterfireVersions]; a test checks that the module activates
+/// one of them.
 library;
 
-/// The version of flutterfire_cli that this file repeats.
-const flutterfireVersion = '1.4';
+/// The versions of flutterfire_cli whose files this file repeats, compared
+/// file by file.
+const emulatedFlutterfireVersions = {'1.4.0', '1.4.1'};
 
 /// The `lib/firebase_options.dart` that `flutterfire configure` writes for
 /// an app with no options for any platform, as `FirebaseDartConfigurationWrite`

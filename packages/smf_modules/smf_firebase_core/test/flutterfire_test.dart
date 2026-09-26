@@ -3,7 +3,7 @@ library;
 
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
-import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart' as cli;
+import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -112,8 +112,8 @@ String _named(FlutterfireProblem problem, Set<String> contributors) {
 void main() {
   test('repeats the flutterfire_cli that the module activates', () {
     expect(
-      cli.flutterfireVersion,
-      startsWith('$flutterfireVersion.'),
+      emulatedFlutterfireVersions,
+      contains(flutterfireVersion),
       reason: 'Compare the files of flutterfire_cli that '
           'test/support/flutterfire.dart names with those of the new '
           'version, and update it.',
