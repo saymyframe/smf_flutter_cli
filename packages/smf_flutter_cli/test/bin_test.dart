@@ -481,9 +481,14 @@ void main() {
                 'flutterfire_cli 1.4.1".\n'
                 '    An interactive run offers to install it.\n',
               ),
+              // Its PATH has no Ruby; elsewhere, the Xcode project is left
+              // for a Mac.
               contains(
-                '  ✗ Xcode project tools of flutterfire (for firebase_core): '
-                'missing\n',
+                Platform.isMacOS
+                    ? '  ✗ Xcode project tools of flutterfire (for '
+                        'firebase_core): missing\n'
+                    : '  ✗ Setup of the Xcode project on a Mac (for '
+                        'firebase_core): missing\n',
               ),
             ]),
           );

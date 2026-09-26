@@ -62,6 +62,7 @@ void main() {
       'firebase_login',
       'flutterfire_cli',
       'xcode_project_tools',
+      'xcode_project_on_mac',
     ]);
     // The app compiles without any of them, so none stops generation.
     expect(preflight.checks.where((check) => check.required), isEmpty);
@@ -593,30 +594,15 @@ void main() {
           reply: (_) => result,
         );
 
-    test('warns elsewhere than on macOS that the Xcode project stays as it is',
-        () async {
+    test('needs nothing elsewhere than on macOS', () async {
       for (final system in [
         HostOperatingSystem.linux,
         HostOperatingSystem.windows,
         HostOperatingSystem.other,
       ]) {
-        final machine = FakeMachine(
-          operatingSystem: system,
-          executables: {'ruby': _ruby},
-        );
+        final machine = FakeMachine(operatingSystem: system);
 
-        expect(
-          await check.check(machine),
-          _missing(
-            instructions: 'flutterfire configure changes the Xcode project '
-                'only on macOS. Elsewhere it registers the iOS app and writes '
-                'its options into lib/firebase_options.dart, but writes no '
-                'GoogleService-Info.plist and leaves the Xcode project as it '
-                'is: run flutterfire configure again on a Mac.',
-            installable: false,
-          ),
-          reason: '$system',
-        );
+        expect(await check.check(machine), isA<PreflightPassed>());
         expect(machine.calls, isEmpty);
       }
     });
@@ -671,6 +657,42 @@ void main() {
         await check.check(macWith(_result(0, stdout: 'unknown'))),
         _failed('Ruby printed "unknown" for the version of the gem xcodeproj.'),
       );
+    });
+  });
+
+  group('XcodeProjectOnMacCheck', () {
+    const check = XcodeProjectOnMacCheck();
+
+    test('warns elsewhere than on macOS that the Xcode project stays as it is',
+        () async {
+      for (final system in [
+        HostOperatingSystem.linux,
+        HostOperatingSystem.windows,
+        HostOperatingSystem.other,
+      ]) {
+        final machine = FakeMachine(operatingSystem: system);
+
+        expect(
+          await check.check(machine),
+          _missing(
+            instructions: 'flutterfire configure changes the Xcode project '
+                'only on macOS. Elsewhere it registers the iOS app and writes '
+                'its options into lib/firebase_options.dart, but writes no '
+                'GoogleService-Info.plist and leaves the Xcode project as it '
+                'is: run flutterfire configure again on a Mac.',
+            installable: false,
+          ),
+          reason: '$system',
+        );
+        expect(machine.calls, isEmpty);
+      }
+    });
+
+    test('passes on macOS', () async {
+      final machine = FakeMachine();
+
+      expect(await check.check(machine), isA<PreflightPassed>());
+      expect(machine.calls, isEmpty);
     });
   });
 

@@ -24,14 +24,17 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// Before generation, the module checks that the machine can run
 /// `flutterfire configure`: the Firebase CLI with a logged-in account, the
 /// FlutterFire CLI, and, on macOS, the Ruby gem that changes the Xcode
-/// project. In a run with a terminal, it offers to install the two CLIs and
-/// to log in; otherwise it tells how.
+/// project; elsewhere, it warns that the Xcode project is left for a Mac.
+/// In a run with a terminal, it offers to install the two CLIs and to log
+/// in; otherwise it tells how.
 ///
 /// After generation, in a run with a terminal, the module runs
 /// `flutterfire configure` for the platforms of the app, which asks the user
-/// for the Firebase project; a run without one, or that skips external
-/// setup, prints the command to run later. The README of the app tells how
-/// to configure it again, such as on another machine.
+/// for the Firebase project. A run without one, or that skips external
+/// setup, prints the command to run later, and so does a run that lacks
+/// what the checks look for, since flutterfire would fail without it. The
+/// README of the app tells how to configure it again, such as on another
+/// machine.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
@@ -59,6 +62,13 @@ final class FirebaseCoreModule extends SmfModule {
       '--platforms=${AppEntryRole.platforms.join(',')}',
       '--overwrite-firebase-options',
     ];
+    // flutterfire configure fails without any of them.
+    const needed = [
+      FirebaseCliCheck(),
+      FirebaseLoginCheck(),
+      FlutterfireCliCheck(),
+      XcodeProjectToolsCheck(),
+    ];
     return [
       BrickContribution(firebaseCoreBundle),
       const PubspecContribution.hosted('firebase_core', '^4.15.0'),
@@ -74,12 +84,7 @@ final class FirebaseCoreModule extends SmfModule {
         ),
       ),
       AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
-      const Preflight([
-        FirebaseCliCheck(),
-        FirebaseLoginCheck(),
-        FlutterfireCliCheck(),
-        XcodeProjectToolsCheck(),
-      ]),
+      const Preflight([...needed, XcodeProjectOnMacCheck()]),
       // flutterfire writes paths relative to the app, so it can run in the
       // temporary directory of the app.
       PostGenStep(
@@ -89,6 +94,7 @@ final class FirebaseCoreModule extends SmfModule {
         interactive: true,
         skippable: true,
         external: true,
+        needs: [for (final check in needed) check.id],
       ),
       AppEntryRole.readmeSections.entry(
         readmeHeading,

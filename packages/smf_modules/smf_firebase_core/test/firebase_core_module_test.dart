@@ -129,6 +129,15 @@ void main() {
       expect(step.external, isTrue);
       expect(step.skippable, isTrue);
       expect(step.when, isEmpty);
+      // flutterfire fails without them, so a run that lacks one leaves the
+      // step for later without asking. It changes the Xcode project only on
+      // macOS, so it runs elsewhere without it.
+      expect(step.needs, [
+        'firebase_cli',
+        'firebase_login',
+        'flutterfire_cli',
+        'xcode_project_tools',
+      ]);
     });
   });
 

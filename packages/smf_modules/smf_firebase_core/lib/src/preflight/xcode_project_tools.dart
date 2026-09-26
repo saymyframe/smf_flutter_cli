@@ -5,14 +5,17 @@ import 'package:smf_contracts/lego.dart';
 /// `XCLocalSwiftPackageReference`.
 const minimumXcodeprojVersion = '1.23.0';
 
-/// Checks what `flutterfire configure` needs to set up the iOS app in its
-/// Xcode project.
+/// Checks what `flutterfire configure` needs on macOS to set up the iOS app
+/// in its Xcode project: Ruby and its gem xcodeproj, which must open the
+/// Xcode project of the app, [minimumXcodeprojVersion] or newer.
 ///
-/// It does that only on macOS, with Ruby and its gem xcodeproj, which must
-/// open the Xcode project of the app: [minimumXcodeprojVersion] or newer. On
-/// any other system, the check reports that the Xcode project stays as it
-/// is, so it is set up by running `flutterfire configure` again on a Mac.
-/// Nothing here can be installed for the user.
+/// Without them, flutterfire_cli 1.4 fails on macOS after it registered the
+/// apps in the Firebase project and wrote the files of Android and the
+/// `GoogleService-Info.plist` of iOS, but before it writes the options, so
+/// the step that runs it needs this check. On any other system flutterfire
+/// does not change the Xcode project, so the check passes there, and
+/// [XcodeProjectOnMacCheck] tells what that leaves to do. Nothing here can
+/// be installed for the user.
 final class XcodeProjectToolsCheck extends PreflightCheck {
   /// Creates the check.
   const XcodeProjectToolsCheck();
@@ -29,13 +32,7 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
     if (environment.operatingSystem != HostOperatingSystem.macos) {
-      return const PreflightMissing(
-        instructions: 'flutterfire configure changes the Xcode project only '
-            'on macOS. Elsewhere it registers the iOS app and writes its '
-            'options into lib/firebase_options.dart, but writes no '
-            'GoogleService-Info.plist and leaves the Xcode project as it '
-            'is: run flutterfire configure again on a Mac.',
-      );
+      return const PreflightPassed();
     }
     final ruby = await environment.findExecutable('ruby');
     if (ruby == null) {
@@ -74,4 +71,36 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
     }
     return const PreflightPassed();
   }
+}
+
+/// Tells, on any system but macOS, that `flutterfire configure` sets up the
+/// iOS app in its Xcode project only on macOS.
+///
+/// Elsewhere it registers the iOS app and writes its options, but writes no
+/// `GoogleService-Info.plist` and leaves the Xcode project as it is, so it
+/// is set up by running `flutterfire configure` again on a Mac. The check
+/// passes on macOS, where [XcodeProjectToolsCheck] checks what that needs,
+/// and nothing here can be installed.
+final class XcodeProjectOnMacCheck extends PreflightCheck {
+  /// Creates the check.
+  const XcodeProjectOnMacCheck();
+
+  @override
+  String get id => 'xcode_project_on_mac';
+
+  @override
+  String get description => 'Setup of the Xcode project on a Mac';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async =>
+      environment.operatingSystem == HostOperatingSystem.macos
+          ? const PreflightPassed()
+          : const PreflightMissing(
+              instructions: 'flutterfire configure changes the Xcode project '
+                  'only on macOS. Elsewhere it registers the iOS app and '
+                  'writes its options into lib/firebase_options.dart, but '
+                  'writes no GoogleService-Info.plist and leaves the Xcode '
+                  'project as it is: run flutterfire configure again on a '
+                  'Mac.',
+            );
 }

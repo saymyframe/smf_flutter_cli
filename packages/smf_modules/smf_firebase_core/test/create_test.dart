@@ -30,9 +30,13 @@ String _notConfigured(String reason) =>
     'Configuring Firebase with flutterfire is not done, because $reason. Run '
     'it in the app: $_later';
 
-/// A macOS machine with a Flutter SDK, bash and Ruby with xcodeproj
-/// 1.27.0, on which `smf create` runs in a terminal; the app goes to
-/// `/work/my_app`.
+/// The path of an install script of the Firebase CLI in a command.
+final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
+
+/// A machine with a Flutter SDK, bash and Ruby with xcodeproj 1.27.0, or
+/// without the gem unless [xcodeproj], on which `smf create` runs in a
+/// terminal; the app goes to `/work/my_app`. It runs macOS unless
+/// [operatingSystem] says otherwise.
 ///
 /// The Firebase CLI and the FlutterFire CLI are missing until a command
 /// installs them: the install script puts `firebase` into `/opt/npm/bin`,
@@ -44,6 +48,8 @@ final class _Machine {
     List<bool> confirmations = const [],
     this.hasTerminal = true,
     this.loginCode = 0,
+    this.xcodeproj = true,
+    this.operatingSystem = HostOperatingSystem.macos,
   }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
@@ -54,19 +60,25 @@ final class _Machine {
     }
     files.directory('/work').createSync();
     files.currentDirectory = '/work';
-    fake = FakeMachine(reply: _reply, confirmations: confirmations);
+    fake = FakeMachine(
+      operatingSystem: operatingSystem,
+      reply: _reply,
+      confirmations: confirmations,
+    );
   }
 
   final files = MemoryFileSystem.test();
   final bool hasTerminal;
   final int loginCode;
+  final bool xcodeproj;
+  final HostOperatingSystem operatingSystem;
   late final FakeMachine fake;
   var _loggedIn = false;
   var _activated = false;
 
   SmfProcessResult _reply(Call call) {
     final line = call.line;
-    if (line.endsWith('/install_firebase_macos.sh')) {
+    if (_script.hasMatch(line)) {
       files.file(_firebase).createSync(recursive: true);
       return const SmfProcessResult(
         exitCode: 0,
@@ -95,7 +107,12 @@ final class _Machine {
       _activated = true;
     }
     if (line.startsWith('/bin/ruby ')) {
-      return const SmfProcessResult(exitCode: 0, stdout: '1.27.0');
+      return xcodeproj
+          ? const SmfProcessResult(exitCode: 0, stdout: '1.27.0')
+          : const SmfProcessResult(
+              exitCode: 1,
+              stderr: 'cannot load such file -- xcodeproj (LoadError)',
+            );
     }
     return const SmfProcessResult(exitCode: 0);
   }
@@ -118,7 +135,7 @@ final class _Machine {
           logger: fake.logger,
           fileSystem: files,
           environmentVariables: const {'PATH': '/sdk/bin:/bin'},
-          operatingSystem: HostOperatingSystem.macos,
+          operatingSystem: operatingSystem,
           hasTerminal: hasTerminal,
         ),
       );
@@ -129,10 +146,7 @@ final class _Machine {
           if (!call.line.startsWith('/sdk/bin/flutter') &&
               !call.line.startsWith('$_dart fix') &&
               !call.line.startsWith('$_dart format'))
-            call.line.replaceFirst(
-              RegExp('/[^ ]*/install_firebase_macos.sh'),
-              '<script>',
-            ),
+            call.line.replaceFirst(_script, '<script>'),
       ];
 
   /// The warnings that the run printed.
@@ -146,16 +160,16 @@ void main() {
   test(
       'a user who declines to install the CLIs gets no installation, but '
       'instructions, and the app', () async {
-    final machine = _Machine(confirmations: [false, false, false]);
+    final machine = _Machine(confirmations: [false, false]);
 
     final code = await machine.create();
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
-    // Each is asked once: no is no.
+    // Each is asked once: no is no. flutterfire configure would fail without
+    // them, so it is not asked about.
     expect(machine.fake.questions, [
       'Firebase CLI is missing (needed by firebase_core). Install it now?',
       'FlutterFire CLI is missing (needed by firebase_core). Install it now?',
-      _configureNow,
     ]);
     expect(machine.checks, [
       '$_dart pub global list',
@@ -169,7 +183,9 @@ void main() {
           'with "firebase login --no-localhost".'),
       contains('FlutterFire CLI is missing. Activate it with "dart pub global '
           'activate flutterfire_cli 1.4.1".'),
-      _notConfigured('you chose to run it later'),
+      _notConfigured(
+        'Firebase CLI, Firebase login and FlutterFire CLI are missing',
+      ),
     ]);
     expect(
       machine.files.file('/work/my_app/lib/firebase_options.dart').existsSync(),
@@ -230,10 +246,7 @@ void main() {
   });
 
   test('a login that fails leaves a warning that says how it ended', () async {
-    final machine = _Machine(
-      confirmations: [true, true, false, false],
-      loginCode: 1,
-    );
+    final machine = _Machine(confirmations: [true, true, false], loginCode: 1);
 
     final code = await machine.create();
 
@@ -250,7 +263,56 @@ void main() {
       contains('Firebase login could not be checked: The installation '
           'failed: "firebase login" exited with code 1.'),
       contains('FlutterFire CLI is missing.'),
-      _notConfigured('you chose to run it later'),
+      _notConfigured(
+        'FlutterFire CLI is missing, and Firebase login could not be checked',
+      ),
+    ]);
+  });
+
+  test(
+      'a Mac without the gem xcodeproj leaves the configuration for later '
+      'without asking', () async {
+    final machine =
+        _Machine(confirmations: [true, true, true], xcodeproj: false);
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions, hasLength(3));
+    expect(machine.checks, isNot(contains(_configure)));
+    expect(machine.warnings, [
+      contains('Xcode project tools of flutterfire is missing. flutterfire '
+          'configure changes the Xcode project with the Ruby gem xcodeproj'),
+      _notConfigured('Xcode project tools of flutterfire is missing'),
+    ]);
+  });
+
+  test(
+      'elsewhere than on macOS, flutterfire configure runs without the tools '
+      'of Xcode, and the Xcode project is left for a Mac', () async {
+    final machine = _Machine(
+      confirmations: [true, true, true, true],
+      operatingSystem: HostOperatingSystem.linux,
+    );
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions.last, _configureNow);
+    expect(machine.checks, [
+      '$_dart pub global list',
+      '/bin/bash <script>',
+      '$_firebase login:list --json',
+      '$_firebase login',
+      '$_firebase login:list --json',
+      '$_dart pub global list',
+      '$_dart pub global activate flutterfire_cli 1.4.1',
+      '$_dart pub global list',
+      _configure,
+    ]);
+    expect(machine.warnings, [
+      contains('Setup of the Xcode project on a Mac is missing. flutterfire '
+          'configure changes the Xcode project only on macOS.'),
     ]);
   });
 
