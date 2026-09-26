@@ -1,6 +1,7 @@
 /// The contract test harness of the lego model: checks that modules and
 /// role templates follow the rules of their roles, and renders the apps
-/// they make in memory.
+/// they make in memory. `ModulePackage` checks what the package of a module
+/// imports and depends on.
 ///
 /// It runs without `package:test`, so both the tests of this package and the
 /// contract tests of the CLI can use it.
@@ -29,4 +30,5 @@ export 'src/templates.dart'
         templateFilesOf;
 export 'src/testing/file_indexer.dart';
 export 'src/testing/harness.dart';
+export 'src/testing/module_package.dart';
 export 'src/validation.dart' show ValidationResult;

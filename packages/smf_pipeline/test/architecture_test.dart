@@ -50,6 +50,19 @@ void main() {
     }
   });
 
+  test(
+      'reads the local file system only to check the package of a module, '
+      'in its tests', () {
+    expect(
+      [
+        for (final MapEntry(key: file, value: uris) in directives.entries)
+          if (uris.contains('package:file/local.dart'))
+            file.replaceAll(Platform.pathSeparator, '/'),
+      ],
+      ['lib/src/testing/module_package.dart'],
+    );
+  });
+
   test('depends on no module package', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final dependencies = RegExp(r'^\s+(smf_[a-z_]+):', multiLine: true)
