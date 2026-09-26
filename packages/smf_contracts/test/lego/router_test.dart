@@ -723,6 +723,25 @@ void main() {
       );
     });
 
+    test('gives the start route of its choice as --start', () async {
+      final template = routerRole.template;
+
+      expect(
+        template.optionsOf(await choose(_data, start: '/settings')),
+        {'start': '/settings'},
+      );
+      expect(
+        template.optionsOf(
+          await choose(_data, environment: PromptingEnvironment(pick: 1)),
+        ),
+        {'start': '/settings'},
+      );
+      // Without a start route, the app starts on the fallback screen, which
+      // no option chooses.
+      expect(template.optionsOf(await choose(const [])), isEmpty);
+      expect(template.optionsOf(null), isEmpty);
+    });
+
     test('takes the route of --start', () async {
       expect(pathOf(await choose(_data, start: '/settings')), '/settings');
       expect(

@@ -315,8 +315,9 @@ void main() {
       ),
     );
 
-    test('a template contributes, checks, chooses and renders nothing',
-        () async {
+    test(
+        'a template contributes, checks, chooses, gives options and renders '
+        'nothing', () async {
       const template = _PlainTemplate();
 
       expect(template.contribute(testContext), isEmpty);
@@ -335,6 +336,8 @@ void main() {
         ),
         isNull,
       );
+      // No option makes a choice.
+      expect(template.optionsOf('/home'), isEmpty);
       final output = template.render(input);
       expect(output.fragments, isEmpty);
       expect(output.vars, isEmpty);

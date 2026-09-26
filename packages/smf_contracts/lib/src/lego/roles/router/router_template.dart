@@ -115,6 +115,15 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     return RouterChoice(startPath: picked.fullPath);
   }
 
+  /// `--start` with the start route of [choice], if it has one.
+  @override
+  Map<String, String> optionsOf(Object? choice) => switch (choice) {
+        RouterChoice(:final startPath?) => {
+            RouterRole.startOption.name: startPath,
+          },
+        _ => const {},
+      };
+
   @override
   RoleOutput render(RoleHookInput<RoutesData> input) =>
       RoleOutput(vars: {'facade': routerRole.facadeOf(input).toDart()});

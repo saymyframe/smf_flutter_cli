@@ -41,6 +41,16 @@ abstract base class RoleTemplate<D extends Object> {
   /// or if the run is not interactive and no option decides.
   Future<Object?> choose(RoleChoiceContext<D> context) async => null;
 
+  /// The values of the role's options by name that make [choice], a result
+  /// of [choose], without asking, such as the full path of the start route
+  /// for `--start`.
+  ///
+  /// A tool that answers the questions of [choose] itself, as the contract
+  /// test harness does, gives them to a run without a terminal, which then
+  /// makes the same decision. It returns no values by default, for a role
+  /// without such options.
+  Map<String, String> optionsOf(Object? choice) => const {};
+
   /// Returns the fragments and brick variables that depend on the data,
   /// such as a composite of all analytics services.
   RoleOutput render(RoleHookInput<D> input) => const RoleOutput();
