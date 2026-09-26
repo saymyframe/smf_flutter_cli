@@ -1,0 +1,523 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:smf_contracts/lego.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/testing.dart';
+import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
+
+import 'support/features.dart';
+import 'support/type_check.dart';
+
+/// The path of the file of `createAppRouter()`.
+const String _factory = RouterRole.appRouterFactoryFile;
+
+/// The pubspec of [app] as plain maps and lists.
+Map<String, Object?> _pubspecOf(RenderedApp app) {
+  Object? plain(Object? node) => switch (node) {
+        final YamlMap map => {
+            for (final MapEntry(:key, :value) in map.entries)
+              '$key': plain(value),
+          },
+        final YamlList list => [for (final item in list) plain(item)],
+        _ => node,
+      };
+  return plain(loadYaml(app.files['pubspec.yaml']!.text))!
+      as Map<String, Object?>;
+}
+
+/// The parsed file of `createAppRouter()` of [app].
+CompilationUnit _factoryOf(RenderedApp app) =>
+    parseString(content: app.files[_factory]!.text).unit;
+
+/// The call that creates the `GoRouter` in [unit].
+MethodInvocation _goRouterOf(CompilationUnit unit) {
+  final finder = _CallFinder('GoRouter');
+  unit.accept(finder);
+  return finder.calls.single;
+}
+
+/// The named argument [label] of [call], or `null`.
+Expression? _argument(MethodInvocation call, String label) => [
+      for (final argument in call.argumentList.arguments)
+        if (argument case NamedExpression(:final name, :final expression)
+            when name.label.name == label)
+          expression,
+    ].firstOrNull;
+
+/// A `GoRoute(...)` of the generated code.
+final class _GoRoute {
+  _GoRoute(this.call);
+
+  final MethodInvocation call;
+
+  String get path => (_argument(call, 'path')! as StringLiteral).stringValue!;
+
+  String? get name => (_argument(call, 'name') as StringLiteral?)?.stringValue;
+
+  /// The source of the redirect, or `null`.
+  String? get redirect => _argument(call, 'redirect')?.toSource();
+
+  /// The source of the builder, or `null`.
+  String? get builder => _argument(call, 'builder')?.toSource();
+
+  /// The arguments that the builder passes to the screen, by name, as
+  /// source.
+  Map<String, String> get screenArguments {
+    final body = (_argument(call, 'builder')! as FunctionExpression).body
+        as ExpressionFunctionBody;
+    final arguments = switch (body.expression) {
+      MethodInvocation(:final argumentList) => argumentList,
+      InstanceCreationExpression(:final argumentList) => argumentList,
+      final other => throw StateError('The builder returns $other'),
+    };
+    return {
+      for (final argument in arguments.arguments)
+        if (argument case NamedExpression(:final name, :final expression))
+          name.label.name: expression.toSource(),
+    };
+  }
+
+  List<_GoRoute> get children => switch (_argument(call, 'routes')) {
+        final ListLiteral list => [
+            for (final element in list.elements)
+              _GoRoute(element as MethodInvocation),
+          ],
+        _ => const [],
+      };
+}
+
+/// The routes in the list of routes of `GoRouter` in [unit].
+List<_GoRoute> _routesOf(CompilationUnit unit) => [
+      for (final element
+          in (_argument(_goRouterOf(unit), 'routes')! as ListLiteral).elements)
+        _GoRoute(element as MethodInvocation),
+    ];
+
+/// Every route of [routes] and below them, parents first, each with the
+/// path of its parent.
+List<(_GoRoute, String?)> _allOf(List<_GoRoute> routes, [String? parent]) => [
+      for (final route in routes) ...[
+        (route, parent),
+        ..._allOf(route.children, route.name),
+      ],
+    ];
+
+final class _CallFinder extends RecursiveAstVisitor<void> {
+  _CallFinder(this.name);
+
+  final String name;
+  final List<MethodInvocation> calls = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target == null && node.methodName.name == name) calls.add(node);
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// The declaration of the class that `createAppRouter()` creates in [unit].
+ClassDeclaration _routerClassOf(CompilationUnit unit) {
+  final factory = unit.declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((function) => function.name.lexeme == 'createAppRouter');
+  final body = factory.functionExpression.body as ExpressionFunctionBody;
+  final created = (body.expression as MethodInvocation).methodName.name;
+  return unit.declarations
+      .whereType<ClassDeclaration>()
+      .singleWhere((declaration) => declaration.name.lexeme == created);
+}
+
+/// The source of the body of the method [name] of [declaration].
+String _bodyOf(ClassDeclaration declaration, String name) => declaration.members
+    .whereType<MethodDeclaration>()
+    .singleWhere((method) => method.name.lexeme == name)
+    .body
+    .toSource();
+
+void main() {
+  const module = GoRouterModule();
+
+  group('GoRouterModule', () {
+    test('is infrastructure that provides the router', () {
+      final descriptor = module.descriptor;
+
+      expect(descriptor.id, const ModuleId('go_router'));
+      expect(descriptor.kind, ModuleKinds.infrastructure);
+      expect(descriptor.provides, {routerRole});
+      expect(descriptor.dependsOn, isEmpty);
+      expect(descriptor.requires, isEmpty);
+      expect(descriptor.uses, isEmpty);
+      expect(descriptor.variants, isNull);
+    });
+
+    test('forms a valid registry with the modules of the tests', () {
+      expect(ModuleRegistry.problemsOf(testModules), isEmpty);
+    });
+  });
+
+  group('the contract harness', () {
+    late List<ContractResult> results;
+
+    setUpAll(() async {
+      results = await ContractHarness(ModuleRegistry(testModules)).checkAll();
+    });
+
+    test(
+        'builds the apps with the router, its features and observers, and '
+        'without them', () {
+      // The app of go_router and of the router role by go_router is the app
+      // of flutter_core with the router.
+      expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router',
+        'flutter_core',
+        'catalog',
+        'settings',
+        'observing with router',
+        'observing',
+      ]);
+    });
+
+    test('finds no errors in any app, rendered code included', () {
+      for (final result in results) {
+        expect(
+          result.errors.map((issue) => '$issue'),
+          isEmpty,
+          reason: '${result.contractCase}',
+        );
+        expect(result.app, isNotNull, reason: '${result.contractCase}');
+      }
+    });
+
+    test('renders apps whose code type-checks', () async {
+      for (final result in results) {
+        expect(
+          await analysisProblems(result.app!),
+          isEmpty,
+          reason: '${result.contractCase}',
+        );
+      }
+    });
+  });
+
+  group('an app without features', () {
+    late ContractResult result;
+    late RenderedApp withRouter;
+    late RenderedApp without;
+
+    setUpAll(() async {
+      result = await renderedApp(const [GoRouterModule.id]);
+      withRouter = result.app!;
+      without = (await renderedApp(const [FlutterCoreModule.id])).app!;
+    });
+
+    test('gets go_router and the brick of the router, and nothing else', () {
+      final contributions = [
+        for (final collected
+            in result.collection!.ofModule(module.descriptor.id))
+          collected.contribution,
+      ];
+
+      expect(contributions, hasLength(2));
+      final brick = contributions.first as BrickContribution;
+      expect(brick.bundle.name, 'go_router');
+      final dependency = contributions.last as PubspecDependency;
+      expect(dependency.package, 'go_router');
+      expect(dependency.constraint, '^17.5.0');
+      expect(dependency.dev, isFalse);
+      expect(_pubspecOf(withRouter)['dependencies'], {
+        'flutter': {'sdk': 'flutter'},
+        'go_router': '^17.5.0',
+      });
+    });
+
+    test('shows the fallback screen through the router', () {
+      final unit = _factoryOf(withRouter);
+      final router = _goRouterOf(unit);
+
+      expect(
+        (_argument(router, 'initialLocation')! as StringLiteral).stringValue,
+        '/',
+      );
+      final routes = _routesOf(unit);
+      expect(routes.map((route) => route.path), ['/']);
+      expect(
+        routes.single.builder,
+        '(context, state) => const FallbackStartScreen()',
+      );
+      expect(routes.single.redirect, isNull);
+      expect(
+        withRouter.files[_factory]!.addedImports.map(
+          (added) => (added.import.uri, added.import.prefix),
+        ),
+        [
+          (
+            'package:contract_app/core/app/fallback_start_screen.dart',
+            null,
+          ),
+        ],
+      );
+      // No route has values to check.
+      expect(withRouter.files[_factory]!.text, isNot(contains('_checkValues')));
+    });
+
+    test('runs the router of the app in the MaterialApp', () {
+      expect(
+        withRouter.files['lib/app.dart']!.text,
+        allOf(
+          contains('MaterialApp.router('),
+          contains('routerConfig: appRouter.config,'),
+          isNot(contains('home:')),
+        ),
+      );
+    });
+
+    test('is the app without a router but for the router', () {
+      const routerFiles = {
+        RouterRole.appRouterFile,
+        RouterRole.navigationFile,
+        RouterRole.appRouterFactoryFile,
+      };
+      expect(
+        withRouter.files.keys.toSet(),
+        {...without.files.keys, ...routerFiles},
+      );
+      expect(
+        withRouter.files[_factory]!.owner,
+        const ModuleOrigin(GoRouterModule.id),
+      );
+      for (final MapEntry(key: path, value: file) in without.files.entries) {
+        if (const {'pubspec.yaml', 'lib/app.dart'}.contains(path)) continue;
+        expect(withRouter.files[path]!.bytes, file.bytes, reason: path);
+      }
+      final pubspec = _pubspecOf(withRouter);
+      final dependencies = {
+        ...pubspec['dependencies']! as Map<String, Object?>,
+      }..remove('go_router');
+      expect({...pubspec, 'dependencies': dependencies}, _pubspecOf(without));
+    });
+  });
+
+  group('an app with features', () {
+    late ContractResult result;
+    late RenderedApp app;
+    late CompilationUnit unit;
+    late Map<String, _GoRoute> routes;
+
+    setUpAll(() async {
+      result = await renderedApp(const [
+        CatalogFeature.id,
+        SettingsFeature.id,
+        ObservingModule.id,
+      ]);
+      app = result.app!;
+      unit = _factoryOf(app);
+      routes = {
+        for (final (route, _) in _allOf(_routesOf(unit)))
+          if (route.name case final name?) name: route,
+      };
+    });
+
+    test('opens on the start route, which / redirects to', () {
+      expect(
+        (_argument(_goRouterOf(unit), 'initialLocation')! as StringLiteral)
+            .stringValue,
+        '/catalog',
+      );
+      final root = _routesOf(unit).first;
+      expect(root.path, '/');
+      expect(root.name, isNull);
+      expect(root.redirect, "(context, state) => '/catalog'");
+      expect(root.builder, isNull);
+    });
+
+    test(
+        'has a route for every route of the facade, named by its full name, '
+        'with its children below it', () {
+      final facade = routerRole.facadeOf(
+        routerRole.hookInput(
+          RoleHookRequest(
+            data: result.collection!.roleData,
+            presentRoles: result.resolution!.presentRoles,
+            context: ContractHarness.defaultContext,
+          ),
+        ),
+      );
+      final parents = {
+        for (final (route, parent) in _allOf(_routesOf(unit)))
+          if (route.name case final name?) name: parent,
+      };
+
+      expect(
+        parents.keys,
+        [for (final route in facade.routes) route.fullName],
+      );
+      for (final route in facade.routes) {
+        final goRoute = routes[route.fullName]!;
+        expect(parents[route.fullName], route.parent?.fullName);
+        expect(
+          goRoute.path,
+          route.parent == null ? route.fullPath : route.route.path,
+          reason: route.fullName,
+        );
+      }
+      expect(routes.keys, containsAll(['catalog.review', 'settings.settings']));
+    });
+
+    test('imports each file of screens once, with a prefix of its own', () {
+      final screens = {
+        for (final added in app.files[_factory]!.addedImports)
+          if (added.import.uri.contains('/features/'))
+            added.import.uri: added.import.prefix,
+      };
+
+      expect(screens, {
+        'package:contract_app/features/catalog/catalog_screen.dart': 'screen0',
+        'package:contract_app/features/catalog/item_screen.dart': 'screen1',
+        'package:contract_app/features/catalog/review_screen.dart': 'screen2',
+        'package:contract_app/features/catalog/more_screens.dart': 'screen3',
+        'package:contract_app/features/settings/settings_screen.dart':
+            'screen4',
+      });
+      expect(
+        {
+          for (final added in app.files[_factory]!.addedImports)
+            added.import.uri: '${added.contributor}',
+        },
+        {
+          for (final screen in screens.keys) screen: 'go_router',
+          // The factory of the observer comes with its import.
+          'package:contract_app/core/observing/test_observer.dart': 'observing',
+        },
+      );
+      expect(routes['catalog.tag']!.builder, contains('screen3.TagScreen('));
+      expect(
+        routes['settings.settings']!.builder,
+        '(context, state) => const screen4.SettingsScreen()',
+      );
+    });
+
+    test(
+        'passes optional int, double and bool query parameters as nullable '
+        'values', () {
+      // A value that the location does not have, or that is not of its
+      // type, is null.
+      expect(routes['catalog.catalog']!.screenArguments, {
+        'page': "int.tryParse(state.uri.queryParameters['page'] ?? '')",
+        'minPrice':
+            "double.tryParse(state.uri.queryParameters['minPrice'] ?? '')",
+        'onSale': "bool.tryParse(state.uri.queryParameters['onSale'] ?? '')",
+        'search': "state.uri.queryParameters['search']",
+      });
+      expect(routes['catalog.catalog']!.redirect, isNull);
+    });
+
+    test('checks the required values of a location before the screen', () {
+      expect(
+        routes['catalog.compare']!.redirect,
+        [
+          '(context, state) => _checkValues({',
+          "'left' : int.tryParse(state.uri.queryParameters['left'] ?? ''), ",
+          "'right' : int.tryParse(state.uri.queryParameters['right'] ?? '')})",
+        ].join(),
+      );
+      expect(routes['catalog.compare']!.screenArguments, {
+        'left': "int.tryParse(state.uri.queryParameters['left'] ?? '')!",
+        'right': "int.tryParse(state.uri.queryParameters['right'] ?? '')!",
+      });
+      expect(routes['catalog.price']!.screenArguments, {
+        'amount': "double.tryParse(state.pathParameters['amount'] ?? '')!",
+        'exact': "bool.tryParse(state.pathParameters['exact'] ?? '')!",
+      });
+      expect(routes['catalog.price']!.redirect, contains("'amount' :"));
+      expect(routes['catalog.price']!.redirect, contains("'exact' :"));
+      // A path always has its String parameters.
+      expect(routes['catalog.tag']!.redirect, isNull);
+      expect(routes['catalog.tag']!.screenArguments, {
+        'tag': "state.pathParameters['tag']!",
+      });
+
+      final checks = unit.declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere((function) => function.name.lexeme == '_checkValues');
+      expect(checks.returnType?.toSource(), 'String?');
+      expect(checks.toSource(), contains('throw GoException('));
+    });
+
+    test('reads a path parameter of the parent from the path', () {
+      expect(routes['catalog.review']!.screenArguments, {
+        'id': "int.tryParse(state.pathParameters['id'] ?? '')!",
+        'reviewId': "state.pathParameters['reviewId']!",
+      });
+      expect(routes['catalog.item']!.screenArguments, {
+        'id': "int.tryParse(state.pathParameters['id'] ?? '')!",
+        'variant': "state.uri.queryParameters['variant']",
+      });
+    });
+
+    test('creates the observers of the router role for its navigator', () {
+      final observers = _argument(_goRouterOf(unit), 'observers')!;
+
+      expect(
+        observers.toSource(),
+        '[for (final create in <NavigatorObserver Function()>[() => '
+        'TestObserver()]) create()]',
+      );
+    });
+
+    test('navigates through the router it created once, whatever the context',
+        () {
+      final router = _routerClassOf(unit);
+
+      expect(router.name.lexeme, isNot('AppRouter'));
+      final config = router.members.whereType<FieldDeclaration>().singleWhere(
+            (field) => field.fields.variables.single.name.lexeme == 'config',
+          );
+      expect(config.fields.isLate, isTrue);
+      expect(config.fields.isFinal, isTrue);
+      expect(_bodyOf(router, 'navigatorOf'), '=> this;');
+      expect(_bodyOf(router, 'go'), '=> config.go(location.path);');
+      expect(_bodyOf(router, 'push'), '=> config.push<T>(location.path);');
+      expect(
+        _bodyOf(router, 'replace'),
+        '=> config.pushReplacement<Object?>(location.path);',
+      );
+      expect(app.files[_factory]!.text, isNot(contains('GoRouter.of(')));
+    });
+  });
+
+  group('the start of an app', () {
+    test('is the fallback screen when no route can start the app', () async {
+      final result = await renderedApp(const [SettingsFeature.id]);
+      final unit = _factoryOf(result.app!);
+
+      final routes = _routesOf(unit);
+      expect(routes.map((route) => route.path), ['/', '/settings']);
+      expect(
+        routes.first.builder,
+        '(context, state) => const FallbackStartScreen()',
+      );
+    });
+
+    test('is the route that --start names', () async {
+      final result = await renderedApp(
+        const [CatalogFeature.id, SettingsFeature.id],
+        roleOptions: {RouterRole.startOption.name: '/settings'},
+      );
+      final unit = _factoryOf(result.app!);
+
+      expect(
+        (_argument(_goRouterOf(unit), 'initialLocation')! as StringLiteral)
+            .stringValue,
+        '/settings',
+      );
+      expect(
+        _routesOf(unit).first.redirect,
+        "(context, state) => '/settings'",
+      );
+    });
+  });
+}

@@ -198,7 +198,6 @@ const _migrating = [
       'packages/smf_modules/smf_firebase_core/',
       'packages/smf_modules/smf_firebase_crashlytics/',
       'packages/smf_modules/smf_get_it/',
-      'packages/smf_modules/smf_go_router/',
       'packages/smf_modules/smf_home_flutter/',
     ],
     null,

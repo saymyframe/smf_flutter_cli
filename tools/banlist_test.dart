@@ -78,7 +78,7 @@ void main() {
 
   test('reports every path of an exception that matches nothing', () {
     final problems = problemsOf({
-      'packages/smf_modules/smf_go_router/lib/a.dart': 'ModuleProfile',
+      'packages/smf_modules/smf_event_bus/lib/a.dart': 'ModuleProfile',
     });
 
     expect(
@@ -90,7 +90,7 @@ void main() {
     );
     expect(
       problems,
-      isNot(contains(contains('smf_go_router/ matches nothing'))),
+      isNot(contains(contains('smf_event_bus/ matches nothing'))),
     );
   });
 }
