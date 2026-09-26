@@ -35,24 +35,26 @@ void main() {
     });
 
     test(
-        'builds an app of every fixture that fits for each router and state '
-        'manager', () async {
+        'builds an app of every fixture that fits for each router, DI '
+        'container and state manager', () async {
       final harness = ContractHarness(ModuleRegistry(fixtureModules()));
       final cases = harness.casesOfAll();
+      const routers = ['fake_router', 'go_router'];
+      const containers = ['fake_di', 'get_it'];
+      const stateManagers = ['fake_bloc', 'fake_riverpod'];
+      final picks = [
+        for (final router in routers)
+          for (final container in containers)
+            for (final stateManager in stateManagers)
+              (router, container, stateManager),
+      ];
 
       expect(cases.map((c) => '$c'), [
-        'every module (fake_router, fake_bloc)',
-        'every module (fake_router, fake_riverpod)',
-        'every module (go_router, fake_bloc)',
-        'every module (go_router, fake_riverpod)',
+        for (final (router, container, stateManager) in picks)
+          'every module ($router, $container, $stateManager)',
       ]);
       for (final (index, contractCase) in cases.indexed) {
-        final (router, otherRouter) = index < 2
-            ? ('fake_router', 'go_router')
-            : ('go_router', 'fake_router');
-        final (stateManager, otherManager) = index.isEven
-            ? ('fake_bloc', 'fake_riverpod')
-            : ('fake_riverpod', 'fake_bloc');
+        final (router, container, stateManager) = picks[index];
         final result = await harness.check(contractCase);
         expect(result.errors.map((issue) => '$issue'), isEmpty);
         expect(
@@ -61,13 +63,16 @@ void main() {
             containsAll([
               stateManager,
               router,
+              container,
               'fake_sockets',
               'fake_feature',
               'fake_second',
+              'fake_registrations',
               'bottom_tabs',
             ]),
-            isNot(contains(otherManager)),
-            isNot(contains(otherRouter)),
+            isNot(contains(_other(stateManagers, stateManager))),
+            isNot(contains(_other(routers, router))),
+            isNot(contains(_other(containers, container))),
           ),
         );
         // Both features can start the app, so the harness answers the
@@ -290,7 +295,7 @@ void main() {
         for (final app in apps)
           if (app.name.startsWith('every module')) app,
       ];
-      expect(every, hasLength(4));
+      expect(every, hasLength(8));
       for (final app in every) {
         expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
@@ -430,6 +435,10 @@ void main() {
   });
 }
 
+/// The one of the two modules [both] that is not [one].
+String _other(List<String> both, String one) =>
+    both.singleWhere((module) => module != one);
+
 /// The codes of the diagnostics that the import cleanup fixes.
 const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 
@@ -442,12 +451,17 @@ const _cases = [
   'go_router with layout',
   'go_router',
   'fake_di',
+  'get_it',
   'fake_bloc',
   'fake_riverpod',
-  'fake_feature (fake_bloc, fake_router)',
-  'fake_feature (fake_bloc, go_router)',
-  'fake_feature (fake_riverpod, fake_router)',
-  'fake_feature (fake_riverpod, go_router)',
+  'fake_feature (fake_bloc, fake_di, fake_router)',
+  'fake_feature (fake_bloc, fake_di, go_router)',
+  'fake_feature (fake_bloc, get_it, fake_router)',
+  'fake_feature (fake_bloc, get_it, go_router)',
+  'fake_feature (fake_riverpod, fake_di, fake_router)',
+  'fake_feature (fake_riverpod, fake_di, go_router)',
+  'fake_feature (fake_riverpod, get_it, fake_router)',
+  'fake_feature (fake_riverpod, get_it, go_router)',
   'fake_second (fake_router)',
   'fake_second (go_router)',
   'fake_sockets',
@@ -460,7 +474,8 @@ const _cases = [
   'fake_crash',
   'fake_events with di',
   'fake_events',
-  'fake_registrations',
+  'fake_registrations (fake_di)',
+  'fake_registrations (get_it)',
   'fake_parent',
   'fake_child',
   'fake_codegen',

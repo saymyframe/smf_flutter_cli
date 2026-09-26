@@ -9,6 +9,7 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -27,6 +28,11 @@ final _apps = <String, ContractCase>{
   'every_fixture_riverpod': ContractCase(
     'every fixture with Riverpod',
     requested: everyFixture(stateManager: FakeRiverpodModule.id),
+  ),
+  // The services of the fixtures registered by a real DI container.
+  'every_fixture_get_it': ContractCase(
+    'every fixture with get_it',
+    requested: everyFixture(di: GetItModule.id),
   ),
   // No router, no DI, and the clock without the badge: the other branches
   // of the templates.
