@@ -326,7 +326,12 @@ final class FakeEventsModule extends SmfModule {
       ];
 }
 
-/// A module that registers services with every capability of the DI role.
+/// A module that registers services with every capability of the DI role,
+/// in each form a DI container can have to render: singletons, lazy
+/// singletons and factories, with and without names; singletons created
+/// asynchronously, and singletons that wait for them, named or not, by
+/// saying so or by taking them; factories with one and two parameters; and
+/// functions that dispose of singletons of each kind.
 final class FakeRegistrationsModule extends SmfModule {
   /// Creates the module.
   const FakeRegistrationsModule();
@@ -345,6 +350,11 @@ final class FakeRegistrationsModule extends SmfModule {
   static const _greeting = TypeRef('FixtureGreeting', import: _file);
   static const _label = TypeRef('FixtureLabel', import: _file);
   static const _zone = TypeRef('FixtureZone', import: _file);
+  static const _stamp = TypeRef('FixtureStamp', import: _file);
+  static const _log = TypeRef('FixtureLog', import: _file);
+  static const _index = TypeRef('FixtureIndex', import: _file);
+  static const _replica = TypeRef('FixtureReplica', import: _file);
+  static const _counter = TypeRef('FixtureCounter', import: _file);
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -424,6 +434,64 @@ final class FakeRegistrationsModule extends SmfModule {
             type: _zone,
             create: FactoryRef('createUtcZone', import: _file),
             instanceName: 'utc',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _stamp,
+            create: FactoryRef(
+              'createFixtureStamp',
+              import: _file,
+              deps: [ServiceRef(_zone, instanceName: 'utc')],
+            ),
+            lifetime: DiLifetime.factory,
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _log,
+            create: FactoryRef('createAuditLog', import: _file),
+            lifetime: DiLifetime.singleton,
+            dispose: FunctionRef('closeFixtureLog', import: _file),
+            instanceName: 'audit',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _index,
+            create: FactoryRef(
+              'createFixtureIndex',
+              import: _file,
+              deps: [ServiceRef(_session)],
+            ),
+            lifetime: DiLifetime.singleton,
+            instanceName: 'primary',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _session,
+            create: FactoryRef('openBackupSession', import: _file),
+            lifetime: DiLifetime.singleton,
+            isAsync: true,
+            dispose: FunctionRef('closeFixtureSession', import: _file),
+            instanceName: 'backup',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _replica,
+            create: FactoryRef('openFixtureReplica', import: _file),
+            lifetime: DiLifetime.singleton,
+            isAsync: true,
+            dependsOn: [ServiceRef(_session, instanceName: 'backup')],
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _counter,
+            create: FactoryRef('createFixtureCounter', import: _file),
+            dispose: FunctionRef('closeFixtureCounter', import: _file),
           ),
         ),
       ];

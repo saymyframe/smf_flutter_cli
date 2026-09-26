@@ -588,6 +588,35 @@ Future<void> registerDependencies() async {
     ),
   );
   locator.lazy<di0.FixtureZone>(() => di0.createUtcZone(), name: 'utc');
+  locator.factoryOf<di0.FixtureStamp>(
+    () => di0.createFixtureStamp(
+      locator.resolve<di0.FixtureZone>(instanceName: 'utc'),
+    ),
+  );
+  locator.singleton<di0.FixtureLog>(di0.createAuditLog(), name: 'audit');
+  locator.onDispose(
+    () => di0.closeFixtureLog(
+      locator.resolve<di0.FixtureLog>(instanceName: 'audit'),
+    ),
+  );
+  locator.singleton<di0.FixtureIndex>(
+    di0.createFixtureIndex(locator.resolve<di0.FixtureSession>()),
+    name: 'primary',
+  );
+  locator.singleton<di0.FixtureSession>(
+    await di0.openBackupSession(),
+    name: 'backup',
+  );
+  locator.onDispose(
+    () => di0.closeFixtureSession(
+      locator.resolve<di0.FixtureSession>(instanceName: 'backup'),
+    ),
+  );
+  locator.singleton<di0.FixtureReplica>(await di0.openFixtureReplica());
+  locator.lazy<di0.FixtureCounter>(() => di0.createFixtureCounter());
+  locator.onDispose(
+    () => di0.closeFixtureCounter(locator.resolve<di0.FixtureCounter>()),
+  );
   locator.lazy<di1.CrashReporter>(() => di1.createCrashReporter());
   locator.lazy<di2.CommunicationService>(
     () => di2.createCommunicationService(),
@@ -922,6 +951,70 @@ FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');
+
+/// A stamp of the time in a zone, new for every call.
+final class FixtureStamp {
+  /// Creates the stamp.
+  const FixtureStamp(this.zone);
+
+  /// The zone of the time.
+  final FixtureZone zone;
+}
+
+/// A log of what the app did.
+final class FixtureLog {
+  /// Whether the log was closed.
+  bool closed = false;
+}
+
+/// An index of what a session holds.
+final class FixtureIndex {
+  /// Creates the index.
+  const FixtureIndex(this.session);
+
+  /// The session.
+  final FixtureSession session;
+}
+
+/// A replica that opens after the backup session.
+final class FixtureReplica {
+  /// Creates the replica.
+  const FixtureReplica();
+}
+
+/// A counter of events.
+final class FixtureCounter {
+  /// How many events it counted.
+  int count = 0;
+}
+
+/// Creates a stamp in [zone].
+FixtureStamp createFixtureStamp(FixtureZone zone) => FixtureStamp(zone);
+
+/// Creates the audit log.
+FixtureLog createAuditLog() => FixtureLog();
+
+/// Closes the log.
+void closeFixtureLog(FixtureLog log) => log.closed = true;
+
+/// Creates the index of [session].
+FixtureIndex createFixtureIndex(FixtureSession session) =>
+    FixtureIndex(session);
+
+/// Opens the backup session.
+Future<FixtureSession> openBackupSession() async => const FixtureSession();
+
+/// Closes [session].
+void closeFixtureSession(FixtureSession session) {}
+
+/// Opens the replica.
+Future<FixtureReplica> openFixtureReplica() async => const FixtureReplica();
+
+/// Creates the counter.
+FixtureCounter createFixtureCounter() => FixtureCounter();
+
+/// Resets the counter.
+void closeFixtureCounter(FixtureCounter counter) => counter.count = 0;
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 

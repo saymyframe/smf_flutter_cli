@@ -99,3 +99,67 @@ FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');
+
+/// A stamp of the time in a zone, new for every call.
+final class FixtureStamp {
+  /// Creates the stamp.
+  const FixtureStamp(this.zone);
+
+  /// The zone of the time.
+  final FixtureZone zone;
+}
+
+/// A log of what the app did.
+final class FixtureLog {
+  /// Whether the log was closed.
+  bool closed = false;
+}
+
+/// An index of what a session holds.
+final class FixtureIndex {
+  /// Creates the index.
+  const FixtureIndex(this.session);
+
+  /// The session.
+  final FixtureSession session;
+}
+
+/// A replica that opens after the backup session.
+final class FixtureReplica {
+  /// Creates the replica.
+  const FixtureReplica();
+}
+
+/// A counter of events.
+final class FixtureCounter {
+  /// How many events it counted.
+  int count = 0;
+}
+
+/// Creates a stamp in [zone].
+FixtureStamp createFixtureStamp(FixtureZone zone) => FixtureStamp(zone);
+
+/// Creates the audit log.
+FixtureLog createAuditLog() => FixtureLog();
+
+/// Closes the log.
+void closeFixtureLog(FixtureLog log) => log.closed = true;
+
+/// Creates the index of [session].
+FixtureIndex createFixtureIndex(FixtureSession session) =>
+    FixtureIndex(session);
+
+/// Opens the backup session.
+Future<FixtureSession> openBackupSession() async => const FixtureSession();
+
+/// Closes [session].
+void closeFixtureSession(FixtureSession session) {}
+
+/// Opens the replica.
+Future<FixtureReplica> openFixtureReplica() async => const FixtureReplica();
+
+/// Creates the counter.
+FixtureCounter createFixtureCounter() => FixtureCounter();
+
+/// Resets the counter.
+void closeFixtureCounter(FixtureCounter counter) => counter.count = 0;
