@@ -17,7 +17,6 @@ dependencies:
   smf_contracts: ^0.2.0
 
 dev_dependencies:
-  analyzer: ^8.1.0
   # The file system of the machine on which the tests run smf create.
   file: ^7.0.1
   # The app entry of the apps that the tests render.
