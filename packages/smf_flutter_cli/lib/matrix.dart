@@ -57,11 +57,14 @@ final class MatrixApp {
 /// combination of the providers of roles that take one
 /// (see [ContractHarness.casesOfAll]).
 ///
-/// [roleOptions] are the values of role options for every app, such as the
-/// start route of apps with several screens that can start them. The
-/// harness renders each app in memory first, so a case that it finds errors
-/// in, such as a choice of a role that no option makes, is among the
-/// `failed` ones, since its app could not be generated.
+/// Each app gets [roleOptions], the values of role options for every app,
+/// the options of its case, and the answers of the harness to the
+/// questions of the roles that they leave open (see
+/// [ContractResult.answers]), such as `--start` with the first of several
+/// screens that can start the app: `smf create` then makes the same
+/// choices without a terminal. The harness renders each app in memory
+/// first, so a case that it finds errors in is among the `failed` ones,
+/// since its app could not be generated.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   List<SmfModule> modules, {
   Map<String, String?> roleOptions = const {},
@@ -89,7 +92,11 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
       MatrixApp(
         '${result.contractCase}',
         [for (final module in resolution.modules) module.id],
-        roleOptions: {...roleOptions, ...result.contractCase.roleOptions},
+        roleOptions: {
+          ...roleOptions,
+          ...result.contractCase.roleOptions,
+          ...result.answers,
+        },
       ),
     );
   }
