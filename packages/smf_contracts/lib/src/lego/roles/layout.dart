@@ -9,7 +9,7 @@ const layoutRole = LayoutRole._();
 ///
 /// The destinations are the top-level routes with a [Destination], in the
 /// order of the features (see [destinationsIn]). The role's template
-/// generates `Destination`, a label and an icon, in
+/// generates the class [destination], a label and an icon, in
 /// `lib/core/layout/destination.dart`, and every provider generates the
 /// widget [appShell], which shows the selected destination's branch as its
 /// `body`. The router builds the shell from the destinations and keeps each
@@ -17,8 +17,21 @@ const layoutRole = LayoutRole._();
 final class LayoutRole extends Role<NoDsl> {
   const LayoutRole._();
 
-  /// The path of the file with `Destination`.
+  /// The path of the file with [destination].
   static const destinationFile = 'lib/core/layout/destination.dart';
+
+  /// The class of a destination in the app, which the role's template
+  /// generates: `Destination(label: ..., icon: ...)` with a `String` label
+  /// and an `IconData` icon.
+  ///
+  /// Its constructor is `const`, so a router creates the destinations as
+  /// constants, which lets a release build tree-shake the icon fonts.
+  static const destination = RequiredClass(
+    'Destination',
+    path: destinationFile,
+    namedParameters: ['label', 'icon'],
+    constConstructor: true,
+  );
 
   /// The path of the provider's file with [appShell].
   static const appShellFile = 'lib/core/layout/app_shell.dart';
@@ -52,7 +65,7 @@ final class LayoutRole extends Role<NoDsl> {
   @override
   RoleInterface get interface => const RoleInterface(
         files: [destinationFile],
-        symbols: [appShell],
+        symbols: [destination, appShell],
       );
 
   @override

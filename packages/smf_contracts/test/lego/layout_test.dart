@@ -71,7 +71,10 @@ void main() {
       'onSelect',
       'body',
     ]);
-    expect(layoutRole.interface.symbols, [LayoutRole.appShell]);
+    expect(
+      layoutRole.interface.symbols,
+      [LayoutRole.destination, LayoutRole.appShell],
+    );
   });
 
   group('LayoutProvider', () {
@@ -145,5 +148,16 @@ void main() {
     expect(code, contains('final class Destination {'));
     expect(code, contains('final IconData icon;'));
     expect(rendered.elsewhere, isEmpty);
+    // As the symbol of the role says, which the contract harness checks in
+    // every app with the role.
+    expect(
+      code,
+      contains(
+        'const Destination({required this.label, required this.icon});',
+      ),
+    );
+    expect(LayoutRole.destination.path, LayoutRole.destinationFile);
+    expect(LayoutRole.destination.namedParameters, ['label', 'icon']);
+    expect(LayoutRole.destination.constConstructor, isTrue);
   });
 }

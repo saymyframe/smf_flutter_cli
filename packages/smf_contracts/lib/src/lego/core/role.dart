@@ -337,7 +337,7 @@ final class RoleOption {
 }
 
 /// What a role guarantees to the rest of the app: the files its template
-/// generates and the symbols every provider must generate.
+/// generates and the symbols that other code uses.
 final class RoleInterface {
   /// Creates the interface of a role.
   const RoleInterface({this.files = const [], this.symbols = const []});
@@ -345,7 +345,8 @@ final class RoleInterface {
   /// The files the role's template generates, relative to the project root.
   final List<String> files;
 
-  /// The symbols every provider of the role must generate.
+  /// The symbols that other code uses: those every provider of the role
+  /// must generate, and those of the files of the role's template.
   final List<RequiredSymbol> symbols;
 
   /// Checks that [files], the indexes of an app by path, declare every
