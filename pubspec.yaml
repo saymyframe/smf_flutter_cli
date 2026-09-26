@@ -22,6 +22,7 @@ workspace:
   - packages/smf_pipeline/test/fixtures/fake_router
   - packages/smf_pipeline/test/fixtures/fake_state
   - packages/smf_modules/smf_bloc
+  - packages/smf_modules/smf_bottom_tabs
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics

@@ -1,0 +1,10 @@
+name: bottom_tabs
+description: "The main navigation of an SMF app: a bar of tabs at the bottom, one for each destination."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
