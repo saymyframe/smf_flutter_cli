@@ -165,8 +165,8 @@ void main() {
       );
     });
 
-    test('names the app in its README', () {
-      expect(texts['README.md'], startsWith('# contract_app\n'));
+    test('names the app in a README without sections', () {
+      expect(texts['README.md'], '# contract_app\n\nA new Flutter project.\n');
     });
   });
 
@@ -211,6 +211,19 @@ void main() {
         startsWith("import 'package:flutter/foundation.dart';\n\n"
             "@pragma('vm:entry-point')\n"
             'Future<void> onBackgroundMessage() async {}\n'),
+      );
+    });
+
+    test('has the sections of the modules in its README', () {
+      expect(
+        texts['README.md'],
+        '# contract_app\n'
+        '\n'
+        'A new Flutter project.\n'
+        '\n'
+        '## Every socket\n'
+        '\n'
+        'The app has something in every socket of its entry.\n',
       );
     });
 

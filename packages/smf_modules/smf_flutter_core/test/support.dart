@@ -182,6 +182,10 @@ final class EverySocketModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.readmeSections.entry(
+          'Every socket',
+          'The app has something in every socket of its entry.',
+        ),
       ];
 }
 
