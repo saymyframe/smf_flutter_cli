@@ -45,6 +45,9 @@ final class FirebaseCrashlyticsModule extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(firebaseCrashlyticsBundle),
+        // The reporter of the brick reports an error of Flutter as
+        // recordFlutterError of this version does, but without presenting
+        // it: compare the two when moving to a newer version.
         const PubspecContribution.hosted('firebase_crashlytics', '^5.4.0'),
         crashReportingRole.data(
           const RoleImplementation(
