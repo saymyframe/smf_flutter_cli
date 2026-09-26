@@ -193,7 +193,6 @@ const _migrating = [
   ),
   _Exception(
     [
-      'packages/smf_modules/smf_event_bus/',
       'packages/smf_modules/smf_firebase_analytics/',
       'packages/smf_modules/smf_firebase_core/',
       'packages/smf_modules/smf_firebase_crashlytics/',
