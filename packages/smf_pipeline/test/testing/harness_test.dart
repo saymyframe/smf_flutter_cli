@@ -419,6 +419,27 @@ void main() {
       expect(given.answers, isEmpty);
     });
 
+    test('answers every kind of question with its default or first choice',
+        () async {
+      final curious = TestRole<String>('curious', template: _CuriousTemplate());
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(),
+          TestModule('asker', providers: [RoleProvider.plain(curious)]),
+        ]),
+      );
+
+      final result = await harness.check(
+        const ContractCase('asker', requested: [ModuleId('asker')]),
+      );
+
+      expect(result.errors, isEmpty);
+      // The defaults of confirm, input and multiSelect, and the first choice
+      // of a select without a default.
+      expect(result.choices, {curious: 'true, typed, b, one'});
+      expect(result.answers, isEmpty);
+    });
+
     test('a harness that does not render leaves the app out', () async {
       final harness = ContractHarness(registry, render: false);
       final result = await harness.check(
@@ -880,6 +901,23 @@ final class _AskTemplate extends RoleTemplate<String> {
   Map<String, String> optionsOf(Object? choice) => {
         if (optionName case final name? when choice is String) name: choice,
       };
+}
+
+/// A template that asks a question of every kind and joins the answers.
+final class _CuriousTemplate extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    final prompter = context.environment.prompter;
+    final confirmed = await prompter.confirm('Sure?', defaultValue: true);
+    final typed = await prompter.input('Name?', defaultValue: 'typed');
+    final picked = await prompter.multiSelect(
+      'Which?',
+      const ['a', 'b'],
+      defaultValues: const ['b'],
+    );
+    final selected = await prompter.select('Which one?', const ['one', 'two']);
+    return '$confirmed, $typed, ${picked.join()}, $selected';
+  }
 }
 
 /// A provider whose render hook returns [vars].
