@@ -86,8 +86,9 @@ const _macos = r'''
 #!/usr/bin/env bash
 # Installs the Firebase CLI on macOS with npm, for SMF.
 #
-# When Node.js is missing, it installs it first: with Homebrew if there is
-# one, or else with nvm in the home directory. It adds the directory of the
+# When Node.js is missing or older than 20, which the Firebase CLI needs, it
+# installs it first: with Homebrew if there is one, or else with nvm in the
+# home directory. It adds the directory of the
 # global npm executables to the PATH of new terminals, and prints the
 # directories of the Firebase CLI and of Node.js as lines
 # "smf-bin-dir=<directory>".
@@ -127,6 +128,18 @@ install_node() {
   set -u
 }
 
+# The major version of Node.js, or 0 if it is missing.
+node_major_version() {
+  if ! command_exists node; then
+    echo 0
+    return
+  fi
+  local version
+  version="$(node -v 2>/dev/null || echo v0)"
+  version="${version#v}"
+  echo "${version%%.*}"
+}
+
 # Adds the directory $1 to the PATH in the profile of the login shell, which
 # new terminals read.
 add_to_path_of_new_terminals() {
@@ -142,8 +155,13 @@ add_to_path_of_new_terminals() {
 }
 
 if ! command_exists firebase; then
-  if ! command_exists node; then
+  if [ "$(node_major_version)" -lt 20 ]; then
     install_node
+    # An older node earlier on the PATH still comes first.
+    if [ "$(node_major_version)" -lt 20 ]; then
+      echo "The Firebase CLI needs Node.js 20 or newer, but node is $(node -v 2>/dev/null || echo missing)." >&2
+      exit 1
+    fi
   fi
   if ! command_exists npm; then
     load_nvm || true
@@ -290,9 +308,9 @@ fi
 const _windows = r'''
 # Installs the Firebase CLI on Windows with npm, for SMF.
 #
-# When Node.js is missing, it installs it first: with winget, Chocolatey or
-# Scoop, or else from the portable ZIP of its LTS version in
-# %LOCALAPPDATA%\Programs\node. It adds the directories to the PATH of the
+# When Node.js is missing or older than 20, which the Firebase CLI needs, it
+# installs it first: with winget, Chocolatey or Scoop, or else from the
+# portable ZIP of its LTS version in %LOCALAPPDATA%\Programs\node. It adds the directories to the PATH of the
 # user for new terminals, and prints the directories of the Firebase CLI and
 # of Node.js as lines "smf-bin-dir=<directory>".
 $ErrorActionPreference = "Stop"
@@ -310,6 +328,14 @@ function Add-UserPathEntry($pathEntry) {
   # Unlike setx, it does not cut a PATH longer than 1024 characters.
   [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
   Write-Host "Added $pathEntry to the PATH for new terminals."
+}
+
+# The major version of Node.js, or 0 if it is missing.
+function Get-NodeMajorVersion {
+  try {
+    $version = (& node -v | Out-String).Trim().TrimStart('v')
+    return [int]($version.Split('.')[0])
+  } catch { return 0 }
 }
 
 $portableNode = Join-Path $env:LOCALAPPDATA "Programs\node"
@@ -333,7 +359,7 @@ function Install-PortableNode {
 }
 
 if (-not (Command-Exists 'firebase')) {
-  if (-not (Command-Exists 'node')) {
+  if ((Get-NodeMajorVersion) -lt 20) {
     if (Command-Exists 'winget') {
       winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
     } elseif (Command-Exists 'choco') {
@@ -345,7 +371,8 @@ if (-not (Command-Exists 'firebase')) {
     $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $env:Path = "$env:Path;$machinePath;$userPath"
-    if (-not (Command-Exists 'node')) { Install-PortableNode }
+    # The portable one goes first on the PATH of this script.
+    if ((Get-NodeMajorVersion) -lt 20) { Install-PortableNode }
   }
 
   if (Command-Exists 'npm') {

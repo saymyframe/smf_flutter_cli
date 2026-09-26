@@ -180,6 +180,7 @@ void main() {
       );
       expect('${result.stdout}', contains('15.14.0'));
       expect(machine.calls, [
+        'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
       ]);
@@ -226,6 +227,45 @@ void main() {
       expect(binDirsIn('${result.stdout}'), [brew.path]);
     });
 
+    test('installs Node.js 20 or newer when the one it finds is older', () {
+      final brew = machine.bin('brew');
+      File('${brew.path}/brew').writeAsStringSync(_brew);
+      Process.runSync('chmod', ['+x', '${brew.path}/brew']);
+      // An older Node.js of Homebrew, which it upgrades.
+      machine.installNode('brew', version: 'v18.20.0');
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(machine.calls, [
+        'node -v',
+        'brew install node',
+        'node -v',
+        'npm install -g firebase-tools',
+        'npm prefix -g',
+      ]);
+      expect(binDirsIn('${result.stdout}'), [brew.path]);
+    });
+
+    test('stops when an older Node.js comes first on the PATH', () {
+      machine.installNode('old', version: 'v18.20.0');
+      final brew = machine.bin('brew');
+      File('${brew.path}/brew').writeAsStringSync(_brew);
+      Process.runSync('chmod', ['+x', '${brew.path}/brew']);
+      machine.path.add(brew.path);
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result.exitCode, isNot(0));
+      expect(
+        '${result.stderr}',
+        contains(
+          'The Firebase CLI needs Node.js 20 or newer, but node is v18.20.0.',
+        ),
+      );
+      expect(machine.calls, isNot(contains(startsWith('npm'))));
+    });
+
     test('installs Node.js with nvm when there is no Homebrew', () {
       final nvm = Directory('${machine.home.path}/.nvm')..createSync();
       File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
@@ -235,6 +275,7 @@ void main() {
       expect(result, succeeded(), reason: '${result.stderr}');
       expect(machine.calls, [
         'nvm install --lts',
+        'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
       ]);
@@ -345,6 +386,20 @@ void main() {
     expect(script, contains('npm install -g firebase-tools'));
     expect(script, contains(r'Write-Output "smf-bin-dir=$(Split-Path'));
     expect(binDirPrefix, 'smf-bin-dir=');
+  });
+
+  test('the Windows script installs Node.js 20 or newer', () {
+    final script = InstallScript.of(HostOperatingSystem.windows)!.text;
+
+    expect(
+      script,
+      contains("if (-not (Command-Exists 'firebase')) {\n"
+          '  if ((Get-NodeMajorVersion) -lt 20) {\n'),
+    );
+    expect(
+      script,
+      contains('if ((Get-NodeMajorVersion) -lt 20) { Install-PortableNode }'),
+    );
   });
 
   test('the Windows script fails when the Firebase CLI does not run', () {
