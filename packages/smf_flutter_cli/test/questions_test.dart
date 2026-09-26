@@ -173,6 +173,7 @@ void main() {
       'Features': ['home'],
       'Layout': ['None'],
       'State management': ['bloc'],
+      'Dependency injection': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -180,6 +181,7 @@ void main() {
       'Features: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
+      'Dependency injection: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
@@ -216,6 +218,7 @@ void main() {
       ),
     );
     expect(app.childDirectory('lib/core/layout').existsSync(), isFalse);
+    expect(app.childDirectory('lib/core/di').existsSync(), isFalse);
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
       allOf(contains('  go_router: '), contains('  flutter_bloc: ')),
@@ -229,6 +232,7 @@ void main() {
       'Features': ['home'],
       'Layout': ['bottom_tabs'],
       'State management': ['riverpod'],
+      'Dependency injection': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -236,6 +240,7 @@ void main() {
       'Features: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
+      'Dependency injection: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -268,6 +273,7 @@ void main() {
       'Features': [],
       'Layout': ['bottom_tabs'],
       'State management': ['None'],
+      'Dependency injection': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -275,6 +281,7 @@ void main() {
       'Features: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
+      'Dependency injection: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -307,6 +314,7 @@ void main() {
       'Layout': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
+      'Dependency injection': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -315,6 +323,7 @@ void main() {
       'Layout: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
+      'Dependency injection: which module provides it?',
     ]);
     expect(run.asked[2].shown, [
       'go_router — Routes and navigation with go_router',
@@ -327,6 +336,49 @@ void main() {
           .childFile('lib/core/router/app_router_factory.dart')
           .readAsStringSync(),
       contains("initialLocation: '/',"),
+    );
+  });
+
+  test(
+      'a run in a terminal asks last which module provides dependency '
+      'injection, and offers get_it', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Layout': ['None'],
+      'State management': ['None'],
+      'Dependency injection': ['get_it'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(
+      run.asked.last.message,
+      'Dependency injection: which module provides it?',
+    );
+    expect(run.asked.last.shown, [
+      'get_it — Service locator with get_it',
+      'None',
+    ]);
+    final app = run.files.directory('/work/my_app');
+    // No module of the CLI registers a service yet.
+    expect(
+      app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
+      allOf(
+        contains('ServiceLocator createServiceLocator() =>'),
+        contains('Future<void> registerDependencies() async {'),
+        isNot(contains('.register')),
+      ),
+    );
+    expect(
+      app.childFile('lib/core/di/service_locator.dart').existsSync(),
+      isTrue,
+    );
+    expect(
+      app.childFile('lib/bootstrap.dart').readAsStringSync(),
+      contains('await registerDependencies();'),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      contains('  get_it: '),
     );
   });
 }

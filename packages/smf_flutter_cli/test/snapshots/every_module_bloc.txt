@@ -213,10 +213,14 @@ class App extends StatelessWidget {
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/di/dependencies.dart';
+
 /// Runs the start-up code of the app before its first frame: first what
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
-Future<void> bootstrap() async {}
+Future<void> bootstrap() async {
+  await registerDependencies();
+}
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 
@@ -228,6 +232,64 @@ class FallbackStartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('My App')));
+}
+=== lib/core/di/dependencies.dart (get_it) ===
+import 'package:get_it/get_it.dart';
+
+import 'service_locator.dart';
+
+/// Creates the service locator of the app, which finds the services in the
+/// global instance of get_it, [GetIt.instance].
+ServiceLocator createServiceLocator() => _GetItServiceLocator(GetIt.instance);
+
+/// Registers the services of the modules of the app in get_it, each after
+/// the services it takes or waits for, and completes when all of them are
+/// ready.
+///
+/// `GetIt.instance.reset()` removes them again and disposes of those that
+/// were created, in the reverse order of their registration.
+Future<void> registerDependencies() async {}
+
+/// Finds the services of the app in get_it.
+final class _GetItServiceLocator implements ServiceLocator {
+  _GetItServiceLocator(this._getIt);
+
+  final GetIt _getIt;
+
+  @override
+  T resolve<T extends Object>({String? instanceName}) =>
+      _getIt<T>(instanceName: instanceName);
+
+  @override
+  T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
+      _getIt<T>(param1: param1, param2: param2);
+}
+=== lib/core/di/service_locator.dart (role:di) ===
+import 'dependencies.dart';
+
+/// The service locator of the app, created on first use.
+final ServiceLocator serviceLocator = createServiceLocator();
+
+/// Returns the service of type [T], or the one named [instanceName].
+///
+/// Only the composition file of a feature calls it, to create what the
+/// feature's screens need; other code receives its services as parameters.
+T resolve<T extends Object>({String? instanceName}) =>
+    serviceLocator.resolve<T>(instanceName: instanceName);
+
+/// Returns a new service of type [T] from a factory that takes parameters,
+/// created with [param1] and [param2].
+T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
+    serviceLocator.resolveWith<T>(param1, param2);
+
+/// Finds the services that `registerDependencies()` registers.
+abstract interface class ServiceLocator {
+  /// Returns the service of type [T], or the one named [instanceName].
+  T resolve<T extends Object>({String? instanceName});
+
+  /// Returns a new service of type [T] from a factory that takes
+  /// parameters, created with [param1] and [param2].
+  T resolveWith<T extends Object>(Object? param1, [Object? param2]);
 }
 === lib/core/layout/app_shell.dart (bottom_tabs) ===
 import 'package:flutter/material.dart';
@@ -564,6 +626,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_bloc: "^9.1.1"
+  get_it: "^9.3.0"
   go_router: "^17.5.0"
 
 dev_dependencies:

@@ -2,6 +2,7 @@ import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
@@ -19,4 +20,5 @@ const List<SmfModule> smfModules = [
   RiverpodModule(),
   HomeModule(),
   BottomTabsModule(),
+  GetItModule(),
 ];

@@ -198,7 +198,7 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 
-import 'core/router/app_router.dart';
+import 'core/app/fallback_start_screen.dart';
 
 /// The root widget of the app.
 class App extends StatelessWidget {
@@ -206,9 +206,9 @@ class App extends StatelessWidget {
   const App({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
+  Widget build(BuildContext context) => MaterialApp(
     title: 'My App',
-    routerConfig: appRouter.config,
+    home: const FallbackStartScreen(),
     builder: (context, child) => child!,
   );
 }
@@ -291,319 +291,8 @@ abstract interface class ServiceLocator {
   /// parameters, created with [param1] and [param2].
   T resolveWith<T extends Object>(Object? param1, [Object? param2]);
 }
-=== lib/core/layout/app_shell.dart (bottom_tabs) ===
-import 'package:flutter/material.dart';
-
-import 'destination.dart';
-
-/// The main navigation of the app: a bar at the bottom with a tab for each
-/// destination, below the screen of the selected one.
-///
-/// With one destination there is nothing to switch to, so the bar is
-/// hidden and the screen fills the app.
-class AppShell extends StatelessWidget {
-  /// Creates the main navigation with [destinations], the one at
-  /// [currentIndex] selected with [body] as its screen; selecting a tab
-  /// calls [onSelect] with its index.
-  const AppShell({
-    required this.destinations,
-    required this.currentIndex,
-    required this.onSelect,
-    required this.body,
-    super.key,
-  });
-
-  /// The tabs of the bar, in order.
-  final List<Destination> destinations;
-
-  /// The index of the selected destination.
-  final int currentIndex;
-
-  /// Selects the destination at the given index.
-  final ValueChanged<int> onSelect;
-
-  /// The screen of the selected destination.
-  final Widget body;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: body,
-    bottomNavigationBar: destinations.length < 2
-        ? null
-        : NavigationBar(
-            selectedIndex: currentIndex,
-            onDestinationSelected: onSelect,
-            destinations: [
-              for (final destination in destinations)
-                NavigationDestination(
-                  icon: Icon(destination.icon),
-                  label: destination.label,
-                ),
-            ],
-          ),
-  );
-}
-=== lib/core/layout/destination.dart (role:layout) ===
-import 'package:flutter/widgets.dart';
-
-/// An item of the main navigation of the app, such as a tab of a bottom bar.
-final class Destination {
-  /// Creates an item labelled [label] with [icon].
-  const Destination({required this.label, required this.icon});
-
-  /// The text of the item.
-  final String label;
-
-  /// The icon of the item.
-  final IconData icon;
-}
-=== lib/core/router/app_router.dart (role:router) ===
-import 'package:flutter/widgets.dart';
-
-import 'app_router_factory.dart';
-import 'navigation.dart';
-
-/// The router of the app, created on first use.
-final AppRouter appRouter = createAppRouter();
-
-/// The router of the app: its configuration for `MaterialApp.router` and the
-/// navigation that screens use through `context.nav`.
-abstract interface class AppRouter {
-  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
-  RouterConfig<Object> get config;
-
-  /// The navigator that [context] navigates with.
-  AppNavigator navigatorOf(BuildContext context);
-}
-
-/// Moves between the locations of the app.
-abstract interface class AppNavigator {
-  /// Shows [location] with the chain of its parents below it as the stack.
-  ///
-  /// In the main navigation, it selects the branch of [location] and makes
-  /// the chain its stack; for a location outside the main navigation, the
-  /// chain replaces the whole stack, main navigation included.
-  void go(AppLocation location);
-
-  /// Shows [location] on top of the current stack and completes with the
-  /// value the page returns when it closes.
-  ///
-  /// In the main navigation, the current stack is that of the selected
-  /// branch, whichever branch [location] belongs to, and the selected
-  /// destination stays; a location outside the main navigation is shown
-  /// over it. A location in the main navigation goes only on top of the
-  /// main navigation itself: from a page shown over it, this throws a
-  /// [StateError] and leaves the stack as it is, so [go] to the location
-  /// instead. From a page with no main navigation below it, the main
-  /// navigation comes on top with the location.
-  Future<T?> push<T extends Object?>(AppLocation location);
-
-  /// Replaces the top of the current stack with [location].
-  ///
-  /// As with [push], a location in the main navigation cannot replace a
-  /// page shown over the main navigation: this throws a [StateError] and
-  /// leaves the stack as it is, so [go] to the location instead.
-  void replace(AppLocation location);
-}
-=== lib/core/router/app_router_factory.dart (go_router) ===
-import 'package:flutter/material.dart' show Icons;
-import 'package:flutter/widgets.dart';
-import 'package:go_router/go_router.dart';
-import 'package:my_app/core/layout/app_shell.dart' show AppShell;
-import 'package:my_app/core/layout/destination.dart' show Destination;
-import 'package:my_app/features/home/home_screen.dart' as screen0;
-
-import 'app_router.dart' show AppNavigator, AppRouter;
-import 'navigation.dart' show AppLocation;
-
-/// Creates the router of the app: a [GoRouter] with the routes of the
-/// modules of the app.
-AppRouter createAppRouter() => _GoAppRouter();
-
-/// The router of the app with go_router, which navigates between the
-/// locations of the app too.
-final class _GoAppRouter implements AppRouter, AppNavigator {
-  /// The router, created once, on first use. Navigation goes through it
-  /// rather than through the router above a context, so that any context
-  /// can navigate, even one above the router.
-  @override
-  late final GoRouter config = GoRouter(
-    initialLocation: '/home',
-    observers: _observers(),
-    routes: [
-      GoRoute(path: '/', redirect: (context, state) => '/home'),
-      StatefulShellRoute.indexedStack(
-        // The navigator of each branch has observers of its own, so the
-        // observers of the root navigator are not told about its pages.
-        notifyRootObserver: false,
-        builder: (context, state, shell) => AppShell(
-          destinations: const [Destination(label: 'Home', icon: Icons.home)],
-          currentIndex: shell.currentIndex,
-          onSelect: shell.goBranch,
-          body: shell,
-        ),
-        branches: [
-          StatefulShellBranch(
-            initialLocation: '/home',
-            observers: _observers(),
-            routes: [
-              GoRoute(
-                path: '/home',
-                name: 'home.home',
-                builder: (context, state) => const screen0.HomeScreen(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ],
-  );
-
-  @override
-  AppNavigator navigatorOf(BuildContext context) => this;
-
-  @override
-  void go(AppLocation location) => config.go(location.path);
-
-  @override
-  Future<T?> push<T extends Object?>(AppLocation location) {
-    _checkMainNavigation(location, 'push');
-    return config.push<T>(location.path);
-  }
-
-  @override
-  void replace(AppLocation location) {
-    _checkMainNavigation(location, 'replace');
-    config.pushReplacement<Object?>(location.path);
-  }
-
-  /// Throws a [StateError] instead of showing [location] of the main
-  /// navigation on top of a page that is shown over the main navigation:
-  /// go_router shows the main navigation once, so a location in it goes
-  /// only on top of the main navigation itself.
-  void _checkMainNavigation(AppLocation location, String method) {
-    final matches = config.routerDelegate.currentConfiguration.matches;
-    if (matches.isEmpty ||
-        matches.last is ShellRouteMatch ||
-        !matches.any((match) => match is ShellRouteMatch)) {
-      return;
-    }
-    final target = config.configuration.findMatch(Uri.parse(location.path));
-    if (target.matches.firstOrNull is! ShellRouteMatch) return;
-    throw StateError(
-      'Cannot $method ${location.path}: it is in the main navigation, and a '
-      'page is shown over the main navigation. Use go() to show it there.',
-    );
-  }
-}
-
-/// Creates the observers of a navigator. An observer can watch only one
-/// navigator, so each navigator gets instances of its own.
-List<NavigatorObserver> _observers() => [
-  for (final create in <NavigatorObserver Function()>[]) create(),
-];
-=== lib/core/router/navigation.dart (role:router) ===
-import 'package:flutter/widgets.dart';
-
-import 'app_router.dart';
-
-/// A place in the app: a route with the values of its parameters.
-///
-/// Every route of the app has a location class, such as
-/// `HomeDetailsLocation` for the route `home.details`.
-sealed class AppLocation {
-  /// Allows the location classes to have constant constructors.
-  const AppLocation();
-
-  /// The full name of the route, such as `home.details`.
-  String get routeName;
-
-  /// The location as a path with its query, such as `/home/details/5`.
-  String get path;
-
-  /// The location of the parent route, or `null` for a top-level route.
-  AppLocation? get parent => null;
-
-  /// The locations from the top-level route down to this one: the stack
-  /// that [NavLink.go] shows.
-  List<AppLocation> get chain => [...?parent?.chain, this];
-}
-
-/// A location and the context that navigates to it, as the routes of
-/// `context.nav` return them.
-final class NavLink {
-  /// Creates the link to [location] from [context].
-  const NavLink(this._context, this.location);
-
-  final BuildContext _context;
-
-  /// The location to navigate to.
-  final AppLocation location;
-
-  /// Shows [location] with the chain of its parents below it as the stack.
-  void go() => appRouter.navigatorOf(_context).go(location);
-
-  /// Shows [location] on top of the current stack and completes with the
-  /// value the page returns when it closes.
-  Future<T?> push<T extends Object?>() =>
-      appRouter.navigatorOf(_context).push<T>(location);
-
-  /// Replaces the top of the current stack with [location].
-  void replace() => appRouter.navigatorOf(_context).replace(location);
-}
-
-/// The location of `home.home`: `/home`.
-final class HomeHomeLocation extends AppLocation {
-  /// Creates the location.
-  const HomeHomeLocation();
-
-  @override
-  String get routeName => 'home.home';
-
-  @override
-  String get path => '/home';
-}
-
-/// Typed navigation to the routes of the app.
-extension AppNavigation on BuildContext {
-  /// The routes of the app by module.
-  AppNav get nav => AppNav._(this);
-}
-
-/// The routes of the app by module, as `context.nav`.
-final class AppNav {
-  const AppNav._(this._context);
-
-  final BuildContext _context;
-
-  /// The routes of the module `home`.
-  HomeRoutes get home => HomeRoutes._(_context);
-}
-
-/// The routes of the module `home`.
-final class HomeRoutes {
-  const HomeRoutes._(this._context);
-
-  final BuildContext _context;
-
-  /// The route `home.home`: `/home`.
-  NavLink home() => NavLink(_context, const HomeHomeLocation());
-}
-=== lib/features/home/home_screen.dart (home) ===
-import 'package:flutter/material.dart';
-
-/// A neutral screen with the name of the app, which the app can start on.
-class HomeScreen extends StatelessWidget {
-  /// Creates the screen.
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      Scaffold(appBar: AppBar(title: const Text('My App')));
-}
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 
 import 'app.dart';
 import 'bootstrap.dart';
@@ -611,7 +300,7 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(ProviderScope(child: const App()));
+  runApp(const App());
 }
 === pubspec.yaml (flutter_core) ===
 name: my_app
@@ -626,9 +315,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_riverpod: "^3.4.3"
   get_it: "^9.3.0"
-  go_router: "^17.5.0"
 
 dev_dependencies:
   flutter_test:

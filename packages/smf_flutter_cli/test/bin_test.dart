@@ -363,6 +363,42 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen for dependency injection',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'get_it',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The version of get_it is the module's to choose.
+          expect(
+            result.stdout,
+            allOf(
+              contains('  get_it: requested\n'),
+              contains('  di: get_it\n'),
+              matches(
+                RegExp(r'^  get_it \S+ \(get_it\)$', multiLine: true),
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(
