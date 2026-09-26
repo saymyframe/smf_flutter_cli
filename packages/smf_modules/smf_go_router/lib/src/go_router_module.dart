@@ -38,7 +38,9 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// selected branch, as go_router does, whichever branch it belongs to.
 /// go_router shows the main navigation once, so `push()` and `replace()`
 /// of a location in it from a page shown over the main navigation throw a
-/// `StateError` that says to use `go()`, and leave the stack as it is.
+/// `StateError` that says to use `go()`, and leave the stack as it is;
+/// from a page with no main navigation below it, `push()` brings the main
+/// navigation back on top with the location.
 /// Every navigator, the root one and that of each branch, creates
 /// navigator observers of its own from the factories of the router role
 /// once.
