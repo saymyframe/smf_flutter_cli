@@ -1,0 +1,28 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final fakeFeatureBlocBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/features/fake_feature/fake_feature_composition.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXJfYmxvYy9mbHV0dGVyX2Jsb2MuZGFydCc7CgppbXBvcnQgJy4uLy4uL2NvcmUvYW5hbHl0aWNzL2FuYWx5dGljc19zZXJ2aWNlLmRhcnQnOwppbXBvcnQgJy4uLy4uL2NvcmUvZGkvc2VydmljZV9sb2NhdG9yLmRhcnQnOwoKLy8vIENyZWF0ZXMgdGhlIGN1Yml0IG9mIHRoZSBkZXRhaWxzIHNjcmVlbiB3aXRoIGl0cyBzZXJ2aWNlcy4KRml4dHVyZUN1Yml0IGNyZWF0ZUZpeHR1cmVDdWJpdCgpID0+IEZpeHR1cmVDdWJpdChyZXNvbHZlPEFuYWx5dGljc1NlcnZpY2U+KCkpOwoKLy8vIENvdW50cyB0aGUgdGFwcyBvbiB0aGUgZGV0YWlscyBzY3JlZW4gYW5kIGxvZ3MgdGhlbS4KY2xhc3MgRml4dHVyZUN1Yml0IGV4dGVuZHMgQ3ViaXQ8aW50PiB7CiAgLy8vIENyZWF0ZXMgdGhlIGN1Yml0LgogIEZpeHR1cmVDdWJpdCh0aGlzLl9hbmFseXRpY3MpIDogc3VwZXIoMCk7CgogIGZpbmFsIEFuYWx5dGljc1NlcnZpY2UgX2FuYWx5dGljczsKCiAgLy8vIENvdW50cyBhIHRhcC4KICBGdXR1cmU8dm9pZD4gdGFwKCkgYXN5bmMgewogICAgYXdhaXQgX2FuYWx5dGljcy5sb2dFdmVudCgnZml4dHVyZV90YXAnKTsKICAgIGVtaXQoc3RhdGUgKyAxKTsKICB9Cn0K",
+      "type": "text"
+    },
+    {
+      "path": "lib/features/fake_feature/fixture_details_screen.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvbWF0ZXJpYWwuZGFydCc7CmltcG9ydCAncGFja2FnZTpmbHV0dGVyX2Jsb2MvZmx1dHRlcl9ibG9jLmRhcnQnOwoKaW1wb3J0ICdmYWtlX2ZlYXR1cmVfY29tcG9zaXRpb24uZGFydCc7CgovLy8gVGhlIGRldGFpbHMgb2YgYW4gaXRlbSwgd2l0aCBhIGNvdW50ZXIgaW4gYSBjdWJpdC4Ke3t7c21mX3JvdXRlcl9fc2NyZWVuX2Fubm90YXRpb25zX19mYWtlX2ZlYXR1cmVfX2ZpeHR1cmVfZGV0YWlsc19zY3JlZW59fX0KY2xhc3MgRml4dHVyZURldGFpbHNTY3JlZW4gZXh0ZW5kcyBTdGF0ZWxlc3NXaWRnZXQgewogIC8vLyBDcmVhdGVzIHRoZSBzY3JlZW4gb2YgdGhlIGl0ZW0gW2lkXSwgb24gdGhlIHRhYiBbdGFiXS4KICBjb25zdCBGaXh0dXJlRGV0YWlsc1NjcmVlbih7CiAgICB7e3tzbWZfcm91dGVyX19wYXJhbV9hbm5vdGF0aW9uc19fZmFrZV9mZWF0dXJlX19maXh0dXJlX2RldGFpbHNfc2NyZWVuX19pZH19fQogICAgcmVxdWlyZWQgdGhpcy5pZCwKICAgIHt7e3NtZl9yb3V0ZXJfX3BhcmFtX2Fubm90YXRpb25zX19mYWtlX2ZlYXR1cmVfX2ZpeHR1cmVfZGV0YWlsc19zY3JlZW5fX3RhYn19fQogICAgdGhpcy50YWIsCiAgICBzdXBlci5rZXksCiAgfSk7CgogIC8vLyBUaGUgaXRlbS4KICBmaW5hbCBpbnQgaWQ7CgogIC8vLyBUaGUgdGFiLCBpZiBhbnkuCiAgZmluYWwgU3RyaW5nPyB0YWI7CgogIEBvdmVycmlkZQogIFdpZGdldCBidWlsZChCdWlsZENvbnRleHQgY29udGV4dCkgPT4gQmxvY1Byb3ZpZGVyKAogICAgICAgIGNyZWF0ZTogKF8pID0+IGNyZWF0ZUZpeHR1cmVDdWJpdCgpLAogICAgICAgIGNoaWxkOiBCbG9jQnVpbGRlcjxGaXh0dXJlQ3ViaXQsIGludD4oCiAgICAgICAgICBidWlsZGVyOiAoY29udGV4dCwgdGFwcykgPT4gVGV4dEJ1dHRvbigKICAgICAgICAgICAgb25QcmVzc2VkOiAoKSA9PiBjb250ZXh0LnJlYWQ8Rml4dHVyZUN1Yml0PigpLnRhcCgpLAogICAgICAgICAgICBjaGlsZDogVGV4dCgnJGlkICR7dGFiID8/ICcnfSAkdGFwcycpLAogICAgICAgICAgKSwKICAgICAgICApLAogICAgICApOwp9Cg==",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "fake_feature_bloc",
+  "description":
+      "A brick of the fixture package fake_feature, for the tests of the SMF pipeline.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

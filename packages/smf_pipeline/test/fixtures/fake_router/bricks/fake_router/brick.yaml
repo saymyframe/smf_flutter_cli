@@ -1,0 +1,6 @@
+name: fake_router
+description: "The brick of the fixture package fake_router, for the tests of the SMF pipeline."
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

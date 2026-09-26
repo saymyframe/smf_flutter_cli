@@ -1,0 +1,4 @@
+# The fixtures and their registry are test code only; see
+# test/fixtures/README.md.
+fixture_registry/
+test/fixtures/

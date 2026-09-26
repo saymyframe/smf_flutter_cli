@@ -13,6 +13,16 @@ environment:
 workspace:
   - packages/smf_flutter_cli
   - packages/smf_contracts
+  - packages/smf_pipeline
+  - packages/smf_pipeline/fixture_registry
+  - packages/smf_pipeline/test/fixtures/fake_di
+  - packages/smf_pipeline/test/fixtures/fake_feature
+  - packages/smf_pipeline/test/fixtures/fake_infra
+  - packages/smf_pipeline/test/fixtures/fake_roles
+  - packages/smf_pipeline/test/fixtures/fake_router
+  - packages/smf_pipeline/test/fixtures/fake_state
+  - packages/smf_modules/smf_bloc
+  - packages/smf_modules/smf_bottom_tabs
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
@@ -22,6 +32,7 @@ workspace:
   - packages/smf_modules/smf_get_it
   - packages/smf_modules/smf_go_router
   - packages/smf_modules/smf_home_flutter
+  - packages/smf_modules/smf_riverpod
 
 executables:
   smfflutter: smfflutter_dev
@@ -29,6 +40,7 @@ executables:
 dev_dependencies:
   lints: ^6.0.0
   melos: ^7.1.0
+  test: ^1.24.0
 
 melos:
   ignore:
@@ -43,31 +55,40 @@ melos:
           dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
 
     # Quality gates. Formatting covers hand-written package code only
-    # (lib, test, bin): bricks/**/__brick__ holds mustache templates, and
-    # lib/bundles is generated (CI checks it matches the bricks instead).
+    # (lib, test, bin, tool), and the tools of the repository:
+    # bricks/**/__brick__ holds mustache templates, and lib/bundles is
+    # generated (CI checks it matches the bricks instead). test/fixtures holds
+    # packages of their own, which melos formats separately, with templates in
+    # their bricks.
     analyze:
-      run: melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings
-    analyze:hooks:
-      description: Analyze brick hooks, which are packages with their own pubspec.
       run: |
-        for hooks in $(find packages -path '*/bricks/*/hooks/pubspec.yaml' -exec dirname {} \;); do
-          echo "Analyzing $hooks"
-          (cd "$hooks" && dart pub get > /dev/null && dart analyze --fatal-infos --fatal-warnings) || exit 1
-        done
+        melos exec -c 6 -- dart analyze --fatal-infos --fatal-warnings && \
+        dart analyze --fatal-infos --fatal-warnings tools
     format:
-      run: melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
+      run: |
+        melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
+        dart format tools
     format:check:
-      run: melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*")'
+      run: |
+        melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
+        dart format --output=none --set-exit-if-changed tools
+    banlist:
+      description: Check that no file uses what the module model replaced; see tools/banlist.dart.
+      run: dart tools/banlist.dart
     test:
-      run: melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded
+      run: |
+        melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded && \
+        dart test tools
     test:coverage:
-      description: Run tests and write coverage/lcov.info in every package with tests.
-      run: melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage
+      description: Run tests and write coverage/lcov.info in every package with tests, then test the tools.
+      run: |
+        melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage && \
+        dart test tools
     check:
       run: |
         melos run format:check && \
         melos run analyze && \
-        melos run analyze:hooks && \
+        melos run banlist && \
         melos run test
 
   command:

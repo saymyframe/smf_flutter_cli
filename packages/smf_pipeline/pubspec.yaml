@@ -1,0 +1,27 @@
+name: smf_pipeline
+description: The generation pipeline of the SMF CLI. Selects modules, validates their contributions against the roles they declare, and generates a Flutter app.
+version: 0.2.0
+homepage: https://saymyframe.com
+repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_pipeline
+issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+topics: [flutter, cli, scaffolding, code-generation]
+license: Apache-2.0
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  analyzer: ^8.1.0
+  args: ^2.7.0
+  file: ^7.0.1
+  mason: ^0.1.1
+  meta: ^1.17.0
+  pub_semver: ^2.2.0
+  smf_contracts: ^0.2.0
+  yaml: ^3.1.2
+
+dev_dependencies:
+  test: ^1.24.0
+  very_good_analysis: ^10.3.0

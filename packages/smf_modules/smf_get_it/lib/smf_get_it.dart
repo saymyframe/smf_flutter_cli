@@ -1,5 +1,5 @@
-/// The get_it module of SMF: service-locator setup for the generated app and
-/// the code that registers the dependencies other modules declare.
+/// The module that provides dependency injection with get_it: `GetItModule`,
+/// a provider of the DI role of the SMF module model.
 library;
 
-export 'smf_get_it_factory.dart';
+export 'src/get_it_module.dart';

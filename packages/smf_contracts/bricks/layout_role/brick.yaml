@@ -1,0 +1,11 @@
+name: layout_role
+description: "The template of the layout role of SMF: the destinations of the main navigation."
+
+# The template of a role in the lego model. Its files are relative to the
+# root of the generated app. The pipeline renders it with app_name, org_name,
+# the has_<role> flags, the rendered sockets of its tags, and the variables
+# the role's template returns from render().
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

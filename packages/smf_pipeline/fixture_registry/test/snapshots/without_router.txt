@@ -1,0 +1,609 @@
+=== README.md (flutter_core) ===
+# fixture_app
+
+A new Flutter project.
+
+## Fixture
+
+The app has something in every socket of its entry, with `code` and a [link](https://example.com).
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+    id("io.github.ben-manes.versions")
+}
+
+android {
+    namespace = "com.example.fixture_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.fixture_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation("androidx.annotation:annotation:1.9.1")
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <application
+        android:label="Fixture App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="fixture" />
+</intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <meta-data android:name="com.example.fixture.KEY" android:value="fixture"/>
+        <meta-data android:name="com.example.fixture.ICON" android:resource="@mipmap/ic_launcher"/>
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+    id("io.github.ben-manes.versions") version("0.64.0") apply false
+}
+
+include(":app")
+=== assets/fixture/readme.txt (fake_sockets) ===
+An asset of the fixture that uses every socket.
+=== fonts/FixtureSans.ttf (fake_sockets) ===
+<58 bytes>
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Fixture App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FixtureApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>FixtureName</key>
+	<string>Fixture</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fixture</string>
+	</array>
+</dict>
+</plist>
+=== l10n.yaml (fake_sockets) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+=== lib/app.dart (flutter_core) ===
+import 'package:fixture_app/l10n/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Fixture App',
+    theme: ThemeData(fontFamily: "FixtureSans"),
+    darkTheme: ThemeData.dark(),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+    ],
+    supportedLocales: [Locale('en')],
+    home: const FallbackStartScreen(),
+    builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
+import 'package:fixture_app/core/events/communication_service.dart';
+import 'package:fixture_app/core/fixture_parent/fixture_parent.dart';
+import 'package:flutter/foundation.dart';
+
+@pragma('vm:entry-point')
+Future<void> fixtureBackgroundHandler() async {}
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  debugPrint('early');
+  debugPrint('platform');
+  await initCrashReporting();
+  installCrashReporting();
+  await initEvents();
+  debugPrint('di');
+  setUpFixtureParent();
+  debugPrint('late');
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on when no route of the app can start it.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('Fixture App')));
+}
+=== lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+/// The text that the clock user shows: the labels of the badge when the
+/// app has one.
+String clockUserText() {
+  return 'No badge';
+}
+=== lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl0;
+import 'package:flutter/foundation.dart';
+
+/// Reports the errors of the app.
+abstract interface class CrashReporter {
+  /// Reports [error] with its [stackTrace]; a [fatal] error ended the app.
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  });
+
+  /// Reports an error that Flutter caught, described by [details].
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  });
+
+  /// Adds [message] to the log sent with the next report.
+  Future<void> log(String message);
+
+  /// Sets the id of the signed-in user for the next reports, or clears it
+  /// with `null`.
+  Future<void> setUserId(String? userId);
+}
+
+/// Returns the crash reporter of the app, which forwards every call to the
+/// crash reporters of all modules.
+CrashReporter createCrashReporter() => _crashReporter;
+
+/// Reports the errors that Flutter and the platform dispatcher do not handle.
+///
+/// `bootstrap()` calls it once the crash reporting services are ready. In
+/// debug mode the errors also still reach the console. The listener on the
+/// current isolate is a safety net for errors that do not reach the platform
+/// dispatcher; isolates that the app starts need listeners of their own.
+void installCrashReporting() {
+  final reporter = createCrashReporter();
+  final presentError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (kDebugMode) {
+      presentError?.call(details);
+    }
+    unawaited(reporter.recordFlutterError(details, fatal: true));
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    unawaited(reporter.recordError(error, stackTrace, fatal: true));
+    return !kDebugMode;
+  };
+  Isolate.current.addErrorListener(
+    RawReceivePort((Object? message) {
+      if (message case [final Object error, final String? stackTrace]) {
+        unawaited(
+          reporter.recordError(
+            error,
+            stackTrace == null ? null : StackTrace.fromString(stackTrace),
+            fatal: true,
+          ),
+        );
+      }
+    }).sendPort,
+  );
+}
+
+final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
+
+final List<CrashReporter> _crashReporters = [];
+
+/// Creates the implementations of CrashReporter that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initCrashReporting() async {
+  _crashReporters.addAll(
+    await Future.wait<CrashReporter>([impl0.initFixtureCrashReporter()]),
+  );
+}
+
+final class _CrashReporters implements CrashReporter {
+  const _CrashReporters(this._reporters);
+
+  final List<CrashReporter> _reporters;
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _forAll(
+    (reporter) =>
+        reporter.recordError(error, stackTrace, fatal: fatal, reason: reason),
+  );
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) =>
+      _forAll((reporter) => reporter.recordFlutterError(details, fatal: fatal));
+
+  @override
+  Future<void> log(String message) =>
+      _forAll((reporter) => reporter.log(message));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((reporter) => reporter.setUserId(userId));
+
+  Future<void> _forAll(
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    await Future.wait(_reporters.map(call));
+  }
+}
+=== lib/core/events/communication_service.dart (role:events) ===
+import 'package:fixture_app/core/fixture_events/fixture_events.dart' as impl0;
+
+/// A message that one part of the app sends to the others, such as
+/// `final class ItemAdded extends AppEvent`.
+abstract class AppEvent {
+  /// Allows the events to have constant constructors.
+  const AppEvent();
+}
+
+/// Delivers [AppEvent]s between parts of the app that do not know each
+/// other.
+abstract interface class CommunicationService {
+  /// Sends [event] to everyone listening to its type.
+  void fire(AppEvent event);
+
+  /// The events of type [T] sent from now on.
+  Stream<T> on<T extends AppEvent>();
+}
+
+/// Returns the communication service of the app.
+CommunicationService createCommunicationService() => _communicationService;
+
+late final CommunicationService _communicationService;
+
+/// Creates the CommunicationService of the app, which starts asynchronously;
+/// `bootstrap()` awaits it.
+Future<void> initEvents() async {
+  _communicationService = await impl0.openFixtureEvents();
+}
+=== lib/core/fixture_codegen/fixture_model.dart (fake_codegen) ===
+import 'package:json_annotation/json_annotation.dart';
+
+part 'fixture_model.g.dart';
+
+/// A model whose JSON code build_runner generates.
+@JsonSerializable()
+final class FixtureModel {
+  /// Creates the model.
+  const FixtureModel(this.name);
+
+  /// Creates the model from [json].
+  factory FixtureModel.fromJson(Map<String, dynamic> json) =>
+      _$FixtureModelFromJson(json);
+
+  /// The name.
+  final String name;
+
+  /// The model as JSON.
+  Map<String, dynamic> toJson() => _$FixtureModelToJson(this);
+}
+=== lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
+import 'package:flutter/foundation.dart';
+
+import '../crash_reporting/crash_reporter.dart';
+
+/// Creates the crash reporter of the fixture once it is ready.
+Future<CrashReporter> initFixtureCrashReporter() async =>
+    const FixtureCrashReporter();
+
+/// Crash reporting that records nothing.
+final class FixtureCrashReporter implements CrashReporter {
+  /// Creates the reporter.
+  const FixtureCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) async {}
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) async {}
+
+  @override
+  Future<void> log(String message) async {}
+
+  @override
+  Future<void> setUserId(String? userId) async {}
+}
+=== lib/core/fixture_events/fixture_events.dart (fake_events) ===
+import 'dart:async';
+
+import '../events/communication_service.dart';
+
+/// Opens the event channel of the fixture, which takes a moment.
+Future<CommunicationService> openFixtureEvents() async => FixtureEvents();
+
+/// Delivers events to the listeners of their type through one stream.
+final class FixtureEvents implements CommunicationService {
+  final _events = StreamController<AppEvent>.broadcast();
+
+  @override
+  void fire(AppEvent event) => _events.add(event);
+
+  @override
+  Stream<T> on<T extends AppEvent>() =>
+      _events.stream.where((event) => event is T).cast<T>();
+}
+=== lib/core/fixture_parent/fixture_parent.dart (fake_parent) ===
+import 'package:flutter/foundation.dart';
+
+/// Sets up the parent and the modules that depend on it.
+void setUpFixtureParent() {
+  debugPrint('child set up');
+  _openAlerts();
+  _openNews();
+}
+
+void _openAlerts() {
+  debugPrint('child alerts');
+}
+
+void _openNews() {}
+=== lib/l10n/app_en.arb (fake_sockets) ===
+{
+  "@@locale": "en",
+  "fixtureTitle": "Fixture",
+  "@fixtureTitle": {
+    "description": "A string of the fixture that uses every socket."
+  }
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(RepaintBoundary(child: const App()));
+}
+=== pubspec.yaml (flutter_core) ===
+name: fixture_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: "any"
+  json_annotation: "^4.9.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: "^2.10.0"
+  flutter_lints: "^6.0.0"
+  json_serializable: "^6.9.0"
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - "assets/fixture/"
+  fonts:
+    - family: "FixtureSans"
+      fonts:
+        - asset: "fonts/FixtureSans.ttf"
+          weight: 400
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fixture_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('Fixture App'), findsOneWidget);
+  });
+}

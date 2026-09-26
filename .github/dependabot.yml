@@ -4,20 +4,15 @@ updates:
     directories:
       - "/packages/smf_flutter_cli"
       - "/packages/smf_contracts"
+      - "/packages/smf_pipeline"
       - "/packages/smf_modules/*"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-    groups:
-      dart-deps:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "pub"
-    directory: "/packages/smf_flutter_cli/bricks/smf_cli_brick/hooks"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+    ignore:
+      # The snapshot tests pin the formatter to the latest version that
+      # works with the analyzer of smf_pipeline; it moves with the analyzer.
+      - dependency-name: "dart_style"
     groups:
       dart-deps:
         patterns:

@@ -1,10 +1,10 @@
 name: smf_event_bus
-description: Event bus and inter-module communication utilities for SMF.
+description: The SMF module of events with event_bus for the Flutter app that SMF generates. Parts of the app that do not know each other exchange events through it.
 version: 0.2.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_event_bus
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
-topics: [flutter, event-bus, messaging, communication, architecture]
+topics: [flutter, scaffolding, events, event-bus, messaging]
 license: Apache-2.0
 
 environment:
@@ -17,5 +17,14 @@ dependencies:
   smf_contracts: ^0.2.0
 
 dev_dependencies:
+  analyzer: ^8.1.0
+  # The library that the tests check the rendered code against.
+  event_bus: ^2.0.1
+  # The app entry of the apps that the tests render.
+  smf_flutter_core: ^0.2.1
+  # The DI container that registers the service in apps of the tests.
+  smf_get_it: ^0.2.0
+  smf_pipeline: ^0.2.0
   test: ^1.24.0
   very_good_analysis: ^10.3.0
+  yaml: ^3.1.2

@@ -1,0 +1,10 @@
+name: firebase_core
+description: "Firebase in an SMF app: the options of its Firebase apps, a placeholder until flutterfire configure writes them."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
