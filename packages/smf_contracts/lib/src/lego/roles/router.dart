@@ -40,6 +40,9 @@ const routerRole = RouterRole._();
 ///   branch, which keeps its stack while another is selected; it matches
 ///   them before the other top-level routes, which stay outside the main
 ///   navigation, and the app starts on the branch of its start route;
+/// - refuses to push a location in the main navigation from a page shown
+///   over the main navigation, or to replace such a page with one, with a
+///   `StateError` that leaves the stack as it is;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - imports screens with a prefix of its own and does not name its router
 ///   class `AppRouter`;
@@ -75,7 +78,10 @@ final class RouterRole extends Role<RoutesData> {
   /// an observer can watch only one navigator; each observer sees the pages
   /// of its own navigator. Switching between the branches of the main
   /// navigation is not a navigation event, so no observer sees it, though a
-  /// branch shows its first page when it is first selected.
+  /// branch shows its first page when it is first selected. When a page
+  /// shown over the main navigation closes, the observers of the root
+  /// navigator see the main navigation come back, not the page of its
+  /// selected branch.
   static const observers = SocketRef<FactoryListSocket>.role(
     routerRole,
     'observers',

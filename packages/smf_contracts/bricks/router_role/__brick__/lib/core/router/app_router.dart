@@ -34,7 +34,8 @@ abstract interface class AppNavigator {
   /// over it. A location in the main navigation goes only on top of the
   /// main navigation itself: from a page shown over it, this throws a
   /// [StateError] and leaves the stack as it is, so [go] to the location
-  /// instead.
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
   Future<T?> push<T extends Object?>(AppLocation location);
 
   /// Replaces the top of the current stack with [location].
