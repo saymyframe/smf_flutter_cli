@@ -435,6 +435,71 @@ void main() {
       );
 
       test(
+        '--explain shows what Firebase needs of the machine and runs after '
+        'generation, and installs nothing',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'firebase_core',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The machine of the test has neither the Firebase CLI nor the
+          // FlutterFire CLI, whose global packages its dart does not list.
+          expect(
+            result.stdout,
+            allOf([
+              contains('  firebase_core: requested\n'),
+              contains(
+                'After generation\n'
+                '  dart pub global run flutterfire_cli:flutterfire configure '
+                '--platforms=android,ios --overwrite-firebase-options '
+                '(firebase_core)\n',
+              ),
+              contains(
+                '  ✗ Firebase CLI (for firebase_core): missing\n'
+                '    Install it with "npm install -g firebase-tools", or see '
+                'https://firebase.google.com/docs/cli.\n',
+              ),
+              contains(
+                '  ✗ Firebase login (for firebase_core): missing\n'
+                '    Install the Firebase CLI, then log in with "firebase '
+                'login".\n',
+              ),
+              contains(
+                '  ✗ FlutterFire CLI (for firebase_core): missing\n'
+                '    Activate it with "dart pub global activate '
+                'flutterfire_cli 1.4.1".\n'
+                '    An interactive run offers to install it.\n',
+              ),
+              contains(
+                '  ✗ Xcode project tools of flutterfire (for firebase_core): '
+                'missing\n',
+              ),
+            ]),
+          );
+          // Only the read-only commands of the checks ran.
+          expect(
+            File(p.join(sdk, 'calls.log')).readAsLinesSync(),
+            everyElement(startsWith('dart pub global list in ')),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(

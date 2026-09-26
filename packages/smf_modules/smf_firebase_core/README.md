@@ -30,6 +30,12 @@ The README of the app gets a section on Firebase: how to configure the app again
 
 ## Use with SMF CLI
 
+`smf create` asks which infrastructure modules the app has, and offers this one. To choose it without the question, name it with `-m`:
+
+```bash
+smf create my_app -m firebase_core
+```
+
 This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
 
 - SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli

@@ -133,10 +133,13 @@ typedef _Run = ({
   MemoryFileSystem files,
 });
 
-/// Runs `smf create my_app` with the modules of the CLI in a terminal that
-/// answers with [answers], on a machine with a Flutter SDK whose commands
-/// all succeed; the app goes to `/work/my_app`.
-Future<_Run> _create(Map<String, List<String>> answers) async {
+/// Runs `smf create my_app` with [options] and the modules of the CLI in a
+/// terminal that answers with [answers], on a machine with a Flutter SDK
+/// whose commands all succeed; the app goes to `/work/my_app`.
+Future<_Run> _create(
+  Map<String, List<String>> answers, {
+  List<String> options = const [],
+}) async {
   final files = MemoryFileSystem.test();
   files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
   files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
@@ -150,7 +153,7 @@ Future<_Run> _create(Map<String, List<String>> answers) async {
   final prompter = _Prompter(answers);
   final logger = _Logger();
   final code = await runSmf(
-    ['create', 'my_app', '--org', 'com.example'],
+    ['create', 'my_app', '--org', 'com.example', ...options],
     modules: smfModules,
     hostFor: ({required verbose}) => SmfHost(
       prompter: prompter,
@@ -171,6 +174,7 @@ void main() {
       'router once the app has home', () async {
     final run = await _create({
       'Features': ['home'],
+      'Infrastructure': [],
       'Layout': ['None'],
       'State management': ['bloc'],
       'Dependency injection': ['None'],
@@ -180,6 +184,7 @@ void main() {
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -189,10 +194,13 @@ void main() {
       'home — Start screen with the name of the app',
     ]);
     expect(run.asked[1].shown, [
+      'firebase_core — Firebase with firebase_core',
+    ]);
+    expect(run.asked[2].shown, [
       'bottom_tabs — Tabs in a bar at the bottom of the app',
       'None',
     ]);
-    expect(run.asked[2].shown, [
+    expect(run.asked[3].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -232,6 +240,7 @@ void main() {
       'features', () async {
     final run = await _create({
       'Features': ['home'],
+      'Infrastructure': [],
       'Layout': ['bottom_tabs'],
       'State management': ['riverpod'],
       'Dependency injection': ['None'],
@@ -241,6 +250,7 @@ void main() {
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -275,6 +285,7 @@ void main() {
       'a question', () async {
     final run = await _create({
       'Features': [],
+      'Infrastructure': [],
       'Layout': ['bottom_tabs'],
       'State management': ['None'],
       'Dependency injection': ['None'],
@@ -284,6 +295,7 @@ void main() {
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -317,6 +329,7 @@ void main() {
       () async {
     final run = await _create({
       'Features': [],
+      'Infrastructure': [],
       'Layout': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
@@ -327,13 +340,14 @@ void main() {
     expect(run.code, 0, reason: run.lines.join('\n'));
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
+      'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
     ]);
-    expect(run.asked[2].shown, [
+    expect(run.asked[3].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);
@@ -352,6 +366,7 @@ void main() {
       'after the state management, and offers get_it', () async {
     final run = await _create({
       'Features': ['home'],
+      'Infrastructure': [],
       'Layout': ['None'],
       'State management': ['None'],
       'Dependency injection': ['get_it'],
@@ -405,6 +420,7 @@ void main() {
       'container registers', () async {
     final run = await _create({
       'Features': [],
+      'Infrastructure': [],
       'Layout': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -453,6 +469,57 @@ void main() {
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
       allOf(contains('  event_bus: '), contains('  get_it: ')),
+    );
+  });
+
+  test(
+      'a run in a terminal asks for the infrastructure after the features, '
+      'and offers Firebase, which a run that skips external setup leaves for '
+      'later', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': ['firebase_core'],
+        'Layout': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(run.asked.map((question) => question.message).take(3), [
+      'Features: which do you want?',
+      'Infrastructure: which do you want?',
+      'Layout: which module provides it?',
+    ]);
+    final app = run.files.directory('/work/my_app');
+    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    expect(
+      app.childFile('lib/bootstrap.dart').readAsStringSync(),
+      contains(
+        'Firebase.initializeApp(options: '
+        'DefaultFirebaseOptions.currentPlatform)',
+      ),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      contains('  firebase_core: '),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      contains('\n## Firebase\n'),
+    );
+    expect(
+      run.lines,
+      contains(
+        'Configuring Firebase with flutterfire is not done, because the run '
+        'skips external setup. Run it in the app: dart pub global run '
+        'flutterfire_cli:flutterfire configure --platforms=android,ios '
+        '--overwrite-firebase-options',
+      ),
     );
   });
 }
