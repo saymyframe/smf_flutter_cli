@@ -150,14 +150,8 @@ final class GoRoutes {
           if (start == null) fallback.importRef,
           ...screens.values,
           if (destinations.isNotEmpty) ...[
-            ImportRef.app(
-              _appPathOf(LayoutRole.appShellFile),
-              show: [LayoutRole.appShell.name],
-            ),
-            ImportRef.app(
-              _appPathOf(LayoutRole.destinationFile),
-              show: const ['Destination'],
-            ),
+            for (final symbol in [LayoutRole.appShell, LayoutRole.destination])
+              ImportRef.app(symbol.importRef.uri, show: [symbol.name]),
             for (final route in destinations)
               ...route.route.destination!.icon.imports,
           ],
@@ -212,12 +206,9 @@ final class GoRoutes {
 
   /// The constant `Destination` of the layout for [destination].
   static String _destinationOf(Destination destination) =>
-      'Destination(label: ${SmfNames.dartString(destination.label)}, '
+      '${LayoutRole.destination.name}('
+      'label: ${SmfNames.dartString(destination.label)}, '
       'icon: ${destination.icon.code})';
-
-  /// The path below `lib/` of [path], a path from the root of the app such
-  /// as `lib/core/layout/app_shell.dart`.
-  static String _appPathOf(String path) => path.substring('lib/'.length);
 
   static String _indented(String code, String indent) =>
       code.split('\n').map((line) => '$indent$line').join('\n');
