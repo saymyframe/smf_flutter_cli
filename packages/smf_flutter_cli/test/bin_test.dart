@@ -252,6 +252,73 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen to route the app',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'go_router',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The version of go_router is the module's to choose.
+          expect(
+            result.stdout,
+            allOf(
+              contains('  go_router: requested\n'),
+              contains('  router: go_router\n'),
+              matches(
+                RegExp(r'^  go_router \S+ \(go_router\)$', multiLine: true),
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
+        'the start of the app is a route of the app',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--no-input',
+              '-m',
+              'go_router',
+              '--start',
+              '/home',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 64);
+          expect(
+            result.stderr,
+            contains('The app has no routes, so it cannot start on /home.'),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         '--on-conflict decides what happens to an existing directory',
         () async {
           final old = File(p.join(temporary.path, 'my_app', 'old.txt'))
