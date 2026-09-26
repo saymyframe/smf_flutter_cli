@@ -10,7 +10,8 @@ part of '../contributions.dart';
 /// A step runs unless:
 /// - it is [external] and the run skips external setup
 ///   (`--skip-external-setup`);
-/// - it is [interactive] and the run is not.
+/// - it is [interactive] and the run is not;
+/// - a check that it [needs] has not passed.
 ///
 /// Then the pipeline prints the command for the user to run later, or fails
 /// generation if the step is not [skippable]. In an interactive run, the
@@ -31,6 +32,7 @@ final class PostGenStep extends Contribution {
     this.interactive = false,
     this.skippable = false,
     this.external = false,
+    this.needs = const [],
     super.when,
   });
 
@@ -54,4 +56,17 @@ final class PostGenStep extends Contribution {
   /// Whether the step needs something outside the app, such as a network
   /// account.
   final bool external;
+
+  /// The ids of the checks of the [Preflight] of the same contributor that
+  /// the step needs, such as the check that its tool is installed.
+  ///
+  /// When one of them has not passed once the checks are done, because the
+  /// user declined to install what it found missing, the installation
+  /// failed, or the run could not install it, the step would fail: it does
+  /// not run, and the user is not asked about it. It is left for later with
+  /// the check as the reason, as a step whose tool is missing is. A check of
+  /// a [Preflight] that does not apply to the app holds no step back. The
+  /// pipeline reports an id that names no check of the contributor as a
+  /// problem of the contributor.
+  final List<String> needs;
 }

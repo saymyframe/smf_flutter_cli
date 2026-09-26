@@ -255,6 +255,7 @@ void main() {
       interactive: true,
       skippable: true,
       external: true,
+      needs: ['tool'],
     );
 
     expect(step.tool.argumentsFor(step.arguments), [
@@ -268,11 +269,13 @@ void main() {
     expect(step.interactive, isTrue);
     expect(step.skippable, isTrue);
     expect(step.external, isTrue);
+    expect(step.needs, ['tool']);
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
     expect(plain.interactive, isFalse);
     expect(plain.skippable, isFalse);
     expect(plain.external, isFalse);
+    expect(plain.needs, isEmpty);
   });
 }
 

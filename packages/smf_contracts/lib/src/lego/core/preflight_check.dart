@@ -12,7 +12,8 @@ abstract base class PreflightCheck {
   /// Allows subclasses to have constant constructors.
   const PreflightCheck();
 
-  /// A lower snake_case id of the check, unique in its module.
+  /// A lower snake_case id of the check, unique in its module, by which a
+  /// [PostGenStep] of the module [PostGenStep.needs] it.
   String get id;
 
   /// What the check looks for, such as `Firebase CLI`.
