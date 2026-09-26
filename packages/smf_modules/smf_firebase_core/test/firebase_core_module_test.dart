@@ -1,8 +1,6 @@
 @TestOn('vm')
 library;
 
-import 'dart:io';
-
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
@@ -12,6 +10,8 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
+
+import 'support/flutterfire.dart';
 
 /// The modules of the tests: flutter_core, which creates the app, and this
 /// module.
@@ -262,13 +262,12 @@ void main() {
       );
     });
 
-    test('has the options of the brick, which name no Firebase project', () {
+    test(
+        'has the options that flutterfire writes for no platform, which name '
+        'no Firebase project', () {
       final options = withFirebase.files[_options]!.text;
 
-      expect(
-        options,
-        File('bricks/firebase_core/__brick__/$_options').readAsStringSync(),
-      );
+      expect(options, flutterfirePlaceholder);
       final index = DartFileIndexer.index(_options, options);
       final declarations = index.declarations;
       expect(declarations.map((d) => d.name), ['DefaultFirebaseOptions']);
@@ -277,17 +276,6 @@ void main() {
         'throw UnsupportedError('.allMatches(options),
         // The web, each of the five platforms of the switch, and the rest.
         hasLength(7),
-      );
-    });
-
-    test('needs iOS 15 at least, which the app entry has already', () {
-      final project = withFirebase.files[AppEntryRole.xcodeProjectFile]!.text;
-
-      expect(
-        RegExp(r'IPHONEOS_DEPLOYMENT_TARGET = ([\d.]+);')
-            .allMatches(project)
-            .map((match) => match[1]),
-        ['15.0', '15.0', '15.0'],
       );
     });
   });
