@@ -66,9 +66,12 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     if (start != null) {
       final route = facade.routeAt(start);
       if (route == null) {
+        final routes = [for (final route in facade.routes) route.fullPath];
         throw SmfUsageException(
-          'The app has no route $start to start on. Routes: '
-          '${facade.routes.map((route) => route.fullPath).join(', ')}.',
+          routes.isEmpty
+              ? 'The app has no routes, so it cannot start on $start.'
+              : 'The app has no route $start to start on. Routes: '
+                  '${routes.join(', ')}.',
         );
       }
       if (route.hasRequiredParams) {

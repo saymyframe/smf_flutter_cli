@@ -743,6 +743,16 @@ void main() {
         ),
       );
       expect(
+        () => choose(const [], start: '/home'),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            'The app has no routes, so it cannot start on /home.',
+          ),
+        ),
+      );
+      expect(
         () => choose(_data, start: '/home/details/:id'),
         throwsA(
           isA<SmfUsageException>().having(
