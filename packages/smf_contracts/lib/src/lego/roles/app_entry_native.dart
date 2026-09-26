@@ -167,7 +167,40 @@ final class PlistMergePolicy extends MergePolicy<PlistValue> {
   }
 }
 
+/// Keeps one text for each heading of the README, and checks that a
+/// heading is one line and that a section has text.
+final class _ReadmeSectionPolicy extends MergePolicy<String> {
+  const _ReadmeSectionPolicy();
+
+  @override
+  String get name => 'conflict';
+
+  @override
+  String? problemWith(String key, String value) {
+    if (key.isEmpty ||
+        key != key.trim() ||
+        key.contains('\n') ||
+        key.contains('\r')) {
+      return 'The heading "$key" of a section of the README is not one line '
+          'of text without spaces around it.';
+    }
+    if (value.trim().isEmpty) {
+      return 'The section "$key" of the README has no text.';
+    }
+    return null;
+  }
+
+  @override
+  String merge(String key, String existing, String incoming) =>
+      const ConflictPolicy<String>().merge(key, existing, incoming);
+}
+
 String _renderString(String value) => value;
+
+/// Each section under its heading, after an empty line.
+String _renderReadmeSections(List<MapEntry<String, String>> entries) => entries
+    .map((entry) => '\n## ${entry.key}\n\n${entry.value.trim()}')
+    .join('\n');
 
 String _renderAndroidPermissions(List<MapEntry<String, NoValue>> entries) =>
     entries
@@ -225,8 +258,8 @@ String _escapeXml(String text) => text
 String _escapeKotlin(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
 
-/// The sockets that render complete lines of a native file, with the file.
-const _nativeLineSockets = <(SocketRef, String)>[
+/// The sockets that render complete lines of a file, with the file.
+const _lineSockets = <(SocketRef, String)>[
   (
     AppEntryRole.androidManifestPermissions,
     AppEntryRole.androidManifestFile,
@@ -240,13 +273,14 @@ const _nativeLineSockets = <(SocketRef, String)>[
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
+  (AppEntryRole.readmeSections, AppEntryRole.readmeFile),
 ];
 
-List<SmfIssue> _checkNativeTagLines(ModuleRuleInput<NoDsl> input) {
+List<SmfIssue> _checkTagLines(ModuleRuleInput<NoDsl> input) {
   final origin = ModuleOrigin(input.module.id);
   final templates = _templatesOf(input.contributions);
   final issues = <SmfIssue>[];
-  for (final (socket, path) in _nativeLineSockets) {
+  for (final (socket, path) in _lineSockets) {
     final tag = '{{{${socket.tag}}}}';
     for (final MapEntry(key: template, value: text) in templates.entries) {
       if (!text.contains(tag)) continue;
@@ -263,7 +297,7 @@ List<SmfIssue> _checkNativeTagLines(ModuleRuleInput<NoDsl> input) {
         issues.add(
           SmfIssue(
             'The tag $tag must stand alone at the start of a line of $path, '
-            'because its contributions render as complete, indented lines.',
+            'because its contributions render as complete lines.',
             origin: origin,
             path: path,
           ),

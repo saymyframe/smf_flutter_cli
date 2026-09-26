@@ -1194,7 +1194,7 @@ flutter:
             'lib/again.dart': '{{{routes}}}\n',
             // A Dart file of the owner that does not read the variable.
             'lib/other.dart': '// {{title}}\n',
-            'README.md': 'Empty: "{{{empty}}}"\n',
+            'NOTES.md': 'Empty: "{{{empty}}}"\n',
           },
         ),
       );
@@ -1227,7 +1227,7 @@ flutter:
       );
       expect(app.files['lib/other.dart']!.text, '// Shelf\n');
       expect(app.files['lib/other.dart']!.addedImports, isEmpty);
-      expect(app.files['README.md']!.text, 'Empty: ""\n');
+      expect(app.files['NOTES.md']!.text, 'Empty: ""\n');
     });
 
     test(
@@ -1359,7 +1359,7 @@ flutter:
               'lib/lambda.dart': '{{{code.upperCase()}}}\n',
               'lib/section.dart': '{{#flag}}\n{{{code}}}\n{{/flag}}\n',
               'lib/over.dart': '{{#code}}x{{/code}}\n',
-              'README.md': '{{{code}}}\n',
+              'NOTES.md': '{{{code}}}\n',
             },
           ),
         ),
@@ -1389,7 +1389,7 @@ flutter:
             '{{{code}}}.',
           ),
           equals(
-            'store: error [store] README.md: The template README.md in the '
+            'store: error [store] NOTES.md: The template NOTES.md in the '
             'brick b of store is not Dart, but it reads the fragment '
             'variable code, whose imports can only go into a Dart file.',
           ),

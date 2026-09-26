@@ -287,6 +287,7 @@ dependencies {
 ''',
   'ios/Podfile':
       "platform :ios, '{{{smf_app_entry__ios_deployment_target}}}'\n",
+  'README.md': '# {{app_name}}\n{{{smf_app_entry__readme_sections}}}\n',
   'ios/Runner/Info.plist': '''
 <plist version="1.0">
 <dict>

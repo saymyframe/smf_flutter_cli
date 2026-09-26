@@ -120,7 +120,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(16));
+      expect(sockets, hasLength(17));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -165,7 +165,7 @@ void main() {
       );
       expect(
         appEntryRole.moduleRules.map((rule) => rule.id),
-        ['app_entry.bootstrap_phases', 'app_entry.native_tag_lines'],
+        ['app_entry.bootstrap_phases', 'app_entry.tag_lines'],
       );
     });
   });
@@ -455,6 +455,48 @@ void main() {
         },
       );
     });
+
+    test('README sections follow each other under their headings', () {
+      const socket = AppEntryRole.readmeSections;
+
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        _render(socket, const [
+          ('Firebase', 'Run `flutterfire configure`.\n'),
+          ('Signing', 'The keys go into `android/key.properties`.'),
+          ('Firebase', 'Run `flutterfire configure`.\n'),
+        ]),
+        {
+          socket.tag: '\n## Firebase\n\nRun `flutterfire configure`.\n'
+              '\n## Signing\n\nThe keys go into `android/key.properties`.',
+        },
+      );
+      expect(
+        () => _render(socket, const [
+          ('Firebase', 'One text.'),
+          ('Firebase', 'Another text.'),
+        ]),
+        throwsA(isA<MergeConflict>()),
+      );
+    });
+
+    test('a README section has a heading of one line and text', () {
+      const socket = AppEntryRole.readmeSections;
+
+      expect(socket.problemsWith(socket.entry('Firebase', 'Text.')), isEmpty);
+      for (final heading in ['', ' Firebase', 'Fire\nbase', 'Fire\rbase']) {
+        expect(
+          socket.problemsWith(socket.entry(heading, 'Text.')).single,
+          'The heading "$heading" of a section of the README is not one line '
+          'of text without spaces around it.',
+          reason: heading,
+        );
+      }
+      expect(
+        socket.problemsWith(socket.entry('Firebase', ' \n')),
+        ['The section "Firebase" of the README has no text.'],
+      );
+    });
   });
 
   group('AppEntryRole native checks', () {
@@ -637,6 +679,8 @@ Future<void> bootstrap() async {
               '{{{smf_app_entry__gradle_app_plugins}}}\n}\n\n'
               'dependencies {\n'
               '{{{smf_app_entry__gradle_app_dependencies}}}\n}\n',
+          AppEntryRole.readmeFile: '# {{app_name}}\n\nAn app.\n'
+              '{{{smf_app_entry__readme_sections}}}\n',
         }),
         isEmpty,
       );
@@ -671,13 +715,15 @@ Future<void> bootstrap() async {
       ]);
     });
 
-    test('native tags stand alone at the start of a line of their file', () {
+    test('line tags stand alone at the start of a line of their file', () {
       final issues = checkModule({
         AppEntryRole.androidManifestFile: _manifestTemplate.replaceFirst(
           '\n{{{smf_app_entry__android_manifest_permissions}}}',
           '    {{{smf_app_entry__android_manifest_permissions}}}',
         ),
         'ios/Podfile': '{{{smf_app_entry__info_plist}}}\n',
+        AppEntryRole.readmeFile:
+            '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
       });
 
       expect(issues.map((issue) => issue.message), [
@@ -685,11 +731,16 @@ Future<void> bootstrap() async {
           'The tag {{{smf_app_entry__android_manifest_permissions}}} must '
           'stand alone at the start of a line of '
           'android/app/src/main/AndroidManifest.xml, because its '
-          'contributions render as complete, indented lines.',
+          'contributions render as complete lines.',
         ),
         equals(
           'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
           'lines belong in ios/Runner/Info.plist.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '
+          'the start of a line of README.md, because its contributions render '
+          'as complete lines.',
         ),
       ]);
     });

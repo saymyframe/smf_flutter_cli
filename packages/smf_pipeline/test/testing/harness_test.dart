@@ -665,9 +665,9 @@ void main() {
           'notes',
           structuralRules: const [
             StructuralRule(
-              id: 'notes.readme',
-              description: 'The README names the app.',
-              check: _checkReadme,
+              id: 'notes.names_the_app',
+              description: 'The notes name the app.',
+              check: _checkNotes,
             ),
           ],
         );
@@ -679,7 +679,7 @@ void main() {
               providers: [RoleProvider.plain(notes)],
               contributions: [
                 BrickContribution(
-                  bundle('readme', files: {'README.md': '# Another app\n'}),
+                  bundle('notes', files: {'NOTES.md': '# Another app\n'}),
                 ),
               ],
             ),
@@ -691,7 +691,7 @@ void main() {
         );
 
         expect(result.errors.map((issue) => issue.message), [
-          'README.md does not name contract_app.',
+          'NOTES.md does not name contract_app.',
         ]);
         expect(
           result.errors.single.origin,
@@ -977,12 +977,12 @@ final class _VarsProvider extends RoleProvider<String> {
 /// A `{` in a mason template.
 const _brace = '{{__LEFT_CURLY_BRACKET__}}';
 
-List<SmfIssue> _checkReadme(StructuralRuleInput<NoDsl> input) => [
-      if (input.texts['README.md'] case final text?
+List<SmfIssue> _checkNotes(StructuralRuleInput<NoDsl> input) => [
+      if (input.texts['NOTES.md'] case final text?
           when !text.contains(input.roleInput.context.appName))
         SmfIssue(
-          'README.md does not name ${input.roleInput.context.appName}.',
-          origin: input.owners['README.md'],
-          path: 'README.md',
+          'NOTES.md does not name ${input.roleInput.context.appName}.',
+          origin: input.owners['NOTES.md'],
+          path: 'NOTES.md',
         ),
     ];

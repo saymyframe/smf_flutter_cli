@@ -20,15 +20,16 @@ const appEntryRole = AppEntryRole._();
 ///   `cupertino`;
 /// - [fallbackStartScreen], the screen of an app without a router;
 /// - the Android and iOS projects, at the paths of Flutter's templates,
-///   such as [androidManifestFile].
+///   such as [androidManifestFile];
+/// - [readmeFile], the README of the app.
 ///
-/// The keyed sockets of the native files and [mainActivityIntentFilters]
-/// render complete, indented lines, so their tags stand alone at the start
-/// of a line of their file, like the tags of [PipelineSockets]. The tag of
-/// [iosDeploymentTarget] stands where the version goes, as in
-/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
-/// check these tags in the templates of its provider, and its structural
-/// rules check that the native files name every key once.
+/// The keyed sockets of the native files and of the README, and
+/// [mainActivityIntentFilters], render complete lines, so their tags stand
+/// alone at the start of a line of their file, like the tags of
+/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
+/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
+/// rules of the role check these tags in the templates of its provider, and
+/// its structural rules check that the native files name every key once.
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -59,6 +60,9 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the Xcode project of the iOS app.
   static const xcodeProjectFile = 'ios/Runner.xcodeproj/project.pbxproj';
+
+  /// The path of the README of the app.
+  static const readmeFile = 'README.md';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -270,6 +274,23 @@ final class AppEntryRole extends Role<NoDsl> {
     KeyedSocket(policy: MaxPolicy(), renderer: _renderGradleDependencies),
   );
 
+  /// Sections of [readmeFile], keyed by their heading, each with its text
+  /// in Markdown, such as how to set up a service that the app uses.
+  ///
+  /// They follow the description of the app as `## <heading>` sections, in
+  /// the order of the contributions (see [SocketContribution]). A heading is
+  /// one line without spaces around it, a section has text, and two
+  /// different texts under one heading conflict. Without sections, the
+  /// README is that of the provider's template.
+  static const readmeSections = SocketRef<KeyedSocket<String>>.role(
+    appEntryRole,
+    'readme_sections',
+    KeyedSocket(
+      policy: _ReadmeSectionPolicy(),
+      renderer: _renderReadmeSections,
+    ),
+  );
+
   @override
   String get id => 'app_entry';
 
@@ -300,6 +321,7 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
+        readmeSections,
       ];
 
   @override
@@ -316,10 +338,11 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkBootstrapPhases,
         ),
         ModuleRule(
-          id: 'app_entry.native_tag_lines',
-          description: 'The tags of the sockets that render lines of a '
-              'native file stand alone at the start of a line of that file.',
-          check: _checkNativeTagLines,
+          id: 'app_entry.tag_lines',
+          description: 'The tags of the sockets that render lines of a file, '
+              'such as a native file or the README, stand alone at the start '
+              'of a line of that file.',
+          check: _checkTagLines,
         ),
       ];
 
