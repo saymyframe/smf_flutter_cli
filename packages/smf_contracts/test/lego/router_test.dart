@@ -723,6 +723,27 @@ void main() {
       );
     });
 
+    test('compares its choices by value', () {
+      expect(
+        const RouterChoice(startPath: '/home'),
+        const RouterChoice(startPath: '/home'),
+      );
+      expect(
+        const RouterChoice(startPath: '/home').hashCode,
+        const RouterChoice(startPath: '/home').hashCode,
+      );
+      expect(
+        const RouterChoice(startPath: '/home'),
+        isNot(const RouterChoice(startPath: '/settings')),
+      );
+      expect(const RouterChoice(), isNot(const RouterChoice(startPath: '/')));
+      expect(
+        '${const RouterChoice(startPath: '/home')}',
+        'start on /home',
+      );
+      expect('${const RouterChoice()}', 'start on the fallback screen');
+    });
+
     test('gives the start route of its choice as --start', () async {
       final template = routerRole.template;
 

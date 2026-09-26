@@ -21,6 +21,16 @@ final class RouterChoice {
   /// The full path of the start route, or `null` if no route can start the
   /// app, which then starts on the fallback screen of the app entry.
   final String? startPath;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RouterChoice && other.startPath == startPath;
+
+  @override
+  int get hashCode => startPath.hashCode;
+
+  @override
+  String toString() => 'start on ${startPath ?? 'the fallback screen'}';
 }
 
 /// The routes of all modules of an app with their full paths, names and

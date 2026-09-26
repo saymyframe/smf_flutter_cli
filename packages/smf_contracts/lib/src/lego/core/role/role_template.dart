@@ -43,12 +43,14 @@ abstract base class RoleTemplate<D extends Object> {
 
   /// The values of the role's options by name that make [choice], a result
   /// of [choose], without asking, such as the full path of the start route
-  /// for `--start`.
+  /// for `--start`: with them, [choose] returns a choice equal to [choice]
+  /// in a run without a terminal.
   ///
   /// A tool that answers the questions of [choose] itself, as the contract
   /// test harness does, gives them to a run without a terminal, which then
-  /// makes the same decision. It returns no values by default, for a role
-  /// without such options.
+  /// makes the same decision. So a role whose [choose] asks the user gives
+  /// options of its own for every answer, and its choices compare by value.
+  /// It returns no values by default, for a role that asks nothing.
   Map<String, String> optionsOf(Object? choice) => const {};
 
   /// Returns the fragments and brick variables that depend on the data,
