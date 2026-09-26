@@ -90,12 +90,12 @@ void main() {
       ),
       [
         equals(
-          'smf_router depends on path, but a module depends only on mason and '
-          'smf_contracts.',
+          'smf_router depends on path, which is not among the dependencies of '
+          'the module: mason and smf_contracts.',
         ),
         equals(
-          'smf_router depends on smf_other, but a module depends only on mason '
-          'and smf_contracts.',
+          'smf_router depends on smf_other, which is not among the '
+          'dependencies of the module: mason and smf_contracts.',
         ),
         'smf_router does not depend on smf_contracts.',
       ],
@@ -130,22 +130,32 @@ void main() {
           'lib/src/old.dart':
               "import 'package:smf_contracts/smf_contracts.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
+                  "import 'package:mason/src/inner.dart';\n"
                   "export 'package:yaml/yaml.dart';\n"
                   "import '../../test/router_test.dart';\n"
-                  "import 'package:smf_contracts/lego.dart';\n",
+                  "import 'package:smf_contracts/lego.dart';\n"
+                  "import 'dart:io';\n"
+                  "import 'dart:convert';\n"
+                  "import 'stub.dart' if (dart.library.io) 'dart:isolate';\n"
+                  "part '../../test/old_part.dart';\n",
         }),
       ),
       [
         for (final uri in [
           'package:smf_contracts/smf_contracts.dart',
           'package:smf_home/smf_home.dart',
-          '../../test/router_test.dart',
+          'package:mason/src/inner.dart',
           'package:yaml/yaml.dart',
+          '../../test/router_test.dart',
+          'dart:io',
+          'dart:isolate',
+          '../../test/old_part.dart',
         ])
           equals(
             'lib/src/old.dart uses $uri, but the code of a module uses only '
-            'dart:, the module model of smf_contracts, its own files in lib/ '
-            'and the packages it depends on.',
+            'the dart: libraries that do not reach the machine, the module '
+            'model of smf_contracts, its own files in lib/ and the public '
+            'libraries of the packages it depends on.',
           ),
       ],
     );
@@ -158,27 +168,65 @@ void main() {
           'test/old_test.dart':
               "import 'package:smf_contracts/smf_contracts.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
+                  "import 'package:smf_pipeline/src/render.dart';\n"
                   "import '../../other/test/support.dart';\n"
-                  "import 'package:yaml/yaml.dart';\n",
+                  "import 'package:yaml/yaml.dart';\n"
+                  "import 'package:smf_router/src/router.dart';\n",
         }),
       ),
       [
         for (final uri in [
           'package:smf_contracts/smf_contracts.dart',
           'package:smf_home/smf_home.dart',
+          'package:smf_pipeline/src/render.dart',
           '../../other/test/support.dart',
         ])
           equals(
             'test/old_test.dart uses $uri, but of the SMF packages the tests '
-            'of a module use only the module model of smf_contracts, '
-            'smf_flutter_core, smf_pipeline and smf_router, and no file '
-            'outside test/ by a relative path.',
+            'of a module use only the module model of smf_contracts and the '
+            'public libraries of smf_flutter_core, smf_pipeline and '
+            'smf_router, and no file outside test/ by a relative path.',
           ),
       ],
     );
   });
 
-  test('a package without code or tests has only its pubspec to check', () {
+  test('the package depends on nothing its code does not use', () {
+    expect(
+      _problemsOf(
+        _package(const {
+          'lib/src/router.dart': "import 'package:smf_contracts/lego.dart';\n",
+          'lib/bundles/router_bundle.dart': '',
+        }),
+      ),
+      ['smf_router depends on mason, but no file in lib/ uses it.'],
+    );
+  });
+
+  test('a module without dependencies depends only on smf_contracts', () {
+    expect(
+      _problemsOf(
+        _package(
+          const {},
+          pubspec: _pubspec(dependencies: ['mason', 'smf_contracts']),
+        ),
+        package: const ModulePackage(
+          'smf_router',
+          testModules: {'smf_flutter_core'},
+        ),
+      ),
+      [
+        equals(
+          'smf_router depends on mason, which is not among the dependencies '
+          'of the module: smf_contracts.',
+        ),
+        startsWith('lib/bundles/router_bundle.dart uses package:mason'),
+        startsWith('lib/src/router.dart uses package:mason/mason.dart'),
+      ],
+    );
+  });
+
+  test('a package without tests has its code and pubspec to check', () {
     final fileSystem = MemoryFileSystem();
     fileSystem.file('/router/pubspec.yaml')
       ..createSync(recursive: true)
@@ -189,6 +237,14 @@ void main() {
         ),
       );
 
+    expect(
+      _problemsOf(fileSystem, package: const ModulePackage('smf_router')),
+      ['smf_router depends on smf_contracts, but no file in lib/ uses it.'],
+    );
+
+    fileSystem.file('/router/lib/smf_router.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'package:smf_contracts/lego_core.dart';\n");
     expect(
       _problemsOf(fileSystem, package: const ModulePackage('smf_router')),
       isEmpty,

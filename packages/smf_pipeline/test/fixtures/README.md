@@ -8,8 +8,8 @@ The real SMF modules do not yet use every feature of the module model in `packag
 | --- | --- |
 | `fake_state` | Two providers of the state management role. |
 | `fake_roles` | Two roles defined outside `smf_contracts` with the same data type, one module that provides both, and a module that uses them under `when` and inside `{{#has_badge}}`. |
-| `fake_di` | A DI container whose capabilities each test sets. |
-| `fake_router` | A router with navigator observers and annotations on screens. |
+| `fake_di` | A DI container whose capabilities each test sets, which renders the registrations with the imports of their files as a variable of its render hook. |
+| `fake_router` | A router with navigator observers and annotations on screens, which renders the screens with the imports of their files as a variable of its render hook. |
 | `fake_feature` | A feature with a variant per state manager, a composition file and the navigation facade. |
 | `fake_infra` | Every socket of the app entry and the `flutter:` section of the pubspec; a second module with the same keys, so their values merge; analytics with navigator observers; crash reporting and events that start asynchronously; services with every DI capability; a module whose sockets a module that depends on it fills; code generation. |
 

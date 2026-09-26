@@ -1,6 +1,7 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:file/file.dart';
 import 'package:file/local.dart';
-import 'package:smf_pipeline/src/testing/file_indexer.dart';
 import 'package:yaml/yaml.dart';
 
 /// The libraries of `smf_contracts` that a module may use: the module
@@ -10,18 +11,30 @@ const _model = {
   'package:smf_contracts/lego_core.dart',
 };
 
+/// The libraries of Dart that reach the machine, which the code of a module
+/// does not use: it runs tools and reads the machine only through the
+/// environment that the pipeline gives its checks and steps.
+const _machineLibraries = {
+  'dart:ffi',
+  'dart:io',
+  'dart:isolate',
+  'dart:mirrors',
+};
+
 /// The package of a module and the rules it follows, which the package
 /// checks in its own tests with [problems]:
-/// - the Dart files in `lib/` import and export only `dart:` libraries, the
-///   module model of `smf_contracts` (`lego.dart` and `lego_core.dart`), the
-///   files of the package and the packages among its [dependencies], and a
-///   relative URI does not leave `lib/`;
+/// - the Dart files in `lib/` import, export and include as parts only
+///   `dart:` libraries but those that reach the machine, such as `dart:io`,
+///   the module model of `smf_contracts` (`lego.dart` and `lego_core.dart`),
+///   the files of the package and the public libraries, outside `src/`, of
+///   the packages among its [dependencies], and a relative URI does not
+///   leave `lib/`, conditional ones included;
 /// - of the SMF packages, the Dart files in `test/` use only the module
-///   model of `smf_contracts`, the package itself, `smf_pipeline` and
-///   [testModules], and a relative URI does not leave `test/`, so a test
-///   uses no file of another package;
-/// - the package depends on `smf_contracts` and [dependencies], and on no
-///   other package;
+///   model of `smf_contracts` and the public libraries of the package
+///   itself, `smf_pipeline` and [testModules], and a relative URI does not
+///   leave `test/`, so a test uses no file of another package;
+/// - the package depends on `smf_contracts` and [dependencies], on no other
+///   package, and on none that no file in `lib/` uses;
 /// - of the SMF packages, its dev dependencies are `smf_pipeline`, for the
 ///   contract harness, and [testModules].
 ///
@@ -90,8 +103,8 @@ final class ModulePackage {
     final dependsOn = packagesOf('dependencies');
     for (final package in _sorted(dependsOn.difference(code))) {
       problems.add(
-        '$name depends on $package, but a module depends only on '
-        '${_list(code)}.',
+        '$name depends on $package, which is not among the dependencies of '
+        'the module: ${_list(code)}.',
       );
     }
     for (final package in _sorted(code.difference(dependsOn))) {
@@ -113,45 +126,64 @@ final class ModulePackage {
       problems.add('$name has no dev dependency on $package.');
     }
 
-    final reachable = {name, ...dependencies};
+    final used = <String>{};
     for (final (path, uri) in _directives(directory, 'lib')) {
       final package = _packageOf(uri);
-      final allowed = package == null
-          ? uri.startsWith('dart:') || _staysIn('lib', path, uri)
-          : package == 'smf_contracts'
-              ? _model.contains(uri)
-              : reachable.contains(package);
-      if (!allowed) {
+      if (package != null) used.add(package);
+      if (!_isAllowed(uri, path, 'lib', {name, ...dependencies})) {
         problems.add(
-          '$path uses $uri, but the code of a module uses only dart:, the '
-          'module model of smf_contracts, its own files in lib/ and the '
-          'packages it depends on.',
+          '$path uses $uri, but the code of a module uses only the dart: '
+          'libraries that do not reach the machine, the module model of '
+          'smf_contracts, its own files in lib/ and the public libraries of '
+          'the packages it depends on.',
         );
       }
     }
+    for (final package in _sorted(code.difference(used))) {
+      problems.add(
+        '$name depends on $package, but no file in lib/ uses it.',
+      );
+    }
     final testable = {name, ...tests};
     for (final (path, uri) in _directives(directory, 'test')) {
-      final package = _packageOf(uri);
-      final allowed = package == null
-          ? uri.startsWith('dart:') || _staysIn('test', path, uri)
-          : package == 'smf_contracts'
-              ? _model.contains(uri)
-              : !package.startsWith('smf_') || testable.contains(package);
-      if (!allowed) {
+      if (!_isAllowed(uri, path, 'test', testable, others: true)) {
         problems.add(
           '$path uses $uri, but of the SMF packages the tests of a module use '
-          'only the module model of smf_contracts, ${_list(testable)}, and '
-          'no file outside test/ by a relative path.',
+          'only the module model of smf_contracts and the public libraries of '
+          '${_list(testable)}, and no file outside test/ by a relative path.',
         );
       }
     }
     return problems;
   }
 
-  /// The URIs of the imports and exports of the Dart files in the directory
-  /// [name] of [package], each with the path of its file relative to the
-  /// package, as the parser of the analyzer reads them, so that text in
-  /// strings does not count.
+  /// Whether the file at [path] in the directory [directory] may use [uri]:
+  /// a `dart:` library, but for those that reach the machine in `lib/`, a
+  /// relative URI that stays in [directory], the module model of
+  /// `smf_contracts`, a library of [packages] that is not in `src/` unless
+  /// it is of this package, or, if [others], a library of a package that is
+  /// not one of SMF.
+  bool _isAllowed(
+    String uri,
+    String path,
+    String directory,
+    Set<String> packages, {
+    bool others = false,
+  }) =>
+      switch (_packageOf(uri)) {
+        null when uri.startsWith('dart:') =>
+          directory != 'lib' || !_machineLibraries.contains(uri),
+        null => _staysIn(directory, path, uri),
+        'smf_contracts' => _model.contains(uri),
+        final package when packages.contains(package) =>
+          package == name || !uri.startsWith('package:$package/src/'),
+        final package => others && !package.startsWith('smf_'),
+      };
+
+  /// The URIs of the imports, exports and parts of the Dart files in the
+  /// directory [name] of [package], each with the path of its file relative
+  /// to the package, as the parser of the analyzer reads them, so that text
+  /// in strings does not count.
   static List<(String, String)> _directives(Directory package, String name) {
     final directory = package.childDirectory(name);
     if (!directory.existsSync()) return const [];
@@ -162,14 +194,21 @@ final class ModulePackage {
     ]..sort((a, b) => a.path.compareTo(b.path));
     return [
       for (final file in files)
-        if (DartFileIndexer.index(file.path, file.readAsStringSync())
-            case final index)
-          for (final directive in [...index.imports, ...index.exports])
+        for (final directive in parseString(
+          content: file.readAsStringSync(),
+          throwIfDiagnostics: false,
+        ).unit.directives)
+          for (final uri in [
+            if (directive case UriBasedDirective(:final uri)) uri,
+            // The libraries a conditional import or export may use instead.
+            if (directive case NamespaceDirective(:final configurations))
+              for (final configuration in configurations) configuration.uri,
+          ])
             (
               context
                   .relative(file.path, from: package.path)
                   .replaceAll(context.separator, '/'),
-              directive.uri,
+              uri.stringValue ?? '',
             ),
     ];
   }
@@ -190,9 +229,8 @@ final class ModulePackage {
 
   static String _list(Set<String> packages) {
     final sorted = _sorted(packages);
-    return sorted.length == 1
-        ? sorted.single
-        : '${sorted.sublist(0, sorted.length - 1).join(', ')} and '
-            '${sorted.last}';
+    if (sorted.length == 1) return sorted.single;
+    return '${sorted.sublist(0, sorted.length - 1).join(', ')} and '
+        '${sorted.last}';
   }
 }

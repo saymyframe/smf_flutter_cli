@@ -726,7 +726,12 @@ flutter:
                   '{{{tool}}}/Generated.xcconfig': '',
                   '{{{tool}}}/Pods/x.h': '',
                 },
-                vars: {'up': '..', 'root': '/etc', 'tool': 'ios/Flutter'},
+                vars: {
+                  'up': '..',
+                  'nothing': '',
+                  'root': '/etc',
+                  'tool': 'ios/Flutter',
+                },
               ),
             ],
           ),
@@ -899,6 +904,62 @@ flutter:
             'brick nor a render hook of home sets, so mustache would render '
             'nothing. (Set every variable a template reads, to "" or false '
             'when there is nothing.)',
+          ),
+        ],
+      );
+    });
+
+    test('a variable of a path that nothing sets is an error', () {
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'home',
+            contributions: [
+              _brick(
+                {'lib/{{prefix}}screen.dart': '', 'lib/{{a}}{{b}}.dart': ''},
+                vars: {'b': 'x'},
+              ),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'home: error [home] lib/{{prefix}}screen.dart: The path '
+            'lib/{{prefix}}screen.dart in the brick b of home reads prefix, '
+            'which neither the brick nor a render hook of home sets, so '
+            'mustache would render nothing. (Set every variable a path reads, '
+            'to "" when there is nothing.)',
+          ),
+          startsWith(
+            'home: error [home] lib/{{a}}{{b}}.dart: The path '
+            'lib/{{a}}{{b}}.dart in the brick b of home reads a, which',
+          ),
+        ],
+      );
+    });
+
+    test('a fragment variable in a path is an error', () {
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(vars: {'name': Fragment('code')}),
+      );
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'home',
+            providers: [rendering.provider],
+            contributions: [
+              _brick({'lib/{{{name}}}.dart': ''}),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'home: error [home] lib/{{{name}}}.dart: The path '
+            'lib/{{{name}}}.dart in the brick b of home reads the fragment '
+            'variable name, but a path takes plain values only. (Set every '
+            'variable a path reads, to "" when there is nothing.)',
           ),
         ],
       );
@@ -1128,8 +1189,11 @@ flutter:
                 '// {{title}}\n'
                 '{{{routes}}}\n'
                 '{{{empty}}}\n'
+                '  {{{ empty }}}  \n'
                 '// end\n',
             'lib/again.dart': '{{{routes}}}\n',
+            // A Dart file of the owner that does not read the variable.
+            'lib/other.dart': '// {{title}}\n',
             'README.md': 'Empty: "{{{empty}}}"\n',
           },
         ),
@@ -1161,7 +1225,49 @@ flutter:
         '\n'
         'final routes = [z.Zeta(), Timer];\n',
       );
+      expect(app.files['lib/other.dart']!.text, '// Shelf\n');
+      expect(app.files['lib/other.dart']!.addedImports, isEmpty);
       expect(app.files['README.md']!.text, 'Empty: ""\n');
+    });
+
+    test(
+        'share an import with a socket in a file, which names both '
+        'contributors', () {
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(
+          vars: {
+            'code': Fragment('final zeta = z.Zeta();', imports: [zeta]),
+          },
+        ),
+      );
+      final app = _render([
+        entry,
+        TestModule(
+          'store',
+          providers: [rendering.provider],
+          contributions: [
+            _brick({'lib/store.dart': '{{{code}}}\n{{{smf_shelf__items}}}\n'}),
+          ],
+        ),
+        TestModule(
+          'user',
+          requires: {rendering.role},
+          contributions: [
+            SocketContribution.code(
+              rendering.items,
+              const Fragment('final other = z.Zeta();', imports: [zeta]),
+            ),
+          ],
+        ),
+      ]);
+
+      final store = app.files['lib/store.dart']!;
+      const directive = "import 'package:zeta/zeta.dart' as z;";
+      expect(directive.allMatches(store.text), hasLength(1));
+      expect(
+        [for (final added in store.addedImports) '${added.contributor}'],
+        unorderedEquals(['store', 'user']),
+      );
     });
 
     test("go into the bricks of the owner's variant", () {
@@ -1260,15 +1366,15 @@ flutter:
         [
           equals(
             'store: error [store] lib/two.dart: The template lib/two.dart in '
-            'the brick b of store reads the fragment variable code as code '
-            'in two braces at line 1; read a fragment of code as it is, '
+            'the brick b of store reads the fragment variable code without '
+            'three braces at line 1; read a fragment of code as it is, '
             '{{{code}}}.',
           ),
           equals(
             'store: error [store] lib/lambda.dart: The template '
             'lib/lambda.dart in the brick b of store reads the fragment '
-            'variable code as code.upperCase() in three braces at line 1; '
-            'read a fragment of code as it is, {{{code}}}.',
+            'variable code as code.upperCase() at line 1; read a fragment of '
+            'code as it is, {{{code}}}.',
           ),
           equals(
             'store: error [store] lib/section.dart: The template '
@@ -1289,6 +1395,87 @@ flutter:
           ),
         ],
       );
+    });
+
+    test('read by a template with another problem are read', () {
+      expect(
+        _failures(
+          withVars(
+            {
+              'code': const Fragment('z.Zeta()', imports: [zeta]),
+            },
+            {'lib/a.dart': '{{{code}}}\n// {{missing}}\n'},
+          ),
+        ),
+        [
+          startsWith(
+            'store: error [store] lib/a.dart: The template lib/a.dart in the '
+            'brick b of store reads missing, which neither',
+          ),
+        ],
+      );
+    });
+
+    test('with a backslash that mason would remove are an error', () {
+      expect(
+        _failures(
+          withVars(
+            {'code': const Fragment('a\\\nb')},
+            {'lib/a.dart': '{{{code}}}\n'},
+          ),
+        ),
+        [
+          equals(
+            'store: error [store]: The brick variable code of the render '
+            'hook of store has a backslash before a line break or a '
+            'non-ASCII character, which mason removes.',
+          ),
+        ],
+      );
+    });
+
+    test('read wrongly are reported once', () {
+      expect(
+        _failures(
+          withVars(
+            {
+              'code': const Fragment('z.Zeta()', imports: [zeta]),
+            },
+            {'lib/a.dart': '{{code}}\n'},
+          ),
+        ),
+        [
+          equals(
+            'store: error [store] lib/a.dart: The template lib/a.dart in the '
+            'brick b of store reads the fragment variable code without three '
+            'braces at line 1; read a fragment of code as it is, {{{code}}}.',
+          ),
+        ],
+      );
+    });
+
+    test('that only a brick left out of the app reads are left out', () {
+      final layout = TestRole<NoDsl>('layout');
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(
+          vars: {
+            'branches': Fragment('final b = z.Zeta();', imports: [zeta]),
+          },
+        ),
+      );
+      final app = _render([
+        entry,
+        TestModule(
+          'store',
+          uses: {layout},
+          providers: [rendering.provider],
+          contributions: [
+            _brick({'lib/branches.dart': '{{{branches}}}\n'}, when: {layout}),
+          ],
+        ),
+      ]);
+
+      expect(app.files.keys, isNot(contains('lib/branches.dart')));
     });
 
     test('that no template reads are an error', () {

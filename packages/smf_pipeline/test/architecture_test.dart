@@ -24,7 +24,9 @@ Map<String, List<String>> _directives() {
 
 void main() {
   // The pipeline knows no concrete role and no module, and reaches the
-  // machine only through the seams of SmfHost.
+  // machine only through the seams of SmfHost; only the check of the
+  // package of a module, which the tests of the package run, reads the
+  // local file system itself.
   final directives = _directives();
 
   test('finds the files of the pipeline', () {

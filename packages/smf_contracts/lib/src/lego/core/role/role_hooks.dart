@@ -174,10 +174,16 @@ final class RoleOutput {
   /// variable renders as the fragment's code, and the pipeline adds the
   /// imports to every Dart file of the owner's bricks that reads it, as it
   /// does for the fragments of a socket: an import the file has already is
-  /// not added again, and the harness knows who needs each. A template
-  /// reads such a variable as it is, `{{{routes}}}`, outside mustache
-  /// sections, and a line that holds nothing but a variable without code
-  /// goes away. A fragment variable that no template of the owner reads is
-  /// an error, since its code would be lost.
+  /// not added again, and the harness knows who needs each.
+  /// - A template reads such a variable as it is, `{{{routes}}}`, outside
+  ///   mustache sections; a path cannot read one.
+  /// - One with imports can be read only by a Dart library, not by a part
+  ///   file or a file that is not Dart.
+  /// - A line that holds nothing but a variable without code goes away.
+  /// - A fragment variable that no template of the owner reads is an error,
+  ///   since its code would be lost; one that only a brick the app leaves
+  ///   out reads, such as a brick for when a role is present, is not. The
+  ///   bricks of the variants of the owner for other providers do not
+  ///   count.
   final Map<String, Object?> vars;
 }

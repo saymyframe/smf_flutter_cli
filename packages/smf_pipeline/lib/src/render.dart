@@ -146,7 +146,8 @@ final class _VariableImports {
 ///    must be read as it is, in three braces and outside mustache sections,
 ///    and a template that is not Dart cannot read one with imports; a
 ///    fragment variable that no template of its owner reads is an error,
-///    since its code would be lost.
+///    since its code would be lost, unless a brick of the owner that the
+///    app leaves out reads it.
 /// 4. Adds the imports of each socket's fragments to the Dart file that
 ///    holds its tag, and those of each fragment variable to every Dart file
 ///    of its owner that reads it; see [addImports].
@@ -238,8 +239,16 @@ RenderedApp renderApp({
   }
   for (final MapEntry(key: owner, value: fragments)
       in hooks.fragmentVars.entries) {
-    for (final name in fragments.keys) {
-      if (variables.read.contains((owner, name))) continue;
+    final unread = [
+      for (final name in fragments.keys)
+        if (!variables.read.contains((owner, name))) name,
+    ];
+    if (unread.isEmpty) continue;
+    // A brick of the owner that this app leaves out, such as one for when a
+    // role is present, may read the variable: its code is left out with it.
+    final readByAny = _namesReadBy(collection, owner);
+    for (final name in unread) {
+      if (readByAny.contains(name)) continue;
       issues.add(
         SmfIssue(
           'The render hook of $owner sets the fragment variable $name, which '
@@ -595,6 +604,25 @@ void _renderBrick(
   };
   for (final file in brick.bundle.files) {
     final template = file.path.replaceAll(r'\', '/');
+    final pathProblems = _pathVariableProblems(
+      template,
+      owner: owner,
+      vars: vars,
+      fragments: fragments,
+      read: (variable) => variables.read.add((owner, variable)),
+    );
+    for (final problem in pathProblems) {
+      issues.add(
+        SmfIssue(
+          'The path $template in the brick $name of $origin $problem',
+          hint: 'Set every variable a path reads, to "" when there is '
+              'nothing.',
+          origin: origin,
+          path: template,
+        ),
+      );
+    }
+    if (pathProblems.isNotEmpty) continue;
     final String path;
     try {
       path = template.render(vars);
@@ -639,6 +667,18 @@ void _renderBrick(
     if (text != null) {
       final scan =
           masonTag.hasMatch(text) ? scanTemplate(template, text) : null;
+      if (scan != null &&
+          !_readFragmentVariables(
+            scan,
+            template,
+            brick: name,
+            origin: origin,
+            fragments: fragments,
+            variables: variables,
+            issues: issues,
+          )) {
+        continue;
+      }
       final unset = scan == null ? const <String>[] : unsetNames(scan, vars);
       if (unset.isNotEmpty) {
         issues.add(
@@ -653,41 +693,6 @@ void _renderBrick(
           ),
         );
         continue;
-      }
-      if (scan != null && fragments.isNotEmpty) {
-        final reads = _fragmentReads(scan, fragments);
-        for (final problem in reads.problems) {
-          issues.add(
-            SmfIssue(
-              'The template $template in the brick $name of $origin $problem',
-              origin: origin,
-              path: template,
-            ),
-          );
-        }
-        if (reads.problems.isNotEmpty) continue;
-        for (final variable in reads.names) {
-          variables.read.add((owner, variable));
-          final imports = fragments[variable]!.imports;
-          if (imports.isEmpty) continue;
-          if (!template.endsWith('.dart')) {
-            issues.add(
-              SmfIssue(
-                'The template $template in the brick $name of $origin is not '
-                'Dart, but it reads the fragment variable $variable, whose '
-                'imports can only go into a Dart file.',
-                origin: origin,
-                path: template,
-              ),
-            );
-            continue;
-          }
-          variables.names
-              .putIfAbsent((origin, template), () => {}).add(variable);
-          variables.imports.putIfAbsent((origin, template), () => []).addAll([
-            for (final import in imports) AddedImport(import, owner),
-          ]);
-        }
       }
       if (scan != null) {
         try {
@@ -754,9 +759,115 @@ String _withoutEmptyLines(String text, bool Function(String name) isEmpty) =>
 /// A line that holds nothing but a variable in three braces, with its line
 /// break.
 final RegExp _variableLine = RegExp(
-  r'^[ \t]*\{\{\{(\w+)\}\}\}[ \t]*(?:\r?\n|$)',
+  r'^[ \t]*\{\{\{\s*(\w+)\s*\}\}\}[ \t]*(?:\r?\n|$)',
   multiLine: true,
 );
+
+/// The problems with the variables that [template], the path of a file of
+/// a brick of [owner], reads: one that neither the brick nor a render hook
+/// of [owner] sets, among [vars], which mustache would render as nothing,
+/// and a fragment variable among [fragments], whose code a path cannot
+/// hold; the fragment variables it reads go to [read].
+List<String> _pathVariableProblems(
+  String template, {
+  required ContributionOrigin owner,
+  required Map<String, Object?> vars,
+  required Map<String, Fragment> fragments,
+  required void Function(String variable) read,
+}) {
+  if (!masonTag.hasMatch(template)) return const [];
+  final scan = scanTemplate(template, template);
+  final code = {
+    for (final tag in scan.tags)
+      if (fragments.containsKey(variableOf(tag.name))) variableOf(tag.name),
+  }..forEach(read);
+  final unset = unsetNames(scan, vars);
+  final problems = <String>[];
+  if (unset.isNotEmpty) {
+    problems.add(
+      'reads ${unset.join(', ')}, which neither the brick nor a render hook '
+      'of $owner sets, so mustache would render nothing.',
+    );
+  }
+  if (code.isNotEmpty) {
+    final what = code.length == 1 ? 'variable' : 'variables';
+    problems.add(
+      'reads the fragment $what ${code.join(', ')}, but a path takes plain '
+      'values only.',
+    );
+  }
+  return problems;
+}
+
+/// Reads the fragment variables among [fragments] that [scan], the scan of
+/// the template file [template] of the brick [brick] of [origin], reads:
+/// records them as read, and their imports for the file, and reports how
+/// the file reads them wrongly to [issues].
+///
+/// Returns `false` if the file reads one wrongly, so it is not rendered.
+bool _readFragmentVariables(
+  TemplateScan scan,
+  String template, {
+  required String brick,
+  required ContributionOrigin origin,
+  required Map<String, Fragment> fragments,
+  required _VariableImports variables,
+  required List<SmfIssue> issues,
+}) {
+  if (fragments.isEmpty) return true;
+  final owner = ownerOf(origin);
+  final reads = _fragmentReads(scan, fragments);
+  // The template reads the variables, even if not as it should.
+  for (final variable in reads.names) {
+    variables.read.add((owner, variable));
+  }
+  for (final problem in reads.problems) {
+    issues.add(
+      SmfIssue(
+        'The template $template in the brick $brick of $origin $problem',
+        origin: origin,
+        path: template,
+      ),
+    );
+  }
+  if (reads.problems.isNotEmpty) return false;
+  for (final variable in reads.names) {
+    final imports = fragments[variable]!.imports;
+    if (imports.isEmpty) continue;
+    if (!template.endsWith('.dart')) {
+      issues.add(
+        SmfIssue(
+          'The template $template in the brick $brick of $origin is not '
+          'Dart, but it reads the fragment variable $variable, whose '
+          'imports can only go into a Dart file.',
+          origin: origin,
+          path: template,
+        ),
+      );
+      continue;
+    }
+    variables.names.putIfAbsent((origin, template), () => {}).add(variable);
+    variables.imports.putIfAbsent((origin, template), () => []).addAll([
+      for (final import in imports) AddedImport(import, owner),
+    ]);
+  }
+  return true;
+}
+
+/// The names of the variables and sections that the templates of the
+/// bricks of [owner] read, those that this app leaves out included.
+Set<String> _namesReadBy(Collection collection, ContributionOrigin owner) => {
+      for (final collected in collection.all)
+        if (collected.contribution case final BrickContribution brick
+            when ownerOf(collected.origin) == owner)
+          for (final MapEntry(key: path, value: text)
+              in templateFilesOf(brick).entries)
+            if (masonTag.hasMatch(text))
+              if (scanTemplate(path, text) case final scan) ...[
+                for (final tag in scan.tags) variableOf(tag.name),
+                for (final section in scan.sections) variableOf(section.name),
+              ],
+    };
 
 /// The fragment variables among [fragments] that the template of [scan]
 /// reads, and the problems with how it reads them: each must be read as it
@@ -775,10 +886,10 @@ final RegExp _variableLine = RegExp(
     if (!fragments.containsKey(name)) continue;
     names.add(name);
     if (!tag.triple || tag.name != name) {
+      final how = tag.name != name ? 'as ${tag.name}' : 'without three braces';
       problems.add(
-        'reads the fragment variable $name as ${tag.name} in '
-        '${tag.triple ? 'three' : 'two'} braces at line ${tag.line}; read '
-        'a fragment of code as it is, {{{$name}}}.',
+        'reads the fragment variable $name $how at line ${tag.line}; read a '
+        'fragment of code as it is, {{{$name}}}.',
       );
     }
     if (tag.sections.isNotEmpty) {

@@ -91,7 +91,8 @@ final class RenderedTemplate {
 /// Renders the template of [role] as the pipeline will: its bricks with the
 /// presence flags, the variables of its `render` hook, and the sockets of
 /// its files filled with the fragments of `render`, whose imports are added
-/// to the files that hold the sockets' tags.
+/// to the files that hold the sockets' tags, as are the imports of the
+/// fragment variables to the files that read them.
 Future<RenderedTemplate> renderTemplate<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
@@ -121,10 +122,17 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
       role.presenceFlag: true,
       for (final other in role.visibleRoles)
         other.presenceFlag: present.contains(other),
-      ...output.vars,
+      // A fragment variable renders as its code.
+      for (final MapEntry(:key, :value) in output.vars.entries)
+        key: value is Fragment ? value.code : value,
     };
     final importsByFile = <String, List<ImportRef>>{};
     for (final MapEntry(key: path, value: text) in templates.entries) {
+      for (final MapEntry(:key, :value) in output.vars.entries) {
+        if (value is Fragment && text.contains('{{{$key}}}')) {
+          importsByFile.putIfAbsent(path, () => []).addAll(value.imports);
+        }
+      }
       for (final match in _tag.allMatches(text)) {
         final tag = match.group(1)!;
         final socket = [...role.sockets, ...appEntryRole.sockets]
