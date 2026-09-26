@@ -23,11 +23,12 @@ final class GoRoutes {
   ///
   /// A screen gets the values of its parameters from the location, parsed
   /// with `tryParse`: a path parameter from the path, including one of a
-  /// parent, and a query parameter from the query. An optional value that
-  /// the location does not have, or not of its type, is `null`; a route
-  /// whose required value is missing or not of its type redirects through
-  /// [valueChecks], which throws a `GoException`, so that the router shows
-  /// its error screen instead.
+  /// parent, and a query parameter from the query; a `bool` is `true` or
+  /// `false` exactly. An optional value that the location does not have, or
+  /// not of its type, is `null`; a route whose required value is missing or
+  /// not of its type redirects through [valueChecks], which throws a
+  /// `GoException`, so that the router shows its error screen instead. The
+  /// redirect of a parent checks its path parameters for its children.
   factory GoRoutes.of(RouterFacade facade, {FacadeRoute? start}) {
     final screens = <String, ImportRef>{};
     String prefixOf(ImportRef import) => screens
@@ -42,9 +43,15 @@ final class GoRoutes {
     String code(FacadeRoute route) {
       final screen = route.route.screen;
       final params = route.route.params;
+      // The redirect of the parent checks a path parameter of its own that
+      // the route passes on, since go_router runs the redirects of every
+      // route that matches the location.
       final checked = [
         for (final param in params)
-          if (param.isRequired && _mayBeMissing(param)) param,
+          if (param.isRequired &&
+              _mayBeMissing(param) &&
+              !route.isInherited(param))
+            param,
       ];
       checksValues |= checked.isNotEmpty;
       final widget = '${prefixOf(screen.import)}.${screen.className}';

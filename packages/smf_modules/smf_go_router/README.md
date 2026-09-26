@@ -9,7 +9,7 @@ The modules of the app declare their routes, and the router role gives the app t
 - screens are imported with prefixes of their own, so their names never clash;
 - the app opens on its start route, and `/` redirects to it. When no route can start the app, as in an app without features, `/` shows the fallback screen of the app.
 
-Screens get the values of their parameters from the location, parsed with `tryParse`. An optional value that the location does not have, or that is not of its type, is `null`. A location without a valid required value, such as `/home/details/abc` for an `int`, shows the error screen of go_router.
+Screens get the values of their parameters from the location, parsed with `tryParse`, and a `bool` is `true` or `false` exactly. An optional value that the location does not have, or that is not of its type, is `null`. A location without a valid required value, such as `/home/details/abc` for an `int`, shows the error screen of go_router.
 
 `context.nav` navigates through this router whatever the context, even one above the router:
 

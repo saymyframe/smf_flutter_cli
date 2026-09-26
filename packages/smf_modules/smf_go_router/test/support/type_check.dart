@@ -4,13 +4,16 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/diagnostic/diagnostic.dart';
+import 'package:smf_contracts/lego.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 
-/// Stand-ins for the parts of Flutter's widgets library that the rendered
-/// apps use, with the signatures of Flutter 3.44.
-const _widgets = '''
-import 'dart:async';
+/// The owner of the files of the app entry.
+const _appEntry = ModuleOrigin(FlutterCoreModule.id);
 
+/// Stand-ins for the parts of Flutter's widgets library that the checked
+/// files use, with the signatures of Flutter 3.44.
+const _widgets = '''
 abstract class Key {
   const Key();
 }
@@ -36,62 +39,16 @@ class SizedBox extends StatelessWidget {
   Widget build(BuildContext context) => this;
 }
 
-typedef TransitionBuilder = Widget Function(BuildContext context, Widget? child);
-
 class RouterConfig<T> {}
 
 class NavigatorObserver {}
-
-class WidgetsFlutterBinding {
-  static WidgetsFlutterBinding ensureInitialized() => WidgetsFlutterBinding();
-}
-
-void runApp(Widget app) {}
 ''';
 
-/// Stand-ins for the parts of Flutter's material library that the rendered
-/// apps use, with the signatures of Flutter 3.44.
+/// Flutter's material library, of which the checked files use only what
+/// it exports of the widgets library, such as the classes of the screens
+/// of the app entry.
 const _material = '''
 export 'widgets.dart';
-
-import 'widgets.dart';
-
-class MaterialApp extends StatelessWidget {
-  const MaterialApp({super.key, this.title = '', Widget? home, TransitionBuilder? builder});
-
-  const MaterialApp.router({
-    super.key,
-    this.title = '',
-    RouterConfig<Object>? routerConfig,
-    TransitionBuilder? builder,
-  });
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => this;
-}
-
-class Scaffold extends StatelessWidget {
-  const Scaffold({super.key, Widget? body});
-
-  @override
-  Widget build(BuildContext context) => this;
-}
-
-class Center extends StatelessWidget {
-  const Center({super.key, Widget? child});
-
-  @override
-  Widget build(BuildContext context) => this;
-}
-
-class Text extends StatelessWidget {
-  const Text(String data, {super.key});
-
-  @override
-  Widget build(BuildContext context) => this;
-}
 ''';
 
 /// Stand-ins for the parts of go_router that the rendered apps use, with
@@ -162,6 +119,9 @@ class GoException implements Exception {
 /// Flutter and go_router libraries they use, and returns the errors and
 /// warnings the analyzer finds, each with the path of its file.
 ///
+/// It checks the files of every owner but the app entry, which the app
+/// needs for the names they declare and whose code is its own module's to
+/// check, so the stand-ins have only what the router and the features use.
 /// It checks the types of the generated code with the Dart SDK alone, as
 /// the tests of the package run without the Flutter SDK.
 Future<List<String>> analysisProblems(RenderedApp app) async {
@@ -207,6 +167,7 @@ Future<List<String>> analysisProblems(RenderedApp app) async {
     try {
       final problems = <String>[];
       for (final file in dartFiles) {
+        if (file.owner == _appEntry) continue;
         final path = '$appPath/${file.path}';
         final result = await collection
             .contextFor(path)

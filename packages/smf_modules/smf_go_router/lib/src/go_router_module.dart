@@ -16,9 +16,10 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// screen through the router. The app opens on the start route.
 ///
 /// Screens get the values of their parameters from the location, parsed
-/// with `tryParse`: an optional value that the location does not have, or
-/// not of its type, is `null`, and a location without a valid required
-/// value shows the error screen of the router.
+/// with `tryParse`, a `bool` being `true` or `false` exactly: an optional
+/// value that the location does not have, or not of its type, is `null`,
+/// and a location without a valid required value shows the error screen of
+/// the router.
 ///
 /// The navigation facade goes through the same router whatever the context
 /// it navigates from: `go()` goes to the path of a location, which makes

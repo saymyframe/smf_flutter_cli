@@ -46,10 +46,11 @@ Future<ContractResult> renderedApp(
 /// - `/catalog/items/:id` below it, with an `int` path parameter and an
 ///   optional query parameter, and `/catalog/items/:id/reviews/:reviewId`
 ///   below that, which passes the `id` of its parent to its screen;
-/// - `/catalog/compare`, with required query parameters;
+/// - `/catalog/compare`, with required `int` query parameters, and
+///   `/catalog/search`, with a required `String` one;
 /// - `/catalog/prices/:amount/:exact`, with a `double` and a `bool` path
 ///   parameter, and `/catalog/tags/:tag`, with a `String` one, whose screens
-///   share a file with the one of `/catalog/compare`.
+///   share a file with those of `/catalog/compare` and `/catalog/search`.
 final class CatalogFeature extends SmfModule {
   /// Creates the module.
   const CatalogFeature();
@@ -97,6 +98,7 @@ final class CatalogFeature extends SmfModule {
                 imports: false,
               ),
               screen(id, 'TagScreen', {'tag': 'String'}, imports: false),
+              screen(id, 'SearchScreen', {'q': 'String'}, imports: false),
             ].join('\n'),
           }),
         ),
@@ -169,13 +171,19 @@ final class CatalogFeature extends SmfModule {
               screen: ScreenRef('TagScreen', import: _more),
               params: [RouteParam.path('tag', type: String)],
             ),
+            Route(
+              '/search',
+              name: 'search',
+              screen: ScreenRef('SearchScreen', import: _more),
+              params: [RouteParam.query('q', type: String)],
+            ),
           ]),
         ),
       ];
 }
 
-/// A feature for the tests with one route, `/settings`, that cannot start
-/// the app.
+/// A feature for the tests with a route, `/settings`, and a child of it,
+/// `/settings/about`, neither of which is a start candidate.
 final class SettingsFeature extends SmfModule {
   /// Creates the module.
   const SettingsFeature();
@@ -184,6 +192,8 @@ final class SettingsFeature extends SmfModule {
   static const id = ModuleId('settings');
 
   static const _file = 'features/settings/settings_screen.dart';
+
+  static const _about = 'features/settings/about_screen.dart';
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -197,6 +207,7 @@ final class SettingsFeature extends SmfModule {
         BrickContribution(
           bundleOf('settings', {
             'lib/$_file': screen(id, 'SettingsScreen', const {}),
+            'lib/$_about': screen(id, 'AboutScreen', const {}),
           }),
         ),
         routerRole.data(
@@ -205,6 +216,16 @@ final class SettingsFeature extends SmfModule {
               '/',
               name: 'settings',
               screen: ScreenRef('SettingsScreen', import: ImportRef.app(_file)),
+              children: [
+                Route(
+                  'about',
+                  name: 'about',
+                  screen: ScreenRef(
+                    'AboutScreen',
+                    import: ImportRef.app(_about),
+                  ),
+                ),
+              ],
             ),
           ]),
         ),

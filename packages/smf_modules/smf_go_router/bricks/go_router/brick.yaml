@@ -1,7 +1,7 @@
 name: go_router
 description: "The router of an SMF app with go_router: createAppRouter() with the routes of the modules of the app."
 
-# A brick of the lego model. Its files are relative to the root of the
+# A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the
 # has_<role> flags and the rendered sockets of its tags; the module adds
 # initial_location, routes and value_checks.

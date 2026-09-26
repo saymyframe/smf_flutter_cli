@@ -12,6 +12,20 @@ import 'package:yaml/yaml.dart';
 import 'support/features.dart';
 import 'support/type_check.dart';
 
+/// `_checkValues` as the analyzer prints its declaration.
+final String _expectedCheckValues = parseString(
+  content: r'''
+String? _checkValues(Map<String, Object?> values) {
+  final invalid = [
+    for (final MapEntry(:key, :value) in values.entries)
+      if (value == null) key,
+  ];
+  if (invalid.isEmpty) return null;
+  throw GoException('The location has no valid ${invalid.join(', ')}.');
+}
+''',
+).unit.declarations.single.toSource();
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -260,8 +274,12 @@ void main() {
           ),
         ],
       );
-      // No route has values to check.
+      // No route has values to check, and no module gives an observer.
       expect(withRouter.files[_factory]!.text, isNot(contains('_checkValues')));
+      expect(
+        _argument(router, 'observers')!.toSource(),
+        '[for (final create in <NavigatorObserver Function()>[]) create()]',
+      );
     });
 
     test('runs the router of the app in the MaterialApp', () {
@@ -381,6 +399,7 @@ void main() {
         'package:contract_app/features/catalog/more_screens.dart': 'screen3',
         'package:contract_app/features/settings/settings_screen.dart':
             'screen4',
+        'package:contract_app/features/settings/about_screen.dart': 'screen5',
       });
       expect(
         {
@@ -440,14 +459,27 @@ void main() {
         'tag': "state.pathParameters['tag']!",
       });
 
+      // A query may leave out a String too.
+      expect(
+        routes['catalog.search']!.redirect,
+        "(context, state) => _checkValues({'q' : "
+        "state.uri.queryParameters['q']})",
+      );
+      expect(routes['catalog.search']!.screenArguments, {
+        'q': "state.uri.queryParameters['q']!",
+      });
+
       final checks = unit.declarations
           .whereType<FunctionDeclaration>()
           .singleWhere((function) => function.name.lexeme == '_checkValues');
-      expect(checks.returnType?.toSource(), 'String?');
-      expect(checks.toSource(), contains('throw GoException('));
+      expect(checks.toSource(), _expectedCheckValues);
     });
 
     test('reads a path parameter of the parent from the path', () {
+      // The redirect of the parent checks it, since go_router runs the
+      // redirect of every route that matches the location.
+      expect(routes['catalog.item']!.redirect, contains("'id' :"));
+      expect(routes['catalog.review']!.redirect, isNull);
       expect(routes['catalog.review']!.screenArguments, {
         'id': "int.tryParse(state.pathParameters['id'] ?? '')!",
         'reviewId': "state.pathParameters['reviewId']!",
@@ -500,6 +532,28 @@ void main() {
         routes.first.builder,
         '(context, state) => const FallbackStartScreen()',
       );
+    });
+
+    test('can be a child route that --start names', () async {
+      final result = await renderedApp(
+        const [SettingsFeature.id],
+        roleOptions: {RouterRole.startOption.name: '/settings/about'},
+      );
+      final unit = _factoryOf(result.app!);
+
+      expect(
+        (_argument(_goRouterOf(unit), 'initialLocation')! as StringLiteral)
+            .stringValue,
+        '/settings/about',
+      );
+      expect(
+        _routesOf(unit).first.redirect,
+        "(context, state) => '/settings/about'",
+      );
+      // go_router shows the chain of parents of the child.
+      final settings = _routesOf(unit)[1];
+      expect(settings.path, '/settings');
+      expect(settings.children.single.path, 'about');
     });
 
     test('is the route that --start names', () async {
