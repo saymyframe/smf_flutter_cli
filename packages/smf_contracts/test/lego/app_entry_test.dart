@@ -510,6 +510,19 @@ void main() {
         socket.problemsWith(socket.entry('Firebase', ' \n')),
         ['The section "Firebase" of the README has no text.'],
       );
+      // mason drops the backslash of a line break of Markdown.
+      for (final (heading, text) in [
+        ('Firebase', 'One line\\\nand another.'),
+        (r'Fire\é', 'Text.'),
+      ]) {
+        expect(
+          socket.problemsWith(socket.entry(heading, text)).single,
+          'The section "$heading" of the README has a backslash before a line '
+          'break or a non-ASCII character, which mason removes; for a line '
+          'break in Markdown, end the line with two spaces instead.',
+          reason: text,
+        );
+      }
     });
   });
 

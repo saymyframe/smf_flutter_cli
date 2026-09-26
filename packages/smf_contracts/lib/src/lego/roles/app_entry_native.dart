@@ -187,6 +187,12 @@ final class _ReadmeSectionPolicy extends MergePolicy<String> {
     if (value.trim().isEmpty) {
       return 'The section "$key" of the README has no text.';
     }
+    if (Fragment.hasStrippedBackslash(key) ||
+        Fragment.hasStrippedBackslash(value)) {
+      return 'The section "$key" of the README has a backslash before a line '
+          'break or a non-ASCII character, which mason removes; for a line '
+          'break in Markdown, end the line with two spaces instead.';
+    }
     return null;
   }
 
