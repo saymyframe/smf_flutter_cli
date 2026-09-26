@@ -54,8 +54,12 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   final names = <String, Route>{};
   final screens = <String, Route>{};
   final patterns = <String, (Route, String)>{};
-  // The routes checked so far, in the order a router matches them.
+  // The routes checked so far, in the order they are declared, in which a
+  // router matches them when the app has no main navigation.
   final earlier = <_PlacedRoute>[];
+  // The routes that the order of the declaration leaves unreachable, or that
+  // match the same locations as an earlier route.
+  final reported = <_PlacedRoute>{};
 
   // The path of the module's root route `/` is empty, so a parent path does
   // not tell a child from a top-level route.
@@ -91,12 +95,12 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
     if (names.putIfAbsent(route.name, () => route) != route) {
       problems.add('Two routes of the module are named "${route.name}".');
     }
-    final pattern = path.replaceAll(RegExp(':[a-zA-Z0-9]+'), ':');
-    if (patterns.putIfAbsent(pattern, () => (route, path))
+    if (patterns.putIfAbsent(placed.pattern, () => (route, path))
         case (
           final other,
           final otherPath,
         ) when other != route) {
+      reported.add(placed);
       problems.add(
         otherPath == path
             ? 'Two routes of the module have the path "$path".'
@@ -105,7 +109,10 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
       );
     } else {
       final (:unreachable, :ambiguous) = _reachability(placed, earlier);
-      if (unreachable != null) problems.add(unreachable);
+      if (unreachable != null) {
+        reported.add(placed);
+        problems.add(unreachable);
+      }
       if (ambiguous != null) {
         warnings.add(SmfIssue.warning(ambiguous, origin: origin));
       }
@@ -182,6 +189,27 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   for (final route in routes) {
     check(route, parentPath: null, ancestors: const [], chain: const []);
   }
+  // In an app with a main navigation, the router matches the destinations
+  // first, each with the routes below it, so a route outside the main
+  // navigation comes after the routes in it that are declared later too.
+  for (final (index, route) in earlier.indexed) {
+    if (route.inMainNavigation || reported.contains(route)) continue;
+    for (final other in earlier.skip(index + 1)) {
+      if (other.inMainNavigation &&
+          other.pattern != route.pattern &&
+          other.covers(route)) {
+        problems.add(
+          'The route "${route.route.name}" (${route.shown}) cannot be '
+          'reached in an app with a main navigation: its router matches the '
+          'destination "${other.chain.first.name}" and the routes below it '
+          'first, and the route "${other.route.name}" (${other.shown}) '
+          'matches every location that "${route.route.name}" does. Change a '
+          'fixed segment so that no location matches both.',
+        );
+        break;
+      }
+    }
+  }
   return [
     for (final problem in problems) SmfIssue(problem, origin: origin),
     ...warnings,
@@ -197,6 +225,14 @@ final class _PlacedRoute {
   final Route route;
   final String path;
   final List<Route> chain;
+
+  /// The locations the route matches, as [path] with `:` for each
+  /// parameter.
+  late final String pattern = path.replaceAll(RegExp(':[a-zA-Z0-9]+'), ':');
+
+  /// Whether the route is in the main navigation of an app that has one: a
+  /// destination or a route below one.
+  bool get inMainNavigation => chain.first.destination != null;
 
   /// The segments of [path].
   late final List<String> segments =
@@ -245,6 +281,10 @@ final class _PlacedRoute {
 /// its locations, as `/:section/about` and `/docs/:page` both match
 /// `/docs/about`, those go to the earlier route, which is worth a warning.
 /// Routes with the same pattern are reported by the caller.
+///
+/// In an app with a main navigation, the routes in it come first, so
+/// declaring a route outside it earlier does not help against a route in
+/// it, and a location of both goes to the route in it.
 ({String? unreachable, String? ambiguous}) _reachability(
   _PlacedRoute route,
   List<_PlacedRoute> earlier,
@@ -252,6 +292,20 @@ final class _PlacedRoute {
   String? ambiguous;
   for (final other in earlier) {
     if (other.covers(route)) {
+      final problem = 'The route "${route.route.name}" (${route.shown}) '
+          'cannot be reached: the route "${other.route.name}" '
+          '(${other.shown}) comes before it and matches every location it '
+          'does.';
+      if (other.inMainNavigation && !route.inMainNavigation) {
+        return (
+          unreachable: '$problem Declaring "${route.chain.first.name}" '
+              'first does not help: in an app with a main navigation, the '
+              'router matches the destination "${other.chain.first.name}" '
+              'and the routes below it first. Change a fixed segment so that '
+              'no location matches both.',
+          ambiguous: null,
+        );
+      }
       // The routes that hold each of them, right below where their chains
       // part: siblings, the one of the earlier route declared first.
       var at = 0;
@@ -261,20 +315,26 @@ final class _PlacedRoute {
         at++;
       }
       return (
-        unreachable: 'The route "${route.route.name}" (${route.shown}) '
-            'cannot be reached: the route "${other.route.name}" '
-            '(${other.shown}) comes before it and matches every location it '
-            'does. Declare "${route.chain[at].name}" before '
+        unreachable: '$problem Declare "${route.chain[at].name}" before '
             '"${other.chain[at].name}".',
         ambiguous: null,
       );
     }
     if (ambiguous != null || route.covers(other)) continue;
     if (other.sharedLocation(route) case final location?) {
-      ambiguous = 'The routes "${other.route.name}" (${other.shown}) and '
+      final shared = 'The routes "${other.route.name}" (${other.shown}) and '
           '"${route.route.name}" (${route.shown}) both match locations such '
-          'as $location, which go to "${other.route.name}", declared first. '
-          'Change a fixed segment so that no location matches both.';
+          'as $location, which go to "${other.route.name}", declared first';
+      ambiguous = [
+        if (route.inMainNavigation && !other.inMainNavigation)
+          '$shared, in an app without a main navigation, and to '
+              '"${route.route.name}" in an app with one, whose router '
+              'matches the destination "${route.chain.first.name}" and the '
+              'routes below it first.'
+        else
+          '$shared.',
+        'Change a fixed segment so that no location matches both.',
+      ].join(' ');
     }
   }
   return (unreachable: null, ambiguous: ambiguous);

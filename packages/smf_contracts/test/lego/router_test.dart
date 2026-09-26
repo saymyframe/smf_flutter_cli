@@ -1049,7 +1049,12 @@ void main() {
     });
 
     group('the order of the routes', () {
-      Route route(String path, String name, {List<Route> children = const []}) {
+      Route route(
+        String path,
+        String name, {
+        List<Route> children = const [],
+        bool destination = false,
+      }) {
         final params = [
           for (final segment in path.split('/'))
             if (segment.startsWith(':'))
@@ -1061,6 +1066,7 @@ void main() {
           screen: _screen('${name[0].toUpperCase()}${name.substring(1)}', 'h'),
           params: params,
           children: children,
+          destination: destination ? _destination(name) : null,
         );
       }
 
@@ -1162,6 +1168,133 @@ void main() {
           'match locations such as /docs/about, which go to "about", declared '
           'first. Change a fixed segment so that no location matches both.',
         );
+      });
+
+      group('with a main navigation', () {
+        test('accepts routes that no route of the main navigation takes', () {
+          for (final routes in [
+            // The route with the fixed segment is in the main navigation.
+            [
+              route(
+                '/',
+                'users',
+                destination: true,
+                children: [route('new', 'create')],
+              ),
+              route('/:id', 'user'),
+            ],
+            // Every route is in the main navigation.
+            [
+              route('/settings', 'settings', destination: true),
+              route(
+                '/',
+                'users',
+                destination: true,
+                children: [route('new', 'create'), route(':id', 'user')],
+              ),
+            ],
+            // No route of the main navigation matches the other routes.
+            [
+              route('/new', 'create'),
+              route(
+                '/',
+                'users',
+                destination: true,
+                children: [route('items/:id', 'user')],
+              ),
+            ],
+          ]) {
+            expect(_routeProblems(routes), isEmpty, reason: '$routes');
+          }
+        });
+
+        test(
+            'rejects a route outside the main navigation that a later route '
+            'in it takes', () {
+          // Declared first, so a router without a main navigation reaches
+          // it.
+          expect(
+            _routeProblems([
+              route('/new', 'create'),
+              route(
+                '/',
+                'users',
+                destination: true,
+                children: [route(':id', 'user')],
+              ),
+            ]).single,
+            'The route "create" (/new) cannot be reached in an app with a main '
+            'navigation: its router matches the destination "users" and the '
+            'routes below it first, and the route "user" (/:id) matches every '
+            'location that "create" does. Change a fixed segment so that no '
+            'location matches both.',
+          );
+        });
+
+        test(
+            'does not advise to declare a route before the main navigation, '
+            'which comes first anyway', () {
+          expect(
+            _routeProblems([
+              route(
+                '/',
+                'users',
+                destination: true,
+                children: [route(':id', 'user')],
+              ),
+              route('/new', 'create'),
+            ]).single,
+            'The route "create" (/new) cannot be reached: the route "user" '
+            '(/:id) comes before it and matches every location it does. '
+            'Declaring "create" first does not help: in an app with a main '
+            'navigation, the router matches the destination "users" and the '
+            'routes below it first. Change a fixed segment so that no '
+            'location matches both.',
+          );
+          // A route of the main navigation can be declared earlier.
+          expect(
+            _routeProblems([
+              route('/:id', 'user'),
+              route('/new', 'create', destination: true),
+            ]),
+            [
+              unreachable(
+                ('create', '/new'),
+                ('user', '/:id'),
+                declare: 'create',
+                before: 'user',
+              ),
+            ],
+          );
+        });
+
+        test(
+            'warns that a location of routes in and outside the main '
+            'navigation goes to the one in it', () {
+          final issues = _moduleIssues(
+            'router.routes',
+            _moduleInput([
+              route('/:section/about', 'about'),
+              route(
+                '/docs',
+                'docs',
+                destination: true,
+                children: [route(':page', 'page')],
+              ),
+            ]),
+          );
+
+          expect(issues.single.isError, isFalse);
+          expect(
+            issues.single.message,
+            'The routes "about" (/:section/about) and "page" (/docs/:page) '
+            'both match locations such as /docs/about, which go to "about", '
+            'declared first, in an app without a main navigation, and to '
+            '"page" in an app with one, whose router matches the destination '
+            '"docs" and the routes below it first. Change a fixed segment so '
+            'that no location matches both.',
+          );
+        });
       });
     });
 

@@ -17,8 +17,12 @@ final class RoutesData {
   /// followed by its children, and the first route that matches the whole
   /// location takes it. So a route with a fixed segment, such as `/new`,
   /// comes before a route with a parameter in its place, such as `/:id`,
-  /// which would take its locations otherwise; the module rule
-  /// `router.routes` reports a route that an earlier one leaves unreachable.
+  /// which would take its locations otherwise. In an app with a main
+  /// navigation, the router matches the destinations first, each followed
+  /// by the routes below it, and then the other routes, so a route below a
+  /// destination must not take every location of a route outside the main
+  /// navigation either. The module rule `router.routes` reports a route
+  /// that another leaves unreachable in either order.
   final List<Route> routes;
 }
 
