@@ -9,6 +9,7 @@ import 'package:analyzer/diagnostic/diagnostic.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:yaml/yaml.dart';
 
 /// The owner of the files of the app entry.
 const _appEntry = ModuleOrigin(FlutterCoreModule.id);
@@ -19,8 +20,9 @@ const _appEntry = ModuleOrigin(FlutterCoreModule.id);
 /// the Dart SDK alone.
 ///
 /// get_it is a Dart package without Flutter, so the code of the DI role runs
-/// in the VM of the tests; the files of the app entry, which need Flutter,
-/// are written but neither analyzed nor run. [delete] removes the directory.
+/// in the VM of the tests. The files of the app entry may need Flutter, so
+/// the analyzer leaves them out, and a script that runs the app imports
+/// none of them. [delete] removes the directory.
 final class DartApp {
   DartApp._(this._root, this._files);
 
@@ -49,7 +51,7 @@ final class DartApp {
             'name': 'contract_app',
             'rootUri': '../',
             'packageUri': 'lib/',
-            'languageVersion': '3.12',
+            'languageVersion': _languageVersionOf(app),
           },
         ],
       }),
@@ -104,36 +106,53 @@ final class DartApp {
   Future<Object?> run(String script) async {
     final file = File('${_root.path}/check.dart')..writeAsStringSync(script);
     final result = Completer<Object?>();
+    void fail(String message) {
+      if (!result.isCompleted) result.completeError(StateError(message));
+    }
+
     final messages = ReceivePort()
       ..listen((message) {
         if (!result.isCompleted) result.complete(message);
       });
     final errors = ReceivePort()
-      ..listen((error) {
-        if (!result.isCompleted) {
-          result.completeError(StateError('The script failed: $error'));
-        }
-      });
+      ..listen((error) => fail('The script failed: $error'));
+    // The isolate sends its message before it ends, so an end that comes
+    // first means that it sent none.
+    final exits = ReceivePort()
+      ..listen((_) => fail('The script ended without a message.'));
+    Isolate? isolate;
     try {
-      await Isolate.spawnUri(
+      isolate = await Isolate.spawnUri(
         file.uri,
         const [],
         messages.sendPort,
         onError: errors.sendPort,
+        onExit: exits.sendPort,
         packageConfig: Uri.file('$_appPath/.dart_tool/package_config.json'),
       );
       return await result.future.timeout(
         const Duration(seconds: 30),
-        onTimeout: () => throw StateError('The script sent nothing.'),
+        onTimeout: () => throw StateError('The script sent nothing in time.'),
       );
     } finally {
+      isolate?.kill(priority: Isolate.immediate);
       messages.close();
       errors.close();
+      exits.close();
     }
   }
 
   /// Deletes the directory of the app.
   void delete() => _root.deleteSync(recursive: true);
+}
+
+/// The language version of [app]: that of the lower bound of the SDK
+/// constraint of its pubspec, such as 3.12 for `^3.12.0`.
+String _languageVersionOf(RenderedApp app) {
+  final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
+  final sdk = (pubspec['environment'] as YamlMap)['sdk'] as String;
+  final version = RegExp(r'(\d+)\.(\d+)').firstMatch(sdk)!;
+  return '${version[1]}.${version[2]}';
 }
 
 /// The packages that the tests of this package resolve, with their roots as

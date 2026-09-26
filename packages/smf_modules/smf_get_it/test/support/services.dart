@@ -42,18 +42,19 @@ const networkFile = 'core/network/network.dart';
 const storageFile = 'core/storage/storage.dart';
 
 /// Services that are ready once registered: singletons, lazy singletons
-/// and factories, one of them with a parameter, and two services of one
-/// type, one of them named.
+/// and factories, one of them with a parameter, and services of one type
+/// told apart by name.
 ///
 /// Its file also has `events`, where every function of the services of the
 /// tests writes what it did, in order.
 ///
 /// - `Endpoint`, a singleton that takes `ApiConfig`, which comes after it;
-/// - `ApiConfig`, a singleton;
+/// - `ApiConfig` and `ApiConfig` named `staging`, singletons;
 /// - `ApiClient`, a lazy singleton that takes `ApiConfig`, with a function
 ///   that disposes of it;
 /// - `Clock` named `utc` and `Clock`, lazy singletons;
-/// - `Token`, a factory that takes `ApiConfig`;
+/// - `Token`, a factory that takes `ApiConfig`, and `Token` named
+///   `refresh`, a factory that takes the `ApiConfig` named `staging`;
 /// - `Request`, a factory that takes `ApiClient` and a path.
 final class NetworkModule extends SmfModule {
   /// Creates the module.
@@ -67,6 +68,7 @@ final class NetworkModule extends SmfModule {
   static const _config = TypeRef('ApiConfig', import: _file);
   static const _client = TypeRef('ApiClient', import: _file);
   static const _clock = TypeRef('Clock', import: _file);
+  static const _token = TypeRef('Token', import: _file);
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -100,6 +102,14 @@ final class NetworkModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
+            type: _config,
+            create: FactoryRef('createStagingConfig', import: _file),
+            lifetime: DiLifetime.singleton,
+            instanceName: 'staging',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
             type: _client,
             create: FactoryRef(
               'createApiClient',
@@ -124,13 +134,25 @@ final class NetworkModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
-            type: TypeRef('Token', import: _file),
+            type: _token,
             create: FactoryRef(
               'createToken',
               import: _file,
               deps: [ServiceRef(_config)],
             ),
             lifetime: DiLifetime.factory,
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _token,
+            create: FactoryRef(
+              'createRefreshToken',
+              import: _file,
+              deps: [ServiceRef(_config, instanceName: 'staging')],
+            ),
+            lifetime: DiLifetime.factory,
+            instanceName: 'refresh',
           ),
         ),
         diRole.data(
@@ -194,6 +216,11 @@ ApiConfig createApiConfig() {
   return const ApiConfig('example.com');
 }
 
+ApiConfig createStagingConfig() {
+  events.add('create staging ApiConfig');
+  return const ApiConfig('staging.example.com');
+}
+
 Endpoint createEndpoint(ApiConfig config) {
   events.add('create Endpoint');
   return Endpoint(config);
@@ -223,6 +250,11 @@ Token createToken(ApiConfig config) {
   return Token(config);
 }
 
+Token createRefreshToken(ApiConfig config) {
+  events.add('create refresh Token');
+  return Token(config);
+}
+
 Request createRequest(ApiClient client, String path) {
   events.add('create Request $path');
   return Request(client, path);
@@ -248,7 +280,8 @@ Request createRequest(ApiClient client, String path) {
 /// - `Session` and `Session` named `backup`, singletons created
 ///   asynchronously, with a function that disposes of them;
 /// - `Cache`, a singleton that takes `ApiClient` and waits for `Session`,
-///   with a function that disposes of it;
+///   and `Cache` named `backup`, which waits for the `Session` named
+///   `backup`, with a function that disposes of them;
 /// - `Mirror`, a singleton created asynchronously that waits for the
 ///   `Session` named `backup`;
 /// - `Random` of `dart:math`, a lazy singleton.
@@ -266,6 +299,7 @@ final class StorageModule extends SmfModule {
   static const _repository = TypeRef('Repository', import: _file);
   static const _store = TypeRef('Store', import: _file);
   static const _database = TypeRef('Database', import: _file);
+  static const _cache = TypeRef('Cache', import: _file);
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -363,7 +397,7 @@ final class StorageModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
-            type: TypeRef('Cache', import: _file),
+            type: _cache,
             create: FactoryRef(
               'createCache',
               import: _file,
@@ -372,6 +406,20 @@ final class StorageModule extends SmfModule {
             lifetime: DiLifetime.singleton,
             dependsOn: [ServiceRef(_session)],
             dispose: FunctionRef('closeCache', import: _file),
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
+            type: _cache,
+            create: FactoryRef(
+              'createBackupCache',
+              import: _file,
+              deps: [ServiceRef(TypeRef('ApiClient', import: _network))],
+            ),
+            lifetime: DiLifetime.singleton,
+            dependsOn: [ServiceRef(_session, instanceName: 'backup')],
+            dispose: FunctionRef('closeCache', import: _file),
+            instanceName: 'backup',
           ),
         ),
         diRole.data(
@@ -439,9 +487,11 @@ final class Session {
 }
 
 final class Cache {
-  const Cache(this.client);
+  const Cache(this.client, this.name);
 
   final ApiClient client;
+
+  final String name;
 }
 
 final class Mirror {
@@ -494,11 +544,16 @@ Future<Session> openBackupSession() async {
 void closeSession(Session session) => events.add('close ${session.name} Session');
 
 Cache createCache(ApiClient client) {
-  events.add('create Cache');
-  return Cache(client);
+  events.add('create main Cache');
+  return Cache(client, 'main');
 }
 
-void closeCache(Cache cache) => events.add('close Cache');
+Cache createBackupCache(ApiClient client) {
+  events.add('create backup Cache');
+  return Cache(client, 'backup');
+}
+
+void closeCache(Cache cache) => events.add('close ${cache.name} Cache');
 
 Future<Mirror> openMirror() async {
   events.add('open Mirror');

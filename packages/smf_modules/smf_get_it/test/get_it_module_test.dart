@@ -64,9 +64,9 @@ String _source(String code) =>
 
 /// `registerDependencies()` of the app of the services of both modules: the
 /// services in the order of their graph, each after what it takes or waits
-/// for, the singletons that wait for services created asynchronously
-/// registered with the services they wait for, and a wait for all at the
-/// end.
+/// for, the singletons that wait for services created asynchronously or
+/// waiting themselves registered with the services they wait for, a named
+/// one by an `InitDependency`, and a wait for all at the end.
 final String _expectedRegistrations = _source('''
 Future<void> registerDependencies() async {
   final getIt = GetIt.instance;
@@ -115,6 +115,12 @@ Future<void> registerDependencies() async {
     dependsOn: [di1.Session],
     dispose: di1.closeCache,
   );
+  getIt.registerSingletonWithDependencies<di1.Cache>(
+    () => di1.createBackupCache(getIt<di0.ApiClient>()),
+    instanceName: 'backup',
+    dependsOn: [InitDependency(di1.Session, instanceName: 'backup')],
+    dispose: di1.closeCache,
+  );
   getIt.registerSingletonAsync<di1.Mirror>(
     () => di1.openMirror(),
     dependsOn: [InitDependency(di1.Session, instanceName: 'backup')],
@@ -124,9 +130,17 @@ Future<void> registerDependencies() async {
     di0.createEndpoint(getIt<di0.ApiConfig>()),
     dispose: di0.closeEndpoint,
   );
+  getIt.registerSingleton<di0.ApiConfig>(
+    di0.createStagingConfig(),
+    instanceName: 'staging',
+  );
   getIt.registerLazySingleton<di0.Clock>(() => di0.createLocalClock());
   getIt.registerFactory<di0.Token>(
     () => di0.createToken(getIt<di0.ApiConfig>()),
+  );
+  getIt.registerFactory<di0.Token>(
+    () => di0.createRefreshToken(getIt<di0.ApiConfig>(instanceName: 'staging')),
+    instanceName: 'refresh',
   );
   getIt.registerFactoryParam<di0.Request, String, void>(
     (param1, _) => di0.createRequest(getIt<di0.ApiClient>(), param1),
@@ -135,20 +149,25 @@ Future<void> registerDependencies() async {
 }
 ''');
 
-/// Runs `bootstrap()` of the app of the services of both modules, uses
-/// every service, resets get_it, and sends what the functions of the
+/// Runs `registerDependencies()` of the app of the services of both
+/// modules, resolves services of each kind, by name too, and with one and
+/// two parameters, resets get_it, and sends what the functions of the
 /// services did at each stage and what the services were.
+///
+/// It imports the files of the DI role and of the services only, not those
+/// of the app entry, which may need Flutter.
 const _script = '''
 import 'dart:isolate';
+import 'dart:math';
 
-import 'package:contract_app/bootstrap.dart';
+import 'package:contract_app/core/di/dependencies.dart';
 import 'package:contract_app/core/di/service_locator.dart';
 import 'package:contract_app/core/network/network.dart';
 import 'package:contract_app/core/storage/storage.dart';
 import 'package:get_it/get_it.dart';
 
 Future<void> main(List<String> arguments, SendPort port) async {
-  await bootstrap();
+  await registerDependencies();
   final ready = [...events];
   events.clear();
   final sync = resolve<Sync>();
@@ -165,6 +184,14 @@ Future<void> main(List<String> arguments, SendPort port) async {
       identical(report.repository, sync.repository),
     ],
     'request': [request.path, identical(request.client, resolve<ApiClient>())],
+    'configs': [
+      resolve<ApiConfig>().host,
+      resolve<ApiConfig>(instanceName: 'staging').host,
+    ],
+    'tokens': [
+      resolve<Token>().config.host,
+      resolve<Token>(instanceName: 'refresh').config.host,
+    ],
     'clocks': [
       resolve<Clock>(instanceName: 'utc').zone,
       resolve<Clock>().zone,
@@ -173,6 +200,11 @@ Future<void> main(List<String> arguments, SendPort port) async {
       resolve<Session>().name,
       resolve<Session>(instanceName: 'backup').name,
     ],
+    'caches': [
+      resolve<Cache>().name,
+      resolve<Cache>(instanceName: 'backup').name,
+    ],
+    'one random': identical(resolve<Random>(), resolve<Random>()),
   };
   final resolved = [...events];
   events.clear();
@@ -360,7 +392,7 @@ void main() {
       );
     });
 
-    test('registers the services before the late start-up code', () {
+    test('awaits the registration of the services in bootstrap()', () {
       final bootstrap = withContainer.files['lib/bootstrap.dart']!;
 
       expect(
@@ -459,9 +491,11 @@ void main() {
       expect(statements.skip(1).map(_registration), [
         'registerSingleton<di0.ApiConfig>',
         'registerSingleton<di0.Endpoint>',
+        'registerSingleton<di0.ApiConfig>',
         'registerLazySingleton<di0.ApiClient>',
         'registerLazySingleton<di0.Clock>',
         'registerLazySingleton<di0.Clock>',
+        'registerFactory<di0.Token>',
         'registerFactory<di0.Token>',
         'registerFactoryParam<di0.Request, String, void>',
       ]);
@@ -469,8 +503,8 @@ void main() {
 
     test(
         'runs in the order of its graph with get_it: the services that '
-        'singletons wait for are ready first, start-up waits for all, and '
-        'reset disposes of them in the reverse order', () async {
+        'singletons wait for are ready first, registerDependencies() waits '
+        'for all, and reset disposes of them in the reverse order', () async {
       final dart = await DartApp.write(app);
       final Map<Object?, Object?> result;
       try {
@@ -482,14 +516,13 @@ void main() {
       bool before(String first, String second) =>
           ready.indexOf(first) < ready.indexOf(second);
 
-      // The singletons that wait for nothing are created as they are
-      // registered, each after what it takes.
-      expect(ready.take(2), ['create ApiConfig', 'create Endpoint']);
-      // Start-up waits until every service that is created asynchronously,
-      // or waits, is ready; lazy singletons and factories wait for use.
+      // The waiting that registerDependencies() does: every service that
+      // is created asynchronously, or waits, is ready when it completes,
+      // while lazy singletons and factories wait for use.
       expect(ready.toSet(), {
         'create ApiConfig',
         'create Endpoint',
+        'create staging ApiConfig',
         'open Database',
         'opened Database',
         'create Store',
@@ -499,16 +532,20 @@ void main() {
         'open main Session',
         'opened main Session',
         'create ApiClient',
-        'create Cache',
+        'create main Cache',
         'open backup Session',
         'opened backup Session',
+        'create backup Cache',
         'open Mirror',
       });
-      expect(ready, hasLength(15));
+      expect(ready, hasLength(17));
+      // Each after what it takes or waits for.
+      expect(before('create ApiConfig', 'create Endpoint'), isTrue);
       expect(before('opened Database', 'create Store'), isTrue);
       expect(before('create Store', 'create Repository'), isTrue);
       expect(before('create Repository', 'start Sync'), isTrue);
-      expect(before('opened main Session', 'create Cache'), isTrue);
+      expect(before('opened main Session', 'create main Cache'), isTrue);
+      expect(before('opened backup Session', 'create backup Cache'), isTrue);
       expect(before('opened backup Session', 'open Mirror'), isTrue);
 
       expect(result['resolved'], [
@@ -516,7 +553,10 @@ void main() {
         'create Request /items',
         'create Token',
         'create Token',
+        'create Token',
+        'create refresh Token',
         'create Clock',
+        'create Random',
       ]);
       expect(result['services'], {
         'one singleton': true,
@@ -524,14 +564,19 @@ void main() {
         'a new instance of a factory': true,
         'report': ['Weekly', 3, true],
         'request': ['/items', true],
+        'configs': ['example.com', 'staging.example.com'],
+        'tokens': ['example.com', 'staging.example.com'],
         'clocks': ['UTC', 'local'],
         'sessions': ['main', 'backup'],
+        'caches': ['main', 'backup'],
+        'one random': true,
       });
       // The reverse order of registration: what a service takes is
       // disposed of after it.
       expect(result['disposed'], [
         'close Endpoint',
-        'close Cache',
+        'close backup Cache',
+        'close main Cache',
         'close ApiClient',
         'close backup Session',
         'close main Session',
