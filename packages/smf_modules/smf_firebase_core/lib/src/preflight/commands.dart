@@ -25,11 +25,17 @@ String directoryOf(String path) {
   return end <= 0 ? path.substring(0, end + 1) : path.substring(0, end);
 }
 
-/// Why the command [command] of [result] failed: its exit code, and the
-/// last lines of what it wrote, if anything; see [outputTail].
+/// How the command [command] ended with the exit code [code]: a negative
+/// code is the signal that stopped it, as `dart:io` reports it.
+String endOf(String command, int code) => code < 0
+    ? '"$command" was stopped by signal ${-code}'
+    : '"$command" exited with code $code';
+
+/// Why the command [command] of [result] failed: how it ended, and the last
+/// lines of what it wrote, if anything; see [outputTail].
 String failureOf(String command, SmfProcessResult result) {
   final tail = outputTail(result);
-  return '"$command" exited with code ${result.exitCode}'
+  return '${endOf(command, result.exitCode)}'
       '${tail.isEmpty ? '.' : ':\n$tail'}';
 }
 

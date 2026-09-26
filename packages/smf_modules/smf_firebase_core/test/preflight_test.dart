@@ -339,6 +339,12 @@ void main() {
         check.install(machine),
         _setupFailure('"firebase login" exited with code 1.'),
       );
+      // Ctrl-C in the terminal stops only the login.
+      code = -2;
+      await expectLater(
+        check.install(machine),
+        _setupFailure('"firebase login" was stopped by signal 2.'),
+      );
       await expectLater(
         check.install(FakeMachine()),
         _setupFailure('The Firebase CLI was not found.'),

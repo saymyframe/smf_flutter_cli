@@ -86,7 +86,7 @@ final class FirebaseCliCheck extends PreflightCheck {
     );
     if (code != 0) {
       throw PreflightSetupException(
-        '"$standaloneInstallCommand" exited with code $code.',
+        '${endOf(standaloneInstallCommand, code)}.',
       );
     }
     return const ToolInstall(binDirs: [standaloneBinDir]);

@@ -38,7 +38,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
       workingDirectory: await scratchDirectory(environment),
     );
     if (!result.succeeded) {
-      return PreflightFailed('"$command" exited with code ${result.exitCode}.');
+      return PreflightFailed('${endOf(command, result.exitCode)}.');
     }
     final output = result.stdout;
     final start = output.indexOf('{');
@@ -78,7 +78,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
       workingDirectory: await scratchDirectory(environment),
     );
     if (code != 0) {
-      throw PreflightSetupException('"firebase login" exited with code $code.');
+      throw PreflightSetupException('${endOf('firebase login', code)}.');
     }
     return const ToolInstall();
   }

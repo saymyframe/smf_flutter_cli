@@ -52,7 +52,7 @@ final class FlutterfireCliCheck extends PreflightCheck {
     );
     if (!result.succeeded) {
       return PreflightFailed(
-        '"dart pub global list" exited with code ${result.exitCode}.',
+        '${endOf('dart pub global list', result.exitCode)}.',
       );
     }
     final active = RegExp(r'^flutterfire_cli (\S+)', multiLine: true)
