@@ -462,7 +462,13 @@ void main() {
                 'After generation\n'
                 '  dart pub global run flutterfire_cli:flutterfire configure '
                 '--platforms=android,ios --overwrite-firebase-options '
-                '(firebase_core)\n',
+                '--ios-bundle-id=com.example.my-app '
+                '--android-package-name=com.example.my_app (firebase_core)\n'
+                // Once it succeeded, the fix of the phase for Crashlytics.
+                '    then ruby -e ',
+              ),
+              contains(
+                ' ios/Runner.xcodeproj/project.pbxproj (firebase_core)\n',
               ),
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n'
@@ -547,7 +553,8 @@ void main() {
               contains(
                 '  dart pub global run flutterfire_cli:flutterfire configure '
                 '--platforms=android,ios --overwrite-firebase-options '
-                '(firebase_core)\n',
+                '--ios-bundle-id=com.example.my-app '
+                '--android-package-name=com.example.my_app (firebase_core)\n',
               ),
             ]),
           );
@@ -600,7 +607,8 @@ void main() {
               contains(
                 '  dart pub global run flutterfire_cli:flutterfire configure '
                 '--platforms=android,ios --overwrite-firebase-options '
-                '(firebase_core)\n',
+                '--ios-bundle-id=com.example.my-app '
+                '--android-package-name=com.example.my_app (firebase_core)\n',
               ),
             ]),
           );

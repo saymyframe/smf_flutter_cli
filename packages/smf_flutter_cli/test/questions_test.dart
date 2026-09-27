@@ -538,12 +538,20 @@ void main() {
     );
     expect(
       run.lines,
-      contains(
-        'Configuring Firebase with flutterfire is not done, because the run '
-        'skips external setup. Run it in the app: dart pub global run '
-        'flutterfire_cli:flutterfire configure --platforms=android,ios '
-        '--overwrite-firebase-options',
-      ),
+      containsAllInOrder([
+        equals(
+          'Configuring Firebase with flutterfire is not done, because the run '
+          'skips external setup. Run it in the app: dart pub global run '
+          'flutterfire_cli:flutterfire configure --platforms=android,ios '
+          '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
+          '--android-package-name=com.example.my_app',
+        ),
+        startsWith(
+          'Fixing the Crashlytics phase of flutterfire for flutter build ipa '
+          'is not done, because it runs after "Configuring Firebase with '
+          'flutterfire", which is not done. Run it in the app: ruby -e ',
+        ),
+      ]),
     );
   });
 
