@@ -418,8 +418,9 @@ List<String> _childNames(String text, String parent, String element) {
   return names;
 }
 
-/// Whether [tag], a match of the tags of [_childNames], opens an element
-/// [name] that has content: it is neither a closing nor an empty tag.
+/// Whether [tag], a match of the tags of [_childNames], is the start tag of
+/// an element [name]: neither a closing tag nor an empty-element tag, such
+/// as `<name/>`.
 bool _opensElement(RegExpMatch tag, String name) =>
     tag[1] != '/' && tag[4] != '/' && tag[2] == name;
 
