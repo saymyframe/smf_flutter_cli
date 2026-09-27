@@ -55,17 +55,13 @@ final String _fix = [
   ...crashlyticsPhaseFix.arguments,
 ].join(' ');
 
-/// The warning that the phase for Crashlytics is not fixed, because of
-/// [reason], with the command of the README of the app.
-String _notFixed(String reason) =>
-    'Fixing the Crashlytics phase of flutterfire for flutter build ipa is not '
-    'done, because $reason. Run it in the app: $crashlyticsPhaseFixCommand';
-
 /// The warning that the phase for Crashlytics is not fixed, since Firebase
-/// is not configured.
-final String _fixAfterConfigure = _notFixed(
-  'it runs after "Configuring Firebase with flutterfire", which is not done',
-);
+/// is not configured, with the command of the README of the app.
+const _fixAfterConfigure =
+    'Fixing the Crashlytics phase of flutterfire, if any, for flutter build '
+    'ipa is not done, because it runs after "Configuring Firebase with '
+    'flutterfire", which is not done. Run it in the app: '
+    '$crashlyticsPhaseFixCommand';
 
 /// The path of an install script of the Firebase CLI in a command.
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');

@@ -57,8 +57,9 @@ const crashlyticsPhaseFixCommand =
 /// [crashlyticsScriptInApp] in the Xcode project of the app, with Ruby,
 /// which `flutterfire configure` needs on macOS too, and changes nothing
 /// else. An app without the phase, such as one without firebase_crashlytics,
-/// or with a phase of another version of flutterfire that has no such path,
-/// stays as it is, and so does an app that the step fixed already.
+/// which the module does not know about, or with a phase of another version
+/// of flutterfire that has no such path, stays as it is, and so does an app
+/// that the step fixed already; its description says so.
 ///
 /// flutterfire adds the phase only on macOS, so the step runs only there.
 /// Elsewhere there is nothing for it to fix, and the app is configured again
@@ -66,7 +67,7 @@ const crashlyticsPhaseFixCommand =
 const crashlyticsPhaseFix = PostGenStep(
   ToolRef('ruby'),
   ['-e', _program, AppEntryRole.xcodeProjectFile],
-  description: 'Fixing the Crashlytics phase of flutterfire for '
+  description: 'Fixing the Crashlytics phase of flutterfire, if any, for '
       'flutter build ipa',
   skippable: true,
   hosts: {HostOperatingSystem.macos},

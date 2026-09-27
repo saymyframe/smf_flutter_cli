@@ -172,9 +172,12 @@ void main() {
         ),
       );
       expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
+      // Without firebase_crashlytics, which the module does not know about,
+      // flutterfire adds no phase.
       expect(
         fix.description,
-        'Fixing the Crashlytics phase of flutterfire for flutter build ipa',
+        'Fixing the Crashlytics phase of flutterfire, if any, for flutter '
+        'build ipa',
       );
       // It changes a file of the app, so it runs without asking or the
       // terminal, and the app is complete without it.
