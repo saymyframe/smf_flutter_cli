@@ -6,8 +6,8 @@ import 'package:smf_contracts/core.dart';
 /// installer and the run is interactive, the pipeline asks the user and
 /// calls [install]; otherwise it prints the instructions. With `--explain`
 /// the pipeline only runs [check] and reports the result. A failed [required]
-/// check stops generation, or drops the module in lenient mode; any other
-/// failed check is a warning.
+/// check stops generation, or drops the module in lenient mode, unless no app
+/// can be made without the module; any other failed check is a warning.
 abstract base class PreflightCheck {
   /// Allows subclasses to have constant constructors.
   const PreflightCheck();

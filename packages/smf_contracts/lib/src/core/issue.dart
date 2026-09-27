@@ -33,7 +33,7 @@ final class SmfIssue {
   /// Who caused the problem, if known.
   ///
   /// In lenient mode the pipeline drops the module named here instead of
-  /// failing.
+  /// failing, unless no app can be made without the module.
   final ContributionOrigin? origin;
 
   /// The file of the generated app the problem is in, relative to the
