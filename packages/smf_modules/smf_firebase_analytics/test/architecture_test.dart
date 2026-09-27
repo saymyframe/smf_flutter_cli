@@ -12,8 +12,8 @@ void main() {
         // The bundle of its brick, and the module it depends on.
         dependencies: {'mason', 'smf_firebase_core'},
         // The app entry of the apps that the tests render, a DI container
-        // that registers the service in some of them, and a router whose
-        // navigators the observers watch in others.
+        // that registers the service in some of them, and a router that
+        // tells the listener of the module about the screens in others.
         testModules: {'smf_flutter_core', 'smf_get_it', 'smf_go_router'},
       ).problems(),
       isEmpty,

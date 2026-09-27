@@ -13,14 +13,11 @@ Analytics works on the Firebase app, so the module depends on [smf_firebase_core
 
 ## Screen views
 
-When the app has a router, the module gives it a `FirebaseAnalyticsObserver` of firebase_analytics for each of its navigators. The observer of a navigator logs a `screen_view` event whose `screen_name` is the name of a page when the page enters the stack of the navigator, because it is pushed or replaces the page on top, and when it shows again because the pages above it are popped. The router names the page of each route of a module after the module and the route, such as `home.home` for the start screen of the `home` feature; any other page, such as the fallback start screen of an app with no route to start on, is logged under the name that the router gives it, and a page without a name is not logged. Each page is logged by one observer, that of the navigator that shows it.
+When the app has a router, the module gives it a listener of the screen the user sees, which logs a `screen_view` event each time the router tells it that the screen changed: once for each screen the user sees, as it comes on top of the app.
 
-The observers see what the navigators do, not only what the user sees:
-
-- when one navigation puts several pages on a stack at once, such as going to a page whose parents are not on the stack yet, each of them is logged, the one on top last;
-- each branch of the main navigation, such as tabs at the bottom, has a navigator of its own, which logs the pages it starts with when the branch is first selected;
-- selecting a branch again is not a navigation event: nothing is logged, although the page of the branch shows again;
-- when a page shown over the main navigation closes, the observer of its navigator sees the main navigation come back, not the page of its selected branch, so that page is not logged again either.
+- The first screen of the app is logged, and so is every page that a navigation shows, a page that shows again as the pages above it close, the page on top when it shows another location, such as the details of another item, and the page of the tab, or other branch of the main navigation, that the user switches to, whether it was selected before or not.
+- A navigation that puts several pages on a stack at once, such as going to a page whose parents are not on it yet, logs only the page on top; a navigation that leaves the same page on top at the same location logs nothing.
+- The `screen_name` of a screen is the full name of its route, after the module and the route, such as `home.home` for the start screen of the `home` feature. A screen that is no route of a module, such as the fallback start screen of an app with no route to start on, or the error screen of the router, is logged under the path of its location, such as `/`: the query of a location that the app cannot show may hold anything, so it is left out.
 
 ## Use with SMF CLI
 

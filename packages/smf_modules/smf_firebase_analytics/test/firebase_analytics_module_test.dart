@@ -21,8 +21,8 @@ import 'support/navigation.dart';
 /// The modules of the tests: flutter_core, which creates the app,
 /// firebase_core, which this module depends on, this module, get_it, a DI
 /// container, which registers the service in the apps that have it, and
-/// go_router, a router, whose navigators the observers watch in the apps
-/// that have it.
+/// go_router, a router, which tells the listener of the module about the
+/// screen the user sees in the apps that have it.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   FirebaseCoreModule(),
@@ -45,16 +45,17 @@ const List<SmfModule> _navigation = [
 /// The path of the file of the module.
 const _implementation = 'lib/core/analytics/firebase_analytics_service.dart';
 
-/// The factory of the observer of a navigator that the module gives the
+/// The listener of the screen the user sees that the module gives the
 /// router.
-const _observer =
-    '() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)';
+const _listener = '(route, location) => '
+    'FirebaseAnalytics.instance.logScreenView('
+    'screenName: route ?? Uri.parse(location).path)';
 
-/// The import of the names that [_observer] needs, in the file of the
+/// The import of the name that [_listener] needs, in the file of the
 /// router.
-const _observerImport =
+const _listenerImport =
     "import 'package:firebase_analytics/firebase_analytics.dart' "
-    'show FirebaseAnalytics, FirebaseAnalyticsObserver;';
+    'show FirebaseAnalytics;';
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
@@ -98,7 +99,7 @@ final class OtherAnalyticsService implements AnalyticsService {
 ''';
 
 /// Another provider of the analytics role, which does not use Firebase, as
-/// a service of another vendor would not, and gives the router no observer.
+/// a service of another vendor would not, and gives the router no listener.
 final class _OtherAnalyticsModule extends SmfModule {
   const _OtherAnalyticsModule();
 
@@ -201,19 +202,19 @@ void _expectTheAppWithout(
 }
 
 /// Checks that the file of the router of [app] is that of [without] but for
-/// the import of firebase_analytics and the factory of the observer, each on
+/// the import of firebase_analytics and the listener of the screen, each on
 /// a line of its own.
 void _expectTheRouterWithout(RenderedApp app, RenderedApp without) {
   List<String> linesOf(RenderedApp app) =>
       app.files[RouterRole.appRouterFactoryFile]!.text.split('\n');
   final lines = linesOf(app);
 
-  expect(lines.where((line) => line == _observerImport), hasLength(1));
-  expect(lines.where((line) => line == '$_observer,'), hasLength(1));
+  expect(lines.where((line) => line == _listenerImport), hasLength(1));
+  expect(lines.where((line) => line == '$_listener,'), hasLength(1));
   expect(
     [
       for (final line in lines)
-        if (line != _observerImport && line != '$_observer,') line,
+        if (line != _listenerImport && line != '$_listener,') line,
     ],
     linesOf(without),
   );
@@ -294,6 +295,19 @@ List<MethodInvocation> _callsOf(
   return calls.found;
 }
 
+/// The listeners of the screen in the list `_screenListeners` of the file
+/// of the router in [unit], as written.
+List<String> _listenersOf(CompilationUnit unit) {
+  final variable = unit.declarations
+      .whereType<TopLevelVariableDeclaration>()
+      .expand((declaration) => declaration.variables.variables)
+      .singleWhere((variable) => variable.name.lexeme == '_screenListeners');
+  return [
+    for (final element in (variable.initializer! as ListLiteral).elements)
+      '$element',
+  ];
+}
+
 /// The factories of the observers that the function `_observers()` of the
 /// file of the router in [unit] calls for a navigator, as written.
 List<String> _observerFactoriesOf(CompilationUnit unit) {
@@ -344,8 +358,8 @@ void main() {
 
     test(
         'contributes its brick, firebase_analytics, its implementation of the '
-        'service, created without waiting, and an observer for each navigator '
-        'of a router, and nothing else', () {
+        'service, created without waiting, and a listener of the screen for '
+        'a router, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
       expect(contributions, hasLength(4));
@@ -376,16 +390,17 @@ void main() {
       );
       expect(implementation.create!.import, implementation.type.import);
 
-      // An observer watches one navigator, so the router calls the factory
-      // for each of its navigators; only an app with a router gets it.
-      final observers = contributions[3] as SocketContribution;
-      expect(observers.socket, RouterRole.observers);
-      expect(observers.when, {routerRole});
-      expect(observers.fragment!.code, _observer);
-      expect(observers.fragment!.imports, const [
+      // The router tells the listener about the screen the user sees; only
+      // an app with a router gets it. The module gives the navigators no
+      // observer, which would log the pages that enter their stacks.
+      final listener = contributions[3] as SocketContribution;
+      expect(listener.socket, RouterRole.screenListeners);
+      expect(listener.when, {routerRole});
+      expect(listener.fragment!.code, _listener);
+      expect(listener.fragment!.imports, const [
         ImportRef(
           'package:firebase_analytics/firebase_analytics.dart',
-          show: ['FirebaseAnalytics', 'FirebaseAnalyticsObserver'],
+          show: ['FirebaseAnalytics'],
         ),
       ]);
     });
@@ -496,12 +511,15 @@ void main() {
       );
     });
 
-    test('has no observer, as it has no navigator to watch', () {
+    test('logs no screen view, as it has no router to tell it the screen', () {
       for (final file in withAnalytics.files.values) {
         if (!file.isText) continue;
         expect(
           file.text,
-          isNot(contains('FirebaseAnalyticsObserver')),
+          allOf(
+            isNot(contains('logScreenView')),
+            isNot(contains('FirebaseAnalyticsObserver')),
+          ),
           reason: file.path,
         );
       }
@@ -659,7 +677,7 @@ void main() {
 
     test(
         'is the app of Firebase and the router but for the analytics and the '
-        'observers of the router', () {
+        'listener of the screen', () {
       _expectTheAppWithout(
         withAnalytics,
         without,
@@ -667,26 +685,34 @@ void main() {
       );
       _expectTheRouterWithout(withAnalytics, without);
       expect(
-        _observerFactoriesOf(
-          _unitOf(without, RouterRole.appRouterFactoryFile),
-        ),
+        _listenersOf(_unitOf(without, RouterRole.appRouterFactoryFile)),
         isEmpty,
       );
     });
 
-    test('gives the navigator of the router an observer of Firebase Analytics',
-        () {
-      expect(_observerFactoriesOf(router), [_observer]);
-      final goRouter = _callsOf(router, 'GoRouter').single;
-      expect('${_argument(goRouter, 'observers')}', '_observers()');
-      // Only the names that the factory needs, so that no name of the
+    test(
+        'gives the router a listener that logs each screen the user sees with '
+        'Firebase Analytics, and its navigator no observer', () {
+      expect(_listenersOf(router), [_listener]);
+      expect(_observerFactoriesOf(router), isEmpty);
+      // The listener logs the screen with the name of its route, or the path
+      // of its location, without the query, when it is no route of a module.
+      final listener = _callsOf(
+        _unitOf(withAnalytics, RouterRole.appRouterFactoryFile),
+        'logScreenView',
+        target: 'FirebaseAnalytics.instance',
+      ).single;
+      expect(listener.argumentList.arguments.map((argument) => '$argument'), [
+        'screenName: route ?? Uri.parse(location).path',
+      ]);
+      // Only the name that the listener needs, so that no name of the
       // package meets another in the file of the router.
       expect(
         _importsOfModuleIn(withAnalytics, RouterRole.appRouterFactoryFile),
         const [
           ImportRef(
             'package:firebase_analytics/firebase_analytics.dart',
-            show: ['FirebaseAnalytics', 'FirebaseAnalyticsObserver'],
+            show: ['FirebaseAnalytics'],
           ),
         ],
       );
@@ -698,7 +724,7 @@ void main() {
                 'package:firebase_analytics/firebase_analytics.dart')
               '$directive',
         ],
-        [_observerImport],
+        [_listenerImport],
       );
     });
   });
@@ -727,7 +753,7 @@ void main() {
 
     test(
         'is the app of Firebase and the main navigation but for the analytics '
-        'and the observers of the router', () {
+        'and the listener of the screen', () {
       _expectTheAppWithout(
         withAnalytics,
         without,
@@ -737,25 +763,18 @@ void main() {
     });
 
     test(
-        'gives every navigator an observer of its own, the root navigator and '
-        'that of each branch, and the root one does not see the pages of the '
-        'branches', () {
-      expect(_observerFactoriesOf(router), [_observer]);
-      final goRouter = _callsOf(router, 'GoRouter').single;
-      expect('${_argument(goRouter, 'observers')}', '_observers()');
-      final shell =
-          _callsOf(router, 'indexedStack', target: 'StatefulShellRoute').single;
-      expect('${_argument(shell, 'notifyRootObserver')}', 'false');
+        'gives the router one listener of the screen for the whole app, the '
+        'branches of the main navigation included, and no navigator an '
+        'observer', () {
+      expect(_listenersOf(router), [_listener]);
+      expect(_observerFactoriesOf(router), isEmpty);
       final branches = _callsOf(router, 'StatefulShellBranch');
       expect(
         [
           for (final branch in branches)
-            (
-              '${_argument(branch, 'initialLocation')}',
-              '${_argument(branch, 'observers')}',
-            ),
+            '${_argument(branch, 'initialLocation')}',
         ],
-        [("'/inbox'", '_observers()'), ("'/search'", '_observers()')],
+        ["'/inbox'", "'/search'"],
       );
     });
   });
@@ -765,7 +784,7 @@ void main() {
 
     test(
         'forwards the calls to both, in the order of the modules, and gives '
-        'the router the observer of Firebase Analytics alone', () async {
+        'the router the listener of Firebase Analytics alone', () async {
       for (final (modules, services) in [
         (
           const [
@@ -794,8 +813,8 @@ void main() {
 
         expect(_servicesOf(app), services, reason: '$modules');
         expect(
-          _observerFactoriesOf(_unitOf(app, RouterRole.appRouterFactoryFile)),
-          [_observer],
+          _listenersOf(_unitOf(app, RouterRole.appRouterFactoryFile)),
+          [_listener],
           reason: '$modules',
         );
         expect(_bootstrapOf(app), [_initializeFirebase], reason: '$modules');

@@ -24,7 +24,7 @@ dev_dependencies:
   smf_flutter_core: ^0.2.1
   # The DI container that registers the service in apps of the tests.
   smf_get_it: ^0.2.0
-  # The router whose navigators the observers watch in apps of the tests.
+  # The router that tells the listener about the screens in apps of the tests.
   smf_go_router: ^0.2.0
   smf_pipeline: ^0.2.0
   test: ^1.24.0

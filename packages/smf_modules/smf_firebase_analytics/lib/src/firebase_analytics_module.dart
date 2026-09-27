@@ -14,28 +14,24 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// `lib/core/analytics/firebase_analytics_service.dart` on
 /// `FirebaseAnalytics`.
 ///
-/// When the app has a router, the module gives it a factory of
-/// `FirebaseAnalyticsObserver`, which the router calls for each navigator
-/// it creates. The observer of a navigator logs a screen view with the name
-/// of a page when the page enters the stack of the navigator, because it is
-/// pushed or replaces the page on top, and when the pages above it are
-/// popped: the name of a route of a module, such as `home.home`, or the
-/// name that the router gives any other page; a page without a name is not
-/// logged. So each page is logged by one observer. A navigation that puts
-/// several pages on a stack at once, such as going to a page whose parents
-/// are not on it yet, logs each of them, the top one last. Switching
-/// between the branches of the main navigation is not a navigation event:
-/// a branch logs the pages it starts with when it is first selected, and
-/// nothing when it is selected again. When a page shown over the main
-/// navigation closes, the observer sees the main navigation come back, not
-/// the page of its selected branch, so that page is not logged again
-/// either.
+/// When the app has a router, the module gives it a listener of the screen
+/// the user sees, which logs a screen view each time the router tells it
+/// that the screen changed: the first screen of the app, a page that a
+/// navigation shows, a page that shows again as the pages above it close,
+/// the page on top when it shows another location, and the page of a
+/// branch of the main navigation that the user switches to, such as a tab.
+/// The name of the screen is the full name of its route, such as
+/// `home.home`, or, for a screen that is no route of a module, such as the
+/// fallback start screen or the error screen of the router, the path of its
+/// location, such as `/`, without the query. A navigation that puts several
+/// pages on a stack at once, such as going to a page whose parents are not
+/// on it yet, logs only the page on top.
 ///
 /// Analytics works on the Firebase app, so the module depends on
 /// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`. The
-/// service is created on first use, without waiting, and the observers
-/// with the router. When the app has a DI container, the role registers
-/// the service in it.
+/// service is created on first use, without waiting, and the first screen
+/// shows after `bootstrap()`. When the app has a DI container, the role
+/// registers the service in it.
 final class FirebaseAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseAnalyticsModule();
@@ -46,6 +42,13 @@ final class FirebaseAnalyticsModule extends SmfModule {
   static const _file = ImportRef.app(
     'core/analytics/firebase_analytics_service.dart',
   );
+
+  /// The listener of the screen that the module gives the router. A screen
+  /// that is no route of a module is logged under the path of its location:
+  /// the query of a location that the app cannot show may hold anything.
+  static const _screenListener = '(route, location) => '
+      'FirebaseAnalytics.instance.logScreenView('
+      'screenName: route ?? Uri.parse(location).path)';
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -66,17 +69,15 @@ final class FirebaseAnalyticsModule extends SmfModule {
             create: FactoryRef('createFirebaseAnalyticsService', import: _file),
           ),
         ),
-        // An observer watches one navigator, so the router creates one for
-        // each of its navigators.
+        // The router tells the listener about each screen the user sees.
         const SocketContribution.item(
-          RouterRole.observers,
+          RouterRole.screenListeners,
           Fragment(
-            '() => FirebaseAnalyticsObserver(analytics: '
-            'FirebaseAnalytics.instance)',
+            _screenListener,
             imports: [
               ImportRef(
                 'package:firebase_analytics/firebase_analytics.dart',
-                show: ['FirebaseAnalytics', 'FirebaseAnalyticsObserver'],
+                show: ['FirebaseAnalytics'],
               ),
             ],
           ),
