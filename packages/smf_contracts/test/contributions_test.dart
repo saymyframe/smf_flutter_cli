@@ -257,7 +257,12 @@ void main() {
       external: true,
       needs: ['tool'],
       followUps: [
-        PostGenStep(ToolRef('ruby'), ['fix.rb'], skippable: true),
+        PostGenStep(
+          ToolRef('ruby'),
+          ['fix.rb'],
+          skippable: true,
+          hosts: {HostOperatingSystem.macos},
+        ),
       ],
     );
 
@@ -278,6 +283,8 @@ void main() {
     expect(followUp.arguments, ['fix.rb']);
     expect(followUp.skippable, isTrue);
     expect(followUp.followUps, isEmpty);
+    expect(followUp.hosts, {HostOperatingSystem.macos});
+    expect(step.hosts, isEmpty);
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
     expect(plain.interactive, isFalse);
@@ -285,6 +292,7 @@ void main() {
     expect(plain.external, isFalse);
     expect(plain.needs, isEmpty);
     expect(plain.followUps, isEmpty);
+    expect(plain.hosts, isEmpty);
   });
 }
 

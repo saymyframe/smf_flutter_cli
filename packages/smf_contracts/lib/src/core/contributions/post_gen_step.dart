@@ -7,7 +7,8 @@ part of '../contributions.dart';
 /// [SocketContribution]). The environment of a step includes, in its `PATH`,
 /// the directories of the tools that [Preflight] checks installed.
 ///
-/// A step runs unless:
+/// A step whose [hosts] leave out the operating system of the run does not
+/// apply to it. A step that applies runs unless:
 /// - it is [external] and the run skips external setup
 ///   (`--skip-external-setup`);
 /// - it is [interactive] and the run is not;
@@ -36,6 +37,7 @@ final class PostGenStep extends Contribution {
     this.external = false,
     this.needs = const [],
     this.followUps = const [],
+    this.hosts = const {},
     super.when,
   });
 
@@ -87,4 +89,13 @@ final class PostGenStep extends Contribution {
   /// [when] of its own; the pipeline reports one that has as a problem of
   /// the contributor.
   final List<PostGenStep> followUps;
+
+  /// The operating systems on which the step runs, or none for every one,
+  /// such as macOS for a step that changes the Xcode project of the app.
+  ///
+  /// On any other system the step does not apply to the run, as a
+  /// contribution whose [when] does not hold: it neither runs nor is left
+  /// for later, and neither are its [followUps]. `--explain` names the
+  /// systems of such a step.
+  final Set<HostOperatingSystem> hosts;
 }
