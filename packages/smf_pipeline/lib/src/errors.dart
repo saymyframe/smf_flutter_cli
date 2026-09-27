@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Thrown when generation cannot continue; the CLI exits with code 1.
 ///

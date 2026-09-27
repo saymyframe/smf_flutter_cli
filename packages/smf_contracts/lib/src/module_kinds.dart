@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The kinds of the built-in modules.
 ///

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_cli/src/io/prompter.dart';
 import 'package:test/test.dart';

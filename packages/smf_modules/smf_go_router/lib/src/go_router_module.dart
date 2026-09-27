@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_go_router/bundles/go_router_bundle.dart';
 import 'package:smf_go_router/src/go_routes.dart';
 

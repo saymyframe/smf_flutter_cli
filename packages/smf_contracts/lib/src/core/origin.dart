@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Who contributed something to the app: a module, the template of a role,
 /// or the pipeline itself.

@@ -35,7 +35,7 @@ void main() {
     for (final MapEntry(key: path, value: uris) in libraries.entries) {
       for (final uri in uris) {
         if (!uri.startsWith('package:smf_contracts/')) continue;
-        expect(uri, 'package:smf_contracts/lego_core.dart', reason: path);
+        expect(uri, 'package:smf_contracts/core.dart', reason: path);
       }
     }
   });

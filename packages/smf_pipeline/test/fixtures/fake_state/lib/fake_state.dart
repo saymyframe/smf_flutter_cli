@@ -2,7 +2,7 @@
 /// pipeline. Not modules to use.
 library;
 
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A provider of the state management role that adds BLoC to the app.
 final class FakeBlocModule extends SmfModule {

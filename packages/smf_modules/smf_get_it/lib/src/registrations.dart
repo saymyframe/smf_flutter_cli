@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The body of `registerDependencies()` that registers the services of
 /// [graph] in get_it, in an app whose package is named [appName], with the

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The module that manages the state of screens with BLoC, and so provides
 /// the state management role.

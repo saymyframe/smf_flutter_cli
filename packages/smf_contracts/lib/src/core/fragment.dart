@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// A piece of code for a socket, with the imports it needs.
 ///

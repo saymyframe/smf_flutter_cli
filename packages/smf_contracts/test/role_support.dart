@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:mason/mason.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';

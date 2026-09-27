@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_event_bus/bundles/event_bus_bundle.dart';
 
 /// The module that delivers the events of the app with the event_bus

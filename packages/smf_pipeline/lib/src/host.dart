@@ -1,5 +1,5 @@
 import 'package:file/file.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// The machine the pipeline runs on: the terminal, the file system, the
 /// environment variables and external commands.

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// [argument] as the user types it in a shell of [operatingSystem]: as it
 /// is when no shell treats its characters specially, else in double quotes

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/home_bundle.dart';
 
 /// The module of the start screen of the app: a feature with one route,

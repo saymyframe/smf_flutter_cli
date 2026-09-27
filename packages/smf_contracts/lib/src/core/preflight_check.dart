@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// One check of a [Preflight], such as "the Firebase CLI is installed".
 ///

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// How serious an [SmfIssue] is.
 enum IssueSeverity {

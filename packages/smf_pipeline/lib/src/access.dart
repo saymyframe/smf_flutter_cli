@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 

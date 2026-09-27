@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Identifies a module: a lower snake_case name such as `go_router`.
 ///

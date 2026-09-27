@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:pub_semver/pub_semver.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 
 /// A dependency of the merged pubspec.

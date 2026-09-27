@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// A Dart type that code of the generated app refers to, with the import
 /// that declares it, such as `AnalyticsService` of

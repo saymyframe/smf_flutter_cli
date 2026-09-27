@@ -9,7 +9,7 @@ import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 const _material = ImportRef('package:flutter/material.dart');
 const _foundation = ImportRef('package:flutter/foundation.dart');

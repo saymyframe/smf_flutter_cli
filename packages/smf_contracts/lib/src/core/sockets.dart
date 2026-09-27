@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// What a socket accepts and how its contributions become text.
 ///

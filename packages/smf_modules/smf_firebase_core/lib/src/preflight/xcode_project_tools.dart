@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The lowest version of the Ruby gem xcodeproj that opens the Xcode project
 /// of the app, which has a local Swift package: 1.23.0 added

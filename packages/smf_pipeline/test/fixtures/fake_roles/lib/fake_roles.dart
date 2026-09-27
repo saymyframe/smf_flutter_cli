@@ -10,7 +10,7 @@ import 'package:fake_roles/bundles/badge_role_bundle.dart';
 import 'package:fake_roles/bundles/clock_role_bundle.dart';
 import 'package:fake_roles/bundles/fake_clock_badge_bundle.dart';
 import 'package:fake_roles/bundles/fake_clock_user_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The clock role; see [ClockRole].
 const clockRole = ClockRole._();

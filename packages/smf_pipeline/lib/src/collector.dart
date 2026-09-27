@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
 /// A contribution with who made it and whether it applies in the app.

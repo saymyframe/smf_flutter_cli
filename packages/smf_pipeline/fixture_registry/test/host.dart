@@ -1,5 +1,5 @@
 import 'package:file/memory.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 
 /// A host without a terminal, with a Flutter SDK in `/sdk` and nothing else,

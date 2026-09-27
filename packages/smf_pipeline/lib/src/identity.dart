@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Stage 2 of the pipeline: the names and platform identifiers of the app.
 ///

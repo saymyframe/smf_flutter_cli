@@ -1,5 +1,5 @@
 import 'package:args/args.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// What to do when the target directory of the app already exists and is
 /// not empty.

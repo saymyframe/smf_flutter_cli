@@ -13,7 +13,7 @@ import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_riverpod_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A feature with a start screen and a details screen.
 final class FakeFeatureModule extends SmfModule {

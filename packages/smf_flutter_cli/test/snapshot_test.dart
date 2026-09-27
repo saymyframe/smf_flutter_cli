@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:dart_style/dart_style.dart';
 import 'package:pub_semver/pub_semver.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';

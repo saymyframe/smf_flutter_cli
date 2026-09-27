@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A command that a check ran.
 final class Call {

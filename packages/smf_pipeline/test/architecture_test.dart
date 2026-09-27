@@ -39,7 +39,7 @@ void main() {
         if (!uri.startsWith('package:smf_contracts/')) continue;
         expect(
           uri,
-          'package:smf_contracts/lego_core.dart',
+          'package:smf_contracts/core.dart',
           reason: '$file imports $uri',
         );
       }

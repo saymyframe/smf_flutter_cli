@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// Why a preflight check could not install or set up what it found
 /// missing; the pipeline reports [message].

@@ -1,7 +1,7 @@
 /// The generation pipeline of the SMF CLI.
 ///
 /// It depends only on the core of the lego model,
-/// `package:smf_contracts/lego_core.dart`: the modules and roles come from a
+/// `package:smf_contracts/core.dart`: the modules and roles come from a
 /// [ModuleRegistry], and the machine from an [SmfHost]. [runSmf] runs the
 /// command line, and [CreatePipeline] the `create` command itself; the
 /// stages are internal.

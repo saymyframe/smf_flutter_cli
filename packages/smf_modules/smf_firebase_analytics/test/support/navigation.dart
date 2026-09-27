@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A mason bundle named [name] with the text [files] by path.
 MasonBundle bundleOf(String name, Map<String, String> files) => MasonBundle(

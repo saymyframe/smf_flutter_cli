@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/templates.dart';
 import 'package:test/test.dart';

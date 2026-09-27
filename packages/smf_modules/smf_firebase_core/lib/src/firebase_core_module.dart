@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_login.dart';

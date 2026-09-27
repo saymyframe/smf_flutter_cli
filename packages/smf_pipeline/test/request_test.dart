@@ -1,5 +1,5 @@
 import 'package:args/args.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 

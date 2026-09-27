@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// How a [KeyedSocket] or [ValueSocket] merges two values contributed for
 /// the same key.

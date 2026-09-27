@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// A symbol that every provider of a role must generate, such as the
 /// `createAppRouter()` function of a router.

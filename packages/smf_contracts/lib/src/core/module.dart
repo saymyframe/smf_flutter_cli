@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// A module: a piece of an app that the user can select, such as a router,
 /// a DI container or a feature.
@@ -153,7 +153,7 @@ final class Variants {
 ///
 /// Kinds are data: the pipeline applies them without knowing any kind. The
 /// kinds of the built-in modules are in `ModuleKinds` of
-/// `package:smf_contracts/lego.dart`.
+/// `package:smf_contracts/smf_contracts.dart`.
 ///
 /// Paths are relative to the project root and may contain `<id>`, which
 /// stands for the module id; directories may end with a slash.

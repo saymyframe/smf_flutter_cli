@@ -1,7 +1,7 @@
 import 'dart:io' as io;
 
 import 'package:mason_logger/mason_logger.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Reports to the standard output and error of the process, with the
 /// styles and the progress animation of `mason_logger`.

@@ -2,7 +2,7 @@
 
 Fake modules for the tests of the generation pipeline. **They are not modules to use in an app.**
 
-The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/lego.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them, together with real modules:
+The real SMF modules do not yet use every feature of the module model in `package:smf_contracts/smf_contracts.dart`. These fake modules do, so each feature is tested on real code: [`fixture_registry`](../../fixture_registry/) runs the contract harness and the pipeline over them, together with real modules:
 
 - `flutter_core`, which creates the app;
 - `go_router`, which routes the fake features as well as `fake_router` does;

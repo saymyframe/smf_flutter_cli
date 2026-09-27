@@ -1,5 +1,5 @@
 import 'package:file/memory.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/choices.dart';
 import 'package:smf_pipeline/src/collector.dart';

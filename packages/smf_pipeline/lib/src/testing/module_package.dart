@@ -7,8 +7,8 @@ import 'package:yaml/yaml.dart';
 /// The libraries of `smf_contracts` that a module may use: the module
 /// model.
 const _model = {
-  'package:smf_contracts/lego.dart',
-  'package:smf_contracts/lego_core.dart',
+  'package:smf_contracts/smf_contracts.dart',
+  'package:smf_contracts/core.dart',
 };
 
 /// The libraries of Dart that reach the machine, which the code of a module
@@ -25,10 +25,10 @@ const _machineLibraries = {
 /// checks in its own tests with [problems]:
 /// - the Dart files in `lib/` import, export and include as parts only
 ///   `dart:` libraries but those that reach the machine, such as `dart:io`,
-///   the module model of `smf_contracts` (`lego.dart` and `lego_core.dart`),
-///   the files of the package and the public libraries, outside `src/`, of
-///   the packages among its [dependencies], and a relative URI does not
-///   leave `lib/`, conditional ones included;
+///   the module model of `smf_contracts` (`smf_contracts.dart` and
+///   `core.dart`), the files of the package and the public libraries,
+///   outside `src/`, of the packages among its [dependencies], and a
+///   relative URI does not leave `lib/`, conditional ones included;
 /// - of the SMF packages, the Dart files in `test/` use only the module
 ///   model of `smf_contracts` and the public libraries of the package
 ///   itself, the packages among its [dependencies], such as a module it

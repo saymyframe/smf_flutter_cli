@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/di_role_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'di/di_dsl.dart';

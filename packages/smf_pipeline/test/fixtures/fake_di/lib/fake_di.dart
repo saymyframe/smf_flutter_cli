@@ -8,7 +8,7 @@
 library;
 
 import 'package:fake_di/bundles/fake_di_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A provider of the DI role with a configurable set of capabilities.
 final class FakeDiModule extends SmfModule {

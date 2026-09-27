@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
 
 /// Checks that the user has logged in to the Firebase CLI, which

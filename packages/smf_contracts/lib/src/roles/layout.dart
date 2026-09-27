@@ -1,5 +1,5 @@
 import 'package:smf_contracts/bundles/layout_role_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The layout role; see [LayoutRole].
 const layoutRole = LayoutRole._();

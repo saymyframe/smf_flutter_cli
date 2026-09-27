@@ -1,5 +1,5 @@
 import 'package:smf_bottom_tabs/bundles/bottom_tabs_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The module of the main navigation of the app as tabs in a bar at the
 /// bottom, and so a provider of the layout role.

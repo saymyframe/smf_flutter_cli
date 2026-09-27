@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:file/local.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_cli/src/io/logger.dart';
 import 'package:smf_flutter_cli/src/io/process_runner.dart';

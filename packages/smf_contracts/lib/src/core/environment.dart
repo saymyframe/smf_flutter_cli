@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// The operating system the pipeline runs on.
 enum HostOperatingSystem {

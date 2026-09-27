@@ -1,9 +1,9 @@
-/// The core of the lego model without any concrete role: modules, roles,
+/// The core of the module model without any concrete role: modules, roles,
 /// sockets, contributions and the seams of the pipeline.
 ///
 /// The pipeline imports only this library, so it cannot depend on a
-/// concrete role. Modules import `package:smf_contracts/lego.dart`, which
-/// adds the built-in roles.
+/// concrete role. Modules import `package:smf_contracts/smf_contracts.dart`,
+/// which adds the built-in roles.
 library;
 
 export 'src/core/contributions.dart';

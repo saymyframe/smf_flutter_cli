@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 
 /// What `smf` does when the user presses Ctrl-C, or the process gets

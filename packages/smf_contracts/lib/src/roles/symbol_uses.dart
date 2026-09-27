@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// Whether [file] uses one of [names] from the library at [libraryPath],
 /// a path relative to the project root such as

@@ -1,5 +1,5 @@
 import 'package:file/file.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/host.dart';
 
 /// The Flutter SDK that the pipeline found before generation.

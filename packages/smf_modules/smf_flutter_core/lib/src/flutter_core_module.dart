@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 
 /// The module that creates the app itself, and so provides the app entry

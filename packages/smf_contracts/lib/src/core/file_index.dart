@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// What a rendered Dart file of the generated app declares and uses, as
 /// data.

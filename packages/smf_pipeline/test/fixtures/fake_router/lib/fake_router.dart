@@ -9,7 +9,7 @@
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// A provider of the router role.
 final class FakeRouterModule extends SmfModule {

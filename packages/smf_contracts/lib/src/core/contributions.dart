@@ -1,6 +1,6 @@
 import 'package:mason/mason.dart' show MasonBundle;
 import 'package:meta/meta.dart';
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 part 'contributions/brick_contribution.dart';
 part 'contributions/codegen_request.dart';

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pipeline.dart';
 import 'package:smf_pipeline/src/postgen.dart';

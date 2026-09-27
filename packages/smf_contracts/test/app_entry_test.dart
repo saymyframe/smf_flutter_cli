@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';

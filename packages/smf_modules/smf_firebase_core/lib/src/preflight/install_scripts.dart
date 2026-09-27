@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// What an install script prints before each directory with the executables
 /// that the rest of the run needs: those of the Firebase CLI and of Node.js,

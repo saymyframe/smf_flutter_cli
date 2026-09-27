@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:mason_logger/mason_logger.dart' show darkGray, green, lightCyan;
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/src/io/interruption.dart';
 
 /// A key the user pressed.

@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 /// The code of the routes of an app for go_router: the items of the list of
 /// routes of its `GoRouter`, the location it opens with, and the check of

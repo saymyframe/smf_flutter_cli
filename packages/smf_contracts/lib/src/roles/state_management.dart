@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// The state management role; see [StateManagementRole].
 const stateManagementRole = StateManagementRole._();

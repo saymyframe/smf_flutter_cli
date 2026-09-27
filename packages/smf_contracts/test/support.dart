@@ -1,4 +1,4 @@
-import 'package:smf_contracts/lego_core.dart';
+import 'package:smf_contracts/core.dart';
 
 /// A role for tests, configured through its constructor.
 final class TestRole<D extends Object> extends Role<D> {

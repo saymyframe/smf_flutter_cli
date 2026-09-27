@@ -33,11 +33,11 @@ MemoryFileSystem _package(
     'lib/smf_router.dart': "export 'src/router.dart';\n",
     'lib/src/router.dart': "import 'dart:convert';\n"
         "import 'package:mason/mason.dart';\n"
-        "import 'package:smf_contracts/lego.dart';\n"
+        "import 'package:smf_contracts/smf_contracts.dart';\n"
         "import 'package:smf_router/bundles/router_bundle.dart';\n"
         "import '../bundles/router_bundle.dart';\n",
     'lib/bundles/router_bundle.dart': "import 'package:mason/mason.dart';\n",
-    'test/router_test.dart': "import 'package:smf_contracts/lego_core.dart';\n"
+    'test/router_test.dart': "import 'package:smf_contracts/core.dart';\n"
         "import 'package:smf_flutter_core/smf_flutter_core.dart';\n"
         "import 'package:smf_pipeline/testing.dart';\n"
         "import 'package:smf_router/smf_router.dart';\n"
@@ -128,12 +128,12 @@ void main() {
       _problemsOf(
         _package(const {
           'lib/src/old.dart':
-              "import 'package:smf_contracts/smf_contracts.dart';\n"
+              "import 'package:smf_contracts/bundles/router_role_bundle.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
                   "import 'package:mason/src/inner.dart';\n"
                   "export 'package:yaml/yaml.dart';\n"
                   "import '../../test/router_test.dart';\n"
-                  "import 'package:smf_contracts/lego.dart';\n"
+                  "import 'package:smf_contracts/smf_contracts.dart';\n"
                   "import 'dart:io';\n"
                   "import 'dart:convert';\n"
                   "import 'stub.dart' if (dart.library.io) 'dart:isolate';\n"
@@ -142,7 +142,7 @@ void main() {
       ),
       [
         for (final uri in [
-          'package:smf_contracts/smf_contracts.dart',
+          'package:smf_contracts/bundles/router_role_bundle.dart',
           'package:smf_home/smf_home.dart',
           'package:mason/src/inner.dart',
           'package:yaml/yaml.dart',
@@ -166,7 +166,7 @@ void main() {
       _problemsOf(
         _package(const {
           'test/old_test.dart':
-              "import 'package:smf_contracts/smf_contracts.dart';\n"
+              "import 'package:smf_contracts/bundles/router_role_bundle.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
                   "import 'package:smf_pipeline/src/render.dart';\n"
                   "import '../../other/test/support.dart';\n"
@@ -176,7 +176,7 @@ void main() {
       ),
       [
         for (final uri in [
-          'package:smf_contracts/smf_contracts.dart',
+          'package:smf_contracts/bundles/router_role_bundle.dart',
           'package:smf_home/smf_home.dart',
           'package:smf_pipeline/src/render.dart',
           '../../other/test/support.dart',
@@ -221,7 +221,8 @@ void main() {
     expect(
       _problemsOf(
         _package(const {
-          'lib/src/router.dart': "import 'package:smf_contracts/lego.dart';\n",
+          'lib/src/router.dart':
+              "import 'package:smf_contracts/smf_contracts.dart';\n",
           'lib/bundles/router_bundle.dart': '',
         }),
       ),
@@ -270,7 +271,7 @@ void main() {
 
     fileSystem.file('/router/lib/smf_router.dart')
       ..createSync(recursive: true)
-      ..writeAsStringSync("import 'package:smf_contracts/lego_core.dart';\n");
+      ..writeAsStringSync("import 'package:smf_contracts/core.dart';\n");
     expect(
       _problemsOf(fileSystem, package: const ModulePackage('smf_router')),
       isEmpty,
