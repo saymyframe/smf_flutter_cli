@@ -209,11 +209,14 @@ import 'package:flutter/widgets.dart' as w;
 final a = const Duration.zero();
 final b = new w.EdgeInsets.all(8);
 final c = const w.Text('c');
+final d = const Box<int>.empty();
 ''');
 
+    // Without the types resolved, `Duration.zero` may be a type of the
+    // import prefix Duration, which type arguments tell apart.
     expect(
       [for (final i in index.invocations) '${i.target}.${i.name}'],
-      ['Duration.zero', 'w.EdgeInsets.all', 'w.Text'],
+      ['Duration.zero', 'w.EdgeInsets.all', 'w.Text', 'Box.empty'],
     );
   });
 
