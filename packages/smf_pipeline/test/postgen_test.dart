@@ -872,7 +872,12 @@ void main() {
           'back', () async {
         for (final (run, checks, reason) in [
           (
-            () => environmentOf(skipExternalSetup: true),
+            () => environmentOf(interactive: true, skipExternalSetup: true),
+            const <CheckResult>[],
+            'the run skips external setup',
+          ),
+          (
+            environmentOf,
             const <CheckResult>[],
             'the run cannot ask the user',
           ),
@@ -899,6 +904,7 @@ void main() {
                   description: 'Set up Firebase',
                   interactive: true,
                   skippable: true,
+                  external: true,
                   needs: ['tool'],
                   followUps: [fix],
                 ),
