@@ -1,5 +1,4 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_core/src/preflight/xcode_project_tools.dart';
 
 /// Where the build phase for Crashlytics that `flutterfire configure` of
 /// flutterfire_cli 1.4.1 adds to the Xcode project looks for the upload
@@ -61,14 +60,14 @@ const crashlyticsPhaseFixCommand =
 /// or with a phase of another version of flutterfire that has no such path,
 /// stays as it is, and so does an app that the step fixed already.
 ///
-/// flutterfire adds the phase only on macOS, so elsewhere the step, which
-/// needs the check that the machine is a Mac, is left for later: the app is
-/// configured again on a Mac, and the step follows that.
-PostGenStep crashlyticsPhaseFix() => PostGenStep(
-      const ToolRef('ruby'),
-      const ['-e', _program, AppEntryRole.xcodeProjectFile],
-      description: 'Fixing the Crashlytics phase of flutterfire for '
-          'flutter build ipa',
-      skippable: true,
-      needs: [const XcodeProjectOnMacCheck().id],
-    );
+/// flutterfire adds the phase only on macOS, so the step runs only there.
+/// Elsewhere there is nothing for it to fix, and the app is configured again
+/// on a Mac, after which the README of the app gives the command.
+const crashlyticsPhaseFix = PostGenStep(
+  ToolRef('ruby'),
+  ['-e', _program, AppEntryRole.xcodeProjectFile],
+  description: 'Fixing the Crashlytics phase of flutterfire for '
+      'flutter build ipa',
+  skippable: true,
+  hosts: {HostOperatingSystem.macos},
+);

@@ -181,9 +181,10 @@ void main() {
       expect(fix.interactive, isFalse);
       expect(fix.external, isFalse);
       expect(fix.skippable, isTrue);
-      // flutterfire adds the phase only on macOS; the step that it follows
-      // needs the Ruby of the Mac.
-      expect(fix.needs, ['xcode_project_on_mac']);
+      // flutterfire adds the phase only on macOS, and elsewhere there is
+      // nothing to fix; the step that it follows needs the Ruby of the Mac.
+      expect(fix.hosts, {HostOperatingSystem.macos});
+      expect(fix.needs, isEmpty);
       expect(fix.when, isEmpty);
       expect(fix.followUps, isEmpty);
       // The README of the app gives it as the pipeline prints it, in single

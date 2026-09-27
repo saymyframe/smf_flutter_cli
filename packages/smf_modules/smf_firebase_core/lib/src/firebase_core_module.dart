@@ -97,7 +97,7 @@ final class FirebaseCoreModule extends SmfModule {
         skippable: true,
         external: true,
         needs: [for (final check in needed) check.id],
-        followUps: [crashlyticsPhaseFix()],
+        followUps: const [crashlyticsPhaseFix],
       ),
       AppEntryRole.readmeSections.entry(
         readmeHeading,

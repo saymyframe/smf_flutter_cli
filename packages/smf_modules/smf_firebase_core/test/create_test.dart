@@ -52,7 +52,7 @@ String _notConfigured(String reason) =>
 /// program and the Xcode project, which the line does not quote.
 final String _fix = [
   '/bin/ruby',
-  ...crashlyticsPhaseFix().arguments,
+  ...crashlyticsPhaseFix.arguments,
 ].join(' ');
 
 /// The warning that the phase for Crashlytics is not fixed, because of
@@ -428,11 +428,13 @@ void main() {
       '$_dart pub global list',
       _configure,
     ]);
-    // flutterfire adds no phase there: the fix waits for a Mac.
+    // flutterfire adds no phase there, so the fix neither runs nor is left
+    // for later: the README of the app gives it for after a configuration
+    // on a Mac.
+    expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
       contains('Setup of the Xcode project on a Mac is missing. flutterfire '
           'configure changes the Xcode project only on macOS.'),
-      _notFixed('Setup of the Xcode project on a Mac is missing'),
     ]);
   });
 

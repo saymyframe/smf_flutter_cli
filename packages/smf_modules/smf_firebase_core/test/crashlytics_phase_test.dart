@@ -26,7 +26,7 @@ String? _ruby() {
 
 void main() {
   final ruby = _ruby();
-  final step = crashlyticsPhaseFix();
+  const step = crashlyticsPhaseFix;
   late String project;
   late Directory app;
   late File file;
