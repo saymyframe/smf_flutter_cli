@@ -1,11 +1,20 @@
 # smf_modules
 
-Collection of first‑party SMF modules for Flutter (routing, DI, Firebase, analytics, event bus, example features).
+The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers, each a package of its own on pub.dev:
 
-These modules are consumed via the SMF CLI during app generation and configuration. They are not installed individually; the CLI integrates them on your behalf.
+| Package | Module (`-m`) |
+| --- | --- |
+| `smf_flutter_core` | `flutter_core`, the Flutter project that every app starts from |
+| `smf_go_router` | `go_router`, routes and navigation with go_router |
+| `smf_bottom_tabs` | `bottom_tabs`, tabs in a bar at the bottom |
+| `smf_home_flutter` | `home`, a start screen |
+| `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
+| `smf_get_it` | `get_it`, dependency injection |
+| `smf_event_bus` | `event_bus`, events |
+| `smf_firebase_core` | `firebase_core`, Firebase |
+| `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
+| `smf_firebase_analytics` | `firebase_analytics`, analytics |
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+`smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.
 
-## License
-See [LICENSE](LICENSE).
+`smf create` puts what the modules generate into an app, so you never add these packages to an app yourself. See the [modules](https://doc.saymyframe.com/modules) in the documentation.

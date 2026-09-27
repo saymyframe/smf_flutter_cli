@@ -1,35 +1,22 @@
 # smf_event_bus
 
-The SMF module of events with [event_bus](https://pub.dev/packages/event_bus). It provides the events role of the SMF module model: parts of the app that do not know each other, such as two features, exchange events through one service.
+The SMF module of events with [event_bus](https://pub.dev/packages/event_bus). It provides the events role of SMF: parts of the app that do not know each other, such as two features, exchange events through one service.
 
-The events role generates `lib/core/events/communication_service.dart`:
+The events role generates the `CommunicationService` interface, whose `fire(event)` sends an event and `on<T>()` is the stream of the events of type `T`, and `AppEvent`, the base class of the events. This module adds `event_bus` to the app and implements the service on an `EventBus`. With a module that provides dependency injection, the service is registered in its container.
 
-- `AppEvent`, the base class of the events, such as `final class ItemAdded extends AppEvent`;
-- the `CommunicationService` interface: `fire(event)` sends an event, and `on<T>()` is the stream of the events of type `T`;
-- `createCommunicationService()`, which returns the service of the app.
+## Use with the SMF CLI
 
-This module adds `event_bus` to the dependencies of the app and implements the service in `lib/core/events/event_bus_communication_service.dart`, on an `EventBus` of the package:
-
-- an event goes to everyone listening to its type, or to a type it extends or implements, so `on<AppEvent>()` gets every event;
-- listeners get an event after the code that fires it has completed, not during `fire`;
-- a listener gets the events fired after it starts listening.
-
-The service is created on first use, without waiting, so the app starts as it would without it. When the app has a module that provides dependency injection, the events role registers the service in its container as a lazy singleton. The code that creates what the screens of a feature need, such as a Cubit, then takes the service with `resolve` in the composition file of the feature, and other services get it as a parameter of their factory function. Without a container, the code of the app gets the service from `createCommunicationService()`, which always returns the same one: the listeners of one service do not get the events fired into another, so the app does not create a second one with `createEventBusCommunicationService()`.
-
-## Use with SMF CLI
-
-`smf create` asks which module provides the events of the app, and offers none as well. To choose this one without the question, name it with `-m`:
+`smf create` asks which module provides the events of the app, and offers none as well. To choose this one without the question:
 
 ```bash
 smf create my_app -m event_bus
 ```
 
-This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
+You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
-- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS and Linux; Windows is not tested yet.
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_event_bus) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+## Documentation
 
-## License
-See LICENSE.
+- [The event_bus module](https://doc.saymyframe.com/modules/event-bus)
+- [Services and state](https://doc.saymyframe.com/guides/services)

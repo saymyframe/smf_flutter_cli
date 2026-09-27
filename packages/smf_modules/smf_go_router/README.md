@@ -1,47 +1,12 @@
 # smf_go_router
 
-The SMF module that routes the app with [go_router](https://pub.dev/packages/go_router). It provides the router role of the SMF module model.
+The SMF module that routes the app with [go_router](https://pub.dev/packages/go_router) 17. It provides the router role of SMF.
 
-The modules of the app declare their routes, and the router role gives the app the typed navigation facade, `context.nav`, in `lib/core/router/navigation.dart`. This module adds `go_router` to the dependencies of the app and generates `createAppRouter()` in `lib/core/router/app_router_factory.dart`, which creates the router of the app once, on first use:
+The features of the app declare their routes, and the router role gives the app a typed navigation facade, `context.nav`, with `go()`, `push()` and `replace()` for every route. This module turns the routes into the `GoRouter` of the app. With a layout, such as tabs at the bottom, it builds the main navigation of the app around it. It tells the listeners of the screen, such as analytics, about each screen the user sees.
 
-- every route is a `GoRoute` under the namespace of its module, such as `/home/details/:id`, with its children below it;
-- a route is named by its full name, such as `home.details`, which the listeners of the screen get as the name of the screen, and navigator observers as the name of the page;
-- screens are imported with prefixes of their own, so their names never clash;
-- the app opens on its start route, and `/` redirects to it. When no route can start the app, as in an app without features, `/` shows the fallback screen of the app.
+## Use with the SMF CLI
 
-When a module provides the layout role, such as bottom tabs, and the app has destinations, they form the main navigation of the app: a `StatefulShellRoute.indexedStack` with a branch for each destination, in the order of the features, which shows the `AppShell` of the layout:
-
-- the routes below a destination stay in its branch, which keeps its stack while another branch is selected;
-- the app opens on the branch of its start route;
-- the other top-level routes are outside the main navigation, and the router matches the destinations first;
-- without destinations, or without a layout, there is no main navigation.
-
-Screens get the values of their parameters from the location, parsed with `tryParse`, and a `bool` is `true` or `false` exactly. An optional value that the location does not have, or that is not of its type, is `null`. A location without a valid required value, such as `/home/details/abc` for an `int`, shows the error screen of go_router.
-
-`context.nav` navigates through this router whatever the context, even one above the router:
-
-- `go()` shows the location with the chain of its parents below it, in the branch of the location when it is in the main navigation;
-- `push()` shows the location on top and completes with the value its page returns; in the main navigation, it goes on top of the stack of the selected branch, whichever branch the location belongs to, as go_router does;
-- `replace()` replaces the top of the stack with the location, as go_router's `pushReplacement` does.
-
-go_router shows the main navigation once, so a location in it goes only on top of the main navigation itself: from a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError` that says to use `go()`, and leave the stack as it is. From a page with no main navigation below it, `push()` brings the main navigation back on top with the location. The check reads the stack as go_router has it when the method is called.
-
-Every navigator, the root one and that of each branch of the main navigation, creates observers of its own from the factories that modules give the router role. The branches do not notify the observers of the root navigator, so each page is reported once. Switching branches is no navigation event, though a branch shows its first page when it is first selected.
-
-Modules that follow the screen the user sees, such as analytics, give the router role listeners of the screen instead. The router listens to its go_router delegate, which hears of every change of the stacks, a switch of branches included, and calls each listener once whenever the page on top of the app changes or shows another location, with the full name of its route and its location, such as `home.details` and `/home/details/5`:
-
-- on the first screen of the app, after a navigation, when a page closes and the one below shows again, and on a switch to another branch of the main navigation, whether it was selected before or not;
-- once for a navigation that puts several pages on a stack, such as `go()` to a page whose parents are not on it yet, with the page on top;
-- not again for the same page at the same location;
-- with the route `null` for a screen that is no route of a module: the fallback screen, at `/`, and the error screen of go_router, at the location it could not show.
-
-The listeners hear only of the pages of go_router: a page that the app shows with a navigator directly, such as with `Navigator.push`, and a dialog are not screens of the router.
-
-go_router 17 works with the Material library of Flutter 3.44, which the apps of SMF use. go_router 18 has moved to the separate `material_ui` package, whose `MaterialApp` it looks for to choose Material pages.
-
-## Use with SMF CLI
-
-`smf create` asks which module provides the router, and offers none as well. To choose this one without the question, name it with `-m`:
+`smf create` asks which module provides the router, and offers none as well. When a module you chose needs a router, such as the start screen of `home`, `smf create` adds this one by itself. To choose it without the question:
 
 ```bash
 smf create my_app -m go_router
@@ -49,12 +14,11 @@ smf create my_app -m go_router
 
 When several routes can start the app, `smf create` asks which one, or takes it from `--start`, such as `--start /home`.
 
-This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
+You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
-- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS and Linux; Windows is not tested yet.
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_go_router) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+## Documentation
 
-## License
-See LICENSE.
+- [The go_router module](https://doc.saymyframe.com/modules/go-router)
+- [Navigation](https://doc.saymyframe.com/guides/navigation)

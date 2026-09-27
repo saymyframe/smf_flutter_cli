@@ -1,30 +1,23 @@
 # smf_flutter_core
 
-The module that creates the Flutter app every SMF app starts from. It provides the app entry role of the SMF module model:
+The SMF module that creates the Flutter app every SMF app starts from. It provides the app entry role of SMF, which every app has exactly one provider of:
 
 - the Android and iOS projects of `flutter create`;
 - `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules;
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
-- `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when a router module is present;
+- `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when the app has a router;
 - a fallback start screen with a widget test;
-- `pubspec.yaml` with the dependencies of all modules;
-- `analysis_options.yaml` with the lints of a new Flutter app, which leaves `build/` out of the analysis: on macOS, Flutter copies there the Swift packages of the plugins that depend on other plugins, with the examples of these plugins, which `flutter analyze` would report.
+- `pubspec.yaml` with the dependencies of all modules, and `analysis_options.yaml`, which leaves `build/` out of the analysis.
 
-The app needs Flutter 3.44 or newer, and runs on iOS 15 or newer.
+The app runs on iOS 15 or newer. For iOS builds with Xcode 27, use Flutter 3.47 or newer; see [troubleshooting](https://doc.saymyframe.com/guides/troubleshooting#ios-builds-with-xcode-27).
 
-## Flutter and Xcode
+## Use with the SMF CLI
 
-Xcode 27 builds only for iOS 15 and newer, which Flutter follows from version 3.47. With Flutter 3.44 and Xcode 27:
+`smf create` adds this module to every app by itself.
 
-- `flutter build ios --simulator` fails in `debug_unpack_ios`: Flutter passes both architectures of the simulator to `lipo -verify_arch`, which takes one in Xcode 27. Build for the architecture of your Mac, as in `FLUTTER_XCODE_ARCHS=arm64 flutter build ios --simulator`.
-- A plugin that installs with CocoaPods and asks for iOS 13 or 14 keeps that version, which Xcode 27 refuses; Flutter 3.47 raises it to the version of the app.
+You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
-So for iOS builds with Xcode 27, use Flutter 3.47 or newer.
-
-## Use with SMF CLI
-This package is not intended to be installed directly. Use the SMF CLI to generate a new project and wire modules together.
-
-- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS and Linux; Windows is not tested yet.
 
 ## Updating the Flutter template
 
@@ -53,8 +46,7 @@ flutter create --platforms=android,ios --org com.example --no-pub my_app
 SMF_FLUTTER_CREATE_APP=$PWD/my_app dart test test/flutter_create_test.dart
 ```
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_flutter_core) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+## Documentation
 
-## License
-See LICENSE.
+- [The flutter_core module](https://doc.saymyframe.com/modules/flutter-core)
+- [The generated app](https://doc.saymyframe.com/getting-started/generated-app)
