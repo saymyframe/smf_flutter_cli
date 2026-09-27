@@ -303,7 +303,6 @@ String clockUserText() {
 }
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl0;
 import 'package:flutter/foundation.dart';
@@ -336,38 +335,35 @@ abstract interface class CrashReporter {
 /// crash reporters of all modules.
 CrashReporter createCrashReporter() => _crashReporter;
 
-/// Reports the errors that Flutter and the platform dispatcher do not handle.
+/// Reports the errors of the main isolate that nothing handles, each once.
 ///
-/// `bootstrap()` calls it once the crash reporting services are ready. In
-/// debug mode the errors also still reach the console. The listener on the
-/// current isolate is a safety net for errors that do not reach the platform
-/// dispatcher; isolates that the app starts need listeners of their own.
+/// `bootstrap()` calls it once the crash reporting services are ready. Two
+/// handlers cover the main isolate:
+/// - `FlutterError.onError` gets the errors that Flutter catches, such as in
+///   a build or a layout, and still presents them as Flutter does by
+///   default;
+/// - `PlatformDispatcher.instance.onError` gets every other uncaught error,
+///   such as in a `Future`, a `Timer` or the handler of a port, with its
+///   type. In debug mode it leaves the error unhandled, so the engine prints
+///   it.
+///
+/// `compute()` and `Isolate.run()` throw the error of their isolate to the
+/// code that awaits them, so it reaches the platform dispatcher unless that
+/// code catches it. The uncaught errors of an isolate that the app spawns
+/// itself go only to the error listener of that isolate, such as the
+/// `onError` port of `Isolate.spawn`, so the app reports them there to its
+/// crash reporter.
 void installCrashReporting() {
   final reporter = createCrashReporter();
   final presentError = FlutterError.onError;
   FlutterError.onError = (details) {
-    if (kDebugMode) {
-      presentError?.call(details);
-    }
+    presentError?.call(details);
     unawaited(reporter.recordFlutterError(details, fatal: true));
   };
   PlatformDispatcher.instance.onError = (error, stackTrace) {
     unawaited(reporter.recordError(error, stackTrace, fatal: true));
     return !kDebugMode;
   };
-  Isolate.current.addErrorListener(
-    RawReceivePort((Object? message) {
-      if (message case [final Object error, final String? stackTrace]) {
-        unawaited(
-          reporter.recordError(
-            error,
-            stackTrace == null ? null : StackTrace.fromString(stackTrace),
-            fatal: true,
-          ),
-        );
-      }
-    }).sendPort,
-  );
 }
 
 final CrashReporter _crashReporter = _CrashReporters(_crashReporters);

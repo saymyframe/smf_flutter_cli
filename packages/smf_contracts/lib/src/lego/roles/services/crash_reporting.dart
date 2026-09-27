@@ -11,15 +11,20 @@ const crashReportingRole = CrashReportingRole._();
 /// - the `CrashReporter` interface;
 /// - `CrashReporter createCrashReporter()`, which returns one reporter that
 ///   forwards every call to the implementations of all providers;
-/// - `installCrashReporting()`, which reports the errors that Flutter, the
-///   platform dispatcher and the current isolate do not handle.
+/// - `installCrashReporting()`, which reports the uncaught errors of the
+///   main isolate once each, through `FlutterError.onError` for the errors
+///   that Flutter catches and `PlatformDispatcher.instance.onError` for the
+///   others.
 ///
 /// `bootstrap()` calls `installCrashReporting()` in its platform phase,
 /// after the providers and the modules they depend on have set up their
 /// SDKs, and after awaiting `initCrashReporting()` if some implementations
 /// are created asynchronously. The handlers belong to the role, so a
 /// provider whose SDK installs global handlers of its own turns them off.
-/// With a DI container, the reporter is registered as a lazy singleton.
+/// The handlers also show the errors: Flutter presents the errors it
+/// catches as it does by default, and in debug mode the engine prints the
+/// others. So an implementation only reports, and prints nothing. With a
+/// DI container, the reporter is registered as a lazy singleton.
 final class CrashReportingRole extends Role<RoleImplementation> {
   const CrashReportingRole._();
 

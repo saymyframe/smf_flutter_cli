@@ -1,3 +1,5 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/lego.dart';
 import 'package:test/test.dart';
 
@@ -303,7 +305,10 @@ void main() {
   });
 
   group('the crash reporting template', () {
-    test('installs the handlers in bootstrap', () async {
+    test(
+        'installs in bootstrap a handler for the errors that Flutter '
+        'catches, which it still presents in every mode, and one for the '
+        'other errors of the main isolate', () async {
       final rendered = await renderTemplate(
         crashReportingRole,
         data: [_data(crashReportingRole, 'ConsoleCrashReporter')],
@@ -311,10 +316,34 @@ void main() {
       final code = rendered.files[CrashReportingRole.file]!;
 
       expectParses(code);
-      expect(code, contains('void installCrashReporting() {'));
-      expect(code, contains('FlutterError.onError = (details) {'));
-      expect(code, contains('PlatformDispatcher.instance.onError ='));
-      expect(code, contains('Isolate.current.addErrorListener('));
+      final unit = parseString(content: code).unit;
+      final install = unit.declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere((f) => f.name.lexeme == 'installCrashReporting');
+      final body = install.functionExpression.body as BlockFunctionBody;
+      // No listener on the isolate: it would take the errors of timers and
+      // ports from the platform dispatcher, without their type, and the
+      // engine would not print them.
+      expect(body.block.statements.map((statement) => '$statement'), [
+        'final reporter = createCrashReporter();',
+        'final presentError = FlutterError.onError;',
+        equals(
+          'FlutterError.onError = (details) {presentError?.call(details); '
+          'unawaited(reporter.recordFlutterError(details, fatal: true));};',
+        ),
+        equals(
+          'PlatformDispatcher.instance.onError = (error, stackTrace) '
+          '{unawaited(reporter.recordError(error, stackTrace, fatal: '
+          'true)); return !kDebugMode;};',
+        ),
+      ]);
+      expect(
+        [
+          for (final directive in unit.directives)
+            if (directive is ImportDirective) directive.uri.stringValue,
+        ],
+        isNot(contains('dart:isolate')),
+      );
       expect(
         rendered.elsewhere.single.fragment!.code,
         'installCrashReporting();',
