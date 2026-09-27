@@ -342,6 +342,35 @@ void main() {
         expect(host.logger.warnings, isEmpty);
       });
 
+      test('and the modules it depends on through others', () async {
+        final host = FakeHost();
+        // In this order, one pass over the registry would not reach entry
+        // from base.
+        final modules = [
+          entry('entry', dependsOn: {'mid'}),
+          TestModule('mid', dependsOn: {'base'}),
+          TestModule(
+            'base',
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          TestModule('home'),
+        ];
+
+        await expectLater(
+          pipeline(modules, host).plan(request(['home'])),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [for (final issue in e.issues) '${issue.origin}'],
+              'origins',
+              ['base'],
+            ),
+          ),
+        );
+        expect(host.logger.warnings, isEmpty);
+      });
+
       test('and the only provider of a role it requires', () async {
         final host = FakeHost();
         final tooling = TestRole<NoDsl>('tooling');
@@ -390,6 +419,57 @@ void main() {
           'the only provider of the app entry role, which every app needs',
         );
         await plan.environment.dispose();
+      });
+
+      test('once the provider that could replace it is left out', () async {
+        final host = FakeHost();
+        final modules = [
+          entry(
+            'entry',
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          entry(
+            'other',
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+        ];
+
+        await expectLater(
+          pipeline(modules, host).plan(request(['entry'])),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [for (final issue in e.issues) '${issue.origin}'],
+              'origins',
+              ['other'],
+            ),
+          ),
+        );
+        // entry was left out while other could replace it; other could not.
+        expect(host.logger.warnings, [
+          startsWith('Leaving out entry: Tool tool is missing.'),
+        ]);
+      });
+
+      test('and says that an app has only one provider of such a role', () {
+        final host = FakeHost();
+        final modules = [entry('entry'), entry('other')];
+
+        expect(
+          pipeline(modules, host).plan(request(['entry', 'other'])),
+          throwsA(
+            isA<SmfUsageException>().having(
+              (e) => e.message,
+              'message',
+              'An app can have only one provider of the app entry role, but '
+                  'it has entry (requested) and other (requested). Keep one '
+                  'of them.',
+            ),
+          ),
+        );
       });
 
       test('and --explain says so for a Flutter SDK that is too old', () async {
