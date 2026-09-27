@@ -9,10 +9,12 @@ The module model of [Say My Frame](https://doc.saymyframe.com) (SMF), which gene
 
 The generation pipeline, [smf_pipeline](https://pub.dev/packages/smf_pipeline), resolves the modules of an app, checks their contributions against the rules of their roles and turns them into the app.
 
-The package has two libraries:
+The package has two libraries to import:
 
 - `package:smf_contracts/smf_contracts.dart`, the model with the roles of SMF: the app entry, the router, the layout, state management, dependency injection, events, analytics and crash reporting;
 - `package:smf_contracts/core.dart`, the core of the model without concrete roles, which the pipeline uses.
+
+`lib/bundles/` holds the templates of these roles, bundled from `bricks/`, which the roles give the pipeline to render.
 
 ## A module
 
