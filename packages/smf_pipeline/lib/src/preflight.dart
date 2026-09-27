@@ -186,17 +186,11 @@ List<SmfIssue> sdkVersionIssues(
       1 => '$single needs',
       _ => '${distinct.join(', ')} need',
     };
-    final leavable = switch (single) {
-      ModuleOrigin(:final module) => canDoWithout({module}),
-      _ => false,
-    };
     issues.add(
       SmfIssue(
         '$who $name $constraint, but the Flutter SDK at ${sdk.flutter} has '
         '$name $version.',
-        hint: leavable
-            ? 'Upgrade Flutter, or leave out $single.'
-            : 'Upgrade Flutter.',
+        hint: _upgradeHint(single, canDoWithout),
         origin: single,
       ),
     );
@@ -206,6 +200,20 @@ List<SmfIssue> sdkVersionIssues(
   check('Flutter', sdk.flutterVersion, pubspec.flutter, pubspec.flutterOrigins);
   return issues;
 }
+
+/// The hint of a version of the Flutter SDK outside the constraint of
+/// [single], or of several contributors when it is `null`: to upgrade
+/// Flutter, or else to leave out the module [single] if [canDoWithout] says
+/// that an app can be made without it.
+String _upgradeHint(
+  ContributionOrigin? single,
+  bool Function(Set<ModuleId> modules) canDoWithout,
+) =>
+    switch (single) {
+      ModuleOrigin(:final module) when canDoWithout({module}) =>
+        'Upgrade Flutter, or leave out $single.',
+      _ => 'Upgrade Flutter.',
+    };
 
 /// A default of [runPreflight] and [sdkVersionIssues]: an app can be made
 /// without any modules.
