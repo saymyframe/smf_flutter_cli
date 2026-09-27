@@ -326,9 +326,21 @@ void main() {
             taken('plain_package'),
           ],
         ),
+        // Only the variant for riverpod takes the package of a1 and go.
+        TestModule(
+          'picky',
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (_) => const [],
+              const ModuleId('riverpod'): (_) => [taken('shared')],
+            },
+          ),
+        ),
       ]),
     );
 
+    // A case with a provider of another role has a variant of feature too.
     expect(
       harness.casesOfModule(const ModuleId('feature')).map((c) => '$c'),
       [
@@ -336,15 +348,16 @@ void main() {
         'feature (riverpod)',
         'feature with bloc',
         'feature with riverpod',
-        'feature with a1',
-        'feature with go',
+        'feature (bloc) with a1',
+        'feature (bloc) with go',
       ],
     );
     final withGo = harness
         .casesOfModule(const ModuleId('feature'))
-        .singleWhere((c) => c.name == 'feature with go');
+        .singleWhere((c) => c.name == 'feature (bloc) with go');
     expect(withGo.requested.map((id) => id.value), ['feature', 'go']);
     expect(withGo.picks[nav], const ModuleId('go'));
+    expect(withGo.picks[state], const ModuleId('bloc'));
     // A case with a provider of the role of the variants is the case of the
     // variant, whose package the variant takes.
     final withRiverpod = await harness.check(
@@ -362,7 +375,7 @@ void main() {
     final withA1 = await harness.check(
       harness
           .casesOfModule(const ModuleId('feature'))
-          .singleWhere((c) => c.name == 'feature with a1'),
+          .singleWhere((c) => c.name == 'feature (bloc) with a1'),
     );
     const takesShared =
         'feature: feature contributes shared, a package of a1, which '
@@ -372,6 +385,42 @@ void main() {
       [for (final issue in withA1.errors) '${issue.origin}: ${issue.message}'],
       [takesShared],
     );
+    // The case of the variant that takes the package reports it.
+    expect(
+      harness.casesOfModule(const ModuleId('picky')).map((c) => '$c'),
+      [
+        'picky (bloc)',
+        'picky (riverpod)',
+        'picky (riverpod) with a1',
+        'picky (riverpod) with go',
+      ],
+    );
+    final pickyWithA1 = await harness.check(
+      harness
+          .casesOfModule(const ModuleId('picky'))
+          .singleWhere((c) => c.name == 'picky (riverpod) with a1'),
+    );
+    expect(
+      [
+        for (final issue in pickyWithA1.errors)
+          '${issue.origin}: ${issue.message}',
+      ],
+      [
+        equals(
+          'picky (riverpod): picky (riverpod) contributes shared, a package '
+          'of a1, which provides the tracking, but picky neither has a '
+          'variant for it nor depends on it.',
+        ),
+      ],
+    );
+    // The case of feature with bloc builds the app of its case with the
+    // variant for bloc, which checkAll checks instead.
+    final checked = [
+      for (final result in await harness.checkAll()) '${result.contractCase}',
+    ];
+    expect(checked, containsAll(['feature (bloc)', 'feature (riverpod)']));
+    expect(checked, isNot(contains('feature with bloc')));
+    expect(checked, isNot(contains('feature with riverpod')));
     // A module that neither contributes a package of another nor has one of
     // its own has no such case.
     expect(

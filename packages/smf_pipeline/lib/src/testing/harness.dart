@@ -136,7 +136,9 @@ final class ContractResult {
 /// For a module it builds an app for every provider of the role of its
 /// variants, every provider of each role it requires that has several, each
 /// subset of the roles it only uses, and every provider of a role whose
-/// package it contributes; for a role, the same for each of its providers.
+/// package it contributes. For a role it builds an app for each of its
+/// providers, with every provider of each role the provider requires that
+/// has several, and each subset of the roles the role uses.
 /// Each app goes through the stages 3 to 5 of the pipeline, in a run
 /// without a terminal that skips external setup, as the Flutter job
 /// generates apps; stage 5 includes [checkTemplateTags], and the
@@ -200,6 +202,11 @@ final class ContractHarness {
   ///   contributes, itself or in a variant, and that can be in an app with
   ///   the module, as `<module> with <provider>`, such as `banner with
   ///   bloc` for a module without a role that contributes `flutter_bloc`.
+  ///   The case requests the provider, so its roles need no pick. With a
+  ///   provider of a role other than that of the variants of the module,
+  ///   there is a case for each variant that contributes the package, as
+  ///   `<module> (<provider of the variant>) with <provider>`, or for the
+  ///   first variant if only the module itself contributes it.
   ///
   /// A package is a provider's when the provider contributes it itself, not
   /// in a variant, with a constraint of its own rather than `any`, and no
@@ -239,15 +246,18 @@ final class ContractHarness {
             present: subset,
           ),
       for (final owner in _ownersOfPackagesOf(module))
-        _case(
-          '$id with ${owner.descriptor.id}',
-          [id, owner.descriptor.id],
-          picks: {
-            for (final role in owner.descriptor.provides)
-              role: owner.descriptor.id,
-          },
-          present: const [],
-        ),
+        for (final picks in _variantPicksWith(module, owner))
+          _case(
+            '${_caseName(id.value, picks, const [])} with '
+            '${owner.descriptor.id}',
+            [id, owner.descriptor.id],
+            picks: {
+              ...picks,
+              for (final role in owner.descriptor.provides)
+                role: owner.descriptor.id,
+            },
+            present: const [],
+          ),
     ];
   }
 
@@ -288,18 +298,55 @@ final class ContractHarness {
     });
   }
 
-  /// Whether [provider] owns one of [packages]: it brings the package, and
-  /// no module it depends on, directly or not, brings it too.
-  bool _ownsOneOf(SmfModule provider, Set<String> packages) {
-    final byDependencies = {
-      for (final dependency in _withDependencies(provider).skip(1))
-        ..._packagesBroughtBy(dependency),
-    };
-    return _packagesBroughtBy(provider).any(
-      (package) =>
-          packages.contains(package) && !byDependencies.contains(package),
-    );
+  /// The provider of the role of the variants of [module] for each case of
+  /// [module] with [owner]: none if [module] has no variants, or it or
+  /// [owner] brings a provider of the role; else each provider whose
+  /// variant contributes a package of [owner], or, if only [module] itself
+  /// does, the first provider with a variant. A provider whose modules do
+  /// not fit in the app of the case has none.
+  List<Map<Role, ModuleId>> _variantPicksWith(
+    SmfModule module,
+    SmfModule owner,
+  ) {
+    final modules = [..._withDependencies(module), ..._withDependencies(owner)];
+    final variants = module.descriptor.variants;
+    if (variants == null) return const [{}];
+    final role = variants.role;
+    if (modules.any((other) => other.descriptor.provides.contains(role))) {
+      return const [{}];
+    }
+    final owned = _packagesOwnedBy(owner);
+    bool takes(List<Contribution> Function(ModuleContext context) contribute) =>
+        _hostedPackagesOf(contribute).any(owned.contains);
+    final fitting = [
+      for (final provider in registry.providersOf(role))
+        if (variants.byProvider[provider.descriptor.id] case final variant?
+            when _fit([...modules, ..._withDependencies(provider)]))
+          (id: provider.descriptor.id, takes: takes(variant)),
+    ];
+    final taking = [
+      for (final provider in fitting)
+        if (provider.takes) provider.id,
+    ];
+    if (taking.isEmpty && fitting.isNotEmpty && takes(module.contribute)) {
+      taking.add(fitting.first.id);
+    }
+    return [
+      for (final provider in taking) {role: provider},
+    ];
   }
+
+  /// Whether [provider] owns one of [packages]; see [_packagesOwnedBy].
+  bool _ownsOneOf(SmfModule provider, Set<String> packages) =>
+      _packagesOwnedBy(provider).any(packages.contains);
+
+  /// The packages that [provider] owns: it brings them, and no module it
+  /// depends on, directly or not, brings them too.
+  Set<String> _packagesOwnedBy(SmfModule provider) =>
+      _packagesBroughtBy(provider).difference({
+        for (final dependency in _withDependencies(provider).skip(1))
+          ..._packagesBroughtBy(dependency),
+      });
 
   /// The hosted packages that [module] contributes itself, not in a
   /// variant, with a constraint of its own ([bringsPackage]).
@@ -317,13 +364,22 @@ final class ContractHarness {
           module.contribute,
           ...?module.descriptor.variants?.byProvider.values,
         ])
-          for (final contribution in _contributionsOf(contribute))
-            if (contribution
-                case PubspecDependency(
-                  source: PubspecSource.hosted,
-                  :final package,
-                ))
-              package,
+          ..._hostedPackagesOf(contribute),
+      };
+
+  /// The hosted packages that [contribute] contributes, with any
+  /// constraint.
+  Set<String> _hostedPackagesOf(
+    List<Contribution> Function(ModuleContext context) contribute,
+  ) =>
+      {
+        for (final contribution in _contributionsOf(contribute))
+          if (contribution
+              case PubspecDependency(
+                source: PubspecSource.hosted,
+                :final package,
+              ))
+            package,
       };
 
   /// What [contribute] contributes to the app of [context], or nothing if it
