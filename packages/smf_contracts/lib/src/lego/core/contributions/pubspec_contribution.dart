@@ -19,6 +19,15 @@ sealed class PubspecContribution extends Contribution {
   /// `^16.3.0`, or `any` for a package whose constraint another module
   /// owns.
   ///
+  /// A package that a module which provides a role depends on with a
+  /// constraint of its own, outside its variants, is the package of that
+  /// provider, such as the package of a router for the module that provides
+  /// the router role, unless a module that the provider depends on has it
+  /// too. Another module depends on it only in its variant for the provider,
+  /// or for a provider that depends on it (see [Variants]), or when it
+  /// depends on the provider, directly or not; the pipeline rejects any
+  /// other module that does.
+  ///
   /// Set [dev] for a dev dependency.
   const factory PubspecContribution.hosted(
     String package,
