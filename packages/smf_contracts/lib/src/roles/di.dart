@@ -180,7 +180,7 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
         issues.add(
           SmfIssue(
             '$path resolves services, so the module $owner must require the '
-            'DI role instead of only using it.',
+            '$diRole instead of only using it.',
             hint: 'Add diRole to the requires of the module.',
             origin: owner,
             path: path,

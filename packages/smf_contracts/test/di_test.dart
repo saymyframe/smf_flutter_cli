@@ -542,7 +542,10 @@ void main() {
     test('rejects resolving in a feature that only uses DI', () {
       final issue = check({composition: resolving(composition)}).single;
 
-      expect(issue.message, contains('must require the DI role'));
+      expect(
+        issue.message,
+        contains('must require the dependency injection role'),
+      );
       expect(issue.origin, const ModuleOrigin(ModuleId('home')));
     });
 

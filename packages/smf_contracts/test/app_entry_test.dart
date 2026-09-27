@@ -795,8 +795,8 @@ Future<void> bootstrap() async {
         [
           equals(
             'socket app_entry.gradle_settings_plugins does not take '
-            'com.android.application: the provider of the app entry declares '
-            'it.',
+            'com.android.application: the provider of the app entry role '
+            'declares it.',
           ),
         ],
       );

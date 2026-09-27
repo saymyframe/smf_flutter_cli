@@ -378,8 +378,8 @@ final class AppEntryRole extends Role<NoDsl> {
       ];
 }
 
-const _declaredByProvider = 'the provider of the app entry declares it';
-const _appliedByProvider = 'the provider of the app entry applies it';
+const _declaredByProvider = 'the provider of the app entry role declares it';
+const _appliedByProvider = 'the provider of the app entry role applies it';
 const _appliedByFlutter =
     'the Flutter Gradle plugin applies the Kotlin plugin itself';
 

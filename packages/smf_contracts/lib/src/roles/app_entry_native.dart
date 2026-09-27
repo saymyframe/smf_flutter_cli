@@ -325,7 +325,7 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
         SmfIssue(
           '$path has $what $key more than once.',
           hint: 'A module cannot contribute a key that the template of the '
-              'app entry has already.',
+              'app entry role has already.',
           origin: input.owners[path],
           path: path,
         ),
