@@ -95,9 +95,11 @@ final class RouterRole extends Role<RoutesData> {
   /// `(route, location) => debugPrint('$location: $route')`: functions of
   /// the type `void Function(String? route, String location)`.
   ///
-  /// The screen the user sees is the page on top of the app. A provider
-  /// calls every listener once for each change of it, a switch to another
-  /// branch of the main navigation, such as another tab, included:
+  /// The screen the user sees is the page of the router on top of the app;
+  /// a page shown past the router, such as with `Navigator.push`, and a
+  /// dialog are not pages of the router. A provider calls every listener
+  /// once for each change of it, a switch to another branch of the main
+  /// navigation, such as another tab, included:
   /// - when the app shows its first screen;
   /// - when another page comes on top, such as a page that a navigation
   ///   shows, a page that shows again as the pages above it close, or the
@@ -112,12 +114,16 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// A listener gets the full name of the route of the screen among the
   /// routes of the modules, such as `home.details` (see
-  /// [FacadeRoute.fullName]), and the location of the screen as a path with
-  /// its query, such as `/home/details/5`. For a screen that is not a route
-  /// of a module, the route is `null`, and the location is still that of
-  /// the screen: `/` for the fallback screen of the app entry, and for the
-  /// error screen of the router, the location it could not show. A listener
-  /// takes note of the screen and does not navigate.
+  /// [FacadeRoute.fullName]), and the location of the screen: its path,
+  /// with the query and the fragment it has, such as `/home/details/5`. For
+  /// a screen that is not a route of a module, the route is `null`, and the
+  /// location is still that of the screen: `/` for the fallback screen of
+  /// the app entry, and for the error screen of the router, the location it
+  /// could not show.
+  ///
+  /// A provider may call the listeners while the app builds, such as for
+  /// its first screen, so a listener only takes note of the screen: it does
+  /// not navigate or rebuild widgets, and it returns without throwing.
   static const screenListeners = SocketRef<FactoryListSocket>.role(
     routerRole,
     'screen_listeners',
