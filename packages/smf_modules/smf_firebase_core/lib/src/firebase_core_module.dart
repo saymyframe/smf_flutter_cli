@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
 import 'package:smf_firebase_core/src/configure.dart';
+import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_login.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
@@ -34,8 +35,12 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// Android and iOS apps, which asks the user for the Firebase project. A run
 /// without one, or that skips external setup, prints the command to run
 /// later, and so does a run that lacks what the checks look for, since
-/// flutterfire would fail without it. The README of the app tells how to
-/// configure it again, such as on another machine.
+/// flutterfire would fail without it. Once flutterfire succeeded on macOS,
+/// the module points the build phase for Crashlytics that flutterfire adds
+/// at the upload script of Crashlytics where Flutter puts it, so that
+/// `flutter build ipa` finds it too. The README of the app tells how to
+/// configure it again, such as on another machine, and how to fix the phase
+/// after that.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
@@ -92,6 +97,7 @@ final class FirebaseCoreModule extends SmfModule {
         skippable: true,
         external: true,
         needs: [for (final check in needed) check.id],
+        followUps: [crashlyticsPhaseFix()],
       ),
       AppEntryRole.readmeSections.entry(
         readmeHeading,

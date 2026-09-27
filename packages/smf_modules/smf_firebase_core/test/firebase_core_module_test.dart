@@ -4,6 +4,7 @@ library;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/configure.dart';
+import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -142,6 +143,56 @@ void main() {
         'flutterfire_cli',
         'xcode_project_tools',
       ]);
+    });
+
+    test(
+        'then points the phase for Crashlytics of flutterfire at the upload '
+        'script in the build directory of the app', () {
+      final step = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+
+      final fix = step.followUps.single;
+      expect(fix.tool.executable, 'ruby');
+      expect(fix.tool.prefixArgs, isEmpty);
+      expect(fix.arguments, hasLength(3));
+      expect(fix.arguments.first, '-e');
+      expect(
+        fix.arguments[1],
+        allOf(
+          contains(
+            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
+            'Crashlytics/run"',
+          ),
+          contains(
+            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
+            'firebase-ios-sdk/Crashlytics/run"',
+          ),
+        ),
+      );
+      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
+      expect(
+        fix.description,
+        'Fixing the Crashlytics phase of flutterfire for flutter build ipa',
+      );
+      // It changes a file of the app, so it runs without asking or the
+      // terminal, and the app is complete without it.
+      expect(fix.interactive, isFalse);
+      expect(fix.external, isFalse);
+      expect(fix.skippable, isTrue);
+      // flutterfire adds the phase only on macOS; the step that it follows
+      // needs the Ruby of the Mac.
+      expect(fix.needs, ['xcode_project_on_mac']);
+      expect(fix.when, isEmpty);
+      expect(fix.followUps, isEmpty);
+      // The README of the app gives it as the pipeline prints it, in single
+      // quotes, which the program has none of.
+      expect(fix.arguments[1], isNot(contains("'")));
+      expect(
+        crashlyticsPhaseFixCommand,
+        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
+      );
     });
   });
 
@@ -292,6 +343,8 @@ void main() {
           ),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('run `flutterfire` from `~/.pub-cache/bin`'),
+          contains('`flutter build ipa` needs one more change on macOS'),
+          contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
         ),
       );
     });
