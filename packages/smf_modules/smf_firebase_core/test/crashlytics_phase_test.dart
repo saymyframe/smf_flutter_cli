@@ -31,6 +31,12 @@ void main() {
   late Directory app;
   late File file;
 
+  /// What the program says when it fixed the phase, and when there was
+  /// nothing to fix.
+  const fixed = 'Fixed the Crashlytics phase in '
+      '${AppEntryRole.xcodeProjectFile}\n';
+  const nothing = 'Nothing to fix in ${AppEntryRole.xcodeProjectFile}\n';
+
   setUpAll(() async {
     const modules = [FlutterCoreModule(), FirebaseCoreModule()];
     final result = await ContractHarness(ModuleRegistry(modules)).check(
@@ -83,7 +89,7 @@ void main() {
         final before = withCrashlyticsPhase(project, '1.4.1');
         write(utf8.encode(before));
 
-        fix();
+        expect(fix().stdout, fixed);
 
         final after = file.readAsStringSync();
         expect(
@@ -100,12 +106,12 @@ void main() {
       test('changes nothing the second time, and does not write the file', () {
         write(utf8.encode(withCrashlyticsPhase(project, '1.4.1')));
         fix();
-        final fixed = file.readAsBytesSync();
-        final time = write(fixed);
+        final bytes = file.readAsBytesSync();
+        final time = write(bytes);
 
-        fix();
+        expect(fix().stdout, nothing);
 
-        expect(file.readAsBytesSync(), fixed);
+        expect(file.readAsBytesSync(), bytes);
         expect(file.lastModifiedSync(), time);
       });
 
@@ -119,7 +125,7 @@ void main() {
           final bytes = utf8.encode(text);
           final time = write(bytes);
 
-          fix();
+          expect(fix().stdout, nothing);
 
           expect(file.readAsBytesSync(), bytes);
           expect(file.lastModifiedSync(), time);
@@ -127,7 +133,7 @@ void main() {
       });
 
       test('does nothing in an app without the Xcode project', () {
-        fix();
+        expect(fix().stdout, nothing);
 
         expect(app.listSync(), isEmpty);
       });

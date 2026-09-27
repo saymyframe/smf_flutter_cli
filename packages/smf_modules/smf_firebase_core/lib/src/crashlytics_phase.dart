@@ -36,12 +36,15 @@ const crashlyticsScriptInApp = r'$SRCROOT/../build/ios/SourcePackages/'
 /// the file that its argument names, it replaces every
 /// [crashlyticsScriptInBuildDirectory] with it, byte for byte, whatever the
 /// encoding of the file and the locale, and writes the file only when it
-/// had the path. Without the file, it does nothing.
-const _program = 'f = ARGV[0]; exit unless File.exist?(f); '
-    's = File.binread(f); '
+/// had the path. Without the file, it does nothing. It says which it did,
+/// so that someone who runs it by hand, such as in another directory, can
+/// tell.
+const _program = 'f = ARGV[0]; '
+    's = File.exist?(f) ? File.binread(f) : ""; '
     't = s.gsub("$crashlyticsScriptInBuildDirectory", '
     '"$crashlyticsScriptInApp"); '
-    'File.binwrite(f, t) unless t == s';
+    'if t == s then puts "Nothing to fix in #{f}" '
+    'else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end';
 
 /// The command of [crashlyticsPhaseFix] as the user types it in the
 /// directory of the app on macOS.
