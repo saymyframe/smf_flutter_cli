@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:mason/mason.dart' show RenderTemplate;
+import 'package:mason/mason.dart' show MasonBundledFile, RenderTemplate;
 import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
@@ -162,20 +162,6 @@ RenderedApp renderApp({
   required MergedPubspec pubspec,
 }) {
   final issues = <SmfIssue>[];
-  void stopOnErrors() {
-    final errors = [
-      for (final issue in issues)
-        if (issue.isError) issue,
-    ];
-    if (errors.isEmpty) return;
-    throw GenerationFailedException(
-      errors.length == 1
-          ? 'The app cannot be rendered because of an error.'
-          : 'The app cannot be rendered because of ${errors.length} errors.',
-      issues: errors,
-    );
-  }
-
   final hooks = _runRenderHooks(
     registry: registry,
     resolution: resolution,
@@ -184,7 +170,7 @@ RenderedApp renderApp({
     choices: choices,
     issues: issues,
   );
-  stopOnErrors();
+  _stopOnErrors(issues);
 
   final tags = scanBricks(
     registry: registry,
@@ -201,9 +187,71 @@ RenderedApp renderApp({
     issues: issues,
   );
   texts.texts.addAll(pubspecSocketTexts(pubspec));
+  _renderEmptySockets(texts.texts, tags, issues);
+  _stopOnErrors(issues);
+
+  final bricks = _BrickRenderer(
+    registry: registry,
+    resolution: resolution,
+    context: context,
+    texts: texts.texts,
+    hooks: hooks,
+    issues: issues,
+  );
+  collection.applyingOf<BrickContribution>().forEach(bricks.render);
+  issues.addAll(_unreadVariableIssues(hooks, bricks.variables, collection));
+  _stopOnErrors(issues);
+
+  final files = bricks.files;
+  final variables = bricks.variables;
+  for (final template in {...texts.imports.keys, ...variables.imports.keys}) {
+    final (owner, templatePath) = template;
+    // Only text files hold tags and read variables, and every brick
+    // rendered.
+    final path = bricks.renderedPaths[template] ??
+        (throw StateError('$templatePath of $owner was not rendered.'));
+    try {
+      files[path] = _withImports(
+        files[path]!,
+        [...?texts.imports[template], ...?variables.imports[template]],
+        context.appName,
+      );
+    } on ImportTargetException catch (error) {
+      issues.addAll(
+        _importTargetIssues(template, path, error.reason, texts, variables),
+      );
+    }
+  }
+  _stopOnErrors(issues);
+  return RenderedApp(files.values);
+}
+
+/// Throws a [GenerationFailedException] with the errors among [issues], if
+/// there are any.
+void _stopOnErrors(List<SmfIssue> issues) {
+  final errors = [
+    for (final issue in issues)
+      if (issue.isError) issue,
+  ];
+  if (errors.isEmpty) return;
+  throw GenerationFailedException(
+    errors.length == 1
+        ? 'The app cannot be rendered because of an error.'
+        : 'The app cannot be rendered because of ${errors.length} errors.',
+    issues: errors,
+  );
+}
+
+/// Renders the tags of the sockets among [tags] that get nothing into
+/// [texts] as nothing, or reports a socket that needs a value.
+void _renderEmptySockets(
+  Map<String, String> texts,
+  BrickTags tags,
+  List<SmfIssue> issues,
+) {
   for (final MapEntry(key: socket, value: byName) in tags.found.entries) {
     for (final name in byName.keys) {
-      if (texts.texts.containsKey(name)) continue;
+      if (texts.containsKey(name)) continue;
       if (socket.kind case ValueSocket(required: true)) {
         issues.add(
           SmfIssue(
@@ -214,29 +262,20 @@ RenderedApp renderApp({
         continue;
       }
       // A socket that gets nothing renders to nothing.
-      texts.texts[name] = '';
+      texts[name] = '';
     }
   }
-  stopOnErrors();
+}
 
-  final files = <String, RenderedFile>{};
-  // The path each template file rendered to, by owner and template path.
-  final renderedPaths = <(ContributionOrigin, String), String>{};
-  final variables = _VariableImports();
-  for (final collected in collection.applyingOf<BrickContribution>()) {
-    _renderBrick(
-      collected,
-      registry: registry,
-      resolution: resolution,
-      context: context,
-      texts: texts.texts,
-      hooks: hooks,
-      files: files,
-      renderedPaths: renderedPaths,
-      variables: variables,
-      issues: issues,
-    );
-  }
+/// The issues of the fragment variables that the render hooks set but no
+/// template of their owner reads, as [variables] recorded, so that their
+/// code would be lost.
+List<SmfIssue> _unreadVariableIssues(
+  _HookOutput hooks,
+  _VariableImports variables,
+  Collection collection,
+) {
+  final issues = <SmfIssue>[];
   for (final MapEntry(key: owner, value: fragments)
       in hooks.fragmentVars.entries) {
     final unread = [
@@ -258,51 +297,48 @@ RenderedApp renderApp({
       );
     }
   }
-  stopOnErrors();
+  return issues;
+}
 
-  for (final template in {...texts.imports.keys, ...variables.imports.keys}) {
-    final (owner, templatePath) = template;
-    // Only text files hold tags and read variables, and every brick
-    // rendered.
-    final path = renderedPaths[template] ??
-        (throw StateError('$templatePath of $owner was not rendered.'));
-    try {
-      files[path] = _withImports(
-        files[path]!,
-        [...?texts.imports[template], ...?variables.imports[template]],
-        context.appName,
-      );
-    } on ImportTargetException catch (error) {
-      if (texts.socketsByTemplate[template] case final sockets?) {
-        issues.add(
-          SmfIssue(
-            'The imports of the ${sockets.join(', ')} cannot go into $path, '
-            'which holds ${sockets.length == 1 ? 'its tag' : 'their tags'}: '
-            '${error.reason}.',
-            hint: 'Put the tag into the library file.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      }
-      if (variables.names[template] case final names?) {
-        issues.add(
-          SmfIssue(
-            'The imports of the fragment '
-            '${names.length == 1 ? 'variable' : 'variables'} '
-            '${names.join(', ')} of ${ownerOf(owner)} cannot go into $path, '
-            'which reads '
-            '${names.length == 1 ? 'it' : 'them'}: ${error.reason}.',
-            hint: 'Read the variable in the library file.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      }
-    }
+/// The issues of the imports that cannot go into [path], the file of
+/// [template], for the [reason]: those of the sockets whose tags it holds
+/// and those of the fragment variables it reads.
+List<SmfIssue> _importTargetIssues(
+  (ContributionOrigin, String) template,
+  String path,
+  String reason,
+  _SocketTexts texts,
+  _VariableImports variables,
+) {
+  final (owner, _) = template;
+  final issues = <SmfIssue>[];
+  if (texts.socketsByTemplate[template] case final sockets?) {
+    issues.add(
+      SmfIssue(
+        'The imports of the ${sockets.join(', ')} cannot go into $path, '
+        'which holds ${sockets.length == 1 ? 'its tag' : 'their tags'}: '
+        '$reason.',
+        hint: 'Put the tag into the library file.',
+        origin: owner,
+        path: path,
+      ),
+    );
   }
-  stopOnErrors();
-  return RenderedApp(files.values);
+  if (variables.names[template] case final names?) {
+    issues.add(
+      SmfIssue(
+        'The imports of the fragment '
+        '${names.length == 1 ? 'variable' : 'variables'} '
+        '${names.join(', ')} of ${ownerOf(owner)} cannot go into $path, '
+        'which reads '
+        '${names.length == 1 ? 'it' : 'them'}: $reason.',
+        hint: 'Read the variable in the library file.',
+        origin: owner,
+        path: path,
+      ),
+    );
+  }
+  return issues;
 }
 
 /// [file] with the imports of [added] that it does not have yet, and with
@@ -347,7 +383,6 @@ _HookOutput _runRenderHooks({
   required Map<Role, Object?> choices,
   required List<SmfIssue> issues,
 }) {
-  final present = resolution.presentRoles;
   final request = hookRequest(
     registry: registry,
     resolution: resolution,
@@ -355,8 +390,34 @@ _HookOutput _runRenderHooks({
     context: context,
     choices: choices,
   );
-  final output = _HookOutput();
+  final hooks = _RenderHooks(registry, resolution, issues);
+  for (final role in resolution.presentRoles) {
+    // The input's runtime type argument is the role's data type, which the
+    // hooks of the role's template and providers take.
+    final input = role.hookInput(request);
+    if (role.template case final template?) {
+      hooks.add(RoleTemplateOrigin(role), () => template.render(input));
+    }
+    for (final module in resolution.providersOf(role)) {
+      final provider = Resolution.providerObject(module, role);
+      hooks.add(module.origin, () => provider.render(input));
+    }
+  }
+  return hooks.output;
+}
 
+/// Runs render hooks, and records what they return in [output] and what is
+/// wrong with it in [issues].
+final class _RenderHooks {
+  _RenderHooks(this.registry, this.resolution, this.issues);
+
+  final ModuleRegistry registry;
+  final Resolution resolution;
+  final List<SmfIssue> issues;
+  final _HookOutput output = _HookOutput();
+
+  /// Runs [render], the render hook of [origin], and records its variables
+  /// and fragments.
   void add(ContributionOrigin origin, RoleOutput Function() render) {
     final RoleOutput result;
     try {
@@ -367,6 +428,11 @@ _HookOutput _runRenderHooks({
       );
       return;
     }
+    _addVars(origin, result);
+    _addFragments(origin, result);
+  }
+
+  void _addVars(ContributionOrigin origin, RoleOutput result) {
     final vars = output.vars.putIfAbsent(origin, () => {});
     final fragments = output.fragmentVars.putIfAbsent(origin, () => {});
     // A fragment variable renders as its code, which must be text that
@@ -395,38 +461,15 @@ _HookOutput _runRenderHooks({
         vars[key] = value;
         if (result.vars[key] case final Fragment fragment) {
           fragments[key] = fragment;
-          for (final problem in _fragmentVarProblems(fragment)) {
-            issues.add(
-              SmfIssue(
-                'The fragment variable $key of the render hook of $origin '
-                '$problem',
-                origin: origin,
-              ),
-            );
-          }
+          issues.addAll(_fragmentVarIssues(fragment, key, origin));
         }
       }
     }
-    for (final name in strippedVars(values)) {
-      issues.add(
-        SmfIssue(
-          'The brick variable $name of the render hook of $origin has a '
-          'backslash before a line break or a non-ASCII character, which '
-          'mason removes.',
-          origin: origin,
-        ),
-      );
-    }
-    for (final name in nonPlainVars(values)) {
-      issues.add(
-        SmfIssue(
-          'The brick variable $name of the render hook of $origin is not '
-          'plain data: strings, numbers, booleans, and lists and maps of '
-          'them, or a fragment of code.',
-          origin: origin,
-        ),
-      );
-    }
+    issues.addAll(_varValueIssues(values, origin));
+  }
+
+  void _addFragments(ContributionOrigin origin, RoleOutput result) {
+    final present = resolution.presentRoles;
     for (final fragment in result.fragments) {
       final socket = fragment.socket;
       final collected = Collected(
@@ -439,21 +482,46 @@ _HookOutput _runRenderHooks({
       if (collected.applies) output.fragments.add(collected);
     }
   }
-
-  for (final role in present) {
-    // The input's runtime type argument is the role's data type, which the
-    // hooks of the role's template and providers take.
-    final input = role.hookInput(request);
-    if (role.template case final template?) {
-      add(RoleTemplateOrigin(role), () => template.render(input));
-    }
-    for (final module in resolution.providersOf(role)) {
-      final provider = Resolution.providerObject(module, role);
-      add(module.origin, () => provider.render(input));
-    }
-  }
-  return output;
 }
+
+/// The issues of [fragment], the value of the brick variable [name] of the
+/// render hook of [origin]; see [_fragmentVarProblems].
+List<SmfIssue> _fragmentVarIssues(
+  Fragment fragment,
+  String name,
+  ContributionOrigin origin,
+) =>
+    [
+      for (final problem in _fragmentVarProblems(fragment))
+        SmfIssue(
+          'The fragment variable $name of the render hook of $origin '
+          '$problem',
+          origin: origin,
+        ),
+    ];
+
+/// The issues of the brick variables [values] of the render hook of
+/// [origin] that mason would change or cannot take.
+List<SmfIssue> _varValueIssues(
+  Map<String, Object?> values,
+  ContributionOrigin origin,
+) =>
+    [
+      for (final name in strippedVars(values))
+        SmfIssue(
+          'The brick variable $name of the render hook of $origin has a '
+          'backslash before a line break or a non-ASCII character, which '
+          'mason removes.',
+          origin: origin,
+        ),
+      for (final name in nonPlainVars(values))
+        SmfIssue(
+          'The brick variable $name of the render hook of $origin is not '
+          'plain data: strings, numbers, booleans, and lists and maps of '
+          'them, or a fragment of code.',
+          origin: origin,
+        ),
+    ];
 
 /// What is wrong with [fragment], the value of a brick variable, besides
 /// what [strippedVars] finds in its code: a wrapper, and imports that are
@@ -478,6 +546,25 @@ final class _SocketTexts {
   /// The sockets whose tags each of those template files holds.
   final Map<(ContributionOrigin, String), List<SocketRef>> socketsByTemplate =
       {};
+
+  /// Records the imports of the fragments of [order], the contributions to
+  /// [socket], for the template file that holds its tag at [place].
+  void addImports(
+    SocketRef socket,
+    TagPlace place,
+    ContributionOrder order,
+  ) {
+    final (tag, owner) = place;
+    final key = (owner, tag.path);
+    socketsByTemplate.putIfAbsent(key, () => []).add(socket);
+    final added = imports.putIfAbsent(key, () => []);
+    for (final collected in order.contributions) {
+      final fragment = (collected.contribution as SocketContribution).fragment;
+      for (final import in fragment?.imports ?? const <ImportRef>[]) {
+        added.add(AddedImport(import, collected.origin));
+      }
+    }
+  }
 }
 
 /// Orders [contributions] by socket and renders each socket.
@@ -508,107 +595,189 @@ _SocketTexts _renderSockets({
     }
     final place = tags.placeOf(socket);
     if (place == null) {
-      final contributors = {
-        for (final collected in order.contributions) collected.origin,
-      };
-      issues.add(
-        SmfIssue(
-          '${contributors.join(', ')} '
-          '${contributors.length == 1 ? 'contributes' : 'contribute'} to '
-          'the $socket, but no template of the app has its tag '
-          '${socket.tags.join(', ')}, so what they contribute would be lost.',
-          origin: contributors.first,
-        ),
-      );
+      issues.add(_lostContributionsIssue(socket, order));
       continue;
     }
-    try {
-      result.texts.addAll(
-        socket.render([
-          for (final collected in order.contributions)
-            collected.contribution as SocketContribution,
-        ]),
-      );
-    } on MergeConflict catch (conflict) {
-      issues.add(
-        SmfIssue(
-          'The contributions to the $socket conflict: $conflict.',
-          origin: conflict.incomingOrigin,
-        ),
-      );
-      continue;
-    } on Object catch (error) {
-      issues.add(SmfIssue('The $socket cannot be rendered: $error.'));
-      continue;
-    }
-    if (!socket.kind.carriesImports) continue;
-    final (tag, owner) = place;
-    final key = (owner, tag.path);
-    result.socketsByTemplate.putIfAbsent(key, () => []).add(socket);
-    final imports = result.imports.putIfAbsent(key, () => []);
-    for (final collected in order.contributions) {
-      final fragment = (collected.contribution as SocketContribution).fragment;
-      for (final import in fragment?.imports ?? const <ImportRef>[]) {
-        imports.add(AddedImport(import, collected.origin));
-      }
-    }
+    final rendered = _renderSocket(socket, order, issues);
+    if (rendered == null) continue;
+    result.texts.addAll(rendered);
+    if (socket.kind.carriesImports) result.addImports(socket, place, order);
   }
   return result;
 }
 
-/// Renders the files of the brick of [collected] into [files].
-void _renderBrick(
-  Collected collected, {
-  required ModuleRegistry registry,
-  required Resolution resolution,
-  required ModuleContext context,
-  required Map<String, String> texts,
-  required _HookOutput hooks,
-  required Map<String, RenderedFile> files,
-  required Map<(ContributionOrigin, String), String> renderedPaths,
-  required _VariableImports variables,
-  required List<SmfIssue> issues,
-}) {
-  final origin = collected.origin;
-  final brick = collected.contribution as BrickContribution;
-  final name = brick.bundle.name;
-  // A variant's bricks belong to its module and get the module's variables.
-  final owner = ownerOf(origin);
-  final fromHooks = hooks.vars[owner] ?? const <String, Object?>{};
-  final fragments = hooks.fragmentVars[owner] ?? const <String, Fragment>{};
-  final present = resolution.presentRoles;
-  final vars = <String, Object?>{
-    'app_name': context.appName,
-    'org_name': context.orgName,
-    for (final role in rolesOf(origin, registry, resolution).access)
-      role.presenceFlag: present.contains(role),
-    ...texts,
-    ...fromHooks,
+/// The issue of the contributions of [order] to [socket], whose tag no
+/// template of the app has, so that they would be lost.
+SmfIssue _lostContributionsIssue(SocketRef socket, ContributionOrder order) {
+  final contributors = {
+    for (final collected in order.contributions) collected.origin,
   };
-  for (final MapEntry(:key, :value) in brick.vars.entries) {
-    if (fromHooks.containsKey(key)) {
-      issues.add(
-        SmfIssue(
-          'The brick $name of $origin sets the variable $key, which a render '
-          'hook of $owner sets too.',
-          origin: origin,
-        ),
-      );
+  return SmfIssue(
+    '${contributors.join(', ')} '
+    '${contributors.length == 1 ? 'contributes' : 'contribute'} to '
+    'the $socket, but no template of the app has its tag '
+    '${socket.tags.join(', ')}, so what they contribute would be lost.',
+    origin: contributors.first,
+  );
+}
+
+/// The text of the tags of [socket] with the contributions of [order], or
+/// `null` after reporting to [issues] why it cannot be rendered.
+Map<String, String>? _renderSocket(
+  SocketRef socket,
+  ContributionOrder order,
+  List<SmfIssue> issues,
+) {
+  try {
+    return socket.render([
+      for (final collected in order.contributions)
+        collected.contribution as SocketContribution,
+    ]);
+  } on MergeConflict catch (conflict) {
+    issues.add(
+      SmfIssue(
+        'The contributions to the $socket conflict: $conflict.',
+        origin: conflict.incomingOrigin,
+      ),
+    );
+  } on Object catch (error) {
+    issues.add(SmfIssue('The $socket cannot be rendered: $error.'));
+  }
+  return null;
+}
+
+/// A brick that [_BrickRenderer] renders: who contributed it, its owner,
+/// its variables, and the fragment variables and module kind of its owner.
+final class _Brick {
+  _Brick({
+    required this.origin,
+    required this.name,
+    required this.vars,
+    required this.fragments,
+    required this.kind,
+  }) : owner = ownerOf(origin);
+
+  final ContributionOrigin origin;
+
+  /// The module or role template the brick belongs to: a variant's bricks
+  /// belong to its module and get the module's variables.
+  final ContributionOrigin owner;
+
+  final String name;
+  final Map<String, Object?> vars;
+  final Map<String, Fragment> fragments;
+
+  /// The kind of the module of the brick, if it has one.
+  final ModuleKind? kind;
+}
+
+/// Renders the bricks of an app into [files], with the text of every tag
+/// and the variables of the render hooks, and reports the problems to
+/// [issues].
+final class _BrickRenderer {
+  _BrickRenderer({
+    required this.registry,
+    required this.resolution,
+    required this.context,
+    required this.texts,
+    required this.hooks,
+    required this.issues,
+  });
+
+  final ModuleRegistry registry;
+  final Resolution resolution;
+  final ModuleContext context;
+
+  /// The text of every tag.
+  final Map<String, String> texts;
+
+  final _HookOutput hooks;
+  final List<SmfIssue> issues;
+
+  /// The files rendered so far, by path.
+  final Map<String, RenderedFile> files = {};
+
+  /// The path each template file rendered to, by owner and template path.
+  final Map<(ContributionOrigin, String), String> renderedPaths = {};
+
+  /// The fragment variables that the templates read, and their imports.
+  final _VariableImports variables = _VariableImports();
+
+  /// Renders the files of the brick of [collected] into [files].
+  void render(Collected collected) {
+    final brick = _brickOf(collected);
+    final files = (collected.contribution as BrickContribution).bundle.files;
+    for (final file in files) {
+      _renderFile(brick, file);
     }
-    vars[key] = value;
   }
 
-  final kind = switch (origin) {
-    ModuleOrigin(:final module) => resolution.module(module)?.descriptor.kind,
-    _ => null,
-  };
-  for (final file in brick.bundle.files) {
+  _Brick _brickOf(Collected collected) {
+    final origin = collected.origin;
+    final brick = collected.contribution as BrickContribution;
+    final name = brick.bundle.name;
+    // A variant's bricks belong to its module and get the module's
+    // variables.
+    final owner = ownerOf(origin);
+    final fromHooks = hooks.vars[owner] ?? const <String, Object?>{};
+    final present = resolution.presentRoles;
+    final vars = <String, Object?>{
+      'app_name': context.appName,
+      'org_name': context.orgName,
+      for (final role in rolesOf(origin, registry, resolution).access)
+        role.presenceFlag: present.contains(role),
+      ...texts,
+      ...fromHooks,
+    };
+    for (final MapEntry(:key, :value) in brick.vars.entries) {
+      if (fromHooks.containsKey(key)) {
+        issues.add(
+          SmfIssue(
+            'The brick $name of $origin sets the variable $key, which a '
+            'render hook of $owner sets too.',
+            origin: origin,
+          ),
+        );
+      }
+      vars[key] = value;
+    }
+    return _Brick(
+      origin: origin,
+      name: name,
+      vars: vars,
+      fragments: hooks.fragmentVars[owner] ?? const <String, Fragment>{},
+      kind: switch (origin) {
+        ModuleOrigin(:final module) =>
+          resolution.module(module)?.descriptor.kind,
+        _ => null,
+      },
+    );
+  }
+
+  void _renderFile(_Brick brick, MasonBundledFile file) {
     final template = file.path.replaceAll(r'\', '/');
+    final path = _pathOf(brick, template);
+    if (path == null) return;
+    final content = _contentOf(brick, file, template);
+    if (content == null || _isGeneratedTwice(brick.origin, path)) return;
+    files[path] = RenderedFile(
+      path: path,
+      bytes: content.bytes,
+      owner: brick.origin,
+      isText: content.isText,
+    );
+    renderedPaths[(brick.origin, template)] = path;
+  }
+
+  /// The path that [template], the path of a file of [brick], renders to,
+  /// or `null` after reporting why it cannot be a path of the app.
+  String? _pathOf(_Brick brick, String template) {
+    final _Brick(:origin, :name, :owner) = brick;
     final pathProblems = _pathVariableProblems(
       template,
       owner: owner,
-      vars: vars,
-      fragments: fragments,
+      vars: brick.vars,
+      fragments: brick.fragments,
       read: (variable) => variables.read.add((owner, variable)),
     );
     for (final problem in pathProblems) {
@@ -622,10 +791,10 @@ void _renderBrick(
         ),
       );
     }
-    if (pathProblems.isNotEmpty) continue;
+    if (pathProblems.isNotEmpty) return null;
     final String path;
     try {
-      path = template.render(vars);
+      path = template.render(brick.vars);
     } on Object catch (error) {
       issues.add(
         SmfIssue(
@@ -635,7 +804,7 @@ void _renderBrick(
           path: template,
         ),
       );
-      continue;
+      return null;
     }
     if (_pathProblem(path) case final problem?) {
       issues.add(
@@ -646,8 +815,9 @@ void _renderBrick(
           path: template,
         ),
       );
-      continue;
+      return null;
     }
+    final kind = brick.kind;
     if (origin case ModuleOrigin(:final module)
         when kind != null && !kind.allowsFile(module, path)) {
       issues.add(
@@ -658,91 +828,93 @@ void _renderBrick(
           path: path,
         ),
       );
-      continue;
+      return null;
     }
+    return path;
+  }
 
-    var bytes = base64.decode(file.data) as List<int>;
+  /// The content of [file], the template [template] of [brick], rendered
+  /// with mason if it is text with tags, or `null` after reporting why it
+  /// cannot be rendered.
+  ({List<int> bytes, bool isText})? _contentOf(
+    _Brick brick,
+    MasonBundledFile file,
+    String template,
+  ) {
+    final bytes = base64.decode(file.data);
     final text = templateTextOf(file);
-    final isText = text != null;
-    if (text != null) {
-      final scan =
-          masonTag.hasMatch(text) ? scanTemplate(template, text) : null;
-      if (scan != null &&
-          !_readFragmentVariables(
-            scan,
-            template,
-            brick: name,
-            origin: origin,
-            fragments: fragments,
-            variables: variables,
-            issues: issues,
-          )) {
-        continue;
-      }
-      final unset = scan == null ? const <String>[] : unsetNames(scan, vars);
-      if (unset.isNotEmpty) {
-        issues.add(
-          SmfIssue(
-            'The template $template in the brick $name of $origin reads '
-            '${unset.join(', ')}, which neither the brick nor a render hook '
-            'of $owner sets, so mustache would render nothing.',
-            hint: 'Set every variable a template reads, to "" or false when '
-                'there is nothing.',
-            origin: origin,
-            path: template,
-          ),
-        );
-        continue;
-      }
-      if (scan != null) {
-        try {
-          bytes = utf8.encode(
-            _withoutEmptyLines(
-              text,
-              (tag) => texts[tag] == '' || fragments[tag]?.code == '',
-            ).render(vars),
-          );
-        } on Object catch (error) {
-          issues.add(
-            SmfIssue(
-              'The template $template in the brick $name of $origin cannot '
-              'be rendered: $error',
-              origin: origin,
-              path: template,
-            ),
-          );
-          continue;
-        }
-      }
+    if (text == null) return (bytes: bytes, isText: false);
+    if (!masonTag.hasMatch(text)) return (bytes: bytes, isText: true);
+    final _Brick(:origin, :name, :vars, :fragments) = brick;
+    final scan = scanTemplate(template, text);
+    if (!_readFragmentVariables(
+      scan,
+      template,
+      brick: name,
+      origin: origin,
+      fragments: fragments,
+      variables: variables,
+      issues: issues,
+    )) {
+      return null;
     }
+    final unset = unsetNames(scan, vars);
+    if (unset.isNotEmpty) {
+      issues.add(
+        SmfIssue(
+          'The template $template in the brick $name of $origin reads '
+          '${unset.join(', ')}, which neither the brick nor a render hook '
+          'of ${brick.owner} sets, so mustache would render nothing.',
+          hint: 'Set every variable a template reads, to "" or false when '
+              'there is nothing.',
+          origin: origin,
+          path: template,
+        ),
+      );
+      return null;
+    }
+    try {
+      final rendered = _withoutEmptyLines(
+        text,
+        (tag) => texts[tag] == '' || fragments[tag]?.code == '',
+      ).render(vars);
+      return (bytes: utf8.encode(rendered), isText: true);
+    } on Object catch (error) {
+      issues.add(
+        SmfIssue(
+          'The template $template in the brick $name of $origin cannot '
+          'be rendered: $error',
+          origin: origin,
+          path: template,
+        ),
+      );
+      return null;
+    }
+  }
+
+  /// Whether [origin] generates [path] although another file of the app
+  /// already has it, which it reports.
+  bool _isGeneratedTwice(ContributionOrigin origin, String path) {
     // File systems that ignore case, as macOS and Windows do by default,
     // take paths that differ only in case for one file.
     final same = files.values
         .where((file) => file.path.toLowerCase() == path.toLowerCase())
         .firstOrNull;
-    if (same != null) {
-      final what = same.path == path
-          ? path
-          : '${same.path} and $path, one file where case does not matter';
-      issues.add(
-        SmfIssue(
-          same.owner == origin
-              ? '$origin generates $what twice; every file has one brick.'
-              : 'Both ${same.owner} and $origin generate $what; every file '
-                  'has one brick.',
-          origin: origin,
-          path: path,
-        ),
-      );
-      continue;
-    }
-    files[path] = RenderedFile(
-      path: path,
-      bytes: bytes,
-      owner: origin,
-      isText: isText,
+    if (same == null) return false;
+    final what = same.path == path
+        ? path
+        : '${same.path} and $path, one file where case does not matter';
+    issues.add(
+      SmfIssue(
+        same.owner == origin
+            ? '$origin generates $what twice; every file has one brick.'
+            : 'Both ${same.owner} and $origin generate $what; every file '
+                'has one brick.',
+        origin: origin,
+        path: path,
+      ),
     );
-    renderedPaths[(origin, template)] = path;
+    return true;
   }
 }
 
@@ -860,13 +1032,19 @@ Set<String> _namesReadBy(Collection collection, ContributionOrigin owner) => {
       for (final collected in collection.all)
         if (collected.contribution case final BrickContribution brick
             when ownerOf(collected.origin) == owner)
-          for (final MapEntry(key: path, value: text)
-              in templateFilesOf(brick).entries)
-            if (masonTag.hasMatch(text))
-              if (scanTemplate(path, text) case final scan) ...[
-                for (final tag in scan.tags) variableOf(tag.name),
-                for (final section in scan.sections) variableOf(section.name),
-              ],
+          ..._namesReadIn(brick),
+    };
+
+/// The names of the variables and sections that the templates of [brick]
+/// read.
+Set<String> _namesReadIn(BrickContribution brick) => {
+      for (final MapEntry(key: path, value: text)
+          in templateFilesOf(brick).entries)
+        if (masonTag.hasMatch(text))
+          if (scanTemplate(path, text) case final scan) ...[
+            for (final tag in scan.tags) variableOf(tag.name),
+            for (final section in scan.sections) variableOf(section.name),
+          ],
     };
 
 /// The fragment variables among [fragments] that the template of [scan]

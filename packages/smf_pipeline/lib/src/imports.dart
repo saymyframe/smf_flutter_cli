@@ -57,18 +57,7 @@ final class _Existing {
   final base = path.startsWith('lib/')
       ? Uri.parse('package:$appName/${path.substring('lib/'.length)}')
       : null;
-  final existing = [
-    for (final directive in unit.directives)
-      if (directive is ImportDirective)
-        _Existing(
-          directive,
-          (_canonical(_uriOf(directive), base), directive.prefix?.name),
-          directive.configurations.isNotEmpty ||
-                  directive.combinators.whereType<HideCombinator>().isNotEmpty
-              ? {}
-              : _shownNames(directive),
-        ),
-  ];
+  final existing = _existingImports(unit, base);
 
   final added = [
     for (final import in ImportRef.merge(imports, appName: appName))
@@ -76,61 +65,113 @@ final class _Existing {
   ];
   if (added.isEmpty) return (text: text, added: const []);
 
-  // What to insert at each offset, in the order of the merged imports,
-  // which are sorted by group and URI like the result, with the line
-  // endings of the file.
-  final newline = text.contains('\r\n') ? '\r\n' : '\n';
-  final insertions = <int, List<String>>{};
-  void insert(int offset, String code) => insertions
-      .putIfAbsent(offset, () => [])
-      .add(code.replaceAll('\n', newline));
-
-  final nodes = [for (final known in existing) known.node];
-  int groupOfNode(ImportDirective node) => _groupOf(_uriOf(node));
+  final inserter = _Inserter(
+    text,
+    [for (final known in existing) known.node],
+    appName,
+  );
   final sections = <String>[];
   for (final group in [0, 1]) {
-    final lines = [
-      for (final import in added)
-        if (_groupOf(import.uri) == group) import,
-    ];
-    if (lines.isEmpty) continue;
-    final sameGroup = [
-      for (final node in nodes)
-        if (groupOfNode(node) == group) node,
-    ];
-    if (sameGroup.isNotEmpty) {
-      // Each import before the first import of its group with a greater
-      // URI, or after the last one.
-      for (final import in lines) {
-        final directive = import.toDirective(appName);
-        final next = sameGroup
-            .where((node) => _uriOf(node).compareTo(import.uri) > 0)
-            .firstOrNull;
-        if (next != null) {
-          insert(_lineStart(text, next.offset), '$directive\n');
-        } else {
-          insert(_lineEnd(text, sameGroup.last.end), '\n$directive');
-        }
-      }
-      continue;
-    }
-    final block = lines.map((import) => import.toDirective(appName)).join('\n');
-    final next = nodes.where((node) => groupOfNode(node) > group).firstOrNull;
-    final previous =
-        nodes.where((node) => groupOfNode(node) < group).lastOrNull;
-    if (next != null) {
-      insert(_lineStart(text, next.offset), '$block\n\n');
-    } else if (previous != null) {
-      insert(_lineEnd(text, previous.end), '\n\n$block');
-    } else {
+    if (inserter.addGroup(group, added) case final block?) {
       sections.add(block);
     }
   }
-
   if (sections.isNotEmpty) {
-    // The file has no imports: they go before its first directive or
-    // declaration after the library directive.
-    final block = sections.join('\n\n');
+    inserter.addToFileWithoutImports(sections.join('\n\n'), unit);
+  }
+  return (text: inserter.result, added: added);
+}
+
+/// The imports of [unit], the file at [base] if it is in `lib/`.
+List<_Existing> _existingImports(CompilationUnit unit, Uri? base) => [
+      for (final directive in unit.directives)
+        if (directive is ImportDirective)
+          _Existing(
+            directive,
+            (_canonical(_uriOf(directive), base), directive.prefix?.name),
+            directive.configurations.isNotEmpty ||
+                    directive.combinators.whereType<HideCombinator>().isNotEmpty
+                ? {}
+                : _shownNames(directive),
+          ),
+    ];
+
+/// Puts the directives that [addImports] adds into a file where
+/// `directives_ordering` puts them, and gives the file with them.
+final class _Inserter {
+  _Inserter(this.text, this.nodes, this.appName)
+      : _newline = text.contains('\r\n') ? '\r\n' : '\n';
+
+  /// The text of the file.
+  final String text;
+
+  /// The import directives of the file.
+  final List<ImportDirective> nodes;
+
+  /// The package of the app.
+  final String appName;
+
+  final String _newline;
+
+  /// What to insert at each offset, in the order of the merged imports,
+  /// which are sorted by group and URI like the result, with the line
+  /// endings of the file.
+  final Map<int, List<String>> _insertions = {};
+
+  void _insert(int offset, String code) => _insertions
+      .putIfAbsent(offset, () => [])
+      .add(code.replaceAll('\n', _newline));
+
+  /// Adds those of [imports] that are in [group] next to the imports of the
+  /// file, or returns them as a block if the file has no imports.
+  String? addGroup(int group, List<ImportRef> imports) {
+    final lines = [
+      for (final import in imports)
+        if (_groupOf(import.uri) == group) import,
+    ];
+    if (lines.isEmpty) return null;
+    final sameGroup = [
+      for (final node in nodes)
+        if (_groupOf(_uriOf(node)) == group) node,
+    ];
+    if (sameGroup.isNotEmpty) {
+      _addAmong(lines, sameGroup);
+      return null;
+    }
+    final block = lines.map((import) => import.toDirective(appName)).join('\n');
+    final next =
+        nodes.where((node) => _groupOf(_uriOf(node)) > group).firstOrNull;
+    final previous =
+        nodes.where((node) => _groupOf(_uriOf(node)) < group).lastOrNull;
+    if (next != null) {
+      _insert(_lineStart(text, next.offset), '$block\n\n');
+    } else if (previous != null) {
+      _insert(_lineEnd(text, previous.end), '\n\n$block');
+    } else {
+      return block;
+    }
+    return null;
+  }
+
+  /// Adds each of [imports] among [sameGroup], the imports of the file in
+  /// its group: before the first with a greater URI, or after the last.
+  void _addAmong(List<ImportRef> imports, List<ImportDirective> sameGroup) {
+    for (final import in imports) {
+      final directive = import.toDirective(appName);
+      final next = sameGroup
+          .where((node) => _uriOf(node).compareTo(import.uri) > 0)
+          .firstOrNull;
+      if (next != null) {
+        _insert(_lineStart(text, next.offset), '$directive\n');
+      } else {
+        _insert(_lineEnd(text, sameGroup.last.end), '\n$directive');
+      }
+    }
+  }
+
+  /// Adds [block], the imports of [unit], a file that has none, before its
+  /// first directive or declaration after the library directive.
+  void addToFileWithoutImports(String block, CompilationUnit unit) {
     final first = [
       ...unit.directives.where((directive) => directive is! LibraryDirective),
       ...unit.declarations,
@@ -140,38 +181,41 @@ final class _Existing {
       // Before the first node, or at the start of the file if only blank
       // lines come before it.
       final start = _lineStart(text, first.offset);
-      insert(
+      _insert(
         text.substring(0, start).trim().isEmpty ? 0 : start,
         '$block\n\n',
       );
     } else if (library != null) {
-      insert(_lineEnd(text, library.end), '\n\n$block');
+      _insert(_lineEnd(text, library.end), '\n\n$block');
     } else {
-      insert(0, '$block\n');
+      _insert(0, '$block\n');
     }
   }
 
-  final buffer = StringBuffer();
-  var position = 0;
-  for (final offset in insertions.keys.toList()..sort()) {
-    buffer
-      ..write(text.substring(position, offset))
-      ..writeAll(insertions[offset]!);
-    position = offset;
+  /// The text of the file with what was added.
+  String get result {
+    final buffer = StringBuffer();
+    var position = 0;
+    for (final offset in _insertions.keys.toList()..sort()) {
+      buffer
+        ..write(text.substring(position, offset))
+        ..writeAll(_insertions[offset]!);
+      position = offset;
+    }
+    buffer.write(text.substring(position));
+    return buffer.toString();
   }
-  buffer.write(text.substring(position));
-  return (text: buffer.toString(), added: added);
 }
 
 String _uriOf(ImportDirective node) => node.uri.stringValue ?? '';
 
 /// The group of an import in `directives_ordering`: `dart:`, `package:`,
 /// then relative.
-int _groupOf(String uri) => uri.startsWith('dart:')
-    ? 0
-    : uri.startsWith('package:')
-        ? 1
-        : 2;
+int _groupOf(String uri) {
+  if (uri.startsWith('dart:')) return 0;
+  if (uri.startsWith('package:')) return 1;
+  return 2;
+}
 
 /// [uri] as the app sees it: a relative import of a file in `lib/` becomes
 /// the `package:` URI of the file, when [base], the file that imports it,
