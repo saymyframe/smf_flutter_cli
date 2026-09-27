@@ -240,7 +240,7 @@ void main() {
         appliesTo: (app) => app.modules.contains(const ModuleId('other')),
       );
 
-      expect(await run(appTests: [core, other]), 0);
+      expect(await run(appTests: [core]), 0);
       expect(tested, ['app_1 (flutter_core): /tests/core']);
       expect(log, [
         '\n=== app_1: flutter_core (flutter_core)',
@@ -249,17 +249,32 @@ void main() {
         '\n1 apps generated in /apps.',
       ]);
 
-      tested.clear();
-      expect(await run(appTests: [other]), 0);
-      expect(tested, isEmpty);
+      // Only the tests that apply to the app go into it.
+      expect(await run(appTests: [core, other]), 1);
+      expect(tested, hasLength(2));
+      expect(tested.last, 'app_1 (flutter_core): /tests/core');
 
       expect(await run(appTests: [core], analyzeCode: 1), 1);
-      expect(tested, isEmpty);
+      expect(tested, hasLength(2));
 
       expect(await run(appTests: [core], testCode: 2), 1);
-      expect(tested, hasLength(1));
-      expect(log.last, contains('app_1 (flutter_core (flutter_core)): '));
-      expect(log.last, endsWith('its tests exited with 2.'));
+      expect(tested, hasLength(3));
+      expect(
+        log.last,
+        'app_1 (flutter_core (flutter_core)): its tests failed with the exit '
+        'code 2.',
+      );
+    });
+
+    test('fails when tests apply to no app', () async {
+      final other = MatrixAppTest(
+        '/tests/other',
+        appliesTo: (app) => app.modules.contains(const ModuleId('other')),
+      );
+
+      expect(await run(appTests: [other]), 1);
+      expect(tested, isEmpty);
+      expect(log.last, 'The tests of /tests/other apply to no app.');
     });
 
     test('fails when the contract harness finds errors in a case', () async {
@@ -281,8 +296,11 @@ void main() {
     fileSystem.file('/tests/core/test/core_test.dart')
       ..createSync(recursive: true)
       ..writeAsStringSync(
-        "import 'package:{{app_name}}/app.dart';\n// {{screen}}, {{other}}\n",
+        "import 'package:{{app_name}}/app.dart';\n// {{screen}}\n",
       );
+    fileSystem.file('/tests/core/.hidden/notes.txt')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('{{nothing}}');
     fileSystem.file('/tests/core/lib/options.dart')
       ..createSync(recursive: true)
       ..writeAsStringSync('const options = 1;\n');
@@ -294,7 +312,7 @@ void main() {
       ..writeAsStringSync('const options = 0;\n');
     const app = MatrixApp('home', [ModuleId('home')]);
 
-    addAppTests(
+    final added = addAppTests(
       [
         MatrixAppTest(
           '/tests/core',
@@ -309,13 +327,145 @@ void main() {
       fileSystem: fileSystem,
     );
 
+    expect(added, [
+      'lib/options.dart',
+      'test/core_test.dart',
+      'test/more_test.dart',
+    ]);
     String read(String path) =>
         fileSystem.file('/apps/app_1/$path').readAsStringSync();
     expect(
       read('test/core_test.dart'),
-      "import 'package:my_app/app.dart';\n// home.home, {{other}}\n",
+      "import 'package:my_app/app.dart';\n// home.home\n",
     );
     expect(read('lib/options.dart'), 'const options = 1;\n');
     expect(read('test/more_test.dart'), '// my_app\n');
+    expect(fileSystem.directory('/apps/app_1/.hidden').existsSync(), isFalse);
+  });
+
+  test('the tests of an app go into it only when their files fit', () {
+    final fileSystem = MemoryFileSystem();
+    fileSystem.file('/tests/core/test/core_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// {{app_name}} {{screen}}\n');
+    fileSystem.file('/tests/more/test/core_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// more\n');
+    const app = MatrixApp('home', [ModuleId('home')]);
+    List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          tests,
+          app: app,
+          directory: '/apps/app_1',
+          packageName: 'my_app',
+          fileSystem: fileSystem,
+        );
+    Matcher throwsProblem(String message) => throwsA(
+          isA<MatrixAppTestException>()
+              .having((error) => error.message, 'message', message),
+        );
+
+    expect(
+      () => add([MatrixAppTest('/tests/core', appliesTo: (app) => true)]),
+      throwsProblem(
+        'The tests of /tests/core keep {{screen}} in test/core_test.dart: no '
+        'value fills it.',
+      ),
+    );
+    expect(
+      () => add([
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          values: (app) => {'screen': 'home.home'},
+        ),
+        MatrixAppTest('/tests/more', appliesTo: (app) => true),
+      ]),
+      throwsProblem(
+        'The tests of /tests/core and /tests/more both have '
+        'test/core_test.dart.',
+      ),
+    );
+    expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+  });
+
+  group('runAppTests', () {
+    late MemoryFileSystem fileSystem;
+    late List<String> commands;
+    const app = MatrixApp('home', [ModuleId('home')]);
+    const generated = GeneratedApp(name: 'my_app', path: '/apps/app_1');
+
+    setUp(() {
+      fileSystem = MemoryFileSystem();
+      fileSystem.file('/tests/core/test/core_test.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// {{app_name}}\n');
+      commands = [];
+    });
+
+    Future<(int, String)> run(
+      List<MatrixAppTest> tests, {
+      Map<String, int> codes = const {},
+    }) =>
+        runAppTests(
+          generated,
+          app,
+          tests,
+          fileSystem: fileSystem,
+          flutter: (arguments, directory) async {
+            final command = arguments.join(' ');
+            commands.add('$directory: $command');
+            return (codes[command] ?? 0, '[$command]');
+          },
+        );
+
+    test('adds the tests, their dev dependencies, and runs them', () async {
+      final (code, output) = await run([
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          devDependencies: const ['mocks', 'more_mocks'],
+        ),
+      ]);
+
+      expect(code, 0);
+      expect(commands, [
+        '/apps/app_1: pub add dev:mocks dev:more_mocks',
+        '/apps/app_1: analyze',
+        '/apps/app_1: test',
+      ]);
+      expect(
+        output,
+        'Added the tests test/core_test.dart.\n'
+        '[pub add dev:mocks dev:more_mocks][analyze][test]',
+      );
+      expect(
+        fileSystem.file('/apps/app_1/test/core_test.dart').readAsStringSync(),
+        '// my_app\n',
+      );
+    });
+
+    test('stops at the first command that fails, and names it', () async {
+      final tests = [MatrixAppTest('/tests/core', appliesTo: (app) => true)];
+
+      final (code, output) = await run(tests, codes: {'analyze': 3});
+
+      expect(code, 3);
+      expect(commands, ['/apps/app_1: analyze']);
+      expect(output, endsWith('[analyze]\nflutter analyze exited with 3.'));
+    });
+
+    test('fails with a problem of the files of the tests', () async {
+      final (code, output) = await run([
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          values: (app) => {'app_name': '{{name}}'},
+        ),
+      ]);
+
+      expect(code, 1);
+      expect(output, contains('keep {{name}} in test/core_test.dart'));
+      expect(commands, isEmpty);
+    });
   });
 }

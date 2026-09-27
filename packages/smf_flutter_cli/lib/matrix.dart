@@ -111,8 +111,8 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
 ///
 /// They check what only a running app shows, such as that the start-up of
 /// the app works with the platform side of its plugins mocked, and a
-/// module keeps them with its package. They are not part of the apps that
-/// `smf create` generates.
+/// package keeps them, such as the package of the module they test. They
+/// are not part of the apps that `smf create` generates.
 final class MatrixAppTest {
   /// Creates the tests of the files in [directory] for the apps that
   /// [appliesTo] accepts.
@@ -129,7 +129,9 @@ final class MatrixAppTest {
   ///
   /// In the text of each file, `{{app_name}}` becomes the name of the
   /// package of the app, and `{{<key>}}` the value of each key of the
-  /// [values] of the app.
+  /// [values] of the app. Hidden files stay out. The files of the tests of
+  /// an app may use those of other tests that the app always has too, such
+  /// as the tests of a module that another depends on.
   final String directory;
 
   /// Whether the tests run in an app of the matrix.
@@ -147,8 +149,13 @@ final class MatrixAppTest {
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
 /// in [directory] with the package [packageName], with the placeholders
-/// of the files filled; see [MatrixAppTest.directory].
-void addAppTests(
+/// of the files filled, and returns the paths of the files in the app; see
+/// [MatrixAppTest.directory].
+///
+/// Throws a [MatrixAppTestException], before it copies anything, if a file
+/// keeps a placeholder that no value fills, or if two of the [tests] have
+/// a file at the same path.
+List<String> addAppTests(
   List<MatrixAppTest> tests, {
   required MatrixApp app,
   required String directory,
@@ -156,23 +163,130 @@ void addAppTests(
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
+  final texts = <String, String>{};
+  final owners = <String, String>{};
   for (final test in tests) {
     final values = {'app_name': packageName, ...?test.values?.call(app)};
     final root = fileSystem.directory(test.directory);
-    final files = root.listSync(recursive: true).whereType<File>().toList()
-      ..sort((a, b) => a.path.compareTo(b.path));
+    final files = [
+      for (final entity in root.listSync(recursive: true))
+        if (entity is File &&
+            !context
+                .split(context.relative(entity.path, from: root.path))
+                .any((part) => part.startsWith('.')))
+          entity,
+    ]..sort((a, b) => a.path.compareTo(b.path));
     for (final file in files) {
-      var text = file.readAsStringSync();
-      for (final MapEntry(:key, :value) in values.entries) {
-        text = text.replaceAll('{{$key}}', value);
+      final path = context.relative(file.path, from: root.path);
+      if (owners[path] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of $other and ${test.directory} both have $path.',
+        );
       }
-      fileSystem.file(
-        context.join(directory, context.relative(file.path, from: root.path)),
-      )
-        ..createSync(recursive: true)
-        ..writeAsStringSync(text);
+      owners[path] = test.directory;
+      texts[path] = _filled(file.readAsStringSync(), values, test, path);
     }
   }
+  for (final MapEntry(key: path, value: text) in texts.entries) {
+    fileSystem.file(context.join(directory, path))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+  }
+  return [...texts.keys];
+}
+
+/// [text], the file at [path] of [test], with the placeholders of [values]
+/// filled; throws a [MatrixAppTestException] if it keeps another.
+String _filled(
+  String text,
+  Map<String, String> values,
+  MatrixAppTest test,
+  String path,
+) {
+  var filled = text;
+  for (final MapEntry(:key, :value) in values.entries) {
+    filled = filled.replaceAll('{{$key}}', value);
+  }
+  if (_placeholder.firstMatch(filled) case final match?) {
+    throw MatrixAppTestException(
+      'The tests of ${test.directory} keep ${match[0]} in $path: no value '
+      'fills it.',
+    );
+  }
+  return filled;
+}
+
+/// A problem of the files of [MatrixAppTest]s, which [addAppTests] finds
+/// before it copies them into an app.
+final class MatrixAppTestException implements Exception {
+  /// Creates the exception with [message].
+  const MatrixAppTestException(this.message);
+
+  /// What is wrong with the files.
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// A placeholder of the files of a [MatrixAppTest], such as `{{app_name}}`.
+final _placeholder = RegExp(r'\{\{\s*[A-Za-z_]\w*\s*\}\}');
+
+/// The `flutter` commands that run [tests] in an app once their files are
+/// in it: `flutter pub add` of their dev dependencies, if they have any;
+/// `flutter analyze`, since the tests follow the rules of the analysis of
+/// the app too; and `flutter test`, which runs every test of the app.
+List<List<String>> appTestCommands(List<MatrixAppTest> tests) {
+  final devDependencies = {for (final test in tests) ...test.devDependencies};
+  return [
+    if (devDependencies.isNotEmpty)
+      ['pub', 'add', for (final package in devDependencies) 'dev:$package'],
+    const ['analyze'],
+    const ['test'],
+  ];
+}
+
+/// Runs `flutter` with [arguments] in [directory] and returns the exit code
+/// and the output.
+typedef MatrixFlutter = Future<(int, String)> Function(
+  List<String> arguments,
+  String directory,
+);
+
+/// Adds [tests] to [generated], the app of the matrix [app], with
+/// [addAppTests], and runs the [appTestCommands] with [flutter] until one
+/// fails; returns its exit code and the output up to it, which says which
+/// command failed, or 0 and the output of all. A problem of the files of
+/// the tests is a failure too, with the exit code 1.
+Future<(int, String)> runAppTests(
+  GeneratedApp generated,
+  MatrixApp app,
+  List<MatrixAppTest> tests, {
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) async {
+  final List<String> added;
+  try {
+    added = addAppTests(
+      tests,
+      app: app,
+      directory: generated.path,
+      packageName: generated.name,
+      fileSystem: fileSystem,
+    );
+  } on MatrixAppTestException catch (error) {
+    return (1, error.message);
+  }
+  final output = StringBuffer('Added the tests ${added.join(', ')}.\n');
+  for (final arguments in appTestCommands(tests)) {
+    final (code, text) = await flutter(arguments, generated.path);
+    output.write(text);
+    if (code != 0) {
+      output.write('\nflutter ${arguments.join(' ')} exited with $code.');
+      return (code, '$output');
+    }
+  }
+  return (0, '$output');
 }
 
 /// Generates the app of `smf create` with [arguments] and gives it to
@@ -187,8 +301,8 @@ typedef MatrixCreate = Future<int> Function(
 typedef MatrixAnalyze = Future<(int, String)> Function(String directory);
 
 /// Adds [tests] to [generated], the app of the matrix [app], and runs them
-/// with `flutter test`; returns the exit code and the output of the first
-/// command that fails, or 0 and the output of all.
+/// with `flutter test`; returns the exit code of the first command that
+/// fails and the output up to it, or 0 and the output of all.
 typedef MatrixTest = Future<(int, String)> Function(
   GeneratedApp generated,
   MatrixApp app,
@@ -209,17 +323,18 @@ final class MatrixCommands {
   final MatrixAnalyze? analyze;
 
   /// Adds the tests that apply to an app and runs them: by default
-  /// [addAppTests] followed by `flutter pub add` of the dev dependencies of
-  /// the tests, `flutter analyze` and `flutter test`.
+  /// [runAppTests].
   final MatrixTest? test;
 }
 
 /// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
 /// [directory], with the options of CI, analyzes each with
-/// `flutter analyze`, runs the [appTests] that apply to it with
-/// `flutter test`, and returns the exit code: 0 if every app was generated
-/// with every module and every step that the options of CI do not leave
-/// for later, has no issue and passes its tests; 1 otherwise.
+/// `flutter analyze`, and, in an app that some of the [appTests] apply to,
+/// adds them and runs every test of the app with `flutter test`. Returns
+/// the exit code: 0 if every app was generated with every module and every
+/// step that the options of CI do not leave for later, has no issue and
+/// passes its tests, and each of the [appTests] applies to some app; 1
+/// otherwise.
 ///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory], with the tests. [commands] run for each app.
@@ -242,8 +357,9 @@ Future<int> runMatrix(
               banner: false,
               onCreated: onCreated,
             ),
-    analyze: commands.analyze ?? _flutterAnalyze,
-    test: commands.test ?? _flutterTest,
+    analyze:
+        commands.analyze ?? (directory) => _flutter(['analyze'], directory),
+    test: commands.test ?? runAppTests,
   );
   final (:apps, :failed) = await matrixOf(modules, roleOptions: roleOptions);
   final problems = [
@@ -252,6 +368,12 @@ Future<int> runMatrix(
   ];
   for (final (index, app) in apps.indexed) {
     problems.addAll(await run.check(app, 'app_${index + 1}'));
+  }
+  // Tests that apply to no app would leave CI without saying so.
+  for (final test in appTests) {
+    if (!apps.any(test.appliesTo)) {
+      problems.add('The tests of ${test.directory} apply to no app.');
+    }
   }
   run.say('\n${apps.length} apps generated in $directory.');
   if (problems.isEmpty) return 0;
@@ -313,7 +435,8 @@ final class _MatrixRun {
     final (tested, testOutput) = await test(generated, app, tests);
     say(testOutput.trim());
     if (tested != 0) {
-      problems.add('$name ($app): its tests exited with $tested.');
+      problems
+          .add('$name ($app): its tests failed with the exit code $tested.');
     }
     return problems;
   }
@@ -321,47 +444,13 @@ final class _MatrixRun {
 
 // Tests have no Flutter SDK.
 // coverage:ignore-start
-Future<(int, String)> _flutterAnalyze(String directory) async {
+Future<(int, String)> _flutter(List<String> arguments, String directory) async {
   final result = await Process.run(
     'flutter',
-    const ['analyze'],
+    arguments,
     workingDirectory: directory,
     runInShell: Platform.isWindows,
   );
   return (result.exitCode, '${result.stdout}${result.stderr}');
-}
-
-Future<(int, String)> _flutterTest(
-  GeneratedApp generated,
-  MatrixApp app,
-  List<MatrixAppTest> tests,
-) async {
-  addAppTests(
-    tests,
-    app: app,
-    directory: generated.path,
-    packageName: generated.name,
-  );
-  final devDependencies = {for (final test in tests) ...test.devDependencies};
-  final output = StringBuffer();
-  for (final arguments in [
-    if (devDependencies.isNotEmpty)
-      ['pub', 'add', for (final package in devDependencies) 'dev:$package'],
-    // The tests follow the rules of the analysis of the app too.
-    const ['analyze'],
-    const ['test'],
-  ]) {
-    final result = await Process.run(
-      'flutter',
-      arguments,
-      workingDirectory: generated.path,
-      runInShell: Platform.isWindows,
-    );
-    output
-      ..write(result.stdout)
-      ..write(result.stderr);
-    if (result.exitCode != 0) return (result.exitCode, '$output');
-  }
-  return (0, '$output');
 }
 // coverage:ignore-end
