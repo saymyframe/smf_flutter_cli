@@ -422,6 +422,67 @@ void main() {
     }
   });
 
+  test('builds no case with a provider that cannot be in an app with a module',
+      () async {
+    final state = TestRole<NoDsl>('state');
+    const pinned = PubspecContribution.hosted('flutter_bloc', '^9.1.1');
+    const taken = PubspecContribution.hosted('flutter_bloc', 'any');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        // Two providers of the state that bring the same package both own
+        // it, but an app has one of them.
+        TestModule(
+          'bloc',
+          providers: [RoleProvider.plain(state)],
+          contributions: const [pinned],
+        ),
+        TestModule(
+          'hydrated',
+          providers: [RoleProvider.plain(state)],
+          contributions: const [pinned],
+        ),
+        TestModule('helper', dependsOn: {'bloc'}, contributions: const [taken]),
+        TestModule(
+          'feature',
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (_) => const [taken],
+            },
+          ),
+        ),
+      ]),
+    );
+
+    expect(
+      {
+        for (final id in ['bloc', 'hydrated', 'helper', 'feature'])
+          id: [
+            for (final contractCase in harness.casesOfModule(ModuleId(id)))
+              '$contractCase',
+          ],
+      },
+      {
+        'bloc': ['bloc'],
+        'hydrated': ['hydrated'],
+        'helper': ['helper', 'helper with bloc'],
+        // Its case without a variant for hydrated reports that already.
+        'feature': [
+          'feature (bloc)',
+          'feature (hydrated)',
+          'feature with bloc',
+        ],
+      },
+    );
+    for (final id in ['bloc', 'hydrated', 'helper']) {
+      for (final contractCase in harness.casesOfModule(ModuleId(id))) {
+        final result = await harness.check(contractCase);
+        expect(result.errors, isEmpty, reason: '$contractCase');
+      }
+    }
+  });
+
   test('a module whose contributions fail has no case with a provider',
       () async {
     final state = TestRole<NoDsl>('state');

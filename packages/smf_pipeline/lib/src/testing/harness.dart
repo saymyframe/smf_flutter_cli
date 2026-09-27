@@ -197,16 +197,21 @@ final class ContractHarness {
   /// - each subset of the roles the module only uses, the largest first,
   ///   with the first registered provider of each;
   /// - every provider of a role in the registry whose package the module
-  ///   contributes, itself or in a variant, as `<module> with <provider>`,
-  ///   such as `feature with bloc` for a feature that contributes
-  ///   `flutter_bloc`.
+  ///   contributes, itself or in a variant, and that can be in an app with
+  ///   the module, as `<module> with <provider>`, such as `banner with
+  ///   bloc` for a module without a role that contributes `flutter_bloc`.
   ///
   /// A package is a provider's when the provider contributes it itself, not
   /// in a variant, with a constraint of its own rather than `any`, and no
   /// module that the provider depends on, directly or not, contributes it
   /// so too. Another module takes such a package only in its variant for the
-  /// provider or by depending on the provider, and the pipeline checks that
-  /// only in an app with the provider, which the last cases build.
+  /// provider, or for a provider that depends on it, or when it depends on
+  /// the provider, and the pipeline checks that only in an app with the
+  /// provider, which the last cases build. A provider can be in an app with
+  /// the module when neither they nor the modules they depend on, directly
+  /// or not, provide a role that takes one provider twice, and each of them
+  /// that has variants has one for the provider of the role of its variants
+  /// among them.
   ///
   /// A role left out of a subset is still present when a module of the case
   /// brings it, such as a provider of several roles or a module that
@@ -248,7 +253,7 @@ final class ContractHarness {
 
   /// The providers of roles in the registry, besides [module], that own a
   /// hosted package that [module] contributes, itself or in any of its
-  /// variants; see [casesOfModule].
+  /// variants, and can be in an app with [module]; see [casesOfModule].
   List<SmfModule> _ownersOfPackagesOf(SmfModule module) {
     final taken = _packagesTakenBy(module);
     if (taken.isEmpty) return const [];
@@ -256,9 +261,31 @@ final class ContractHarness {
       for (final other in registry.modules)
         if (other.descriptor.id != module.descriptor.id &&
             other.descriptor.provides.isNotEmpty &&
-            _ownsOneOf(other, taken))
+            _ownsOneOf(other, taken) &&
+            _fit([..._withDependencies(module), ..._withDependencies(other)]))
           other,
     ];
+  }
+
+  /// Whether [modules] can be in one app: no two of them provide a role
+  /// that takes one provider, and each that has variants has one for the
+  /// provider among them of the role of its variants.
+  static bool _fit(List<SmfModule> modules) {
+    final providers = <Role, ModuleId>{};
+    for (final module in modules) {
+      final id = module.descriptor.id;
+      for (final role in module.descriptor.provides) {
+        if (!role.cardinality.allowsMany &&
+            providers.putIfAbsent(role, () => id) != id) {
+          return false;
+        }
+      }
+    }
+    return modules.every((module) {
+      final variants = module.descriptor.variants;
+      final provider = providers[variants?.role];
+      return provider == null || variants!.byProvider.containsKey(provider);
+    });
   }
 
   /// Whether [provider] owns one of [packages]: it brings the package, and
