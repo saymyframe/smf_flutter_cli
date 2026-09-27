@@ -1302,8 +1302,8 @@ void main() {
         const uri = 'package:flutter_bloc/flutter_bloc.dart';
         const ofBloc = 'a package of bloc, which provides the state';
         String bannerTakes(String path, String how) =>
-            'banner: $path imports $uri $how of banner, $ofBloc, but banner '
-            'does not contribute flutter_bloc.';
+            'banner: $path imports $uri $how of banner, but banner does not '
+            'contribute flutter_bloc, $ofBloc.';
         expect(await errorsOf('banner with bloc', ['banner', 'bloc']), [
           bannerTakes('lib/banner/banner.dart', 'in the template'),
           bannerTakes('lib/bootstrap.dart', 'for a fragment'),
@@ -1327,7 +1327,7 @@ void main() {
         expect(await errorsOf('feature', ['feature', 'bloc']), isEmpty);
         const lazyImports =
             'lazy: lib/lazy/lazy.dart imports $uri in the template of lazy, '
-            '$ofBloc, but lazy does not contribute flutter_bloc.';
+            'but lazy does not contribute flutter_bloc, $ofBloc.';
         expect(await errorsOf('lazy', ['lazy']), [lazyImports]);
         final lazy = await harness.check(
           const ContractCase('lazy', requested: [ModuleId('lazy')]),
@@ -1335,9 +1335,9 @@ void main() {
         expect(
           lazy.errors.single.hint,
           'A module contributes the packages that its code uses, and the '
-          'package of a provider of a role only in its variant for the '
-          'provider, with the constraint any, or when it depends on the '
-          'provider.',
+          'package of a provider of a role with the constraint any: in its '
+          'variant for the provider, or for a provider that depends on it, or '
+          'in itself when it depends on the provider.',
         );
       });
 
@@ -1404,8 +1404,8 @@ void main() {
           [
             equals(
               'store: lib/store/own.dart imports $uri in the template of '
-              'store, a package of bloc, which provides the state, but store '
-              'does not contribute flutter_bloc.',
+              'store, but store does not contribute flutter_bloc, a package of '
+              'bloc, which provides the state.',
             ),
           ],
         );

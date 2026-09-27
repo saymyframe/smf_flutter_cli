@@ -1127,13 +1127,13 @@ final class _ImportCheck {
           when _takesWithout(who, users, package)) {
         issues.add(
           SmfIssue(
-            '${checked.path} $verb $uri ${_how(who, users)}, a package of '
-            '${packageOwnersText(owners)}, but $module does not contribute '
-            '$package.',
+            '${checked.path} $verb $uri ${_how(who, users)}, but $module '
+            'does not contribute $package, a package of '
+            '${packageOwnersText(owners)}.',
             hint: 'A module contributes the packages that its code uses, and '
-                'the package of a provider of a role only in its variant for '
-                'the provider, with the constraint any, or when it depends on '
-                'the provider.',
+                'the package of a provider of a role with the constraint any: '
+                'in its variant for the provider, or for a provider that '
+                'depends on it, or in itself when it depends on the provider.',
             origin: who,
             path: checked.path,
           ),
