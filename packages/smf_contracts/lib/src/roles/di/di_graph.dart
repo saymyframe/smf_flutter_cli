@@ -39,50 +39,9 @@ final class DiGraph {
   /// parameters, cycles, and services a singleton waits for that are not
   /// created asynchronously.
   List<SmfIssue> get issues {
-    final issues = <SmfIssue>[];
-    for (final data in registrations) {
-      final registration = data.value;
-      final origin = data.origin;
-      for (final problem in registration.problems()) {
-        issues.add(SmfIssue(problem, origin: origin));
-      }
-      final first = _byKey[registration.key]!;
-      if (!identical(first, data)) {
-        issues.add(
-          SmfIssue(
-            '${registration.key} is registered twice, by ${first.origin} and '
-            'by $origin.',
-            hint: 'Give one of them an instance name.',
-            origin: origin,
-          ),
-        );
-        continue;
-      }
-      for (final service in [
-        ...registration.create.deps,
-        ...registration.dependsOn,
-      ]) {
-        final target = _byKey[service]?.value;
-        if (target == null) {
-          issues.add(
-            SmfIssue(
-              'The registration of ${registration.key} needs $service, which '
-              'no module registers.',
-              origin: origin,
-            ),
-          );
-        } else if (target.params.isNotEmpty) {
-          // The container would create it without the values it takes.
-          issues.add(
-            SmfIssue(
-              'The registration of ${registration.key} needs $service, which '
-              'takes parameters that only resolveWith can pass.',
-              origin: origin,
-            ),
-          );
-        }
-      }
-    }
+    final issues = [
+      for (final data in registrations) ..._issuesOf(data),
+    ];
     final cycles = _cycles();
     for (final cycle in cycles) {
       issues.add(
@@ -109,6 +68,55 @@ final class DiGraph {
             ),
           );
         }
+      }
+    }
+    return issues;
+  }
+
+  /// The problems of the registration [data] alone, whether it registers a
+  /// service registered before, and otherwise the services it needs that no
+  /// module registers or that are created with parameters.
+  List<SmfIssue> _issuesOf(RoleData<DiRegistration> data) {
+    final registration = data.value;
+    final origin = data.origin;
+    final issues = [
+      for (final problem in registration.problems())
+        SmfIssue(problem, origin: origin),
+    ];
+    final first = _byKey[registration.key]!;
+    if (!identical(first, data)) {
+      return issues
+        ..add(
+          SmfIssue(
+            '${registration.key} is registered twice, by ${first.origin} and '
+            'by $origin.',
+            hint: 'Give one of them an instance name.',
+            origin: origin,
+          ),
+        );
+    }
+    for (final service in [
+      ...registration.create.deps,
+      ...registration.dependsOn,
+    ]) {
+      final target = _byKey[service]?.value;
+      if (target == null) {
+        issues.add(
+          SmfIssue(
+            'The registration of ${registration.key} needs $service, which '
+            'no module registers.',
+            origin: origin,
+          ),
+        );
+      } else if (target.params.isNotEmpty) {
+        // The container would create it without the values it takes.
+        issues.add(
+          SmfIssue(
+            'The registration of ${registration.key} needs $service, which '
+            'takes parameters that only resolveWith can pass.',
+            origin: origin,
+          ),
+        );
       }
     }
     return issues;

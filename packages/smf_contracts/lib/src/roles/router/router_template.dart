@@ -63,25 +63,7 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
   Future<Object?> choose(RoleChoiceContext<RoutesData> context) async {
     final facade = RouterFacade.of(context.data);
     final start = context.option(RouterRole.startOption.name);
-    if (start != null) {
-      final route = facade.routeAt(start);
-      if (route == null) {
-        final routes = [for (final route in facade.routes) route.fullPath];
-        throw SmfUsageException(
-          routes.isEmpty
-              ? 'The app has no routes, so it cannot start on $start.'
-              : 'The app has no route $start to start on. Routes: '
-                  '${routes.join(', ')}.',
-        );
-      }
-      if (route.hasRequiredParams) {
-        throw SmfUsageException(
-          'The app cannot start on $start, because the route needs '
-          '${route.params.where((p) => p.isRequired).join(', ')}.',
-        );
-      }
-      return RouterChoice(startPath: route.fullPath);
-    }
+    if (start != null) return _startOn(facade, start);
 
     final candidates = [
       for (final route in facade.routes)
@@ -113,6 +95,28 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
       display: (route) => '${route.fullPath} (${route.feature.module})',
     );
     return RouterChoice(startPath: picked.fullPath);
+  }
+
+  /// The choice of the route at [start], the path the user asked the app to
+  /// start on, which must be a route without required parameters.
+  RouterChoice _startOn(RouterFacade facade, String start) {
+    final route = facade.routeAt(start);
+    if (route == null) {
+      final routes = [for (final route in facade.routes) route.fullPath];
+      throw SmfUsageException(
+        routes.isEmpty
+            ? 'The app has no routes, so it cannot start on $start.'
+            : 'The app has no route $start to start on. Routes: '
+                '${routes.join(', ')}.',
+      );
+    }
+    if (route.hasRequiredParams) {
+      throw SmfUsageException(
+        'The app cannot start on $start, because the route needs '
+        '${route.params.where((p) => p.isRequired).join(', ')}.',
+      );
+    }
+    return RouterChoice(startPath: route.fullPath);
   }
 
   /// `--start` with the start route of [choice], if it has one.

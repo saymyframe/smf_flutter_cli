@@ -394,17 +394,16 @@ List<String> _plistKeys(String text) {
 List<String> _childNames(String text, String parent, String element) {
   final names = <String>[];
   final name = RegExp(r'android:name\s*=\s*"([^"]*)"');
-  // -1 before the parent, 0 directly in it, more in its descendants.
-  var depth = -1;
   final tags = RegExp(r'<(/?)([A-Za-z][\w:.-]*)((?:[^>"]|"[^"]*")*?)(/?)>');
-  for (final match in tags.allMatches(_withoutXmlComments(text))) {
-    final closing = match[1] == '/';
-    final selfClosing = match[4] == '/';
-    if (depth < 0) {
-      if (!closing && !selfClosing && match[2] == parent) depth = 0;
-      continue;
-    }
-    if (closing) {
+  // The tags after the one that opens the parent, if any.
+  final inParent = tags
+      .allMatches(_withoutXmlComments(text))
+      .skipWhile((match) => !_opensElement(match, parent))
+      .skip(1);
+  // 0 directly in the parent, more in its descendants.
+  var depth = 0;
+  for (final match in inParent) {
+    if (match[1] == '/') {
       if (depth == 0) break;
       depth--;
       continue;
@@ -414,10 +413,15 @@ List<String> _childNames(String text, String parent, String element) {
         names.add(_unescapeXml(attribute[1]!));
       }
     }
-    if (!selfClosing) depth++;
+    if (match[4] != '/') depth++;
   }
   return names;
 }
+
+/// Whether [tag], a match of the tags of [_childNames], opens an element
+/// [name] that has content: it is neither a closing nor an empty tag.
+bool _opensElement(RegExpMatch tag, String name) =>
+    tag[1] != '/' && tag[4] != '/' && tag[2] == name;
 
 /// The plugin ids of each top-level `plugins { … }` block of the Gradle
 /// script [text], which has no braces inside.

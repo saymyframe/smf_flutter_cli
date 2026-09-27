@@ -220,6 +220,10 @@ final class FacadeFeature {
   String toString() => 'routes of $module';
 }
 
+/// The annotation of a member of a location class that overrides one of
+/// `AppLocation`, as a line of the class.
+const String _overrideLine = '  @override';
+
 /// A route of a [RouterFacade]: its full path, full name and the classes
 /// the facade generates for it.
 final class FacadeRoute {
@@ -362,17 +366,17 @@ final class FacadeRoute {
     }
     buffer
       ..writeln()
-      ..writeln('  @override')
+      ..writeln(_overrideLine)
       ..writeln(
         '  String get routeName => ${SmfNames.dartString(fullName)};',
       )
       ..writeln()
-      ..writeln('  @override')
+      ..writeln(_overrideLine)
       ..writeln('  String get path => ${_pathExpression()};');
     if (parent case final parent?) {
       buffer
         ..writeln()
-        ..writeln('  @override')
+        ..writeln(_overrideLine)
         ..writeln('  AppLocation get parent => ${parent._parentLocation()};');
     }
     buffer.writeln('}');

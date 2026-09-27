@@ -46,36 +46,101 @@ Set<String> _segmentsOf(String path) => {
 List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
   final routes = [for (final data in input.data) ...data.value.routes];
-  final problems = <String>[
-    if (input.data.isNotEmpty && routes.isEmpty)
-      'The module contributes routes data without routes.',
+  final check = _RoutesCheck(origin);
+  if (input.data.isNotEmpty && routes.isEmpty) {
+    check.problems.add('The module contributes routes data without routes.');
+  }
+  for (final route in routes) {
+    check.visit(route, parentPath: null, ancestors: const [], chain: const []);
+  }
+  check.mainNavigationOrder();
+  return [
+    for (final problem in check.problems) SmfIssue(problem, origin: origin),
+    ...check.warnings,
   ];
-  final warnings = <SmfIssue>[];
-  final names = <String, Route>{};
-  final screens = <String, Route>{};
-  final patterns = <String, (Route, String)>{};
-  // The routes checked so far, in the order they are declared, in which a
-  // router matches them when the app has no main navigation.
-  final earlier = <_PlacedRoute>[];
-  // The routes that the order of the declaration leaves unreachable, or that
-  // match the same locations as an earlier route.
-  final reported = <_PlacedRoute>{};
+}
 
-  // The path of the module's root route `/` is empty, so a parent path does
-  // not tell a child from a top-level route.
-  void check(
+/// The checks of [_checkRoutes], which visits the routes of a module in the
+/// order they are declared, each followed by its children, depth first.
+final class _RoutesCheck {
+  _RoutesCheck(this.origin);
+
+  final ModuleOrigin origin;
+  final List<String> problems = [];
+  final List<SmfIssue> warnings = [];
+  final Map<String, Route> _names = {};
+  final Map<String, Route> _screens = {};
+  final Map<String, (Route, String)> _patterns = {};
+
+  /// The routes checked so far, in the order they are declared, in which a
+  /// router matches them when the app has no main navigation.
+  final List<_PlacedRoute> _earlier = [];
+
+  /// The routes that the order of the declaration leaves unreachable, or
+  /// that match the same locations as an earlier route.
+  final Set<_PlacedRoute> _reported = {};
+
+  /// Checks [route] and its children. The path of the module's root route
+  /// `/` is empty, so a parent path does not tell a child from a top-level
+  /// route: [parentPath] is `null` for a top-level route.
+  void visit(
     Route route, {
     required String? parentPath,
     required List<RouteParam> ancestors,
     required List<Route> chain,
   }) {
     final topLevel = parentPath == null;
-    final path = topLevel
-        ? (route.path == '/' ? '' : route.path)
-        : '$parentPath/${route.path}';
+    final path = _placedPath(route, parentPath);
     final label = 'The route "${route.name}" (${route.path})';
     final placed = _PlacedRoute(route, path, [...chain, route]);
 
+    _checkPathAndName(route, label, topLevel: topLevel);
+    _checkPlace(placed);
+    _earlier.add(placed);
+    problems
+      ..addAll(_screenProblems(route, label, _screens))
+      ..addAll(_paramProblems(route, label, ancestors));
+
+    final required = _requiredParams(route, ancestors);
+    if (route.startCandidate && required.isNotEmpty) {
+      problems.add(
+        '$label is a start candidate but needs ${required.join(', ')}; the '
+        'app can only start on a route without required parameters.',
+      );
+    }
+    if (route.destination case final destination?) {
+      problems.addAll(
+        _destinationProblems(destination, label, required, topLevel: topLevel),
+      );
+    }
+    if (route.children.isNotEmpty &&
+        route.params.any(
+          (param) => param.source == RouteParamSource.query && param.isRequired,
+        )) {
+      problems.add(
+        '$label has children, so its query parameters must be optional: '
+        'navigating to a child rebuilds it without them.',
+      );
+    }
+
+    final known = {for (final param in ancestors) param.name};
+    for (final child in route.children) {
+      visit(
+        child,
+        parentPath: path,
+        ancestors: [
+          ...ancestors,
+          for (final param in route.params)
+            if (!known.contains(param.name)) param,
+        ],
+        chain: placed.chain,
+      );
+    }
+  }
+
+  /// Checks the path of [route], and its name, which no other route of the
+  /// module has.
+  void _checkPathAndName(Route route, String label, {required bool topLevel}) {
     if (!(topLevel ? _topLevelPath : _childPath).hasMatch(route.path)) {
       problems.add(
         topLevel
@@ -92,128 +157,121 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
         '${(_reservedMemberNames.toList()..sort()).join(', ')}.',
       );
     }
-    if (names.putIfAbsent(route.name, () => route) != route) {
+    if (_names.putIfAbsent(route.name, () => route) != route) {
       problems.add('Two routes of the module are named "${route.name}".');
     }
-    if (patterns.putIfAbsent(placed.pattern, () => (route, path))
+  }
+
+  /// Checks whether an earlier route matches the same locations as
+  /// [placed], or leaves it unreachable.
+  void _checkPlace(_PlacedRoute placed) {
+    final _PlacedRoute(:route, :path) = placed;
+    if (_patterns.putIfAbsent(placed.pattern, () => (route, path))
         case (
           final other,
           final otherPath,
         ) when other != route) {
-      reported.add(placed);
+      _reported.add(placed);
       problems.add(
         otherPath == path
             ? 'Two routes of the module have the path "$path".'
             : 'The routes "${other.name}" and "${route.name}" have the paths '
                 '"$otherPath" and "$path", which match the same locations.',
       );
-    } else {
-      final (:unreachable, :ambiguous) = _reachability(placed, earlier);
-      if (unreachable != null) {
-        reported.add(placed);
-        problems.add(unreachable);
-      }
-      if (ambiguous != null) {
-        warnings.add(SmfIssue.warning(ambiguous, origin: origin));
-      }
+      return;
     }
-    earlier.add(placed);
-    problems
-      ..addAll(_screenProblems(route, label, screens))
-      ..addAll(_paramProblems(route, label, ancestors));
-
-    final ancestorPath = [
-      for (final param in ancestors)
-        if (param.source == RouteParamSource.path) param,
-    ];
-    final required = {
-      for (final param in [...ancestorPath, ...route.params])
-        if (param.isRequired) param.name: param,
-    }.values;
-    if (route.startCandidate && required.isNotEmpty) {
-      problems.add(
-        '$label is a start candidate but needs ${required.join(', ')}; the '
-        'app can only start on a route without required parameters.',
-      );
+    final (:unreachable, :ambiguous) = _reachability(placed, _earlier);
+    if (unreachable != null) {
+      _reported.add(placed);
+      problems.add(unreachable);
     }
-    if (route.destination case final destination?) {
-      if (!topLevel) {
-        problems.add(
-          '$label is a child, so it cannot be a destination of the main '
-          'navigation.',
-        );
-      }
-      if (required.isNotEmpty) {
-        problems.add(
-          '$label is a destination of the main navigation but needs '
-          '${required.join(', ')}; a destination is reached without values.',
-        );
-      }
-      if (destination.label.trim().isEmpty) {
-        problems.add('$label has a destination without a label.');
-      }
-      final icon = destination.icon;
-      if (icon.isWrapper || icon.code.trim().isEmpty) {
-        problems.add(
-          '$label has a destination whose icon is not an expression, such '
-          'as Icons.home.',
-        );
-      }
-      problems.addAll(icon.problems());
-    }
-    if (route.children.isNotEmpty &&
-        route.params.any(
-          (param) => param.source == RouteParamSource.query && param.isRequired,
-        )) {
-      problems.add(
-        '$label has children, so its query parameters must be optional: '
-        'navigating to a child rebuilds it without them.',
-      );
-    }
-
-    final known = {for (final param in ancestors) param.name};
-    for (final child in route.children) {
-      check(
-        child,
-        parentPath: path,
-        ancestors: [
-          ...ancestors,
-          for (final param in route.params)
-            if (!known.contains(param.name)) param,
-        ],
-        chain: placed.chain,
-      );
+    if (ambiguous != null) {
+      warnings.add(SmfIssue.warning(ambiguous, origin: origin));
     }
   }
 
-  for (final route in routes) {
-    check(route, parentPath: null, ancestors: const [], chain: const []);
-  }
-  // In an app with a main navigation, the router matches the destinations
-  // first, each with the routes below it, so a route outside the main
-  // navigation comes after the routes in it that are declared later too.
-  for (final (index, route) in earlier.indexed) {
-    if (route.inMainNavigation || reported.contains(route)) continue;
-    for (final other in earlier.skip(index + 1)) {
-      if (other.inMainNavigation &&
-          other.pattern != route.pattern &&
-          other.covers(route)) {
-        problems.add(
-          'The route "${route.route.name}" (${route.shown}) cannot be '
-          'reached in an app with a main navigation: its router matches the '
-          'destination "${other.chain.first.name}" and the routes below it '
-          'first, and the route "${other.route.name}" (${other.shown}) '
-          'matches every location that "${route.route.name}" does. Change a '
-          'fixed segment so that no location matches both.',
-        );
-        break;
+  /// Checks the routes outside the main navigation of an app that has one.
+  ///
+  /// In such an app, the router matches the destinations first, each with
+  /// the routes below it, so a route outside the main navigation comes
+  /// after the routes in it that are declared later too.
+  void mainNavigationOrder() {
+    for (final (index, route) in _earlier.indexed) {
+      if (route.inMainNavigation || _reported.contains(route)) continue;
+      for (final other in _earlier.skip(index + 1)) {
+        if (other.inMainNavigation &&
+            other.pattern != route.pattern &&
+            other.covers(route)) {
+          problems.add(
+            'The route "${route.route.name}" (${route.shown}) cannot be '
+            'reached in an app with a main navigation: its router matches the '
+            'destination "${other.chain.first.name}" and the routes below it '
+            'first, and the route "${other.route.name}" (${other.shown}) '
+            'matches every location that "${route.route.name}" does. Change a '
+            'fixed segment so that no location matches both.',
+          );
+          break;
+        }
       }
     }
   }
-  return [
-    for (final problem in problems) SmfIssue(problem, origin: origin),
-    ...warnings,
+}
+
+/// The path of [route] from the namespace of its module: empty for the
+/// route `/`, and below [parentPath] for a child.
+String _placedPath(Route route, String? parentPath) {
+  if (parentPath != null) return '$parentPath/${route.path}';
+  return route.path == '/' ? '' : route.path;
+}
+
+/// The parameters that [route] requires, with the path parameters of its
+/// parents, [ancestors], which a location of the route has too.
+Iterable<RouteParam> _requiredParams(
+  Route route,
+  List<RouteParam> ancestors,
+) {
+  final ancestorPath = [
+    for (final param in ancestors)
+      if (param.source == RouteParamSource.path) param,
   ];
+  return {
+    for (final param in [...ancestorPath, ...route.params])
+      if (param.isRequired) param.name: param,
+  }.values;
+}
+
+/// The problems with [destination], the destination of the main navigation
+/// of the route of [label] that requires the parameters [required].
+List<String> _destinationProblems(
+  Destination destination,
+  String label,
+  Iterable<RouteParam> required, {
+  required bool topLevel,
+}) {
+  final problems = <String>[];
+  if (!topLevel) {
+    problems.add(
+      '$label is a child, so it cannot be a destination of the main '
+      'navigation.',
+    );
+  }
+  if (required.isNotEmpty) {
+    problems.add(
+      '$label is a destination of the main navigation but needs '
+      '${required.join(', ')}; a destination is reached without values.',
+    );
+  }
+  if (destination.label.trim().isEmpty) {
+    problems.add('$label has a destination without a label.');
+  }
+  final icon = destination.icon;
+  if (icon.isWrapper || icon.code.trim().isEmpty) {
+    problems.add(
+      '$label has a destination whose icon is not an expression, such '
+      'as Icons.home.',
+    );
+  }
+  return problems..addAll(icon.problems());
 }
 
 /// A route of a module with its path from the namespace of the module, such
@@ -292,52 +350,58 @@ final class _PlacedRoute {
   String? ambiguous;
   for (final other in earlier) {
     if (other.covers(route)) {
-      final problem = 'The route "${route.route.name}" (${route.shown}) '
-          'cannot be reached: the route "${other.route.name}" '
-          '(${other.shown}) comes before it and matches every location it '
-          'does.';
-      if (other.inMainNavigation && !route.inMainNavigation) {
-        return (
-          unreachable: '$problem Declaring "${route.chain.first.name}" '
-              'first does not help: in an app with a main navigation, the '
-              'router matches the destination "${other.chain.first.name}" '
-              'and the routes below it first. Change a fixed segment so that '
-              'no location matches both.',
-          ambiguous: null,
-        );
-      }
-      // The routes that hold each of them, right below where their chains
-      // part: siblings, the one of the earlier route declared first.
-      var at = 0;
-      while (at < route.chain.length - 1 &&
-          at < other.chain.length - 1 &&
-          identical(route.chain[at], other.chain[at])) {
-        at++;
-      }
-      return (
-        unreachable: '$problem Declare "${route.chain[at].name}" before '
-            '"${other.chain[at].name}".',
-        ambiguous: null,
-      );
+      return (unreachable: _unreachable(route, other), ambiguous: null);
     }
     if (ambiguous != null || route.covers(other)) continue;
     if (other.sharedLocation(route) case final location?) {
-      final shared = 'The routes "${other.route.name}" (${other.shown}) and '
-          '"${route.route.name}" (${route.shown}) both match locations such '
-          'as $location, which go to "${other.route.name}", declared first';
-      ambiguous = [
-        if (route.inMainNavigation && !other.inMainNavigation)
-          '$shared, in an app without a main navigation, and to '
-              '"${route.route.name}" in an app with one, whose router '
-              'matches the destination "${route.chain.first.name}" and the '
-              'routes below it first.'
-        else
-          '$shared.',
-        'Change a fixed segment so that no location matches both.',
-      ].join(' ');
+      ambiguous = _ambiguity(route, other, location);
     }
   }
   return (unreachable: null, ambiguous: ambiguous);
+}
+
+/// Why [route] cannot be reached behind [other], an earlier route that
+/// matches every location it does, and what to change.
+String _unreachable(_PlacedRoute route, _PlacedRoute other) {
+  final problem = 'The route "${route.route.name}" (${route.shown}) '
+      'cannot be reached: the route "${other.route.name}" '
+      '(${other.shown}) comes before it and matches every location it '
+      'does.';
+  if (other.inMainNavigation && !route.inMainNavigation) {
+    return '$problem Declaring "${route.chain.first.name}" '
+        'first does not help: in an app with a main navigation, the '
+        'router matches the destination "${other.chain.first.name}" '
+        'and the routes below it first. Change a fixed segment so that '
+        'no location matches both.';
+  }
+  // The routes that hold each of them, right below where their chains
+  // part: siblings, the one of the earlier route declared first.
+  var at = 0;
+  while (at < route.chain.length - 1 &&
+      at < other.chain.length - 1 &&
+      identical(route.chain[at], other.chain[at])) {
+    at++;
+  }
+  return '$problem Declare "${route.chain[at].name}" before '
+      '"${other.chain[at].name}".';
+}
+
+/// The warning that [route] and [other], an earlier route, both match
+/// locations such as [location], which go to [other].
+String _ambiguity(_PlacedRoute route, _PlacedRoute other, String location) {
+  final shared = 'The routes "${other.route.name}" (${other.shown}) and '
+      '"${route.route.name}" (${route.shown}) both match locations such '
+      'as $location, which go to "${other.route.name}", declared first';
+  return [
+    if (route.inMainNavigation && !other.inMainNavigation)
+      '$shared, in an app without a main navigation, and to '
+          '"${route.route.name}" in an app with one, whose router '
+          'matches the destination "${route.chain.first.name}" and the '
+          'routes below it first.'
+    else
+      '$shared.',
+    'Change a fixed segment so that no location matches both.',
+  ].join(' ');
 }
 
 List<String> _screenProblems(
@@ -421,28 +485,8 @@ List<String> _paramProblems(
         'int, double or bool.',
       );
     }
-    final parents = inherited[name];
-    final fromParent = param.source == RouteParamSource.path &&
-        !segments.contains(name) &&
-        parents?.source == RouteParamSource.path;
-    if (fromParent) {
-      if (parents!.type != param.type) {
-        problems.add(
-          '$label passes the path parameter "$name" of a parent as '
-          '${param.type}, but the parent declares it as ${parents.type}.',
-        );
-      }
-    } else if (parents != null) {
-      problems.add(
-        '$label has the parameter "$name", which a parent already has.',
-      );
-    } else if (param.source == RouteParamSource.path &&
-        !segments.contains(name)) {
-      problems.add(
-        '$label declares the path parameter "$name", but neither its path '
-        'nor the path of a parent has a :$name segment.',
-      );
-    }
+    final problem = _sourceProblem(param, label, inherited[name], segments);
+    if (problem != null) problems.add(problem);
     if (valid) {
       final snake = SmfNames.snakeCaseOf(name);
       final other = snakeNames.putIfAbsent(snake, () => name);
@@ -454,6 +498,45 @@ List<String> _paramProblems(
       }
     }
   }
+  return problems..addAll(_segmentProblems(route, label, segments));
+}
+
+/// The problem with where [param] of the route of [label] comes from, if
+/// any: a parameter of a parent, [parents], or a segment of the route's
+/// path, one of [segments].
+String? _sourceProblem(
+  RouteParam param,
+  String label,
+  RouteParam? parents,
+  Set<String> segments,
+) {
+  final name = param.name;
+  final fromParent = param.source == RouteParamSource.path &&
+      !segments.contains(name) &&
+      parents?.source == RouteParamSource.path;
+  if (fromParent) {
+    if (parents!.type == param.type) return null;
+    return '$label passes the path parameter "$name" of a parent as '
+        '${param.type}, but the parent declares it as ${parents.type}.';
+  }
+  if (parents != null) {
+    return '$label has the parameter "$name", which a parent already has.';
+  }
+  if (param.source == RouteParamSource.path && !segments.contains(name)) {
+    return '$label declares the path parameter "$name", but neither its path '
+        'nor the path of a parent has a :$name segment.';
+  }
+  return null;
+}
+
+/// The problems with the path parameters [segments] of [route]: each needs
+/// a [RouteParam.path].
+List<String> _segmentProblems(
+  Route route,
+  String label,
+  Set<String> segments,
+) {
+  final problems = <String>[];
   for (final segment in segments) {
     final declared = route.params.any(
       (param) => param.source == RouteParamSource.path && param.name == segment,
@@ -469,16 +552,7 @@ List<String> _paramProblems(
 
 List<SmfIssue> _checkScreenSockets(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
-  final templates = <String, String>{
-    for (final contribution in input.contributions)
-      if (contribution is BrickContribution)
-        for (final file in contribution.bundle.files)
-          if (file.type == 'text')
-            file.path.replaceAll(r'\', '/'): utf8.decode(
-              base64.decode(file.data),
-              allowMalformed: true,
-            ),
-  };
+  final templates = _textTemplates(input.contributions);
 
   final issues = <SmfIssue>[];
   void check(Route route) {
@@ -520,6 +594,18 @@ List<SmfIssue> _checkScreenSockets(ModuleRuleInput<RoutesData> input) {
   return issues;
 }
 
+/// The text files of the bricks among [contributions], by path.
+Map<String, String> _textTemplates(List<Contribution> contributions) => {
+      for (final contribution in contributions)
+        if (contribution is BrickContribution)
+          for (final file in contribution.bundle.files)
+            if (file.type == 'text')
+              file.path.replaceAll(r'\', '/'): utf8.decode(
+                base64.decode(file.data),
+                allowMalformed: true,
+              ),
+    };
+
 /// What may stand between the tag of a class's annotations and the class:
 /// white space, comments and other annotations.
 final RegExp _onlyAnnotations = RegExp(
@@ -552,28 +638,7 @@ List<String> _annotationProblems(ModuleId feature, Route route, String text) {
     );
   }
 
-  final screenAt = text.indexOf(screenTag);
-  if (screenAt == -1) {
-    problems.add(
-      'The template of $screen lacks the tag $screenTag for the annotations '
-      'of the class, which routers such as auto_route fill.',
-    );
-  } else {
-    problems.addAll(_braceProblems(text, screenAt, screenTag));
-    if (declaration != null) {
-      final placed = screenAt < declaration.start &&
-          _onlyAnnotations.hasMatch(
-            text.substring(screenAt + screenTag.length, declaration.start),
-          );
-      if (!placed) {
-        problems.add(
-          'The tag $screenTag must come right before the declaration of the '
-          'class $screen, with only other annotations and comments between '
-          'them.',
-        );
-      }
-    }
-  }
+  problems.addAll(_screenTagProblems(text, screen, screenTag, declaration));
 
   final constructor = declaration == null
       ? null
@@ -604,6 +669,36 @@ List<String> _annotationProblems(ModuleId feature, Route route, String text) {
         'constructor of $screen, right before the parameter ${param.name}.',
       );
     }
+  }
+  return problems;
+}
+
+/// The problems with [screenTag], the tag of the annotations of the class
+/// [screen], in [text], whose [declaration] of the class may be missing.
+List<String> _screenTagProblems(
+  String text,
+  String screen,
+  String screenTag,
+  RegExpMatch? declaration,
+) {
+  final screenAt = text.indexOf(screenTag);
+  if (screenAt == -1) {
+    final missing = 'The template of $screen lacks the tag $screenTag for '
+        'the annotations of the class, which routers such as auto_route fill.';
+    return [missing];
+  }
+  final problems = [..._braceProblems(text, screenAt, screenTag)];
+  final placed = declaration == null ||
+      screenAt < declaration.start &&
+          _onlyAnnotations.hasMatch(
+            text.substring(screenAt + screenTag.length, declaration.start),
+          );
+  if (!placed) {
+    problems.add(
+      'The tag $screenTag must come right before the declaration of the '
+      'class $screen, with only other annotations and comments between '
+      'them.',
+    );
   }
   return problems;
 }
@@ -649,40 +744,70 @@ List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
     // The router builds the screens of every location.
     if (module?.provides.contains(routerRole) ?? false) continue;
     final dependsOn = module?.dependsOn ?? const <ModuleId>{};
-    final allowed = {
-      owner.module.lowerCamelCase,
-      for (final dependency in dependsOn) dependency.lowerCamelCase,
-    };
-    for (final access in file.memberAccesses) {
-      final target = access.target;
-      final viaNav = target == 'nav' || target.endsWith('.nav');
-      if (viaNav && !allowed.contains(access.name)) {
-        issues.add(
-          SmfIssue(
-            '$path navigates to the routes of "${access.name}" through '
-            '$target.${access.name}, but the module $owner may only use its '
-            'own routes and those of the modules it depends on.',
-            hint: 'Declare the module in dependsOn, or let the other module '
-                'navigate. The rule matches by name, so rename a variable '
-                'called nav that is not the navigation facade.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      }
-    }
-    final used = {
-      for (final call in file.invocations) call.name,
-      for (final reference in file.references) reference.name,
-      for (final access in file.memberAccesses) access.name,
-    };
-    for (final MapEntry(key: location, value: feature) in locations.entries) {
-      if (feature == owner.module ||
-          dependsOn.contains(feature) ||
-          !used.contains(location)) {
-        continue;
-      }
+    issues
+      ..addAll(_facadeAccessIssues(path, file, owner, dependsOn))
+      ..addAll(
+        _locationUseIssues(path, file, owner, dependsOn, locations),
+      );
+  }
+  return issues;
+}
+
+/// The issues of the file at [path] of the module [owner], which depends on
+/// [dependsOn], for navigating through the facade to the routes of another
+/// module.
+List<SmfIssue> _facadeAccessIssues(
+  String path,
+  DartFileIndex file,
+  ModuleOrigin owner,
+  Set<ModuleId> dependsOn,
+) {
+  final allowed = {
+    owner.module.lowerCamelCase,
+    for (final dependency in dependsOn) dependency.lowerCamelCase,
+  };
+  final issues = <SmfIssue>[];
+  for (final access in file.memberAccesses) {
+    final target = access.target;
+    final viaNav = target == 'nav' || target.endsWith('.nav');
+    if (viaNav && !allowed.contains(access.name)) {
       issues.add(
+        SmfIssue(
+          '$path navigates to the routes of "${access.name}" through '
+          '$target.${access.name}, but the module $owner may only use its '
+          'own routes and those of the modules it depends on.',
+          hint: 'Declare the module in dependsOn, or let the other module '
+              'navigate. The rule matches by name, so rename a variable '
+              'called nav that is not the navigation facade.',
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/// The issues of the file at [path] of the module [owner], which depends on
+/// [dependsOn], for using a location class of another module, among the
+/// [locations] of the facade with the module of each.
+List<SmfIssue> _locationUseIssues(
+  String path,
+  DartFileIndex file,
+  ModuleOrigin owner,
+  Set<ModuleId> dependsOn,
+  Map<String, ModuleId> locations,
+) {
+  final used = {
+    for (final call in file.invocations) call.name,
+    for (final reference in file.references) reference.name,
+    for (final access in file.memberAccesses) access.name,
+  };
+  return [
+    for (final MapEntry(key: location, value: feature) in locations.entries)
+      if (feature != owner.module &&
+          !dependsOn.contains(feature) &&
+          used.contains(location))
         SmfIssue(
           '$path uses $location, a location of $feature, but the module '
           '$owner may only use its own routes and those of the modules it '
@@ -691,10 +816,7 @@ List<SmfIssue> _checkNavAccess(StructuralRuleInput<RoutesData> input) {
           origin: owner,
           path: path,
         ),
-      );
-    }
-  }
-  return issues;
+  ];
 }
 
 List<SmfIssue> _checkScreenConstructors(StructuralRuleInput<RoutesData> input) {
