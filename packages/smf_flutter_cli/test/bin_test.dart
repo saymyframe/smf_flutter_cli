@@ -534,13 +534,13 @@ void main() {
                 '    An interactive run offers to set it up.\n',
               ),
               // Its PATH has no Ruby; elsewhere, the Xcode project is left
-              // for a Mac.
+              // for a Mac, which the machine is not rather than it missing.
               contains(
                 Platform.isMacOS
                     ? '  ✗ Xcode project tools of flutterfire (for '
                         'firebase_core): missing\n'
                     : '  ✗ Setup of the Xcode project on a Mac (for '
-                        'firebase_core): missing\n',
+                        'firebase_core): this machine is not a Mac\n',
               ),
             ]),
           );
