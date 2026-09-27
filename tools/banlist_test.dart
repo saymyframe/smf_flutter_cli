@@ -80,7 +80,7 @@ void main() {
   });
 
   test('reports every path of an exception that matches nothing', () {
-    // Both exceptions last: neither goes as the packages move.
+    // Both exceptions are lasting ones.
     final problems = problemsOf({
       'packages/smf_modules/smf_contribution_engine/lib/a.dart': 'mustachex',
     });

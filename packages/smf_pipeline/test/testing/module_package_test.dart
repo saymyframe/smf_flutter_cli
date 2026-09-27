@@ -127,7 +127,7 @@ void main() {
     expect(
       _problemsOf(
         _package(const {
-          'lib/src/old.dart':
+          'lib/src/bad.dart':
               "import 'package:smf_contracts/bundles/router_role_bundle.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
                   "import 'package:mason/src/inner.dart';\n"
@@ -137,7 +137,7 @@ void main() {
                   "import 'dart:io';\n"
                   "import 'dart:convert';\n"
                   "import 'stub.dart' if (dart.library.io) 'dart:isolate';\n"
-                  "part '../../test/old_part.dart';\n",
+                  "part '../../test/bad_part.dart';\n",
         }),
       ),
       [
@@ -149,10 +149,10 @@ void main() {
           '../../test/router_test.dart',
           'dart:io',
           'dart:isolate',
-          '../../test/old_part.dart',
+          '../../test/bad_part.dart',
         ])
           equals(
-            'lib/src/old.dart uses $uri, but the code of a module uses only '
+            'lib/src/bad.dart uses $uri, but the code of a module uses only '
             'the dart: libraries that do not reach the machine, the module '
             'model of smf_contracts, its own files in lib/ and the public '
             'libraries of the packages it depends on.',
@@ -165,7 +165,7 @@ void main() {
     expect(
       _problemsOf(
         _package(const {
-          'test/old_test.dart':
+          'test/bad_test.dart':
               "import 'package:smf_contracts/bundles/router_role_bundle.dart';\n"
                   "import 'package:smf_home/smf_home.dart';\n"
                   "import 'package:smf_pipeline/src/render.dart';\n"
@@ -182,7 +182,7 @@ void main() {
           '../../other/test/support.dart',
         ])
           equals(
-            'test/old_test.dart uses $uri, but of the SMF packages the tests '
+            'test/bad_test.dart uses $uri, but of the SMF packages the tests '
             'of a module use only the module model of smf_contracts and the '
             'public libraries of smf_flutter_core, smf_pipeline and '
             'smf_router, and no file outside test/ by a relative path.',
