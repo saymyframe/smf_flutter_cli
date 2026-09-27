@@ -5,13 +5,21 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 ///
 /// The tests of the module repeat the edits that this version makes to the
 /// Gradle files of the app. It is exact, rather than a range such as
-/// `^1.4.0`: `cmd.exe`, which runs `dart.bat` on Windows, would read `^`,
+/// `^1.4.1`: `cmd.exe`, which runs `dart.bat` on Windows, would read `^`,
 /// `<` and `>` in the argument as its own.
 const flutterfireVersion = '1.4.1';
 
-/// The lowest version of flutterfire_cli that the check accepts, which
-/// writes `lib/firebase_options.dart` in the form of the placeholder.
-const minimumFlutterfireVersion = '1.4.0';
+/// The lowest version of flutterfire_cli that the check accepts.
+///
+/// It writes `lib/firebase_options.dart` in the form of the placeholder, as
+/// 1.4.0 does. For an app with Crashlytics, flutterfire adds a build phase to
+/// the Xcode project that uploads the debug symbols with the upload script of
+/// Crashlytics. With Swift Package Manager, Flutter puts the Swift packages
+/// of the app, and the script with them, in `build/ios/SourcePackages`,
+/// where the phase of 1.4.0 does not look, so the iOS build fails. The phase
+/// of 1.4.1 looks in `SourcePackages` of the build directory of Xcode, which
+/// `flutter run` and `flutter build ios` set to `build/ios`.
+const minimumFlutterfireVersion = '1.4.1';
 
 /// How the module runs the FlutterFire CLI: through the Dart of the Flutter
 /// SDK, which finds a globally activated package without
@@ -26,11 +34,15 @@ const flutterfireTool = ToolRef(
 /// [minimumFlutterfireVersion] and the next major one.
 ///
 /// `dart pub global list` tells. The tests of the module repeat the changes
-/// that flutterfire_cli 1.4 makes to the app; a later 1.x version that is
+/// that flutterfire_cli 1.4.1 makes to the app; a later 1.x version that is
 /// active already is used as it is. The check can activate
 /// [flutterfireVersion] in place of an older version, but never in place of
 /// a newer major one, which other apps of the user may need: the build
 /// phases that flutterfire adds to their Xcode projects run the active one.
+///
+/// Its description names the versions that it accepts: the pipeline says
+/// that the description is missing, both when no version is active and when
+/// an older or a newer major version is.
 final class FlutterfireCliCheck extends PreflightCheck {
   /// Creates the check.
   const FlutterfireCliCheck();
@@ -39,7 +51,8 @@ final class FlutterfireCliCheck extends PreflightCheck {
   String get id => 'flutterfire_cli';
 
   @override
-  String get description => 'FlutterFire CLI';
+  String get description =>
+      'FlutterFire CLI $minimumFlutterfireVersion or a later 1.x';
 
   static const _activate =
       'dart pub global activate flutterfire_cli $flutterfireVersion';

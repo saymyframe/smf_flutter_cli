@@ -110,14 +110,18 @@ String _named(FlutterfireProblem problem, Set<String> contributors) {
 }
 
 void main() {
-  test('repeats the flutterfire_cli that the module activates', () {
-    expect(
-      emulatedFlutterfireVersions,
-      contains(flutterfireVersion),
-      reason: 'Compare the files of flutterfire_cli that '
-          'test/support/flutterfire.dart names with those of the new '
-          'version, and update it.',
-    );
+  test(
+      'repeats the flutterfire_cli that the module activates, and the lowest '
+      'that it accepts', () {
+    for (final version in [flutterfireVersion, minimumFlutterfireVersion]) {
+      expect(
+        emulatedFlutterfireVersions,
+        contains(version),
+        reason: 'Compare the files of flutterfire_cli that '
+            'test/support/flutterfire.dart names with those of $version, and '
+            'update it.',
+      );
+    }
   });
 
   group('flutterfire configure', () {

@@ -430,8 +430,12 @@ void main() {
           reply: (_) => result,
         );
 
-    test('passes with flutterfire_cli 1.4.0 or a later 1.x active', () async {
-      for (final version in ['1.4.0', '1.4.1', '1.9.12', '1.4.2-dev.1']) {
+    test('names the versions that it accepts', () {
+      expect(check.description, 'FlutterFire CLI 1.4.1 or a later 1.x');
+    });
+
+    test('passes with flutterfire_cli 1.4.1 or a later 1.x active', () async {
+      for (final version in ['1.4.1', '1.5.0', '1.9.12', '1.4.2-dev.1']) {
         final machine = machineWith(
           _result(
             0,
@@ -456,7 +460,7 @@ void main() {
     });
 
     test('offers to activate it in place of an older version', () async {
-      for (final version in ['1.3.2', '0.3.0-dev.1']) {
+      for (final version in ['1.4.0', '1.3.2', '0.3.0-dev.1']) {
         expect(
           await check.check(
             machineWith(
@@ -465,13 +469,41 @@ void main() {
           ),
           _missing(
             instructions: 'flutterfire_cli $version is active, but the app '
-                'needs 1.4.0 or a later 1.x version: activate one with "dart '
+                'needs 1.4.1 or a later 1.x version: activate one with "dart '
                 'pub global activate flutterfire_cli 1.4.1".',
             installable: true,
           ),
           reason: version,
         );
       }
+    });
+
+    test(
+        'activates 1.4.1 in place of 1.4.0, whose build phase of Crashlytics '
+        'fails with Swift Package Manager, and passes then', () async {
+      var active = '1.4.0';
+      final machine = FakeMachine(
+        executables: {'dart': _dart},
+        reply: (call) {
+          if (call.arguments.contains('activate')) active = '1.4.1';
+          return _result(0, stdout: 'flutterfire_cli $active\n');
+        },
+      );
+
+      expect(
+        await check.check(machine),
+        _missing(
+          instructions: startsWith('flutterfire_cli 1.4.0 is active'),
+          installable: true,
+        ),
+      );
+      await check.install(machine);
+      expect(await check.check(machine), isA<PreflightPassed>());
+      expect(machine.calls.map((call) => call.line), [
+        '$_dart pub global list',
+        '$_dart pub global activate flutterfire_cli 1.4.1',
+        '$_dart pub global list',
+      ]);
     });
 
     test('never replaces a newer major version, but tells how', () async {
@@ -483,7 +515,7 @@ void main() {
           ),
           _missing(
             instructions: 'flutterfire_cli $version is active, but SMF works '
-                'with 1.4.0 or a later 1.x version, and does not replace a '
+                'with 1.4.1 or a later 1.x version, and does not replace a '
                 'newer one, which other apps may need. To use one, activate '
                 'it with "dart pub global activate flutterfire_cli 1.4.1".',
             installable: false,
@@ -571,12 +603,20 @@ void main() {
       }
     });
 
-    test('accepts 1.4.0 and every later 1.x version', () {
-      expect(minimumFlutterfireVersion, '1.4.0');
-      for (final version in ['1.4.0', '1.4.1', '1.5.0', '1.10.3', '1.4.0+2']) {
+    test('accepts 1.4.1 and every later 1.x version', () {
+      expect(minimumFlutterfireVersion, '1.4.1');
+      for (final version in ['1.4.1', '1.4.2', '1.5.0', '1.10.3', '1.4.1+2']) {
         expect(isSupportedFlutterfireVersion(version), isTrue, reason: version);
       }
-      for (final version in ['1.3.9', '0.9.0', '2.0.0', '1', 'x']) {
+      for (final version in [
+        '1.4.0',
+        '1.4.0+2',
+        '1.3.9',
+        '0.9.0',
+        '2.0.0',
+        '1',
+        'x',
+      ]) {
         expect(
           isSupportedFlutterfireVersion(version),
           isFalse,

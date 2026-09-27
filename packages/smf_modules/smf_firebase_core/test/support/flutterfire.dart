@@ -6,11 +6,11 @@
 /// It follows `lib/src/firebase/firebase_android_writes.dart` (the Gradle
 /// files), `lib/src/flutter_app.dart` (the application id and the bundle
 /// id) and `lib/src/firebase/firebase_dart_configuration_write.dart` (the
-/// options) of flutterfire_cli 1.4.0, which 1.4.1 did not change. When the
-/// module activates another flutterfire_cli, compare these files of the two
-/// versions, update this file and add the version to
-/// [emulatedFlutterfireVersions]; a test checks that the module activates
-/// one of them.
+/// options) of flutterfire_cli 1.4.1, the version that the module activates
+/// and the lowest that it accepts; 1.4.0 has the same files, byte for byte.
+/// When the module activates or accepts another flutterfire_cli, compare
+/// these files of the two versions, update this file and add the version to
+/// [emulatedFlutterfireVersions]; a test checks that the list has both.
 library;
 
 /// The versions of flutterfire_cli whose files this file repeats, compared

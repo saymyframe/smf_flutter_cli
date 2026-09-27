@@ -25,6 +25,18 @@ const _later = 'dart pub global run flutterfire_cli:flutterfire configure '
 const _configureNow = 'Configuring Firebase with flutterfire ($_later), for '
     'firebase_core. Run it now?';
 
+/// The question whether to activate flutterfire_cli.
+const _flutterfireMissing = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
+    '(needed by firebase_core). Install it now?';
+
+/// The activation of flutterfire_cli.
+const _activate = '$_dart pub global activate flutterfire_cli 1.4.1';
+
+/// What the check says about flutterfire_cli 1.4.0.
+const _tooOld = 'flutterfire_cli 1.4.0 is active, but the app needs 1.4.1 or '
+    'a later 1.x version: activate one with "dart pub global activate '
+    'flutterfire_cli 1.4.1".';
+
 /// The warning that Firebase is not configured, because of [reason].
 String _notConfigured(String reason) =>
     'Configuring Firebase with flutterfire is not done, because $reason. Run '
@@ -38,17 +50,18 @@ final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 /// terminal; the app goes to `/work/my_app`. It runs macOS unless
 /// [operatingSystem] says otherwise.
 ///
-/// The Firebase CLI and the FlutterFire CLI are missing until a command
-/// installs them: the install script puts `firebase` into `/opt/npm/bin`,
-/// `firebase login` logs in unless it exits with [loginCode], and `dart pub
-/// global activate` activates flutterfire_cli. Every other command
-/// succeeds.
+/// The Firebase CLI is missing until the install script puts `firebase`
+/// into `/opt/npm/bin`, and `firebase login` logs in unless it exits with
+/// [loginCode]. flutterfire_cli is not active, or in version [flutterfire],
+/// until `dart pub global activate` activates flutterfire_cli 1.4.1. Every
+/// other command succeeds.
 final class _Machine {
   _Machine({
     List<bool> confirmations = const [],
     this.hasTerminal = true,
     this.loginCode = 0,
     this.xcodeproj = true,
+    this.flutterfire,
     this.operatingSystem = HostOperatingSystem.macos,
   }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
@@ -71,6 +84,7 @@ final class _Machine {
   final bool hasTerminal;
   final int loginCode;
   final bool xcodeproj;
+  final String? flutterfire;
   final HostOperatingSystem operatingSystem;
   late final FakeMachine fake;
   var _loggedIn = false;
@@ -98,12 +112,14 @@ final class _Machine {
       return SmfProcessResult(exitCode: loginCode);
     }
     if (line == '$_dart pub global list') {
+      final active = _activated ? '1.4.1' : flutterfire;
       return SmfProcessResult(
         exitCode: 0,
-        stdout: _activated ? 'flutterfire_cli 1.4.1\n' : 'melos 7.5.1\n',
+        stdout: 'melos 7.5.1\n'
+            '${active == null ? '' : 'flutterfire_cli $active\n'}',
       );
     }
-    if (line == '$_dart pub global activate flutterfire_cli 1.4.1') {
+    if (line == _activate) {
       _activated = true;
     }
     if (line.startsWith('/bin/ruby ')) {
@@ -150,9 +166,14 @@ final class _Machine {
       ];
 
   /// The warnings that the run printed.
-  List<String> get warnings => [
+  List<String> get warnings => _reports('warn: ');
+
+  /// What the run printed as information, such as the lines of `--explain`.
+  List<String> get infos => _reports('info: ');
+
+  List<String> _reports(String kind) => [
         for (final report in fake.reports)
-          if (report.startsWith('warn: ')) report.substring('warn: '.length),
+          if (report.startsWith(kind)) report.substring(kind.length),
       ];
 }
 
@@ -169,7 +190,7 @@ void main() {
     // them, so it is not asked about.
     expect(machine.fake.questions, [
       'Firebase CLI is missing (needed by firebase_core). Install it now?',
-      'FlutterFire CLI is missing (needed by firebase_core). Install it now?',
+      _flutterfireMissing,
     ]);
     expect(machine.checks, [
       '$_dart pub global list',
@@ -181,10 +202,11 @@ void main() {
       contains('Firebase login is missing. Install the Firebase CLI, then log '
           'in with "firebase login", or on a remote machine, such as over SSH, '
           'with "firebase login --no-localhost".'),
-      contains('FlutterFire CLI is missing. Activate it with "dart pub global '
-          'activate flutterfire_cli 1.4.1".'),
+      contains('FlutterFire CLI 1.4.1 or a later 1.x is missing. Activate it '
+          'with "dart pub global activate flutterfire_cli 1.4.1".'),
       _notConfigured(
-        'Firebase CLI, Firebase login and FlutterFire CLI are missing',
+        'Firebase CLI, Firebase login and FlutterFire CLI 1.4.1 or a later '
+        '1.x are missing',
       ),
     ]);
     expect(
@@ -204,7 +226,7 @@ void main() {
     expect(machine.fake.questions, [
       'Firebase CLI is missing (needed by firebase_core). Install it now?',
       'Firebase login is missing (needed by firebase_core). Install it now?',
-      'FlutterFire CLI is missing (needed by firebase_core). Install it now?',
+      _flutterfireMissing,
       _configureNow,
     ]);
     expect(machine.checks, [
@@ -216,7 +238,7 @@ void main() {
       '$_firebase login',
       '$_firebase login:list --json',
       '$_dart pub global list',
-      '$_dart pub global activate flutterfire_cli 1.4.1',
+      _activate,
       '$_dart pub global list',
       _configure,
     ]);
@@ -262,9 +284,10 @@ void main() {
     expect(machine.warnings, [
       contains('Firebase login could not be checked: The installation '
           'failed: "firebase login" exited with code 1.'),
-      contains('FlutterFire CLI is missing.'),
+      contains('FlutterFire CLI 1.4.1 or a later 1.x is missing.'),
       _notConfigured(
-        'FlutterFire CLI is missing, and Firebase login could not be checked',
+        'FlutterFire CLI 1.4.1 or a later 1.x is missing, and Firebase login '
+        'could not be checked',
       ),
     ]);
   });
@@ -306,7 +329,7 @@ void main() {
       '$_firebase login',
       '$_firebase login:list --json',
       '$_dart pub global list',
-      '$_dart pub global activate flutterfire_cli 1.4.1',
+      _activate,
       '$_dart pub global list',
       _configure,
     ]);
@@ -347,5 +370,95 @@ void main() {
       _notConfigured('the run cannot ask the user'),
     );
     expect(machine.checks, isNot(contains(_configure)));
+  });
+
+  group('with flutterfire_cli 1.4.0 active', () {
+    test(
+        'a user who agrees gets 1.4.1 in its place, and Firebase configured '
+        'with it', () async {
+      final machine = _Machine(
+        confirmations: [true, true, true, true],
+        flutterfire: '1.4.0',
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions, [
+        'Firebase CLI is missing (needed by firebase_core). Install it now?',
+        'Firebase login is missing (needed by firebase_core). Install it now?',
+        _flutterfireMissing,
+        _configureNow,
+      ]);
+      expect(
+        machine.checks,
+        containsAllInOrder([
+          '$_dart pub global list',
+          _activate,
+          '$_dart pub global list',
+          _configure,
+        ]),
+      );
+      expect(machine.warnings, isEmpty);
+    });
+
+    test(
+        'a user who keeps it gets the configuration for later, with the '
+        'reason', () async {
+      final machine = _Machine(
+        confirmations: [true, true, false],
+        flutterfire: '1.4.0',
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions.last, _flutterfireMissing);
+      expect(machine.checks, isNot(contains(_activate)));
+      expect(machine.checks, isNot(contains(_configure)));
+      expect(machine.warnings, [
+        contains('FlutterFire CLI 1.4.1 or a later 1.x is missing. $_tooOld'),
+        _notConfigured('FlutterFire CLI 1.4.1 or a later 1.x is missing'),
+      ]);
+    });
+  });
+
+  test(
+      '--explain shows flutterfire_cli 1.4.0 as missing and 1.4.1 as there, '
+      'and changes nothing', () async {
+    const check = 'FlutterFire CLI 1.4.1 or a later 1.x (for firebase_core)';
+    for (final (active, lines) in [
+      (
+        '1.4.0',
+        [
+          '  ✗ $check: missing',
+          '    $_tooOld',
+          '    An interactive run offers to install it.',
+        ]
+      ),
+      ('1.4.1', ['  ✓ $check']),
+    ]) {
+      final machine = _Machine(flutterfire: active);
+
+      final code = await machine.create(['--explain']);
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.infos, containsAllInOrder(lines), reason: active);
+      expect(machine.fake.questions, isEmpty);
+      expect(machine.checks, isNot(contains(_activate)));
+      expect(machine.files.directory('/work/my_app').existsSync(), isFalse);
+    }
   });
 }
