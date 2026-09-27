@@ -11,10 +11,10 @@ const crashReportingRole = CrashReportingRole._();
 /// - the `CrashReporter` interface;
 /// - `CrashReporter createCrashReporter()`, which returns one reporter that
 ///   forwards every call to the implementations of all providers;
-/// - `installCrashReporting()`, which reports the uncaught errors of the
-///   main isolate once each, through `FlutterError.onError` for the errors
-///   that Flutter catches and `PlatformDispatcher.instance.onError` for the
-///   others.
+/// - `installCrashReporting()`, which reports the errors of the main
+///   isolate that the app does not handle, once each, through
+///   `FlutterError.onError` for the errors that Flutter catches and
+///   `PlatformDispatcher.instance.onError` for the others.
 ///
 /// `bootstrap()` calls `installCrashReporting()` in its platform phase,
 /// after the providers and the modules they depend on have set up their
@@ -23,8 +23,12 @@ const crashReportingRole = CrashReportingRole._();
 /// provider whose SDK installs global handlers of its own turns them off.
 /// The handlers also show the errors: Flutter presents the errors it
 /// catches as it does by default, and in debug mode the engine prints the
-/// others. So an implementation only reports, and prints nothing. With a
-/// DI container, the reporter is registered as a lazy singleton.
+/// others. So an implementation only reports, and prints nothing. The
+/// handlers cover the main isolate only: `compute()` and `Isolate.run()`
+/// throw the errors of their isolates to the code that awaits them, and
+/// the app reports the errors of an isolate it spawns itself through the
+/// error listener of that isolate. With a DI container, the reporter is
+/// registered as a lazy singleton.
 final class CrashReportingRole extends Role<RoleImplementation> {
   const CrashReportingRole._();
 
