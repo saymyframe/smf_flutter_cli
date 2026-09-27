@@ -392,6 +392,47 @@ void main() {
         await plan.environment.dispose();
       });
 
+      test('and --explain says so for a Flutter SDK that is too old', () async {
+        final host = FakeHost();
+        host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(
+            '{"flutterVersion": "3.29.3", "dartSdkVersion": "3.7.2"}',
+          );
+        final modules = [
+          scaffold(),
+          TestModule(
+            'home',
+            contributions: const [
+              PubspecContribution.environment(flutter: '>=3.32.0'),
+            ],
+          ),
+        ];
+
+        await pipeline(modules, host).plan(request(['home'], explain: true));
+
+        final report = host.logger.infos.join('\n');
+        expect(
+          report,
+          contains(
+            '  ✗ scaffold needs Dart ^3.8.1, but the Flutter SDK at '
+            '/sdk/bin/flutter has Dart 3.7.2.\n'
+            '    Upgrade Flutter.\n'
+            '    Generation would stop.',
+          ),
+        );
+        // A module that an app can do without would be left out.
+        expect(
+          report,
+          contains(
+            '  ✗ home needs Flutter >=3.32.0, but the Flutter SDK at '
+            '/sdk/bin/flutter has Flutter 3.29.3.\n'
+            '    Upgrade Flutter, or leave out home.\n'
+            '    Generation would leave out home.',
+          ),
+        );
+      });
+
       test('and --explain says that generation would stop', () async {
         final host = FakeHost();
         final modules = [

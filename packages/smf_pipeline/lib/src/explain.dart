@@ -25,7 +25,9 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   follow-up of a step under it, and with the systems of a step that runs
 ///   only on some;
 /// - the state of every preflight check, with instructions for what is
-///   missing and what a missing required check would do.
+///   missing and what a missing required check would do, and the versions
+///   of the Flutter SDK outside the constraints of the app, with what to do
+///   and what they would do.
 final class Explanation {
   /// Creates the report of what the stages 1 to 6 found.
   const Explanation({
@@ -189,8 +191,24 @@ final class Explanation {
         '',
         'Machine',
         for (final result in preflight.results) ..._checkLines(result),
-        for (final issue in sdkIssues) '  ✗ ${issue.message}',
+        for (final issue in sdkIssues) ..._sdkIssueLines(issue),
       ];
+
+  /// The lines of [issue], a version of the Flutter SDK outside a constraint
+  /// of the app: the problem, how to fix it, and what it would do.
+  List<String> _sdkIssueLines(SmfIssue issue) => [
+        '  ✗ ${issue.message}',
+        if (issue.hint case final hint?) '    $hint',
+        _outcome(issue.origin),
+      ];
+
+  /// What a problem of [origin] that nothing fixes would do: leave out the
+  /// module, unless the run is strict or no app can be made without it, or
+  /// stop generation.
+  String _outcome(ContributionOrigin? origin) =>
+      origin is ModuleOrigin && !strict && canDoWithout({origin.module})
+          ? '    Generation would leave out ${origin.module}.'
+          : '    Generation would stop.';
 
   /// The lines of the preflight check of [result]: its state, and what a
   /// required check that is not ready would do.
@@ -221,13 +239,7 @@ final class Explanation {
       case PreflightFailed(:final message):
         lines.add('  ✗ ${check.description}$by: $message');
     }
-    if (!result.passed && check.required) {
-      lines.add(
-        origin is ModuleOrigin && !strict && canDoWithout({origin.module})
-            ? '    Generation would leave out ${origin.module}.'
-            : '    Generation would stop.',
-      );
-    }
+    if (!result.passed && check.required) lines.add(_outcome(origin));
     return lines;
   }
 }
