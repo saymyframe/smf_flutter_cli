@@ -15,7 +15,6 @@ resolution: workspace
 dependencies:
   mason: ^0.1.1
   meta: ^1.17.0
-  smf_contribution_engine: ^0.2.0
 
 dev_dependencies:
   analyzer: ^8.1.0

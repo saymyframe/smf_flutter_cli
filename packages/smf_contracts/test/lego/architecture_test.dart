@@ -44,34 +44,22 @@ String? _target(File file, String uri) {
 bool _isCore(String path) =>
     path == 'lego_core.dart' || path.startsWith('src/lego/core/');
 
-/// The templates of the lego roles are bricks bundled into
-/// `bundles/<role>_role_bundle.dart`.
-bool _isLego(String path) =>
-    path == 'lego.dart' ||
-    path == 'lego_core.dart' ||
-    path.startsWith('src/lego/') ||
-    RegExp(r'^bundles/[a-z_]+_role_bundle\.dart$').hasMatch(path);
-
 String _relative(File file) => file.path
     .substring(file.path.lastIndexOf('lib${Platform.pathSeparator}') + 4)
     .replaceAll(Platform.pathSeparator, '/');
 
 void main() {
-  // The lego model is introduced next to the older API. These tests keep
-  // the two apart, and the core free of concrete roles, until the old API
-  // is removed.
+  // The core of the module model knows no concrete role, so the pipeline,
+  // which imports only the core, cannot depend on one either.
   final files = _dartFiles('lib');
   final core = files.where((file) => _isCore(_relative(file))).toList();
-  final lego = files.where((file) => _isLego(_relative(file))).toList();
-  final old = files.where((file) => !_isLego(_relative(file))).toList();
 
-  test('finds the files of both APIs', () {
+  test('finds the core and the roles', () {
     expect(core, isNotEmpty);
-    expect(lego.length, greaterThan(core.length));
-    expect(old, isNotEmpty);
+    expect(files.length, greaterThan(core.length));
   });
 
-  test('the core depends on no concrete role and no old API', () {
+  test('the core depends on no concrete role', () {
     for (final file in core) {
       for (final uri in _directives(file)) {
         final target = _target(file, uri);
@@ -85,15 +73,9 @@ void main() {
     }
   });
 
-  test('the lego model does not use the old API or the engine', () {
-    for (final file in lego) {
+  test('neither the engine nor mustachex', () {
+    for (final file in files) {
       for (final uri in _directives(file)) {
-        final target = _target(file, uri);
-        expect(
-          target == null || _isLego(target),
-          isTrue,
-          reason: '${_relative(file)} refers to the old API: $uri',
-        );
         expect(
           uri,
           isNot(
@@ -103,35 +85,6 @@ void main() {
             ),
           ),
           reason: '${_relative(file)} must not use $uri',
-        );
-      }
-    }
-  });
-
-  test('tests of each API use only that API', () {
-    const package = 'package:smf_contracts/';
-    final separator = Platform.pathSeparator;
-    for (final file in _dartFiles('test')) {
-      final testsLego = file.path.contains('${separator}lego$separator');
-      for (final uri in _directives(file)) {
-        if (!uri.startsWith(package)) continue;
-        expect(
-          _isLego(uri.substring(package.length)),
-          testsLego,
-          reason: '${file.path} must not use $uri',
-        );
-      }
-    }
-  });
-
-  test('the old API does not use the lego model', () {
-    for (final file in old) {
-      for (final uri in _directives(file)) {
-        final target = _target(file, uri);
-        expect(
-          target == null || !_isLego(target),
-          isTrue,
-          reason: '${_relative(file)} refers to the lego model: $uri',
         );
       }
     }

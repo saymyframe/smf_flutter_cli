@@ -4,10 +4,6 @@
 /// The pipeline imports only this library, so it cannot depend on a
 /// concrete role. Modules import `package:smf_contracts/lego.dart`, which
 /// adds the built-in roles.
-///
-/// While the model is being introduced, it lives next to the older API of
-/// `package:smf_contracts/smf_contracts.dart`, which declares some of the
-/// same names. A file imports one of the two, never both.
 library;
 
 export 'src/lego/core/contributions.dart';

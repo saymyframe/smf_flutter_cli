@@ -55,22 +55,25 @@ void main() {
   });
 
   test('allows a name only in the files of its exceptions', () {
+    const engine = 'packages/smf_modules/smf_contribution_engine/lib';
     const template =
         'packages/smf_contracts/bricks/di_role/__brick__/lib/di.dart';
     expect(
       _names({
         'packages/smf_modules/smf_get_it/lib/di.dart': 'GetIt getIt;',
-        'packages/smf_contracts/lib/src/modules/profile.dart':
-            'class ModuleProfile {}',
-        'packages/smf_contracts/lib/src/lego/roles/di.dart':
+        '$engine/patch.dart': "import 'package:mustachex/mustachex.dart';",
+        '$engine/profile.dart': 'class ModuleProfile {}',
+        'packages/smf_contracts/lib/src/roles/di.dart':
             'class ModuleProfile {}',
         template: '{{app_name_sc}}',
         'packages/smf_contracts/pubspec.yaml':
             '  smf_contribution_engine: ^0.2.0\n  mustachex: ^1.0.0',
       }),
       [
-        'packages/smf_contracts/lib/src/lego/roles/di.dart:1: ModuleProfile',
+        '$engine/profile.dart:1: ModuleProfile',
+        'packages/smf_contracts/lib/src/roles/di.dart:1: ModuleProfile',
         '$template:1: {{app_name_sc}}',
+        'packages/smf_contracts/pubspec.yaml:1: smf_contribution_engine',
         'packages/smf_contracts/pubspec.yaml:2: mustachex',
       ],
     );

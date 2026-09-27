@@ -12,6 +12,7 @@
 // - a migration exception, for a package that still uses the old model.
 //   It goes once the package has moved, and the check fails when a path of
 //   an exception no longer matches anything, so the list only shrinks.
+//   Every package has moved, so the list is empty.
 import 'dart:io';
 
 /// A name that the tracked files may not use.
@@ -32,13 +33,10 @@ final class _Ban {
 
 /// Files that may use some banned names.
 final class _Exception {
-  const _Exception(this.files, this.names, this.reason, {this.except});
+  const _Exception(this.files, this.names, this.reason);
 
   /// The files: a path, or the start of one when it ends with `/`.
   final List<String> files;
-
-  /// The start of paths among [files] that the exception does not cover.
-  final List<String>? except;
 
   /// The names the files may use, or `null` for every banned name.
   final Set<String>? names;
@@ -48,10 +46,7 @@ final class _Exception {
 
   /// The entry of [files] that lets the file [path] use [name], or `null`.
   String? entryFor(String path, String name) {
-    if (!(names?.contains(name) ?? true) ||
-        (except?.any(path.startsWith) ?? false)) {
-      return null;
-    }
+    if (!(names?.contains(name) ?? true)) return null;
     for (final file in files) {
       if (file.endsWith('/') ? path.startsWith(file) : path == file) {
         return file;
@@ -172,26 +167,7 @@ const _lasting = [
   ),
 ];
 
-const _migrating = [
-  _Exception(
-    [
-      'packages/smf_contracts/lib/smf_contracts_factory.dart',
-      'packages/smf_contracts/lib/smf_contracts_module.dart',
-      'packages/smf_contracts/lib/src/',
-      'packages/smf_contracts/test/src/',
-      'packages/smf_contracts/test/smf_contracts_module_test.dart',
-      'packages/smf_contracts/bricks/smf_contracts_brick/',
-    ],
-    null,
-    'The old contracts API stays until no module uses it.',
-    except: ['packages/smf_contracts/lib/src/lego/'],
-  ),
-  _Exception(
-    ['packages/smf_contracts/pubspec.yaml'],
-    {'smf_contribution_engine'},
-    'The old contracts API uses the contribution engine.',
-  ),
-];
+const _migrating = <_Exception>[];
 
 /// Whether the check reads the tracked file [path]: Dart code but the
 /// generated bundles, pubspecs, the templates of bricks, and the workflows
