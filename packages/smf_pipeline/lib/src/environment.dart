@@ -193,18 +193,25 @@ final class PipelineEnvironment implements SmfEnvironment {
     if (context.isAbsolute(name) ||
         name.contains(context.separator) ||
         name.contains('/')) {
-      for (final candidate in names) {
-        final path = context.normalize(context.absolute(candidate));
-        if (await fileSystem.isFile(path)) return path;
-      }
-      return null;
+      return _firstFile(
+        names
+            .map((candidate) => context.normalize(context.absolute(candidate))),
+      );
     }
-    for (final directory in _searchDirectories) {
-      for (final candidate in names) {
-        final path = context
-            .normalize(context.absolute(context.join(directory, candidate)));
-        if (await fileSystem.isFile(path)) return path;
-      }
+    return _firstFile(
+      _searchDirectories.expand(
+        (directory) => names.map(
+          (candidate) => context
+              .normalize(context.absolute(context.join(directory, candidate))),
+        ),
+      ),
+    );
+  }
+
+  /// The first of [paths] that is a file, or `null` if none is.
+  Future<String?> _firstFile(Iterable<String> paths) async {
+    for (final path in paths) {
+      if (await fileSystem.isFile(path)) return path;
     }
     return null;
   }

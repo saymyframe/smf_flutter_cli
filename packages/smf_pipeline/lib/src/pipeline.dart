@@ -359,7 +359,7 @@ extension CreatePlanning on CreatePipeline {
       }
 
       if (request.explain) {
-        explain(
+        Explanation(
           selection: selection,
           context: context,
           resolution: resolution,
@@ -370,20 +370,13 @@ extension CreatePlanning on CreatePipeline {
           operatingSystem: environment.operatingSystem,
           onConflict: request.onConflict,
           sdkIssues: preflight.versionIssues,
-          codegen: [
-            for (final collected in collection.applyingOf<CodegenRequest>())
-              collected.origin,
-          ],
-        ).forEach(logger.info);
+          codegen: _codegenOrigins(collection),
+        ).lines.forEach(logger.info);
         await environment.dispose();
         return null;
       }
 
-      for (final module in resolution.modules) {
-        if (module.reason is! Requested) {
-          logger.info('Adding ${module.id}: ${module.reason}.');
-        }
-      }
+      _reportAdded(resolution, logger);
       final choices = await chooseRoles(
         registry: registry,
         resolution: resolution,
@@ -406,6 +399,22 @@ extension CreatePlanning on CreatePipeline {
         environment: environment,
         leftOut: List.unmodifiable(lenience.leftOut),
       );
+    }
+  }
+}
+
+/// Who asks for code generation among [collection].
+List<ContributionOrigin> _codegenOrigins(Collection collection) => [
+      for (final collected in collection.applyingOf<CodegenRequest>())
+        collected.origin,
+    ];
+
+/// Tells about each module of [resolution] that the user did not ask for
+/// why it is in the app.
+void _reportAdded(Resolution resolution, SmfLogger logger) {
+  for (final module in resolution.modules) {
+    if (module.reason is! Requested) {
+      logger.info('Adding ${module.id}: ${module.reason}.');
     }
   }
 }
@@ -434,16 +443,7 @@ final class _Lenience {
         if (issue.isError) issue,
     ];
     if (errors.isEmpty) return false;
-    final culprits = <ModuleId, String>{};
-    for (final error in errors) {
-      if (error.origin case ModuleOrigin(:final module)
-          when !excluded.contains(module)) {
-        culprits.putIfAbsent(module, () => error.message);
-      } else {
-        culprits.clear();
-        break;
-      }
-    }
+    final culprits = _culpritsOf(errors);
     if (strict || culprits.isEmpty) {
       throw GenerationFailedException(
         errors.length == 1
@@ -458,5 +458,21 @@ final class _Lenience {
       logger.warn('Leaving out $module: $reason');
     }
     return true;
+  }
+
+  /// The modules that caused [errors], each with the message of its first
+  /// error, or none if an error has no module that lenient mode can still
+  /// leave out.
+  Map<ModuleId, String> _culpritsOf(List<SmfIssue> errors) {
+    final culprits = <ModuleId, String>{};
+    for (final error in errors) {
+      if (error.origin case ModuleOrigin(:final module)
+          when !excluded.contains(module)) {
+        culprits.putIfAbsent(module, () => error.message);
+      } else {
+        return const {};
+      }
+    }
+    return culprits;
   }
 }

@@ -26,62 +26,111 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   only on some;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do.
-List<String> explain({
-  required Selection selection,
-  required ModuleContext context,
-  required Resolution resolution,
-  required ValidationResult validation,
-  required PreflightReport preflight,
-  required List<LeftOut> leftOut,
-  required bool strict,
-  required HostOperatingSystem operatingSystem,
-  OnConflict onConflict = OnConflict.prompt,
-  List<SmfIssue> sdkIssues = const [],
-  List<ContributionOrigin> codegen = const [],
-}) {
-  final target = selection.target;
-  final conflict = target.conflict ? _conflicts[onConflict]! : '';
-  final lines = <String>[
-    'App ${context.appName} of ${context.orgName}',
-    '  Android application id: ${context.appIdentity.androidApplicationId}',
-    '  iOS bundle id: ${context.appIdentity.iosBundleId}',
-    '  Directory: ${target.path}$conflict',
-    '',
-    'Modules',
-    for (final module in resolution.modules)
-      '  ${module.id}: ${module.reason}${_variant(module)}',
-  ];
+final class Explanation {
+  /// Creates the report of what the stages 1 to 6 found.
+  const Explanation({
+    required this.selection,
+    required this.context,
+    required this.resolution,
+    required this.validation,
+    required this.preflight,
+    required this.leftOut,
+    required this.strict,
+    required this.operatingSystem,
+    this.onConflict = OnConflict.prompt,
+    this.sdkIssues = const [],
+    this.codegen = const [],
+  });
 
-  if (resolution.presentRoles.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('Roles');
+  /// What the user asked for, and where the app goes.
+  final Selection selection;
+
+  /// The app being generated.
+  final ModuleContext context;
+
+  /// The modules of the app and the roles they provide.
+  final Resolution resolution;
+
+  /// The orders of the contributions and the merged pubspec.
+  final ValidationResult validation;
+
+  /// The state of the machine.
+  final PreflightReport preflight;
+
+  /// The modules lenient mode left out.
+  final List<LeftOut> leftOut;
+
+  /// Whether the run is strict, so that a missing required check would stop
+  /// it rather than leave out its module.
+  final bool strict;
+
+  /// The system whose shell the commands are quoted for.
+  final HostOperatingSystem operatingSystem;
+
+  /// What the run would do with a directory of the app that is not empty.
+  final OnConflict onConflict;
+
+  /// The problems of the versions of the Flutter SDK.
+  final List<SmfIssue> sdkIssues;
+
+  /// The modules that ask for code generation.
+  final List<ContributionOrigin> codegen;
+
+  /// The lines of the report.
+  List<String> get lines => [
+        ..._app(),
+        ..._roles(),
+        ..._leftOut(),
+        ..._orders(),
+        ..._dependencies(),
+        ..._steps(),
+        ..._machine(),
+      ];
+
+  List<String> _app() {
+    final target = selection.target;
+    final conflict = target.conflict ? _conflicts[onConflict]! : '';
+    return [
+      'App ${context.appName} of ${context.orgName}',
+      '  Android application id: ${context.appIdentity.androidApplicationId}',
+      '  iOS bundle id: ${context.appIdentity.iosBundleId}',
+      '  Directory: ${target.path}$conflict',
+      '',
+      'Modules',
+      for (final module in resolution.modules)
+        '  ${module.id}: ${module.reason}${_variant(module)}',
+    ];
+  }
+
+  List<String> _roles() {
+    if (resolution.presentRoles.isEmpty) return const [];
+    final lines = ['', 'Roles'];
     for (final role in resolution.presentRoles) {
       final providers = resolution.providersOf(role).map((m) => m.id);
       lines.add('  ${role.id}: ${providers.join(', ')}');
     }
+    return lines;
   }
 
-  if (leftOut.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('Left out (lenient mode)');
-    for (final record in leftOut) {
-      lines.add('  ${record.module}: ${record.reason}');
-    }
+  List<String> _leftOut() {
+    if (leftOut.isEmpty) return const [];
+    return [
+      '',
+      'Left out (lenient mode)',
+      for (final record in leftOut) '  ${record.module}: ${record.reason}',
+    ];
   }
 
-  final ordered = [
-    for (final MapEntry(key: socket, value: order)
-        in validation.socketOrders.entries)
-      if (_contributors(order).length > 1) ('$socket', order),
-    if (_contributors(validation.postGenOrder).length > 1)
-      ('post-generation steps', validation.postGenOrder),
-  ];
-  if (ordered.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('Order of contributions');
+  List<String> _orders() {
+    final ordered = [
+      for (final MapEntry(key: socket, value: order)
+          in validation.socketOrders.entries)
+        if (_contributors(order).length > 1) ('$socket', order),
+      if (_contributors(validation.postGenOrder).length > 1)
+        ('post-generation steps', validation.postGenOrder),
+    ];
+    if (ordered.isEmpty) return const [];
+    final lines = ['', 'Order of contributions'];
     for (final (name, order) in ordered) {
       lines.add('  $name: ${_contributors(order).join(', ')}');
       for (final edge in order.edges) {
@@ -91,49 +140,59 @@ List<String> explain({
         lines.add('    cycle: ${order.cycle.join(', ')}');
       }
     }
+    return lines;
   }
 
-  final pubspec = validation.pubspec;
-  for (final (title, dependencies) in [
-    ('Dependencies', pubspec.dependencies),
-    ('Dev dependencies', pubspec.devDependencies),
-  ]) {
-    if (dependencies.isEmpty) continue;
-    lines
-      ..add('')
-      ..add(title);
-    for (final dependency in dependencies.values) {
-      final version = dependency.source == PubspecSource.sdk
-          ? 'from the ${dependency.sdk} SDK'
-          : dependency.constraintText ?? 'any';
-      lines.add(
-        '  ${dependency.package} $version '
-        '(${dependency.origins.toSet().join(', ')})',
-      );
+  List<String> _dependencies() {
+    final pubspec = validation.pubspec;
+    final lines = <String>[];
+    for (final (title, dependencies) in [
+      ('Dependencies', pubspec.dependencies),
+      ('Dev dependencies', pubspec.devDependencies),
+    ]) {
+      if (dependencies.isEmpty) continue;
+      lines
+        ..add('')
+        ..add(title);
+      for (final dependency in dependencies.values) {
+        final version = dependency.source == PubspecSource.sdk
+            ? 'from the ${dependency.sdk} SDK'
+            : dependency.constraintText ?? 'any';
+        lines.add(
+          '  ${dependency.package} $version '
+          '(${dependency.origins.toSet().join(', ')})',
+        );
+      }
     }
+    return lines;
   }
 
-  final steps = [
-    if (codegen.isNotEmpty)
-      '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
-    for (final collected in validation.postGenOrder.contributions)
-      if (collected.contribution case final PostGenStep step)
-        ..._stepLines(step, collected.origin, operatingSystem),
-  ];
-  if (steps.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('After generation')
-      ..addAll(steps);
+  List<String> _steps() {
+    final steps = [
+      if (codegen.isNotEmpty)
+        '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
+      for (final collected in validation.postGenOrder.contributions)
+        if (collected.contribution case final PostGenStep step)
+          ..._stepLines(step, collected.origin, operatingSystem),
+    ];
+    if (steps.isEmpty) return const [];
+    return ['', 'After generation', ...steps];
   }
 
-  lines
-    ..add('')
-    ..add('Machine');
-  for (final result in preflight.results) {
+  List<String> _machine() => [
+        '',
+        'Machine',
+        for (final result in preflight.results) ..._checkLines(result),
+        for (final issue in sdkIssues) '  ✗ ${issue.message}',
+      ];
+
+  /// The lines of the preflight check of [result]: its state, and what a
+  /// required check that is not ready would do.
+  List<String> _checkLines(CheckResult result) {
     final check = result.planned.check;
     final origin = result.planned.origin;
     final by = origin is PipelineOrigin ? '' : ' (for $origin)';
+    final lines = <String>[];
     switch (result.status) {
       case PreflightPassed():
         lines.add('  ✓ ${check.description}$by');
@@ -159,11 +218,8 @@ List<String> explain({
             : '    Generation would stop.',
       );
     }
+    return lines;
   }
-  for (final issue in sdkIssues) {
-    lines.add('  ✗ ${issue.message}');
-  }
-  return lines;
 }
 
 const Map<OnConflict, String> _conflicts = {

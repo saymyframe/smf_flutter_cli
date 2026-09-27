@@ -298,11 +298,47 @@ Future<PreflightReport> runPreflight(
   MergedPubspec? pubspec,
   Map<String, CheckResult>? known,
 }) async {
-  final logger = environment.logger;
   final canInstall =
       !explain && environment.interactive && !environment.skipExternalSetup;
 
   // Everything the checks find before anything is installed.
+  final first = await _checkAll(checks, environment, known);
+
+  final doomed = _doomedBy(first);
+  final versionIssues = pubspec == null
+      ? const <SmfIssue>[]
+      : sdkVersionIssues(environment.sdk, pubspec);
+  for (final issue in versionIssues) {
+    doomed.add(issue.origin ?? const PipelineOrigin());
+  }
+  final hopeless = doomed.any((origin) => origin is PipelineOrigin) ||
+      (strict && doomed.isNotEmpty);
+
+  final results = await _installMissing(
+    checks,
+    first,
+    environment,
+    known: known,
+    mayInstall: (planned) =>
+        canInstall && !hopeless && !doomed.contains(planned.origin),
+  );
+  return PreflightReport(
+    results,
+    [
+      ..._checkIssues(results, environment.logger, explain: explain),
+      ...versionIssues,
+    ],
+    versionIssues: versionIssues,
+  );
+}
+
+/// The results of [checks] before anything is installed: those in [known],
+/// and the results of running the others.
+Future<List<CheckResult>> _checkAll(
+  List<PlannedCheck> checks,
+  PipelineEnvironment environment,
+  Map<String, CheckResult>? known,
+) async {
   final first = <CheckResult>[];
   for (final planned in checks) {
     final result = known?[planned.key] ??
@@ -313,12 +349,15 @@ Future<PreflightReport> runPreflight(
       environment.sdk = found;
     }
   }
+  return first;
+}
 
-  // The contributors that a failing required check dooms: one that no
-  // installation before it can fix.
+/// The contributors that a failing required check among [results] dooms:
+/// one that no installation before it can fix.
+Set<ContributionOrigin> _doomedBy(List<CheckResult> results) {
   final doomed = <ContributionOrigin>{};
   var installableBefore = false;
-  for (final result in first) {
+  for (final result in results) {
     if (_installable(result)) installableBefore = true;
     if (result.planned.check.required &&
         !result.passed &&
@@ -327,15 +366,20 @@ Future<PreflightReport> runPreflight(
       doomed.add(result.planned.origin);
     }
   }
-  final versionIssues = pubspec == null
-      ? const <SmfIssue>[]
-      : sdkVersionIssues(environment.sdk, pubspec);
-  for (final issue in versionIssues) {
-    doomed.add(issue.origin ?? const PipelineOrigin());
-  }
-  final hopeless = doomed.any((origin) => origin is PipelineOrigin) ||
-      (strict && doomed.isNotEmpty);
+  return doomed;
+}
 
+/// Installs, in order, what the [checks] that [mayInstall] found missing,
+/// [first], after asking the user, and checks again what failed after an
+/// installation; returns the results, which go into [known] too. A check
+/// with a result in [known] is left as it is.
+Future<List<CheckResult>> _installMissing(
+  List<PlannedCheck> checks,
+  List<CheckResult> first,
+  PipelineEnvironment environment, {
+  required Map<String, CheckResult>? known,
+  required bool Function(PlannedCheck planned) mayInstall,
+}) async {
   final results = <CheckResult>[];
   var installed = false;
   for (final (index, planned) in checks.indexed) {
@@ -347,10 +391,7 @@ Future<PreflightReport> runPreflight(
           await _statusOf(planned.check, environment),
         );
       }
-      if (canInstall &&
-          !hopeless &&
-          !doomed.contains(planned.origin) &&
-          _installable(result)) {
+      if (mayInstall(planned) && _installable(result)) {
         result = await _install(result, environment);
         installed |= result.installed;
       }
@@ -358,7 +399,17 @@ Future<PreflightReport> runPreflight(
     known?[planned.key] = result;
     results.add(result);
   }
+  return results;
+}
 
+/// The problems of the [results] that did not pass: an error for a
+/// required check, a warning otherwise. Unless it is an [explain] run, the
+/// checks that passed are reported to the detailed log.
+List<SmfIssue> _checkIssues(
+  List<CheckResult> results,
+  SmfLogger logger, {
+  required bool explain,
+}) {
   final issues = <SmfIssue>[];
   for (final result in results) {
     final check = result.planned.check;
@@ -381,11 +432,7 @@ Future<PreflightReport> runPreflight(
           : SmfIssue.warning(problem, origin: issueOrigin),
     );
   }
-  return PreflightReport(
-    results,
-    [...issues, ...versionIssues],
-    versionIssues: versionIssues,
-  );
+  return issues;
 }
 
 bool _installable(CheckResult result) => switch (result.status) {

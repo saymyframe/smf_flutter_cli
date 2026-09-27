@@ -48,36 +48,8 @@ Future<void> moveApp(
   final destination = fileSystem.directory(target.path);
   Directory? setAside;
   try {
-    for (final path in flutterToolFiles) {
-      final entity = fileSystem.path.joinAll([source, ...path.split('/')]);
-      final type = fileSystem.typeSync(entity, followLinks: false);
-      if (type == FileSystemEntityType.directory) {
-        await fileSystem.directory(entity).delete(recursive: true);
-      } else if (type != FileSystemEntityType.notFound) {
-        await fileSystem.file(entity).delete();
-      }
-    }
-
-    await destination.parent.create(recursive: true);
-    final type = fileSystem.typeSync(target.path);
-    if (type == FileSystemEntityType.directory) {
-      if (destination.listSync().isEmpty) {
-        await destination.delete();
-      } else if (target.replaceExisting) {
-        final aside = await _freeSibling(destination, 'replaced');
-        await destination.rename(aside);
-        setAside = fileSystem.directory(aside);
-      } else {
-        throw GenerationFailedException(
-          '${target.path} appeared while the app was being generated, so the '
-          'app stays in $source.',
-        );
-      }
-    } else if (type != FileSystemEntityType.notFound) {
-      throw GenerationFailedException(
-        '${target.path} is a file, so the app stays in $source.',
-      );
-    }
+    await _deleteToolFiles(fileSystem, source);
+    setAside = await _clearTarget(fileSystem, target, source);
   } on FileSystemException catch (error) {
     throw GenerationFailedException(
       'The app could not be moved to ${target.path}, so it stays in $source: '
@@ -116,6 +88,54 @@ Future<void> moveApp(
       );
     }
   }
+}
+
+/// Deletes the [flutterToolFiles] of the app in [source].
+Future<void> _deleteToolFiles(FileSystem fileSystem, String source) async {
+  for (final path in flutterToolFiles) {
+    final entity = fileSystem.path.joinAll([source, ...path.split('/')]);
+    final type = fileSystem.typeSync(entity, followLinks: false);
+    if (type == FileSystemEntityType.directory) {
+      await fileSystem.directory(entity).delete(recursive: true);
+    } else if (type != FileSystemEntityType.notFound) {
+      await fileSystem.file(entity).delete();
+    }
+  }
+}
+
+/// Makes way at [target] for the app in [source]: creates the parent of the
+/// target, deletes an empty directory there, and sets aside a directory
+/// that the app replaces, which it returns.
+///
+/// Throws a [GenerationFailedException] if the target is a file, or a
+/// directory that is not empty and that the app does not replace.
+Future<Directory?> _clearTarget(
+  FileSystem fileSystem,
+  TargetDecision target,
+  String source,
+) async {
+  final destination = fileSystem.directory(target.path);
+  await destination.parent.create(recursive: true);
+  final type = fileSystem.typeSync(target.path);
+  if (type == FileSystemEntityType.directory) {
+    if (destination.listSync().isEmpty) {
+      await destination.delete();
+    } else if (target.replaceExisting) {
+      final aside = await _freeSibling(destination, 'replaced');
+      await destination.rename(aside);
+      return fileSystem.directory(aside);
+    } else {
+      throw GenerationFailedException(
+        '${target.path} appeared while the app was being generated, so the '
+        'app stays in $source.',
+      );
+    }
+  } else if (type != FileSystemEntityType.notFound) {
+    throw GenerationFailedException(
+      '${target.path} is a file, so the app stays in $source.',
+    );
+  }
+  return null;
 }
 
 /// A path next to [directory] that nothing has, marked with [purpose].

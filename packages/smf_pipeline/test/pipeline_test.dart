@@ -597,7 +597,7 @@ void main() {
         edges: [],
         cycle: ['a', 'b'],
       );
-      final lines = explain(
+      final lines = Explanation(
         selection: const Selection(
           appName: 'app',
           org: 'com.example',
@@ -622,7 +622,7 @@ void main() {
         leftOut: const [],
         strict: false,
         operatingSystem: HostOperatingSystem.linux,
-      );
+      ).lines;
 
       expect(lines, contains('  home: requested, variant for bloc'));
       expect(lines, contains('  Directory: /app'));
@@ -633,7 +633,7 @@ void main() {
     test('notes a launcher of flutter and a Flutter too old', () {
       final launched = FlutterSdkCheck(FakeHost().fileSystem, explain: true)
         ..launcher = '/snap/bin/flutter';
-      final lines = explain(
+      final lines = Explanation(
         selection: const Selection(
           appName: 'app',
           org: 'com.example',
@@ -661,7 +661,7 @@ void main() {
         strict: false,
         operatingSystem: HostOperatingSystem.linux,
         sdkIssues: const [SmfIssue('The app needs Dart ^3.99.0.')],
-      );
+      ).lines;
 
       const note =
           '    /snap/bin/flutter is a launcher; a run asks it where the SDK is.';

@@ -12,11 +12,9 @@ import 'package:smf_pipeline/src/move.dart';
 ///
 /// The answer completes "The brick generates [path], which …".
 String? machineFileProblem(String path) {
-  for (final tool in flutterToolFiles) {
-    if (path == tool || path.startsWith('$tool/')) {
-      return "is written by Flutter's tools, which the pipeline does not move "
-          'with the app';
-    }
+  if (_isFlutterToolFile(path)) {
+    return "is written by Flutter's tools, which the pipeline does not move "
+        'with the app';
   }
   if (_paths[path] case final problem?) return problem;
   final segments = path.split('/');
@@ -41,6 +39,10 @@ String? machineFileProblem(String path) {
   }
   return null;
 }
+
+/// Whether [path] is one of the [flutterToolFiles] or in one of them.
+bool _isFlutterToolFile(String path) =>
+    flutterToolFiles.any((tool) => path == tool || path.startsWith('$tool/'));
 
 const _build = 'is the output of a build, not a part of the app';
 

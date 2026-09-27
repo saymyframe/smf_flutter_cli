@@ -57,20 +57,8 @@ Future<int> runSmf(
   int? usageLineLength,
   void Function(GeneratedApp app)? onCreated,
 }) async {
-  final ModuleRegistry registry;
-  try {
-    registry = ModuleRegistry(modules);
-  } on RegistryException catch (error) {
-    final logger = hostFor(verbose: false).logger
-      ..error(
-        'The modules of $executableName break the rules of the registry, '
-        'which is a bug:',
-      );
-    for (final problem in error.problems) {
-      logger.error('  $problem');
-    }
-    return SmfExitCodes.software;
-  }
+  final registry = _registryOf(modules, executableName, hostFor);
+  if (registry == null) return SmfExitCodes.software;
 
   late final SmfHost host;
   final runner = _Runner(executableName, () => host.logger, usageLineLength)
@@ -99,10 +87,7 @@ Future<int> runSmf(
     return _usageError(host.logger, error.message, error.usage);
   }
   final command = results.command;
-  final verbose = results.flag('verbose') ||
-      (command != null &&
-          command.options.contains('verbose') &&
-          command.flag('verbose'));
+  final verbose = _isVerbose(results);
   host = hostFor(verbose: verbose);
   final logger = host.logger;
   try {
@@ -116,11 +101,7 @@ Future<int> runSmf(
   } on SmfUsageException catch (error) {
     return _usageError(logger, error.message);
   } on GenerationFailedException catch (error) {
-    logger.error(error.message);
-    for (final issue in error.issues) {
-      logger.error('  $issue');
-    }
-    return SmfExitCodes.generationFailed;
+    return _generationFailed(logger, error);
   } on SmfCancelledException {
     logger.info('Cancelled. No app was created.');
     return SmfExitCodes.cancelled;
@@ -133,6 +114,46 @@ Future<int> runSmf(
     }
     return SmfExitCodes.software;
   }
+}
+
+/// The registry of [modules], or `null` after reporting that they break its
+/// rules, which is a bug of [executableName].
+ModuleRegistry? _registryOf(
+  List<SmfModule> modules,
+  String executableName,
+  SmfHostFactory hostFor,
+) {
+  try {
+    return ModuleRegistry(modules);
+  } on RegistryException catch (error) {
+    final logger = hostFor(verbose: false).logger
+      ..error(
+        'The modules of $executableName break the rules of the registry, '
+        'which is a bug:',
+      );
+    for (final problem in error.problems) {
+      logger.error('  $problem');
+    }
+    return null;
+  }
+}
+
+/// Whether [results] have the flag `--verbose`, before the command or after
+/// it.
+bool _isVerbose(ArgResults results) {
+  final command = results.command;
+  return results.flag('verbose') ||
+      (command != null &&
+          command.options.contains('verbose') &&
+          command.flag('verbose'));
+}
+
+int _generationFailed(SmfLogger logger, GenerationFailedException error) {
+  logger.error(error.message);
+  for (final issue in error.issues) {
+    logger.error('  $issue');
+  }
+  return SmfExitCodes.generationFailed;
 }
 
 int _usageError(SmfLogger logger, String message, [String? usage]) {

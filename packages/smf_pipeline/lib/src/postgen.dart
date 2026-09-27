@@ -185,40 +185,13 @@ final class _ModuleSteps {
     final resolved = await _commands.resolve(step.tool, step.arguments);
     final command = _commands.display(step.tool, step.arguments, resolved);
     final description = step.description ?? command;
-    final unmet = _unmetNeeds(step, origin, _checks);
-    String? reason;
-    var failed = false;
-    if (step.external && environment.skipExternalSetup) {
-      reason = 'the run skips external setup';
-    } else if (step.interactive && !environment.interactive) {
-      reason = 'the run cannot ask the user';
-    } else if (unmet.isNotEmpty) {
-      reason = _unmetReason(unmet);
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of $origin cannot run, because $reason.',
-        );
-      }
-      failed = true;
-    } else if (resolved == null) {
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of $origin cannot run, because '
-          '${step.tool.executable} was not found.',
-        );
-      }
-      reason = '${step.tool.executable} was not found';
-      failed = true;
-    } else if (!followUp &&
-        step.skippable &&
-        environment.interactive &&
-        !await environment.prompter.confirm(
-          '${step.description == null ? command : '$description ($command)'}'
-          ', for $origin. Run it now?',
-          defaultValue: true,
-        )) {
-      reason = 'you chose to run it later';
-    }
+    var (:reason, :failed) = await _whyNotNow(
+      step,
+      origin,
+      resolved,
+      command: command,
+      followUp: followUp,
+    );
     if (reason == null) {
       final failure = await _commands.runResolved(
         description,
@@ -244,6 +217,71 @@ final class _ModuleSteps {
     }
     skipped.add(SkippedStep(description, command, reason, failed: failed));
     await _leaveFollowUps(step, description);
+  }
+
+  /// Why [step] of [origin], whose tool is [resolved] and whose [command]
+  /// the user would run, does not run now, and whether that is a failure;
+  /// no reason if it runs. In an interactive run, the user is asked about a
+  /// skippable step that is not a [followUp].
+  ///
+  /// Throws a [GenerationFailedException] if a step that is not skippable
+  /// cannot run.
+  Future<({String? reason, bool failed})> _whyNotNow(
+    PostGenStep step,
+    ContributionOrigin origin,
+    ResolvedTool? resolved, {
+    required String command,
+    required bool followUp,
+  }) async {
+    final environment = _environment;
+    final description = step.description ?? command;
+    final unmet = _unmetNeeds(step, origin, _checks);
+    if (step.external && environment.skipExternalSetup) {
+      return (reason: 'the run skips external setup', failed: false);
+    }
+    if (step.interactive && !environment.interactive) {
+      return (reason: 'the run cannot ask the user', failed: false);
+    }
+    if (unmet.isNotEmpty) {
+      final reason = _unmetReason(unmet);
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of $origin cannot run, because $reason.',
+        );
+      }
+      return (reason: reason, failed: true);
+    }
+    if (resolved == null) {
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of $origin cannot run, because '
+          '${step.tool.executable} was not found.',
+        );
+      }
+      return (reason: '${step.tool.executable} was not found', failed: true);
+    }
+    if (!followUp &&
+        step.skippable &&
+        environment.interactive &&
+        !await _confirmRun(step, origin, command)) {
+      return (reason: 'you chose to run it later', failed: false);
+    }
+    return (reason: null, failed: false);
+  }
+
+  /// Asks the user whether to run [step] of [origin], whose [command] the
+  /// user would run, now.
+  Future<bool> _confirmRun(
+    PostGenStep step,
+    ContributionOrigin origin,
+    String command,
+  ) {
+    final description = step.description;
+    return _environment.prompter.confirm(
+      '${description == null ? command : '$description ($command)'}'
+      ', for $origin. Run it now?',
+      defaultValue: true,
+    );
   }
 
   /// Whether [step] runs on the operating system of the run; see
@@ -405,25 +443,7 @@ final class _Commands {
       'Running ${[resolved.executable, ...resolved.arguments].join(' ')} in '
       '$_directory',
     );
-    if (interactive) {
-      logger.info('$description…');
-      final int code;
-      try {
-        code = await runner.runInteractive(
-          resolved.executable,
-          resolved.arguments,
-          workingDirectory: _directory,
-          environment: resolved.environment,
-        );
-      } on SmfCancelledException {
-        rethrow;
-      } on Object catch (error) {
-        return _Failure('it could not start', 'it could not start: $error');
-      }
-      return code == 0
-          ? null
-          : _Failure(_exitReason(code, _environment.operatingSystem));
-    }
+    if (interactive) return _runInteractive(description, resolved);
     final progress = logger.progress(description);
     var waiting = false;
     final SmfProcessResult result;
@@ -469,6 +489,31 @@ final class _Commands {
     return streams.isEmpty
         ? _Failure(reason)
         : _Failure(reason, '$reason:\n${streams.map(_tail).join('\n')}');
+  }
+
+  /// Runs [resolved], the command of [description], with the terminal, and
+  /// returns `null` if it succeeded, or why it failed.
+  Future<_Failure?> _runInteractive(
+    String description,
+    ResolvedTool resolved,
+  ) async {
+    _environment.logger.info('$description…');
+    final int code;
+    try {
+      code = await _environment.processRunner.runInteractive(
+        resolved.executable,
+        resolved.arguments,
+        workingDirectory: _directory,
+        environment: resolved.environment,
+      );
+    } on SmfCancelledException {
+      rethrow;
+    } on Object catch (error) {
+      return _Failure('it could not start', 'it could not start: $error');
+    }
+    return code == 0
+        ? null
+        : _Failure(_exitReason(code, _environment.operatingSystem));
   }
 
   /// Runs [tool] with [arguments], the command of [description], and
