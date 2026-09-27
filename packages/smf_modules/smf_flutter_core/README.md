@@ -39,7 +39,7 @@ To move to a newer Flutter:
 5. Update the minimum Flutter and iOS versions of `FlutterCoreModule`, and the Flutter of the CI workflow with the SHA-256 of its archive.
 6. Bundle the bricks with `melos bootstrap`.
 
-`test/flutter_create_test.dart` compares the brick with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the Flutter job of CI does with the Flutter it pins:
+`test/flutter_create_test.dart` compares the brick with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the CI job `Generated apps (real)` does with the Flutter it pins:
 
 ```bash
 flutter create --platforms=android,ios --org com.example --no-pub my_app
