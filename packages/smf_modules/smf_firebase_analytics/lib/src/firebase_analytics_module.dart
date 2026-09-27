@@ -16,16 +16,20 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///
 /// When the app has a router, the module gives it a factory of
 /// `FirebaseAnalyticsObserver`, which the router calls for each navigator
-/// it creates. When a page of a navigator shows, because it is pushed,
-/// replaces the page on top or the page above it is popped, the observer
-/// of the navigator logs a screen view named after the route of the page,
-/// such as `home.home`, unless the page has no name; so each page is logged
-/// by one observer. Switching between the branches of the main navigation
-/// is not a navigation event: a branch logs its first page when it is
-/// first selected, and nothing when it is selected again. When a page
-/// shown over the main navigation closes, the observer sees the main
-/// navigation come back, not the page of its selected branch, so that page
-/// is not logged again either.
+/// it creates. The observer of a navigator logs a screen view with the name
+/// of a page when the page enters the stack of the navigator, because it is
+/// pushed or replaces the page on top, and when the pages above it are
+/// popped: the name of a route of a module, such as `home.home`, or the
+/// name that the router gives any other page; a page without a name is not
+/// logged. So each page is logged by one observer. A navigation that puts
+/// several pages on a stack at once, such as going to a page whose parents
+/// are not on it yet, logs each of them, the top one last. Switching
+/// between the branches of the main navigation is not a navigation event:
+/// a branch logs the pages it starts with when it is first selected, and
+/// nothing when it is selected again. When a page shown over the main
+/// navigation closes, the observer sees the main navigation come back, not
+/// the page of its selected branch, so that page is not logged again
+/// either.
 ///
 /// Analytics works on the Firebase app, so the module depends on
 /// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`. The

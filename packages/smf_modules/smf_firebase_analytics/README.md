@@ -13,11 +13,12 @@ Analytics works on the Firebase app, so the module depends on [smf_firebase_core
 
 ## Screen views
 
-When the app has a router, the module gives it a `FirebaseAnalyticsObserver` of firebase_analytics for each of its navigators. When a page shows, because it is pushed, replaces the page on top or the page above it is popped, the observer of its navigator logs a `screen_view` event whose `screen_name` is the name of the route of the page: the router names every route after its module and its own name, such as `home.home` for the start screen of the `home` feature. A page without a name is not logged. Each page is logged by one observer, that of the navigator that shows it.
+When the app has a router, the module gives it a `FirebaseAnalyticsObserver` of firebase_analytics for each of its navigators. The observer of a navigator logs a `screen_view` event whose `screen_name` is the name of a page when the page enters the stack of the navigator, because it is pushed or replaces the page on top, and when it shows again because the pages above it are popped. The router names the page of each route of a module after the module and the route, such as `home.home` for the start screen of the `home` feature; any other page, such as the fallback start screen of an app with no route to start on, is logged under the name that the router gives it, and a page without a name is not logged. Each page is logged by one observer, that of the navigator that shows it.
 
-The observers see only what the navigators do, so with a main navigation, such as tabs at the bottom:
+The observers see what the navigators do, not only what the user sees:
 
-- each branch of the main navigation has a navigator of its own, which logs its first page when the branch is first selected;
+- when one navigation puts several pages on a stack at once, such as going to a page whose parents are not on the stack yet, each of them is logged, the one on top last;
+- each branch of the main navigation, such as tabs at the bottom, has a navigator of its own, which logs the pages it starts with when the branch is first selected;
 - selecting a branch again is not a navigation event: nothing is logged, although the page of the branch shows again;
 - when a page shown over the main navigation closes, the observer of its navigator sees the main navigation come back, not the page of its selected branch, so that page is not logged again either.
 
