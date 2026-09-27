@@ -221,18 +221,26 @@ void main() {
     );
 
     // The modules that take the package in their variant for bloc or by
-    // depending on bloc pass in each of their apps.
+    // depending on bloc pass in each of their apps, and rogue in its case
+    // with bloc, the provider whose package it contributes, does not.
+    const rogueTakes =
+        'rogue: rogue contributes flutter_bloc, a package of bloc, which '
+        'provides the state, but rogue neither has a variant for it nor '
+        'depends on it.';
     final results = await harness.checkAll();
     expect(
       [
         for (final result in results)
-          if (!result.contractCase.requested.contains(const ModuleId('rogue')))
-            for (final issue in result.errors) '${result.contractCase}: $issue',
+          for (final issue in result.errors)
+            '${result.contractCase}: ${issue.origin}: ${issue.message}',
       ],
-      isEmpty,
+      ['rogue with bloc: $rogueTakes'],
     );
-    // Rogue declares no role, so only an app with every module has both it
-    // and bloc.
+    expect(
+      harness.casesOfModule(const ModuleId('rogue')).map((c) => '$c'),
+      ['rogue', 'rogue with bloc'],
+    );
+    // So does the app with every module, which has bloc.
     final every = await harness.check(
       harness.casesOfAll().singleWhere(
             (c) => c.name == 'every module (bloc)',
@@ -240,13 +248,7 @@ void main() {
     );
     expect(
       [for (final issue in every.errors) '${issue.origin}: ${issue.message}'],
-      [
-        equals(
-          'rogue: rogue contributes flutter_bloc, a package of bloc, which '
-          'provides the state, but rogue neither has a variant for it nor '
-          'depends on it.',
-        ),
-      ],
+      [rogueTakes],
     );
     expect(every.app, isNull);
     // Without bloc, flutter_bloc is the package of no provider.
@@ -257,6 +259,194 @@ void main() {
     );
     expect(withRiverpod.errors, isEmpty);
     expect(withRiverpod.app, isNotNull);
+  });
+
+  test('builds a case with each provider whose package a module contributes',
+      () async {
+    final state = TestRole<NoDsl>('state');
+    final tracking = TestRole<NoDsl>(
+      'tracking',
+      cardinality: RoleCardinality.many,
+    );
+    final nav = TestRole<NoDsl>('nav');
+    PubspecContribution pinned(String package) =>
+        PubspecContribution.hosted(package, '^1.0.0');
+    PubspecContribution taken(String package) =>
+        PubspecContribution.hosted(package, 'any');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'bloc',
+          providers: [RoleProvider.plain(state)],
+          contributions: [pinned('flutter_bloc')],
+        ),
+        TestModule(
+          'riverpod',
+          providers: [RoleProvider.plain(state)],
+          contributions: [pinned('flutter_riverpod')],
+        ),
+        // Two providers of other roles that bring the same package both
+        // own it.
+        TestModule(
+          'a1',
+          providers: [RoleProvider.plain(tracking)],
+          contributions: [pinned('shared')],
+        ),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        TestModule(
+          'go',
+          providers: [RoleProvider.plain(nav)],
+          contributions: [pinned('shared')],
+        ),
+        // A provider that leaves the constraint to others, one that repeats
+        // the package of a module it depends on, and a module without a
+        // role own no package.
+        TestModule(
+          'a2',
+          providers: [RoleProvider.plain(tracking)],
+          contributions: [taken('loose'), pinned('base_package')],
+          dependsOn: {'base'},
+        ),
+        TestModule('base', contributions: [pinned('base_package')]),
+        TestModule('plain', contributions: [pinned('plain_package')]),
+        TestModule(
+          'feature',
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (_) => [taken('flutter_bloc')],
+              const ModuleId('riverpod'): (_) => [taken('flutter_riverpod')],
+            },
+          ),
+          contributions: [
+            taken('shared'),
+            taken('loose'),
+            taken('base_package'),
+            taken('plain_package'),
+          ],
+        ),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('feature')).map((c) => '$c'),
+      [
+        'feature (bloc)',
+        'feature (riverpod)',
+        'feature with bloc',
+        'feature with riverpod',
+        'feature with a1',
+        'feature with go',
+      ],
+    );
+    final withGo = harness
+        .casesOfModule(const ModuleId('feature'))
+        .singleWhere((c) => c.name == 'feature with go');
+    expect(withGo.requested.map((id) => id.value), ['feature', 'go']);
+    expect(withGo.picks[nav], const ModuleId('go'));
+    // A case with a provider of the role of the variants is the case of the
+    // variant, whose package the variant takes.
+    final withRiverpod = await harness.check(
+      harness
+          .casesOfModule(const ModuleId('feature'))
+          .singleWhere((c) => c.name == 'feature with riverpod'),
+    );
+    expect(withRiverpod.errors, isEmpty);
+    expect(
+      withRiverpod.resolution!.module(const ModuleId('feature'))!.variant,
+      const ModuleId('riverpod'),
+    );
+    // Feature takes the package of a1 and go without a variant for them or
+    // a dependency on them.
+    final withA1 = await harness.check(
+      harness
+          .casesOfModule(const ModuleId('feature'))
+          .singleWhere((c) => c.name == 'feature with a1'),
+    );
+    const takesShared =
+        'feature: feature contributes shared, a package of a1, which '
+        'provides the tracking, but feature neither has a variant for it nor '
+        'depends on it.';
+    expect(
+      [for (final issue in withA1.errors) '${issue.origin}: ${issue.message}'],
+      [takesShared],
+    );
+    // A module that neither contributes a package of another nor has one of
+    // its own has no such case.
+    expect(
+      harness.casesOfModule(const ModuleId('plain')).map((c) => '$c'),
+      ['plain'],
+    );
+    expect(
+      harness.casesOfModule(const ModuleId('bloc')).map((c) => '$c'),
+      ['bloc'],
+    );
+  });
+
+  test('a module that contributes the package of a provider passes its case',
+      () async {
+    final state = TestRole<NoDsl>('state');
+    const pinned = PubspecContribution.hosted('flutter_bloc', '^9.1.1');
+    const taken = PubspecContribution.hosted('flutter_bloc', 'any');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'bloc',
+          providers: [RoleProvider.plain(state)],
+          contributions: const [pinned],
+        ),
+        TestModule('riverpod', providers: [RoleProvider.plain(state)]),
+        TestModule(
+          'feature',
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (_) => const [taken],
+              const ModuleId('riverpod'): (_) => const [],
+            },
+          ),
+        ),
+        TestModule('helper', dependsOn: {'bloc'}, contributions: [taken]),
+      ]),
+    );
+
+    for (final id in ['feature', 'helper']) {
+      final cases = harness.casesOfModule(ModuleId(id));
+      expect(cases.map((c) => '$c'), contains('$id with bloc'));
+      for (final contractCase in cases) {
+        final result = await harness.check(contractCase);
+        expect(result.errors, isEmpty, reason: '$contractCase');
+      }
+    }
+  });
+
+  test('a module whose contributions fail has no case with a provider',
+      () async {
+    final state = TestRole<NoDsl>('state');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'bloc',
+          providers: [RoleProvider.plain(state)],
+          contributions: const [
+            PubspecContribution.hosted('flutter_bloc', '^9.1.1'),
+          ],
+        ),
+        _FailingModule('broken'),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('broken')).map((c) => '$c'),
+      ['broken'],
+    );
+    final result = await harness.check(
+      harness.casesOfModule(const ModuleId('broken')).single,
+    );
+    expect(result.errors.single.message, contains('failed to contribute'));
   });
 
   test('checks every module and role, each app once', () async {
@@ -1053,3 +1243,20 @@ List<SmfIssue> _checkNotes(StructuralRuleInput<NoDsl> input) => [
           path: 'NOTES.md',
         ),
     ];
+
+/// A module whose contributions fail.
+final class _FailingModule extends SmfModule {
+  _FailingModule(String id)
+      : descriptor = ModuleDescriptor(
+          id: ModuleId(id),
+          description: 'The module $id',
+          kind: plainKind,
+        );
+
+  @override
+  final ModuleDescriptor descriptor;
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      throw StateError('No contributions.');
+}

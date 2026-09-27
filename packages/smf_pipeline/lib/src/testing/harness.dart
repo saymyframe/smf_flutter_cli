@@ -134,11 +134,12 @@ final class ContractResult {
 /// generate them in every combination that matters.
 ///
 /// For a module it builds an app for every provider of the role of its
-/// variants, every provider of each role it requires that has several, and
-/// each subset of the roles it only uses; for a role, the same for each of
-/// its providers. Each app goes through the stages 3 to 5 of the pipeline,
-/// in a run without a terminal that skips external setup, as the Flutter
-/// job generates apps; stage 5 includes [checkTemplateTags], and the
+/// variants, every provider of each role it requires that has several, each
+/// subset of the roles it only uses, and every provider of a role whose
+/// package it contributes; for a role, the same for each of its providers.
+/// Each app goes through the stages 3 to 5 of the pipeline, in a run
+/// without a terminal that skips external setup, as the Flutter job
+/// generates apps; stage 5 includes [checkTemplateTags], and the
 /// harness adds [missingTemplateTags] and reports templates with `{{`
 /// that mason would copy as they are. Unless [render] is off, the harness
 /// then makes the roles' choices (stage 7) with the options of the case,
@@ -194,12 +195,24 @@ final class ContractHarness {
   ///   the module has no variant for, whose app the pipeline rejects;
   /// - every provider of each role the module requires that has several;
   /// - each subset of the roles the module only uses, the largest first,
-  ///   with the first registered provider of each.
+  ///   with the first registered provider of each;
+  /// - every provider of a role in the registry whose package the module
+  ///   contributes, itself or in a variant, as `<module> with <provider>`,
+  ///   such as `feature with bloc` for a feature that contributes
+  ///   `flutter_bloc`.
+  ///
+  /// A package is a provider's when the provider contributes it itself, not
+  /// in a variant, with a constraint of its own rather than `any`, and no
+  /// module that the provider depends on, directly or not, contributes it
+  /// so too. Another module takes such a package only in its variant for the
+  /// provider or by depending on the provider, and the pipeline checks that
+  /// only in an app with the provider, which the last cases build.
   ///
   /// A role left out of a subset is still present when a module of the case
   /// brings it, such as a provider of several roles or a module that
   /// requires it. [checkAll] then leaves out the case, since the case of a
-  /// larger subset built its app already and names the roles it has.
+  /// larger subset built its app already and names the roles it has; so it
+  /// does with a case with a provider whose app another case built.
   List<ContractCase> casesOfModule(ModuleId id) {
     final module = registry[id];
     if (module == null) throw ArgumentError.value(id, 'id', 'Not registered');
@@ -220,7 +233,82 @@ final class ContractHarness {
             picks: picks,
             present: subset,
           ),
+      for (final owner in _ownersOfPackagesOf(module))
+        _case(
+          '$id with ${owner.descriptor.id}',
+          [id, owner.descriptor.id],
+          picks: {
+            for (final role in owner.descriptor.provides)
+              role: owner.descriptor.id,
+          },
+          present: const [],
+        ),
     ];
+  }
+
+  /// The providers of roles in the registry, besides [module], that own a
+  /// hosted package that [module] contributes, itself or in any of its
+  /// variants; see [casesOfModule].
+  List<SmfModule> _ownersOfPackagesOf(SmfModule module) {
+    final taken = _packagesTakenBy(module);
+    if (taken.isEmpty) return const [];
+    return [
+      for (final other in registry.modules)
+        if (other.descriptor.id != module.descriptor.id &&
+            other.descriptor.provides.isNotEmpty &&
+            _ownsOneOf(other, taken))
+          other,
+    ];
+  }
+
+  /// Whether [provider] owns one of [packages]: it brings the package, and
+  /// no module it depends on, directly or not, brings it too.
+  bool _ownsOneOf(SmfModule provider, Set<String> packages) {
+    final byDependencies = {
+      for (final dependency in _withDependencies(provider).skip(1))
+        ..._packagesBroughtBy(dependency),
+    };
+    return _packagesBroughtBy(provider).any(
+      (package) =>
+          packages.contains(package) && !byDependencies.contains(package),
+    );
+  }
+
+  /// The hosted packages that [module] contributes itself, not in a
+  /// variant, with a constraint of its own ([bringsPackage]).
+  Set<String> _packagesBroughtBy(SmfModule module) => {
+        for (final contribution in _contributionsOf(module.contribute))
+          if (contribution case final PubspecDependency dependency
+              when bringsPackage(dependency))
+            dependency.package,
+      };
+
+  /// The hosted packages that [module] contributes, itself or in any of its
+  /// variants, with any constraint.
+  Set<String> _packagesTakenBy(SmfModule module) => {
+        for (final contribute in [
+          module.contribute,
+          ...?module.descriptor.variants?.byProvider.values,
+        ])
+          for (final contribution in _contributionsOf(contribute))
+            if (contribution
+                case PubspecDependency(
+                  source: PubspecSource.hosted,
+                  :final package,
+                ))
+              package,
+      };
+
+  /// What [contribute] contributes to the app of [context], or nothing if it
+  /// throws: the cases of its module report that.
+  List<Contribution> _contributionsOf(
+    List<Contribution> Function(ModuleContext context) contribute,
+  ) {
+    try {
+      return contribute(context);
+    } on Object {
+      return const [];
+    }
   }
 
   /// The cases of [role]: each of its providers, with every provider of
