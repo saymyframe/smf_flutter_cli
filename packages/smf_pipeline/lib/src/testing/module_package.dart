@@ -99,9 +99,20 @@ final class ModulePackage {
           _ => const {},
         };
 
-    final problems = <String>[];
     final code = {'smf_contracts', ...dependencies};
-    final dependsOn = packagesOf('dependencies');
+    final tests = {'smf_pipeline', ...testModules};
+    return [
+      ..._dependencyProblems(code, packagesOf('dependencies')),
+      ..._devDependencyProblems(tests, packagesOf('dev_dependencies')),
+      ..._libProblems(directory, code),
+      ..._testProblems(directory, tests),
+    ];
+  }
+
+  /// The problems of [dependsOn], the dependencies of the package, which
+  /// must be [code], the packages its code uses.
+  List<String> _dependencyProblems(Set<String> code, Set<String> dependsOn) {
+    final problems = <String>[];
     for (final package in _sorted(dependsOn.difference(code))) {
       problems.add(
         '$name depends on $package, which is not among the dependencies of '
@@ -111,12 +122,20 @@ final class ModulePackage {
     for (final package in _sorted(code.difference(dependsOn))) {
       problems.add('$name does not depend on $package.');
     }
+    return problems;
+  }
 
-    final tests = {'smf_pipeline', ...testModules};
+  /// The problems of [devDependencies], the dev dependencies of the
+  /// package, which must have [tests] among the SMF packages.
+  List<String> _devDependencyProblems(
+    Set<String> tests,
+    Set<String> devDependencies,
+  ) {
     final testsWith = {
-      for (final package in packagesOf('dev_dependencies'))
+      for (final package in devDependencies)
         if (package.startsWith('smf_')) package,
     };
+    final problems = <String>[];
     for (final package in _sorted(testsWith.difference(tests))) {
       problems.add(
         '$name has a dev dependency on $package, but of the SMF packages the '
@@ -126,7 +145,13 @@ final class ModulePackage {
     for (final package in _sorted(tests.difference(testsWith))) {
       problems.add('$name has no dev dependency on $package.');
     }
+    return problems;
+  }
 
+  /// The problems of the files in `lib/` of the package in [directory]:
+  /// the URIs they use, and the packages among [code] that none uses.
+  List<String> _libProblems(Directory directory, Set<String> code) {
+    final problems = <String>[];
     final used = <String>{};
     for (final (path, uri) in _directives(directory, 'lib')) {
       final package = _packageOf(uri);
@@ -145,6 +170,12 @@ final class ModulePackage {
         '$name depends on $package, but no file in lib/ uses it.',
       );
     }
+    return problems;
+  }
+
+  /// The problems of the URIs that the files in `test/` of the package in
+  /// [directory] use, with [tests] among the SMF packages.
+  List<String> _testProblems(Directory directory, Set<String> tests) {
     // The tests may use the modules that the code depends on, as the code
     // does: the registry of their apps needs them.
     final testable = {
@@ -153,6 +184,7 @@ final class ModulePackage {
       for (final package in dependencies)
         if (package.startsWith('smf_')) package,
     };
+    final problems = <String>[];
     for (final (path, uri) in _directives(directory, 'test')) {
       if (!_isAllowed(uri, path, 'test', testable, others: true)) {
         problems.add(
@@ -202,24 +234,32 @@ final class ModulePackage {
     ]..sort((a, b) => a.path.compareTo(b.path));
     return [
       for (final file in files)
-        for (final directive in parseString(
-          content: file.readAsStringSync(),
-          throwIfDiagnostics: false,
-        ).unit.directives)
-          for (final uri in [
-            if (directive case UriBasedDirective(:final uri)) uri,
-            // The libraries a conditional import or export may use instead.
-            if (directive case NamespaceDirective(:final configurations))
-              for (final configuration in configurations) configuration.uri,
-          ])
-            (
-              context
-                  .relative(file.path, from: package.path)
-                  .replaceAll(context.separator, '/'),
-              uri.stringValue ?? '',
-            ),
+        for (final uri in _urisOf(file.readAsStringSync()))
+          (
+            context
+                .relative(file.path, from: package.path)
+                .replaceAll(context.separator, '/'),
+            uri,
+          ),
     ];
   }
+
+  /// The URIs of the imports, exports and parts of the Dart file with
+  /// [text], and of the libraries that a conditional import or export may
+  /// use instead.
+  static List<String> _urisOf(String text) => [
+        for (final directive
+            in parseString(content: text, throwIfDiagnostics: false)
+                .unit
+                .directives) ...[
+          if (directive case UriBasedDirective(:final uri))
+            uri.stringValue ?? '',
+          // The libraries a conditional import or export may use instead.
+          if (directive case NamespaceDirective(:final configurations))
+            for (final configuration in configurations)
+              configuration.uri.stringValue ?? '',
+        ],
+      ];
 
   /// The package of [uri], a `package:` URI, or `null` for another URI.
   static String? _packageOf(String uri) => uri.startsWith('package:')

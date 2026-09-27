@@ -156,11 +156,7 @@ Iterable<IndexedDeclaration> _declarations(
       final function = member.functionExpression;
       yield IndexedDeclaration(
         name: member.name.lexeme,
-        kind: member.isGetter
-            ? DeclarationKind.getter
-            : member.isSetter
-                ? DeclarationKind.setter
-                : DeclarationKind.function,
+        kind: _functionKind(member),
         type: member.returnType?.toSource(),
         parameters: _parameters(function.parameters),
         annotations: annotations,
@@ -179,6 +175,13 @@ Iterable<IndexedDeclaration> _declarations(
         );
       }
   }
+}
+
+/// Whether [function] is a getter, a setter or a function.
+DeclarationKind _functionKind(FunctionDeclaration function) {
+  if (function.isGetter) return DeclarationKind.getter;
+  if (function.isSetter) return DeclarationKind.setter;
+  return DeclarationKind.function;
 }
 
 List<IndexedConstructor> _constructors(NodeList<ClassMember> members) {
@@ -213,17 +216,18 @@ List<IndexedParameter> _parameters(
       for (final parameter in list?.parameters ?? const <FormalParameter>[])
         IndexedParameter(
           parameter.name?.lexeme ?? '',
-          kind: parameter.isRequiredPositional
-              ? ParameterKind.requiredPositional
-              : parameter.isOptionalPositional
-                  ? ParameterKind.optionalPositional
-                  : parameter.isRequiredNamed
-                      ? ParameterKind.requiredNamed
-                      : ParameterKind.optionalNamed,
+          kind: _parameterKind(parameter),
           type: _typeOf(parameter, fields),
           annotations: _annotations(parameter.metadata),
         ),
     ];
+
+ParameterKind _parameterKind(FormalParameter parameter) {
+  if (parameter.isRequiredPositional) return ParameterKind.requiredPositional;
+  if (parameter.isOptionalPositional) return ParameterKind.optionalPositional;
+  if (parameter.isRequiredNamed) return ParameterKind.requiredNamed;
+  return ParameterKind.optionalNamed;
+}
 
 String? _typeOf(FormalParameter parameter, Map<String, String> fields) {
   final normal = switch (parameter) {
@@ -318,11 +322,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
     invocations.add(
       IndexedInvocation(
         named ?? type.name.lexeme,
-        target: named == null
-            ? type.importPrefix?.name.lexeme
-            : type.importPrefix == null
-                ? type.name.lexeme
-                : '${type.importPrefix!.name.lexeme}.${type.name.lexeme}',
+        target: _creationTarget(type, named),
         typeArguments: _typeArguments(type.typeArguments),
         namedArguments: _namedArguments(node.argumentList),
         enclosingDeclaration: _enclosing(node),
@@ -405,4 +405,13 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
     }
     return false;
   }
+}
+
+/// The target of a creation of [type] with the constructor [named]: the
+/// prefix of the type for its unnamed constructor, and the type, after its
+/// prefix, for a named one.
+String? _creationTarget(NamedType type, String? named) {
+  final prefix = type.importPrefix?.name.lexeme;
+  if (named == null) return prefix;
+  return prefix == null ? type.name.lexeme : '$prefix.${type.name.lexeme}';
 }

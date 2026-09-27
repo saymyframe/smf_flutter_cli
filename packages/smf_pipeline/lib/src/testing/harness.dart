@@ -215,12 +215,7 @@ final class ContractHarness {
       ]))
         for (final subset in _subsets(used))
           _case(
-            [
-              id.value,
-              if (picks.isNotEmpty) '(${picks.values.join(', ')})',
-              if (subset.isNotEmpty)
-                'with ${subset.map((role) => role.id).join(', ')}',
-            ].join(' '),
+            _caseName(id.value, picks, subset),
             [id],
             picks: picks,
             present: subset,
@@ -243,18 +238,32 @@ final class ContractHarness {
         ))
           for (final subset in _subsets(used))
             _case(
-              [
+              _caseName(
                 '${role.id} by ${provider.descriptor.id}',
-                if (picks.isNotEmpty) '(${picks.values.join(', ')})',
-                if (subset.isNotEmpty)
-                  'with ${subset.map((role) => role.id).join(', ')}',
-              ].join(' '),
+                picks,
+                subset,
+              ),
               [provider.descriptor.id],
               picks: {...picks, role: provider.descriptor.id},
               present: subset,
             ),
     ];
   }
+
+  /// The name of a case of [subject], such as `home` or `analytics by
+  /// firebase_analytics`, with the providers it [picks] and the [subset] of
+  /// the roles it uses.
+  static String _caseName(
+    String subject,
+    Map<Role, ModuleId> picks,
+    List<Role> subset,
+  ) =>
+      [
+        subject,
+        if (picks.isNotEmpty) '(${picks.values.join(', ')})',
+        if (subset.isNotEmpty)
+          'with ${subset.map((role) => role.id).join(', ')}',
+      ].join(' ');
 
   /// The cases of the apps with as many modules as one app can have, one
   /// for every combination of providers of the roles that take at most one
@@ -484,37 +493,7 @@ final class ContractHarness {
     required Collection collection,
     required Map<String, String?> options,
   }) async {
-    final given = <String, String>{};
-    final problems = <SmfIssue>[];
-    for (final MapEntry(key: role, value: choice) in answered.entries) {
-      final origin = RoleTemplateOrigin(role);
-      final ofChoice = role.template!.optionsOf(choice);
-      if (ofChoice.isEmpty) {
-        problems.add(
-          SmfIssue(
-            'The ${role.id} asks a question, but its template gives no '
-            'option for the answer, $choice, so a run without a terminal '
-            'cannot make the choice.',
-            hint: 'Give the options of the answer from optionsOf() of the '
-                'template.',
-            origin: origin,
-          ),
-        );
-      }
-      final declared = {for (final option in role.options) option.name};
-      for (final name in ofChoice.keys) {
-        if (!declared.contains(name)) {
-          problems.add(
-            SmfIssue(
-              'The template of the ${role.id} gives --$name for an answer, '
-              'but the ${role.id} has no such option.',
-              origin: origin,
-            ),
-          );
-        }
-      }
-      given.addAll(ofChoice);
-    }
+    final (options: given, :problems) = _optionsOfAnswers(answered);
     if (answered.isEmpty || problems.isNotEmpty) {
       return (options: given, problems: problems);
     }
@@ -558,6 +537,46 @@ final class ContractHarness {
           ),
         );
       }
+    }
+    return (options: given, problems: problems);
+  }
+
+  /// The options that the templates of the roles in [answered] give for
+  /// the choices that the harness answered, and the problems: a role that
+  /// gives none for its choice, or one that it does not declare.
+  ({Map<String, String> options, List<SmfIssue> problems}) _optionsOfAnswers(
+    Map<Role, Object?> answered,
+  ) {
+    final given = <String, String>{};
+    final problems = <SmfIssue>[];
+    for (final MapEntry(key: role, value: choice) in answered.entries) {
+      final origin = RoleTemplateOrigin(role);
+      final ofChoice = role.template!.optionsOf(choice);
+      if (ofChoice.isEmpty) {
+        problems.add(
+          SmfIssue(
+            'The ${role.id} asks a question, but its template gives no '
+            'option for the answer, $choice, so a run without a terminal '
+            'cannot make the choice.',
+            hint: 'Give the options of the answer from optionsOf() of the '
+                'template.',
+            origin: origin,
+          ),
+        );
+      }
+      final declared = {for (final option in role.options) option.name};
+      for (final name in ofChoice.keys) {
+        if (!declared.contains(name)) {
+          problems.add(
+            SmfIssue(
+              'The template of the ${role.id} gives --$name for an answer, '
+              'but the ${role.id} has no such option.',
+              origin: origin,
+            ),
+          );
+        }
+      }
+      given.addAll(ofChoice);
     }
     return (options: given, problems: problems);
   }
@@ -719,133 +738,201 @@ final class ContractHarness {
     Map<String, DartFileIndex> indexes,
   ) {
     final (:resolution, :collection) = _resolved(result);
-    final appName = context.appName;
-    final pubspec = result.validation?.pubspec;
-    // The code of the app itself may use only its dependencies; tests and
-    // tools may use its dev dependencies too, as depend_on_referenced_packages
-    // has it.
-    final dependencies = {appName, ...?pubspec?.dependencies.keys};
-    final devDependencies = {...?pubspec?.devDependencies.keys};
+    final check = _ImportCheck(
+      registry: registry,
+      resolution: resolution,
+      collection: collection,
+      app: app,
+      appName: context.appName,
+      pubspec: result.validation?.pubspec,
+    );
+    return [
+      for (final MapEntry(key: path, value: index) in indexes.entries)
+        if (app.files[path] case final file?)
+          ...check.issuesOf(path, file, index),
+    ];
+  }
+}
 
-    // The template and the providers of a role render the data of its
-    // contributors, so they may import their files.
-    final dataContributors = <Role, Set<ContributionOrigin>>{};
+/// A Dart file of an app whose imports [_ImportCheck] checks: its path, the
+/// file, the packages it may use, and the imports that the pipeline added
+/// to it, with who needed each, by URI and prefix.
+typedef _CheckedFile = ({
+  String path,
+  RenderedFile file,
+  Set<String> packages,
+  Map<String, Set<ContributionOrigin>> added,
+});
+
+/// The checks of the imports and exports of the Dart files of a rendered
+/// app; see [ContractHarness.checkRendered].
+final class _ImportCheck {
+  _ImportCheck({
+    required this.registry,
+    required this.resolution,
+    required Collection collection,
+    required this.app,
+    required this.appName,
+    required MergedPubspec? pubspec,
+  })  : dependencies = {appName, ...?pubspec?.dependencies.keys},
+        devDependencies = {...?pubspec?.devDependencies.keys},
+        dataContributors = _dataContributorsOf(collection),
+        generated = {
+          ..._flutterOutputs(app, pubspec),
+          for (final collected in collection.applyingOf<CodegenRequest>())
+            ...(collected.contribution as CodegenRequest).outputs,
+        };
+
+  final ModuleRegistry registry;
+  final Resolution resolution;
+  final RenderedApp app;
+  final String appName;
+
+  /// The packages that the code of the app itself may use; tests and tools
+  /// may use its [devDependencies] too, as depend_on_referenced_packages
+  /// has it.
+  final Set<String> dependencies;
+
+  final Set<String> devDependencies;
+
+  /// The owners of the files of those who contribute data to each role.
+  final Map<Role, Set<ContributionOrigin>> dataContributors;
+
+  /// The files of the app that code generation or Flutter generate.
+  final Set<String> generated;
+
+  /// The template and the providers of a role render the data of its
+  /// contributors, so they may import their files.
+  static Map<Role, Set<ContributionOrigin>> _dataContributorsOf(
+    Collection collection,
+  ) {
+    final contributors = <Role, Set<ContributionOrigin>>{};
     for (final data in collection.roleData) {
       if (data.origin case final origin?) {
-        dataContributors.putIfAbsent(data.role, () => {}).add(ownerOf(origin));
+        contributors.putIfAbsent(data.role, () => {}).add(ownerOf(origin));
       }
     }
+    return contributors;
+  }
 
-    bool mayImport(ContributionOrigin who, String target) {
-      final owner = ownerOf(app.files[target]!.owner);
-      final user = ownerOf(who);
-      if (owner == user) return true;
-      // A module knows only the modules it depends on directly.
-      if ((user, owner)
-          case (ModuleOrigin(:final module), ModuleOrigin(module: final other))
-          when resolution
-                  .module(module)
-                  ?.descriptor
-                  .dependsOn
-                  .contains(other) ??
-              false) {
-        return true;
-      }
-      final roles = rolesOf(who, registry, resolution).access;
-      for (final role in roles) {
-        if (owner == RoleTemplateOrigin(role) ||
-            role.interface.files.contains(target) ||
-            role.interface.symbols.any((symbol) => symbol.path == target)) {
-          return true;
-        }
-      }
-      for (final role in resolution.presentRoles) {
-        final renders = user == RoleTemplateOrigin(role) ||
-            resolution.providersOf(role).any((module) => module.origin == user);
-        if (renders && (dataContributors[role]?.contains(owner) ?? false)) {
-          return true;
-        }
-      }
-      return false;
+  /// The problems of the imports and exports of [file], the Dart file at
+  /// [path] with [index].
+  List<SmfIssue> issuesOf(String path, RenderedFile file, DartFileIndex index) {
+    final added = <String, Set<ContributionOrigin>>{};
+    for (final import in file.addedImports) {
+      added
+          .putIfAbsent(
+            '${import.import.uri} as ${import.import.prefix}',
+            () => {},
+          )
+          .add(import.contributor);
     }
+    final public = path.startsWith('lib/') || path.startsWith('bin/');
+    final checked = (
+      path: path,
+      file: file,
+      packages: public ? dependencies : {...dependencies, ...devDependencies},
+      added: added,
+    );
+    return [
+      for (final import in index.imports)
+        ..._directiveIssues(checked, 'imports', import),
+      for (final export in index.exports)
+        ..._directiveIssues(checked, 'exports', export),
+    ];
+  }
 
-    final generated = {
-      ..._flutterOutputs(app, pubspec),
-      for (final collected in collection.applyingOf<CodegenRequest>())
-        ...(collected.contribution as CodegenRequest).outputs,
-    };
+  /// The problems of [directive], which [verb] a library in [checked].
+  List<SmfIssue> _directiveIssues(
+    _CheckedFile checked,
+    String verb,
+    IndexedImport directive,
+  ) {
+    final (:path, :file, :packages, :added) = checked;
+    final uri = directive.uri;
+    if (uri.startsWith('dart:')) return const [];
+    final target = _appPathOf(uri, path, appName);
+    if (target == null) {
+      final issue = _packageIssue(checked, verb, uri);
+      return issue == null ? const [] : [issue];
+    }
+    if (generated.contains(target)) return const [];
+    if (!app.files.containsKey(target)) {
+      return [
+        SmfIssue(
+          '$path $verb $uri, but the app has no $target.',
+          origin: file.owner,
+          path: path,
+        ),
+      ];
+    }
+    final key = '${_packageUriOf(uri, path, appName)} as ${directive.prefix}';
+    final byPipeline = verb == 'imports' && added.containsKey(key);
     final issues = <SmfIssue>[];
-    for (final MapEntry(key: path, value: index) in indexes.entries) {
-      final file = app.files[path];
-      if (file == null) continue;
-      final added = <String, Set<ContributionOrigin>>{};
-      for (final import in file.addedImports) {
-        added
-            .putIfAbsent(
-              '${import.import.uri} as ${import.import.prefix}',
-              () => {},
-            )
-            .add(import.contributor);
-      }
-      final public = path.startsWith('lib/') || path.startsWith('bin/');
-      final packages =
-          public ? dependencies : {...dependencies, ...devDependencies};
-      for (final (verb, import) in [
-        for (final import in index.imports) ('imports', import),
-        for (final export in index.exports) ('exports', export),
-      ]) {
-        final uri = import.uri;
-        if (uri.startsWith('dart:')) continue;
-        final target = _appPathOf(uri, path, appName);
-        if (target == null) {
-          final package = uri.startsWith('package:')
-              ? uri.substring('package:'.length).split('/').first
-              : null;
-          if (package != null && !packages.contains(package)) {
-            issues.add(
-              SmfIssue(
-                devDependencies.contains(package)
-                    ? '$path $verb $uri, but $package is only a dev '
-                        'dependency of the app.'
-                    : '$path $verb $uri, but the app does not depend on '
-                        '$package.',
-                origin: file.owner,
-                path: path,
-              ),
-            );
-          }
-          continue;
-        }
-        if (generated.contains(target)) continue;
-        if (!app.files.containsKey(target)) {
-          issues.add(
-            SmfIssue(
-              '$path $verb $uri, but the app has no $target.',
-              origin: file.owner,
-              path: path,
-            ),
-          );
-          continue;
-        }
-        final key = '${_packageUriOf(uri, path, appName)} as ${import.prefix}';
-        final byPipeline = verb == 'imports' && added.containsKey(key);
-        for (final who in byPipeline ? added[key]! : {file.owner}) {
-          if (mayImport(who, target)) continue;
-          final by =
-              byPipeline ? 'for a fragment of $who' : 'in the template of $who';
-          issues.add(
-            SmfIssue(
-              '$path $verb $target $by, but that file is of '
-              '${app.files[target]!.owner}, which $who neither depends on '
-              'nor knows through a role.',
-              origin: who,
-              path: path,
-            ),
-          );
-        }
-      }
+    for (final who in byPipeline ? added[key]! : {file.owner}) {
+      if (_mayImport(who, target)) continue;
+      final by =
+          byPipeline ? 'for a fragment of $who' : 'in the template of $who';
+      issues.add(
+        SmfIssue(
+          '$path $verb $target $by, but that file is of '
+          '${app.files[target]!.owner}, which $who neither depends on '
+          'nor knows through a role.',
+          origin: who,
+          path: path,
+        ),
+      );
     }
     return issues;
+  }
+
+  /// The problem of [uri], a library outside the app that [checked] uses as
+  /// [verb] says, when the file may not use its package.
+  SmfIssue? _packageIssue(_CheckedFile checked, String verb, String uri) {
+    final (:path, :file, :packages, added: _) = checked;
+    final package = uri.startsWith('package:')
+        ? uri.substring('package:'.length).split('/').first
+        : null;
+    if (package == null || packages.contains(package)) return null;
+    return SmfIssue(
+      devDependencies.contains(package)
+          ? '$path $verb $uri, but $package is only a dev '
+              'dependency of the app.'
+          : '$path $verb $uri, but the app does not depend on '
+              '$package.',
+      origin: file.owner,
+      path: path,
+    );
+  }
+
+  /// Whether [who] may use the file of the app at [target].
+  bool _mayImport(ContributionOrigin who, String target) {
+    final owner = ownerOf(app.files[target]!.owner);
+    final user = ownerOf(who);
+    if (owner == user) return true;
+    // A module knows only the modules it depends on directly.
+    if ((user, owner)
+        case (ModuleOrigin(:final module), ModuleOrigin(module: final other))
+        when resolution.module(module)?.descriptor.dependsOn.contains(other) ??
+            false) {
+      return true;
+    }
+    final roles = rolesOf(who, registry, resolution).access;
+    for (final role in roles) {
+      if (owner == RoleTemplateOrigin(role) ||
+          role.interface.files.contains(target) ||
+          role.interface.symbols.any((symbol) => symbol.path == target)) {
+        return true;
+      }
+    }
+    for (final role in resolution.presentRoles) {
+      final renders = user == RoleTemplateOrigin(role) ||
+          resolution.providersOf(role).any((module) => module.origin == user);
+      if (renders && (dataContributors[role]?.contains(owner) ?? false)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
