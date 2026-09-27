@@ -631,6 +631,7 @@ void main() {
 
     test('a module takes one in its variant for it or by depending on it', () {
       final base = TestRole<String>('base');
+      final theme = TestRole<String>('theme');
       final result = validateWith(
         [
           entry,
@@ -673,8 +674,22 @@ void main() {
               },
             ),
           ),
+          // A provider whose variant for bloc has a constraint of its own:
+          // a variant brings nothing, so the package stays of bloc.
+          TestModule(
+            'styles',
+            providers: [RoleProvider.plain(theme)],
+            variants: Variants(
+              role: state,
+              byProvider: {
+                const ModuleId('bloc'): (_) => const [
+                      PubspecContribution.hosted('flutter_bloc', '^9.1.0'),
+                    ],
+              },
+            ),
+          ),
         ],
-        variants: {'feature': 'bloc', 'page': 'auto'},
+        variants: {'feature': 'bloc', 'page': 'auto', 'styles': 'bloc'},
       );
 
       expect(result.issues, isEmpty);
@@ -700,6 +715,14 @@ void main() {
                 dev: true,
                 when: {absent},
               ),
+            ],
+          ),
+          // Twice, as a dependency and as a dev dependency: one problem.
+          TestModule(
+            'twice',
+            contributions: const [
+              taken,
+              PubspecContribution.hosted('flutter_bloc', 'any', dev: true),
             ],
           ),
           // In its variant for another provider.
@@ -734,6 +757,7 @@ void main() {
       expect(_messages(result), [
         problem('rogue', 'rogue'),
         problem('pinned', 'pinned'),
+        problem('twice', 'twice'),
         problem('page (go)', 'page'),
         equals(
           'feature: feature contributes flutter_bloc, a package of bloc, '
@@ -747,7 +771,7 @@ void main() {
         'on the provider.',
       );
       expect(
-        result.issues[2].origin,
+        result.issues[3].origin,
         const ModuleOrigin(ModuleId('page'), variant: ModuleId('go')),
       );
       expect(
@@ -830,6 +854,8 @@ void main() {
         provider('bloc', state, contributions: const [shared]),
         provider('go', nav, contributions: const [shared]),
         TestModule('user', contributions: const [user]),
+        // Depends on one of the two: enough.
+        TestModule('near', dependsOn: {'go'}, contributions: const [user]),
       ]);
 
       expect(_messages(result), [

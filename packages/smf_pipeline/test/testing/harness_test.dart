@@ -220,16 +220,19 @@ void main() {
       ]),
     );
 
-    // The apps of a module have the providers of its roles, and rogue
-    // declares none; the app with every module and bloc has both.
+    // The modules that take the package in their variant for bloc or by
+    // depending on bloc pass in each of their apps.
     final results = await harness.checkAll();
     expect(
       [
         for (final result in results)
-          for (final issue in result.errors) '${result.contractCase}: $issue',
+          if (!result.contractCase.requested.contains(const ModuleId('rogue')))
+            for (final issue in result.errors) '${result.contractCase}: $issue',
       ],
       isEmpty,
     );
+    // Rogue declares no role, so only an app with every module has both it
+    // and bloc.
     final every = await harness.check(
       harness.casesOfAll().singleWhere(
             (c) => c.name == 'every module (bloc)',
@@ -246,6 +249,14 @@ void main() {
       ],
     );
     expect(every.app, isNull);
+    // Without bloc, flutter_bloc is the package of no provider.
+    final withRiverpod = await harness.check(
+      harness.casesOfAll().singleWhere(
+            (c) => c.name == 'every module (riverpod)',
+          ),
+    );
+    expect(withRiverpod.errors, isEmpty);
+    expect(withRiverpod.app, isNotNull);
   });
 
   test('checks every module and role, each app once', () async {
