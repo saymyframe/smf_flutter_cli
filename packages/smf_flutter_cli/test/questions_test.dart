@@ -638,8 +638,8 @@ void main() {
 
   test(
       'a run in a terminal asks last which modules provide the analytics, and '
-      'offers Firebase Analytics, which brings Firebase and watches every '
-      'navigator of the router', () async {
+      'offers Firebase Analytics, which brings Firebase and listens to the '
+      'screen the user sees', () async {
     final run = await _create(
       {
         'Features': ['home'],
@@ -684,8 +684,9 @@ void main() {
           .readAsStringSync(),
       contains('FirebaseAnalytics.instance'),
     );
-    // The root navigator and the navigator of the branch of home create
-    // their observers with the same function.
+    // The router tells the listener of Firebase Analytics about the screen
+    // the user sees, in the main navigation too, and its navigators have no
+    // observer.
     final router = app
         .childFile('lib/core/router/app_router_factory.dart')
         .readAsStringSync();
@@ -693,13 +694,15 @@ void main() {
       router,
       allOf(
         contains(
-          '() => FirebaseAnalyticsObserver(analytics: '
-          'FirebaseAnalytics.instance),',
+          '(route, location) => '
+          'FirebaseAnalytics.instance.logScreenView(screenName: '
+          'route ?? Uri.parse(location).path),',
         ),
+        contains('..routerDelegate.addListener(_showScreen);'),
         contains('StatefulShellBranch('),
+        isNot(contains('FirebaseAnalyticsObserver')),
       ),
     );
-    expect('observers: _observers(),'.allMatches(router), hasLength(2));
     // The service starts without waiting, so bootstrap() only initializes
     // Firebase.
     const bootstrap = 'lib/bootstrap.dart';
@@ -729,7 +732,7 @@ void main() {
 
   test(
       'a run in a terminal gives an app without a router Firebase Analytics '
-      'without observers, and registers its service in the DI container',
+      'without screen views, and registers its service in the DI container',
       () async {
     final run = await _create(
       {
@@ -759,7 +762,15 @@ void main() {
       for (final entity in app.childDirectory('lib').listSync(recursive: true))
         if (entity is File) entity.readAsStringSync(),
     ];
-    expect(lib, everyElement(isNot(contains('FirebaseAnalyticsObserver'))));
+    expect(
+      lib,
+      everyElement(
+        allOf(
+          isNot(contains('logScreenView')),
+          isNot(contains('FirebaseAnalyticsObserver')),
+        ),
+      ),
+    );
     expect(
       app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
       contains('.createAnalyticsService()'),
