@@ -2,7 +2,9 @@
 // Crashlytics, on the real Firebase packages, whose platform side answers
 // as their packages for tests let it: the start-up of the app installs the
 // handlers of the errors that nothing catches, which report them to
-// Crashlytics, and the crash reporter of the app reaches it.
+// Crashlytics, and the crash reporter of the app reaches it. The mocks of
+// Firebase Core come with the tests of firebase_core, which every app with
+// Crashlytics has.
 import 'dart:async';
 
 import 'package:firebase_crashlytics_platform_interface/test.dart';
@@ -56,6 +58,11 @@ final class _Crashlytics implements TestFirebaseCrashlyticsHostApi {
 
   @override
   Future<void> setCustomKey(String key, String value) async {}
+
+  // A method that a later version of the package adds fails only if the
+  // app calls it.
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Runs [body] and returns what it printed, with print or debugPrint.
