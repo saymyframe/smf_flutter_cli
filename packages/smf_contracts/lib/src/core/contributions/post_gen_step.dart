@@ -15,8 +15,9 @@ part of '../contributions.dart';
 /// - it is one of the [followUps] of a step that is not done.
 ///
 /// Then the pipeline prints the command for the user to run later, or fails
-/// generation if the step is not [skippable]. In an interactive run, the
-/// user may also skip a [skippable] step that is not a follow-up. A
+/// generation if the step is not [skippable]; a follow-up of a step that is
+/// not done is left for later with it either way. In an interactive run,
+/// the user may also skip a [skippable] step that is not a follow-up. A
 /// [skippable] step whose tool is missing, or that fails, is left for later
 /// too; any other step that fails fails generation.
 ///
@@ -77,10 +78,10 @@ final class PostGenStep extends Contribution {
   ///
   /// They are part of this step, so the user is not asked about them. When
   /// this step does not run or fails, they do not run either, and each is
-  /// left for later after it, with this step as the reason. Otherwise a
-  /// follow-up runs as any step of the same contributor: by its own
-  /// [needs], [interactive], [external] and [skippable], before its own
-  /// follow-ups.
+  /// left for later after it, with this step as the reason, whether it is
+  /// [skippable] or not. Otherwise a follow-up runs as any step of the same
+  /// contributor: by its own [needs], [interactive], [external] and
+  /// [skippable], before its own follow-ups.
   ///
   /// A follow-up applies to the app when this step does, so it has no
   /// [when] of its own; the pipeline reports one that has as a problem of

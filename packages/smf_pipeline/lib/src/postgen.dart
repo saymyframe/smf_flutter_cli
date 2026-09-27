@@ -85,7 +85,8 @@ const importCleanupCodes = [
 /// not done, with their commands for later, in the order they would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
-/// a step that is not skippable fails or cannot run, and an
+/// a step that is not skippable fails or cannot run, unless it is a
+/// follow-up of a step that is not done, and an
 /// [SmfCancelledException] when the user cancels the run. `dart fix` and
 /// `dart format` only warn when they fail, since the app is complete
 /// without them.
