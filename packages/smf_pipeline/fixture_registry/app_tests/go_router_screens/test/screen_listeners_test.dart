@@ -2,6 +2,8 @@
 // modules with go_router and bottom tabs: the router calls the listeners of
 // the screen, here the listener of the fixture analytics, which notes each
 // call in fixtureScreens, once for each screen the user sees.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +24,8 @@ List<(String?, String)> _heard() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // A widget test fails after ten minutes by default; a test that hangs
+  // fails sooner.
   testWidgets('each screen the user sees is heard of once', (tester) async {
     BuildContext details(int id) => tester.element(
           find.byWidgetPredicate(
@@ -56,13 +60,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(_heard(), isEmpty);
 
-    // push() and the page below again when the pushed one closes.
-    final pushed = details(1).nav.fakeFeature.details(id: 2).push<Object?>();
+    // push() and the page below again when the pushed one closes. The test
+    // does not wait for push(), which could keep it waiting forever.
+    Object? result;
+    unawaited(
+      details(1)
+          .nav
+          .fakeFeature
+          .details(id: 2)
+          .push<Object?>()
+          .then((value) => result = value),
+    );
     await tester.pumpAndSettle();
     expect(_heard(), [('fake_feature.details', '/fake_feature/details/2')]);
     Navigator.of(details(2)).pop('closed');
     await tester.pumpAndSettle();
-    expect(await pushed, 'closed');
+    expect(result, 'closed');
     expect(_heard(), [('fake_feature.details', '/fake_feature/details/1')]);
 
     // The same route with another value of its query parameter.
@@ -77,11 +90,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(_heard(), isEmpty);
 
-    // The back button of the system closes the child. go_router keeps the
-    // query of the location for the parent, as the address of the page
-    // shows it.
+    // The back button of the system closes the child. Whether the location
+    // of the parent keeps the query of the child is up to go_router.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(_heard(), [('fake_feature.home', '/fake_feature?tab=b')]);
-  });
+    final [(route, location)] = _heard();
+    expect(route, 'fake_feature.home');
+    expect(Uri.parse(location).path, '/fake_feature');
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

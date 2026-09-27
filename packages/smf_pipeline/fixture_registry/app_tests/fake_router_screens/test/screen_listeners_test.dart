@@ -3,7 +3,10 @@
 // here the listener of the fixture analytics, which notes each call in
 // fixtureScreens, once for each page that comes on top. It has no main
 // navigation, and a location object that it has not shown makes a new
-// page, even when it equals the one on top.
+// page, even with the same values as the one on top, where go_router keeps
+// the page.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/fixture_analytics/fixture_analytics.dart';
@@ -22,6 +25,8 @@ List<(String?, String)> _heard() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // A widget test fails after ten minutes by default; a test that hangs
+  // fails sooner.
   testWidgets('each page on top is heard of once', (tester) async {
     BuildContext details(int id) => tester.element(
           find.byWidgetPredicate(
@@ -44,13 +49,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(_heard(), [('fake_feature.details', '/fake_feature/details/1')]);
 
-    // push() and the page below again when the pushed one closes.
-    final pushed = details(1).nav.fakeFeature.details(id: 2).push<Object?>();
+    // push() and the page below again when the pushed one closes. The test
+    // does not wait for push(), which could keep it waiting forever.
+    var closed = false;
+    unawaited(
+      details(1)
+          .nav
+          .fakeFeature
+          .details(id: 2)
+          .push<Object?>()
+          .then((_) => closed = true),
+    );
     await tester.pumpAndSettle();
     expect(_heard(), [('fake_feature.details', '/fake_feature/details/2')]);
     Navigator.of(details(2)).pop();
     await tester.pumpAndSettle();
-    await pushed;
+    expect(closed, isTrue);
     expect(_heard(), [('fake_feature.details', '/fake_feature/details/1')]);
 
     // The same route with another value of its query parameter.
@@ -60,7 +74,8 @@ void main() {
       ('fake_feature.details', '/fake_feature/details/1?tab=b'),
     ]);
 
-    // A new location object equal to the one on top is a new page.
+    // A new location object with the same values as the one on top makes a
+    // new page, which comes on top.
     details(1).nav.fakeFeature.details(id: 1, tab: 'b').go();
     await tester.pumpAndSettle();
     expect(_heard(), [
@@ -74,5 +89,5 @@ void main() {
     tester.element(find.byType(FixtureHomeScreen)).nav.fakeFeature.home().go();
     await tester.pumpAndSettle();
     expect(_heard(), isEmpty);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
