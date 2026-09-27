@@ -330,14 +330,22 @@ List<CheckResult> _unmetNeeds(
 }
 
 /// Why a step that needs the checks of [unmet] does not run, such as
-/// `Firebase CLI and Firebase login are missing`.
+/// `Firebase CLI and Firebase login are missing`, or `FlutterFire CLI 1.4.1
+/// or a later 1.x is needed, but flutterfire_cli 1.4.0 is active` for a check
+/// that found something else (see [PreflightMissing.found]).
 String _unmetReason(List<CheckResult> unmet) {
   String and(List<String> names) => names.length == 1
       ? names.single
       : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
   final missing = [
     for (final result in unmet)
-      if (result.status is PreflightMissing) result.planned.check.description,
+      if (result.status case PreflightMissing(found: null))
+        result.planned.check.description,
+  ];
+  final other = [
+    for (final result in unmet)
+      if (result.status case PreflightMissing(:final found?))
+        '${result.planned.check.description} is needed, but $found',
   ];
   final unchecked = [
     for (final result in unmet)
@@ -346,6 +354,7 @@ String _unmetReason(List<CheckResult> unmet) {
   return [
     if (missing.isNotEmpty)
       '${and(missing)} ${missing.length == 1 ? 'is' : 'are'} missing',
+    ...other,
     if (unchecked.isNotEmpty) '${and(unchecked)} could not be checked',
   ].join(', and ');
 }

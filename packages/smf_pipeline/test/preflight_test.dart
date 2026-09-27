@@ -142,8 +142,18 @@ void main() {
         final check = FlutterSdkCheck(host.fileSystem);
         final status = await check.check(host.environment());
         expect(
-          (status as PreflightMissing).instructions,
-          contains('has no dart'),
+          status,
+          isA<PreflightMissing>()
+              .having(
+                (missing) => missing.found,
+                'found',
+                'the Flutter SDK of /sdk/bin/flutter has no dart',
+              )
+              .having(
+                (missing) => missing.instructions,
+                'instructions',
+                'Reinstall Flutter, or run "flutter doctor".',
+              ),
           reason: result.stdout,
         );
       }
@@ -275,9 +285,37 @@ void main() {
       expect(report.results.single.passed, isTrue);
       expect(report.issues, isEmpty);
       expect(environment.binDirs, ['/npm/bin']);
+      // The instructions come before the question, so the user knows what
+      // setting it up means.
       expect(
         host.prompter.asked.single.message,
-        'Tool firebase_cli is missing (needed by firebase). Install it now?',
+        'Tool firebase_cli is missing (needed by firebase). Run npm install '
+        '-g firebase-tools. Set it up now?',
+      );
+    });
+
+    test('says what a check found in place of what it looks for', () async {
+      const older = PreflightMissing(
+        found: 'tool 1.0.0 is active',
+        instructions: 'Activate 2.0.0 in its place with "activate 2.0.0".',
+        installable: true,
+      );
+      final declining = FakeHost(answers: [false], terminal: true);
+
+      final report = await runPreflight(
+        [PlannedCheck(TestCheck('cli', status: older), _module)],
+        declining.environment(),
+      );
+
+      expect(
+        declining.prompter.asked.single.message,
+        'Tool cli is needed by firebase, but tool 1.0.0 is active. Activate '
+        '2.0.0 in its place with "activate 2.0.0". Set it up now?',
+      );
+      expect(
+        report.issues.single.message,
+        'Tool cli is needed, but tool 1.0.0 is active. Activate 2.0.0 in its '
+        'place with "activate 2.0.0".',
       );
     });
 

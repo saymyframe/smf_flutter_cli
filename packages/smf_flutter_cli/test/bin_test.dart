@@ -488,7 +488,7 @@ void main() {
                 'missing\n'
                 '    Activate it with "dart pub global activate '
                 'flutterfire_cli 1.4.1".\n'
-                '    An interactive run offers to install it.\n',
+                '    An interactive run offers to set it up.\n',
               ),
               // Its PATH has no Ruby; elsewhere, the Xcode project is left
               // for a Mac.

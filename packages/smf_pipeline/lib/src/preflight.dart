@@ -89,8 +89,8 @@ final class FlutterSdkCheck extends PreflightCheck {
     }
     if (dart == null) {
       return PreflightMissing(
-        instructions: 'The Flutter SDK of $flutter has no dart. Reinstall '
-            'Flutter, or run "flutter doctor".',
+        found: 'the Flutter SDK of $flutter has no dart',
+        instructions: 'Reinstall Flutter, or run "flutter doctor".',
       );
     }
     final versions = await _versions(context.dirname(context.dirname(dart)));
@@ -418,8 +418,10 @@ List<SmfIssue> _checkIssues(
       continue;
     }
     final problem = switch (result.status) {
-      PreflightMissing(:final instructions) =>
+      PreflightMissing(:final instructions, found: null) =>
         '${check.description} is missing. $instructions',
+      PreflightMissing(:final instructions, :final found?) =>
+        '${check.description} is needed, but $found. $instructions',
       PreflightFailed(:final message) =>
         '${check.description} could not be checked: $message',
       PreflightPassed() => '',
@@ -440,17 +442,25 @@ bool _installable(CheckResult result) => switch (result.status) {
       _ => false,
     };
 
-/// Asks the user whether to install what the check of [found] found
+/// Asks the user whether to set up what the check of [found] found
 /// missing, and if they agree, installs it and checks again.
+///
+/// The question tells what the check found and how to set it up by hand,
+/// such as which version the installation activates in place of the one
+/// that is active.
 Future<CheckResult> _install(
   CheckResult found,
   PipelineEnvironment environment,
 ) async {
   final planned = found.planned;
   final check = planned.check;
+  final missing = found.status as PreflightMissing;
+  final state = missing.found == null
+      ? '${check.description} is missing (needed by ${planned.origin})'
+      : '${check.description} is needed by ${planned.origin}, but '
+          '${missing.found}';
   final agreed = await environment.prompter.confirm(
-    '${check.description} is missing (needed by ${planned.origin}). '
-    'Install it now?',
+    '$state. ${missing.instructions} Set it up now?',
     defaultValue: true,
   );
   if (!agreed) return found;

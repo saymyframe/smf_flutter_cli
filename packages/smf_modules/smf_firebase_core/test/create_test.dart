@@ -31,9 +31,21 @@ const _later =
 const _configureNow = 'Configuring Firebase with flutterfire ($_later), for '
     'firebase_core. Run it now?';
 
+/// The question whether to install the Firebase CLI, with the instructions
+/// for doing it by hand.
+const _installFirebase = 'Firebase CLI is missing (needed by firebase_core). '
+    'Install it with "npm install -g firebase-tools", or see '
+    'https://firebase.google.com/docs/cli. Set it up now?';
+
+/// The question whether to log in to the Firebase CLI.
+const _logIn = 'Firebase login is missing (needed by firebase_core). Log in '
+    'with "firebase login", or on a remote machine, such as over SSH, with '
+    '"firebase login --no-localhost". Set it up now?';
+
 /// The question whether to activate flutterfire_cli.
 const _flutterfireMissing = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
-    '(needed by firebase_core). Install it now?';
+    '(needed by firebase_core). Activate it with "dart pub global activate '
+    'flutterfire_cli 1.4.1". Set it up now?';
 
 /// The activation of flutterfire_cli.
 const _activate = '$_dart pub global activate flutterfire_cli 1.4.1';
@@ -42,6 +54,10 @@ const _activate = '$_dart pub global activate flutterfire_cli 1.4.1';
 const _tooOld = 'flutterfire_cli 1.4.0 is active, but SMF works with 1.4.1 or '
     'a later 1.x version: activate one with "dart pub global activate '
     'flutterfire_cli 1.4.1".';
+
+/// The question whether to activate flutterfire_cli 1.4.1 in place of 1.4.0.
+const _replaceFlutterfire = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
+    '(needed by firebase_core). $_tooOld Set it up now?';
 
 /// The warning that Firebase is not configured, because of [reason].
 String _notConfigured(String reason) =>
@@ -214,7 +230,7 @@ void main() {
     // Each is asked once: no is no. flutterfire configure would fail without
     // them, so it is not asked about.
     expect(machine.fake.questions, [
-      'Firebase CLI is missing (needed by firebase_core). Install it now?',
+      _installFirebase,
       _flutterfireMissing,
     ]);
     expect(machine.checks, [
@@ -250,8 +266,8 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, [
-      'Firebase CLI is missing (needed by firebase_core). Install it now?',
-      'Firebase login is missing (needed by firebase_core). Install it now?',
+      _installFirebase,
+      _logIn,
       _flutterfireMissing,
       _configureNow,
     ]);
@@ -486,9 +502,9 @@ void main() {
         reason: machine.fake.reports.join('\n'),
       );
       expect(machine.fake.questions, [
-        'Firebase CLI is missing (needed by firebase_core). Install it now?',
-        'Firebase login is missing (needed by firebase_core). Install it now?',
-        _flutterfireMissing,
+        _installFirebase,
+        _logIn,
+        _replaceFlutterfire,
         _configureNow,
       ]);
       expect(
@@ -518,7 +534,7 @@ void main() {
         SmfExitCodes.success,
         reason: machine.fake.reports.join('\n'),
       );
-      expect(machine.fake.questions.last, _flutterfireMissing);
+      expect(machine.fake.questions.last, _replaceFlutterfire);
       expect(machine.checks, isNot(contains(_activate)));
       expect(machine.checks, isNot(contains(_configure)));
       expect(machine.warnings, [
@@ -541,8 +557,8 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, [
-      'Firebase CLI is missing (needed by firebase_core). Install it now?',
-      'Firebase login is missing (needed by firebase_core). Install it now?',
+      _installFirebase,
+      _logIn,
     ]);
     expect(machine.checks, isNot(contains(_activate)));
     expect(machine.checks, isNot(contains(_configure)));
@@ -565,7 +581,7 @@ void main() {
         [
           '  ✗ $check: missing',
           '    $_tooOld',
-          '    An interactive run offers to install it.',
+          '    An interactive run offers to set it up.',
         ]
       ),
       ('1.4.1', ['  ✓ $check']),

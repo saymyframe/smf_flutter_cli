@@ -536,7 +536,7 @@ void main() {
         contains(
           '  ✗ Tool cli (for analytics): missing\n'
           '    Run the installer.\n'
-          '    An interactive run offers to install it.\n'
+          '    An interactive run offers to set it up.\n'
           '    Generation would leave out analytics.',
         ),
       );
@@ -576,6 +576,45 @@ void main() {
         contains(
           '  ✗ Tool broken (for scaffold): no network\n'
           '    Generation would stop.',
+        ),
+      );
+    });
+
+    test('says what a check found in place of what it looks for', () async {
+      final host = FakeHost();
+      final modules = [
+        scaffold(),
+        TestModule(
+          'home',
+          contributions: [
+            Preflight([
+              TestCheck(
+                'cli',
+                status: const PreflightMissing(
+                  found: 'cli 1.0.0 is active',
+                  instructions: 'Activate 2.0.0 in its place.',
+                  installable: true,
+                ),
+              ),
+            ]),
+          ],
+        ),
+      ];
+
+      await pipeline(modules, host).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('home')],
+          explain: true,
+        ),
+      );
+
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          '  ✗ Tool cli (for home): cli 1.0.0 is active\n'
+          '    Activate 2.0.0 in its place.\n'
+          '    An interactive run offers to set it up.',
         ),
       );
     });

@@ -201,12 +201,16 @@ final class Explanation {
             '    $launcher is a launcher; a run asks it where the SDK is.',
           );
         }
-      case PreflightMissing(:final instructions, :final installable):
+      case PreflightMissing(
+          :final instructions,
+          :final installable,
+          :final found
+        ):
         lines
-          ..add('  ✗ ${check.description}$by: missing')
+          ..add('  ✗ ${check.description}$by: ${found ?? 'missing'}')
           ..add('    $instructions');
         if (installable) {
-          lines.add('    An interactive run offers to install it.');
+          lines.add('    An interactive run offers to set it up.');
         }
       case PreflightFailed(:final message):
         lines.add('  ✗ ${check.description}$by: $message');

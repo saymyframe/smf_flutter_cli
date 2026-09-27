@@ -659,6 +659,29 @@ void main() {
         expect(skipped.single.reason, 'Tool and Account are missing');
       });
 
+      test('name what a check found in place of what it looks for', () async {
+        environment = environmentOf(interactive: true);
+        const older = PreflightMissing(
+          instructions: 'Update it.',
+          found: 'tool 1.0.0 is active',
+        );
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          checks: const [
+            CheckResult(tool, older),
+            CheckResult(account, missing),
+          ],
+        );
+
+        expect(
+          skipped.single.reason,
+          'Account is missing, and Tool is needed, but tool 1.0.0 is active',
+        );
+      });
+
       test('go by the checks of their own module only', () async {
         environment = environmentOf(interactive: true, answers: [true]);
         const other = PlannedCheck(
