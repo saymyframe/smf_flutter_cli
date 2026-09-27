@@ -17,7 +17,7 @@ SMF (Say My Frame) is a Flutter CLI (`smf create`) that generates apps from inde
   | `smf_bloc`, `smf_riverpod` | `bloc`, `riverpod` | Provide the state management role; an app has at most one. |
   | `smf_home_flutter` | `home` | The feature `home` (`HomeModule`), the start screen at `/home`; requires the router role. |
   | `smf_bottom_tabs` | `bottom_tabs` | Provides the layout role: tabs in a bar at the bottom for the destinations of the features, which the router builds its main navigation around. The layout requires the router role. |
-  | `smf_get_it` | `get_it` | Provides the DI role and registers in get_it the services that the modules of the app declare. |
+  | `smf_get_it` | `get_it` | Provides the dependency injection (DI) role and registers in get_it the services that the modules of the app declare. |
   | `smf_event_bus` | `event_bus` | Provides the events role: a service on the event_bus package through which parts of the app that do not know each other exchange events. |
   | `smf_firebase_core` | `firebase_core` | Infrastructure without a role that sets up Firebase; a run in a terminal offers it among the modules of its kind. |
   | `smf_firebase_crashlytics` | `firebase_crashlytics` | Provides the crash reporting role with Firebase Crashlytics (an app can have several providers of it); depends on `smf_firebase_core`. |
@@ -37,7 +37,7 @@ packages/
     smf_contribution_engine/  # a standalone engine that patches Dart files; no module uses it
     smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core, bloc, riverpod, bottom_tabs
   smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
-tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart, package_graph_test.dart
+tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart and its test, package_graph_test.dart
 ```
 
 Dependencies point one way only: `smf_contracts` ← `smf_pipeline` and modules ← `smf_flutter_cli`. Contracts never depend on modules, the pipeline or the CLI; the pipeline never depends on a module. Modules use `smf_pipeline` only in their tests, for the contract harness.
@@ -52,7 +52,7 @@ Module independence is the foundation of the project. Never break it, not even t
 - Modules describe *what* they need through the DSLs in `smf_contracts`: routes (`RoutesData` of the router role), DI (`DiRegistration` of the DI role), code for sockets (`SocketContribution`s) and bricks. The router and DI modules turn those descriptions into code. A feature module must not assume a specific router or DI container.
 - Generated UI talks only to its state-management layer (a Cubit via `context.read`, a Riverpod provider via `ref`), never directly to a DI container or infrastructure service.
 - State-manager variants: a module whose code depends on the state manager declares `Variants` of the state management role in its descriptor, keyed by the id of each provider (`bloc`, `riverpod`), and each variant adds the package of its state manager with the constraint `any`, leaving the version to the provider (see the fixture `fake_feature` in `packages/smf_pipeline/test/fixtures/`).
-- The package of a provider of a role, such as `flutter_riverpod` of `riverpod`, goes into another module only through its variant for the provider or its `dependsOn` on the provider, with the constraint `any`: the pipeline rejects any other module that adds it in an app with the provider. A module that imports or exports such a package adds it itself, even when it depends on the provider; a provider of a role may import, for a fragment, the package that a module which gives the role data adds.
+- The package of a provider of a role, such as `flutter_riverpod` of `riverpod`, goes into another module only through its variant for the provider, with the constraint `any`, or through its `dependsOn` on the provider: the pipeline rejects any other module that adds it in an app with the provider. A module that imports or exports such a package adds it itself, even when it depends on the provider; a provider of a role may import, for a fragment, the package that a module which gives the role data adds.
 
 ## Commands
 
@@ -84,7 +84,7 @@ Modules are chosen with `-m`, and every option of `create` comes from the comman
 - `bricks/**/__brick__/**` holds mason templates, not Dart. They are excluded from analysis and formatting. They use mason syntax: `{{app_name.snakeCase()}}`.
 - Bricks have no mason hooks. The pipeline rejects a brick with hooks and runs none: modules check the machine and run tools through `Preflight` and `PostGenStep` contributions.
 - The snapshots in `packages/smf_flutter_cli/test/snapshots/` and `packages/smf_pipeline/fixture_registry/test/snapshots/` hold the files of the apps the CLI and the fixtures render. When a change alters them, update them with `SMF_UPDATE_SNAPSHOTS=1 dart test test/snapshot_test.dart` in the package and review the diff.
-- `smf_firebase_core` generates `lib/firebase_options.dart` as a placeholder in the form that `flutterfire configure` writes, which throws an `UnsupportedError` until the FlutterFire CLI fills it in, and initializes Firebase with it in `bootstrap()`. Its preflight checks look for the Firebase CLI, a Firebase login, the FlutterFire CLI and, on macOS, the Ruby gem xcodeproj, and only warn: a run in a terminal offers to set up what it can, asking first. After generation it runs `flutterfire configure` in the terminal with the ids of the app; that needs a Firebase account, so a run with `--no-input` or `--skip-external-setup` generates the app with the placeholder and prints the command to run later. A follow-up of that step (`PostGenStep.followUps`), which runs only after it and only on macOS, points the build phase for Crashlytics that flutterfire adds at the upload script in `build/ios/SourcePackages`, which `flutter build ipa` needs.
+- `smf_firebase_core` generates `lib/firebase_options.dart` as a placeholder in the form that `flutterfire configure` writes, which throws an `UnsupportedError` until the FlutterFire CLI fills it in, and initializes Firebase with it in `bootstrap()`. Its preflight checks look for the Firebase CLI, a Firebase login, the FlutterFire CLI and, on macOS, the Ruby gem xcodeproj; elsewhere a check tells that the Xcode project is set up on a Mac. They only warn: a run in a terminal offers to set up what it can, asking first. After generation it runs `flutterfire configure` in the terminal with the ids of the app; that needs a Firebase account, so a run with `--no-input` or `--skip-external-setup` generates the app with the placeholder and prints the command to run later. A follow-up of that step (`PostGenStep.followUps`), which runs only after it and only on macOS, points the build phase for Crashlytics that flutterfire adds at the upload script in `build/ios/SourcePackages`, which `flutter build ipa` needs.
 
 ## Tests
 
