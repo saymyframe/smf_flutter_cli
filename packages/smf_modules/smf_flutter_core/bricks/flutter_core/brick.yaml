@@ -1,7 +1,7 @@
 name: flutter_core
 description: "The Flutter app every SMF app starts from: the Android and iOS projects, main(), the start-up sequence and the root widget."
 
-# A brick of the lego model. Its files are relative to the root of the
+# A brick of the module model. Its files are relative to the root of the
 # generated app, and follow the files of `flutter create` of Flutter 3.44.
 # The pipeline renders it with app_name, org_name, the has_<role> flags and
 # the rendered sockets of its tags; the module adds android_namespace,

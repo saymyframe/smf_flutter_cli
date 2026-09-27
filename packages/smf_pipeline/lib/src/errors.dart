@@ -22,7 +22,7 @@ final class GenerationFailedException implements Exception {
       ].join('\n');
 }
 
-/// Thrown when the registry of modules breaks the rules of the lego model,
+/// Thrown when the registry of modules breaks the rules of the module model,
 /// which is a bug in the modules or the CLI, not in the user's input.
 final class RegistryException implements Exception {
   /// Creates the exception with the [problems] found.

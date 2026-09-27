@@ -3,7 +3,7 @@ import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/request.dart';
 
 /// The modules the CLI offers and the roles they declare, checked against
-/// the rules of the lego model.
+/// the rules of the module model.
 ///
 /// The registry is checked once, before the command line is parsed, because
 /// the options of the roles become options of the command.

@@ -4,7 +4,7 @@
 
 The generation pipeline of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli): it selects modules, checks their contributions against the roles they declare, and generates a Flutter app from them.
 
-The pipeline knows no concrete module or role. It depends only on the core of the lego model, `package:smf_contracts/core.dart`, and receives the modules and the machine it runs on from the CLI.
+The pipeline knows no concrete module or role. It depends only on the core of the module model, `package:smf_contracts/core.dart`, and receives the modules and the machine it runs on from the CLI.
 
 Most users use it through the SMF CLI, which passes its modules and the machine to `runSmf`:
 

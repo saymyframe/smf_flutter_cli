@@ -1,4 +1,4 @@
-/// Rules for the names that the lego model turns into Dart identifiers,
+/// Rules for the names that the module model turns into Dart identifiers,
 /// route paths and template tags: module ids, role ids and socket names.
 abstract final class SmfNames {
   static final RegExp _snakeCase = RegExp(r'^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$');

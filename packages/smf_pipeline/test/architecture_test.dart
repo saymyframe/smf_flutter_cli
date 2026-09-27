@@ -33,7 +33,7 @@ void main() {
     expect(directives, isNotEmpty);
   });
 
-  test('imports only the core of the lego model from smf_contracts', () {
+  test('imports only the core of the module model from smf_contracts', () {
     for (final MapEntry(key: file, value: uris) in directives.entries) {
       for (final uri in uris) {
         if (!uri.startsWith('package:smf_contracts/')) continue;

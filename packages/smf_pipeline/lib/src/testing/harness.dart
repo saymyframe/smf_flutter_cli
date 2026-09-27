@@ -130,7 +130,7 @@ final class ContractResult {
 }
 
 /// The contract test harness: checks that the modules and roles of a
-/// registry follow the rules of the lego model, the way the pipeline would
+/// registry follow the rules of the module model, the way the pipeline would
 /// generate them in every combination that matters.
 ///
 /// For a module it builds an app for every provider of the role of its

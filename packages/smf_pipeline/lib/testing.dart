@@ -1,4 +1,4 @@
-/// The contract test harness of the lego model: checks that modules and
+/// The contract test harness of the module model: checks that modules and
 /// role templates follow the rules of their roles, and renders the apps
 /// they make in memory. `ModulePackage` checks what the package of a module
 /// imports and depends on.

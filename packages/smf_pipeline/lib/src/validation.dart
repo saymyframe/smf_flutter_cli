@@ -125,7 +125,7 @@ List<String> strippedVars(Map<String, Object?> vars) {
 }
 
 /// Stage 5 of the pipeline: checks the contributions against the rules of
-/// the lego model and the hooks of the roles, orders the contributions of
+/// the module model and the hooks of the roles, orders the contributions of
 /// every socket, and merges the pubspec.
 ///
 /// Checks, in this order:
