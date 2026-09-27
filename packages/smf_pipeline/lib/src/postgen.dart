@@ -25,7 +25,8 @@ final class SkippedStep {
   final String command;
 
   /// Why it is not done, as a phrase such as `the run skips external setup`
-  /// or `it exited with code 1`.
+  /// or `it exited with code 1`, followed by the checks that the step needs
+  /// and that have not passed, such as `, and Firebase CLI is missing`.
   final String reason;
 
   /// Whether the step could not run or failed, rather than being left for
@@ -236,11 +237,18 @@ final class _ModuleSteps {
     final environment = _environment;
     final description = step.description ?? command;
     final unmet = _unmetNeeds(step, origin, _checks);
+    // The reason names the checks that have not passed too, since the step
+    // needs them when the user runs it later.
+    String alsoUnmet(String reason) =>
+        unmet.isEmpty ? reason : '$reason, and ${_unmetReason(unmet)}';
     if (step.external && environment.skipExternalSetup) {
-      return (reason: 'the run skips external setup', failed: false);
+      return (
+        reason: alsoUnmet('the run skips external setup'),
+        failed: false,
+      );
     }
     if (step.interactive && !environment.interactive) {
-      return (reason: 'the run cannot ask the user', failed: false);
+      return (reason: alsoUnmet('the run cannot ask the user'), failed: false);
     }
     if (unmet.isNotEmpty) {
       final reason = _unmetReason(unmet);

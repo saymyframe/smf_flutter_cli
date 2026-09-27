@@ -701,7 +701,7 @@ void main() {
         expect(runner.lines, contains('firebase deploy'));
       });
 
-      test('keep the reasons of the run first', () async {
+      test('keep the reasons of the run first, then name the checks', () async {
         environment = environmentOf(skipExternalSetup: true);
 
         final skipped = await runPostGen(
@@ -723,7 +723,37 @@ void main() {
           checks: const [CheckResult(tool, missing)],
         );
 
-        expect(skipped.single.reason, 'the run skips external setup');
+        // The user who runs the command later needs the tool too.
+        expect(
+          skipped.single.reason,
+          'the run skips external setup, and Tool is missing',
+        );
+        expect(skipped.single.failed, isFalse);
+      });
+
+      test('left for a run that cannot ask, name the checks too', () async {
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environmentOf(),
+          steps: [
+            _step(
+              'firebase',
+              const PostGenStep(
+                ToolRef('firebase'),
+                ['login'],
+                interactive: true,
+                skippable: true,
+                needs: ['tool'],
+              ),
+            ),
+          ],
+          checks: const [CheckResult(tool, missing)],
+        );
+
+        expect(
+          skipped.single.reason,
+          'the run cannot ask the user, and Tool is missing',
+        );
         expect(skipped.single.failed, isFalse);
       });
 

@@ -539,9 +539,13 @@ void main() {
     expect(
       run.lines,
       containsAllInOrder([
+        // The reason names what the command needs too, which the machine of
+        // the test lacks.
         equals(
           'Configuring Firebase with flutterfire is not done, because the run '
-          'skips external setup. Run it in the app: dart pub global run '
+          'skips external setup, and Firebase CLI, Firebase login, FlutterFire '
+          'CLI 1.4.1 or a later 1.x and Xcode project tools of flutterfire are '
+          'missing. Run it in the app: dart pub global run '
           'flutterfire_cli:flutterfire configure --platforms=android,ios '
           '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
           '--android-package-name=com.example.my_app',

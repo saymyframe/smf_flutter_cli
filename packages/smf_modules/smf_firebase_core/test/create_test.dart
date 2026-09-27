@@ -466,9 +466,13 @@ void main() {
       '$_dart pub global list',
       "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
     ]);
+    // The reason names what configure needs too, for when the user runs it.
     expect(machine.warnings, [
       ...List.filled(3, contains('is missing.')),
-      _notConfigured('the run skips external setup'),
+      _notConfigured(
+        'the run skips external setup, and Firebase CLI, Firebase login and '
+        'FlutterFire CLI 1.4.1 or a later 1.x are missing',
+      ),
       _fixAfterConfigure,
     ]);
   });
@@ -481,10 +485,13 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, isEmpty);
-    expect(
-      machine.warnings.sublist(machine.warnings.length - 2),
-      [_notConfigured('the run cannot ask the user'), _fixAfterConfigure],
-    );
+    expect(machine.warnings.sublist(machine.warnings.length - 2), [
+      _notConfigured(
+        'the run cannot ask the user, and Firebase CLI, Firebase login and '
+        'FlutterFire CLI 1.4.1 or a later 1.x are missing',
+      ),
+      _fixAfterConfigure,
+    ]);
     expect(machine.checks, isNot(contains(_configure)));
     expect(machine.checks, isNot(contains(_fix)));
   });
