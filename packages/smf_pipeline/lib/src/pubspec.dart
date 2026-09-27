@@ -189,6 +189,8 @@ final class _PubspecMerger {
     }
   }
 
+  /// Merges [contribution] of [origin], a dependency or dev dependency,
+  /// into the dependencies of the same package.
   void _addDependency(
     PubspecDependency contribution,
     ContributionOrigin origin,
@@ -240,6 +242,7 @@ final class _PubspecMerger {
       ..origins.add(origin);
   }
 
+  /// Merges the assets, fonts and flags of [contribution] of [origin].
   void _addFlutter(PubspecFlutter contribution, ContributionOrigin origin) {
     _assets.addAll(contribution.assets);
     _generate |= contribution.generate;

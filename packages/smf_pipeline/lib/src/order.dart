@@ -81,12 +81,11 @@ ContributionOrder orderContributions(
     byContributor.putIfAbsent(name, () => []).add(collected);
     origins.putIfAbsent(name, () => collected.origin);
   }
-  final names = byContributor.keys.toSet();
-
   final graph = _AppEdges(resolution, byContributor)
     ..addModules()
     ..addTemplates(origins)
     ..cancelMutual();
+  final names = graph.names;
   final raw = graph.raw;
 
   final components = _components(raw);

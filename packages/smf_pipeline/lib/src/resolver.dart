@@ -319,6 +319,8 @@ final class _Resolver {
           if (!excluded.contains(module.descriptor.id)) module,
       ];
 
+  /// The issue of [role], which [need] needs, but no module in the
+  /// registry that is not left out provides.
   SmfIssue _noProviderIssue(Role role, _Need need) => SmfIssue(
         'No module provides the ${role.id}, but ${need.phrase}.',
         origin: need.module == null ? null : ModuleOrigin(need.module!),

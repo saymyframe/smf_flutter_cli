@@ -357,7 +357,7 @@ final class _ModuleQuestions {
   /// Asks for a provider of [role], unless no module provides it, the
   /// answers so far have one, or it was asked before and the answers do
   /// not require it; a single provider that the answers require is taken
-  /// without asking. Returns whether the answers changed.
+  /// without asking. Returns whether it added a module to the answers.
   Future<bool> askRole(Role role) async {
     final providers = registry.providersOf(role);
     if (providers.isEmpty) return false;

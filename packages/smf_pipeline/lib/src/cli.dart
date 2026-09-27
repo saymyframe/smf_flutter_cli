@@ -148,6 +148,8 @@ bool _isVerbose(ArgResults results) {
           command.flag('verbose'));
 }
 
+/// Reports [error], a generation that failed, with its issues, and returns
+/// the exit code of it.
 int _generationFailed(SmfLogger logger, GenerationFailedException error) {
   logger.error(error.message);
   for (final issue in error.issues) {

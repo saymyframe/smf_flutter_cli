@@ -442,6 +442,8 @@ final class _BrickScanner {
     return BrickTags(_found, _issues);
   }
 
+  /// Reports the paths of the files of [brick] of [origin] that use more of
+  /// mustache than variables.
   void _checkPaths(BrickContribution brick, ContributionOrigin origin) {
     final name = brick.bundle.name;
     for (final file in brick.bundle.files) {
@@ -476,6 +478,9 @@ final class _BrickScanner {
         'provide, require or use, so the pipeline does not set it';
   }
 
+  /// Checks [text], the template at [path] of [origin], whose presence
+  /// flags are those of the [flagged] roles, and records the places of the
+  /// tags of sockets that it holds.
   void _scanFile(
     String path,
     String text,

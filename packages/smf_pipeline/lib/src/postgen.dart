@@ -437,13 +437,13 @@ final class _Commands {
     ResolvedTool resolved, {
     bool interactive = false,
   }) async {
-    final logger = _environment.logger;
-    final runner = _environment.processRunner;
-    logger.detail(
-      'Running ${[resolved.executable, ...resolved.arguments].join(' ')} in '
-      '$_directory',
-    );
+    final logger = _environment.logger
+      ..detail(
+        'Running ${[resolved.executable, ...resolved.arguments].join(' ')} '
+        'in $_directory',
+      );
     if (interactive) return _runInteractive(description, resolved);
+    final runner = _environment.processRunner;
     final progress = logger.progress(description);
     var waiting = false;
     final SmfProcessResult result;

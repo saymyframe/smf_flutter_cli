@@ -177,7 +177,7 @@ Iterable<IndexedDeclaration> _declarations(
   }
 }
 
-/// Whether [function] is a getter, a setter or a function.
+/// The kind of [function]: a getter, a setter or a function.
 DeclarationKind _functionKind(FunctionDeclaration function) {
   if (function.isGetter) return DeclarationKind.getter;
   if (function.isSetter) return DeclarationKind.setter;
@@ -222,6 +222,7 @@ List<IndexedParameter> _parameters(
         ),
     ];
 
+/// The kind of [parameter]: positional or named, required or optional.
 ParameterKind _parameterKind(FormalParameter parameter) {
   if (parameter.isRequiredPositional) return ParameterKind.requiredPositional;
   if (parameter.isOptionalPositional) return ParameterKind.optionalPositional;

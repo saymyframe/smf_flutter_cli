@@ -706,8 +706,9 @@ final class _BrickRenderer {
   /// Renders the files of the brick of [collected] into [files].
   void render(Collected collected) {
     final brick = _brickOf(collected);
-    final files = (collected.contribution as BrickContribution).bundle.files;
-    for (final file in files) {
+    final bundleFiles =
+        (collected.contribution as BrickContribution).bundle.files;
+    for (final file in bundleFiles) {
       _renderFile(brick, file);
     }
   }
