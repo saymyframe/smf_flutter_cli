@@ -245,6 +245,15 @@ final class ContractHarness {
             picks: picks,
             present: subset,
           ),
+      ..._casesWithOwners(module),
+    ];
+  }
+
+  /// The cases of [module] with the providers that own a package it
+  /// contributes; see [casesOfModule].
+  List<ContractCase> _casesWithOwners(SmfModule module) {
+    final id = module.descriptor.id;
+    return [
       for (final owner in _ownersOfPackagesOf(module))
         for (final picks in _variantPicksWith(module, owner))
           _case(
