@@ -1084,6 +1084,119 @@ void main() {
       });
     });
 
+    group('for some systems', () {
+      const macos = {HostOperatingSystem.macos};
+      const fix = PostGenStep(
+        ToolRef('fix'),
+        ['project'],
+        description: 'Fix the project',
+        skippable: true,
+        hosts: macos,
+      );
+
+      /// Puts the tool of [fix] on the PATH.
+      void installFix() =>
+          host.fileSystem.file('/usr/bin/fix').createSync(recursive: true);
+
+      test(
+          'run on those systems and not elsewhere, where they are not left '
+          'for later, nor are their follow-ups', () async {
+        const step = PostGenStep(
+          ToolRef('firebase'),
+          ['setup'],
+          skippable: true,
+          hosts: macos,
+          followUps: [
+            PostGenStep(ToolRef('firebase'), ['check'], skippable: true),
+          ],
+        );
+
+        final elsewhere = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', step)],
+        );
+
+        expect(elsewhere, isEmpty);
+        expect(runner.lines, isNot(contains(startsWith('firebase'))));
+
+        environment = environmentOf(operatingSystem: HostOperatingSystem.macos);
+        final there = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', step)],
+        );
+
+        expect(there, isEmpty);
+        expect(
+          runner.lines,
+          containsAllInOrder(['firebase setup', 'firebase check']),
+        );
+      });
+
+      test(
+          'as follow-ups, run after their step on those systems, and are '
+          'not left for later with it elsewhere', () async {
+        installFix();
+        const step = PostGenStep(
+          ToolRef('firebase'),
+          ['setup'],
+          description: 'Set up Firebase',
+          skippable: true,
+          external: true,
+          followUps: [fix],
+        );
+
+        final ran = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', step)],
+        );
+
+        expect(ran, isEmpty);
+        expect(runner.lines, contains('firebase setup'));
+        expect(runner.lines, isNot(contains('fix project')));
+
+        environment = environmentOf(skipExternalSetup: true);
+        final held = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', step)],
+        );
+
+        expect(held.map((step) => '$step'), [
+          'Set up Firebase: firebase setup (the run skips external setup)',
+        ]);
+
+        for (final skip in [false, true]) {
+          environment = environmentOf(
+            operatingSystem: HostOperatingSystem.macos,
+            skipExternalSetup: skip,
+          );
+          installFix();
+
+          final skipped = await runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: [_step('firebase', step)],
+          );
+
+          if (skip) {
+            expect(skipped.map((step) => step.description), [
+              'Set up Firebase',
+              'Fix the project',
+            ]);
+          } else {
+            expect(skipped, isEmpty);
+            expect(
+              runner.lines,
+              containsAllInOrder(['firebase setup', 'fix project']),
+            );
+          }
+        }
+      });
+    });
+
     test('a step that a signal stopped says so', () async {
       environment = environmentOf(interactive: true, answers: [true]);
       runner.onInteractive = (call) => -2;

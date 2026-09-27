@@ -72,17 +72,19 @@ const importCleanupCodes = [
 /// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
 /// 6. `dart format .`.
 ///
-/// A step that needs a terminal in a run that cannot ask the user, or
-/// external setup in a run that skips it, does not run; the pipeline checked
-/// before that such a step is skippable. Nor does a step that
-/// [PostGenStep.needs] a check which has not passed among [checks], the
-/// results of stage 6, and the user is not asked about it. In an
-/// interactive run the user may also leave a skippable step for later, but
-/// for a follow-up, which is part of the step it follows. A skippable step
-/// whose tool is missing, or that fails, is left for later too; a failure
-/// is reported with the output of the command. The follow-ups of a step
-/// that is not done are left for later after it. Returns the steps that are
-/// not done, with their commands for later, in the order they would run.
+/// A step for other systems than that of the run (see [PostGenStep.hosts])
+/// neither runs nor is returned. A step that needs a terminal in a run that
+/// cannot ask the user, or external setup in a run that skips it, does not
+/// run; the pipeline checked before that such a step is skippable. Nor does
+/// a step that [PostGenStep.needs] a check which has not passed among
+/// [checks], the results of stage 6, and the user is not asked about it. In
+/// an interactive run the user may also leave a skippable step for later,
+/// but for a follow-up, which is part of the step it follows. A skippable
+/// step whose tool is missing, or that fails, is left for later too; a
+/// failure is reported with the output of the command. The follow-ups of a
+/// step that is not done are left for later after it. Returns the steps
+/// that are not done, with their commands for later, in the order they
+/// would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
 /// a step that is not skippable fails or cannot run, unless it is a
@@ -171,12 +173,14 @@ final class _ModuleSteps {
 
   /// Runs [step] of [origin], then its follow-ups once it succeeded, or
   /// records it and them as not done. The user is not asked about a
-  /// [followUp], which is part of the step it follows.
+  /// [followUp], which is part of the step it follows. A step for other
+  /// systems neither runs nor is recorded, and neither are its follow-ups.
   Future<void> run(
     PostGenStep step,
     ContributionOrigin origin, {
     bool followUp = false,
   }) async {
+    if (!_isForHost(step)) return;
     final environment = _environment;
     final resolved = await _commands.resolve(step.tool, step.arguments);
     final command = _commands.display(step.tool, step.arguments, resolved);
@@ -242,10 +246,17 @@ final class _ModuleSteps {
     await _leaveFollowUps(step, description);
   }
 
+  /// Whether [step] runs on the operating system of the run; see
+  /// [PostGenStep.hosts].
+  bool _isForHost(PostGenStep step) =>
+      step.hosts.isEmpty || step.hosts.contains(_environment.operatingSystem);
+
   /// Records the follow-ups of [step], the step of [description] that is
-  /// not done, as not done either, each before its own follow-ups.
+  /// not done, as not done either, each before its own follow-ups, but for
+  /// those of other systems.
   Future<void> _leaveFollowUps(PostGenStep step, String description) async {
     for (final next in step.followUps) {
+      if (!_isForHost(next)) continue;
       final resolved = await _commands.resolve(next.tool, next.arguments);
       final command = _commands.display(next.tool, next.arguments, resolved);
       final nextDescription = next.description ?? command;

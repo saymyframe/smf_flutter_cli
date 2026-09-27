@@ -432,7 +432,13 @@ void main() {
                   ToolRef('fix'),
                   ['it', 'in "a b"'],
                   skippable: true,
-                  followUps: [PostGenStep(ToolRef('check'), [])],
+                  followUps: [
+                    PostGenStep(
+                      ToolRef('check'),
+                      [],
+                      hosts: {HostOperatingSystem.macos},
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -519,7 +525,7 @@ void main() {
           // Follow-ups run once the step above them succeeded.
           // Quoted for the shell of the host, as the commands for later.
           '    then fix it \'in "a b"\' (core)\n'
-          '      then check (core)\n'
+          '      then check (core, on macOS)\n'
           '  b (analytics)',
         ),
       );

@@ -22,7 +22,8 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
 ///   after generation, quoted for a shell of [operatingSystem], each
-///   follow-up of a step under it;
+///   follow-up of a step under it, and with the systems of a step that runs
+///   only on some;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do.
 List<String> explain({
@@ -184,8 +185,9 @@ List<String> _contributors(ContributionOrder order) => {
     }.toList();
 
 /// The lines of [step] of [origin] under `After generation`: its command,
-/// quoted for a shell of [system], then, a level deeper each, those of its
-/// follow-ups, which run once it succeeded; [depth] is the level of [step].
+/// quoted for a shell of [system], with the systems it runs on if it runs
+/// only on some, then, a level deeper each, those of its follow-ups, which
+/// run once it succeeded; [depth] is the level of [step].
 Iterable<String> _stepLines(
   PostGenStep step,
   ContributionOrigin origin,
@@ -196,8 +198,19 @@ Iterable<String> _stepLines(
     step.tool.executable,
     ...step.tool.argumentsFor(step.arguments),
   ].map((argument) => shellQuoted(argument, system)).join(' ');
-  yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command ($origin)';
+  final systems = [for (final host in step.hosts) _systemNames[host]];
+  final where = systems.isEmpty ? '' : ', on ${systems.join(', ')}';
+  yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command '
+      '($origin$where)';
   for (final next in step.followUps) {
     yield* _stepLines(next, origin, system, depth: depth + 1);
   }
 }
+
+/// The names of the operating systems in the text of `--explain`.
+const Map<HostOperatingSystem, String> _systemNames = {
+  HostOperatingSystem.macos: 'macOS',
+  HostOperatingSystem.linux: 'Linux',
+  HostOperatingSystem.windows: 'Windows',
+  HostOperatingSystem.other: 'other systems',
+};
