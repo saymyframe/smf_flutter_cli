@@ -45,7 +45,7 @@ final class TestRole<D extends Object> extends Role<D> {
   final String id;
 
   @override
-  String get description => 'Test role $id';
+  String get description => id;
 
   @override
   final RoleCardinality cardinality;

@@ -30,6 +30,21 @@ void main() {
     }
   });
 
+  test('messages name the roles by their descriptions', () {
+    final names = [for (final role in _roles) '$role'];
+
+    expect(names, [
+      'app entry role',
+      'state management role',
+      'router role',
+      'layout role',
+      'dependency injection role',
+      'events role',
+      'analytics role',
+      'crash reporting role',
+    ]);
+  });
+
   test('the roles have the cardinalities and relations of the plan', () {
     Map<String, Object> shape(Role role) => {
           'cardinality': role.cardinality,

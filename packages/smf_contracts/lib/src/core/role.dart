@@ -63,7 +63,10 @@ abstract base class Role<D extends Object> {
   /// the ids of other roles and of all modules.
   String get id;
 
-  /// What the role does, for prompts and diagnostics, such as `Routing`.
+  /// What the role does, as a short noun phrase such as `Router`.
+  ///
+  /// Prompts show it as it is, as in `Router: which module provides it?`,
+  /// and messages name the role by it (see [toString]).
   String get description;
 
   /// How many providers of the role an app can have.
@@ -291,8 +294,19 @@ abstract base class Role<D extends Object> {
     return origin == null ? typed : typed.withOrigin(origin);
   }
 
+  /// The role as messages name it: its [description] followed by `role`,
+  /// such as `router role` for `Router`.
+  ///
+  /// The description starts in lower case, unless it starts with an
+  /// acronym, as `DI role` does for `DI`.
   @override
-  String toString() => 'role $id';
+  String toString() {
+    final name = description;
+    final acronym = name.length > 1 && name[1] != name[1].toLowerCase();
+    return name.isEmpty || acronym
+        ? '$name role'
+        : '${name[0].toLowerCase()}${name.substring(1)} role';
+  }
 }
 
 /// Whether data applies in an app: its role and the roles in its

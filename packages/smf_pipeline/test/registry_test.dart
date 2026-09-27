@@ -157,8 +157,8 @@ void main() {
           ),
         ]),
         allOf(
-          _hasProblem('two providers of the role thing'),
-          _hasProblem('must provide the role app_entry'),
+          _hasProblem('two providers of the thing role'),
+          _hasProblem('must provide the app entry role'),
         ),
       );
     });

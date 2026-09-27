@@ -43,6 +43,20 @@ final class _PlainTemplate extends RoleTemplate<String> {
   const _PlainTemplate();
 }
 
+/// A role with the [description] of a test.
+final class _Described extends Role<NoDsl> {
+  const _Described(this.description);
+
+  @override
+  String get id => 'described';
+
+  @override
+  final String description;
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.many;
+}
+
 void main() {
   test('RoleCardinality says whether none or many are allowed', () {
     expect(RoleCardinality.exactlyOne.allowsNone, isFalse);
@@ -73,7 +87,14 @@ void main() {
 
     test('names its presence flag and itself', () {
       expect(role.presenceFlag, 'has_minimal');
-      expect('$role', 'role minimal');
+      expect('$role', 'minimal role');
+    });
+
+    test('is named by its description in lower case, but for an acronym', () {
+      expect('${const _Described('App entry')}', 'app entry role');
+      expect('${const _Described('DI')}', 'DI role');
+      expect('${const _Described('BLE scanner')}', 'BLE scanner role');
+      expect('${const _Described('X')}', 'x role');
     });
   });
 
@@ -169,7 +190,7 @@ void main() {
           isA<ArgumentError>().having(
             (e) => e.message,
             'message',
-            contains('neither requires nor uses the role hidden'),
+            contains('neither requires nor uses the hidden role'),
           ),
         ),
       );
@@ -237,7 +258,7 @@ void main() {
           isA<ArgumentError>().having(
             (e) => e.message,
             'message',
-            'home contributed a int to the role router, which takes String',
+            'home contributed a int to the router role, which takes String',
           ),
         ),
       );

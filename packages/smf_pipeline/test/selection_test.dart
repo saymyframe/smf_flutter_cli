@@ -366,9 +366,9 @@ void main() {
       expect(asked[4].shown, contains('None'));
       expect(asked[5].shown, isNot(contains('None')));
       expect(
-          asked[5].message,
-          'Test role nav: home requires the nav. Which '
-          'module provides it?');
+        asked[5].message,
+        'nav: home requires the nav. Which module provides it?',
+      );
     });
 
     test('takes the only provider of a required role', () async {
