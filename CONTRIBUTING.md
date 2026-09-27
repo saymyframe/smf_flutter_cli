@@ -2,26 +2,26 @@
 
 Thank you for your interest in contributing to SMF Flutter CLI! This document provides guidelines and information for contributors.
 
-## Code of Conduct
+## Code of conduct
 
 This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code.
 
-## How Can I Contribute?
+## How can I contribute?
 
-### Reporting Bugs
+### Reporting bugs
 
 - Use the GitHub issue tracker
 - Include detailed steps to reproduce the bug
 - Provide your environment details (OS, Flutter version, etc.)
 - Include error messages and stack traces
 
-### Suggesting Enhancements
+### Suggesting enhancements
 
 - Use the GitHub issue tracker with the "enhancement" label
 - Describe the feature and its benefits
 - Provide use cases and examples
 
-### Submitting Code Changes
+### Submitting code changes
 
 1. Fork the repository
 2. Create a branch named after the change type (`git checkout -b feat/amazing-feature`, or `fix/...`, `docs/...`)
@@ -32,22 +32,34 @@ This project and everyone participating in it is governed by our Code of Conduct
 7. Push to the branch (`git push origin feat/amazing-feature`)
 8. Open a Pull Request
 
-## Development Setup
+## Development setup
+
+CI pins Dart 3.12.2, and the output of the formatter depends on its version, so develop with that Dart, which Flutter 3.44.2 comes with.
 
 1. Clone the repository
-2. Install dependencies and bundle bricks: `melos bootstrap`
-3. Run all checks: `melos run check` (format, analyze, brick hooks, tests)
+2. Install Melos and the Mason CLI: `dart pub global activate melos` and `dart pub global activate mason_cli`
+3. Install dependencies and bundle bricks: `melos bootstrap`
+4. Run all checks: `melos run check` (format, analyze, banlist, tests)
 
-The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people.
+The bundles in `lib/bundles/` are generated from the bricks, so change the brick, run `melos bootstrap` and commit both. When a change alters what an app renders, update the snapshots of the CLI or of the fixtures with `SMF_UPDATE_SNAPSHOTS=1 dart test test/snapshot_test.dart` in the package, and review their diff.
 
-## Code Style
+Besides these checks, CI generates apps with Flutter and runs `flutter analyze` on each, then `flutter test` with the tests that packages keep for the apps in `app_tests/`. To run it locally, with `flutter` on the `PATH`:
+
+```bash
+dart run packages/smf_flutter_cli/tool/matrix.dart /tmp/smf_apps
+dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart /tmp/smf_fixture_apps
+```
+
+The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
+
+## Code style
 
 - Follow the Dart style guide; CI checks formatting with Dart 3.12.2
 - `very_good_analysis` is enabled in every package
 - Use Conventional Commits with the package as scope (`fix(contracts): ...`); versions and changelogs are generated from them
 - Add tests for new functionality
 
-## Copyright and Licensing
+## Copyright and licensing
 
 By contributing to this project, you agree that your contributions will be licensed under the Apache License, Version 2.0.
 
