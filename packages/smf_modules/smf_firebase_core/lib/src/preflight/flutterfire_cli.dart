@@ -155,7 +155,9 @@ bool isSupportedFlutterfireVersion(String version) {
   for (var i = 1; i < numbers.length; i++) {
     if (numbers[i] != minimum[i]) return numbers[i] > minimum[i];
   }
-  return true;
+  // A pre-release of the lowest version, such as 1.4.1-dev.1, comes before
+  // it, and may lack what it fixed.
+  return !RegExp(r'^\d+\.\d+\.\d+-').hasMatch(version);
 }
 
 /// The major, minor and patch numbers of [version], or `null` if it does

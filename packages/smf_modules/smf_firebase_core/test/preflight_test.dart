@@ -460,7 +460,7 @@ void main() {
     });
 
     test('offers to activate it in place of an older version', () async {
-      for (final version in ['1.4.0', '1.3.2', '0.3.0-dev.1']) {
+      for (final version in ['1.4.0', '1.4.1-dev.1', '1.3.2', '0.3.0-dev.1']) {
         expect(
           await check.check(
             machineWith(
@@ -605,12 +605,21 @@ void main() {
 
     test('accepts 1.4.1 and every later 1.x version', () {
       expect(minimumFlutterfireVersion, '1.4.1');
-      for (final version in ['1.4.1', '1.4.2', '1.5.0', '1.10.3', '1.4.1+2']) {
+      for (final version in [
+        '1.4.1',
+        '1.4.1+2',
+        '1.4.2',
+        '1.4.2-dev.1',
+        '1.5.0',
+        '1.10.3',
+      ]) {
         expect(isSupportedFlutterfireVersion(version), isTrue, reason: version);
       }
       for (final version in [
         '1.4.0',
         '1.4.0+2',
+        '1.4.1-dev.1',
+        '1.4.1-dev.1+2',
         '1.3.9',
         '0.9.0',
         '2.0.0',
