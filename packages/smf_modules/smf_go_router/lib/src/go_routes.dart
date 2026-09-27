@@ -164,6 +164,8 @@ final class _RouteCode {
   /// Whether a route checks the values of its location.
   bool checksValues = false;
 
+  /// The prefix of the import of the screen of [import], which the first
+  /// route with the screen gives it: `screen0`, `screen1`, and so on.
   String _prefixOf(ImportRef import) => screens
       .putIfAbsent(
         // A screen is a file of the app, which its path identifies.
