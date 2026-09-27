@@ -266,10 +266,7 @@ final class TerminalPrompter implements SmfPrompter {
     return _ask(
       '$question\n$_hideCursor',
       () {
-        final selected = {
-          for (final value in defaultValues)
-            if (choices.indexOf(value) case final i when i >= 0) i,
-        };
+        final selected = _indexesIn(choices, defaultValues);
         var index = 0;
         void draw({bool again = false}) => _list(
               labels,
@@ -291,15 +288,10 @@ final class TerminalPrompter implements SmfPrompter {
             case PromptKey(character: ' '):
               if (!selected.remove(index)) selected.add(index);
             case PromptKey(control: PromptControl.enter):
-              final chosen = [
-                for (var i = 0; i < choices.length; i++)
-                  if (selected.contains(i)) i,
-              ];
+              final chosen = _inOrder(selected, choices.length);
               _answered(
                 message,
-                chosen.isEmpty
-                    ? 'none'
-                    : [for (final i in chosen) labels[i]].join(', '),
+                _selectionAnswer(labels, chosen),
                 lines: labels.length + _rowsOf(_asking(question)),
               );
               return [for (final i in chosen) choices[i]];
@@ -311,6 +303,23 @@ final class TerminalPrompter implements SmfPrompter {
       },
     );
   }
+
+  /// The indexes in [choices] of those of [values] that are among them.
+  static Set<int> _indexesIn<T>(List<T> choices, List<T> values) => {
+        for (final value in values)
+          if (choices.indexOf(value) case final i when i >= 0) i,
+      };
+
+  /// The indexes of [selected], the selected ones of [count] choices, in
+  /// order.
+  static List<int> _inOrder(Set<int> selected, int count) => [
+        for (var i = 0; i < count; i++)
+          if (selected.contains(i)) i,
+      ];
+
+  /// The answer that shows the [chosen] ones of [labels].
+  static String _selectionAnswer(List<String> labels, List<int> chosen) =>
+      chosen.isEmpty ? 'none' : [for (final i in chosen) labels[i]].join(', ');
 
   /// Writes [labels] one per line, with a pointer at the one that is
   /// [current] and, with [marks], whether each is [selected]; [again]
@@ -331,14 +340,14 @@ final class TerminalPrompter implements SmfPrompter {
           ? '${String.fromCharCodes(runes.take(width - 1))}…'
           : labels[i];
       final pointer = current(i) ? green.wrap('❯')! : ' ';
-      final mark = !marks
-          ? ''
-          : (selected?.call(i) ?? false)
-              ? '${lightCyan.wrap('◉')} '
-              : '◯ ';
+      final mark = marks ? _mark(selected?.call(i) ?? false) : '';
       final shown = current(i) ? lightCyan.wrap(label) : label;
       text.write('$pointer $mark$shown\n');
     }
     _terminal.write(text.toString());
   }
+
+  /// The mark of a choice that is [selected] or not.
+  static String _mark(bool selected) =>
+      selected ? '${lightCyan.wrap('◉')} ' : '◯ ';
 }

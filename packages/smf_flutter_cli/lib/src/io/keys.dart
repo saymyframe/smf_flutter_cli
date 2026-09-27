@@ -38,7 +38,11 @@ final class KeyDecoder {
         // Not the first byte of a character in UTF-8.
         return const PromptKey.control(PromptControl.other);
     }
-    final length = byte >= 0xf0 ? 4 : (byte >= 0xe0 ? 3 : 2);
+    final length = switch (byte) {
+      >= 0xf0 => 4,
+      >= 0xe0 => 3,
+      _ => 2,
+    };
     final bytes = [byte];
     while (bytes.length < length) {
       final next = _soon();
