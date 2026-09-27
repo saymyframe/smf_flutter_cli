@@ -432,6 +432,31 @@ void main() {
   });
 
   test(
+      'with flutterfire_cli 2.0.0 active, a run asks nothing about it, keeps '
+      'it and leaves the configuration for later', () async {
+    final machine = _Machine(
+      confirmations: [true, true],
+      flutterfire: '2.0.0',
+    );
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions, [
+      'Firebase CLI is missing (needed by firebase_core). Install it now?',
+      'Firebase login is missing (needed by firebase_core). Install it now?',
+    ]);
+    expect(machine.checks, isNot(contains(_activate)));
+    expect(machine.checks, isNot(contains(_configure)));
+    expect(machine.warnings, [
+      contains('FlutterFire CLI 1.4.1 or a later 1.x is missing. '
+          'flutterfire_cli 2.0.0 is active, but SMF works with 1.4.1 or a '
+          'later 1.x version, and does not replace a newer one'),
+      _notConfigured('FlutterFire CLI 1.4.1 or a later 1.x is missing'),
+    ]);
+  });
+
+  test(
       '--explain shows flutterfire_cli 1.4.0 as missing and 1.4.1 as there, '
       'and changes nothing', () async {
     const check = 'FlutterFire CLI 1.4.1 or a later 1.x (for firebase_core)';
