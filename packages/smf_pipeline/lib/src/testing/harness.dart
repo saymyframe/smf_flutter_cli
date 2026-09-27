@@ -796,7 +796,9 @@ final class ContractHarness {
   /// - a module imports or exports the package of a provider of a role in
   ///   the app, in a template or for a fragment, only when it contributes
   ///   the package too, itself or in its variant, so that the pipeline
-  ///   checks that it may take the package (see [casesOfModule]);
+  ///   checks that it may take the package (see [casesOfModule]); a
+  ///   provider of a role may import it for a fragment when a module that
+  ///   gives the role data contributes it, as the data may need it;
   /// - a file imports and exports only files that its owner may use, and
   ///   the pipeline added only imports that the contributors of the
   ///   fragments may use: their own files, the files of the modules they
@@ -1121,9 +1123,8 @@ final class _ImportCheck {
     final owners = packageOwners[package];
     if (owners == null) return issues;
     for (final who in users.users) {
-      // An owner of the package contributes it too.
       if (ownerOf(who) case ModuleOrigin(:final module)
-          when !(contributed[module]?.contains(package) ?? false)) {
+          when _takesWithout(who, users, package)) {
         issues.add(
           SmfIssue(
             '${checked.path} $verb $uri ${_how(who, users)}, a package of '
@@ -1140,6 +1141,34 @@ final class _ImportCheck {
       }
     }
     return issues;
+  }
+
+  /// Whether [who], one of [users], uses [package], the package of a
+  /// provider of a role, without contributing it. An owner of the package
+  /// contributes it too. A provider of a role renders the data that other
+  /// modules give the role, so it may use the package for a fragment when
+  /// one of them contributes it, as it may import their files.
+  bool _takesWithout(ContributionOrigin who, _Users users, String package) {
+    final user = ownerOf(who);
+    if (user is! ModuleOrigin ||
+        (contributed[user.module]?.contains(package) ?? false)) {
+      return false;
+    }
+    if (!users.byPipeline) return true;
+    for (final role in resolution.presentRoles) {
+      if (!resolution
+          .providersOf(role)
+          .any((module) => module.origin == user)) {
+        continue;
+      }
+      for (final contributor in dataContributors[role] ?? const {}) {
+        if (contributor case ModuleOrigin(:final module)
+            when contributed[module]?.contains(package) ?? false) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /// The problems of [uri], a library of [package] that [checked] uses as

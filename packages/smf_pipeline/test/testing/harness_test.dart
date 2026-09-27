@@ -1341,6 +1341,76 @@ void main() {
         );
       });
 
+      test(
+          'a provider of a role may use the package of a module whose data it '
+          'renders', () async {
+        final state = TestRole<NoDsl>('state');
+        final shelf = TestRole<String>('shelf');
+        const uri = 'package:flutter_bloc/flutter_bloc.dart';
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'bloc',
+              providers: [RoleProvider.plain(state)],
+              contributions: const [
+                PubspecContribution.hosted('flutter_bloc', '^9.1.1'),
+              ],
+            ),
+            TestModule(
+              'store',
+              providers: [
+                _VarsProvider(
+                  shelf,
+                  const {
+                    'code': Fragment(
+                      'final observer = Bloc.observer;',
+                      imports: [ImportRef(uri)],
+                    ),
+                  },
+                ),
+              ],
+              contributions: [
+                dart('lib/store/store.dart', '{{{code}}}\n'),
+                dart('lib/store/own.dart', "import '$uri';\n"),
+              ],
+            ),
+            // The data of the shelf that needs the package.
+            TestModule(
+              'item',
+              requires: {shelf},
+              dependsOn: {'bloc'},
+              contributions: [
+                shelf.data('item'),
+                const PubspecContribution.hosted('flutter_bloc', 'any'),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'store',
+            requested: [ModuleId('store'), ModuleId('item')],
+          ),
+        );
+
+        // Its own template does not render the data of the shelf.
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'store: lib/store/own.dart imports $uri in the template of '
+              'store, a package of bloc, which provides the state, but store '
+              'does not contribute flutter_bloc.',
+            ),
+          ],
+        );
+      });
+
       test('exports and dev dependencies follow the same rules', () async {
         final harness = ContractHarness(
           ModuleRegistry([
