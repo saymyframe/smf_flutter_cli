@@ -6,18 +6,18 @@
 /// adds the built-in roles.
 library;
 
-export 'src/lego/core/contributions.dart';
-export 'src/lego/core/environment.dart';
-export 'src/lego/core/file_index.dart';
-export 'src/lego/core/fragment.dart';
-export 'src/lego/core/issue.dart';
-export 'src/lego/core/merge.dart';
-export 'src/lego/core/module.dart';
-export 'src/lego/core/module_context.dart';
-export 'src/lego/core/module_id.dart';
-export 'src/lego/core/names.dart';
-export 'src/lego/core/origin.dart';
-export 'src/lego/core/preflight_check.dart';
-export 'src/lego/core/required_symbol.dart';
-export 'src/lego/core/role.dart';
-export 'src/lego/core/sockets.dart';
+export 'src/core/contributions.dart';
+export 'src/core/environment.dart';
+export 'src/core/file_index.dart';
+export 'src/core/fragment.dart';
+export 'src/core/issue.dart';
+export 'src/core/merge.dart';
+export 'src/core/module.dart';
+export 'src/core/module_context.dart';
+export 'src/core/module_id.dart';
+export 'src/core/names.dart';
+export 'src/core/origin.dart';
+export 'src/core/preflight_check.dart';
+export 'src/core/required_symbol.dart';
+export 'src/core/role.dart';
+export 'src/core/sockets.dart';

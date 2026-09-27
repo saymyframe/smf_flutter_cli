@@ -6,11 +6,11 @@
 library;
 
 export 'lego_core.dart';
-export 'src/lego/module_kinds.dart';
-export 'src/lego/refs.dart';
-export 'src/lego/roles/app_entry.dart';
-export 'src/lego/roles/di.dart';
-export 'src/lego/roles/layout.dart';
-export 'src/lego/roles/router.dart';
-export 'src/lego/roles/services.dart';
-export 'src/lego/roles/state_management.dart';
+export 'src/module_kinds.dart';
+export 'src/refs.dart';
+export 'src/roles/app_entry.dart';
+export 'src/roles/di.dart';
+export 'src/roles/layout.dart';
+export 'src/roles/router.dart';
+export 'src/roles/services.dart';
+export 'src/roles/state_management.dart';

@@ -4,7 +4,7 @@ import 'package:smf_contracts/bundles/analytics_role_bundle.dart';
 import 'package:smf_contracts/bundles/crash_reporting_role_bundle.dart';
 import 'package:smf_contracts/bundles/events_role_bundle.dart';
 import 'package:smf_contracts/lego.dart';
-import 'package:smf_contracts/src/lego/roles/symbol_uses.dart';
+import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'services/analytics.dart';
 part 'services/crash_reporting.dart';

@@ -42,7 +42,7 @@ String? _target(File file, String uri) {
 }
 
 bool _isCore(String path) =>
-    path == 'lego_core.dart' || path.startsWith('src/lego/core/');
+    path == 'lego_core.dart' || path.startsWith('src/core/');
 
 String _relative(File file) => file.path
     .substring(file.path.lastIndexOf('lib${Platform.pathSeparator}') + 4)
