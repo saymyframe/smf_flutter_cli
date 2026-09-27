@@ -1411,6 +1411,82 @@ void main() {
         );
       });
 
+      test(
+          'the package check reads exports and every contribution of a '
+          'module', () async {
+        final state = TestRole<NoDsl>('state');
+        final nav = TestRole<NoDsl>('nav');
+        const bloc = 'package:flutter_bloc/flutter_bloc.dart';
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'bloc',
+              providers: [RoleProvider.plain(state)],
+              contributions: const [
+                PubspecContribution.hosted('flutter_bloc', '^9.1.1'),
+              ],
+            ),
+            TestModule('go', providers: [RoleProvider.plain(nav)]),
+            TestModule(
+              'exporter',
+              contributions: [
+                dart('lib/exporter/exporter.dart', "export '$bloc';\n"),
+              ],
+            ),
+            // A dev dependency, or one that the app leaves out, is a
+            // contribution of the module all the same.
+            TestModule(
+              'tester',
+              dependsOn: {'bloc'},
+              contributions: [
+                const PubspecContribution.hosted(
+                  'flutter_bloc',
+                  'any',
+                  dev: true,
+                ),
+                dart('test/tester_test.dart', "import '$bloc';\n"),
+              ],
+            ),
+            TestModule(
+              'navigator',
+              uses: {nav},
+              dependsOn: {'bloc'},
+              contributions: [
+                PubspecContribution.hosted('flutter_bloc', 'any', when: {nav}),
+                dart('lib/navigator/navigator.dart', "import '$bloc';\n"),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'package check',
+            requested: [
+              ModuleId('exporter'),
+              ModuleId('tester'),
+              ModuleId('navigator'),
+            ],
+          ),
+        );
+
+        expect(result.resolution!.module(const ModuleId('go')), isNull);
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'exporter: lib/exporter/exporter.dart exports $bloc in the '
+              'template of exporter, but exporter does not contribute '
+              'flutter_bloc, a package of bloc, which provides the state.',
+            ),
+          ],
+        );
+      });
+
       test('exports and dev dependencies follow the same rules', () async {
         final harness = ContractHarness(
           ModuleRegistry([
