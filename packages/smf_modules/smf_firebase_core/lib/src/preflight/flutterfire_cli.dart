@@ -101,7 +101,7 @@ final class FlutterfireCliCheck extends PreflightCheck {
       );
     }
     return PreflightMissing(
-      instructions: 'flutterfire_cli $active is active, but the app needs '
+      instructions: 'flutterfire_cli $active is active, but SMF works with '
           '$minimumFlutterfireVersion or a later 1.x version: activate one '
           'with "$_activate".',
       installable: true,

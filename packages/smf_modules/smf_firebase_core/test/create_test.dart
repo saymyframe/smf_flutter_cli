@@ -33,7 +33,7 @@ const _flutterfireMissing = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
 const _activate = '$_dart pub global activate flutterfire_cli 1.4.1';
 
 /// What the check says about flutterfire_cli 1.4.0.
-const _tooOld = 'flutterfire_cli 1.4.0 is active, but the app needs 1.4.1 or '
+const _tooOld = 'flutterfire_cli 1.4.0 is active, but SMF works with 1.4.1 or '
     'a later 1.x version: activate one with "dart pub global activate '
     'flutterfire_cli 1.4.1".';
 

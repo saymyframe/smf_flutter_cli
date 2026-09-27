@@ -468,8 +468,8 @@ void main() {
             ),
           ),
           _missing(
-            instructions: 'flutterfire_cli $version is active, but the app '
-                'needs 1.4.1 or a later 1.x version: activate one with "dart '
+            instructions: 'flutterfire_cli $version is active, but SMF works '
+                'with 1.4.1 or a later 1.x version: activate one with "dart '
                 'pub global activate flutterfire_cli 1.4.1".',
             installable: true,
           ),
