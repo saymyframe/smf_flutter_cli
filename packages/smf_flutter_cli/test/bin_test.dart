@@ -464,11 +464,13 @@ void main() {
                 '--platforms=android,ios --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n'
-                // Once it succeeded, the fix of the phase for Crashlytics.
-                '    then ruby -e ',
+                // Once it succeeded, on macOS, the fix of the phase for
+                // Crashlytics, quoted as a run prints it for later.
+                "    then ruby -e 'f = ARGV[0]; ",
               ),
               contains(
-                ' ios/Runner.xcodeproj/project.pbxproj (firebase_core)\n',
+                "' ios/Runner.xcodeproj/project.pbxproj (firebase_core, on "
+                'macOS)\n',
               ),
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n'

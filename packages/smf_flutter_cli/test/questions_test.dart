@@ -547,9 +547,10 @@ void main() {
           '--android-package-name=com.example.my_app',
         ),
         startsWith(
-          'Fixing the Crashlytics phase of flutterfire for flutter build ipa '
-          'is not done, because it runs after "Configuring Firebase with '
-          'flutterfire", which is not done. Run it in the app: ruby -e ',
+          'Fixing the Crashlytics phase of flutterfire, if any, for flutter '
+          'build ipa is not done, because it runs after "Configuring Firebase '
+          'with flutterfire", which is not done. Run it in the app: ruby -e '
+          "'f = ARGV[0]; ",
         ),
       ]),
     );

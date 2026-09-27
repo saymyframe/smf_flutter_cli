@@ -15,14 +15,14 @@ firebase login
 flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
 ```
 
-`flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
 
 Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. The phase for Crashlytics that flutterfire_cli 1.4.0 adds does not find the upload script of Crashlytics where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase; configuring the app again on macOS with 1.4.1 or a later 1.x replaces the phase.
 
 With Crashlytics, `flutter build ipa` needs one more change on macOS: the phase of flutterfire_cli 1.4.1 looks for the upload script of Crashlytics in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`, so SMF points the phase at `build/ios/SourcePackages` right after it configures the app. `flutterfire configure` writes the phase again, so after running it yourself on macOS, run in the directory of the app:
 
 ```bash
-ruby -e 'f = ARGV[0]; exit unless File.exist?(f); s = File.binread(f); t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); File.binwrite(f, t) unless t == s' ios/Runner.xcodeproj/project.pbxproj
+ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
 ```
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
