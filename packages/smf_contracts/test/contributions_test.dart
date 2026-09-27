@@ -256,6 +256,9 @@ void main() {
       skippable: true,
       external: true,
       needs: ['tool'],
+      followUps: [
+        PostGenStep(ToolRef('ruby'), ['fix.rb'], skippable: true),
+      ],
     );
 
     expect(step.tool.argumentsFor(step.arguments), [
@@ -270,12 +273,18 @@ void main() {
     expect(step.skippable, isTrue);
     expect(step.external, isTrue);
     expect(step.needs, ['tool']);
+    final followUp = step.followUps.single;
+    expect(followUp.tool.executable, 'ruby');
+    expect(followUp.arguments, ['fix.rb']);
+    expect(followUp.skippable, isTrue);
+    expect(followUp.followUps, isEmpty);
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
     expect(plain.interactive, isFalse);
     expect(plain.skippable, isFalse);
     expect(plain.external, isFalse);
     expect(plain.needs, isEmpty);
+    expect(plain.followUps, isEmpty);
   });
 }
 

@@ -11,13 +11,14 @@ part of '../contributions.dart';
 /// - it is [external] and the run skips external setup
 ///   (`--skip-external-setup`);
 /// - it is [interactive] and the run is not;
-/// - a check that it [needs] has not passed.
+/// - a check that it [needs] has not passed;
+/// - it is one of the [followUps] of a step that is not done.
 ///
 /// Then the pipeline prints the command for the user to run later, or fails
 /// generation if the step is not [skippable]. In an interactive run, the
-/// user may also skip a [skippable] step. A [skippable] step whose tool is
-/// missing, or that fails, is left for later too; any other step that fails
-/// fails generation.
+/// user may also skip a [skippable] step that is not a follow-up. A
+/// [skippable] step whose tool is missing, or that fails, is left for later
+/// too; any other step that fails fails generation.
 ///
 /// The app is generated in a temporary directory and moved to its place
 /// afterwards, so a step must not write the absolute path of its working
@@ -33,6 +34,7 @@ final class PostGenStep extends Contribution {
     this.skippable = false,
     this.external = false,
     this.needs = const [],
+    this.followUps = const [],
     super.when,
   });
 
@@ -69,4 +71,19 @@ final class PostGenStep extends Contribution {
   /// pipeline reports an id that names no check of the contributor as a
   /// problem of the contributor.
   final List<String> needs;
+
+  /// Steps that finish this one, such as a fix of a file that its tool
+  /// writes: they run right after it, in their order, once it succeeded.
+  ///
+  /// They are part of this step, so the user is not asked about them. When
+  /// this step does not run or fails, they do not run either, and each is
+  /// left for later after it, with this step as the reason. Otherwise a
+  /// follow-up runs as any step of the same contributor: by its own
+  /// [needs], [interactive], [external] and [skippable], before its own
+  /// follow-ups.
+  ///
+  /// A follow-up applies to the app when this step does, so it has no
+  /// [when] of its own; the pipeline reports one that has as a problem of
+  /// the contributor.
+  final List<PostGenStep> followUps;
 }
