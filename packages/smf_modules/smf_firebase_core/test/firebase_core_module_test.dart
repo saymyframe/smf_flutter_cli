@@ -347,6 +347,7 @@ void main() {
           ),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('run `flutterfire` from `~/.pub-cache/bin`'),
+          contains('if you change them, change them in the command too'),
           contains('`flutter build ipa` needs one more change on macOS'),
           contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
         ),

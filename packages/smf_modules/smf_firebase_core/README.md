@@ -32,11 +32,11 @@ The command also gives flutterfire the ids of the Android and iOS apps, with `--
 
 Right after `flutterfire configure`, on macOS, SMF fixes the phase for Crashlytics that flutterfire_cli 1.4.1 adds to the Xcode project of an app with Crashlytics, so that `flutter build ipa` finds the upload script of Crashlytics too. The phase looks for the script in `$BUILD_DIR/SourcePackages`, among the Swift packages in the build directory of Xcode. `flutter run` and `flutter build ios` set that directory to `build/ios`, where Flutter puts the Swift packages, but `flutter build ipa` does not, since Xcode would not copy the debug symbols into the archive then, so the archive fails in that phase. With Ruby, SMF replaces the path in the Xcode project with `$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run`, the same place for the other builds, and changes nothing else: an app without the phase, or with a phase without that path, stays as it is. The fix is part of the configuration, so when `flutterfire configure` does not run or fails, the fix waits with it, and SMF prints its command after that of `flutterfire configure`. Elsewhere than on macOS, flutterfire adds no phase, so SMF does not run the fix there. `flutterfire configure` writes the phase again each time, so the README of the app gives the command to run after it on macOS.
 
-If an older flutterfire_cli, such as 1.4.0, configured an app with Crashlytics, the app keeps the phase of that version in its Xcode project, so with Swift Package Manager `flutter run` and `flutter build ios` fail even after 1.4.1 is activated. To replace the phase, activate 1.4.1 and configure the app again on a Mac, in its directory:
+If an older flutterfire_cli, such as 1.4.0, configured an app with Crashlytics, the app keeps the phase of that version in its Xcode project, so with Swift Package Manager `flutter run` and `flutter build ios` fail even after 1.4.1 is activated. To replace the phase, activate 1.4.1 and configure the app again on a Mac, in its directory, with the ids of its Android and iOS apps, as the README of the app gives them:
 
 ```bash
 dart pub global activate flutterfire_cli 1.4.1
-flutterfire configure --platforms=android,ios --overwrite-firebase-options
+flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=<bundle id> --android-package-name=<application id>
 ```
 
 Then, for `flutter build ipa`, fix the new phase with the command of the README of the app.
