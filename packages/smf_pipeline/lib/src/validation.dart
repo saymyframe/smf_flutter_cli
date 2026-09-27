@@ -921,15 +921,12 @@ Iterable<SmfIssue> _packageIssues(
     if ((collected.origin, collected.contribution)
         case (
           final ModuleOrigin origin,
-          PubspecDependency(
-            source: PubspecSource.hosted,
-            :final package,
-            :final constraint,
-          ),
-        )) {
+          final PubspecDependency dependency,
+        ) when dependency.source == PubspecSource.hosted) {
+      final package = dependency.package;
       final origins = contributors.putIfAbsent(package, () => []);
       if (!origins.contains(origin)) origins.add(origin);
-      if (origin.variant == null && !_allowsAny(constraint)) {
+      if (origin.variant == null && bringsPackage(dependency)) {
         bringers.putIfAbsent(package, () => {}).add(origin.module);
       }
     }
@@ -975,10 +972,7 @@ SmfIssue? _takenPackageIssue(
     },
   };
   if (others.any((owner) => reached.contains(owner.id))) return null;
-  final whose = [
-    for (final owner in others)
-      '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
-  ].join(', and of ');
+  final whose = packageOwnersText(others);
   // The variant of the module in the app, when it would take the package
   // of an owner: the package belongs in that variant.
   final selected =
@@ -1008,6 +1002,40 @@ SmfIssue? _takenPackageIssue(
     origin: origin,
   );
 }
+
+/// The packages of the providers of roles among the modules of
+/// [resolution], each with the providers it belongs to, as stage 5 tells
+/// them from [collection]'s contributions (see [validate]): a provider of a
+/// role owns a hosted package that it contributes itself, not in a variant,
+/// with a constraint of its own ([bringsPackage]), unless a module that it
+/// depends on, directly or not, contributes the package so too. A package
+/// that no provider owns has no entry.
+Map<String, List<ResolvedModule>> providerPackages(
+  Resolution resolution,
+  Collection collection,
+) {
+  final (contributors: _, :bringers) = _hostedPackages(collection);
+  return {
+    for (final MapEntry(key: package, value: brought) in bringers.entries)
+      if (_packageOwners(resolution, brought) case final owners
+          when owners.isNotEmpty)
+        package: owners,
+  };
+}
+
+/// Whether [dependency] brings its package: a hosted package with a
+/// constraint of its own, rather than one that allows every version, as
+/// `any` does, which leaves the constraint to another module.
+bool bringsPackage(PubspecDependency dependency) =>
+    dependency.source == PubspecSource.hosted &&
+    !_allowsAny(dependency.constraint);
+
+/// [owners], the providers a package belongs to, as a message names them:
+/// `bloc, which provides the state`, with `, and of ` between them.
+String packageOwnersText(Iterable<ResolvedModule> owners) => [
+      for (final owner in owners)
+        '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
+    ].join(', and of ');
 
 /// Whether [constraint] allows every version, as `any` does.
 bool _allowsAny(String? constraint) {
