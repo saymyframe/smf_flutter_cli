@@ -86,24 +86,7 @@ Collection collect(Resolution resolution, ModuleContext context) {
       return;
     }
     for (final contribution in contributions) {
-      final role = switch (contribution) {
-        RoleData(:final role) => role,
-        SocketContribution(:final socket) => socket.role,
-        _ => null,
-      };
-      final applies = contribution.when.every(present.contains) &&
-          (role == null || present.contains(role));
-      all.add(
-        Collected(
-          switch (contribution) {
-            final RoleData<Object> data => data.withOrigin(origin),
-            final SocketContribution socket => socket.withOrigin(origin),
-            _ => contribution,
-          },
-          origin,
-          applies: applies,
-        ),
-      );
+      all.add(_collected(contribution, origin, present));
     }
   }
 
@@ -128,4 +111,29 @@ Collection collect(Resolution resolution, ModuleContext context) {
     }
   }
   return Collection(List.unmodifiable(all), issues: List.unmodifiable(issues));
+}
+
+/// The [contribution] of [origin], which applies when the roles of its
+/// [Contribution.when] and the role of its data or socket are [present].
+Collected _collected(
+  Contribution contribution,
+  ContributionOrigin origin,
+  Set<Role> present,
+) {
+  final role = switch (contribution) {
+    RoleData(:final role) => role,
+    SocketContribution(:final socket) => socket.role,
+    _ => null,
+  };
+  final applies = contribution.when.every(present.contains) &&
+      (role == null || present.contains(role));
+  return Collected(
+    switch (contribution) {
+      final RoleData<Object> data => data.withOrigin(origin),
+      final SocketContribution socket => socket.withOrigin(origin),
+      _ => contribution,
+    },
+    origin,
+    applies: applies,
+  );
 }

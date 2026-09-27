@@ -182,30 +182,82 @@ Future<ResolverResult> resolve({
   Map<Role, ModuleId>? answers,
   bool explain = false,
 }) async {
-  final selected = <ModuleId, ResolvedModule>{};
-  // Keyed by message: the loop may find a problem more than once.
-  final issues = <String, SmfIssue>{};
-  void report(SmfIssue issue) => issues[issue.message] = issue;
-  final picks = answers ?? {};
-
-  void add(SmfModule module, SelectionReason reason) =>
-      selected[module.descriptor.id] = ResolvedModule(module, reason);
-
+  final resolver = _Resolver(
+    registry: registry,
+    environment: environment,
+    declined: declined,
+    excluded: excluded,
+    picks: answers ?? {},
+    explain: explain,
+  );
   for (final id in requested) {
     final module = registry[id] ??
         (throw ArgumentError.value(id, 'requested', 'Not in the registry'));
-    if (!excluded.contains(id)) add(module, const Requested());
+    if (!excluded.contains(id)) resolver.add(module, const Requested());
   }
 
   var changed = true;
   while (changed) {
-    changed = false;
+    changed = resolver.addDependencies() || await resolver.addProvider();
+  }
 
+  final modules = resolver.selected.values.toList();
+  final byRole = _providersByRole(modules);
+  final resolved = [
+    for (final module in modules) resolver.withVariant(module, byRole),
+  ];
+
+  final issues = resolver.issues.values;
+  final hasErrors = issues.any((issue) => issue.isError);
+  return ResolverResult(
+    resolution: hasErrors ? null : Resolution(List.unmodifiable(resolved)),
+    issues: List.unmodifiable(issues),
+  );
+}
+
+/// The modules that [resolve] selects so far, and the problems it found.
+final class _Resolver {
+  _Resolver({
+    required this.registry,
+    required this.environment,
+    required this.declined,
+    required this.excluded,
+    required this.picks,
+    required this.explain,
+  });
+
+  final ModuleRegistry registry;
+  final PipelineEnvironment environment;
+  final Set<Role> declined;
+  final Set<ModuleId> excluded;
+
+  /// The user's picks of providers, kept between runs of the stage.
+  final Map<Role, ModuleId> picks;
+
+  final bool explain;
+
+  /// The selected modules by id.
+  final Map<ModuleId, ResolvedModule> selected = {};
+
+  /// The problems found, keyed by message: the loop of [resolve] may find
+  /// a problem more than once.
+  final Map<String, SmfIssue> issues = {};
+
+  void _report(SmfIssue issue) => issues[issue.message] = issue;
+
+  /// Selects [module] for [reason].
+  void add(SmfModule module, SelectionReason reason) =>
+      selected[module.descriptor.id] = ResolvedModule(module, reason);
+
+  /// Adds the modules that the selected modules depend on and returns
+  /// whether it added one.
+  bool addDependencies() {
+    var changed = false;
     for (final module in selected.values.toList()) {
       for (final dependency in module.descriptor.dependsOn) {
         if (selected.containsKey(dependency)) continue;
         if (excluded.contains(dependency)) {
-          report(
+          _report(
             SmfIssue(
               '${module.id} depends on $dependency, which was left out.',
               origin: module.origin,
@@ -217,8 +269,14 @@ Future<ResolverResult> resolve({
         changed = true;
       }
     }
-    if (changed) continue;
+    return changed;
+  }
 
+  /// Adds a provider of the first role that the selected modules need and
+  /// no selected module provides, and returns whether it added one. A
+  /// module added here may provide or require other roles, so every
+  /// addition starts a new pass.
+  Future<bool> addProvider() async {
     final present = {
       for (final module in selected.values) ...module.descriptor.provides,
     };
@@ -226,7 +284,7 @@ Future<ResolverResult> resolve({
         in _requiredRoles(selected.values, registry).entries) {
       if (present.contains(role)) continue;
       if (declined.contains(role)) {
-        report(
+        _report(
           SmfIssue(
             'No module provides the ${role.id}, as chosen, but '
             '${need.phrase}.',
@@ -236,60 +294,106 @@ Future<ResolverResult> resolve({
         );
         continue;
       }
-      final candidates = [
-        for (final module in registry.providersOf(role))
-          if (!excluded.contains(module.descriptor.id)) module,
-      ];
+      final candidates = _candidatesFor(role);
       if (candidates.isEmpty) {
-        report(
-          SmfIssue(
-            'No module provides the ${role.id}, but ${need.phrase}.',
-            origin: need.module == null ? null : ModuleOrigin(need.module!),
-          ),
-        );
+        _report(_noProviderIssue(role, need));
         continue;
       }
-      // A module added here may provide or require other roles, so every
-      // addition starts a new pass.
       if (candidates.length == 1) {
         add(candidates.single, ProviderOf(role, need.phrase));
-        changed = true;
-        break;
+        return true;
       }
-      final remembered = picks[role];
-      final SmfModule module;
-      var others = const <ModuleId>[];
-      if (remembered != null &&
-          candidates.any((c) => c.descriptor.id == remembered)) {
-        module = registry[remembered]!;
-      } else if (explain) {
-        module = candidates.first;
-        others = [for (final other in candidates.skip(1)) other.descriptor.id];
-      } else if (environment.interactive) {
-        module = await environment.prompter.select(
-          '${role.description}: ${need.phrase}. Which module provides it?',
-          candidates,
-          display: (module) =>
-              '${module.descriptor.id} — ${module.descriptor.description}',
-        );
-        picks[role] = module.descriptor.id;
-      } else {
-        throw SmfUsageException(
-          'Several modules provide the ${role.id}, which ${need.phrase}: '
-          '${candidates.map((m) => m.descriptor.id).join(', ')}. Add one '
-          'of them to -m.',
-        );
-      }
+      final (module, others) = await _pick(role, need, candidates);
       add(
         module,
         ProviderOf(role, need.phrase, chosen: true, alternatives: others),
       );
-      changed = true;
-      break;
+      return true;
     }
+    return false;
   }
 
-  final modules = selected.values.toList();
+  /// The providers of [role] in the registry that are not excluded.
+  List<SmfModule> _candidatesFor(Role role) => [
+        for (final module in registry.providersOf(role))
+          if (!excluded.contains(module.descriptor.id)) module,
+      ];
+
+  SmfIssue _noProviderIssue(Role role, _Need need) => SmfIssue(
+        'No module provides the ${role.id}, but ${need.phrase}.',
+        origin: need.module == null ? null : ModuleOrigin(need.module!),
+      );
+
+  /// The provider of [role] among [candidates] for [need], with the others
+  /// that `--explain` did not take: the user's earlier pick, the first one
+  /// with `--explain`, or the one the user picks now.
+  ///
+  /// Throws an [SmfUsageException] if the run cannot ask the user.
+  Future<(SmfModule, List<ModuleId>)> _pick(
+    Role role,
+    _Need need,
+    List<SmfModule> candidates,
+  ) async {
+    final remembered = picks[role];
+    if (remembered != null &&
+        candidates.any((c) => c.descriptor.id == remembered)) {
+      return (registry[remembered]!, const <ModuleId>[]);
+    }
+    if (explain) {
+      return (
+        candidates.first,
+        [for (final other in candidates.skip(1)) other.descriptor.id],
+      );
+    }
+    if (environment.interactive) {
+      final module = await environment.prompter.select(
+        '${role.description}: ${need.phrase}. Which module provides it?',
+        candidates,
+        display: (module) =>
+            '${module.descriptor.id} — ${module.descriptor.description}',
+      );
+      picks[role] = module.descriptor.id;
+      return (module, const <ModuleId>[]);
+    }
+    throw SmfUsageException(
+      'Several modules provide the ${role.id}, which ${need.phrase}: '
+      '${candidates.map((m) => m.descriptor.id).join(', ')}. Add one '
+      'of them to -m.',
+    );
+  }
+
+  /// [module] with the variant of the provider of the role of its
+  /// variants, among the providers of each role, [byRole].
+  ResolvedModule withVariant(
+    ResolvedModule module,
+    Map<Role, List<ResolvedModule>> byRole,
+  ) {
+    final variants = module.descriptor.variants;
+    if (variants == null) return module;
+    final provider = byRole[variants.role]?.single;
+    // The role is missing; its issue is already reported.
+    if (provider == null) return module;
+    if (!variants.byProvider.containsKey(provider.id)) {
+      _report(
+        SmfIssue(
+          '${module.id} has no variant for ${provider.id}, the provider of '
+          'the ${variants.role.id}. It supports '
+          '${variants.byProvider.keys.join(', ')}.',
+          origin: module.origin,
+        ),
+      );
+    }
+    return ResolvedModule(module.module, module.reason, variant: provider.id);
+  }
+}
+
+/// The providers of each role among [modules].
+///
+/// Throws an [SmfUsageException] if a role that allows one provider has
+/// more.
+Map<Role, List<ResolvedModule>> _providersByRole(
+  List<ResolvedModule> modules,
+) {
   final byRole = <Role, List<ResolvedModule>>{};
   for (final module in modules) {
     for (final role in module.descriptor.provides) {
@@ -305,40 +409,7 @@ Future<ResolverResult> resolve({
       );
     }
   }
-
-  final resolved = <ResolvedModule>[];
-  for (final module in modules) {
-    final variants = module.descriptor.variants;
-    if (variants == null) {
-      resolved.add(module);
-      continue;
-    }
-    final provider = byRole[variants.role]?.single;
-    if (provider == null) {
-      // The role is missing; its issue is already reported.
-      resolved.add(module);
-      continue;
-    }
-    if (!variants.byProvider.containsKey(provider.id)) {
-      report(
-        SmfIssue(
-          '${module.id} has no variant for ${provider.id}, the provider of '
-          'the ${variants.role.id}. It supports '
-          '${variants.byProvider.keys.join(', ')}.',
-          origin: module.origin,
-        ),
-      );
-    }
-    resolved.add(
-      ResolvedModule(module.module, module.reason, variant: provider.id),
-    );
-  }
-
-  final hasErrors = issues.values.any((issue) => issue.isError);
-  return ResolverResult(
-    resolution: hasErrors ? null : Resolution(List.unmodifiable(resolved)),
-    issues: List.unmodifiable(issues.values),
-  );
+  return byRole;
 }
 
 /// Who needs a role.

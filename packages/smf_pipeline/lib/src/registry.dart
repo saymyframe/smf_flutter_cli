@@ -172,8 +172,18 @@ List<String> _roleIdProblems(List<Role> roles, List<SmfModule> modules) {
 }
 
 List<String> _dependencyProblems(List<SmfModule> modules) {
-  final problems = <String>[];
   final byId = {for (final module in modules) module.descriptor.id: module};
+  return [
+    ..._kindProblems(modules),
+    ..._dependsOnProblems(modules, byId),
+    ..._cycleProblems(modules, byId),
+  ];
+}
+
+/// The problems of the kinds of [modules]: two different kinds with the
+/// same id.
+List<String> _kindProblems(List<SmfModule> modules) {
+  final problems = <String>[];
   final kinds = <String, ModuleKind>{};
   for (final module in modules) {
     final kind = module.descriptor.kind;
@@ -182,6 +192,16 @@ List<String> _dependencyProblems(List<SmfModule> modules) {
       problems.add('Two different module kinds have the id ${kind.id}.');
     }
   }
+  return problems;
+}
+
+/// The problems of the dependencies of [modules], which [byId] has by id:
+/// a module that depends on itself or on a module that is not registered.
+List<String> _dependsOnProblems(
+  List<SmfModule> modules,
+  Map<ModuleId, SmfModule> byId,
+) {
+  final problems = <String>[];
   for (final module in modules) {
     final descriptor = module.descriptor;
     for (final dependency in descriptor.dependsOn) {
@@ -195,8 +215,16 @@ List<String> _dependencyProblems(List<SmfModule> modules) {
       }
     }
   }
+  return problems;
+}
 
-  // Cycles of dependsOn, reported once per cycle.
+/// The cycles of `dependsOn` among [modules], which [byId] has by id,
+/// reported once per cycle.
+List<String> _cycleProblems(
+  List<SmfModule> modules,
+  Map<ModuleId, SmfModule> byId,
+) {
+  final problems = <String>[];
   final done = <ModuleId>{};
   final reported = <String>{};
   void visit(ModuleId id, List<ModuleId> stack) {
@@ -226,11 +254,26 @@ List<String> _dependencyProblems(List<SmfModule> modules) {
 
 List<String> _descriptorProblems(SmfModule module, List<SmfModule> modules) {
   final descriptor = module.descriptor;
+  final provided = <Role>{};
+  final problems = _providerProblems(descriptor, provided);
+  final variants = descriptor.variants;
+  if (variants != null) {
+    problems.addAll(_variantProblems(descriptor, variants, provided, modules));
+  }
+  return problems;
+}
+
+/// The problems of the providers of [descriptor], whose roles go into
+/// [provided]: a role provided twice, a role that the kind of the module
+/// needs but it does not provide, and a role it both provides and requires
+/// or uses.
+List<String> _providerProblems(
+  ModuleDescriptor descriptor,
+  Set<Role> provided,
+) {
   final id = descriptor.id;
   final kind = descriptor.kind;
   final problems = <String>[];
-
-  final provided = <Role>{};
   for (final provider in descriptor.providers) {
     if (!provided.add(provider.role)) {
       problems.add('The module $id has two providers of the ${provider.role}.');
@@ -251,61 +294,86 @@ List<String> _descriptorProblems(SmfModule module, List<SmfModule> modules) {
       );
     }
   }
+  return problems;
+}
 
-  final variants = descriptor.variants;
-  if (variants != null) {
-    final role = variants.role;
-    if (!kind.allowsVariants) {
-      problems.add('The module $id is of the $kind, which has no variants.');
-    }
-    if (role.cardinality.allowsMany) {
+/// The problems of the [variants] of [descriptor], a module that provides
+/// the roles [provided], with the providers among [modules].
+List<String> _variantProblems(
+  ModuleDescriptor descriptor,
+  Variants variants,
+  Set<Role> provided,
+  List<SmfModule> modules,
+) {
+  final id = descriptor.id;
+  final kind = descriptor.kind;
+  final role = variants.role;
+  final problems = <String>[];
+  if (!kind.allowsVariants) {
+    problems.add('The module $id is of the $kind, which has no variants.');
+  }
+  if (role.cardinality.allowsMany) {
+    problems.add(
+      'The variants of the module $id are for the $role, which can have '
+      'several providers; variants need a role with at most one.',
+    );
+  }
+  if (provided.contains(role)) {
+    problems.add(
+      'The module $id provides the $role, so it cannot have variants for '
+      'it.',
+    );
+  }
+  if (variants.byProvider.isEmpty) {
+    problems.add('The module $id declares variants but has none.');
+  }
+  final providers = {
+    for (final other in modules)
+      if (other.descriptor.provides.contains(role)) other.descriptor.id,
+  };
+  for (final key in variants.byProvider.keys) {
+    if (!providers.contains(key)) {
       problems.add(
-        'The variants of the module $id are for the $role, which can have '
-        'several providers; variants need a role with at most one.',
+        'The module $id has a variant for $key, which is not a registered '
+        'provider of the $role.',
       );
-    }
-    if (provided.contains(role)) {
-      problems.add(
-        'The module $id provides the $role, so it cannot have variants for '
-        'it.',
-      );
-    }
-    if (variants.byProvider.isEmpty) {
-      problems.add('The module $id declares variants but has none.');
-    }
-    final providers = {
-      for (final other in modules)
-        if (other.descriptor.provides.contains(role)) other.descriptor.id,
-    };
-    for (final key in variants.byProvider.keys) {
-      if (!providers.contains(key)) {
-        problems.add(
-          'The module $id has a variant for $key, which is not a registered '
-          'provider of the $role.',
-        );
-      }
     }
   }
   return problems;
 }
 
 List<String> _socketProblems(List<Role> roles, List<SmfModule> modules) {
-  final problems = <String>[];
-  final owners = <String, String>{};
-  final families = <SocketFamily<Object?, SocketKind>>[];
+  final check = _SocketCheck();
+  PipelineSockets.all.forEach(check.addSocket);
+  roles.forEach(check.addRole);
+  modules.forEach(check.addModule);
+  check.checkFamilies();
+  return check.problems;
+}
 
+/// The checks of [_socketProblems]: the sockets and socket families of the
+/// pipeline, the roles and the modules, and whether their tags overlap.
+final class _SocketCheck {
+  final List<String> problems = [];
+
+  /// The name of the socket of each tag.
+  final Map<String, String> _owners = {};
+  final List<SocketFamily<Object?, SocketKind>> _families = [];
+
+  /// Checks [socket] and its tags, which no other socket may have.
   void addSocket(SocketRef socket) {
     problems.addAll(socket.problems());
     for (final tag in socket.tags) {
-      if (owners.putIfAbsent(tag, () => '$socket') case final other
+      if (_owners.putIfAbsent(tag, () => '$socket') case final other
           when other != '$socket') {
         problems.add('The $other and the $socket have the same tag $tag.');
       }
     }
   }
 
-  PipelineSockets.all.forEach(addSocket);
-  for (final role in roles) {
+  /// Checks the sockets and socket families that [role] declares, which
+  /// must be its own.
+  void addRole(Role role) {
     for (final socket in role.sockets) {
       if (!identical(socket.role, role) || socket.familyKey.isNotEmpty) {
         problems.add('The ${role.id} declares the $socket, which is not its.');
@@ -321,10 +389,13 @@ List<String> _socketProblems(List<Role> roles, List<SmfModule> modules) {
         );
         continue;
       }
-      families.add(family);
+      _families.add(family);
     }
   }
-  for (final module in modules) {
+
+  /// Checks the sockets and socket families that [module] declares, which
+  /// must be its own.
+  void addModule(SmfModule module) {
     final descriptor = module.descriptor;
     for (final socket in descriptor.sockets) {
       if (socket.module != descriptor.id || socket.familyKey.isNotEmpty) {
@@ -343,36 +414,39 @@ List<String> _socketProblems(List<Role> roles, List<SmfModule> modules) {
         );
         continue;
       }
-      families.add(family);
+      _families.add(family);
     }
   }
 
-  for (final family in families) {
-    if (!SmfNames.isSnakeCase(family.name)) {
-      problems.add(
-        'The socket family name "${family.name}" of ${family.ownerName} is '
-        'not lower snake_case.',
-      );
-    }
-    for (final MapEntry(key: tag, value: socket) in owners.entries) {
-      if (tag.startsWith(family.tagPrefix)) {
+  /// Checks the names of the socket families, and that their tags overlap
+  /// neither the tags of a socket nor those of another family.
+  void checkFamilies() {
+    for (final family in _families) {
+      if (!SmfNames.isSnakeCase(family.name)) {
         problems.add(
-          'The tag $tag of the $socket starts like the members of the socket '
-          'family ${family.ownerName}.${family.name}.',
+          'The socket family name "${family.name}" of ${family.ownerName} is '
+          'not lower snake_case.',
         );
       }
-    }
-    for (final other in families) {
-      if (!identical(other, family) &&
-          other.tagPrefix.startsWith(family.tagPrefix)) {
-        problems.add(
-          'The socket families ${family.ownerName}.${family.name} and '
-          '${other.ownerName}.${other.name} have overlapping tags.',
-        );
+      for (final MapEntry(key: tag, value: socket) in _owners.entries) {
+        if (tag.startsWith(family.tagPrefix)) {
+          problems.add(
+            'The tag $tag of the $socket starts like the members of the '
+            'socket family ${family.ownerName}.${family.name}.',
+          );
+        }
+      }
+      for (final other in _families) {
+        if (!identical(other, family) &&
+            other.tagPrefix.startsWith(family.tagPrefix)) {
+          problems.add(
+            'The socket families ${family.ownerName}.${family.name} and '
+            '${other.ownerName}.${other.name} have overlapping tags.',
+          );
+        }
       }
     }
   }
-  return problems;
 }
 
 final RegExp _kebabCase = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');
@@ -383,19 +457,7 @@ List<String> _optionProblems(List<Role> roles) {
   for (final role in roles) {
     for (final option in role.options) {
       final name = option.name;
-      if (!_kebabCase.hasMatch(name)) {
-        problems.add(
-          'The option --$name of the ${role.id} is not lower kebab-case.',
-        );
-      }
-      if (CreateOptions.names.contains(name) ||
-          const {'help', 'verbose', 'version'}.contains(name) ||
-          name.startsWith('no-')) {
-        problems.add(
-          'The option --$name of the ${role.id} is an option of the '
-          'pipeline, or starts with no-, which negates its flags.',
-        );
-      }
+      problems.addAll(_optionNameProblems(name, role));
       if (role.template == null) {
         problems.add(
           'The ${role.id} has the option --$name but no template, whose '
@@ -409,6 +471,26 @@ List<String> _optionProblems(List<Role> roles) {
         );
       }
     }
+  }
+  return problems;
+}
+
+/// The problems of the name of the option --[name] of [role]: it must be
+/// lower kebab-case, and neither an option of the pipeline nor a negation.
+List<String> _optionNameProblems(String name, Role role) {
+  final problems = <String>[];
+  if (!_kebabCase.hasMatch(name)) {
+    problems.add(
+      'The option --$name of the ${role.id} is not lower kebab-case.',
+    );
+  }
+  if (CreateOptions.names.contains(name) ||
+      const {'help', 'verbose', 'version'}.contains(name) ||
+      name.startsWith('no-')) {
+    problems.add(
+      'The option --$name of the ${role.id} is an option of the '
+      'pipeline, or starts with no-, which negates its flags.',
+    );
   }
   return problems;
 }

@@ -26,17 +26,7 @@ Future<Map<Role, Object?>> chooseRoles({
   void Function(Role role, Object? choice)? onChoice,
 }) async {
   final present = resolution.presentRoles;
-  for (final role in registry.roles) {
-    if (present.contains(role)) continue;
-    for (final option in role.options) {
-      if (optionValues.containsKey(option.name)) {
-        environment.logger.warn(
-          '--${option.name} has no effect: no module of the app provides '
-          'the ${role.id}.',
-        );
-      }
-    }
-  }
+  _warnOfAbsentRoles(registry, present, optionValues, environment.logger);
 
   final request = RoleChoiceRequest(
     data: collection.roleData,
@@ -71,4 +61,25 @@ Future<Map<Role, Object?>> chooseRoles({
     onChoice?.call(role, choice);
   }
   return choices;
+}
+
+/// Warns of each of the [optionValues] that is an option of a role of
+/// [registry] that is not among the [present] roles, since nothing reads it.
+void _warnOfAbsentRoles(
+  ModuleRegistry registry,
+  Set<Role> present,
+  Map<String, String?> optionValues,
+  SmfLogger logger,
+) {
+  for (final role in registry.roles) {
+    if (present.contains(role)) continue;
+    for (final option in role.options) {
+      if (optionValues.containsKey(option.name)) {
+        logger.warn(
+          '--${option.name} has no effect: no module of the app provides '
+          'the ${role.id}.',
+        );
+      }
+    }
+  }
 }

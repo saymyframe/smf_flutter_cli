@@ -82,69 +82,12 @@ ContributionOrder orderContributions(
     origins.putIfAbsent(name, () => collected.origin);
   }
   final names = byContributor.keys.toSet();
-  Set<Role> whenRolesOf(String name) => {
-        for (final collected in byContributor[name] ?? const <Collected>[])
-          ...collected.contribution.when,
-      };
 
-  // The edges of the whole app, before → after, with a reason each.
-  final raw = <String, Map<String, String>>{};
-  final dependencies = <(String, String)>{};
-  void edge(String before, String after, String reason) {
-    if (before != after) {
-      raw.putIfAbsent(after, () => {}).putIfAbsent(before, () => reason);
-    }
-  }
-
-  void roleEdges(String after, Iterable<Role> required, Set<Role> when) {
-    for (final role in {...required, ...when}) {
-      final verb = required.contains(role) ? 'requires' : 'uses';
-      for (final provider in resolution.providersOf(role)) {
-        edge(provider.id.value, after, '$after $verb the ${role.id}');
-      }
-      // The template of the role makes it ready, as by initAnalytics().
-      final template = 'role:${role.id}';
-      if (names.contains(template)) {
-        edge(template, after, '$after $verb the ${role.id}');
-      }
-    }
-  }
-
-  for (final module in resolution.modules) {
-    final name = module.id.value;
-    for (final dependency in module.descriptor.dependsOn) {
-      edge(dependency.value, name, '$name depends on $dependency');
-      dependencies.add((dependency.value, name));
-    }
-    roleEdges(name, module.descriptor.effectiveRequires, whenRolesOf(name));
-  }
-  for (final name in names) {
-    if (origins[name] case RoleTemplateOrigin(:final role)) {
-      for (final provider in resolution.providersOf(role)) {
-        edge(
-          provider.id.value,
-          name,
-          '$name comes after the providers of the ${role.id}',
-        );
-      }
-      roleEdges(name, role.requires, whenRolesOf(name));
-    }
-  }
-
-  // Edges both ways cancel out, except that a module comes after a module
-  // it depends on in any case.
-  final mutual = [
-    for (final MapEntry(key: after, value: befores) in raw.entries)
-      for (final before in befores.keys)
-        if (raw[before]?.containsKey(after) ?? false) (before, after),
-  ];
-  for (final (before, after) in mutual) {
-    if (dependencies.contains((before, after)) &&
-        !dependencies.contains((after, before))) {
-      continue;
-    }
-    raw[after]!.remove(before);
-  }
+  final graph = _AppEdges(resolution, byContributor)
+    ..addModules()
+    ..addTemplates(origins)
+    ..cancelMutual();
+  final raw = graph.raw;
 
   final components = _components(raw);
   // The modules and templates on the cycles that reach the contributors,
@@ -156,7 +99,126 @@ ContributionOrder orderContributions(
   }.toList()
     ..sort();
 
-  // The edges between the contributors, through any path of the app.
+  final (:edges, :predecessors) = _contributorEdges(names, raw, components);
+  return ContributionOrder(
+    contributions: [
+      for (final name in _placed(names, predecessors)) ...byContributor[name]!,
+    ],
+    edges: edges..sort((a, b) => '$a'.compareTo('$b')),
+    cycle: cycle,
+  );
+}
+
+/// The edges of the whole app by the rules of [orderContributions], before
+/// → after, with a reason each.
+final class _AppEdges {
+  _AppEdges(this.resolution, this.byContributor)
+      : names = byContributor.keys.toSet();
+
+  final Resolution resolution;
+
+  /// The contributions by the name of their contributor.
+  final Map<String, List<Collected>> byContributor;
+
+  /// The names of the contributors.
+  final Set<String> names;
+
+  /// The reason of every edge, by the contributor after it and the one
+  /// before it.
+  final Map<String, Map<String, String>> raw = {};
+
+  /// The edges from a module to a module that depends on it.
+  final Set<(String, String)> _dependencies = {};
+
+  Set<Role> _whenRolesOf(String name) => {
+        for (final collected in byContributor[name] ?? const <Collected>[])
+          ...collected.contribution.when,
+      };
+
+  void _edge(String before, String after, String reason) {
+    if (before != after) {
+      raw.putIfAbsent(after, () => {}).putIfAbsent(before, () => reason);
+    }
+  }
+
+  void _roleEdges(String after, Iterable<Role> required, Set<Role> when) {
+    for (final role in {...required, ...when}) {
+      final verb = required.contains(role) ? 'requires' : 'uses';
+      for (final provider in resolution.providersOf(role)) {
+        _edge(provider.id.value, after, '$after $verb the ${role.id}');
+      }
+      // The template of the role makes it ready, as by initAnalytics().
+      final template = 'role:${role.id}';
+      if (names.contains(template)) {
+        _edge(template, after, '$after $verb the ${role.id}');
+      }
+    }
+  }
+
+  /// Adds the edges of the modules of the app: after the modules they
+  /// depend on, and after the providers and templates of the roles they
+  /// require or have in the conditions of their contributions.
+  void addModules() {
+    for (final module in resolution.modules) {
+      final name = module.id.value;
+      for (final dependency in module.descriptor.dependsOn) {
+        _edge(dependency.value, name, '$name depends on $dependency');
+        _dependencies.add((dependency.value, name));
+      }
+      _roleEdges(
+        name,
+        module.descriptor.effectiveRequires,
+        _whenRolesOf(name),
+      );
+    }
+  }
+
+  /// Adds the edges of the role templates among the contributors, whose
+  /// [origins] tell them: after the providers of their role, and after the
+  /// providers and templates of the roles their role requires or has in the
+  /// conditions of their contributions.
+  void addTemplates(Map<String, ContributionOrigin> origins) {
+    for (final name in names) {
+      if (origins[name] case RoleTemplateOrigin(:final role)) {
+        for (final provider in resolution.providersOf(role)) {
+          _edge(
+            provider.id.value,
+            name,
+            '$name comes after the providers of the ${role.id}',
+          );
+        }
+        _roleEdges(name, role.requires, _whenRolesOf(name));
+      }
+    }
+  }
+
+  /// Removes the edges both ways, except that a module comes after a module
+  /// it depends on in any case.
+  void cancelMutual() {
+    final mutual = [
+      for (final MapEntry(key: after, value: befores) in raw.entries)
+        for (final before in befores.keys)
+          if (raw[before]?.containsKey(after) ?? false) (before, after),
+    ];
+    for (final (before, after) in mutual) {
+      if (_dependencies.contains((before, after)) &&
+          !_dependencies.contains((after, before))) {
+        continue;
+      }
+      raw[after]!.remove(before);
+    }
+  }
+}
+
+/// The edges between the contributors [names] through any path of the app
+/// in [raw], and the contributors before each; contributors on a cycle, in
+/// one of [components], have no edges between them.
+({List<OrderEdge> edges, Map<String, Set<String>> predecessors})
+    _contributorEdges(
+  Set<String> names,
+  Map<String, Map<String, String>> raw,
+  Map<String, Set<String>> components,
+) {
   final edges = <OrderEdge>[];
   final predecessors = {for (final name in names) name: <String>{}};
   for (final after in names) {
@@ -180,9 +242,16 @@ ContributionOrder orderContributions(
       );
     }
   }
+  return (edges: edges, predecessors: predecessors);
+}
 
-  // Kahn's algorithm, taking the smallest name among the contributors
-  // whose predecessors are all placed.
+/// The contributors [names] in order by Kahn's algorithm, taking the
+/// smallest name among the contributors whose [predecessors] are all
+/// placed.
+List<String> _placed(
+  Set<String> names,
+  Map<String, Set<String>> predecessors,
+) {
   final placed = <String>[];
   final remaining = names.toSet();
   while (remaining.isNotEmpty) {
@@ -193,14 +262,7 @@ ContributionOrder orderContributions(
     placed.add(ready.first);
     remaining.remove(ready.first);
   }
-
-  return ContributionOrder(
-    contributions: [
-      for (final name in placed) ...byContributor[name]!,
-    ],
-    edges: edges..sort((a, b) => '$a'.compareTo('$b')),
-    cycle: cycle,
-  );
+  return placed;
 }
 
 /// The contributors that come before [after] through the edges of [raw],

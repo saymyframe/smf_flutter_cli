@@ -203,20 +203,7 @@ Future<TargetDecision> _decideTarget(
   final path = context.normalize(
     context.absolute(context.join(request.outputDirectory, package)),
   );
-  if (await fileSystem.isFile(path)) {
-    throw SmfUsageException(
-      'Cannot create the app at $path, because a file is there.',
-    );
-  }
-  for (var parent = context.dirname(path);
-      parent != context.dirname(parent);
-      parent = context.dirname(parent)) {
-    if (await fileSystem.isFile(parent)) {
-      throw SmfUsageException(
-        'Cannot create the app at $path, because $parent is a file.',
-      );
-    }
-  }
+  await _checkNoFileAt(path, environment);
   final directory = fileSystem.directory(path);
   if (!directory.existsSync() || directory.listSync().isEmpty) {
     return TargetDecision(path: path);
@@ -250,12 +237,7 @@ Future<TargetDecision> _decideTarget(
       );
       return TargetDecision(path: path, replaceExisting: true);
     case OnConflict.copy:
-      var index = 1;
-      var copy = '$path copy';
-      while (fileSystem.typeSync(copy) != FileSystemEntityType.notFound) {
-        index++;
-        copy = '$path copy $index';
-      }
+      final copy = _copyPath(path, fileSystem);
       environment.logger.info('The app will be created at $copy.');
       return TargetDecision(path: copy);
     case OnConflict.prompt:
@@ -269,6 +251,41 @@ Future<TargetDecision> _decideTarget(
   }
 }
 
+/// Throws an [SmfUsageException] if a file is at [path], the directory of
+/// the app, or at a directory above it.
+Future<void> _checkNoFileAt(
+  String path,
+  PipelineEnvironment environment,
+) async {
+  final fileSystem = environment.fileSystem;
+  final context = fileSystem.path;
+  if (await fileSystem.isFile(path)) {
+    throw SmfUsageException(
+      'Cannot create the app at $path, because a file is there.',
+    );
+  }
+  for (var parent = context.dirname(path);
+      parent != context.dirname(parent);
+      parent = context.dirname(parent)) {
+    if (await fileSystem.isFile(parent)) {
+      throw SmfUsageException(
+        'Cannot create the app at $path, because $parent is a file.',
+      );
+    }
+  }
+}
+
+/// The first of `<path> copy`, `<path> copy 2` and so on that is free.
+String _copyPath(String path, FileSystem fileSystem) {
+  var index = 1;
+  var copy = '$path copy';
+  while (fileSystem.typeSync(copy) != FileSystemEntityType.notFound) {
+    index++;
+    copy = '$path copy $index';
+  }
+  return copy;
+}
+
 /// Asks the user for the modules: first those without a role, grouped by
 /// kind, then a provider of each role.
 ///
@@ -280,29 +297,8 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
   ModuleRegistry registry,
   PipelineEnvironment environment,
 ) async {
-  final prompter = environment.prompter;
-  final chosen = <SmfModule>[];
-  // Providers the answers need that the user was not asked about: the
-  // resolver adds them with the reason, so they are not requested.
-  final implied = <SmfModule>[];
-  final declined = <Role>{};
-  final asked = <Role>{};
-
-  final byKind = <String, List<SmfModule>>{};
-  for (final module in registry.modules) {
-    if (module.descriptor.providers.isEmpty) {
-      byKind.putIfAbsent(module.descriptor.kind.id, () => []).add(module);
-    }
-  }
-  for (final modules in byKind.values) {
-    chosen.addAll(
-      await prompter.multiSelect(
-        '${modules.first.descriptor.kind.label}: which do you want?',
-        modules,
-        display: _display,
-      ),
-    );
-  }
+  final questions = _ModuleQuestions(registry, environment.prompter);
+  await questions.askModulesWithoutRoles();
 
   // Asks until the answers need no more roles: a later answer can need a
   // role that was declined before, which is then asked again without
@@ -311,61 +307,131 @@ Future<(List<ModuleId>, Set<Role>)> _askModules(
   while (changed) {
     changed = false;
     for (final role in _promptOrder(registry)) {
-      final providers = registry.providersOf(role);
-      if (providers.isEmpty) continue;
-      final app = _withDependencies([...chosen, ...implied], registry);
-      if (app.any((module) => module.descriptor.provides.contains(role))) {
-        continue;
-      }
-      final requiredBy = _requirer(role, app);
-      if (asked.contains(role) && requiredBy == null) continue;
-      asked.add(role);
-      declined.remove(role);
-      if (requiredBy != null && providers.length == 1) {
-        implied.add(providers.single);
-        changed = true;
-        continue;
-      }
-      final question = requiredBy == null
-          ? '${role.description}: which module provides it?'
-          : '${role.description}: $requiredBy. Which module provides it?';
-      if (role.cardinality.allowsMany) {
-        final picked = await prompter.multiSelect<SmfModule>(
-          question,
-          providers,
-          display: _display,
-          defaultValues: requiredBy == null ? const [] : [providers.first],
-        );
-        if (picked.isEmpty && requiredBy != null) {
-          throw SmfUsageException(
-            'The app needs a module that provides the ${role.id}: '
-            '$requiredBy.',
-          );
-        }
-        if (picked.isEmpty) declined.add(role);
-        chosen.addAll(picked);
-        changed |= picked.isNotEmpty;
-        continue;
-      }
-      final picked = await prompter.select<_Choice>(
-        question,
-        [
-          for (final provider in providers) _Choice(provider),
-          if (requiredBy == null) const _Choice(null),
-        ],
-        display: (choice) =>
-            choice.module == null ? 'None' : _display(choice.module!),
-      );
-      final module = picked.module;
-      if (module == null) {
-        declined.add(role);
-      } else {
-        chosen.add(module);
-        changed = true;
-      }
+      changed |= await questions.askRole(role);
     }
   }
-  return ([for (final module in chosen) module.descriptor.id], declined);
+  return (
+    [for (final module in questions.chosen) module.descriptor.id],
+    questions.declined,
+  );
+}
+
+/// The questions of [_askModules] and the answers so far.
+final class _ModuleQuestions {
+  _ModuleQuestions(this.registry, this.prompter);
+
+  final ModuleRegistry registry;
+  final SmfPrompter prompter;
+
+  /// The modules the user chose.
+  final List<SmfModule> chosen = [];
+
+  /// Providers the answers need that the user was not asked about: the
+  /// resolver adds them with the reason, so they are not requested.
+  final List<SmfModule> implied = [];
+
+  /// The roles the user chose no provider of.
+  final Set<Role> declined = {};
+
+  final Set<Role> _asked = {};
+
+  /// Asks for the modules without a role, grouped by kind.
+  Future<void> askModulesWithoutRoles() async {
+    final byKind = <String, List<SmfModule>>{};
+    for (final module in registry.modules) {
+      if (module.descriptor.providers.isEmpty) {
+        byKind.putIfAbsent(module.descriptor.kind.id, () => []).add(module);
+      }
+    }
+    for (final modules in byKind.values) {
+      chosen.addAll(
+        await prompter.multiSelect(
+          '${modules.first.descriptor.kind.label}: which do you want?',
+          modules,
+          display: _display,
+        ),
+      );
+    }
+  }
+
+  /// Asks for a provider of [role], unless no module provides it, the
+  /// answers so far have one, or it was asked before and the answers do
+  /// not require it; a single provider that the answers require is taken
+  /// without asking. Returns whether the answers changed.
+  Future<bool> askRole(Role role) async {
+    final providers = registry.providersOf(role);
+    if (providers.isEmpty) return false;
+    final app = _withDependencies([...chosen, ...implied], registry);
+    if (app.any((module) => module.descriptor.provides.contains(role))) {
+      return false;
+    }
+    final requiredBy = _requirer(role, app);
+    if (_asked.contains(role) && requiredBy == null) return false;
+    _asked.add(role);
+    declined.remove(role);
+    if (requiredBy != null && providers.length == 1) {
+      implied.add(providers.single);
+      return true;
+    }
+    final question = requiredBy == null
+        ? '${role.description}: which module provides it?'
+        : '${role.description}: $requiredBy. Which module provides it?';
+    if (role.cardinality.allowsMany) {
+      return _askMany(role, providers, question, requiredBy: requiredBy);
+    }
+    return _askOne(role, providers, question, requiredBy: requiredBy);
+  }
+
+  /// Asks for the [providers] of [role] with [question], and requires one
+  /// if the answers need the role for [requiredBy].
+  Future<bool> _askMany(
+    Role role,
+    List<SmfModule> providers,
+    String question, {
+    required String? requiredBy,
+  }) async {
+    final picked = await prompter.multiSelect<SmfModule>(
+      question,
+      providers,
+      display: _display,
+      defaultValues: requiredBy == null ? const [] : [providers.first],
+    );
+    if (picked.isEmpty && requiredBy != null) {
+      throw SmfUsageException(
+        'The app needs a module that provides the ${role.id}: '
+        '$requiredBy.',
+      );
+    }
+    if (picked.isEmpty) declined.add(role);
+    chosen.addAll(picked);
+    return picked.isNotEmpty;
+  }
+
+  /// Asks for one of the [providers] of [role] with [question], or none
+  /// unless the answers need the role for [requiredBy].
+  Future<bool> _askOne(
+    Role role,
+    List<SmfModule> providers,
+    String question, {
+    required String? requiredBy,
+  }) async {
+    final picked = await prompter.select<_Choice>(
+      question,
+      [
+        for (final provider in providers) _Choice(provider),
+        if (requiredBy == null) const _Choice(null),
+      ],
+      display: (choice) =>
+          choice.module == null ? 'None' : _display(choice.module!),
+    );
+    final module = picked.module;
+    if (module == null) {
+      declined.add(role);
+      return false;
+    }
+    chosen.add(module);
+    return true;
+  }
 }
 
 /// [chosen] and the modules they depend on, directly or not.
