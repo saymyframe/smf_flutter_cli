@@ -232,7 +232,8 @@ final class FakeOverlapModule extends SmfModule {
 }
 
 /// A provider of the analytics role whose service logs nothing, with a
-/// navigator observer for every navigator of the router.
+/// navigator observer for every navigator of the router and a listener of
+/// the screen the user sees.
 final class FakeAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FakeAnalyticsModule();
@@ -264,6 +265,14 @@ final class FakeAnalyticsModule extends SmfModule {
         const SocketContribution.item(
           RouterRole.observers,
           Fragment('() => FixtureObserver()', imports: [_file]),
+          when: {routerRole},
+        ),
+        const SocketContribution.item(
+          RouterRole.screenListeners,
+          Fragment(
+            '(route, location) => fixtureScreens.add((route, location))',
+            imports: [_file],
+          ),
           when: {routerRole},
         ),
       ];

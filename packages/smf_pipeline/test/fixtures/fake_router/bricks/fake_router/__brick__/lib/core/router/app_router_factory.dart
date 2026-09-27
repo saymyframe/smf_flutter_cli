@@ -33,31 +33,57 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       create(),
   ];
 
+  final _screenListeners = <void Function(String? route, String location)>[
+{{{smf_router__screen_listeners}}}
+  ];
+
   final List<AppLocation> _stack = [{{{start}}}];
 
   final Map<AppLocation, Completer<Object?>> _results = {};
 
+  /// The location on top, as the listeners of the screen last heard of it,
+  /// or [_nothing] before the first screen.
+  Object? _shown = _nothing;
+
+  static const Object _nothing = Object();
+
   @override
-  Widget build(BuildContext context) => Navigator(
-        key: _navigatorKey,
-        observers: _observers,
-        pages: [
-          if (_stack.isEmpty)
-            const MaterialPage<Object?>(child: FallbackStartScreen()),
-          for (final location in _stack)
-            MaterialPage<Object?>(
-              key: ObjectKey(location),
-              name: location.routeName,
-              child: _screen(location),
-            ),
-        ],
-        onDidRemovePage: (page) {
-          final location = (page.key as ObjectKey?)?.value;
-          if (location is AppLocation && _stack.remove(location)) {
-            _results.remove(location)?.complete();
-          }
-        },
-      );
+  Widget build(BuildContext context) {
+    _showScreen();
+    return Navigator(
+      key: _navigatorKey,
+      observers: _observers,
+      pages: [
+        if (_stack.isEmpty)
+          const MaterialPage<Object?>(child: FallbackStartScreen()),
+        for (final location in _stack)
+          MaterialPage<Object?>(
+            key: ObjectKey(location),
+            name: location.routeName,
+            child: _screen(location),
+          ),
+      ],
+      onDidRemovePage: (page) {
+        final location = (page.key as ObjectKey?)?.value;
+        if (location is AppLocation && _stack.remove(location)) {
+          _results.remove(location)?.complete();
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  /// Tells the listeners of the screen about the page on top when it is
+  /// another than they last heard of: the location on top of the stack, or
+  /// the fallback screen at `/`.
+  void _showScreen() {
+    final top = _stack.lastOrNull;
+    if (identical(top, _shown)) return;
+    _shown = top;
+    for (final listener in _screenListeners) {
+      listener(top?.routeName, top?.path ?? '/');
+    }
+  }
 
   @override
   Future<bool> popRoute() async {

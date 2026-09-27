@@ -2,8 +2,9 @@
 ///
 /// It implements the router role with a plain `Navigator` whose stack is a
 /// list of locations, calls every observer factory once for its navigator,
-/// and annotates every screen and parameter with annotations restricted by
-/// `@Target`, so a misplaced tag of an annotation socket fails
+/// tells the screen listeners about the location on top whenever another is
+/// on top, and annotates every screen and parameter with annotations
+/// restricted by `@Target`, so a misplaced tag of an annotation socket fails
 /// `flutter analyze`.
 library;
 

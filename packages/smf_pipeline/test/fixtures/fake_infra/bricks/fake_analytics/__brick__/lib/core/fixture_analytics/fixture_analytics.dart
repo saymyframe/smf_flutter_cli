@@ -8,6 +8,10 @@ AnalyticsService createFixtureAnalytics() => const FixtureAnalytics();
 /// A navigator observer that the fixture adds to every navigator.
 final class FixtureObserver extends NavigatorObserver {}
 
+/// The screens the user saw, as the screen listener of the fixture heard of
+/// them: the full name of the route of each, or `null`, and its location.
+final List<(String?, String)> fixtureScreens = [];
+
 /// Analytics that logs nothing.
 final class FixtureAnalytics implements AnalyticsService {
   /// Creates the service.

@@ -155,6 +155,16 @@ void main() {
       expect(pubspec.generate, isTrue);
       expect(pubspec.usesMaterialDesign, isTrue);
       expect(result.collection!.applyingOf<CodegenRequest>(), hasLength(1));
+      // The analytics of the fixtures watches the navigators of the router
+      // and listens to the screen the user sees.
+      for (final socket in [RouterRole.observers, RouterRole.screenListeners]) {
+        expect(
+          result.validation!.socketOrders[socket]!.contributions
+              .map((collected) => '${collected.origin}'),
+          ['fake_analytics'],
+          reason: '$socket',
+        );
+      }
     });
 
     test('with Riverpod', () async {
@@ -266,6 +276,21 @@ void main() {
       expect(
         initialLocationsOf(result),
         ['/fake_feature', '/fake_feature', '/fake_second'],
+      );
+    });
+
+    test('gives go_router the observer and the screen listener of analytics',
+        () async {
+      final result = await harness.check(
+        ContractCase('tabs', requested: modules),
+      );
+      final router = result.app!.files[RouterRole.appRouterFactoryFile]!.text;
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(router, contains('() => FixtureObserver(),'));
+      expect(
+        router,
+        contains('(route, location) => fixtureScreens.add((route, location)),'),
       );
     });
 
