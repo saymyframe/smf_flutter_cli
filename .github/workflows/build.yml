@@ -139,7 +139,7 @@ jobs:
 
       # Every app is generated with `smf create --no-input
       # --skip-external-setup --no-dart-fix --strict` and must pass
-      # `flutter analyze`, and then the tests that the modules keep for it
+      # `flutter analyze`, and then the tests that the packages keep for it
       # in `app_tests/`, with `flutter test`.
       - name: Generate, analyze and test the apps of the CLI's modules
         if: matrix.registry == 'real'

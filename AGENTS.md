@@ -43,7 +43,7 @@ Dart **3.12.2** is pinned in CI (`.github/workflows/build.yml`). The formatter o
 
 ```bash
 melos bootstrap             # resolve the workspace and re-bundle every brick
-melos run format            # format lib/test/bin/tool of every package, and tools/
+melos run format            # format lib/test/bin/tool/app_tests of every package, and tools/
 melos run analyze           # dart analyze --fatal-infos --fatal-warnings, every package and tools/
 melos run banlist           # no file uses the names the module model replaced (tools/banlist.dart)
 melos run test              # dart test in every package with a test/ dir, and in tools/
