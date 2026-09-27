@@ -17,10 +17,10 @@ smf --version
 
 ## Create an app
 
-In a terminal, `smf create` asks for the name of the app, its organization and its modules:
+In a terminal, `smf create` asks for what the command line does not give: the name of the app, its organization and its modules:
 
 ```bash
-smf create my_app
+smf create
 ```
 
 With the modules on the command line and `--no-input`, it asks nothing:
