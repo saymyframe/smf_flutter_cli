@@ -6,12 +6,12 @@ The crash reporting role generates `lib/core/crash_reporting/crash_reporter.dart
 
 - the `CrashReporter` interface: `recordError` and `recordFlutterError` report an error, `log` adds a message to the log sent with the next report, and `setUserId` sets the id of the signed-in user, or clears it with `null`;
 - `createCrashReporter()`, which returns the reporter of the app: it forwards every call to the reporters of all the modules that provide crash reporting, so an app can report to more than one service;
-- `installCrashReporting()`, which reports as fatal the uncaught errors of the main isolate: those that Flutter catches, which it still presents as it does by default, and the others, which the engine still prints in debug mode.
+- `installCrashReporting()`, which reports as fatal the errors of the main isolate that the app does not handle: those that Flutter catches, which it still presents as it does by default, and the others, which the engine still prints in debug mode.
 
 This module adds `firebase_crashlytics` to the dependencies of the app and implements the reporter in `lib/core/crash_reporting/crashlytics_crash_reporter.dart`, on `FirebaseCrashlytics.instance`:
 
 - an error of Flutter is reported with what `recordFlutterError` of Crashlytics reports, and any other error with `recordError`;
-- the reporter prints nothing, since the handlers of the role already show each error: Crashlytics would present each error of Flutter again and, in debug mode, print each report. So an error that the code of the app reports itself is not printed either;
+- the reporter prints nothing: Flutter already presents the errors it catches, in every mode, and in debug mode the engine prints the others, while Crashlytics would present each error of Flutter again and, in debug mode, print each report. So an error that the code of the app reports itself is not printed either;
 - `setUserId(null)` clears the id of the user with an empty one, as Crashlytics does.
 
 Crashlytics works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it: `bootstrap()` initializes Firebase, then calls `installCrashReporting()`. The reporter is created on first use, without waiting. When the app has a module that provides dependency injection, the crash reporting role registers the reporter in its container as a lazy singleton, and the code that creates what the screens of a feature need takes it with `resolve` in the composition file of the feature.
