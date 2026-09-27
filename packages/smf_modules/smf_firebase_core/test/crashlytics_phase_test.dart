@@ -1,6 +1,6 @@
 // The fix of the build phase for Crashlytics runs here with the Ruby of the
 // machine, as the step runs it, on the Xcode project of an app of SMF in a
-// temporary directory.
+// temporary directory; without Ruby, the tests are skipped.
 @TestOn('vm && !windows')
 library;
 
@@ -17,9 +17,15 @@ import 'package:test/test.dart';
 
 import 'support/flutterfire.dart';
 
-/// The Ruby on the `PATH`, or `null` without one.
+/// The Ruby on the `PATH`, or `null` without one, or without `which` to
+/// find it.
 String? _ruby() {
-  final result = Process.runSync('which', ['ruby']);
+  final ProcessResult result;
+  try {
+    result = Process.runSync('which', ['ruby']);
+  } on ProcessException {
+    return null;
+  }
   final path = result.stdout.toString().trim();
   return result.exitCode == 0 && path.isNotEmpty ? path : null;
 }
