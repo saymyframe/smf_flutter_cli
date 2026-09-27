@@ -1,4 +1,4 @@
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=saymyframe_smf_contracts&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=saymyframe_smf_contracts)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=saymyframe_smf_flutter_cli&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=saymyframe_smf_flutter_cli)
 
 # smf_contracts
 
@@ -52,7 +52,7 @@ final class LoggingModule extends SmfModule {
 }
 ```
 
-A command that offers the module runs the SMF CLI with it, and the contract harness of `package:smf_pipeline/testing.dart` checks it in every app it can be part of.
+To offer the module, a command of your own passes it to `runCli` of [smf_flutter_cli](https://pub.dev/packages/smf_flutter_cli) with the modules of SMF, and the tests of the module check it with the contract harness of `package:smf_pipeline/testing.dart` in every app it can be part of.
 
 ## Documentation
 
