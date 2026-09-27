@@ -3,6 +3,7 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_core/src/configure.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -120,6 +121,9 @@ void main() {
         'configure',
         '--platforms=android,ios',
         '--overwrite-firebase-options',
+        // So that flutterfire does not ask for them.
+        '--ios-bundle-id=com.example.contract-app',
+        '--android-package-name=com.example.contract_app',
       ]);
       expect(AppEntryRole.platforms, ['android', 'ios']);
       expect(step.description, 'Configuring Firebase with flutterfire');
@@ -138,6 +142,54 @@ void main() {
         'flutterfire_cli',
         'xcode_project_tools',
       ]);
+    });
+  });
+
+  group('flutterfire configure gets the ids of the app', () {
+    /// The options of `flutterfire configure` with the ids of the Android
+    /// app [android] and the iOS app [ios].
+    List<String> idsFor({required String android, required String ios}) => [
+          for (final argument in configureArguments(
+            AppIdentity(
+              androidApplicationId: android,
+              iosBundleId: ios,
+              androidNamespace: android,
+            ),
+          ))
+            if (argument.startsWith('--ios-bundle-id=') ||
+                argument.startsWith('--android-package-name='))
+              argument,
+        ];
+
+    test('after the platforms and the options', () {
+      expect(
+        configureArguments(ContractHarness.defaultContext.appIdentity),
+        [
+          'configure',
+          '--platforms=android,ios',
+          '--overwrite-firebase-options',
+          '--ios-bundle-id=com.example.contract-app',
+          '--android-package-name=com.example.contract_app',
+        ],
+      );
+    });
+
+    test('but those that flutterfire would stop at, which it reads itself', () {
+      // As for --org my-org: flutterfire takes no underscore in the first
+      // part of an application id.
+      expect(idsFor(android: 'my_org.my_app', ios: 'my-org.my-app'), [
+        '--ios-bundle-id=my-org.my-app',
+      ]);
+      // As for --org com.acme_: nor a hyphen at the end of a part of a bundle
+      // id, nor a part of more than 63 characters.
+      expect(idsFor(android: 'com.acme_.my_app', ios: 'com.acme-.my-app'), [
+        '--android-package-name=com.acme_.my_app',
+      ]);
+      final long = 'a' * 64;
+      expect(idsFor(android: 'com.$long', ios: 'com.$long'), [
+        '--android-package-name=com.$long',
+      ]);
+      expect(idsFor(android: 'com.a.b2_c', ios: 'com.a.b2-c'), hasLength(2));
     });
   });
 
@@ -221,7 +273,9 @@ void main() {
         '## Firebase\n'
         '\n'
         '${readmeSection('flutterfire configure --platforms=android,ios '
-            '--overwrite-firebase-options')}',
+            '--overwrite-firebase-options '
+            '--ios-bundle-id=com.example.contract-app '
+            '--android-package-name=com.example.contract_app')}',
       );
       expect(
         readme.text,
@@ -231,7 +285,9 @@ void main() {
             'dart pub global activate flutterfire_cli 1.4.1\n'
             'firebase login\n'
             'flutterfire configure --platforms=android,ios '
-            '--overwrite-firebase-options\n'
+            '--overwrite-firebase-options '
+            '--ios-bundle-id=com.example.contract-app '
+            '--android-package-name=com.example.contract_app\n'
             '```\n',
           ),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),

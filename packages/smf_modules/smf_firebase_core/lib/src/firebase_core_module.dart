@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
+import 'package:smf_firebase_core/src/configure.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_login.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
@@ -29,12 +30,12 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// in; otherwise it tells how.
 ///
 /// After generation, in a run with a terminal, the module runs
-/// `flutterfire configure` for the platforms of the app, which asks the user
-/// for the Firebase project. A run without one, or that skips external
-/// setup, prints the command to run later, and so does a run that lacks
-/// what the checks look for, since flutterfire would fail without it. The
-/// README of the app tells how to configure it again, such as on another
-/// machine.
+/// `flutterfire configure` for the platforms of the app, with the ids of its
+/// Android and iOS apps, which asks the user for the Firebase project. A run
+/// without one, or that skips external setup, prints the command to run
+/// later, and so does a run that lacks what the checks look for, since
+/// flutterfire would fail without it. The README of the app tells how to
+/// configure it again, such as on another machine.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
@@ -57,11 +58,7 @@ final class FirebaseCoreModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) {
-    final configure = [
-      'configure',
-      '--platforms=${AppEntryRole.platforms.join(',')}',
-      '--overwrite-firebase-options',
-    ];
+    final configure = configureArguments(context.appIdentity);
     // flutterfire configure fails without any of them.
     const needed = [
       FirebaseCliCheck(),

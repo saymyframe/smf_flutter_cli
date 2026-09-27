@@ -28,6 +28,8 @@ The installation of the Firebase CLI can take minutes, and its progress shows wh
 
 Once the app has its packages, SMF runs `flutterfire configure --platforms=android,ios --overwrite-firebase-options` in it, through `dart pub global run flutterfire_cli:flutterfire`, with the terminal: it asks for the Firebase project and writes the options into `lib/firebase_options.dart`. It asks first, so you can leave it for later. A run without a terminal, or that skips external setup, prints the command to run later instead, and so does a run that lacks the Firebase CLI, the login, the FlutterFire CLI or, on macOS, the gem xcodeproj, without asking, since `flutterfire configure` would fail without them.
 
+The command also gives flutterfire the ids of the Android and iOS apps, with `--android-package-name` and `--ios-bundle-id`. flutterfire reads the bundle id from the Xcode project only when it is not in quotes, and saves the project with the Ruby gem xcodeproj, which puts a bundle id with a hyphen, such as `com.example.my-app`, in quotes, so configuring the app again would ask for it. An id that flutterfire would not take in an option, such as an application id with an underscore in its first part, is left out, for flutterfire to read.
+
 If an older flutterfire_cli, such as 1.4.0, configured an app with Crashlytics, the app keeps the phase of that version in its Xcode project, so with Swift Package Manager `flutter run` and `flutter build ios` fail even after 1.4.1 is activated. To replace the phase, activate 1.4.1 and configure the app again on a Mac, in its directory:
 
 ```bash

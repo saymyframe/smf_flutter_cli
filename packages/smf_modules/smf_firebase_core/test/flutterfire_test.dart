@@ -211,18 +211,44 @@ void main() {
       expect(twice.app, once.app);
     });
 
-    test('reads the ids of the app', () {
+    test('reads the ids of the app, which the step gives it too', () {
       final identity = ContractHarness.defaultContext.appIdentity;
 
-      final appGradle = texts[FlutterfireGradle.appPath]!;
-      expect(
-        FlutterfireIds.androidApplicationIdOf(appGradle),
-        identity.androidApplicationId,
+      final android = FlutterfireIds.androidApplicationIdOf(
+        texts[FlutterfireGradle.appPath]!,
       );
-      expect(
-        FlutterfireIds.iosBundleIdOf(texts[AppEntryRole.xcodeProjectFile]!),
-        identity.iosBundleId,
+      final ios = FlutterfireIds.iosBundleIdOf(
+        texts[AppEntryRole.xcodeProjectFile]!,
       );
+      expect(android, identity.androidApplicationId);
+      expect(ios, identity.iosBundleId);
+      final step = const FirebaseCoreModule()
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+      expect(
+        step.arguments,
+        containsAll([
+          '--ios-bundle-id=$ios',
+          '--android-package-name=$android',
+        ]),
+      );
+    });
+
+    test(
+        'reads no bundle id once the gem xcodeproj put it in quotes, as it '
+        'saves one with a hyphen', () {
+      final project = texts[AppEntryRole.xcodeProjectFile]!;
+      const id = 'com.example.contract-app';
+      expect(project, contains('PRODUCT_BUNDLE_IDENTIFIER = $id;'));
+
+      final saved = project.replaceAllMapped(
+        RegExp('PRODUCT_BUNDLE_IDENTIFIER = ([^";]+);'),
+        (match) => 'PRODUCT_BUNDLE_IDENTIFIER = "${match[1]}";',
+      );
+
+      expect(saved, contains('PRODUCT_BUNDLE_IDENTIFIER = "$id";'));
+      expect(FlutterfireIds.iosBundleIdOf(saved), isNull);
     });
 
     test('fills the options of each platform of the app in place', () {
