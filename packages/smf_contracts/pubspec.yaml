@@ -1,10 +1,10 @@
 name: smf_contracts
-description: Contracts, DSL, and shared codegen interfaces used across SMF modules (routing, DI, code generation).
+description: The module model of Say My Frame, the Flutter app generator. Modules declare roles, such as a router, and contribute templates, code for sockets and checks.
 version: 0.2.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_contracts
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
-topics: [dsl, codegen, routing, dependency-injection, interfaces]
+topics: [flutter, scaffolding, code-generation, modules, templates]
 license: Apache-2.0
 
 environment:
