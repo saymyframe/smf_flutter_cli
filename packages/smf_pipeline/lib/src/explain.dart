@@ -20,7 +20,7 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   contributors and the edges that decide it, and the same for the
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
-///   after generation;
+///   after generation, each follow-up of a step under it;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do.
 List<String> explain({
@@ -114,10 +114,7 @@ List<String> explain({
       '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
     for (final collected in validation.postGenOrder.contributions)
       if (collected.contribution case final PostGenStep step)
-        '  ${[
-          step.tool.executable,
-          ...step.tool.argumentsFor(step.arguments),
-        ].join(' ')} (${collected.origin})',
+        ..._stepLines(step, collected.origin),
   ];
   if (steps.isNotEmpty) {
     lines
@@ -182,3 +179,21 @@ List<String> _contributors(ContributionOrder order) => {
       for (final collected in order.contributions)
         contributorName(collected.origin),
     }.toList();
+
+/// The lines of [step] of [origin] under `After generation`: its command,
+/// then, a level deeper each, those of its follow-ups, which run once it
+/// succeeded; [depth] is the level of [step].
+Iterable<String> _stepLines(
+  PostGenStep step,
+  ContributionOrigin origin, {
+  int depth = 0,
+}) sync* {
+  final command = [
+    step.tool.executable,
+    ...step.tool.argumentsFor(step.arguments),
+  ].join(' ');
+  yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command ($origin)';
+  for (final next in step.followUps) {
+    yield* _stepLines(next, origin, depth: depth + 1);
+  }
+}

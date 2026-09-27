@@ -165,6 +165,46 @@ void main() {
     expect(runner.lines, isNot(contains(startsWith('tool'))));
   });
 
+  test('runs the follow-ups of a step after it, or leaves them with it',
+      () async {
+    // On the PATH of the host.
+    host.fileSystem.file('/sdk/bin/fix').createSync(recursive: true);
+    const fix = PostGenStep(
+      ToolRef('fix'),
+      ['it'],
+      description: 'Fix',
+      skippable: true,
+    );
+
+    final ran = await pipeline(
+      modulesWith([
+        const PostGenStep(ToolRef('fix'), ['first'], followUps: [fix]),
+      ]),
+    ).run(request(onConflict: OnConflict.replace));
+
+    expect(ran!.skippedSteps, isEmpty);
+    expect(runner.lines, containsAllInOrder(['fix first', 'fix it']));
+
+    final left = await pipeline(
+      modulesWith([
+        const Preflight([_Missing()]),
+        const PostGenStep(
+          ToolRef('tool'),
+          ['go'],
+          description: 'Go',
+          skippable: true,
+          needs: ['tool'],
+          followUps: [fix],
+        ),
+      ]),
+    ).run(request(onConflict: OnConflict.replace));
+
+    expect(left!.skippedSteps.map((step) => '$step'), [
+      'Go: tool go (Tool is missing)',
+      'Fix: fix it (it runs after "Go", which is not done)',
+    ]);
+  });
+
   test('replaces the directory of the app when asked to', () async {
     host.fileSystem.file('/work/my_app/old.txt').createSync(recursive: true);
 

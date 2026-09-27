@@ -29,7 +29,9 @@ final class SkippedStep {
   final String reason;
 
   /// Whether the step could not run or failed, rather than being left for
-  /// later by the options of the run or by the user.
+  /// later by the options of the run, by the user, or with the step that it
+  /// follows (see [PostGenStep.followUps]), whose record tells why that one
+  /// is not done.
   final bool failed;
 
   @override
@@ -64,7 +66,8 @@ const importCleanupCodes = [
 /// 2. `dart run build_runner build`, once, if [codegen] has requests, and
 ///    checks that it generated the outputs they name; see
 ///    [codegenArguments];
-/// 3. the post-generation [steps] of the modules, in their order;
+/// 3. the post-generation [steps] of the modules, in their order, each
+///    with its follow-ups right after it (see [PostGenStep.followUps]);
 /// 4. `dart fix --apply` for the imports only; see [importCleanupCodes];
 /// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
 /// 6. `dart format .`.
@@ -74,10 +77,12 @@ const importCleanupCodes = [
 /// before that such a step is skippable. Nor does a step that
 /// [PostGenStep.needs] a check which has not passed among [checks], the
 /// results of stage 6, and the user is not asked about it. In an
-/// interactive run the user may also leave a skippable step for later. A
-/// skippable step whose tool is missing, or that fails, is left for later
-/// too; a failure is reported with the output of the command. Returns the
-/// steps that are not done, with their commands for later.
+/// interactive run the user may also leave a skippable step for later, but
+/// for a follow-up, which is part of the step it follows. A skippable step
+/// whose tool is missing, or that fails, is left for later too; a failure
+/// is reported with the output of the command. The follow-ups of a step
+/// that is not done are left for later after it. Returns the steps that are
+/// not done, with their commands for later, in the order they would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
 /// a step that is not skippable fails or cannot run, and an
@@ -93,7 +98,6 @@ Future<List<SkippedStep>> runPostGen({
   bool fullDartFix = true,
 }) async {
   final commands = _Commands(environment, directory);
-  final logger = environment.logger;
 
   await commands.require(
     'Getting the packages of the app',
@@ -121,64 +125,12 @@ Future<List<SkippedStep>> runPostGen({
     }
   }
 
-  final skipped = <SkippedStep>[];
+  final moduleSteps = _ModuleSteps(commands, checks);
   for (final collected in steps) {
-    final step = collected.contribution as PostGenStep;
-    final resolved = await commands.resolve(step.tool, step.arguments);
-    final command = commands.display(step.tool, step.arguments, resolved);
-    final description = step.description ?? command;
-    final unmet = _unmetNeeds(step, collected.origin, checks);
-    String? reason;
-    var failed = false;
-    if (step.external && environment.skipExternalSetup) {
-      reason = 'the run skips external setup';
-    } else if (step.interactive && !environment.interactive) {
-      reason = 'the run cannot ask the user';
-    } else if (unmet.isNotEmpty) {
-      reason = _unmetReason(unmet);
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of ${collected.origin} cannot run, '
-          'because $reason.',
-        );
-      }
-      failed = true;
-    } else if (resolved == null) {
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of ${collected.origin} cannot run, '
-          'because ${step.tool.executable} was not found.',
-        );
-      }
-      reason = '${step.tool.executable} was not found';
-      failed = true;
-    } else if (step.skippable &&
-        environment.interactive &&
-        !await environment.prompter.confirm(
-          '${step.description == null ? command : '$description ($command)'}'
-          ', for ${collected.origin}. Run it now?',
-          defaultValue: true,
-        )) {
-      reason = 'you chose to run it later';
-    }
-    if (reason == null) {
-      final failure = await commands.runResolved(
-        description,
-        resolved!,
-        interactive: step.interactive,
-      );
-      if (failure == null) continue;
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of ${collected.origin} failed: '
-          '${failure.detail}',
-        );
-      }
-      logger.warn('The step "$description" failed: ${failure.detail}');
-      reason = failure.reason;
-      failed = true;
-    }
-    skipped.add(SkippedStep(description, command, reason, failed: failed));
+    await moduleSteps.run(
+      collected.contribution as PostGenStep,
+      collected.origin,
+    );
   }
 
   await commands.tryRun(
@@ -198,7 +150,114 @@ Future<List<SkippedStep>> runPostGen({
     const ToolRef('dart'),
     const ['format', '.'],
   );
-  return skipped;
+  return moduleSteps.skipped;
+}
+
+/// Runs the post-generation steps of the modules, each with its follow-ups,
+/// and records those that are not done.
+final class _ModuleSteps {
+  _ModuleSteps(this._commands, this._checks);
+
+  final _Commands _commands;
+
+  /// The results of the preflight checks.
+  final List<CheckResult> _checks;
+
+  /// The steps that are not done, in the order they would run.
+  final List<SkippedStep> skipped = [];
+
+  PipelineEnvironment get _environment => _commands._environment;
+
+  /// Runs [step] of [origin], then its follow-ups once it succeeded, or
+  /// records it and them as not done. The user is not asked about a
+  /// [followUp], which is part of the step it follows.
+  Future<void> run(
+    PostGenStep step,
+    ContributionOrigin origin, {
+    bool followUp = false,
+  }) async {
+    final environment = _environment;
+    final resolved = await _commands.resolve(step.tool, step.arguments);
+    final command = _commands.display(step.tool, step.arguments, resolved);
+    final description = step.description ?? command;
+    final unmet = _unmetNeeds(step, origin, _checks);
+    String? reason;
+    var failed = false;
+    if (step.external && environment.skipExternalSetup) {
+      reason = 'the run skips external setup';
+    } else if (step.interactive && !environment.interactive) {
+      reason = 'the run cannot ask the user';
+    } else if (unmet.isNotEmpty) {
+      reason = _unmetReason(unmet);
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of $origin cannot run, because $reason.',
+        );
+      }
+      failed = true;
+    } else if (resolved == null) {
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of $origin cannot run, because '
+          '${step.tool.executable} was not found.',
+        );
+      }
+      reason = '${step.tool.executable} was not found';
+      failed = true;
+    } else if (!followUp &&
+        step.skippable &&
+        environment.interactive &&
+        !await environment.prompter.confirm(
+          '${step.description == null ? command : '$description ($command)'}'
+          ', for $origin. Run it now?',
+          defaultValue: true,
+        )) {
+      reason = 'you chose to run it later';
+    }
+    if (reason == null) {
+      final failure = await _commands.runResolved(
+        description,
+        resolved!,
+        interactive: step.interactive,
+      );
+      if (failure == null) {
+        for (final next in step.followUps) {
+          await run(next, origin, followUp: true);
+        }
+        return;
+      }
+      if (!step.skippable) {
+        throw GenerationFailedException(
+          'The step "$description" of $origin failed: ${failure.detail}',
+        );
+      }
+      environment.logger.warn(
+        'The step "$description" failed: ${failure.detail}',
+      );
+      reason = failure.reason;
+      failed = true;
+    }
+    skipped.add(SkippedStep(description, command, reason, failed: failed));
+    await _leaveFollowUps(step, description);
+  }
+
+  /// Records the follow-ups of [step], the step of [description] that is
+  /// not done, as not done either, each before its own follow-ups.
+  Future<void> _leaveFollowUps(PostGenStep step, String description) async {
+    for (final next in step.followUps) {
+      final resolved = await _commands.resolve(next.tool, next.arguments);
+      final command = _commands.display(next.tool, next.arguments, resolved);
+      final nextDescription = next.description ?? command;
+      skipped.add(
+        SkippedStep(
+          nextDescription,
+          command,
+          'it runs after "$description", which is not done',
+        ),
+      );
+      await _leaveFollowUps(next, nextDescription);
+    }
+  }
 }
 
 /// The checks among [checks] that [step] of [origin] needs and that have

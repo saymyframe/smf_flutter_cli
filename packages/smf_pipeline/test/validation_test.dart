@@ -548,6 +548,80 @@ void main() {
     ]);
   });
 
+  test('a follow-up needs checks of its own module too', () {
+    final result = _validate([
+      scaffold(
+        contributions: const [
+          Preflight([_Check('tool')]),
+          PostGenStep(
+            ToolRef('tool'),
+            ['a'],
+            needs: ['tool'],
+            followUps: [
+              PostGenStep(ToolRef('fix'), [], needs: ['tool']),
+              PostGenStep(
+                ToolRef('fix'),
+                [],
+                followUps: [
+                  PostGenStep(
+                    ToolRef('check'),
+                    [],
+                    description: 'Check',
+                    needs: ['login'],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ]);
+
+    expect(
+      _messages(result).single,
+      'scaffold: The step Check of scaffold needs the preflight check '
+      '"login", which scaffold does not have.',
+    );
+  });
+
+  test('a follow-up has no conditions of its own', () {
+    final nav = TestRole<String>('nav');
+    final result = _validate([
+      entry,
+      TestModule(
+        'other',
+        uses: {nav},
+        contributions: [
+          PostGenStep(
+            const ToolRef('tool'),
+            const ['a'],
+            when: {nav},
+            followUps: [
+              const PostGenStep(ToolRef('fix'), []),
+              PostGenStep(
+                const ToolRef('check'),
+                const [],
+                description: 'Check',
+                when: {nav},
+              ),
+            ],
+          ),
+        ],
+      ),
+    ]);
+
+    expect(
+      _messages(result).single,
+      'other: The step Check of other follows another step, but has '
+      'conditions of its own.',
+    );
+    expect(
+      result.issues.single.hint,
+      'A follow-up applies when the step it follows does, so put the '
+      'conditions on that step.',
+    );
+  });
+
   test('kinds require and forbid data', () {
     final nav = TestRole<String>('nav');
     final feature = ModuleKind(
@@ -1146,6 +1220,15 @@ void main() {
           PostGenStep(ToolRef('a'), [], interactive: true),
           PostGenStep(ToolRef('b'), [], external: true, description: 'Log in'),
           PostGenStep(ToolRef('c'), [], interactive: true, skippable: true),
+          PostGenStep(
+            ToolRef('d'),
+            [],
+            skippable: true,
+            followUps: [
+              PostGenStep(ToolRef('e'), [], external: true, skippable: true),
+              PostGenStep(ToolRef('f'), [], interactive: true),
+            ],
+          ),
         ],
       ),
     ];
@@ -1172,6 +1255,11 @@ void main() {
         equals(
           'The step Log in of scaffold cannot run with --skip-external-setup, '
           'and the app is not complete without it.',
+        ),
+        // A follow-up too.
+        equals(
+          'The step f of scaffold cannot run without a terminal, and the app '
+          'is not complete without it.',
         ),
       ],
     );

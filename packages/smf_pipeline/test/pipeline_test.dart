@@ -424,7 +424,18 @@ void main() {
               AppEntryRole.bootstrapPlatform,
               Fragment('core();'),
             ),
-            const PostGenStep(ToolRef('a'), ['--flag']),
+            const PostGenStep(
+              ToolRef('a'),
+              ['--flag'],
+              followUps: [
+                PostGenStep(
+                  ToolRef('fix'),
+                  ['it'],
+                  skippable: true,
+                  followUps: [PostGenStep(ToolRef('check'), [])],
+                ),
+              ],
+            ),
             const PubspecContribution.hosted('core_lib', '^1.2.0'),
             const PubspecContribution.sdk('flutter_test', dev: true),
             const CodegenRequest(),
@@ -505,6 +516,9 @@ void main() {
           'After generation\n'
           '  dart run build_runner build --force-jit (core)\n'
           '  a --flag (core)\n'
+          // Follow-ups run once the step above them succeeded.
+          '    then fix it (core)\n'
+          '      then check (core)\n'
           '  b (analytics)',
         ),
       );

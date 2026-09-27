@@ -147,8 +147,9 @@ List<String> strippedVars(Map<String, Object?> vars) {
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
 ///   generated;
-/// - that every post-generation step can run in this run, [interactive]
-///   and with [skipExternalSetup] as given, or may be skipped.
+/// - that every post-generation step, and each of its follow-ups, can run
+///   in this run, [interactive] and with [skipExternalSetup] as given, or
+///   may be skipped.
 ValidationResult validate({
   required ModuleRegistry registry,
   required Resolution resolution,
@@ -229,20 +230,22 @@ ValidationResult validate({
         bySocket.putIfAbsent(socket.socket, () => []).add(collected);
       case final PostGenStep step:
         postGen.add(collected);
-        final needsTerminal = step.interactive && !interactive;
-        final needsSetup = step.external && skipExternalSetup;
-        if ((needsTerminal || needsSetup) && !step.skippable) {
-          final why = needsTerminal
-              ? 'without a terminal'
-              : 'with --skip-external-setup';
-          issues.add(
-            SmfIssue(
-              'The step ${step.description ?? step.tool.executable} of '
-              '${collected.origin} cannot run $why, and the app is not '
-              'complete without it.',
-              origin: collected.origin,
-            ),
-          );
+        for (final part in withFollowUps(step)) {
+          final needsTerminal = part.interactive && !interactive;
+          final needsSetup = part.external && skipExternalSetup;
+          if ((needsTerminal || needsSetup) && !part.skippable) {
+            final why = needsTerminal
+                ? 'without a terminal'
+                : 'with --skip-external-setup';
+            issues.add(
+              SmfIssue(
+                'The step ${part.description ?? part.tool.executable} of '
+                '${collected.origin} cannot run $why, and the app is not '
+                'complete without it.',
+                origin: collected.origin,
+              ),
+            );
+          }
         }
       default:
         break;
@@ -309,8 +312,9 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
 }
 
 /// The problems of [collected] with the rules of the pipeline: the roles in
-/// its [Contribution.when], who may use which role and socket, and, for a
-/// brick, its hooks, variables and files.
+/// its [Contribution.when], who may use which role and socket, for a brick,
+/// its hooks, variables and files, and for a post-generation step, that its
+/// follow-ups have no conditions of their own.
 ///
 /// Stage 8 checks the fragments of the render hooks with it too.
 Iterable<SmfIssue> contributionIssues(
@@ -424,7 +428,19 @@ Iterable<SmfIssue> contributionIssues(
           );
         }
       }
-    case Preflight() || PubspecContribution() || PostGenStep():
+    case final PostGenStep step:
+      for (final followUp in withFollowUps(step).skip(1)) {
+        if (followUp.when.isNotEmpty) {
+          yield SmfIssue(
+            'The step ${followUp.description ?? followUp.tool.executable} '
+            'of $origin follows another step, but has conditions of its own.',
+            hint: 'A follow-up applies when the step it follows does, so put '
+                'the conditions on that step.',
+            origin: origin,
+          );
+        }
+      }
+    case Preflight() || PubspecContribution():
       break;
   }
 }
@@ -520,9 +536,19 @@ Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
   }
 }
 
-/// Post-generation steps that need a preflight check that their contributor
-/// does not have; see [PostGenStep.needs]. A check of a [Preflight] that
-/// does not apply to the app is still one of the contributor.
+/// [step] and its follow-ups (see [PostGenStep.followUps]), each before its
+/// own, in the order they run.
+Iterable<PostGenStep> withFollowUps(PostGenStep step) sync* {
+  yield step;
+  for (final next in step.followUps) {
+    yield* withFollowUps(next);
+  }
+}
+
+/// Post-generation steps, follow-ups included, that need a preflight check
+/// that their contributor does not have; see [PostGenStep.needs]. A check
+/// of a [Preflight] that does not apply to the app is still one of the
+/// contributor.
 Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
   final checks = <String, Set<String>>{};
   for (final collected in collection.all) {
@@ -536,16 +562,18 @@ Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
     if (collected.contribution case final PostGenStep step) {
       final contributor = contributorName(collected.origin);
       final own = checks[contributor] ?? const {};
-      for (final id in step.needs) {
-        if (own.contains(id)) continue;
-        yield SmfIssue(
-          'The step ${step.description ?? step.tool.executable} of '
-          '${collected.origin} needs the preflight check "$id", which '
-          '$contributor does not have.',
-          hint: 'A step needs only checks of the Preflight of its own '
-              'module.',
-          origin: collected.origin,
-        );
+      for (final part in withFollowUps(step)) {
+        for (final id in part.needs) {
+          if (own.contains(id)) continue;
+          yield SmfIssue(
+            'The step ${part.description ?? part.tool.executable} of '
+            '${collected.origin} needs the preflight check "$id", which '
+            '$contributor does not have.',
+            hint: 'A step needs only checks of the Preflight of its own '
+                'module.',
+            origin: collected.origin,
+          );
+        }
       }
     }
   }

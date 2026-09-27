@@ -736,6 +736,348 @@ void main() {
       });
     });
 
+    group('with follow-ups', () {
+      const fix = PostGenStep(
+        ToolRef('fix'),
+        ['project'],
+        description: 'Fix the project',
+        skippable: true,
+        followUps: [
+          PostGenStep(ToolRef('check'), ['project'], skippable: true),
+        ],
+      );
+      const setUp = PostGenStep(
+        ToolRef('firebase'),
+        ['setup'],
+        description: 'Set up Firebase',
+        interactive: true,
+        skippable: true,
+        followUps: [
+          fix,
+          PostGenStep(ToolRef('tidy'), [], skippable: true),
+        ],
+      );
+      const tool = PlannedCheck(_Check('tool', 'Tool'), _firebase);
+
+      /// Puts the tools of the follow-ups on the PATH.
+      void installTools() {
+        for (final name in ['fix', 'check', 'tidy']) {
+          host.fileSystem.file('/usr/bin/$name').createSync();
+        }
+      }
+
+      /// The records of [steps], as `description: command (reason)`.
+      List<String> records(List<SkippedStep> steps) =>
+          [for (final step in steps) '$step'];
+
+      test(
+          'run right after their step, in their order, once it succeeded, '
+          'without a question', () async {
+        environment = environmentOf(interactive: true, answers: [true, true]);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step('firebase', setUp),
+            _step(
+              'other',
+              const PostGenStep(ToolRef('firebase'), ['use'], skippable: true),
+            ),
+          ],
+        );
+
+        expect(skipped, isEmpty);
+        expect(runner.lines.sublist(1, 6), [
+          'firebase setup',
+          'fix project',
+          'check project',
+          'tidy',
+          'firebase use',
+        ]);
+        expect(host.prompter.asked.map((prompt) => prompt.message), [
+          'Set up Firebase (firebase setup), for firebase. Run it now?',
+          'firebase use, for other. Run it now?',
+        ]);
+        // Each runs as it is: the step with the terminal, its follow-up
+        // without, in the directory of the app.
+        expect(runner.calls[1].interactive, isTrue);
+        expect(runner.calls[2].interactive, isFalse);
+        expect(runner.calls[2].workingDirectory, '/tmp/app');
+        expect(
+          host.logger.progresses,
+          containsAllInOrder([
+            'start: Fix the project',
+            'complete: Fix the project',
+          ]),
+        );
+      });
+
+      test(
+          'are left for later after a step that the user leaves for later, '
+          'without a question', () async {
+        environment = environmentOf(interactive: true, answers: [false]);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', setUp)],
+        );
+
+        expect(records(skipped), [
+          'Set up Firebase: firebase setup (you chose to run it later)',
+          equals(
+            'Fix the project: fix project (it runs after "Set up Firebase", '
+            'which is not done)',
+          ),
+          equals(
+            'check project: check project (it runs after "Fix the project", '
+            'which is not done)',
+          ),
+          'tidy: tidy (it runs after "Set up Firebase", which is not done)',
+        ]);
+        expect(skipped.map((step) => step.failed), everyElement(isFalse));
+        expect(host.prompter.asked, hasLength(1));
+        expect(runner.lines, isNot(contains(startsWith('fix'))));
+        expect(runner.lines, isNot(contains(startsWith('check'))));
+        expect(runner.lines, isNot(contains(startsWith('tidy'))));
+      });
+
+      test('are left for later after a step that fails', () async {
+        environment = environmentOf(interactive: true, answers: [true]);
+        installTools();
+        runner.onInteractive = (call) => 1;
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', setUp)],
+        );
+
+        expect(skipped.map((step) => step.reason), [
+          'it exited with code 1',
+          'it runs after "Set up Firebase", which is not done',
+          'it runs after "Fix the project", which is not done',
+          'it runs after "Set up Firebase", which is not done',
+        ]);
+        // Only the step failed; its record tells why the rest is not done.
+        expect(skipped.map((step) => step.failed), [true, false, false, false]);
+        expect(runner.lines, isNot(contains(startsWith('fix'))));
+      });
+
+      test(
+          'are left for later after a step that the run or a check holds '
+          'back', () async {
+        for (final (run, checks, reason) in [
+          (
+            () => environmentOf(skipExternalSetup: true),
+            const <CheckResult>[],
+            'the run cannot ask the user',
+          ),
+          (
+            () => environmentOf(interactive: true),
+            const [
+              CheckResult(tool, PreflightMissing(instructions: 'Install it.')),
+            ],
+            'Tool is missing',
+          ),
+        ]) {
+          environment = run();
+          installTools();
+
+          final skipped = await runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: [
+              _step(
+                'firebase',
+                const PostGenStep(
+                  ToolRef('firebase'),
+                  ['setup'],
+                  description: 'Set up Firebase',
+                  interactive: true,
+                  skippable: true,
+                  needs: ['tool'],
+                  followUps: [fix],
+                ),
+              ),
+            ],
+            checks: checks,
+          );
+
+          expect(
+            records(skipped),
+            [
+              'Set up Firebase: firebase setup ($reason)',
+              equals(
+                'Fix the project: fix project (it runs after "Set up '
+                'Firebase", which is not done)',
+              ),
+              equals(
+                'check project: check project (it runs after "Fix the '
+                'project", which is not done)',
+              ),
+            ],
+            reason: reason,
+          );
+          expect(host.prompter.asked, isEmpty);
+          expect(runner.lines, isNot(contains(startsWith('fix'))));
+        }
+      });
+
+      test('otherwise go by their own needs, tools and results', () async {
+        environment = environmentOf(interactive: true, answers: [true]);
+        // The tool of tidy is missing.
+        for (final name in ['fix', 'check']) {
+          host.fileSystem.file('/usr/bin/$name').createSync();
+        }
+
+        final needsTool = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step(
+              'firebase',
+              const PostGenStep(
+                ToolRef('firebase'),
+                ['setup'],
+                description: 'Set up Firebase',
+                interactive: true,
+                skippable: true,
+                followUps: [
+                  PostGenStep(
+                    ToolRef('fix'),
+                    ['project'],
+                    description: 'Fix the project',
+                    skippable: true,
+                    needs: ['tool'],
+                    followUps: [
+                      PostGenStep(ToolRef('check'), ['project']),
+                    ],
+                  ),
+                  PostGenStep(ToolRef('tidy'), [], skippable: true),
+                ],
+              ),
+            ),
+          ],
+          checks: const [
+            CheckResult(tool, PreflightMissing(instructions: 'Install it.')),
+          ],
+        );
+
+        expect(records(needsTool), [
+          'Fix the project: fix project (Tool is missing)',
+          equals(
+            'check project: check project (it runs after "Fix the project", '
+            'which is not done)',
+          ),
+          'tidy: tidy (tidy was not found)',
+        ]);
+        expect(needsTool.map((step) => step.failed), [true, false, true]);
+        expect(runner.lines, contains('firebase setup'));
+        expect(runner.lines, isNot(contains(startsWith('fix'))));
+
+        environment = environmentOf(interactive: true, answers: [true]);
+        installTools();
+        runner.onRun = (call) => call.line == 'fix project'
+            ? const SmfProcessResult(exitCode: 2, stderr: 'no phase\n')
+            : const SmfProcessResult(exitCode: 0);
+
+        final fails = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', setUp)],
+        );
+
+        expect(records(fails), [
+          'Fix the project: fix project (it exited with code 2)',
+          equals(
+            'check project: check project (it runs after "Fix the project", '
+            'which is not done)',
+          ),
+        ]);
+        expect(fails.map((step) => step.failed), [true, false]);
+        expect(
+          host.logger.warnings.single,
+          'The step "Fix the project" failed: it exited with code 2:\n'
+          'no phase',
+        );
+        expect(runner.lines, containsAllInOrder(['firebase setup', 'tidy']));
+      });
+
+      test('that need a terminal are left for later in a run without one',
+          () async {
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step(
+              'firebase',
+              const PostGenStep(
+                ToolRef('firebase'),
+                ['setup'],
+                followUps: [
+                  PostGenStep(
+                    ToolRef('fix'),
+                    ['project'],
+                    interactive: true,
+                    skippable: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        expect(records(skipped), [
+          'fix project: fix project (the run cannot ask the user)',
+        ]);
+        expect(runner.lines, contains('firebase setup'));
+      });
+
+      test('that are not skippable stop generation when they fail', () async {
+        installTools();
+        runner.onRun = (call) => call.line == 'fix project'
+            ? const SmfProcessResult(exitCode: 4)
+            : const SmfProcessResult(exitCode: 0);
+
+        await expectLater(
+          runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: [
+              _step(
+                'firebase',
+                const PostGenStep(
+                  ToolRef('firebase'),
+                  ['setup'],
+                  followUps: [
+                    PostGenStep(
+                      ToolRef('fix'),
+                      ['project'],
+                      description: 'Fix the project',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => e.message,
+              'message',
+              'The step "Fix the project" of firebase failed: it exited with '
+                  'code 4',
+            ),
+          ),
+        );
+      });
+    });
+
     test('a step that a signal stopped says so', () async {
       environment = environmentOf(interactive: true, answers: [true]);
       runner.onInteractive = (call) => -2;
