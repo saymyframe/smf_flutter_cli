@@ -584,6 +584,287 @@ void main() {
     ]);
   });
 
+  group('packages of providers', () {
+    final state = TestRole<String>('state');
+    final nav = TestRole<String>('nav');
+    const pinned = PubspecContribution.hosted('flutter_bloc', '^9.1.1');
+    const taken = PubspecContribution.hosted('flutter_bloc', 'any');
+
+    TestModule provider(
+      String id,
+      Role<Object> role, {
+      Set<String> dependsOn = const {},
+      List<Contribution> contributions = const [],
+    }) =>
+        TestModule(
+          id,
+          dependsOn: dependsOn,
+          providers: [RoleProvider.plain(role)],
+          contributions: contributions,
+        );
+
+    /// Validates an app of [modules], all requested, in which the module
+    /// named by a key of [variants] has its variant for the provider of the
+    /// value.
+    ValidationResult validateWith(
+      List<SmfModule> modules, {
+      Map<String, String> variants = const {},
+    }) {
+      final resolution = Resolution([
+        for (final module in modules)
+          ResolvedModule(
+            module,
+            const Requested(),
+            variant: switch (variants[module.descriptor.id.value]) {
+              final id? => ModuleId(id),
+              null => null,
+            },
+          ),
+      ]);
+      return validate(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        context: testContext,
+      );
+    }
+
+    test('a module takes one in its variant for it or by depending on it', () {
+      final base = TestRole<String>('base');
+      final result = validateWith(
+        [
+          entry,
+          provider('bloc', state, contributions: const [pinned]),
+          TestModule(
+            'feature',
+            variants: Variants(
+              role: state,
+              byProvider: {
+                const ModuleId('bloc'): (_) => const [taken],
+              },
+            ),
+          ),
+          TestModule('direct', dependsOn: {'bloc'}, contributions: [taken]),
+          TestModule(
+            'through',
+            dependsOn: {'direct'},
+            contributions: const [
+              PubspecContribution.hosted('flutter_bloc', '^9.1.0', dev: true),
+            ],
+          ),
+          // A variant for a provider that depends on the provider of the
+          // package.
+          provider(
+            'router_base',
+            base,
+            contributions: const [
+              PubspecContribution.hosted('router_lib', '^1.0.0'),
+            ],
+          ),
+          provider('auto', nav, dependsOn: {'router_base'}),
+          TestModule(
+            'page',
+            variants: Variants(
+              role: nav,
+              byProvider: {
+                const ModuleId('auto'): (_) => const [
+                      PubspecContribution.hosted('router_lib', 'any'),
+                    ],
+              },
+            ),
+          ),
+        ],
+        variants: {'feature': 'bloc', 'page': 'auto'},
+      );
+
+      expect(result.issues, isEmpty);
+    });
+
+    test('any other module that contributes one is at fault', () {
+      final absent = TestRole<String>('absent');
+      final result = validateWith(
+        [
+          entry,
+          provider('bloc', state, contributions: const [pinned]),
+          provider('go', nav),
+          TestModule('rogue', contributions: [taken]),
+          // With a constraint of its own, as a dev dependency, and in a
+          // contribution that does not apply in the app.
+          TestModule(
+            'pinned',
+            uses: {absent},
+            contributions: [
+              PubspecContribution.hosted(
+                'flutter_bloc',
+                '^9.1.1',
+                dev: true,
+                when: {absent},
+              ),
+            ],
+          ),
+          // In its variant for another provider.
+          TestModule(
+            'page',
+            variants: Variants(
+              role: nav,
+              byProvider: {
+                const ModuleId('go'): (_) => const [taken],
+              },
+            ),
+          ),
+        ],
+        variants: {'page': 'go'},
+      );
+
+      String problem(String origin, String module) =>
+          '$origin: $origin contributes flutter_bloc, a package of bloc, '
+          'which provides the state, but $module neither has a variant for it '
+          'nor depends on it.';
+      expect(_messages(result), [
+        problem('rogue', 'rogue'),
+        problem('pinned', 'pinned'),
+        problem('page (go)', 'page'),
+      ]);
+      expect(
+        result.issues.first.hint,
+        'A module takes the package of a provider of a role only in its '
+        'variant for the provider, with the constraint any, or by depending '
+        'on the provider.',
+      );
+      expect(
+        result.issues.last.origin,
+        const ModuleOrigin(ModuleId('page'), variant: ModuleId('go')),
+      );
+    });
+
+    test('packages that no provider of a role brings are shared', () {
+      final result = validateWith([
+        entry,
+        provider(
+          'go',
+          nav,
+          contributions: const [
+            PubspecContribution.hosted('collection', 'any'),
+            PubspecContribution.sdk('flutter_localizations'),
+          ],
+        ),
+        TestModule(
+          'a',
+          contributions: const [
+            PubspecContribution.hosted('collection', 'any'),
+            PubspecContribution.hosted('json_annotation', '^4.9.0'),
+            PubspecContribution.sdk('flutter_localizations'),
+          ],
+        ),
+        TestModule(
+          'b',
+          contributions: const [
+            PubspecContribution.hosted('json_annotation', '^4.9.0'),
+          ],
+        ),
+      ]);
+
+      expect(result.issues, isEmpty);
+    });
+
+    test('a provider that repeats a package of its dependency does not own it',
+        () {
+      final tracking = TestRole<String>(
+        'tracking',
+        cardinality: RoleCardinality.many,
+      );
+      final crashes = TestRole<String>(
+        'crashes',
+        cardinality: RoleCardinality.many,
+      );
+      const core = PubspecContribution.hosted('firebase_core', '^4.15.0');
+      final result = validateWith([
+        entry,
+        TestModule('firebase', contributions: const [core]),
+        provider(
+          'analytics',
+          tracking,
+          dependsOn: {'firebase'},
+          contributions: const [core],
+        ),
+        provider(
+          'crash',
+          crashes,
+          dependsOn: {'firebase'},
+          contributions: const [core],
+        ),
+      ]);
+
+      expect(result.issues, isEmpty);
+    });
+
+    test('two providers that bring a package take it from each other', () {
+      const shared = PubspecContribution.hosted('shared_lib', '^1.0.0');
+      const user = PubspecContribution.hosted('shared_lib', 'any');
+      final result = validateWith([
+        entry,
+        provider('bloc', state, contributions: const [shared]),
+        provider('go', nav, contributions: const [shared]),
+        TestModule('user', contributions: const [user]),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'bloc: bloc contributes shared_lib, a package of go, which provides '
+          'the nav, but bloc neither has a variant for it nor depends on it.',
+        ),
+        equals(
+          'go: go contributes shared_lib, a package of bloc, which provides '
+          'the state, but go neither has a variant for it nor depends on it.',
+        ),
+        equals(
+          'user: user contributes shared_lib, a package of bloc, which '
+          'provides the state, and of go, which provides the nav, but user '
+          'neither has a variant for any of them nor depends on any of them.',
+        ),
+      ]);
+
+      // Once one depends on the other, the package is of the other alone.
+      expect(
+        validateWith([
+          entry,
+          provider('bloc', state, contributions: const [shared]),
+          provider(
+            'go',
+            nav,
+            dependsOn: {'bloc'},
+            contributions: const [shared],
+          ),
+          TestModule('user', dependsOn: {'go'}, contributions: const [user]),
+        ]).issues,
+        isEmpty,
+      );
+    });
+
+    test('names every role of a provider', () {
+      final result = validateWith([
+        entry,
+        TestModule(
+          'kit',
+          providers: [
+            RoleProvider.plain(state),
+            RoleProvider.plain(nav),
+            RoleProvider.plain(TestRole<String>('theme')),
+          ],
+          contributions: const [pinned],
+        ),
+        TestModule('rogue', contributions: [taken]),
+      ]);
+
+      expect(
+        result.issues.single.message,
+        'rogue contributes flutter_bloc, a package of kit, which provides the '
+        'state, the nav and the theme, but rogue neither has a variant for it '
+        'nor depends on it.',
+      );
+    });
+  });
+
   test('the app may not be named like a dependency', () {
     final registry = ModuleRegistry([
       scaffold(

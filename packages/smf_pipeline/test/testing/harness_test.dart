@@ -192,6 +192,62 @@ void main() {
     },
   );
 
+  test('reports a module that takes the package of a provider', () async {
+    final state = TestRole<NoDsl>('state');
+    const pinned = PubspecContribution.hosted('flutter_bloc', '^9.1.1');
+    const taken = PubspecContribution.hosted('flutter_bloc', 'any');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'bloc',
+          providers: [RoleProvider.plain(state)],
+          contributions: const [pinned],
+        ),
+        TestModule('riverpod', providers: [RoleProvider.plain(state)]),
+        TestModule(
+          'feature',
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (_) => const [taken],
+              const ModuleId('riverpod'): (_) => const [],
+            },
+          ),
+        ),
+        TestModule('helper', dependsOn: {'bloc'}, contributions: [taken]),
+        TestModule('rogue', contributions: [taken]),
+      ]),
+    );
+
+    // The apps of a module have the providers of its roles, and rogue
+    // declares none; the app with every module and bloc has both.
+    final results = await harness.checkAll();
+    expect(
+      [
+        for (final result in results)
+          for (final issue in result.errors) '${result.contractCase}: $issue',
+      ],
+      isEmpty,
+    );
+    final every = await harness.check(
+      harness.casesOfAll().singleWhere(
+            (c) => c.name == 'every module (bloc)',
+          ),
+    );
+    expect(
+      [for (final issue in every.errors) '${issue.origin}: ${issue.message}'],
+      [
+        equals(
+          'rogue: rogue contributes flutter_bloc, a package of bloc, which '
+          'provides the state, but rogue neither has a variant for it nor '
+          'depends on it.',
+        ),
+      ],
+    );
+    expect(every.app, isNull);
+  });
+
   test('checks every module and role, each app once', () async {
     final results = await harness.checkAll();
 

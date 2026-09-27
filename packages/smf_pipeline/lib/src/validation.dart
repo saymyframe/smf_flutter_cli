@@ -1,3 +1,4 @@
+import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_pipeline/src/access.dart';
 import 'package:smf_pipeline/src/collector.dart';
@@ -133,6 +134,8 @@ List<String> strippedVars(Map<String, Object?> vars) {
 ///   owner per file, brick variables that are not reserved and that mason
 ///   renders as they are;
 /// - the rules of each module's kind;
+/// - that a module contributes the package of a provider of a role only in
+///   its variant for the provider or when it depends on the provider;
 /// - the pubspec, with [codegenDependency] if code generation is requested:
 ///   it has a Dart SDK constraint, and the app is not named like a
 ///   dependency;
@@ -173,6 +176,7 @@ ValidationResult validate({
   for (final module in resolution.modules) {
     issues.addAll(_kindIssues(module, collection));
   }
+  issues.addAll(_packageIssues(resolution, collection));
 
   final codegen = collection.applyingOf<CodegenRequest>().isNotEmpty;
   // First, so that a module whose constraint conflicts is at fault.
@@ -711,6 +715,113 @@ Iterable<SmfIssue> _kindIssues(
       );
     }
   }
+}
+
+/// Contributions of the package of a provider of a role by modules that
+/// neither have a variant for the provider nor depend on it.
+///
+/// A module brings a hosted package, a dependency or a dev dependency, when
+/// it contributes the package itself, not in a variant, with a constraint of
+/// its own rather than `any`. The package is of a provider of a role when
+/// the provider brings it and no module that the provider depends on,
+/// directly or not, brings it too, as a provider of the state management
+/// with Riverpod brings `flutter_riverpod`. Any other module that
+/// contributes the package, with any constraint, takes it from the
+/// provider, which only these allow:
+/// - its variant for the provider, or for a provider that depends on it;
+/// - a dependency on the provider, directly or not.
+///
+/// With several such providers, one of them is enough. So a package that no
+/// provider of a role brings is shared by every module that needs it, such
+/// as `collection`, which Flutter pins and modules contribute with `any`,
+/// and two providers that bring the same package take it from each other
+/// unless one depends on the other.
+///
+/// Every contribution counts, whether it applies in the app or not.
+Iterable<SmfIssue> _packageIssues(
+  Resolution resolution,
+  Collection collection,
+) sync* {
+  // Who contributes each hosted package, in order, and who brings it.
+  final contributors = <String, List<ModuleOrigin>>{};
+  final bringers = <String, Set<ModuleId>>{};
+  for (final collected in collection.all) {
+    if ((collected.origin, collected.contribution)
+        case (
+          final ModuleOrigin origin,
+          PubspecDependency(
+            source: PubspecSource.hosted,
+            :final package,
+            :final constraint,
+          ),
+        )) {
+      final origins = contributors.putIfAbsent(package, () => []);
+      if (!origins.contains(origin)) origins.add(origin);
+      if (origin.variant == null && !_allowsAny(constraint)) {
+        bringers.putIfAbsent(package, () => {}).add(origin.module);
+      }
+    }
+  }
+
+  for (final MapEntry(key: package, value: origins) in contributors.entries) {
+    final brought = bringers[package] ?? const <ModuleId>{};
+    final owners = [
+      for (final module in resolution.modules)
+        if (brought.contains(module.id) &&
+            module.descriptor.provides.isNotEmpty &&
+            !resolution.dependencyClosure(module.id).any(brought.contains))
+          module,
+    ];
+    for (final origin in origins) {
+      final others = [
+        for (final owner in owners)
+          if (owner.id != origin.module) owner,
+      ];
+      if (others.isEmpty) continue;
+      final variant = origin.variant;
+      final reached = {
+        ...resolution.dependencyClosure(origin.module),
+        if (variant != null) ...{
+          variant,
+          ...resolution.dependencyClosure(variant),
+        },
+      };
+      if (others.any((owner) => reached.contains(owner.id))) continue;
+      final whose = [
+        for (final owner in others)
+          '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
+      ].join(', and of ');
+      final them = others.length == 1 ? 'it' : 'any of them';
+      yield SmfIssue(
+        '$origin contributes $package, a package of $whose, but '
+        '${origin.module} neither has a variant for $them nor depends on '
+        '$them.',
+        hint: 'A module takes the package of a provider of a role only in its '
+            'variant for the provider, with the constraint any, or by '
+            'depending on the provider.',
+        origin: origin,
+      );
+    }
+  }
+}
+
+/// Whether [constraint] allows every version, as `any` does.
+bool _allowsAny(String? constraint) {
+  if (constraint == null) return false;
+  try {
+    return VersionConstraint.parse(constraint).isAny;
+  } on FormatException {
+    // The merge of the pubspec reports it.
+    return false;
+  }
+}
+
+/// The roles that [descriptor] provides, as `the a and the b`.
+String _rolesText(ModuleDescriptor descriptor) {
+  final names = [for (final role in descriptor.provides) 'the ${role.id}'];
+  return names.length == 1
+      ? names.single
+      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 }
 
 /// Runs the `validate` hooks of the present roles' templates and providers
