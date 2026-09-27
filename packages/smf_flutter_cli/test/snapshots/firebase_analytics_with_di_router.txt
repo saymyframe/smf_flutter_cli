@@ -326,6 +326,8 @@ final class _AnalyticsServices implements AnalyticsService {
 }
 === lib/core/analytics/firebase_analytics_service.dart (firebase_analytics) ===
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show PlatformException;
 
 import 'analytics_service.dart';
 
@@ -373,6 +375,29 @@ final class FirebaseAnalyticsService implements AnalyticsService {
     required String name,
     required String? value,
   }) => _analytics.setUserProperty(name: name, value: value);
+}
+
+/// Logs a screen view to Firebase Analytics for the screen the user sees,
+/// which the router of the app tells it about, named by the full name of
+/// its route, such as `home.home`.
+///
+/// A screen that is no route of a module is the fallback start screen of
+/// the app, logged as `/`, or the error screen of the router, which is not
+/// logged: the location that the app cannot show may hold anything, such
+/// as a token of a link.
+///
+/// Nothing waits for the screen view, so an error of the platform is
+/// printed rather than left to the handler of the uncaught errors of the
+/// app.
+void logFirebaseScreenView(String? route, String location) {
+  final name = route ?? (Uri.parse(location).path == '/' ? '/' : null);
+  if (name == null) return;
+  FirebaseAnalytics.instance
+      .logScreenView(screenName: name)
+      .catchError(
+        (Object error) => debugPrint('Firebase Analytics: $error'),
+        test: (error) => error is PlatformException,
+      );
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
@@ -499,10 +524,10 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
-import 'package:firebase_analytics/firebase_analytics.dart'
-    show FirebaseAnalytics;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_app/core/analytics/firebase_analytics_service.dart'
+    show logFirebaseScreenView;
 import 'package:my_app/core/app/fallback_start_screen.dart';
 
 import 'app_router.dart' show AppNavigator, AppRouter;
@@ -558,8 +583,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// of its configuration, a switch of branches included, and may do so
   /// again without a change of the page on top, which the listeners of the
   /// screen do not hear of twice. The location of a pushed page is its own,
-  /// as that of the configuration leaves pushed pages out; the error screen
-  /// of go_router has no page.
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
   void _showScreen() {
     final configuration = config.routerDelegate.currentConfiguration;
     final top = configuration.lastOrNull;
@@ -586,9 +612,7 @@ List<NavigatorObserver> _observers() => [
 /// the route of the screen, or `null` for a screen that is not a route of a
 /// module, and its location.
 final List<void Function(String? route, String location)> _screenListeners = [
-  (route, location) => FirebaseAnalytics.instance.logScreenView(
-    screenName: route ?? Uri.parse(location).path,
-  ),
+  logFirebaseScreenView,
 ];
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';

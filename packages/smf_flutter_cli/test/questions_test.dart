@@ -682,7 +682,10 @@ void main() {
       app
           .childFile('lib/core/analytics/firebase_analytics_service.dart')
           .readAsStringSync(),
-      contains('FirebaseAnalytics.instance'),
+      allOf(
+        contains('FirebaseAnalytics.instance'),
+        contains('void logFirebaseScreenView(String? route, String location)'),
+      ),
     );
     // The router tells the listener of Firebase Analytics about the screen
     // the user sees, in the main navigation too, and its navigators have no
@@ -693,11 +696,8 @@ void main() {
     expect(
       router,
       allOf(
-        contains(
-          '(route, location) => '
-          'FirebaseAnalytics.instance.logScreenView(screenName: '
-          'route ?? Uri.parse(location).path),',
-        ),
+        contains('show logFirebaseScreenView;'),
+        contains('\nlogFirebaseScreenView,\n'),
         contains('..routerDelegate.addListener(_showScreen);'),
         contains('StatefulShellBranch('),
         isNot(contains('FirebaseAnalyticsObserver')),
@@ -767,6 +767,7 @@ void main() {
       everyElement(
         allOf(
           isNot(contains('logScreenView')),
+          isNot(contains('logFirebaseScreenView')),
           isNot(contains('FirebaseAnalyticsObserver')),
         ),
       ),
