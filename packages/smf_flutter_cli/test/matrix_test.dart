@@ -1,3 +1,4 @@
+import 'package:file/memory.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
@@ -121,10 +122,12 @@ void main() {
   group('runMatrix', () {
     late List<String> log;
     late List<List<String>> created;
+    late List<String> tested;
 
     setUp(() {
       log = [];
       created = [];
+      tested = [];
     });
 
     Future<int> run({
@@ -133,26 +136,38 @@ void main() {
       List<LeftOut> leftOut = const [],
       List<SkippedStep> skippedSteps = const [],
       int analyzeCode = 0,
+      List<MatrixAppTest> appTests = const [],
+      int testCode = 0,
     }) =>
         runMatrix(
           modules,
           directory: '/apps',
+          appTests: appTests,
           log: log.add,
-          create: (arguments, onCreated) async {
-            created.add(arguments);
-            if (createCode == 0) {
-              onCreated(
-                GeneratedApp(
-                  name: arguments[1],
-                  path: '/apps/${arguments[1]}',
-                  leftOut: leftOut,
-                  skippedSteps: skippedSteps,
-                ),
+          commands: MatrixCommands(
+            create: (arguments, onCreated) async {
+              created.add(arguments);
+              if (createCode == 0) {
+                onCreated(
+                  GeneratedApp(
+                    name: arguments[1],
+                    path: '/apps/${arguments[1]}',
+                    leftOut: leftOut,
+                    skippedSteps: skippedSteps,
+                  ),
+                );
+              }
+              return createCode;
+            },
+            analyze: (directory) async => (analyzeCode, 'Analyzed $directory'),
+            test: (generated, app, tests) async {
+              tested.add(
+                '${generated.name} (${app.name}): '
+                '${[for (final test in tests) test.directory].join(', ')}',
               );
-            }
-            return createCode;
-          },
-          analyze: (directory) async => (analyzeCode, 'Analyzed $directory'),
+              return (testCode, 'Tested ${generated.path}');
+            },
+          ),
         );
 
     test('generates and analyzes every app', () async {
@@ -214,6 +229,39 @@ void main() {
       );
     });
 
+    test('runs the tests that apply to an app once it passed the analysis',
+        () async {
+      final core = MatrixAppTest(
+        '/tests/core',
+        appliesTo: (app) => app.modules.contains(FlutterCoreModule.id),
+      );
+      final other = MatrixAppTest(
+        '/tests/other',
+        appliesTo: (app) => app.modules.contains(const ModuleId('other')),
+      );
+
+      expect(await run(appTests: [core, other]), 0);
+      expect(tested, ['app_1 (flutter_core): /tests/core']);
+      expect(log, [
+        '\n=== app_1: flutter_core (flutter_core)',
+        'Analyzed /apps/app_1',
+        'Tested /apps/app_1',
+        '\n1 apps generated in /apps.',
+      ]);
+
+      tested.clear();
+      expect(await run(appTests: [other]), 0);
+      expect(tested, isEmpty);
+
+      expect(await run(appTests: [core], analyzeCode: 1), 1);
+      expect(tested, isEmpty);
+
+      expect(await run(appTests: [core], testCode: 2), 1);
+      expect(tested, hasLength(1));
+      expect(log.last, contains('app_1 (flutter_core (flutter_core)): '));
+      expect(log.last, endsWith('its tests exited with 2.'));
+    });
+
     test('fails when the contract harness finds errors in a case', () async {
       expect(
         await run(modules: const [FlutterCoreModule(), _Broken()]),
@@ -226,5 +274,48 @@ void main() {
         startsWith('every module: error [broken]'),
       ]);
     });
+  });
+
+  test('the tests of an app go into it with their placeholders filled', () {
+    final fileSystem = MemoryFileSystem();
+    fileSystem.file('/tests/core/test/core_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:{{app_name}}/app.dart';\n// {{screen}}, {{other}}\n",
+      );
+    fileSystem.file('/tests/core/lib/options.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('const options = 1;\n');
+    fileSystem.file('/tests/more/test/more_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// {{app_name}}\n');
+    fileSystem.file('/apps/app_1/lib/options.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('const options = 0;\n');
+    const app = MatrixApp('home', [ModuleId('home')]);
+
+    addAppTests(
+      [
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          values: (app) => {'screen': '${app.modules.single}.home'},
+        ),
+        MatrixAppTest('/tests/more', appliesTo: (app) => true),
+      ],
+      app: app,
+      directory: '/apps/app_1',
+      packageName: 'my_app',
+      fileSystem: fileSystem,
+    );
+
+    String read(String path) =>
+        fileSystem.file('/apps/app_1/$path').readAsStringSync();
+    expect(
+      read('test/core_test.dart'),
+      "import 'package:my_app/app.dart';\n// home.home, {{other}}\n",
+    );
+    expect(read('lib/options.dart'), 'const options = 1;\n');
+    expect(read('test/more_test.dart'), '// my_app\n');
   });
 }
