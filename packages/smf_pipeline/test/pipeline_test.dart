@@ -204,6 +204,238 @@ void main() {
       );
     });
 
+    group('keeps a module that no app can be made without', () {
+      /// A required check that fails, which nothing can install.
+      TestCheck failing() => TestCheck(
+            'tool',
+            status: const PreflightMissing(instructions: 'Get the tool.'),
+            required: true,
+          );
+
+      /// Another provider of the app entry, [id], with the contributions of
+      /// the scaffold of the tests.
+      TestModule entry(
+        String id, {
+        Set<String> dependsOn = const {},
+        Set<Role> requires = const {},
+        List<Contribution> contributions = const [],
+      }) =>
+          TestModule(
+            id,
+            kind: ModuleKinds.scaffold,
+            dependsOn: dependsOn,
+            requires: requires,
+            providers: [const RoleProvider.plain(appEntryRole)],
+            contributions: [
+              entryBrick(),
+              AppEntryRole.iosDeploymentTarget.value('13.0'),
+              const PubspecContribution.environment(sdk: '^3.8.1'),
+              const PubspecContribution.sdk('flutter'),
+              ...contributions,
+            ],
+          );
+
+      test(
+          'and stops at its problem, with its hint, for a Flutter SDK that is '
+          'too old', () async {
+        final host = FakeHost();
+        host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(
+            '{"flutterVersion": "3.29.3", "dartSdkVersion": "3.7.2"}',
+          );
+        final modules = [scaffold(), TestModule('home')];
+
+        await expectLater(
+          pipeline(modules, host).plan(request(['home'])),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [for (final issue in e.issues) '$issue'],
+              'issues',
+              // Not "No module provides the app entry role", which leaving
+              // out the scaffold would bring, and not to leave it out.
+              [
+                equals(
+                  'error [scaffold]: scaffold needs Dart ^3.8.1, but the '
+                  'Flutter SDK at /sdk/bin/flutter has Dart 3.7.2. (Upgrade '
+                  'Flutter.)',
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(host.logger.warnings, isEmpty);
+      });
+
+      test('and installs nothing for a run that stops so', () async {
+        final host = FakeHost(answers: [true], terminal: true);
+        host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(
+            '{"flutterVersion": "3.29.3", "dartSdkVersion": "3.7.2"}',
+          );
+        final installable = TestCheck(
+          'cli',
+          status: const PreflightMissing(
+            instructions: 'Install it.',
+            installable: true,
+          ),
+          afterInstall: const PreflightPassed(),
+        );
+        final modules = [
+          scaffold(),
+          TestModule(
+            'firebase',
+            contributions: [
+              Preflight([installable]),
+            ],
+          ),
+        ];
+
+        await expectLater(
+          pipeline(modules, host).plan(
+            const CreateRequest(
+              appName: 'my_app',
+              org: 'com.example',
+              modules: [ModuleId('firebase')],
+            ),
+          ),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => e.issues.map((issue) => issue.message),
+              'issues',
+              [startsWith('scaffold needs Dart ^3.8.1')],
+            ),
+          ),
+        );
+        // The check of firebase only warns, and is not asked about.
+        expect(installable.installs, 0);
+        expect(host.prompter.asked, isEmpty);
+        expect(host.logger.warnings, [
+          'warning [firebase]: Tool cli is missing. Install it.',
+        ]);
+      });
+
+      test('and the modules it depends on', () async {
+        final host = FakeHost();
+        final modules = [
+          entry('entry', dependsOn: {'base'}),
+          TestModule(
+            'base',
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          TestModule('home'),
+        ];
+
+        await expectLater(
+          pipeline(modules, host).plan(request(['home'])),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [for (final issue in e.issues) '${issue.origin}'],
+              'origins',
+              ['base'],
+            ),
+          ),
+        );
+        expect(host.logger.warnings, isEmpty);
+      });
+
+      test('and the only provider of a role it requires', () async {
+        final host = FakeHost();
+        final tooling = TestRole<NoDsl>('tooling');
+        final modules = [
+          entry('entry', requires: {tooling}),
+          TestModule(
+            'maker',
+            providers: [RoleProvider.plain(tooling)],
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          TestModule('home'),
+        ];
+
+        await expectLater(
+          pipeline(modules, host).plan(request(['home'])),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [for (final issue in e.issues) '${issue.origin}'],
+              'origins',
+              ['maker'],
+            ),
+          ),
+        );
+        expect(host.logger.warnings, isEmpty);
+      });
+
+      test('but leaves out a provider that another can replace', () async {
+        final host = FakeHost();
+        final modules = [
+          entry(
+            'entry',
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          entry('other'),
+        ];
+
+        final plan = (await pipeline(modules, host).plan(request(['entry'])))!;
+
+        expect(plan.leftOut.single.module, const ModuleId('entry'));
+        expect(
+          '${plan.resolution.modules.single.reason}',
+          'the only provider of the app entry role, which every app needs',
+        );
+        await plan.environment.dispose();
+      });
+
+      test('and --explain says that generation would stop', () async {
+        final host = FakeHost();
+        final modules = [
+          scaffold(
+            contributions: [
+              Preflight([failing()]),
+            ],
+          ),
+          TestModule(
+            'home',
+            contributions: [
+              Preflight([
+                TestCheck(
+                  'cli',
+                  status: const PreflightMissing(instructions: 'Get it.'),
+                  required: true,
+                ),
+              ]),
+            ],
+          ),
+        ];
+
+        await pipeline(modules, host).plan(request(['home'], explain: true));
+
+        final report = host.logger.infos.join('\n');
+        expect(
+          report,
+          contains(
+            '  ✗ Tool tool (for scaffold): missing\n'
+            '    Get the tool.\n'
+            '    Generation would stop.',
+          ),
+        );
+        expect(
+          report,
+          contains(
+            '  ✗ Tool cli (for home): missing\n'
+            '    Get it.\n'
+            '    Generation would leave out home.',
+          ),
+        );
+      });
+    });
+
     test('fails on an error no module caused', () async {
       final modules = [
         scaffold(),

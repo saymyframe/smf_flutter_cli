@@ -37,6 +37,7 @@ final class Explanation {
     required this.leftOut,
     required this.strict,
     required this.operatingSystem,
+    this.canDoWithout = _anyModules,
     this.onConflict = OnConflict.prompt,
     this.sdkIssues = const [],
     this.codegen = const [],
@@ -63,6 +64,11 @@ final class Explanation {
   /// Whether the run is strict, so that a missing required check would stop
   /// it rather than leave out its module.
   final bool strict;
+
+  /// Whether an app can be made without the modules; a missing required
+  /// check of a module that no app can be made without would stop the run
+  /// too.
+  final bool Function(Set<ModuleId> modules) canDoWithout;
 
   /// The system whose shell the commands are quoted for.
   final HostOperatingSystem operatingSystem;
@@ -217,7 +223,7 @@ final class Explanation {
     }
     if (!result.passed && check.required) {
       lines.add(
-        origin is ModuleOrigin && !strict
+        origin is ModuleOrigin && !strict && canDoWithout({origin.module})
             ? '    Generation would leave out ${origin.module}.'
             : '    Generation would stop.',
       );
@@ -274,3 +280,7 @@ const Map<HostOperatingSystem, String> _systemNames = {
   HostOperatingSystem.windows: 'Windows',
   HostOperatingSystem.other: 'other systems',
 };
+
+/// The default of [Explanation.canDoWithout]: an app can be made without
+/// any modules.
+bool _anyModules(Set<ModuleId> modules) => true;

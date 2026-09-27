@@ -278,10 +278,11 @@ extension CreatePlanning on CreatePipeline {
   /// 7. Choices: what only the user can decide, such as the start screen.
   ///
   /// In lenient mode, the default, a problem caused by a module leaves that
-  /// module out and the stages run again from 3 without it; with `--strict`
-  /// every error stops generation. `--explain` runs the stages 1 to 5 and
-  /// the read-only part of 6, prints what it found, and stops: it never
-  /// asks, installs, logs in or chooses.
+  /// module out and the stages run again from 3 without it, unless no app
+  /// can be made without the module, as without the only provider of a role
+  /// that every app has; with `--strict` every error stops generation.
+  /// `--explain` runs the stages 1 to 5 and the read-only part of 6, prints
+  /// what it found, and stops: it never asks, installs, logs in or chooses.
   ///
   /// Throws a [GenerationFailedException] with the errors found, or an
   /// [SmfUsageException] for a problem of the command line.
@@ -308,7 +309,11 @@ extension CreatePlanning on CreatePipeline {
     final context =
         AppNames.contextOf(name: selection.appName, org: selection.org);
 
-    final lenience = _Lenience(strict: request.strict, logger: logger);
+    final lenience = _Lenience(
+      registry,
+      strict: request.strict,
+      logger: logger,
+    );
     final answers = <Role, ModuleId>{};
     final checked = <String, CheckResult>{};
     final sdkCheck = FlutterSdkCheck(
@@ -351,6 +356,7 @@ extension CreatePlanning on CreatePipeline {
         environment,
         explain: request.explain,
         strict: request.strict,
+        canDoWithout: lenience.canDoWithout,
         pubspec: validation.pubspec,
         known: checked,
       );
@@ -367,6 +373,7 @@ extension CreatePlanning on CreatePipeline {
           preflight: preflight,
           leftOut: lenience.leftOut,
           strict: request.strict,
+          canDoWithout: lenience.canDoWithout,
           operatingSystem: environment.operatingSystem,
           onConflict: request.onConflict,
           sdkIssues: preflight.versionIssues,
@@ -422,18 +429,26 @@ void _reportAdded(Resolution resolution, SmfLogger logger) {
 /// What lenient mode has decided so far in a run: the modules it left out
 /// and the warnings already reported.
 final class _Lenience {
-  _Lenience({required this.strict, required this.logger});
+  _Lenience(this.registry, {required this.strict, required this.logger});
 
+  final ModuleRegistry registry;
   final bool strict;
   final SmfLogger logger;
   final Set<ModuleId> excluded = {};
   final List<LeftOut> leftOut = [];
   final Set<String> _warned = {};
 
+  /// Whether an app can be made without [modules] and the modules left out
+  /// so far; see [_canDoWithout].
+  bool canDoWithout(Set<ModuleId> modules) =>
+      _canDoWithout(registry, {...excluded, ...modules});
+
   /// Reports the warnings among [issues], each once per run, and decides
   /// what their errors mean: nothing if there are none, a retry without the
   /// modules at fault if lenient mode can leave them all out (returns
-  /// `true`), or a [GenerationFailedException] otherwise.
+  /// `true`), or a [GenerationFailedException] otherwise. Lenient mode does
+  /// not leave out modules that no app can be made without: their errors,
+  /// with the hints that tell how to fix them, stop generation.
   bool leaveOut(List<SmfIssue> issues) {
     for (final issue in issues) {
       if (!issue.isError && _warned.add('$issue')) logger.warn('$issue');
@@ -444,7 +459,7 @@ final class _Lenience {
     ];
     if (errors.isEmpty) return false;
     final culprits = _culpritsOf(errors);
-    if (strict || culprits.isEmpty) {
+    if (strict || culprits.isEmpty || !canDoWithout(culprits.keys.toSet())) {
       throw GenerationFailedException(
         errors.length == 1
             ? 'Generation stopped because of an error.'
@@ -475,4 +490,37 @@ final class _Lenience {
     }
     return culprits;
   }
+}
+
+/// Whether [registry] can make an app without the modules [without]: every
+/// role that each app has exactly one of keeps a provider that is not among
+/// them and neither depends on one of them nor requires a role whose
+/// providers are all among them, directly or not.
+///
+/// Without such a provider, the resolution stops generation anyway, since
+/// every app needs the role. So lenient mode keeps a module that the app
+/// cannot do without, such as the only provider of the app entry, and stops
+/// at its own problem, which tells how to fix it.
+bool _canDoWithout(ModuleRegistry registry, Set<ModuleId> without) {
+  final gone = {...without};
+  bool isGone(SmfModule module) => gone.contains(module.descriptor.id);
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (final module in registry.modules) {
+      if (isGone(module)) continue;
+      final descriptor = module.descriptor;
+      if (descriptor.dependsOn.any(gone.contains) ||
+          descriptor.effectiveRequires
+              .any((role) => registry.providersOf(role).every(isGone))) {
+        gone.add(descriptor.id);
+        changed = true;
+      }
+    }
+  }
+  return registry.roles.every(
+    (role) =>
+        role.cardinality != RoleCardinality.exactlyOne ||
+        registry.providersOf(role).any((module) => !isGone(module)),
+  );
 }

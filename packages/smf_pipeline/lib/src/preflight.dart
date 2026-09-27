@@ -156,8 +156,13 @@ final class FlutterSdkCheck extends PreflightCheck {
 /// is an error before anything is generated.
 ///
 /// A constraint that one module narrowed is that module's problem, so
-/// lenient mode can leave it out.
-List<SmfIssue> sdkVersionIssues(FlutterSdk? sdk, MergedPubspec pubspec) {
+/// lenient mode can leave it out. The hint suggests leaving it out only if
+/// [canDoWithout] says that an app can be made without it.
+List<SmfIssue> sdkVersionIssues(
+  FlutterSdk? sdk,
+  MergedPubspec pubspec, {
+  bool Function(Set<ModuleId> modules) canDoWithout = _anyModules,
+}) {
   if (sdk == null) return const [];
   final issues = <SmfIssue>[];
   void check(
@@ -181,13 +186,17 @@ List<SmfIssue> sdkVersionIssues(FlutterSdk? sdk, MergedPubspec pubspec) {
       1 => '$single needs',
       _ => '${distinct.join(', ')} need',
     };
+    final leavable = switch (single) {
+      ModuleOrigin(:final module) => canDoWithout({module}),
+      _ => false,
+    };
     issues.add(
       SmfIssue(
         '$who $name $constraint, but the Flutter SDK at ${sdk.flutter} has '
         '$name $version.',
-        hint: single == null
-            ? 'Upgrade Flutter.'
-            : 'Upgrade Flutter, or leave out $single.',
+        hint: leavable
+            ? 'Upgrade Flutter, or leave out $single.'
+            : 'Upgrade Flutter.',
         origin: single,
       ),
     );
@@ -197,6 +206,10 @@ List<SmfIssue> sdkVersionIssues(FlutterSdk? sdk, MergedPubspec pubspec) {
   check('Flutter', sdk.flutterVersion, pubspec.flutter, pubspec.flutterOrigins);
   return issues;
 }
+
+/// A default of [runPreflight] and [sdkVersionIssues]: an app can be made
+/// without any modules.
+bool _anyModules(Set<ModuleId> modules) => true;
 
 /// A preflight check with who needs it.
 final class PlannedCheck {
@@ -278,9 +291,11 @@ List<PlannedCheck> plannedChecks(
 ///
 /// Nothing is installed when generation cannot go on anyway: when a
 /// required check that nothing can fix fails for the pipeline itself, or
-/// for any module with [strict]. Nor for a module that lenient mode will
-/// leave out for such a check. Anything still missing gets instructions: an
-/// error for a [PreflightCheck.required] check, a warning otherwise.
+/// for any module with [strict], or for modules that [canDoWithout] says
+/// no app can be made without, which lenient mode does not leave out
+/// either. Nor for a module that lenient mode will leave out for such a
+/// check. Anything still missing gets instructions: an error for a
+/// [PreflightCheck.required] check, a warning otherwise.
 ///
 /// The versions of the SDK are compared with the SDK constraints of
 /// [pubspec] right after the checks, before anything is installed; see
@@ -295,6 +310,7 @@ Future<PreflightReport> runPreflight(
   PipelineEnvironment environment, {
   bool explain = false,
   bool strict = false,
+  bool Function(Set<ModuleId> modules) canDoWithout = _anyModules,
   MergedPubspec? pubspec,
   Map<String, CheckResult>? known,
 }) async {
@@ -307,12 +323,21 @@ Future<PreflightReport> runPreflight(
   final doomed = _doomedBy(first);
   final versionIssues = pubspec == null
       ? const <SmfIssue>[]
-      : sdkVersionIssues(environment.sdk, pubspec);
+      : sdkVersionIssues(
+          environment.sdk,
+          pubspec,
+          canDoWithout: canDoWithout,
+        );
   for (final issue in versionIssues) {
     doomed.add(issue.origin ?? const PipelineOrigin());
   }
+  final doomedModules = {
+    for (final origin in doomed)
+      if (origin case ModuleOrigin(:final module)) module,
+  };
   final hopeless = doomed.any((origin) => origin is PipelineOrigin) ||
-      (strict && doomed.isNotEmpty);
+      (strict && doomed.isNotEmpty) ||
+      (doomedModules.isNotEmpty && !canDoWithout(doomedModules));
 
   final results = await _installMissing(
     checks,

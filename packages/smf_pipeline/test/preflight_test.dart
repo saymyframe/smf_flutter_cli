@@ -221,6 +221,19 @@ void main() {
       expect(issues.first.origin, _module);
       expect(issues.first.hint, 'Upgrade Flutter, or leave out firebase.');
       expect(issues.last.origin, isNull);
+      expect(issues.last.hint, 'Upgrade Flutter.');
+      // Unless no app can be made without it.
+      expect(
+        sdkVersionIssues(
+          sdk,
+          MergedPubspec(
+            sdk: VersionConstraint.parse('^3.13.0'),
+            sdkOrigins: const [_module],
+          ),
+          canDoWithout: (modules) => false,
+        ).single.hint,
+        'Upgrade Flutter.',
+      );
       expect(
         sdkVersionIssues(
           sdk,

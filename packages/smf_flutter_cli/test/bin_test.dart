@@ -158,6 +158,49 @@ void main() {
       List<String> calls() => File(p.join(sdk, 'calls.log')).readAsLinesSync();
 
       test(
+        'stops with the versions of an older Flutter SDK, which flutter_core '
+        'needs, rather than leave out flutter_core',
+        () async {
+          File(p.join(sdk, 'cache', 'flutter.version.json')).writeAsStringSync(
+            '{"flutterVersion": "3.41.0", "dartSdkVersion": "3.10.1"}',
+          );
+          final output = p.join(temporary.path, 'apps');
+
+          final result = await _smf(
+            ['create', 'my_app', '-m', 'home', '--no-input', '-o', output],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 1);
+          final flutter = p.join(sdk, 'flutter');
+          expect(
+            result.stderr,
+            allOf(
+              contains(
+                'error [flutter_core]: flutter_core needs Dart ^3.12.0, but '
+                'the Flutter SDK at $flutter has Dart 3.10.1. (Upgrade '
+                'Flutter.)',
+              ),
+              contains(
+                'error [flutter_core]: flutter_core needs Flutter >=3.44.0, '
+                'but the Flutter SDK at $flutter has Flutter 3.41.0. '
+                '(Upgrade Flutter.)',
+              ),
+            ),
+          );
+          expect(
+            '${result.stdout}${result.stderr}',
+            allOf(
+              isNot(contains('Leaving out')),
+              isNot(contains('No module provides')),
+            ),
+          );
+          expect(Directory(output).existsSync(), isFalse);
+        },
+        timeout: timeout,
+      );
+
+      test(
         'creates the app, says how to run it and where the community is',
         () async {
           final output = p.join(temporary.path, 'apps');
