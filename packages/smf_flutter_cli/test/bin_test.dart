@@ -476,7 +476,8 @@ void main() {
                 '"firebase login --no-localhost".\n',
               ),
               contains(
-                '  ✗ FlutterFire CLI (for firebase_core): missing\n'
+                '  ✗ FlutterFire CLI 1.4.1 or a later 1.x (for firebase_core): '
+                'missing\n'
                 '    Activate it with "dart pub global activate '
                 'flutterfire_cli 1.4.1".\n'
                 '    An interactive run offers to install it.\n',
