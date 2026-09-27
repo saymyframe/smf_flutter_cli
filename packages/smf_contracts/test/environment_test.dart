@@ -83,9 +83,16 @@ void main() {
   test('preflight statuses describe the result', () {
     const failed = PreflightFailed('The tool crashed.');
     const missing = PreflightMissing(instructions: 'Run x.', installable: true);
+    const older = PreflightMissing(
+      instructions: 'Update x.',
+      found: 'x 1.0.0 is active',
+    );
 
     expect(failed.message, 'The tool crashed.');
     expect(missing.installable, isTrue);
+    expect(missing.found, isNull);
+    expect(older.found, 'x 1.0.0 is active');
+    expect(older.installable, isFalse);
     expect(const PreflightPassed(), isA<PreflightStatus>());
   });
 

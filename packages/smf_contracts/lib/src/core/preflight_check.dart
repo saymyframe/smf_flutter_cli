@@ -52,13 +52,15 @@ final class PreflightPassed extends PreflightStatus {
   const PreflightPassed();
 }
 
-/// Something is missing, and [instructions] say how to fix it.
+/// What the check looks for is not there, or not as the module needs it,
+/// and [instructions] say how to fix it.
 final class PreflightMissing extends PreflightStatus {
   /// Creates the result; set [installable] if [PreflightCheck.install] can
-  /// fix it.
+  /// fix it, and [found] if the check found something else in its place.
   const PreflightMissing({
     required this.instructions,
     this.installable = false,
+    this.found,
   });
 
   /// How the user can fix it by hand.
@@ -66,6 +68,15 @@ final class PreflightMissing extends PreflightStatus {
 
   /// Whether [PreflightCheck.install] can fix it.
   final bool installable;
+
+  /// What the check found in place of what it looks for, as a clause such
+  /// as `flutterfire_cli 1.4.0 is active`, or `null` if it found nothing.
+  ///
+  /// The pipeline says that what the check looks for is missing only when
+  /// the check found nothing. Otherwise it says that it is needed and what
+  /// the check found, so that an older version, or a system that cannot
+  /// have it, is not called missing.
+  final String? found;
 }
 
 /// The check itself could not run, for the reason in [message].
