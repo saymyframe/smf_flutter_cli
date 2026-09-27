@@ -1,6 +1,7 @@
 // The platform side of Firebase Core for the tests that continuous
 // integration runs in the apps with Firebase, which run the Firebase
-// packages without a Firebase project, and without a device.
+// packages without a Firebase project, and without a device. The tests of
+// the modules that depend on firebase_core use it too.
 import 'package:firebase_core_platform_interface/test.dart';
 
 /// Answers the platform side of Firebase Core: an app initializes with the
@@ -37,4 +38,9 @@ final class _FirebaseCore implements TestFirebaseCoreHostApi {
   @override
   Future<CoreFirebaseOptions> optionsFromResource() =>
       throw UnsupportedError('The app gives the options of Firebase.');
+
+  // A method that a later version of the package adds fails only if the
+  // app calls it.
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
