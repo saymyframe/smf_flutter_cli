@@ -117,40 +117,53 @@ final RegExp _packageName = RegExp(r'^[a-z][a-z0-9_]*$');
 ///   contribution sets them; one font file with two weights or styles is an
 ///   error.
 PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
-  final issues = <SmfIssue>[];
-  final all = <String, _Dependency>{};
-  final devOnly = <String>{};
-  _Constraint? sdk;
-  _Constraint? flutter;
-  final assets = <String>{};
-  final fonts = <String, Map<String, (PubspecFontAsset, ContributionOrigin)>>{};
-  var generate = false;
-  var usesMaterialDesign = false;
+  final merger = _PubspecMerger();
+  for (final collected in contributions) {
+    if (!collected.applies) continue;
+    if (collected.contribution case final PubspecContribution contribution) {
+      merger.add(contribution, collected.origin);
+    }
+  }
+  return merger.result;
+}
 
-  _Constraint? parse(String text, String what, ContributionOrigin origin) {
+/// Merges the pubspec contributions of [mergePubspec], one after another.
+final class _PubspecMerger {
+  final List<SmfIssue> _issues = [];
+  final Map<String, _Dependency> _all = {};
+  final Set<String> _devOnly = {};
+  _Constraint? _sdk;
+  _Constraint? _flutter;
+  final Set<String> _assets = {};
+  final Map<String, Map<String, (PubspecFontAsset, ContributionOrigin)>>
+      _fonts = {};
+  bool _generate = false;
+  bool _usesMaterialDesign = false;
+
+  _Constraint? _parse(String text, String what, ContributionOrigin origin) {
     try {
       return _Constraint(VersionConstraint.parse(text), text, [origin]);
     } on FormatException {
-      issues.add(
+      _issues.add(
         SmfIssue('The constraint "$text" of $what is invalid.', origin: origin),
       );
       return null;
     }
   }
 
-  _Constraint? merge(
+  _Constraint? _merge(
     _Constraint? existing,
     String? text,
     String what,
     ContributionOrigin origin,
   ) {
     if (text == null) return existing;
-    final incoming = parse(text, what, origin);
+    final incoming = _parse(text, what, origin);
     if (incoming == null) return existing;
     if (existing == null) return incoming;
     final merged = existing.merge(incoming);
     if (merged == null) {
-      issues.add(
+      _issues.add(
         SmfIssue(
           'The constraints "${existing.text}" (from '
           '${existing.origins.join(', ')}) and "$text" (from $origin) of '
@@ -163,89 +176,128 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
     return merged;
   }
 
-  for (final collected in contributions) {
-    if (!collected.applies) continue;
-    final contribution = collected.contribution;
-    if (contribution is! PubspecContribution) continue;
-    final origin = collected.origin;
+  /// Merges [contribution] of [origin] into the pubspec.
+  void add(PubspecContribution contribution, ContributionOrigin origin) {
     switch (contribution) {
       case PubspecDependency():
-        final package = contribution.package;
-        if (!_packageName.hasMatch(package)) {
-          issues.add(
-            SmfIssue('"$package" is not a package name.', origin: origin),
-          );
-          continue;
-        }
-        final existing = all[package];
-        if (existing == null) {
-          final constraint =
-              merge(null, contribution.constraint, package, origin);
-          if (contribution.source == PubspecSource.hosted &&
-              constraint == null) {
-            continue;
-          }
-          all[package] = _Dependency(
-            package,
-            contribution.source,
-            constraint,
-            contribution.sdk,
-            [origin],
-          );
-          if (contribution.dev) devOnly.add(package);
-          continue;
-        }
-        if (existing.source != contribution.source ||
-            existing.sdk != contribution.sdk) {
-          issues.add(
-            SmfIssue(
-              '$package comes from ${_sourceOf(existing.source, existing.sdk)} '
-              '(from ${existing.origins.first}) and from '
-              '${_sourceOf(contribution.source, contribution.sdk)} '
-              '(from $origin).',
-              origin: origin,
-            ),
-          );
-          continue;
-        }
-        if (!contribution.dev) devOnly.remove(package);
-        existing
-          ..constraint = merge(
-            existing.constraint,
-            contribution.constraint,
-            package,
-            origin,
-          )
-          ..origins.add(origin);
+        _addDependency(contribution, origin);
       case PubspecEnvironment(sdk: final dart, flutter: final flutterText):
-        sdk = merge(sdk, dart, 'the Dart SDK', origin);
-        flutter = merge(flutter, flutterText, 'the Flutter SDK', origin);
+        _sdk = _merge(_sdk, dart, 'the Dart SDK', origin);
+        _flutter = _merge(_flutter, flutterText, 'the Flutter SDK', origin);
       case PubspecFlutter():
-        assets.addAll(contribution.assets);
-        generate |= contribution.generate;
-        usesMaterialDesign |= contribution.usesMaterialDesign;
-        for (final font in contribution.fonts) {
-          final files = fonts.putIfAbsent(font.family, () => {});
-          for (final asset in font.assets) {
-            final existing = files[asset.asset];
-            if (existing == null) {
-              files[asset.asset] = (asset, origin);
-            } else if (existing.$1.weight != asset.weight ||
-                existing.$1.style != asset.style) {
-              issues.add(
-                SmfIssue(
-                  'The font file ${asset.asset} of ${font.family} has '
-                  'another weight or style in ${existing.$2}.',
-                  origin: origin,
-                ),
-              );
-            }
-          }
-        }
+        _addFlutter(contribution, origin);
     }
   }
 
-  MergedDependency merged(_Dependency dependency) => MergedDependency(
+  void _addDependency(
+    PubspecDependency contribution,
+    ContributionOrigin origin,
+  ) {
+    final package = contribution.package;
+    if (!_packageName.hasMatch(package)) {
+      _issues.add(
+        SmfIssue('"$package" is not a package name.', origin: origin),
+      );
+      return;
+    }
+    final existing = _all[package];
+    if (existing == null) {
+      final constraint = _merge(null, contribution.constraint, package, origin);
+      if (contribution.source == PubspecSource.hosted && constraint == null) {
+        return;
+      }
+      _all[package] = _Dependency(
+        package,
+        contribution.source,
+        constraint,
+        contribution.sdk,
+        [origin],
+      );
+      if (contribution.dev) _devOnly.add(package);
+      return;
+    }
+    if (existing.source != contribution.source ||
+        existing.sdk != contribution.sdk) {
+      _issues.add(
+        SmfIssue(
+          '$package comes from ${_sourceOf(existing.source, existing.sdk)} '
+          '(from ${existing.origins.first}) and from '
+          '${_sourceOf(contribution.source, contribution.sdk)} '
+          '(from $origin).',
+          origin: origin,
+        ),
+      );
+      return;
+    }
+    if (!contribution.dev) _devOnly.remove(package);
+    existing
+      ..constraint = _merge(
+        existing.constraint,
+        contribution.constraint,
+        package,
+        origin,
+      )
+      ..origins.add(origin);
+  }
+
+  void _addFlutter(PubspecFlutter contribution, ContributionOrigin origin) {
+    _assets.addAll(contribution.assets);
+    _generate |= contribution.generate;
+    _usesMaterialDesign |= contribution.usesMaterialDesign;
+    for (final font in contribution.fonts) {
+      final files = _fonts.putIfAbsent(font.family, () => {});
+      for (final asset in font.assets) {
+        final existing = files[asset.asset];
+        if (existing == null) {
+          files[asset.asset] = (asset, origin);
+        } else if (existing.$1.weight != asset.weight ||
+            existing.$1.style != asset.style) {
+          _issues.add(
+            SmfIssue(
+              'The font file ${asset.asset} of ${font.family} has '
+              'another weight or style in ${existing.$2}.',
+              origin: origin,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// The merged pubspec and the problems found.
+  PubspecMergeResult get result => PubspecMergeResult(
+        MergedPubspec(
+          dependencies: {
+            for (final MapEntry(key: package, value: dependency)
+                in _all.entries)
+              if (!_devOnly.contains(package)) package: _merged(dependency),
+          },
+          devDependencies: {
+            for (final MapEntry(key: package, value: dependency)
+                in _all.entries)
+              if (_devOnly.contains(package)) package: _merged(dependency),
+          },
+          sdk: _sdk?.value,
+          flutter: _flutter?.value,
+          sdkText: _sdk?.text,
+          flutterText: _flutter?.text,
+          sdkOrigins: List.unmodifiable(_sdk?.origins ?? const []),
+          flutterOrigins: List.unmodifiable(_flutter?.origins ?? const []),
+          assets: List.unmodifiable(_assets),
+          fonts: [
+            for (final MapEntry(key: family, value: files) in _fonts.entries)
+              PubspecFont(
+                family,
+                [for (final (asset, _) in files.values) asset],
+              ),
+          ],
+          generate: _generate,
+          usesMaterialDesign: _usesMaterialDesign,
+        ),
+        _issues,
+      );
+
+  static MergedDependency _merged(_Dependency dependency) => MergedDependency(
         dependency.package,
         source: dependency.source,
         constraint: dependency.constraint?.value,
@@ -253,33 +305,6 @@ PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
         sdk: dependency.sdk,
         origins: List.unmodifiable(dependency.origins),
       );
-
-  return PubspecMergeResult(
-    MergedPubspec(
-      dependencies: {
-        for (final MapEntry(key: package, value: dependency) in all.entries)
-          if (!devOnly.contains(package)) package: merged(dependency),
-      },
-      devDependencies: {
-        for (final MapEntry(key: package, value: dependency) in all.entries)
-          if (devOnly.contains(package)) package: merged(dependency),
-      },
-      sdk: sdk?.value,
-      flutter: flutter?.value,
-      sdkText: sdk?.text,
-      flutterText: flutter?.text,
-      sdkOrigins: List.unmodifiable(sdk?.origins ?? const []),
-      flutterOrigins: List.unmodifiable(flutter?.origins ?? const []),
-      assets: List.unmodifiable(assets),
-      fonts: [
-        for (final MapEntry(key: family, value: files) in fonts.entries)
-          PubspecFont(family, [for (final (asset, _) in files.values) asset]),
-      ],
-      generate: generate,
-      usesMaterialDesign: usesMaterialDesign,
-    ),
-    issues,
-  );
 }
 
 /// A constraint merged from contributions: its value, its text, and the
@@ -343,58 +368,66 @@ final class _Dependency {
 /// quoted, since a constraint such as `>=1.0.0 <2.0.0` cannot stand bare in
 /// YAML.
 Map<String, String> pubspecSocketTexts(MergedPubspec pubspec) {
-  String quoted(String text) => jsonEncode(text);
-
-  List<String> dependencyLines(Map<String, MergedDependency> dependencies) {
-    int byName(MergedDependency a, MergedDependency b) =>
-        a.package.compareTo(b.package);
-    final sdk = [
-      for (final dependency in dependencies.values)
-        if (dependency.source == PubspecSource.sdk) dependency,
-    ]..sort(byName);
-    final hosted = [
-      for (final dependency in dependencies.values)
-        if (dependency.source != PubspecSource.sdk) dependency,
-    ]..sort(byName);
-    return [
-      for (final dependency in sdk) ...[
-        '  ${dependency.package}:',
-        '    sdk: ${dependency.sdk}',
-      ],
-      for (final dependency in hosted)
-        '  ${dependency.package}: ${quoted(dependency.constraintText!)}',
-    ];
-  }
-
   String section(String key, List<String> lines) =>
       lines.isEmpty ? '' : ['$key:', ...lines].join('\n');
 
   return {
     PipelineSockets.pubspecEnvironment.tag: section('environment', [
-      if (pubspec.sdkText case final sdk?) '  sdk: ${quoted(sdk)}',
+      if (pubspec.sdkText case final sdk?) '  sdk: ${_quoted(sdk)}',
       if (pubspec.flutterText case final flutter?)
-        '  flutter: ${quoted(flutter)}',
+        '  flutter: ${_quoted(flutter)}',
     ]),
     PipelineSockets.pubspecDependencies.tag:
-        section('dependencies', dependencyLines(pubspec.dependencies)),
+        section('dependencies', _dependencyLines(pubspec.dependencies)),
     PipelineSockets.pubspecDevDependencies.tag:
-        section('dev_dependencies', dependencyLines(pubspec.devDependencies)),
+        section('dev_dependencies', _dependencyLines(pubspec.devDependencies)),
     PipelineSockets.pubspecFlutter.tag: section('flutter', [
       if (pubspec.usesMaterialDesign) '  uses-material-design: true',
       if (pubspec.generate) '  generate: true',
       if (pubspec.assets.isNotEmpty) '  assets:',
-      for (final asset in pubspec.assets) '    - ${quoted(asset)}',
-      if (pubspec.fonts.isNotEmpty) '  fonts:',
-      for (final font in pubspec.fonts) ...[
-        '    - family: ${quoted(font.family)}',
-        '      fonts:',
-        for (final asset in font.assets) ...[
-          '        - asset: ${quoted(asset.asset)}',
-          if (asset.weight case final weight?) '          weight: $weight',
-          if (asset.style case final style?)
-            '          style: ${quoted(style)}',
-        ],
-      ],
+      for (final asset in pubspec.assets) '    - ${_quoted(asset)}',
+      ..._fontLines(pubspec.fonts),
     ]),
   };
 }
+
+/// [text] as a YAML string.
+String _quoted(String text) => jsonEncode(text);
+
+/// The lines of [dependencies] in a section of `pubspec.yaml`: those of an
+/// SDK first, then the others, each by name.
+List<String> _dependencyLines(Map<String, MergedDependency> dependencies) {
+  int byName(MergedDependency a, MergedDependency b) =>
+      a.package.compareTo(b.package);
+  final sdk = [
+    for (final dependency in dependencies.values)
+      if (dependency.source == PubspecSource.sdk) dependency,
+  ]..sort(byName);
+  final hosted = [
+    for (final dependency in dependencies.values)
+      if (dependency.source != PubspecSource.sdk) dependency,
+  ]..sort(byName);
+  return [
+    for (final dependency in sdk) ...[
+      '  ${dependency.package}:',
+      '    sdk: ${dependency.sdk}',
+    ],
+    for (final dependency in hosted)
+      '  ${dependency.package}: ${_quoted(dependency.constraintText!)}',
+  ];
+}
+
+/// The lines of [fonts] in the section `flutter` of `pubspec.yaml`.
+List<String> _fontLines(List<PubspecFont> fonts) => [
+      if (fonts.isNotEmpty) '  fonts:',
+      for (final font in fonts) ...[
+        '    - family: ${_quoted(font.family)}',
+        '      fonts:',
+        for (final asset in font.assets) ...[
+          '        - asset: ${_quoted(asset.asset)}',
+          if (asset.weight case final weight?) '          weight: $weight',
+          if (asset.style case final style?)
+            '          style: ${_quoted(style)}',
+        ],
+      ],
+    ];

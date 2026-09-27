@@ -187,6 +187,82 @@ ValidationResult validate({
     ...collection.all,
   ]);
   final pubspec = merged.pubspec;
+  issues
+    ..addAll(_appPubspecIssues(merged, context))
+    ..addAll(merged.issues)
+    ..addAll(_hookIssues(registry, resolution, collection, context));
+  final tags = scanBricks(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
+  );
+  issues
+    ..addAll(tags.issues)
+    ..addAll(_pubspecTagIssues(pubspec, tags, collection))
+    ..addAll(_requiredValueIssues(resolution, collection));
+
+  final bySocket = <SocketRef, List<Collected>>{};
+  final postGen = <Collected>[];
+  for (final collected in collection.applying) {
+    switch (collected.contribution) {
+      case final SocketContribution socket:
+        bySocket.putIfAbsent(socket.socket, () => []).add(collected);
+      case final PostGenStep step:
+        postGen.add(collected);
+        issues.addAll(
+          _runIssues(
+            step,
+            collected.origin,
+            interactive: interactive,
+            skipExternalSetup: skipExternalSetup,
+          ),
+        );
+      default:
+        break;
+    }
+  }
+
+  issues.addAll(
+    _taglessIssues(
+      {
+        for (final MapEntry(key: socket, value: contributions)
+            in bySocket.entries)
+          if (!broken.contains(socket)) socket: contributions,
+      },
+      tags,
+      resolution,
+    ),
+  );
+
+  final orders = <SocketRef, ContributionOrder>{};
+  for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
+    final order = orderContributions(contributions, resolution);
+    orders[socket] = order;
+    issues
+      ..addAll(_orderIssues('the $socket', order))
+      ..addAll(_dryRenderIssues(socket, order));
+  }
+
+  final postGenOrder = orderContributions(postGen, resolution);
+  issues.addAll(_orderIssues('the post-generation steps', postGenOrder));
+
+  return ValidationResult(
+    issues: issues,
+    socketOrders: orders,
+    postGenOrder: postGenOrder,
+    pubspec: merged.pubspec,
+  );
+}
+
+/// The problems of the pubspec of the app, [merged]: it needs a Dart SDK
+/// constraint, and the app of [context] cannot be named like one of its
+/// dependencies.
+List<SmfIssue> _appPubspecIssues(
+  PubspecMergeResult merged,
+  ModuleContext context,
+) {
+  final pubspec = merged.pubspec;
+  final issues = <SmfIssue>[];
   if (pubspec.sdk == null && merged.issues.isEmpty) {
     issues.add(
       const SmfIssue(
@@ -209,97 +285,59 @@ ValidationResult validate({
       ),
     );
   }
-  issues
-    ..addAll(merged.issues)
-    ..addAll(_hookIssues(registry, resolution, collection, context));
-  final tags = scanBricks(
-    registry: registry,
-    resolution: resolution,
-    collection: collection,
-  );
-  issues
-    ..addAll(tags.issues)
-    ..addAll(_pubspecTagIssues(pubspec, tags, collection))
-    ..addAll(_requiredValueIssues(resolution, collection));
+  return issues;
+}
 
-  final bySocket = <SocketRef, List<Collected>>{};
-  final postGen = <Collected>[];
-  for (final collected in collection.applying) {
-    switch (collected.contribution) {
-      case final SocketContribution socket:
-        bySocket.putIfAbsent(socket.socket, () => []).add(collected);
-      case final PostGenStep step:
-        postGen.add(collected);
-        for (final part in withFollowUps(step)) {
-          final needsTerminal = part.interactive && !interactive;
-          final needsSetup = part.external && skipExternalSetup;
-          if ((needsTerminal || needsSetup) && !part.skippable) {
-            final why = needsTerminal
-                ? 'without a terminal'
-                : 'with --skip-external-setup';
-            issues.add(
-              SmfIssue(
-                'The step ${part.description ?? part.tool.executable} of '
-                '${collected.origin} cannot run $why, and the app is not '
-                'complete without it.',
-                origin: collected.origin,
-              ),
-            );
-          }
-        }
-      default:
-        break;
-    }
-  }
-
-  issues.addAll(
-    _taglessIssues(
-      {
-        for (final MapEntry(key: socket, value: contributions)
-            in bySocket.entries)
-          if (!broken.contains(socket)) socket: contributions,
-      },
-      tags,
-      resolution,
-    ),
-  );
-
-  final orders = <SocketRef, ContributionOrder>{};
-  for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
-    final order = orderContributions(contributions, resolution);
-    orders[socket] = order;
-    issues.addAll(_orderIssues('the $socket', order));
-    final valid = [
-      for (final collected in order.contributions)
-        if (socket
-            .problemsWith(collected.contribution as SocketContribution)
-            .isEmpty)
-          collected.contribution as SocketContribution,
-    ];
-    if (valid.length != order.contributions.length) continue;
-    try {
-      socket.render(valid);
-    } on MergeConflict catch (conflict) {
-      issues.add(
-        SmfIssue(
-          'The contributions to the $socket conflict: $conflict.',
-          origin: conflict.incomingOrigin,
-        ),
+/// The parts of [step] of [origin], the step and its follow-ups, that
+/// cannot run in a run that is not [interactive] or that has
+/// [skipExternalSetup], and without which the app is not complete.
+Iterable<SmfIssue> _runIssues(
+  PostGenStep step,
+  ContributionOrigin origin, {
+  required bool interactive,
+  required bool skipExternalSetup,
+}) sync* {
+  for (final part in withFollowUps(step)) {
+    final needsTerminal = part.interactive && !interactive;
+    final needsSetup = part.external && skipExternalSetup;
+    if ((needsTerminal || needsSetup) && !part.skippable) {
+      final why =
+          needsTerminal ? 'without a terminal' : 'with --skip-external-setup';
+      yield SmfIssue(
+        'The step ${part.description ?? part.tool.executable} of '
+        '$origin cannot run $why, and the app is not '
+        'complete without it.',
+        origin: origin,
       );
-    } on Object catch (error) {
-      issues.add(SmfIssue('The $socket cannot be rendered: $error.'));
     }
   }
+}
 
-  final postGenOrder = orderContributions(postGen, resolution);
-  issues.addAll(_orderIssues('the post-generation steps', postGenOrder));
-
-  return ValidationResult(
-    issues: issues,
-    socketOrders: orders,
-    postGenOrder: postGenOrder,
-    pubspec: merged.pubspec,
-  );
+/// The problems of rendering the contributions of [order] to [socket] when
+/// every one is valid, so that a merge conflict names its contributors
+/// before anything is generated.
+List<SmfIssue> _dryRenderIssues(SocketRef socket, ContributionOrder order) {
+  final valid = [
+    for (final collected in order.contributions)
+      if (socket
+          .problemsWith(collected.contribution as SocketContribution)
+          .isEmpty)
+        collected.contribution as SocketContribution,
+  ];
+  if (valid.length != order.contributions.length) return const [];
+  try {
+    socket.render(valid);
+  } on MergeConflict catch (conflict) {
+    return [
+      SmfIssue(
+        'The contributions to the $socket conflict: $conflict.',
+        origin: conflict.incomingOrigin,
+      ),
+    ];
+  } on Object catch (error) {
+    return [SmfIssue('The $socket cannot be rendered: $error.')];
+  }
+  return const [];
 }
 
 Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
@@ -339,84 +377,11 @@ Iterable<SmfIssue> contributionIssues(
 
   switch (contribution) {
     case final RoleData<Object> data:
-      if (!roles.access.contains(data.role)) {
-        yield SmfIssue(
-          '$origin contributes data to the ${data.role.id}, but does not '
-          'provide, require or use it.',
-          origin: origin,
-        );
-      } else if (!data.role.accepts(data.value)) {
-        yield SmfIssue(
-          '$origin contributes a ${data.value.runtimeType} to the '
-          '${data.role.id}, which takes other data.',
-          origin: origin,
-        );
-      }
+      yield* _roleDataIssues(data, origin, roles.access);
     case final SocketContribution socket:
       yield* _socketIssues(socket, origin, roles.access, resolution);
     case final BrickContribution brick:
-      if (brick.bundle.hooks.isNotEmpty) {
-        yield SmfIssue(
-          'The brick ${brick.bundle.name} of $origin has mason hooks, which '
-          'the pipeline does not run.',
-          hint: 'Move the hooks into Preflight checks and PostGenSteps.',
-          origin: origin,
-        );
-      }
-      for (final name in brick.vars.keys) {
-        if (isReservedVar(name)) {
-          yield SmfIssue(
-            'The brick ${brick.bundle.name} of $origin sets the variable '
-            '$name, which the pipeline sets itself.',
-            origin: origin,
-          );
-        }
-      }
-      for (final name in strippedVars(brick.vars)) {
-        yield SmfIssue(
-          'The variable $name of the brick ${brick.bundle.name} of $origin '
-          'has a backslash before a line break or a non-ASCII character, '
-          'which mason removes.',
-          origin: origin,
-        );
-      }
-      for (final name in nonPlainVars(brick.vars)) {
-        yield SmfIssue(
-          'The variable $name of the brick ${brick.bundle.name} of $origin '
-          'is not plain data: strings, numbers, booleans, and lists and maps '
-          'of them.',
-          origin: origin,
-        );
-      }
-      for (final file in brick.bundle.files) {
-        // A path with a variable is checked once it is rendered.
-        if (file.path.contains('{{')) continue;
-        if (machineFileProblem(file.path) case final problem?) {
-          yield SmfIssue(
-            'The brick ${brick.bundle.name} of $origin generates '
-            '${file.path}, which $problem.',
-            hint: 'Remove the file from the brick.',
-            origin: origin,
-            path: file.path,
-          );
-        }
-      }
-      if (origin case ModuleOrigin(:final module)) {
-        final kind = resolution.module(module)?.descriptor.kind;
-        for (final file in brick.bundle.files) {
-          // A path with a variable is checked once it is rendered.
-          if (kind != null &&
-              !file.path.contains('{{') &&
-              !kind.allowsFile(module, file.path)) {
-            yield SmfIssue(
-              'The module $module generates ${file.path}, where modules of '
-              'the ${kind.id} kind may not.',
-              origin: origin,
-              path: file.path,
-            );
-          }
-        }
-      }
+      yield* _brickIssues(brick, origin, resolution);
     case CodegenRequest(:final outputs):
       for (final output in outputs) {
         if (!_isDartPathInApp(output)) {
@@ -429,19 +394,139 @@ Iterable<SmfIssue> contributionIssues(
         }
       }
     case final PostGenStep step:
-      for (final followUp in withFollowUps(step).skip(1)) {
-        if (followUp.when.isNotEmpty) {
-          yield SmfIssue(
-            'The step ${followUp.description ?? followUp.tool.executable} '
-            'of $origin follows another step, but has conditions of its own.',
-            hint: 'A follow-up applies when the step it follows does, so put '
-                'the conditions on that step.',
-            origin: origin,
-          );
-        }
-      }
+      yield* _followUpIssues(step, origin);
     case Preflight() || PubspecContribution():
       break;
+  }
+}
+
+/// The problems of [data] of [origin], which has access to the roles
+/// [access]: it must have access to the role of the data, which must take
+/// it.
+Iterable<SmfIssue> _roleDataIssues(
+  RoleData<Object> data,
+  ContributionOrigin origin,
+  Set<Role> access,
+) sync* {
+  if (!access.contains(data.role)) {
+    yield SmfIssue(
+      '$origin contributes data to the ${data.role.id}, but does not '
+      'provide, require or use it.',
+      origin: origin,
+    );
+  } else if (!data.role.accepts(data.value)) {
+    yield SmfIssue(
+      '$origin contributes a ${data.value.runtimeType} to the '
+      '${data.role.id}, which takes other data.',
+      origin: origin,
+    );
+  }
+}
+
+/// The problems of [brick] of [origin]: its hooks, its variables and its
+/// files.
+Iterable<SmfIssue> _brickIssues(
+  BrickContribution brick,
+  ContributionOrigin origin,
+  Resolution resolution,
+) sync* {
+  if (brick.bundle.hooks.isNotEmpty) {
+    yield SmfIssue(
+      'The brick ${brick.bundle.name} of $origin has mason hooks, which '
+      'the pipeline does not run.',
+      hint: 'Move the hooks into Preflight checks and PostGenSteps.',
+      origin: origin,
+    );
+  }
+  yield* _brickVarIssues(brick, origin);
+  yield* _brickFileIssues(brick, origin, resolution);
+}
+
+/// The problems of the variables of [brick] of [origin]: reserved names,
+/// and values that mason would change or cannot take.
+Iterable<SmfIssue> _brickVarIssues(
+  BrickContribution brick,
+  ContributionOrigin origin,
+) sync* {
+  for (final name in brick.vars.keys) {
+    if (isReservedVar(name)) {
+      yield SmfIssue(
+        'The brick ${brick.bundle.name} of $origin sets the variable '
+        '$name, which the pipeline sets itself.',
+        origin: origin,
+      );
+    }
+  }
+  for (final name in strippedVars(brick.vars)) {
+    yield SmfIssue(
+      'The variable $name of the brick ${brick.bundle.name} of $origin '
+      'has a backslash before a line break or a non-ASCII character, '
+      'which mason removes.',
+      origin: origin,
+    );
+  }
+  for (final name in nonPlainVars(brick.vars)) {
+    yield SmfIssue(
+      'The variable $name of the brick ${brick.bundle.name} of $origin '
+      'is not plain data: strings, numbers, booleans, and lists and maps '
+      'of them.',
+      origin: origin,
+    );
+  }
+}
+
+/// The problems of the files of [brick] of [origin]: files of one machine,
+/// and files that the kind of its module may not generate. A path with a
+/// variable is checked once it is rendered.
+Iterable<SmfIssue> _brickFileIssues(
+  BrickContribution brick,
+  ContributionOrigin origin,
+  Resolution resolution,
+) sync* {
+  for (final file in brick.bundle.files) {
+    if (file.path.contains('{{')) continue;
+    if (machineFileProblem(file.path) case final problem?) {
+      yield SmfIssue(
+        'The brick ${brick.bundle.name} of $origin generates '
+        '${file.path}, which $problem.',
+        hint: 'Remove the file from the brick.',
+        origin: origin,
+        path: file.path,
+      );
+    }
+  }
+  if (origin case ModuleOrigin(:final module)) {
+    final kind = resolution.module(module)?.descriptor.kind;
+    for (final file in brick.bundle.files) {
+      if (kind != null &&
+          !file.path.contains('{{') &&
+          !kind.allowsFile(module, file.path)) {
+        yield SmfIssue(
+          'The module $module generates ${file.path}, where modules of '
+          'the ${kind.id} kind may not.',
+          origin: origin,
+          path: file.path,
+        );
+      }
+    }
+  }
+}
+
+/// The follow-ups of [step] of [origin] that have conditions of their own.
+Iterable<SmfIssue> _followUpIssues(
+  PostGenStep step,
+  ContributionOrigin origin,
+) sync* {
+  for (final followUp in withFollowUps(step).skip(1)) {
+    if (followUp.when.isNotEmpty) {
+      yield SmfIssue(
+        'The step ${followUp.description ?? followUp.tool.executable} '
+        'of $origin follows another step, but has conditions of its own.',
+        hint: 'A follow-up applies when the step it follows does, so put '
+            'the conditions on that step.',
+        origin: origin,
+      );
+    }
   }
 }
 
@@ -459,46 +544,70 @@ Iterable<SmfIssue> _socketIssues(
   final role = socket.role;
   final owner = socket.module;
   if (role != null) {
-    if (!roles.contains(role)) {
-      yield SmfIssue(
-        '$origin puts code into the $socket, but does not provide, require '
-        'or use the ${role.id}.',
-        origin: origin,
-      );
-      return;
-    }
-    final declared = socket.familyKey.isEmpty
-        ? role.sockets.contains(socket)
-        : role.socketFamilies.any((family) => _isMember(family, socket));
-    if (!declared) {
-      yield SmfIssue(
-        'The ${role.id} has no $socket.',
-        origin: origin,
-      );
-    }
+    yield* _roleSocketIssues(socket, role, origin, roles);
   } else if (owner != null) {
-    final dependsOn = switch (origin) {
-      ModuleOrigin(:final module) =>
-        resolution.module(module)?.descriptor.dependsOn ?? const {},
-      _ => const <ModuleId>{},
-    };
-    if (!dependsOn.contains(owner)) {
-      yield SmfIssue(
-        '$origin puts code into the $socket, but only modules that depend '
-        'on $owner directly may.',
-        origin: origin,
-      );
-      return;
-    }
-    final descriptor = resolution.module(owner)?.descriptor;
-    final declared = descriptor != null &&
-        (socket.familyKey.isEmpty
-            ? descriptor.sockets.contains(socket)
-            : descriptor.socketFamilies
-                .any((family) => _isMember(family, socket)));
-    if (!declared) {
-      yield SmfIssue('The module $owner has no $socket.', origin: origin);
-    }
+    yield* _moduleSocketIssues(socket, owner, origin, resolution);
+  }
+}
+
+/// The problems of code of [origin], which has access to [roles], for
+/// [socket], a socket of [role]: [origin] needs access to the role, which
+/// must have the socket.
+Iterable<SmfIssue> _roleSocketIssues(
+  SocketRef socket,
+  Role role,
+  ContributionOrigin origin,
+  Set<Role> roles,
+) sync* {
+  if (!roles.contains(role)) {
+    yield SmfIssue(
+      '$origin puts code into the $socket, but does not provide, require '
+      'or use the ${role.id}.',
+      origin: origin,
+    );
+    return;
+  }
+  final declared = socket.familyKey.isEmpty
+      ? role.sockets.contains(socket)
+      : role.socketFamilies.any((family) => _isMember(family, socket));
+  if (!declared) {
+    yield SmfIssue(
+      'The ${role.id} has no $socket.',
+      origin: origin,
+    );
+  }
+}
+
+/// The problems of code of [origin] for [socket], a socket of the module
+/// [owner]: [origin] must depend on [owner] directly, which must have the
+/// socket.
+Iterable<SmfIssue> _moduleSocketIssues(
+  SocketRef socket,
+  ModuleId owner,
+  ContributionOrigin origin,
+  Resolution resolution,
+) sync* {
+  final dependsOn = switch (origin) {
+    ModuleOrigin(:final module) =>
+      resolution.module(module)?.descriptor.dependsOn ?? const {},
+    _ => const <ModuleId>{},
+  };
+  if (!dependsOn.contains(owner)) {
+    yield SmfIssue(
+      '$origin puts code into the $socket, but only modules that depend '
+      'on $owner directly may.',
+      origin: origin,
+    );
+    return;
+  }
+  final descriptor = resolution.module(owner)?.descriptor;
+  final declared = descriptor != null &&
+      (socket.familyKey.isEmpty
+          ? descriptor.sockets.contains(socket)
+          : descriptor.socketFamilies
+              .any((family) => _isMember(family, socket)));
+  if (!declared) {
+    yield SmfIssue('The module $owner has no $socket.', origin: origin);
   }
 }
 
@@ -561,20 +670,34 @@ Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
   for (final collected in collection.all) {
     if (collected.contribution case final PostGenStep step) {
       final contributor = contributorName(collected.origin);
-      final own = checks[contributor] ?? const {};
-      for (final part in withFollowUps(step)) {
-        for (final id in part.needs) {
-          if (own.contains(id)) continue;
-          yield SmfIssue(
-            'The step ${part.description ?? part.tool.executable} of '
-            '${collected.origin} needs the preflight check "$id", which '
-            '$contributor does not have.',
-            hint: 'A step needs only checks of the Preflight of its own '
-                'module.',
-            origin: collected.origin,
-          );
-        }
-      }
+      yield* _unknownNeedIssues(
+        step,
+        collected.origin,
+        checks[contributor] ?? const {},
+      );
+    }
+  }
+}
+
+/// The checks that [step] of [origin], or one of its follow-ups, needs but
+/// that are not among [own], the ids of the checks of its contributor.
+Iterable<SmfIssue> _unknownNeedIssues(
+  PostGenStep step,
+  ContributionOrigin origin,
+  Set<String> own,
+) sync* {
+  final contributor = contributorName(origin);
+  for (final part in withFollowUps(step)) {
+    for (final id in part.needs) {
+      if (own.contains(id)) continue;
+      yield SmfIssue(
+        'The step ${part.description ?? part.tool.executable} of '
+        '$origin needs the preflight check "$id", which '
+        '$contributor does not have.',
+        hint: 'A step needs only checks of the Preflight of its own '
+            'module.',
+        origin: origin,
+      );
     }
   }
 }
@@ -772,7 +895,26 @@ Iterable<SmfIssue> _packageIssues(
   Resolution resolution,
   Collection collection,
 ) sync* {
-  // Who contributes each hosted package, in order, and who brings it.
+  final (:contributors, :bringers) = _hostedPackages(collection);
+  for (final MapEntry(key: package, value: origins) in contributors.entries) {
+    final owners =
+        _packageOwners(resolution, bringers[package] ?? const <ModuleId>{});
+    for (final origin in origins) {
+      if (_takenPackageIssue(resolution, package, origin, owners)
+          case final issue?) {
+        yield issue;
+      }
+    }
+  }
+}
+
+/// Who contributes each hosted package among the contributions of
+/// [collection], in order, and which modules bring it: contribute it
+/// themselves, not in a variant, with a constraint of their own.
+({
+  Map<String, List<ModuleOrigin>> contributors,
+  Map<String, Set<ModuleId>> bringers,
+}) _hostedPackages(Collection collection) {
   final contributors = <String, List<ModuleOrigin>>{};
   final bringers = <String, Set<ModuleId>>{};
   for (final collected in collection.all) {
@@ -792,66 +934,79 @@ Iterable<SmfIssue> _packageIssues(
       }
     }
   }
+  return (contributors: contributors, bringers: bringers);
+}
 
-  for (final MapEntry(key: package, value: origins) in contributors.entries) {
-    final brought = bringers[package] ?? const <ModuleId>{};
-    final owners = [
+/// The modules of [resolution] whose package is the one that [brought]
+/// bring: providers of a role that bring it, when no module they depend on
+/// brings it too.
+List<ResolvedModule> _packageOwners(
+  Resolution resolution,
+  Set<ModuleId> brought,
+) =>
+    [
       for (final module in resolution.modules)
         if (brought.contains(module.id) &&
             module.descriptor.provides.isNotEmpty &&
             !resolution.dependencyClosure(module.id).any(brought.contains))
           module,
     ];
-    for (final origin in origins) {
-      final others = [
-        for (final owner in owners)
-          if (owner.id != origin.module) owner,
-      ];
-      if (others.isEmpty) continue;
-      final variant = origin.variant;
-      final reached = {
-        ...resolution.dependencyClosure(origin.module),
-        if (variant != null) ...{
-          variant,
-          ...resolution.dependencyClosure(variant),
-        },
-      };
-      if (others.any((owner) => reached.contains(owner.id))) continue;
-      final whose = [
-        for (final owner in others)
-          '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
-      ].join(', and of ');
-      // The variant of the module in the app, when it would take the package
-      // of an owner: the package belongs in that variant.
-      final selected =
-          variant == null ? resolution.module(origin.module)?.variant : null;
-      if (selected != null &&
-          others.any(
-            (owner) =>
-                owner.id == selected ||
-                resolution.dependencyClosure(selected).contains(owner.id),
-          )) {
-        yield SmfIssue(
-          '$origin contributes $package, a package of $whose, outside its '
-          'variant for $selected.',
-          hint: 'Contribute $package in the variant of ${origin.module} for '
-              '$selected, with the constraint any.',
-          origin: origin,
-        );
-        continue;
-      }
-      final them = others.length == 1 ? 'it' : 'any of them';
-      yield SmfIssue(
-        '$origin contributes $package, a package of $whose, but '
-        '${origin.module} neither has a variant for $them nor depends on '
-        '$them.',
-        hint: 'A module takes the package of a provider of a role only in its '
-            'variant for the provider, with the constraint any, or by '
-            'depending on the provider.',
-        origin: origin,
-      );
-    }
+
+/// The issue of [origin], which contributes [package], when it takes the
+/// package from one of its [owners] other than its own module, without a
+/// variant for one of them or a dependency on one.
+SmfIssue? _takenPackageIssue(
+  Resolution resolution,
+  String package,
+  ModuleOrigin origin,
+  List<ResolvedModule> owners,
+) {
+  final others = [
+    for (final owner in owners)
+      if (owner.id != origin.module) owner,
+  ];
+  if (others.isEmpty) return null;
+  final variant = origin.variant;
+  final reached = {
+    ...resolution.dependencyClosure(origin.module),
+    if (variant != null) ...{
+      variant,
+      ...resolution.dependencyClosure(variant),
+    },
+  };
+  if (others.any((owner) => reached.contains(owner.id))) return null;
+  final whose = [
+    for (final owner in others)
+      '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
+  ].join(', and of ');
+  // The variant of the module in the app, when it would take the package
+  // of an owner: the package belongs in that variant.
+  final selected =
+      variant == null ? resolution.module(origin.module)?.variant : null;
+  if (selected != null &&
+      others.any(
+        (owner) =>
+            owner.id == selected ||
+            resolution.dependencyClosure(selected).contains(owner.id),
+      )) {
+    return SmfIssue(
+      '$origin contributes $package, a package of $whose, outside its '
+      'variant for $selected.',
+      hint: 'Contribute $package in the variant of ${origin.module} for '
+          '$selected, with the constraint any.',
+      origin: origin,
+    );
   }
+  final them = others.length == 1 ? 'it' : 'any of them';
+  return SmfIssue(
+    '$origin contributes $package, a package of $whose, but '
+    '${origin.module} neither has a variant for $them nor depends on '
+    '$them.',
+    hint: 'A module takes the package of a provider of a role only in its '
+        'variant for the provider, with the constraint any, or by '
+        'depending on the provider.',
+    origin: origin,
+  );
 }
 
 /// Whether [constraint] allows every version, as `any` does.
