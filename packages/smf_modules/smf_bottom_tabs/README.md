@@ -10,7 +10,7 @@ Features declare which of their routes are destinations of the main navigation, 
 
 The module that provides the router role builds the main navigation around the shell: a branch for each destination, in the order of the features, which keeps its stack while another tab is selected, and the app opens on the tab of its start screen. An app without destinations has no main navigation.
 
-The bar shows at most five destinations, as the Material Design guidelines advise, so `smf create` stops before it generates an app with more.
+The bar shows at most five destinations, as the Material Design guidelines advise. With more, `smf create` leaves out the features of the destinations that do not fit, each with a warning, and generates the app without them; with `--strict`, it stops instead.
 
 ## Use with SMF CLI
 

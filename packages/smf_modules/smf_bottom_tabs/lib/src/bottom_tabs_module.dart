@@ -14,8 +14,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// The router of the app builds the shell from the destinations that the
 /// features declare, in the order of the features, and keeps the stack of
 /// each tab; an app without destinations has no shell. The bar shows at
-/// most [maxDestinations], so `smf create` stops before it generates an app
-/// with more.
+/// most [maxDestinations]. With more, `smf create` leaves out the features
+/// of the destinations that do not fit, each with a warning, and generates
+/// the app without them; with `--strict`, it stops instead.
 final class BottomTabsModule extends SmfModule {
   /// Creates the module.
   const BottomTabsModule();
