@@ -228,12 +228,13 @@ void main() {
         allOf(
           contains(
             '```bash\n'
-            'dart pub global activate flutterfire_cli\n'
+            'dart pub global activate flutterfire_cli 1.4.1\n'
             'firebase login\n'
             'flutterfire configure --platforms=android,ios '
             '--overwrite-firebase-options\n'
             '```\n',
           ),
+          contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('run `flutterfire` from `~/.pub-cache/bin`'),
         ),
       );

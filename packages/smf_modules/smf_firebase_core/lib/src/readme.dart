@@ -1,3 +1,5 @@
+import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
+
 /// The heading of the section of the module in the README of the app.
 const readmeHeading = 'Firebase';
 
@@ -9,10 +11,10 @@ The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through 
 To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
 
 ```bash
-dart pub global activate flutterfire_cli
+dart pub global activate flutterfire_cli $flutterfireVersion
 firebase login
 $configure
 ```
 
-`flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated with `dart pub global activate flutterfire_cli`.
+`flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli) and flutterfire_cli $minimumFlutterfireVersion or a later 1.x, and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too. The phase for Crashlytics that flutterfire_cli 1.4.0 adds does not find the upload script of Crashlytics where Flutter puts the Swift packages of the app, so with Swift Package Manager the iOS build fails.
 ''';

@@ -35,7 +35,7 @@ dart pub global activate flutterfire_cli 1.4.1
 flutterfire configure --platforms=android,ios --overwrite-firebase-options
 ```
 
-The README of the app gets a section on Firebase: how to configure the app again, such as for another Firebase project or on another machine, and that the build phases that the FlutterFire CLI adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`.
+The README of the app gets a section on Firebase: how to configure the app again, such as for another Firebase project or on another machine, with flutterfire_cli 1.4.1 or a later 1.x, and that the build phases that the FlutterFire CLI adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`.
 
 ## Use with SMF CLI
 
