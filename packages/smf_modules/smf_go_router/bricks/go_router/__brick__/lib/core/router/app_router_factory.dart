@@ -53,8 +53,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// of its configuration, a switch of branches included, and may do so
   /// again without a change of the page on top, which the listeners of the
   /// screen do not hear of twice. The location of a pushed page is its own,
-  /// as that of the configuration leaves pushed pages out; the error screen
-  /// of go_router has no page.
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
   void _showScreen() {
     final configuration = config.routerDelegate.currentConfiguration;
     final top = configuration.lastOrNull;

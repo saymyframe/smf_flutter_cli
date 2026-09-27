@@ -17,8 +17,9 @@ final class GoRoutes {
   ///
   /// The path `/` redirects to the start route, or shows the fallback
   /// screen. Every route of the facade becomes a `GoRoute` named by its
-  /// full name, such as `home.details`, which navigator observers report as
-  /// the name of the screen, with its children below it; a top-level route
+  /// full name, such as `home.details`, which the listeners of the screen
+  /// get as the name of the screen, and navigator observers as the name of
+  /// its page, with its children below it; a top-level route
   /// has its full path, a child its path relative to its parent. The
   /// screens are imported with prefixes of their own: `screen0`, `screen1`,
   /// and so on.

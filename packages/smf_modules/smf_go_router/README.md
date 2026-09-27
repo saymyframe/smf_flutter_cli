@@ -35,6 +35,8 @@ Modules that follow the screen the user sees, such as analytics, give the router
 - not again for the same page at the same location;
 - with the route `null` for a screen that is no route of a module: the fallback screen, at `/`, and the error screen of go_router, at the location it could not show.
 
+The listeners hear only of the pages of go_router: a page that the app shows with a navigator directly, such as with `Navigator.push`, and a dialog are not screens of the router.
+
 go_router 17 works with the Material library of Flutter 3.44, which the apps of SMF use. go_router 18 has moved to the separate `material_ui` package, whose `MaterialApp` it looks for to choose Material pages.
 
 ## Use with SMF CLI
