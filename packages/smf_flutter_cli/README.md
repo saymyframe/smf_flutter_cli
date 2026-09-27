@@ -1,84 +1,70 @@
 # SMF Flutter CLI
 
-A comprehensive Flutter CLI tool for scaffolding and configuring Flutter applications with modular architecture.
+`smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
-## Overview
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS and Linux; Windows is not tested yet.
 
-SMF Flutter CLI is a powerful command-line interface that helps developers quickly scaffold Flutter applications with pre-configured modules, dependencies, and best practices. It provides a modular approach to Flutter project generation, allowing developers to select only the components they need.
-
-> Status: Alpha — Actively developed. Features are added continuously and APIs may change. Best suited for exploration and early prototypes. Feedback and contributions are welcome.
-
-## Features
-
-- 🚀 **Rapid Project Scaffolding**: Generate Flutter projects with pre-configured modules
-- 🧩 **Modular Architecture**: Select and configure only the modules you need
-- 🔧 **Smart Dependency Management**: Automatic dependency resolution and configuration
-- 📱 **Flutter Best Practices**: Built-in templates following Flutter development standards
-- 🔥 **Firebase Integration**: Seamless Firebase setup and configuration
-- 🛣️ **Routing Solutions**: Multiple routing options including GoRouter
-- 📊 **Analytics Ready**: Built-in analytics and tracking capabilities
-- 🎯 **Customizable Templates**: Extensible brick-based template system
+The documentation is at [doc.saymyframe.com](https://doc.saymyframe.com).
 
 ## Install
+
 ```bash
 dart pub global activate smf_flutter_cli
 smf --version
 ```
 
-## Quick start
+`smf create` uses the Flutter SDK of the `flutter` on your `PATH`.
 
-Interactive (you will be prompted for missing values):
+## Create an app
+
+In a terminal, `smf create` asks for the name of the app, its organization and its modules:
+
 ```bash
 smf create my_app
 ```
 
-![SMF CLI Demo](https://raw.githubusercontent.com/saymyframe/.github/main/assets/smf_cli.gif)
+With the modules on the command line and `--no-input`, it asks nothing:
 
 ```bash
-A CLI tool by Say My Frame
-
-Usage: smf <command> [arguments]
-
-Global options:
--h, --help           Print this usage information.
-    --verbose        Enable verbose logging.
-    --strict         Enable strict mode for module compatibility checks.
--v, --version        Print the current CLI version.
-    --on-conflict    Behavior when destination directory exists (replace, copy, cancel, prompt).
-                     [replace, copy, cancel, prompt (default)]
-
-Available commands:
-  create   Create flutter app
-
-Run "smf help <command>" for more information about a command.
+smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 ```
 
-Non-interactive (fully scripted):
-```bash
-smf create my_cli_test_app \
-  -m firebase_analytics,home,get_it,go_router \
-  --route /home \
-  --org com.saymyframe \
-  -s bloc \
-  --on-conflict replace
-```
+`smf create` adds the modules that the chosen ones need, such as `go_router` for the start screen of `home`. The main options:
 
-## Available Modules
+| Option | What it does |
+| --- | --- |
+| `-m`, `--modules` | The modules, separated by commas. |
+| `--org` | The organization in reverse domain notation, `com.example` by default. |
+| `-o`, `--output` | The directory in which the app's directory is created. |
+| `--no-input` | Ask nothing; everything comes from the options. |
+| `--explain` | Print what would be generated and whether the machine is ready, then stop. |
+| `--strict` | Stop instead of leaving out a module that cannot work in the app. |
+| `--skip-external-setup` | Never install tools, log in or configure external services. |
+| `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
+| `--start` | The full path of the screen the app starts on, such as `/home`. |
 
-- **Core Flutter**: Basic Flutter project structure and configuration
-- **Firebase Core**: Firebase initialization and basic setup
-- **Analytics**: Analytics and tracking integration
-- **GoRouter**: Advanced routing with GoRouter
-- **GetIt**: Dependency injection with GetIt
-- **Communication**: Inter-module communication patterns
-- **Home Flutter**: Home screen and navigation templates
+`smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
-## Available State Manager Approach
-- **BLoC**: Event–State pattern using `flutter_bloc`.
-- **Riverpod**: Provider-based model using `flutter_riverpod`.
+## Modules
+
+| Module | What it adds to the app |
+| --- | --- |
+| [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up and the root widget. Every app has it. |
+| [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
+| [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
+| [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
+| [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
+| [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
+| [`get_it`](https://doc.saymyframe.com/modules/get-it) | Dependency injection: the services of the modules, registered in get_it. |
+| [`event_bus`](https://doc.saymyframe.com/modules/event-bus) | Events between parts of the app that do not know each other, with event_bus. |
+| [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
+| [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
+| [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
+
+A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it. You can also write modules of your own, and a command of your own with them; see [Extending SMF](https://doc.saymyframe.com/extending).
 
 ## Support
 
-- 📧 Email: support@saymyframe.com
-- 🐛 Issues: [GitHub Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
-- 📖 Documentation: [SayMyFrame Docs](https://saymyframe.com)
+- Discord: [saymyframe.com/discord](https://saymyframe.com/discord)
+- Issues: [GitHub Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+- Email: support@saymyframe.com
