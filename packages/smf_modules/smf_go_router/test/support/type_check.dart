@@ -18,6 +18,22 @@ abstract class Key {
   const Key();
 }
 
+abstract class LocalKey extends Key {
+  const LocalKey();
+}
+
+class ValueKey<T> extends LocalKey {
+  const ValueKey(this.value);
+
+  final T value;
+}
+
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  void addListener(VoidCallback listener);
+}
+
 abstract interface class BuildContext {}
 
 abstract class Widget {
@@ -110,11 +126,13 @@ abstract class RouteBase {}
 class GoRoute extends RouteBase {
   GoRoute({
     required String path,
-    String? name,
+    this.name,
     GoRouterWidgetBuilder? builder,
     GoRouterRedirect? redirect,
     List<RouteBase> routes = const <RouteBase>[],
   });
+
+  final String? name;
 }
 
 typedef StatefulShellRouteBuilder = Widget Function(
@@ -150,14 +168,35 @@ class StatefulShellRoute extends RouteBase {
 
 abstract class RouteMatchBase {}
 
+class RouteMatch extends RouteMatchBase {
+  RouteMatch(this.route, this.pageKey);
+
+  final GoRoute route;
+
+  final ValueKey<String> pageKey;
+}
+
+class ImperativeRouteMatch extends RouteMatch {
+  ImperativeRouteMatch(super.route, super.pageKey, this.matches);
+
+  final RouteMatchList matches;
+}
+
 class ShellRouteMatch extends RouteMatchBase {}
 
 class RouteMatchList {
   final List<RouteMatchBase> matches = const [];
+
+  final Uri uri = Uri();
+
+  RouteMatch? get lastOrNull => null;
 }
 
-class GoRouterDelegate {
+class GoRouterDelegate implements Listenable {
   RouteMatchList currentConfiguration = RouteMatchList();
+
+  @override
+  void addListener(VoidCallback listener) {}
 }
 
 class RouteConfiguration {

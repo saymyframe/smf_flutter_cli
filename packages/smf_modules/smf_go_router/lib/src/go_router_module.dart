@@ -44,6 +44,13 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// Every navigator, the root one and that of each branch, creates
 /// navigator observers of its own from the factories of the router role
 /// once.
+///
+/// The router tells the listeners of the screen of the router role about
+/// the page on top of the app: the delegate of go_router hears of every
+/// change of its stacks, a switch of branches included, and the router
+/// calls the listeners when another page comes on top or the page on top
+/// shows another location, with the name of the route of the page, `null`
+/// for the fallback screen and the error screen, and its location.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();

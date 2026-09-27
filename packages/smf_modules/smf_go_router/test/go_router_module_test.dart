@@ -55,6 +55,35 @@ class _GoAppRouter {
     .single
     .toSource();
 
+/// `_showScreen` as the analyzer prints its declaration.
+final String _expectedShowScreen = parseString(
+  content: '''
+class _GoAppRouter {
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      listener(top?.route.name, location);
+    }
+  }
+}
+''',
+)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .single
+    .members
+    .single
+    .toSource();
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -191,6 +220,64 @@ String _observersOf(CompilationUnit unit) {
   return (function.functionExpression.body as ExpressionFunctionBody)
       .expression
       .toSource();
+}
+
+/// The declaration of the top-level variable `_screenListeners` of [unit].
+VariableDeclarationList _screenListenersOf(CompilationUnit unit) =>
+    unit.declarations
+        .whereType<TopLevelVariableDeclaration>()
+        .map((declaration) => declaration.variables)
+        .singleWhere(
+          (variables) =>
+              variables.variables.single.name.lexeme == '_screenListeners',
+        );
+
+/// The source of the listeners of the screen in the list `_screenListeners`
+/// of [unit].
+List<String> _listenersOf(CompilationUnit unit) => [
+      for (final element in (_screenListenersOf(unit)
+              .variables
+              .single
+              .initializer! as ListLiteral)
+          .elements)
+        element.toSource(),
+    ];
+
+/// Checks that the router of [unit] tells the listeners of the screen, whose
+/// sources are [listeners], about the screen the user sees.
+void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
+  final router = _routerClassOf(unit);
+  final fields = {
+    for (final field in router.members.whereType<FieldDeclaration>())
+      field.fields.variables.single.name.lexeme: field.fields,
+  };
+
+  // The delegate of the router, created once, tells the router of every
+  // change of its configuration.
+  final config = fields['config']!.variables.single.initializer!;
+  expect(config, isA<CascadeExpression>());
+  config as CascadeExpression;
+  expect(config.target, _goRouterOf(unit));
+  expect(
+    config.cascadeSections.map((section) => section.toSource()),
+    ['..routerDelegate.addListener(_showScreen)'],
+  );
+  expect(fields['_screen']!.type!.toSource(), '(LocalKey?, String)?');
+  expect(
+    router.members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == '_showScreen')
+        .toSource(),
+    _expectedShowScreen,
+  );
+  // One list for the whole app, not a list for each navigator.
+  final declaration = _screenListenersOf(unit);
+  expect(declaration.isFinal, isTrue);
+  expect(
+    declaration.type!.toSource(),
+    'List<void Function(String? route, String location)>',
+  );
+  expect(_listenersOf(unit), listeners);
 }
 
 /// Every route of [routes] and below them, parents first, each with the
@@ -359,13 +446,15 @@ void main() {
           ),
         ],
       );
-      // No route has values to check, and no module gives an observer.
+      // No route has values to check, and no module gives an observer or a
+      // listener of the screen.
       expect(withRouter.files[_factory]!.text, isNot(contains('_checkValues')));
       expect(_argument(router, 'observers')!.toSource(), '_observers()');
       expect(
         _observersOf(unit),
         '[for (final create in <NavigatorObserver Function()>[]) create()]',
       );
+      _expectScreenListeners(unit, const []);
     });
 
     test('runs the router of the app in the MaterialApp', () {
@@ -588,6 +677,30 @@ void main() {
       );
     });
 
+    test(
+        'tells the listeners of the router role about the page on top when '
+        'it changes', () {
+      _expectScreenListeners(unit, const [ObservingModule.listener]);
+      // The listener comes with the import of its module, which the file
+      // has once, as the observer of the module needs it too.
+      const file = 'package:contract_app/core/observing/test_observer.dart';
+      expect(
+        [
+          for (final added in app.files[_factory]!.addedImports)
+            if (added.contributor == const ModuleOrigin(ObservingModule.id))
+              added.import.uri,
+        ],
+        [file, file],
+      );
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            if (directive.uri.stringValue == file) directive.toSource(),
+        ],
+        ["import '$file';"],
+      );
+    });
+
     test('has no main navigation without a layout', () {
       expect(_shellOf(unit), isNull);
       expect(
@@ -742,6 +855,14 @@ void main() {
         '[for (final create in <NavigatorObserver Function()>[() => '
         'TestObserver()]) create()]',
       );
+    });
+
+    test(
+        'tells the listeners of the screen about the page on top of every '
+        'navigator, the branches included, with one list', () {
+      // The delegate of go_router hears of a switch of branches, which no
+      // navigator observer sees, so the listeners hear of it too.
+      _expectScreenListeners(unit, const [ObservingModule.listener]);
     });
 
     test(

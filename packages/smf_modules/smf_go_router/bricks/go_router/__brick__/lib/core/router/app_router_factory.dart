@@ -9,7 +9,8 @@ import 'navigation.dart' show AppLocation;
 AppRouter createAppRouter() => _GoAppRouter();
 
 /// The router of the app with go_router, which navigates between the
-/// locations of the app too.
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
 final class _GoAppRouter implements AppRouter, AppNavigator {
   /// The router, created once, on first use. Navigation goes through it
   /// rather than through the router above a context, so that any context
@@ -21,7 +22,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     routes: [
 {{{routes}}}
     ],
-  );
+  )..routerDelegate.addListener(_showScreen);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
 
   @override
   AppNavigator navigatorOf(BuildContext context) => this;
@@ -39,6 +44,30 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   void replace(AppLocation location) {
     {{#main_navigation}}_checkMainNavigation(location, 'replace');
     {{/main_navigation}}config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out; the error screen
+  /// of go_router has no page.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      listener(top?.route.name, location);
+    }
   }{{#main_navigation}}
 
   /// Throws a [StateError] instead of showing [location] of the main
@@ -68,5 +97,12 @@ List<NavigatorObserver> _observers() => [
 {{{smf_router__observers}}}
   ])
     create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [
+{{{smf_router__screen_listeners}}}
 ];
 {{{value_checks}}}

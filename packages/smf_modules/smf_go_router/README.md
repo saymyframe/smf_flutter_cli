@@ -5,7 +5,7 @@ The SMF module that routes the app with [go_router](https://pub.dev/packages/go_
 The modules of the app declare their routes, and the router role gives the app the typed navigation facade, `context.nav`, in `lib/core/router/navigation.dart`. This module adds `go_router` to the dependencies of the app and generates `createAppRouter()` in `lib/core/router/app_router_factory.dart`, which creates the router of the app once, on first use:
 
 - every route is a `GoRoute` under the namespace of its module, such as `/home/details/:id`, with its children below it;
-- a route is named by its full name, such as `home.details`, which navigator observers, such as the one of analytics, report as the name of the screen;
+- a route is named by its full name, such as `home.details`, which the listeners of the screen get as the name of the screen, and navigator observers as the name of the page;
 - screens are imported with prefixes of their own, so their names never clash;
 - the app opens on its start route, and `/` redirects to it. When no route can start the app, as in an app without features, `/` shows the fallback screen of the app.
 
@@ -26,7 +26,14 @@ Screens get the values of their parameters from the location, parsed with `tryPa
 
 go_router shows the main navigation once, so a location in it goes only on top of the main navigation itself: from a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError` that says to use `go()`, and leave the stack as it is. From a page with no main navigation below it, `push()` brings the main navigation back on top with the location. The check reads the stack as go_router has it when the method is called.
 
-Every navigator, the root one and that of each branch of the main navigation, creates observers of its own from the factories that modules give the router role, such as `() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)`. The branches do not notify the observers of the root navigator, so each page is reported once. Switching branches is no navigation event, though a branch shows its first page when it is first selected.
+Every navigator, the root one and that of each branch of the main navigation, creates observers of its own from the factories that modules give the router role. The branches do not notify the observers of the root navigator, so each page is reported once. Switching branches is no navigation event, though a branch shows its first page when it is first selected.
+
+Modules that follow the screen the user sees, such as analytics, give the router role listeners of the screen instead. The router listens to its go_router delegate, which hears of every change of the stacks, a switch of branches included, and calls each listener once whenever the page on top of the app changes or shows another location, with the full name of its route and its location, such as `home.details` and `/home/details/5`:
+
+- on the first screen of the app, after a navigation, when a page closes and the one below shows again, and on a switch to another branch of the main navigation, whether it was selected before or not;
+- once for a navigation that puts several pages on a stack, such as `go()` to a page whose parents are not on it yet, with the page on top;
+- not again for the same page at the same location;
+- with the route `null` for a screen that is no route of a module: the fallback screen, at `/`, and the error screen of go_router, at the location it could not show.
 
 go_router 17 works with the Material library of Flutter 3.44, which the apps of SMF use. go_router 18 has moved to the separate `material_ui` package, whose `MaterialApp` it looks for to choose Material pages.
 

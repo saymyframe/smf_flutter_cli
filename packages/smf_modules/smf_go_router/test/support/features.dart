@@ -8,8 +8,8 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
 /// The modules of the tests: flutter_core, which creates the app, this
-/// module, three features, a module with a navigator observer, and a
-/// layout.
+/// module, three features, a module with a navigator observer and a
+/// listener of the screen, and a layout.
 const List<SmfModule> testModules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -356,13 +356,17 @@ final class _TabsProvider extends LayoutProvider {
 }
 
 /// A module that watches the navigation of the app when it has a router,
-/// as analytics would.
+/// as analytics would: it gives every navigator an observer and listens to
+/// the screen the user sees.
 final class ObservingModule extends SmfModule {
   /// Creates the module.
   const ObservingModule();
 
   /// The id of the module.
   static const id = ModuleId('observing');
+
+  /// The listener of the screen that the module gives the router.
+  static const listener = '(route, location) => screens.add((route, location))';
 
   static const _file = ImportRef.app('core/observing/test_observer.dart');
 
@@ -382,12 +386,20 @@ final class ObservingModule extends SmfModule {
                 "import 'package:flutter/widgets.dart';\n"
                     '\n'
                     '/// Watches the navigation of the app.\n'
-                    'final class TestObserver extends NavigatorObserver {}\n',
+                    'final class TestObserver extends NavigatorObserver {}\n'
+                    '\n'
+                    '/// The route and location of each screen the user saw.\n'
+                    'final List<(String?, String)> screens = [];\n',
           }),
         ),
         const SocketContribution.item(
           RouterRole.observers,
           Fragment('() => TestObserver()', imports: [_file]),
+          when: {routerRole},
+        ),
+        const SocketContribution.item(
+          RouterRole.screenListeners,
+          Fragment(listener, imports: [_file]),
           when: {routerRole},
         ),
       ];
