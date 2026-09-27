@@ -430,7 +430,7 @@ void main() {
               followUps: [
                 PostGenStep(
                   ToolRef('fix'),
-                  ['it'],
+                  ['it', 'in "a b"'],
                   skippable: true,
                   followUps: [PostGenStep(ToolRef('check'), [])],
                 ),
@@ -517,7 +517,8 @@ void main() {
           '  dart run build_runner build --force-jit (core)\n'
           '  a --flag (core)\n'
           // Follow-ups run once the step above them succeeded.
-          '    then fix it (core)\n'
+          // Quoted for the shell of the host, as the commands for later.
+          '    then fix it \'in "a b"\' (core)\n'
           '      then check (core)\n'
           '  b (analytics)',
         ),
@@ -614,6 +615,7 @@ void main() {
         preflight: const PreflightReport([], []),
         leftOut: const [],
         strict: false,
+        operatingSystem: HostOperatingSystem.linux,
       );
 
       expect(lines, contains('  home: requested, variant for bloc'));
@@ -651,6 +653,7 @@ void main() {
         ),
         leftOut: const [],
         strict: false,
+        operatingSystem: HostOperatingSystem.linux,
         sdkIssues: const [SmfIssue('The app needs Dart ^3.99.0.')],
       );
 

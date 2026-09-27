@@ -6,6 +6,7 @@ import 'package:smf_pipeline/src/preflight.dart';
 import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/selection.dart';
+import 'package:smf_pipeline/src/shell.dart';
 import 'package:smf_pipeline/src/validation.dart';
 
 /// The report of `--explain`: what the pipeline would generate and why, and
@@ -20,7 +21,8 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   contributors and the edges that decide it, and the same for the
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
-///   after generation, each follow-up of a step under it;
+///   after generation, quoted for a shell of [operatingSystem], each
+///   follow-up of a step under it;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do.
 List<String> explain({
@@ -31,6 +33,7 @@ List<String> explain({
   required PreflightReport preflight,
   required List<LeftOut> leftOut,
   required bool strict,
+  required HostOperatingSystem operatingSystem,
   OnConflict onConflict = OnConflict.prompt,
   List<SmfIssue> sdkIssues = const [],
   List<ContributionOrigin> codegen = const [],
@@ -114,7 +117,7 @@ List<String> explain({
       '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
     for (final collected in validation.postGenOrder.contributions)
       if (collected.contribution case final PostGenStep step)
-        ..._stepLines(step, collected.origin),
+        ..._stepLines(step, collected.origin, operatingSystem),
   ];
   if (steps.isNotEmpty) {
     lines
@@ -181,19 +184,20 @@ List<String> _contributors(ContributionOrder order) => {
     }.toList();
 
 /// The lines of [step] of [origin] under `After generation`: its command,
-/// then, a level deeper each, those of its follow-ups, which run once it
-/// succeeded; [depth] is the level of [step].
+/// quoted for a shell of [system], then, a level deeper each, those of its
+/// follow-ups, which run once it succeeded; [depth] is the level of [step].
 Iterable<String> _stepLines(
   PostGenStep step,
-  ContributionOrigin origin, {
+  ContributionOrigin origin,
+  HostOperatingSystem system, {
   int depth = 0,
 }) sync* {
   final command = [
     step.tool.executable,
     ...step.tool.argumentsFor(step.arguments),
-  ].join(' ');
+  ].map((argument) => shellQuoted(argument, system)).join(' ');
   yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command ($origin)';
   for (final next in step.followUps) {
-    yield* _stepLines(next, origin, depth: depth + 1);
+    yield* _stepLines(next, origin, system, depth: depth + 1);
   }
 }

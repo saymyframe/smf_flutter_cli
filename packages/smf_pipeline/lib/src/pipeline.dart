@@ -367,6 +367,7 @@ extension CreatePlanning on CreatePipeline {
           preflight: preflight,
           leftOut: lenience.leftOut,
           strict: request.strict,
+          operatingSystem: environment.operatingSystem,
           onConflict: request.onConflict,
           sdkIssues: preflight.versionIssues,
           codegen: [
