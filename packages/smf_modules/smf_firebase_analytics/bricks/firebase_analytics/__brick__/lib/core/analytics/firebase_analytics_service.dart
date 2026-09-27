@@ -53,19 +53,22 @@ final class FirebaseAnalyticsService implements AnalyticsService {
 }{{#has_router}}
 
 /// Logs a screen view to Firebase Analytics for the screen the user sees,
-/// which the router of the app tells it about: the full name of its route,
-/// such as `home.home`, or, for a screen that is no route of a module, the
-/// path of its location, without the query, which may hold anything for a
-/// location that the app cannot show.
+/// which the router of the app tells it about, named by the full name of
+/// its route, such as `home.home`.
+///
+/// A screen that is no route of a module is the fallback start screen of
+/// the app, logged as `/`, or the error screen of the router, which is not
+/// logged: the location that the app cannot show may hold anything, such
+/// as a token of a link.
 ///
 /// Nothing waits for the screen view, so an error of the platform is
 /// printed rather than left to the handler of the uncaught errors of the
 /// app.
 void logFirebaseScreenView(String? route, String location) {
-  FirebaseAnalytics.instance
-      .logScreenView(screenName: route ?? Uri.parse(location).path)
-      .catchError(
-        (Object error) => debugPrint('Firebase Analytics: $error'),
-        test: (error) => error is PlatformException,
-      );
+  final name = route ?? (Uri.parse(location).path == '/' ? '/' : null);
+  if (name == null) return;
+  FirebaseAnalytics.instance.logScreenView(screenName: name).catchError(
+    (Object error) => debugPrint('Firebase Analytics: $error'),
+    test: (error) => error is PlatformException,
+  );
 }{{/has_router}}

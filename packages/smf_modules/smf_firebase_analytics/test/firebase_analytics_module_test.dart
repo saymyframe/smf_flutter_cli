@@ -58,12 +58,12 @@ const _listenerImport =
 final String _expectedListener = parseString(
   content: r'''
 void logFirebaseScreenView(String? route, String location) {
-  FirebaseAnalytics.instance
-      .logScreenView(screenName: route ?? Uri.parse(location).path)
-      .catchError(
-        (Object error) => debugPrint('Firebase Analytics: $error'),
-        test: (error) => error is PlatformException,
-      );
+  final name = route ?? (Uri.parse(location).path == '/' ? '/' : null);
+  if (name == null) return;
+  FirebaseAnalytics.instance.logScreenView(screenName: name).catchError(
+    (Object error) => debugPrint('Firebase Analytics: $error'),
+    test: (error) => error is PlatformException,
+  );
 }
 ''',
 ).unit.declarations.single.toSource();
@@ -756,8 +756,9 @@ void main() {
     });
 
     test(
-        'logs a screen view with the name of the route of the screen, or the '
-        'path of its location, and prints an error of the platform', () {
+        'logs a screen view with the name of the route of the screen, or / '
+        'for the fallback start screen, but not the error screen of the '
+        'router, and prints an error of the platform', () {
       final unit = _unitOf(withAnalytics, _implementation);
       final listener = unit.declarations
           .whereType<FunctionDeclaration>()
