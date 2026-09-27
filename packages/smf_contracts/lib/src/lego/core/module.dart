@@ -130,9 +130,9 @@ typedef VariantContributions = List<Contribution> Function(
 /// `ModuleId('bloc')`, so the module does not depend on every provider's
 /// package. A variant may import the packages of its provider. It adds them
 /// to the pubspec with the constraint `any`, leaving the constraint to the
-/// provider. Only a variant for the provider, or a module that depends on
-/// it, may add the packages of a provider; see
-/// [PubspecContribution.hosted].
+/// provider. Only a variant for the provider, or for a provider that
+/// depends on it, and a module that depends on the provider may add the
+/// packages of a provider; see [PubspecContribution.hosted].
 @immutable
 final class Variants {
   /// Creates the variants of a module for the providers of [role].
