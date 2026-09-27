@@ -1,3 +1,4 @@
+import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_contracts/lego_core.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
@@ -181,6 +182,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -192,6 +194,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
@@ -249,6 +252,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -260,6 +264,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -296,6 +301,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -307,6 +313,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -343,6 +350,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -355,6 +363,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
     ]);
     expect(run.asked[3].shown, [
       'go_router — Routes and navigation with go_router',
@@ -381,6 +390,7 @@ void main() {
       'Dependency injection': ['get_it'],
       'Events': ['None'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -437,6 +447,7 @@ void main() {
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
       'Crash reporting': [],
+      'Analytics': [],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -497,6 +508,7 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Crash reporting': [],
+        'Analytics': [],
       },
       options: ['--skip-external-setup'],
     );
@@ -536,9 +548,9 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which modules provide the crash '
-      'reporting, and offers Firebase Crashlytics, which brings Firebase',
-      () async {
+      'a run in a terminal asks which modules provide the crash reporting '
+      'after the events, and offers Firebase Crashlytics, which brings '
+      'Firebase', () async {
     final run = await _create(
       {
         'Features': [],
@@ -549,19 +561,25 @@ void main() {
         'Dependency injection': ['get_it'],
         'Events': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
+        'Analytics': [],
       },
       options: ['--skip-external-setup'],
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and
-    // firebase_crashlytics is last. An app can report to more than one
-    // service, so the question takes any number of answers, none included.
-    expect(
-      run.asked.last.message,
+    // firebase_crashlytics comes after event_bus. An app can report to more
+    // than one service, so the question takes any number of answers, none
+    // included.
+    final messages = [for (final question in run.asked) question.message];
+    final crashReporting = messages.indexOf(
       'Crash reporting: which module provides it?',
     );
-    expect(run.asked.last.shown, [
+    expect(
+      crashReporting,
+      greaterThan(messages.indexOf('Events: which module provides it?')),
+    );
+    expect(run.asked[crashReporting].shown, [
       'firebase_crashlytics — Firebase Crashlytics with firebase_crashlytics',
     ]);
     // Firebase was not chosen among the infrastructure, but Crashlytics
@@ -615,6 +633,136 @@ void main() {
     expect(
       run.lines,
       contains(startsWith('Configuring Firebase with flutterfire is not done')),
+    );
+  });
+
+  test(
+      'a run in a terminal asks last which modules provide the analytics, and '
+      'offers Firebase Analytics, which brings Firebase and watches every '
+      'navigator of the router', () async {
+    final run = await _create(
+      {
+        'Features': ['home'],
+        'Infrastructure': [],
+        'Layout': ['bottom_tabs'],
+        'State management': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Crash reporting': [],
+        'Analytics': ['firebase_analytics'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The roles come in the order of the list of modules, and
+    // firebase_analytics is last. An app can record to more than one
+    // service, so the question takes any number of answers, none included.
+    expect(run.asked.last.message, 'Analytics: which module provides it?');
+    expect(run.asked.last.shown, [
+      'firebase_analytics — Firebase Analytics with firebase_analytics',
+    ]);
+    // Firebase was not chosen among the infrastructure, but Analytics
+    // depends on it.
+    expect(
+      run.lines,
+      contains('Adding firebase_core: a dependency of firebase_analytics.'),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/analytics/analytics_service.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('abstract interface class AnalyticsService'),
+        contains('createFirebaseAnalyticsService()'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/analytics/firebase_analytics_service.dart')
+          .readAsStringSync(),
+      contains('FirebaseAnalytics.instance'),
+    );
+    // The root navigator and the navigator of the branch of home create
+    // their observers with the same function.
+    final router = app
+        .childFile('lib/core/router/app_router_factory.dart')
+        .readAsStringSync();
+    expect(
+      router,
+      allOf(
+        contains(
+          '() => FirebaseAnalyticsObserver(analytics: '
+          'FirebaseAnalytics.instance),',
+        ),
+        contains('StatefulShellBranch('),
+      ),
+    );
+    expect('observers: _observers(),'.allMatches(router), hasLength(2));
+    // The service starts without waiting, so bootstrap() only initializes
+    // Firebase.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initializeApp'],
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(
+        contains('  firebase_analytics: '),
+        contains('  firebase_core: '),
+      ),
+    );
+    expect(
+      run.lines,
+      contains(startsWith('Configuring Firebase with flutterfire is not done')),
+    );
+  });
+
+  test(
+      'a run in a terminal gives an app without a router Firebase Analytics '
+      'without observers, and registers its service in the DI container',
+      () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Dependency injection': ['get_it'],
+        'Events': ['None'],
+        'Crash reporting': [],
+        'Analytics': ['firebase_analytics'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final app = run.files.directory('/work/my_app');
+    expect(app.childDirectory('lib/core/router').existsSync(), isFalse);
+    expect(
+      app
+          .childFile('lib/core/analytics/firebase_analytics_service.dart')
+          .existsSync(),
+      isTrue,
+    );
+    final lib = [
+      for (final entity in app.childDirectory('lib').listSync(recursive: true))
+        if (entity is File) entity.readAsStringSync(),
+    ];
+    expect(lib, everyElement(isNot(contains('FirebaseAnalyticsObserver'))));
+    expect(
+      app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
+      contains('.createAnalyticsService()'),
     );
   });
 }

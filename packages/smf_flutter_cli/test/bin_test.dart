@@ -559,6 +559,59 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen for the analytics, with Firebase, '
+        'which it depends on',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'firebase_analytics',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          // The version of firebase_analytics is the module's to choose.
+          expect(
+            result.stdout,
+            allOf([
+              contains('  firebase_analytics: requested\n'),
+              contains(
+                '  firebase_core: a dependency of firebase_analytics\n',
+              ),
+              contains('  analytics: firebase_analytics\n'),
+              matches(
+                RegExp(
+                  r'^  firebase_analytics \S+ \(firebase_analytics\)$',
+                  multiLine: true,
+                ),
+              ),
+              // What Firebase needs of the machine and runs after
+              // generation comes with it.
+              contains(
+                '  ✗ Firebase CLI (for firebase_core): missing\n',
+              ),
+              contains(
+                '  dart pub global run flutterfire_cli:flutterfire configure '
+                '--platforms=android,ios --overwrite-firebase-options '
+                '(firebase_core)\n',
+              ),
+            ]),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(

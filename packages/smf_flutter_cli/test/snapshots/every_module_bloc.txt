@@ -244,6 +244,138 @@ Future<void> bootstrap() async {
   installCrashReporting();
   await registerDependencies();
 }
+=== lib/core/analytics/analytics_service.dart (role:analytics) ===
+import 'package:my_app/core/analytics/firebase_analytics_service.dart' as impl0;
+
+/// Records what users do in the app.
+abstract interface class AnalyticsService {
+  /// Logs the event [name] with [parameters].
+  Future<void> logEvent(String name, {Map<String, Object>? parameters});
+
+  /// Logs that the user signed in, with the sign-in [method].
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters});
+
+  /// Logs that the user signed up, with the sign-up [method].
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  });
+
+  /// Turns the collection of analytics data on or off.
+  Future<void> setAnalyticsCollectionEnabled(bool enabled);
+
+  /// Sets the id of the signed-in user, or clears it with `null`.
+  Future<void> setUserId(String? userId);
+
+  /// Sets the user property [name] to [value], or clears it with `null`.
+  Future<void> setUserProperty({required String name, required String? value});
+}
+
+/// Returns the analytics service of the app, which forwards every call to
+/// the analytics services of all modules.
+AnalyticsService createAnalyticsService() => _analyticsService;
+
+final AnalyticsService _analyticsService = _AnalyticsServices(
+  _analyticsServices,
+);
+
+final List<AnalyticsService> _analyticsServices = [
+  impl0.createFirebaseAnalyticsService(),
+];
+
+final class _AnalyticsServices implements AnalyticsService {
+  const _AnalyticsServices(this._services);
+
+  final List<AnalyticsService> _services;
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _forAll((service) => service.logEvent(name, parameters: parameters));
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _forAll(
+        (service) => service.logSignIn(method: method, parameters: parameters),
+      );
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _forAll(
+    (service) => service.logSignUp(method: method, parameters: parameters),
+  );
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _forAll((service) => service.setAnalyticsCollectionEnabled(enabled));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((service) => service.setUserId(userId));
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _forAll((service) => service.setUserProperty(name: name, value: value));
+
+  Future<void> _forAll(
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    await Future.wait(_services.map(call));
+  }
+}
+=== lib/core/analytics/firebase_analytics_service.dart (firebase_analytics) ===
+import 'package:firebase_analytics/firebase_analytics.dart';
+
+import 'analytics_service.dart';
+
+/// Creates an analytics service that records to Firebase Analytics, which
+/// needs Firebase to be initialized.
+///
+/// The app has one analytics service, which `createAnalyticsService()`
+/// returns and which forwards every call to this one.
+AnalyticsService createFirebaseAnalyticsService() =>
+    FirebaseAnalyticsService(FirebaseAnalytics.instance);
+
+/// Records what users do in the app with Firebase Analytics.
+///
+/// A sign-in and a sign-up are the standard `login` and `sign_up` events of
+/// Firebase Analytics, with the method in their `method` parameter.
+final class FirebaseAnalyticsService implements AnalyticsService {
+  /// Creates the service on the given [FirebaseAnalytics].
+  FirebaseAnalyticsService(this._analytics);
+
+  final FirebaseAnalytics _analytics;
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _analytics.logEvent(name: name, parameters: parameters);
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _analytics.logLogin(loginMethod: method, parameters: parameters);
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _analytics.logSignUp(signUpMethod: method, parameters: parameters);
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _analytics.setAnalyticsCollectionEnabled(enabled);
+
+  @override
+  Future<void> setUserId(String? userId) => _analytics.setUserId(id: userId);
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _analytics.setUserProperty(name: name, value: value);
+}
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 
@@ -434,6 +566,7 @@ final class CrashlyticsCrashReporter implements CrashReporter {
 }
 === lib/core/di/dependencies.dart (get_it) ===
 import 'package:get_it/get_it.dart';
+import 'package:my_app/core/analytics/analytics_service.dart' as di2;
 import 'package:my_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:my_app/core/events/communication_service.dart' as di0;
 
@@ -456,6 +589,9 @@ Future<void> registerDependencies() async {
   );
   getIt.registerLazySingleton<di1.CrashReporter>(
     () => di1.createCrashReporter(),
+  );
+  getIt.registerLazySingleton<di2.AnalyticsService>(
+    () => di2.createAnalyticsService(),
   );
 }
 
@@ -671,6 +807,8 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
+import 'package:firebase_analytics/firebase_analytics.dart'
+    show FirebaseAnalytics, FirebaseAnalyticsObserver;
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
@@ -765,7 +903,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 /// Creates the observers of a navigator. An observer can watch only one
 /// navigator, so each navigator gets instances of its own.
 List<NavigatorObserver> _observers() => [
-  for (final create in <NavigatorObserver Function()>[]) create(),
+  for (final create in <NavigatorObserver Function()>[
+    () => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
+  ])
+    create(),
 ];
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';
@@ -949,6 +1090,7 @@ dependencies:
   flutter:
     sdk: flutter
   event_bus: "^2.0.1"
+  firebase_analytics: "^12.6.0"
   firebase_core: "^4.15.0"
   firebase_crashlytics: "^5.4.0"
   flutter_bloc: "^9.1.1"
