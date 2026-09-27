@@ -64,9 +64,10 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
     }
     if (order < 0) {
       return PreflightMissing(
-        instructions: 'The Ruby gem xcodeproj is $version, but flutterfire '
-            'configure needs $minimumXcodeprojVersion or newer to open the '
-            'Xcode project of the app, which has a Swift package: $_install.',
+        found: 'the Ruby gem xcodeproj is $version',
+        instructions: 'flutterfire configure needs $minimumXcodeprojVersion '
+            'or newer to open the Xcode project of the app, which has a Swift '
+            'package: $_install.',
       );
     }
     return const PreflightPassed();
@@ -74,7 +75,9 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
 }
 
 /// Tells, on any system but macOS, that `flutterfire configure` sets up the
-/// iOS app in its Xcode project only on macOS.
+/// iOS app in its Xcode project only on macOS, and that the machine is not
+/// a Mac ([PreflightMissing.found]), so that the setup is not called
+/// missing.
 ///
 /// Elsewhere it registers the iOS app and writes its options, but writes no
 /// `GoogleService-Info.plist` and leaves the Xcode project as it is, without
@@ -98,6 +101,7 @@ final class XcodeProjectOnMacCheck extends PreflightCheck {
       environment.operatingSystem == HostOperatingSystem.macos
           ? const PreflightPassed()
           : const PreflightMissing(
+              found: 'this machine is not a Mac',
               instructions: 'flutterfire configure changes the Xcode project '
                   'only on macOS. Elsewhere it registers the iOS app and '
                   'writes its options into lib/firebase_options.dart, but '

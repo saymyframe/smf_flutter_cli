@@ -50,14 +50,17 @@ const _flutterfireMissing = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
 /// The activation of flutterfire_cli.
 const _activate = '$_dart pub global activate flutterfire_cli 1.4.1';
 
-/// What the check says about flutterfire_cli 1.4.0.
-const _tooOld = 'flutterfire_cli 1.4.0 is active, but SMF works with 1.4.1 or '
-    'a later 1.x version: activate one with "dart pub global activate '
+/// What the check found of flutterfire_cli with 1.4.0 active.
+const _tooOld = 'flutterfire_cli 1.4.0 is active';
+
+/// What the check tells to do with flutterfire_cli 1.4.0 active.
+const _replace = 'Activate 1.4.1 in its place with "dart pub global activate '
     'flutterfire_cli 1.4.1".';
 
-/// The question whether to activate flutterfire_cli 1.4.1 in place of 1.4.0.
-const _replaceFlutterfire = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
-    '(needed by firebase_core). $_tooOld Set it up now?';
+/// The question whether to activate flutterfire_cli 1.4.1 in place of 1.4.0,
+/// which says so.
+const _replaceFlutterfire = 'FlutterFire CLI 1.4.1 or a later 1.x is needed '
+    'by firebase_core, but $_tooOld. $_replace Set it up now?';
 
 /// The warning that Firebase is not configured, because of [reason].
 String _notConfigured(String reason) =>
@@ -445,8 +448,9 @@ void main() {
     // on a Mac.
     expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
-      contains('Setup of the Xcode project on a Mac is missing. flutterfire '
-          'configure changes the Xcode project only on macOS.'),
+      contains('Setup of the Xcode project on a Mac is needed, but this '
+          'machine is not a Mac. flutterfire configure changes the Xcode '
+          'project only on macOS.'),
     ]);
   });
 
@@ -538,8 +542,13 @@ void main() {
       expect(machine.checks, isNot(contains(_activate)));
       expect(machine.checks, isNot(contains(_configure)));
       expect(machine.warnings, [
-        contains('FlutterFire CLI 1.4.1 or a later 1.x is missing. $_tooOld'),
-        _notConfigured('FlutterFire CLI 1.4.1 or a later 1.x is missing'),
+        contains(
+          'FlutterFire CLI 1.4.1 or a later 1.x is needed, but $_tooOld. '
+          '$_replace',
+        ),
+        _notConfigured(
+          'FlutterFire CLI 1.4.1 or a later 1.x is needed, but $_tooOld',
+        ),
         _fixAfterConfigure,
       ]);
     });
@@ -563,24 +572,28 @@ void main() {
     expect(machine.checks, isNot(contains(_activate)));
     expect(machine.checks, isNot(contains(_configure)));
     expect(machine.warnings, [
-      contains('FlutterFire CLI 1.4.1 or a later 1.x is missing. '
-          'flutterfire_cli 2.0.0 is active, but SMF works with 1.4.1 or a '
-          'later 1.x version, and does not replace a newer one'),
-      _notConfigured('FlutterFire CLI 1.4.1 or a later 1.x is missing'),
+      contains('FlutterFire CLI 1.4.1 or a later 1.x is needed, but '
+          'flutterfire_cli 2.0.0 is active. SMF does not replace a newer '
+          'major version, which other apps may need. To use 1.4.1, activate '
+          'it with "dart pub global activate flutterfire_cli 1.4.1".'),
+      _notConfigured(
+        'FlutterFire CLI 1.4.1 or a later 1.x is needed, but flutterfire_cli '
+        '2.0.0 is active',
+      ),
       _fixAfterConfigure,
     ]);
   });
 
   test(
-      '--explain shows flutterfire_cli 1.4.0 as missing and 1.4.1 as there, '
-      'and changes nothing', () async {
+      '--explain shows that flutterfire_cli 1.4.0 is active in place of 1.4.1 '
+      'or a later 1.x, and changes nothing', () async {
     const check = 'FlutterFire CLI 1.4.1 or a later 1.x (for firebase_core)';
     for (final (active, lines) in [
       (
         '1.4.0',
         [
-          '  ✗ $check: missing',
-          '    $_tooOld',
+          '  ✗ $check: $_tooOld',
+          '    $_replace',
           '    An interactive run offers to set it up.',
         ]
       ),

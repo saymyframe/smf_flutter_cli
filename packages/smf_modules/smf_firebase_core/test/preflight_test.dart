@@ -26,10 +26,17 @@ SmfProcessResult _result(
 }) =>
     SmfProcessResult(exitCode: exitCode, stdout: stdout, stderr: stderr);
 
-Matcher _missing({required Object instructions, required bool installable}) =>
+/// A check that found nothing of what it looks for, or [found] in its
+/// place.
+Matcher _missing({
+  required Object instructions,
+  required bool installable,
+  Object? found,
+}) =>
     isA<PreflightMissing>()
         .having((s) => s.instructions, 'instructions', instructions)
-        .having((s) => s.installable, 'installable', installable);
+        .having((s) => s.installable, 'installable', installable)
+        .having((s) => s.found, 'found', found);
 
 Matcher _failed(Object message) =>
     isA<PreflightFailed>().having((s) => s.message, 'message', message);
@@ -468,9 +475,9 @@ void main() {
             ),
           ),
           _missing(
-            instructions: 'flutterfire_cli $version is active, but SMF works '
-                'with 1.4.1 or a later 1.x version: activate one with "dart '
-                'pub global activate flutterfire_cli 1.4.1".',
+            found: 'flutterfire_cli $version is active',
+            instructions: 'Activate 1.4.1 in its place with "dart pub global '
+                'activate flutterfire_cli 1.4.1".',
             installable: true,
           ),
           reason: version,
@@ -493,7 +500,8 @@ void main() {
       expect(
         await check.check(machine),
         _missing(
-          instructions: startsWith('flutterfire_cli 1.4.0 is active'),
+          found: 'flutterfire_cli 1.4.0 is active',
+          instructions: startsWith('Activate 1.4.1 in its place'),
           installable: true,
         ),
       );
@@ -514,10 +522,10 @@ void main() {
             machineWith(_result(0, stdout: 'flutterfire_cli $active\n')),
           ),
           _missing(
-            instructions: 'flutterfire_cli $version is active, but SMF works '
-                'with 1.4.1 or a later 1.x version, and does not replace a '
-                'newer one, which other apps may need. To use one, activate '
-                'it with "dart pub global activate flutterfire_cli 1.4.1".',
+            found: 'flutterfire_cli $version is active',
+            instructions: 'SMF does not replace a newer major version, which '
+                'other apps may need. To use 1.4.1, activate it with "dart pub '
+                'global activate flutterfire_cli 1.4.1".',
             installable: false,
           ),
           reason: active,
@@ -691,11 +699,11 @@ void main() {
       expect(
         await check.check(macWith(_result(0, stdout: '1.22.0'))),
         _missing(
-          instructions: 'The Ruby gem xcodeproj is 1.22.0, but flutterfire '
-              'configure needs 1.23.0 or newer to open the Xcode project of '
-              'the app, which has a Swift package: install it with "gem '
-              'install xcodeproj", with a Ruby version manager or, for the '
-              'Ruby of macOS, with sudo.',
+          found: 'the Ruby gem xcodeproj is 1.22.0',
+          instructions: 'flutterfire configure needs 1.23.0 or newer to open '
+              'the Xcode project of the app, which has a Swift package: '
+              'install it with "gem install xcodeproj", with a Ruby version '
+              'manager or, for the Ruby of macOS, with sudo.',
           installable: false,
         ),
       );
@@ -725,6 +733,7 @@ void main() {
         expect(
           await check.check(machine),
           _missing(
+            found: 'this machine is not a Mac',
             instructions: 'flutterfire configure changes the Xcode project '
                 'only on macOS. Elsewhere it registers the iOS app and writes '
                 'its options into lib/firebase_options.dart, but writes no '

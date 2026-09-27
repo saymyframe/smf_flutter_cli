@@ -40,9 +40,10 @@ const flutterfireTool = ToolRef(
 /// a newer major one, which other apps of the user may need: the build
 /// phases that flutterfire adds to their Xcode projects run the active one.
 ///
-/// Its description names the versions that it accepts: the pipeline says
-/// that the description is missing, both when no version is active and when
-/// an older or a newer major version is.
+/// Its description names the versions that it accepts. When another
+/// version is active, the check tells which one
+/// ([PreflightMissing.found]), so that it is not called missing, and its
+/// instructions do not repeat the versions.
 final class FlutterfireCliCheck extends PreflightCheck {
   /// Creates the check.
   const FlutterfireCliCheck();
@@ -94,16 +95,16 @@ final class FlutterfireCliCheck extends PreflightCheck {
     if (isSupportedFlutterfireVersion(active)) return const PreflightPassed();
     if (major > _numbersOf(minimumFlutterfireVersion)!.first) {
       return PreflightMissing(
-        instructions: 'flutterfire_cli $active is active, but SMF works with '
-            '$minimumFlutterfireVersion or a later 1.x version, and does not '
-            'replace a newer one, which other apps may need. To use one, '
-            'activate it with "$_activate".',
+        found: 'flutterfire_cli $active is active',
+        instructions: 'SMF does not replace a newer major version, which '
+            'other apps may need. To use $flutterfireVersion, activate it '
+            'with "$_activate".',
       );
     }
     return PreflightMissing(
-      instructions: 'flutterfire_cli $active is active, but SMF works with '
-          '$minimumFlutterfireVersion or a later 1.x version: activate one '
-          'with "$_activate".',
+      found: 'flutterfire_cli $active is active',
+      instructions: 'Activate $flutterfireVersion in its place with '
+          '"$_activate".',
       installable: true,
     );
   }
