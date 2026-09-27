@@ -144,12 +144,12 @@ final class _AppEdges {
     for (final role in {...required, ...when}) {
       final verb = required.contains(role) ? 'requires' : 'uses';
       for (final provider in resolution.providersOf(role)) {
-        _edge(provider.id.value, after, '$after $verb the ${role.id}');
+        _edge(provider.id.value, after, '$after $verb the $role');
       }
       // The template of the role makes it ready, as by initAnalytics().
       final template = 'role:${role.id}';
       if (names.contains(template)) {
-        _edge(template, after, '$after $verb the ${role.id}');
+        _edge(template, after, '$after $verb the $role');
       }
     }
   }
@@ -183,7 +183,7 @@ final class _AppEdges {
           _edge(
             provider.id.value,
             name,
-            '$name comes after the providers of the ${role.id}',
+            '$name comes after the providers of the $role',
           );
         }
         _roleEdges(name, role.requires, _whenRolesOf(name));

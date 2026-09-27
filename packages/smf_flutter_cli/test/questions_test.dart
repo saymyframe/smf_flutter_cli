@@ -215,8 +215,8 @@ void main() {
     expect(
       run.lines,
       contains(
-        'Adding go_router: the only provider of the router (home requires '
-        'the router).',
+        'Adding go_router: the only provider of the router role, which home '
+        'requires.',
       ),
     );
     final app = run.files.directory('/work/my_app');
@@ -269,8 +269,8 @@ void main() {
     expect(
       run.lines,
       contains(
-        'Adding go_router: the only provider of the router (home requires '
-        'the router).',
+        'Adding go_router: the only provider of the router role, which home '
+        'requires.',
       ),
     );
     final app = run.files.directory('/work/my_app');
@@ -318,8 +318,8 @@ void main() {
     expect(
       run.lines,
       contains(
-        'Adding go_router: the only provider of the router (bottom_tabs '
-        'requires the router).',
+        'Adding go_router: the only provider of the router role, which '
+        'bottom_tabs requires.',
       ),
     );
     final app = run.files.directory('/work/my_app');

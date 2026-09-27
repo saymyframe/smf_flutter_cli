@@ -367,7 +367,7 @@ void main() {
       expect(asked[5].shown, isNot(contains('None')));
       expect(
         asked[5].message,
-        'nav: home requires the nav. Which module provides it?',
+        'nav: home requires the nav role. Which module provides it?',
       );
     });
 

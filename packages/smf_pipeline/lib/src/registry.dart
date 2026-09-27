@@ -97,7 +97,7 @@ final class ModuleRegistry {
       for (final role in roles)
         if (role.cardinality == RoleCardinality.exactlyOne &&
             !modules.any((m) => m.descriptor.provides.contains(role)))
-          'Every app needs the ${role.id}, but no module provides it.',
+          'Every app needs the $role, but no module provides it.',
     ];
   }
 }
@@ -376,7 +376,7 @@ final class _SocketCheck {
   void addRole(Role role) {
     for (final socket in role.sockets) {
       if (!identical(socket.role, role) || socket.familyKey.isNotEmpty) {
-        problems.add('The ${role.id} declares the $socket, which is not its.');
+        problems.add('The $role declares the $socket, which is not its.');
         continue;
       }
       addSocket(socket);
@@ -384,7 +384,7 @@ final class _SocketCheck {
     for (final family in role.socketFamilies) {
       if (!identical(family.role, role)) {
         problems.add(
-          'The ${role.id} declares the socket family ${family.name} of '
+          'The $role declares the socket family ${family.name} of '
           '${family.ownerName}.',
         );
         continue;
@@ -460,14 +460,14 @@ List<String> _optionProblems(List<Role> roles) {
       problems.addAll(_optionNameProblems(name, role));
       if (role.template == null) {
         problems.add(
-          'The ${role.id} has the option --$name but no template, whose '
+          'The $role has the option --$name but no template, whose '
           'choose hook would read it.',
         );
       }
       if (owners.putIfAbsent(name, () => role) case final other
           when !identical(other, role)) {
         problems.add(
-          'The ${other.id} and the ${role.id} both have the option --$name.',
+          'The $other and the $role both have the option --$name.',
         );
       }
     }
@@ -481,14 +481,14 @@ List<String> _optionNameProblems(String name, Role role) {
   final problems = <String>[];
   if (!_kebabCase.hasMatch(name)) {
     problems.add(
-      'The option --$name of the ${role.id} is not lower kebab-case.',
+      'The option --$name of the $role is not lower kebab-case.',
     );
   }
   if (CreateOptions.names.contains(name) ||
       const {'help', 'verbose', 'version'}.contains(name) ||
       name.startsWith('no-')) {
     problems.add(
-      'The option --$name of the ${role.id} is an option of the '
+      'The option --$name of the $role is an option of the '
       'pipeline, or starts with no-, which negates its flags.',
     );
   }

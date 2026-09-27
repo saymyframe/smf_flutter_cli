@@ -62,8 +62,8 @@ void main() {
         'requested',
         'requested',
         'a dependency of analytics',
-        'the only provider of the app_entry (every app needs the app_entry)',
-        'the only provider of the nav (analytics requires the nav)',
+        'the only provider of the app entry role, which every app needs',
+        'the only provider of the nav role, which analytics requires',
       ],
     );
     // The pipeline reports the additions once the app is resolved.
@@ -95,7 +95,7 @@ void main() {
     expect(names(result), ['f', 'scaffold', 'm']);
     expect(
       '${result.resolution!.modules.last.reason}',
-      'the only provider of the a (f requires the a)',
+      'the only provider of the a role, which f requires',
     );
   });
 
@@ -118,7 +118,7 @@ void main() {
     expect(names(result), ['home', 'scaffold', 'go']);
     expect(
       '${result.resolution!.modules.last.reason}',
-      'the first provider of the nav (home requires the nav); a run asks '
+      'the first provider of the nav role, which home requires; a run asks '
           'which one, also offering auto',
     );
   });
@@ -135,7 +135,7 @@ void main() {
     expect(names(result), ['tabs', 'scaffold', 'go']);
     expect(
       '${result.resolution!.modules.last.reason}',
-      contains('tabs requires the nav'),
+      contains('the nav role, which tabs requires'),
     );
   });
 
@@ -233,7 +233,7 @@ void main() {
       result.issues.map((issue) => issue.message),
       [
         'analytics depends on core, which was left out.',
-        'No module provides the nav, but home requires the nav.',
+        'No module provides the nav role, but home requires it.',
       ],
     );
   });

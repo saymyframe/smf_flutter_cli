@@ -711,7 +711,7 @@ final class ContractHarness {
       if (again[role] != choice) {
         problems.add(
           SmfIssue(
-            'With $shown, the ${role.id} makes the choice ${again[role]} in a '
+            'With $shown, the $role makes the choice ${again[role]} in a '
             'run without a terminal, not $choice, which the harness answered.',
             origin: RoleTemplateOrigin(role),
           ),
@@ -735,7 +735,7 @@ final class ContractHarness {
       if (ofChoice.isEmpty) {
         problems.add(
           SmfIssue(
-            'The ${role.id} asks a question, but its template gives no '
+            'The $role asks a question, but its template gives no '
             'option for the answer, $choice, so a run without a terminal '
             'cannot make the choice.',
             hint: 'Give the options of the answer from optionsOf() of the '
@@ -749,8 +749,8 @@ final class ContractHarness {
         if (!declared.contains(name)) {
           problems.add(
             SmfIssue(
-              'The template of the ${role.id} gives --$name for an answer, '
-              'but the ${role.id} has no such option.',
+              'The template of the $role gives --$name for an answer, '
+              'but the $role has no such option.',
               origin: origin,
             ),
           );

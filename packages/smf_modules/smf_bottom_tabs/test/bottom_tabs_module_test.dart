@@ -192,10 +192,10 @@ void main() {
         },
         {
           'bottom_tabs': 'requested',
-          'flutter_core': 'the only provider of the app_entry (every app '
-              'needs the app_entry)',
-          'go_router': 'the only provider of the router (bottom_tabs '
-              'requires the router)',
+          'flutter_core':
+              'the only provider of the app entry role, which every app needs',
+          'go_router': 'the only provider of the router role, which '
+              'bottom_tabs requires',
         },
       );
     });

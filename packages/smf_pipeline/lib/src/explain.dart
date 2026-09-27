@@ -107,7 +107,7 @@ final class Explanation {
     final lines = ['', 'Roles'];
     for (final role in resolution.presentRoles) {
       final providers = resolution.providersOf(role).map((m) => m.id);
-      lines.add('  ${role.id}: ${providers.join(', ')}');
+      lines.add('  ${role.description}: ${providers.join(', ')}');
     }
     return lines;
   }

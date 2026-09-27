@@ -84,7 +84,7 @@ void main() {
     expect(codes(order), ['zdi', 'menu', 'zgo', 'home']);
     expect(
       order.edges.map((e) => e.reason),
-      containsAll(['home requires the nav', 'menu uses the di']),
+      containsAll(['home requires the nav role', 'menu uses the di role']),
     );
   });
 
@@ -115,14 +115,17 @@ void main() {
     expect(
       order.edges.map((e) => '$e'),
       [
-        'xxx → role:aaa (role:aaa requires the dep)',
-        'xxx → zzz (zzz requires the dep)',
+        'xxx → role:aaa (role:aaa requires the dep role)',
+        'xxx → zzz (zzz requires the dep role)',
         equals(
           'yyy → role:aaa (zzz depends on yyy; role:aaa comes after the '
-          'providers of the aaa)',
+          'providers of the aaa role)',
         ),
         'yyy → zzz (zzz depends on yyy)',
-        'zzz → role:aaa (role:aaa comes after the providers of the aaa)',
+        equals(
+          'zzz → role:aaa (role:aaa comes after the providers of the aaa '
+          'role)',
+        ),
       ],
     );
   });
@@ -150,7 +153,7 @@ void main() {
     expect(
       order.edges.single.reason,
       'firebase_analytics depends on firebase_core; app_open requires the '
-      'analytics',
+      'analytics role',
     );
   });
 
@@ -170,7 +173,7 @@ void main() {
     );
 
     expect(codes(order), ['zdi', 'template']);
-    expect(order.edges.single.reason, 'role:aaa uses the di');
+    expect(order.edges.single.reason, 'role:aaa uses the di role');
   });
 
   test('role edges both ways cancel out', () {
@@ -218,7 +221,7 @@ void main() {
     );
 
     expect(codes(order), ['init', 'consent']);
-    expect(order.edges.single.reason, 'consent requires the analytics');
+    expect(order.edges.single.reason, 'consent requires the analytics role');
   });
 
   test('a cycle is reported and ordered by name', () {

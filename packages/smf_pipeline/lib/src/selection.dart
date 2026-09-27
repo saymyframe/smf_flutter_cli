@@ -375,7 +375,8 @@ final class _ModuleQuestions {
     }
     final question = requiredBy == null
         ? '${role.description}: which module provides it?'
-        : '${role.description}: $requiredBy. Which module provides it?';
+        : '${role.description}: $requiredBy the $role. Which module provides '
+            'it?';
     if (role.cardinality.allowsMany) {
       return _askMany(role, providers, question, requiredBy: requiredBy);
     }
@@ -398,7 +399,7 @@ final class _ModuleQuestions {
     );
     if (picked.isEmpty && requiredBy != null) {
       throw SmfUsageException(
-        'The app needs a module that provides the ${role.id}: '
+        'The app needs a module that provides the $role, which '
         '$requiredBy.',
       );
     }
@@ -461,16 +462,17 @@ final class _Choice {
 String _display(SmfModule module) =>
     '${module.descriptor.id} — ${module.descriptor.description}';
 
-/// Why the modules in [chosen] need [role], or `null` if they do not.
+/// Who among the modules in [chosen] needs [role], and how, as the start
+/// of a phrase such as `home requires`, or `null` if they do not need it.
 String? _requirer(Role role, List<SmfModule> chosen) {
   if (role.cardinality == RoleCardinality.exactlyOne) {
-    return 'every app needs the ${role.id}';
+    return 'every app needs';
   }
   for (final module in chosen) {
     // Includes the roles that the roles the module provides require.
     final descriptor = module.descriptor;
     if (descriptor.effectiveRequires.contains(role)) {
-      return '${descriptor.id} requires the ${role.id}';
+      return '${descriptor.id} requires';
     }
   }
   return null;

@@ -301,7 +301,8 @@ void f() {{{{smf_after__brace}}}
         [
           equals(
             'home: The section has_other in lib/home.dart:3 of home is the '
-            'flag of the other, which home does not provide, require or use, '
+            'flag of the other role, which home does not provide, require or '
+            'use, '
             'so the pipeline does not set it.',
           ),
           equals(
@@ -519,15 +520,17 @@ void f() {{{{smf_after__brace}}}
           // The test scaffold has no bricks, so the app entry misses all.
           for (final socket in appEntryRole.sockets)
             equals(
-              'scaffold: No template of the app_entry or of its providers '
+              'scaffold: No template of the app entry role or of its providers '
               'has the tag of the $socket (${socket.tags.join(', ')}).',
             ),
           equals(
-            'go: No template of the nav or of its providers has the tag of '
+            'go: No template of the nav role or of its providers has the tag '
+            'of '
             'the socket nav.a (smf_nav__a).',
           ),
           equals(
-            'role:service: No template of the service or of its providers '
+            'role:service: No template of the service role or of its '
+            'providers '
             'has the tag of the socket service.impl (smf_service__impl).',
           ),
           equals(

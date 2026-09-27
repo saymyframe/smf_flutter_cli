@@ -427,7 +427,7 @@ flutter:
         ),
         contains(
           'store puts code into the socket other.code, but does not provide, '
-          'require or use the other.',
+          'require or use the other role.',
         ),
       ],
     );

@@ -474,7 +474,7 @@ final class _BrickScanner {
     final role = _rolesById[flag.substring('has_'.length)];
     if (role == null) return 'names no role';
     if (flagged.contains(role)) return null;
-    return 'is the flag of the ${role.id}, which $origin does not '
+    return 'is the flag of the $role, which $origin does not '
         'provide, require or use, so the pipeline does not set it';
   }
 
@@ -778,7 +778,7 @@ Iterable<SmfIssue> _missingRoleTagIssues(
     for (final socket in role.sockets) {
       if (found.containsKey(socket)) continue;
       yield SmfIssue(
-        'No template of the ${role.id} or of its providers has the tag of '
+        'No template of the $role or of its providers has the tag of '
         'the $socket (${socket.tags.join(', ')}).',
         origin: role.template == null
             ? resolution.providersOf(role).firstOrNull?.origin

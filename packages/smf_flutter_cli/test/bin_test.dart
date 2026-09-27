@@ -234,7 +234,7 @@ void main() {
             result.stdout,
             allOf(
               contains('  riverpod: requested\n'),
-              contains('  state_management: riverpod\n'),
+              contains('  State management: riverpod\n'),
               matches(
                 RegExp(
                   r'^  flutter_riverpod \S+ \(riverpod\)$',
@@ -273,7 +273,7 @@ void main() {
             result.stdout,
             allOf(
               contains('  go_router: requested\n'),
-              contains('  router: go_router\n'),
+              contains('  Router: go_router\n'),
               matches(
                 RegExp(r'^  go_router \S+ \(go_router\)$', multiLine: true),
               ),
@@ -310,10 +310,10 @@ void main() {
             allOf(
               contains('  home: requested\n'),
               contains(
-                '  go_router: the only provider of the router (home requires '
-                'the router)\n',
+                '  go_router: the only provider of the router role, which home '
+                'requires\n',
               ),
-              contains('  router: go_router\n'),
+              contains('  Router: go_router\n'),
             ),
           );
           expect(
@@ -347,11 +347,11 @@ void main() {
             allOf(
               contains('  bottom_tabs: requested\n'),
               contains(
-                '  go_router: the only provider of the router (bottom_tabs '
-                'requires the router)\n',
+                '  go_router: the only provider of the router role, which '
+                'bottom_tabs requires\n',
               ),
-              contains('  layout: bottom_tabs\n'),
-              contains('  router: go_router\n'),
+              contains('  Layout: bottom_tabs\n'),
+              contains('  Router: go_router\n'),
             ),
           );
           expect(
@@ -384,7 +384,7 @@ void main() {
             result.stdout,
             allOf(
               contains('  get_it: requested\n'),
-              contains('  di: get_it\n'),
+              contains('  Dependency injection: get_it\n'),
               matches(
                 RegExp(r'^  get_it \S+ \(get_it\)$', multiLine: true),
               ),
@@ -420,7 +420,7 @@ void main() {
             result.stdout,
             allOf(
               contains('  event_bus: requested\n'),
-              contains('  events: event_bus\n'),
+              contains('  Events: event_bus\n'),
               matches(
                 RegExp(r'^  event_bus \S+ \(event_bus\)$', multiLine: true),
               ),
@@ -540,7 +540,7 @@ void main() {
               contains(
                 '  firebase_core: a dependency of firebase_crashlytics\n',
               ),
-              contains('  crash_reporting: firebase_crashlytics\n'),
+              contains('  Crash reporting: firebase_crashlytics\n'),
               matches(
                 RegExp(
                   r'^  firebase_crashlytics \S+ \(firebase_crashlytics\)$',
@@ -594,7 +594,7 @@ void main() {
               contains(
                 '  firebase_core: a dependency of firebase_analytics\n',
               ),
-              contains('  analytics: firebase_analytics\n'),
+              contains('  Analytics: firebase_analytics\n'),
               matches(
                 RegExp(
                   r'^  firebase_analytics \S+ \(firebase_analytics\)$',

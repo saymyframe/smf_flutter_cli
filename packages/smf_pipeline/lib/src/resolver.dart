@@ -42,7 +42,8 @@ final class ProviderOf extends SelectionReason {
   /// The role the module provides.
   final Role role;
 
-  /// Who needs the role, as a phrase such as `home requires the router`.
+  /// Who needs the role, and how, as the start of a phrase such as
+  /// `home requires` or `every app needs`.
   final String requiredBy;
 
   /// Whether the user chose the module among several providers.
@@ -55,12 +56,12 @@ final class ProviderOf extends SelectionReason {
   @override
   String toString() {
     if (alternatives.isNotEmpty) {
-      return 'the first provider of the ${role.id} ($requiredBy); a run '
+      return 'the first provider of the $role, which $requiredBy; a run '
           'asks which one, also offering ${alternatives.join(', ')}';
     }
     return chosen
-        ? 'chosen to provide the ${role.id} ($requiredBy)'
-        : 'the only provider of the ${role.id} ($requiredBy)';
+        ? 'chosen to provide the $role, which $requiredBy'
+        : 'the only provider of the $role, which $requiredBy';
   }
 }
 
@@ -286,9 +287,8 @@ final class _Resolver {
       if (declined.contains(role)) {
         _report(
           SmfIssue(
-            'No module provides the ${role.id}, as chosen, but '
-            '${need.phrase}.',
-            hint: 'Choose a provider of the ${role.id}, or leave out '
+            'No module provides the $role, as chosen, but ${need.who} it.',
+            hint: 'Choose a provider of the $role, or leave out '
                 '${need.module ?? 'what needs it'}.',
           ),
         );
@@ -300,13 +300,13 @@ final class _Resolver {
         continue;
       }
       if (candidates.length == 1) {
-        add(candidates.single, ProviderOf(role, need.phrase));
+        add(candidates.single, ProviderOf(role, need.who));
         return true;
       }
       final (module, others) = await _pick(role, need, candidates);
       add(
         module,
-        ProviderOf(role, need.phrase, chosen: true, alternatives: others),
+        ProviderOf(role, need.who, chosen: true, alternatives: others),
       );
       return true;
     }
@@ -322,7 +322,7 @@ final class _Resolver {
   /// The issue of [role], which [need] needs, but no module in the
   /// registry that is not left out provides.
   SmfIssue _noProviderIssue(Role role, _Need need) => SmfIssue(
-        'No module provides the ${role.id}, but ${need.phrase}.',
+        'No module provides the $role, but ${need.who} it.',
         origin: need.module == null ? null : ModuleOrigin(need.module!),
       );
 
@@ -349,7 +349,8 @@ final class _Resolver {
     }
     if (environment.interactive) {
       final module = await environment.prompter.select(
-        '${role.description}: ${need.phrase}. Which module provides it?',
+        '${role.description}: ${need.who} the $role. Which module provides '
+        'it?',
         candidates,
         display: (module) =>
             '${module.descriptor.id} — ${module.descriptor.description}',
@@ -358,7 +359,7 @@ final class _Resolver {
       return (module, const <ModuleId>[]);
     }
     throw SmfUsageException(
-      'Several modules provide the ${role.id}, which ${need.phrase}: '
+      'Several modules provide the $role, which ${need.who}: '
       '${candidates.map((m) => m.descriptor.id).join(', ')}. Add one '
       'of them to -m.',
     );
@@ -379,7 +380,7 @@ final class _Resolver {
       _report(
         SmfIssue(
           '${module.id} has no variant for ${provider.id}, the provider of '
-          'the ${variants.role.id}. It supports '
+          'the ${variants.role}. It supports '
           '${variants.byProvider.keys.join(', ')}.',
           origin: module.origin,
         ),
@@ -404,8 +405,9 @@ Map<Role, List<ResolvedModule>> _providersByRole(
   }
   for (final MapEntry(key: role, value: providers) in byRole.entries) {
     if (providers.length > 1 && !role.cardinality.allowsMany) {
+      final most = role.cardinality.allowsNone ? 'at most one' : 'only one';
       throw SmfUsageException(
-        'An app can have one provider of the ${role.id}, but it has '
+        'An app can have $most provider of the $role, but it has '
         '${providers.map((m) => '${m.id} (${m.reason})').join(' and ')}. '
         'Keep one of them.',
       );
@@ -416,10 +418,11 @@ Map<Role, List<ResolvedModule>> _providersByRole(
 
 /// Who needs a role.
 final class _Need {
-  const _Need(this.phrase, [this.module]);
+  const _Need(this.who, [this.module]);
 
-  /// Who needs the role, as a phrase.
-  final String phrase;
+  /// Who needs the role, and how, as the start of a phrase such as
+  /// `home requires`.
+  final String who;
 
   /// The module that needs it, if a module does.
   final ModuleId? module;
@@ -435,14 +438,14 @@ Map<Role, _Need> _requiredRoles(
   final needs = <Role, _Need>{};
   for (final role in registry.roles) {
     if (role.cardinality == RoleCardinality.exactlyOne) {
-      needs[role] = _Need('every app needs the ${role.id}');
+      needs[role] = const _Need('every app needs');
     }
   }
   for (final module in modules) {
     for (final role in module.descriptor.effectiveRequires) {
       needs.putIfAbsent(
         role,
-        () => _Need('${module.id} requires the ${role.id}', module.id),
+        () => _Need('${module.id} requires', module.id),
       );
     }
   }

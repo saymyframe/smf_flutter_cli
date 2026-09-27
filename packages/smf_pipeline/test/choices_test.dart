@@ -57,7 +57,10 @@ void main() {
     expect(context.environment.interactive, isTrue);
     expect(context.context, same(testContext));
     expect(host.logger.warnings, [
-      '--ignored has no effect: no module of the app provides the absent.',
+      equals(
+        '--ignored has no effect: no module of the app provides the absent '
+        'role.',
+      ),
     ]);
   });
 
@@ -81,7 +84,7 @@ void main() {
         isA<GenerationFailedException>().having(
           (e) => e.message,
           'message',
-          'The template of the failing failed to choose: Bad state: no',
+          'The template of the failing role failed to choose: Bad state: no',
         ),
       ),
     );

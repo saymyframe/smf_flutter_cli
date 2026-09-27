@@ -54,7 +54,7 @@ Future<Map<Role, Object?>> chooseRoles({
       rethrow;
     } on Object catch (error) {
       throw GenerationFailedException(
-        'The template of the ${role.id} failed to choose: $error',
+        'The template of the $role failed to choose: $error',
       );
     }
     choices[role] = choice;
@@ -77,7 +77,7 @@ void _warnOfAbsentRoles(
       if (optionValues.containsKey(option.name)) {
         logger.warn(
           '--${option.name} has no effect: no module of the app provides '
-          'the ${role.id}.',
+          'the $role.',
         );
       }
     }

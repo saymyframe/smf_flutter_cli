@@ -266,8 +266,8 @@ void main() {
       expect(
         problems,
         allOf([
-          _hasProblem('owner declares the socket other.code'),
-          _hasProblem('owner declares the socket app_entry.Bad Name'),
+          _hasProblem('owner role declares the socket other.code'),
+          _hasProblem('owner role declares the socket app_entry.Bad Name'),
           _hasProblem('declares the socket family family of other'),
           _hasProblem('module a declares the socket b.x'),
           _hasProblem('module a declares the socket family family of b'),
@@ -355,10 +355,12 @@ void main() {
           TestModule('m', uses: {a, b}),
         ]),
         allOf([
-          _hasProblem('--Start of the a is not lower kebab-case'),
-          _hasProblem('--modules of the a is an option of the pipeline'),
-          _hasProblem('--verbose of the a is an option of the pipeline'),
-          _hasProblem('The a and the b both have the option --shared'),
+          _hasProblem('--Start of the a role is not lower kebab-case'),
+          _hasProblem('--modules of the a role is an option of the pipeline'),
+          _hasProblem('--verbose of the a role is an option of the pipeline'),
+          _hasProblem(
+            'The a role and the b role both have the option --shared',
+          ),
         ]),
       );
     });
@@ -396,7 +398,9 @@ void main() {
       _problems([
         TestModule('home', uses: {appEntryRole}),
       ]),
-      _hasProblem('Every app needs the app_entry, but no module provides it'),
+      _hasProblem(
+        'Every app needs the app entry role, but no module provides it',
+      ),
     );
   });
 

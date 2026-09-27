@@ -247,10 +247,10 @@ void main() {
         },
         {
           'home': 'requested',
-          'flutter_core': 'the only provider of the app_entry (every app '
-              'needs the app_entry)',
-          'go_router': 'the only provider of the router (home requires the '
-              'router)',
+          'flutter_core':
+              'the only provider of the app entry role, which every app needs',
+          'go_router': 'the only provider of the router role, which home '
+              'requires',
         },
       );
     });

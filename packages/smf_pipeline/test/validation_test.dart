@@ -94,8 +94,10 @@ void main() {
       expect(
         _messages(result),
         [
-          equals('home: home lists the nav in the condition of a contribution, '
-              'but does not provide, require or use it.'),
+          equals(
+            'home: home lists the nav role in the condition of a '
+            'contribution, but does not provide, require or use it.',
+          ),
         ],
       );
     });
@@ -114,7 +116,7 @@ void main() {
 
       expect(
         _messages(result).single,
-        'home: home contributes data to the routes, but does not provide, '
+        'home: home contributes data to the routes role, but does not provide, '
         'require or use it.',
       );
       // The template does not see it.
@@ -136,7 +138,12 @@ void main() {
 
       expect(
         _messages(result),
-        ['home: home contributes a int to the typed, which takes other data.'],
+        [
+          equals(
+            'home: home contributes a int to the typed role, which takes '
+            'other data.',
+          ),
+        ],
       );
       expect(template.validated.single.data, isEmpty);
     });
@@ -172,10 +179,10 @@ void main() {
       ]);
 
       expect(_messages(result), [
-        'user: The owned has no socket owned.other.',
+        'user: The owned role has no socket owned.other.',
         equals(
             'stranger: stranger puts code into the socket owned.code, but does '
-            'not provide, require or use the owned.'),
+            'not provide, require or use the owned role.'),
       ]);
     });
 
@@ -278,7 +285,7 @@ void main() {
       ]);
 
       expect(_messages(result), [
-        'home: The family has no socket family.other.home.',
+        'home: The family role has no socket family.other.home.',
       ]);
     });
 
@@ -305,10 +312,13 @@ void main() {
       ]);
 
       expect(_messages(result), [
-        equals('role:service: role:service lists the nav in the condition of a '
-            'contribution, but does not provide, require or use it.'),
+        equals(
+          'role:service: role:service lists the nav role in the condition of '
+          'a contribution, but does not provide, require or use it.',
+        ),
         equals('role:service: role:service puts code into the socket '
-            'nav.observers, but does not provide, require or use the nav.'),
+            'nav.observers, but does not provide, require or use the nav '
+            'role.'),
       ]);
     });
   });
@@ -652,9 +662,9 @@ void main() {
     expect(_messages(result), [
       equals(
           'home: The module home is of the feature kind, so it must contribute '
-          'data to the nav.'),
+          'data to the nav role.'),
       equals('sneaky: The module sneaky is of the infra kind, so it must not '
-          'contribute data to the nav.'),
+          'contribute data to the nav role.'),
     ]);
   });
 
@@ -826,8 +836,8 @@ void main() {
 
       String problem(String origin, String module) =>
           '$origin: $origin contributes flutter_bloc, a package of bloc, '
-          'which provides the state, but $module neither has a variant for it '
-          'nor depends on it.';
+          'which provides the state role, but $module neither has a variant '
+          'for it nor depends on it.';
       expect(_messages(result), [
         problem('rogue', 'rogue'),
         problem('pinned', 'pinned'),
@@ -835,7 +845,7 @@ void main() {
         problem('page (go)', 'page'),
         equals(
           'feature: feature contributes flutter_bloc, a package of bloc, '
-          'which provides the state, outside its variant for bloc.',
+          'which provides the state role, outside its variant for bloc.',
         ),
       ]);
       expect(
@@ -935,15 +945,18 @@ void main() {
       expect(_messages(result), [
         equals(
           'bloc: bloc contributes shared_lib, a package of go, which provides '
-          'the nav, but bloc neither has a variant for it nor depends on it.',
+          'the nav role, but bloc neither has a variant for it nor depends on '
+          'it.',
         ),
         equals(
           'go: go contributes shared_lib, a package of bloc, which provides '
-          'the state, but go neither has a variant for it nor depends on it.',
+          'the state role, but go neither has a variant for it nor depends on '
+          'it.',
         ),
         equals(
           'user: user contributes shared_lib, a package of bloc, which '
-          'provides the state, and of go, which provides the nav, but user '
+          'provides the state role, and of go, which provides the nav role, '
+          'but user '
           'neither has a variant for any of them nor depends on any of them.',
         ),
       ]);
@@ -983,8 +996,8 @@ void main() {
       expect(
         result.issues.single.message,
         'rogue contributes flutter_bloc, a package of kit, which provides the '
-        'state, the nav and the theme, but rogue neither has a variant for it '
-        'nor depends on it.',
+        'state role, the nav role and the theme role, but rogue neither has a '
+        'variant for it nor depends on it.',
       );
     });
   });
@@ -1356,7 +1369,8 @@ void main() {
       expect(
         _messages(result).single,
         'bare: The ${AppEntryRole.iosDeploymentTarget} needs a value, but '
-        'nothing contributes one; the provider of the app_entry contributes '
+        'nothing contributes one; the provider of the app entry role '
+        'contributes '
         'its base value.',
       );
       expect(result.hasErrors, isTrue);

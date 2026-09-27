@@ -367,7 +367,7 @@ Iterable<SmfIssue> contributionIssues(
   for (final role in contribution.when) {
     if (!roles.when.contains(role)) {
       yield SmfIssue(
-        '$origin lists the ${role.id} in the condition of a contribution, '
+        '$origin lists the $role in the condition of a contribution, '
         'but does not provide, require or use it.',
         hint: 'Add the role to the uses of the module.',
         origin: origin,
@@ -410,14 +410,14 @@ Iterable<SmfIssue> _roleDataIssues(
 ) sync* {
   if (!access.contains(data.role)) {
     yield SmfIssue(
-      '$origin contributes data to the ${data.role.id}, but does not '
+      '$origin contributes data to the ${data.role}, but does not '
       'provide, require or use it.',
       origin: origin,
     );
   } else if (!data.role.accepts(data.value)) {
     yield SmfIssue(
       '$origin contributes a ${data.value.runtimeType} to the '
-      '${data.role.id}, which takes other data.',
+      '${data.role}, which takes other data.',
       origin: origin,
     );
   }
@@ -562,7 +562,7 @@ Iterable<SmfIssue> _roleSocketIssues(
   if (!roles.contains(role)) {
     yield SmfIssue(
       '$origin puts code into the $socket, but does not provide, require '
-      'or use the ${role.id}.',
+      'or use the $role.',
       origin: origin,
     );
     return;
@@ -572,7 +572,7 @@ Iterable<SmfIssue> _roleSocketIssues(
       : role.socketFamilies.any((family) => _isMember(family, socket));
   if (!declared) {
     yield SmfIssue(
-      'The ${role.id} has no $socket.',
+      'The $role has no $socket.',
       origin: origin,
     );
   }
@@ -723,7 +723,7 @@ Iterable<SmfIssue> _requiredValueIssues(
       final providers = resolution.providersOf(role);
       yield SmfIssue(
         'The $socket needs a value, but nothing contributes one; the '
-        'provider of the ${role.id} contributes its base value.',
+        'provider of the $role contributes its base value.',
         origin: providers.length == 1 ? providers.single.origin : null,
       );
     }
@@ -852,7 +852,7 @@ Iterable<SmfIssue> _kindIssues(
     if (!applyingDataRoles.contains(role)) {
       yield SmfIssue(
         'The module ${module.id} is of the ${kind.id} kind, so it must '
-        'contribute data to the ${role.id}.',
+        'contribute data to the $role.',
         origin: module.origin,
       );
     }
@@ -861,7 +861,7 @@ Iterable<SmfIssue> _kindIssues(
     if (dataRoles.contains(role)) {
       yield SmfIssue(
         'The module ${module.id} is of the ${kind.id} kind, so it must not '
-        'contribute data to the ${role.id}.',
+        'contribute data to the $role.',
         origin: module.origin,
       );
     }
@@ -1031,7 +1031,8 @@ bool bringsPackage(PubspecDependency dependency) =>
     !_allowsAny(dependency.constraint);
 
 /// [owners], the providers a package belongs to, as a message names them:
-/// `bloc, which provides the state`, with `, and of ` between them.
+/// `bloc, which provides the state management role`, with `, and of `
+/// between them.
 String packageOwnersText(Iterable<ResolvedModule> owners) => [
       for (final owner in owners)
         '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
@@ -1048,9 +1049,9 @@ bool _allowsAny(String? constraint) {
   }
 }
 
-/// The roles that [descriptor] provides, as `the a and the b`.
+/// The roles that [descriptor] provides, as `the a role and the b role`.
 String _rolesText(ModuleDescriptor descriptor) {
-  final names = [for (final role in descriptor.provides) 'the ${role.id}'];
+  final names = [for (final role in descriptor.provides) 'the $role'];
   return names.length == 1
       ? names.single
       : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';

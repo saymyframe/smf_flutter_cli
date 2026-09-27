@@ -170,7 +170,10 @@ void main() {
     final usage = await harness.check(
       harness.casesOfModule(const ModuleId('both')).single,
     );
-    expect(usage.errors.single.message, contains('one provider of the nav'));
+    expect(
+      usage.errors.single.message,
+      contains('at most one provider of the nav role'),
+    );
     expect(usage.resolution, isNull);
 
     final unresolved = await harness.check(
@@ -225,7 +228,7 @@ void main() {
     // with bloc, the provider whose package it contributes, does not.
     const rogueTakes =
         'rogue: rogue contributes flutter_bloc, a package of bloc, which '
-        'provides the state, but rogue neither has a variant for it nor '
+        'provides the state role, but rogue neither has a variant for it nor '
         'depends on it.';
     final results = await harness.checkAll();
     expect(
@@ -379,7 +382,8 @@ void main() {
     );
     const takesShared =
         'feature: feature contributes shared, a package of a1, which '
-        'provides the tracking, but feature neither has a variant for it nor '
+        'provides the tracking role, but feature neither has a variant for '
+        'it nor '
         'depends on it.';
     expect(
       [for (final issue in withA1.errors) '${issue.origin}: ${issue.message}'],
@@ -408,7 +412,7 @@ void main() {
       [
         equals(
           'picky (riverpod): picky (riverpod) contributes shared, a package '
-          'of a1, which provides the tracking, but picky neither has a '
+          'of a1, which provides the tracking role, but picky neither has a '
           'variant for it nor depends on it.',
         ),
       ],
@@ -796,7 +800,8 @@ void main() {
 
         expect(
           await errorOf(_AskTemplate(optionsFor: (choice) => {})),
-          'The colors asks a question, but its template gives no option for '
+          'The colors role asks a question, but its template gives no option '
+          'for '
           'the answer, green, so a run without a terminal cannot make the '
           'choice.',
         );
@@ -804,13 +809,13 @@ void main() {
           await errorOf(
             _AskTemplate(optionsFor: (choice) => {'colour': '$choice'}),
           ),
-          'The template of the colors gives --colour for an answer, but the '
-          'colors has no such option.',
+          'The template of the colors role gives --colour for an answer, but '
+          'the colors role has no such option.',
         );
         expect(
           await errorOf(_AskTemplate(optionsFor: (choice) => {'color': 'red'})),
-          'With --color red, the colors makes the choice red in a run without '
-          'a terminal, not green, which the harness answered.',
+          'With --color red, the colors role makes the choice red in a run '
+          'without a terminal, not green, which the harness answered.',
         );
         expect(
           await errorOf(_AskTemplate(needsTerminal: true)),
@@ -1300,7 +1305,7 @@ void main() {
         }
 
         const uri = 'package:flutter_bloc/flutter_bloc.dart';
-        const ofBloc = 'a package of bloc, which provides the state';
+        const ofBloc = 'a package of bloc, which provides the state role';
         String bannerTakes(String path, String how) =>
             'banner: $path imports $uri $how of banner, but banner does not '
             'contribute flutter_bloc, $ofBloc.';
@@ -1405,7 +1410,7 @@ void main() {
             equals(
               'store: lib/store/own.dart imports $uri in the template of '
               'store, but store does not contribute flutter_bloc, a package of '
-              'bloc, which provides the state.',
+              'bloc, which provides the state role.',
             ),
           ],
         );
@@ -1481,7 +1486,8 @@ void main() {
             equals(
               'exporter: lib/exporter/exporter.dart exports $bloc in the '
               'template of exporter, but exporter does not contribute '
-              'flutter_bloc, a package of bloc, which provides the state.',
+              'flutter_bloc, a package of bloc, which provides the state '
+              'role.',
             ),
           ],
         );

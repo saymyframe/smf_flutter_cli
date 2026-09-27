@@ -84,8 +84,9 @@ void main() {
     expect(
       err,
       contains(
-        'An app can have one provider of the state_management, but it has '
-        'bloc (requested) and riverpod (requested). Keep one of them.',
+        'An app can have at most one provider of the state management role, '
+        'but it has bloc (requested) and riverpod (requested). Keep one of '
+        'them.',
       ),
     );
     expect(directory.listSync(), isEmpty);
