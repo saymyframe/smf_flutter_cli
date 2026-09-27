@@ -712,8 +712,19 @@ void main() {
               },
             ),
           ),
+          // Outside its variant for the provider.
+          TestModule(
+            'feature',
+            variants: Variants(
+              role: state,
+              byProvider: {
+                const ModuleId('bloc'): (_) => const [taken],
+              },
+            ),
+            contributions: [taken],
+          ),
         ],
-        variants: {'page': 'go'},
+        variants: {'page': 'go', 'feature': 'bloc'},
       );
 
       String problem(String origin, String module) =>
@@ -724,6 +735,10 @@ void main() {
         problem('rogue', 'rogue'),
         problem('pinned', 'pinned'),
         problem('page (go)', 'page'),
+        equals(
+          'feature: feature contributes flutter_bloc, a package of bloc, '
+          'which provides the state, outside its variant for bloc.',
+        ),
       ]);
       expect(
         result.issues.first.hint,
@@ -732,8 +747,17 @@ void main() {
         'on the provider.',
       );
       expect(
-        result.issues.last.origin,
+        result.issues[2].origin,
         const ModuleOrigin(ModuleId('page'), variant: ModuleId('go')),
+      );
+      expect(
+        result.issues.last.hint,
+        'Contribute flutter_bloc in the variant of feature for bloc, with the '
+        'constraint any.',
+      );
+      expect(
+        result.issues.last.origin,
+        const ModuleOrigin(ModuleId('feature')),
       );
     });
 

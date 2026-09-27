@@ -731,13 +731,15 @@ Iterable<SmfIssue> _kindIssues(
 /// - its variant for the provider, or for a provider that depends on it;
 /// - a dependency on the provider, directly or not.
 ///
-/// With several such providers, one of them is enough. So a package that no
+/// With several such providers, one of them is enough. A package that no
 /// provider of a role brings is shared by every module that needs it, such
-/// as `collection`, which Flutter pins and modules contribute with `any`,
-/// and two providers that bring the same package take it from each other
-/// unless one depends on the other.
+/// as `collection`, which Flutter pins and modules contribute with `any`.
+/// Two providers that bring the same package, neither depending on the
+/// other, take it from each other, and both are reported.
 ///
-/// Every contribution counts, whether it applies in the app or not.
+/// Only the modules of the app count: a module that contributes the package
+/// of a provider that the app does not have is not reported. Every
+/// contribution counts, whether it applies in the app or not.
 Iterable<SmfIssue> _packageIssues(
   Resolution resolution,
   Collection collection,
@@ -791,6 +793,25 @@ Iterable<SmfIssue> _packageIssues(
         for (final owner in others)
           '${owner.id}, which provides ${_rolesText(owner.descriptor)}',
       ].join(', and of ');
+      // The variant of the module in the app, when it would take the package
+      // of an owner: the package belongs in that variant.
+      final selected =
+          variant == null ? resolution.module(origin.module)?.variant : null;
+      if (selected != null &&
+          others.any(
+            (owner) =>
+                owner.id == selected ||
+                resolution.dependencyClosure(selected).contains(owner.id),
+          )) {
+        yield SmfIssue(
+          '$origin contributes $package, a package of $whose, outside its '
+          'variant for $selected.',
+          hint: 'Contribute $package in the variant of ${origin.module} for '
+              '$selected, with the constraint any.',
+          origin: origin,
+        );
+        continue;
+      }
       final them = others.length == 1 ? 'it' : 'any of them';
       yield SmfIssue(
         '$origin contributes $package, a package of $whose, but '
