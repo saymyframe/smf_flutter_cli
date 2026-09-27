@@ -971,7 +971,7 @@ final class _ImportCheck {
     String verb,
     IndexedImport directive,
   ) {
-    final (:path, :file, packages: _, added: _) = checked;
+    final (:path, file: _, packages: _, added: _) = checked;
     final uri = directive.uri;
     if (uri.startsWith('dart:')) return const [];
     final users = _usersOf(checked, verb, directive);
@@ -980,11 +980,13 @@ final class _ImportCheck {
     if (generated.contains(target)) return const [];
     if (!app.files.containsKey(target)) {
       return [
-        SmfIssue(
-          '$path $verb $uri, but the app has no $target.',
-          origin: file.owner,
-          path: path,
-        ),
+        for (final who in users.users)
+          SmfIssue(
+            '$path $verb $uri ${_how(who, users)}, but the app has no '
+            '$target.',
+            origin: who,
+            path: path,
+          ),
       ];
     }
     final issues = <SmfIssue>[];
@@ -1032,10 +1034,7 @@ final class _ImportCheck {
   ) {
     if (!uri.startsWith('package:')) return const [];
     final package = uri.substring('package:'.length).split('/').first;
-    final issues = <SmfIssue>[];
-    if (_packageIssue(checked, verb, uri, package) case final issue?) {
-      issues.add(issue);
-    }
+    final issues = [..._packageIssues(checked, verb, uri, package, users)];
     final owners = packageOwners[package];
     if (owners == null) return issues;
     for (final who in users.users) {
@@ -1060,25 +1059,29 @@ final class _ImportCheck {
     return issues;
   }
 
-  /// The problem of [uri], a library of [package] that [checked] uses as
-  /// [verb] says, when the file may not use the package.
-  SmfIssue? _packageIssue(
+  /// The problems of [uri], a library of [package] that [checked] uses as
+  /// [verb] says, for each of its [users], when the file may not use the
+  /// package.
+  List<SmfIssue> _packageIssues(
     _CheckedFile checked,
     String verb,
     String uri,
     String package,
+    _Users users,
   ) {
-    final (:path, :file, :packages, added: _) = checked;
-    if (packages.contains(package)) return null;
-    return SmfIssue(
-      devDependencies.contains(package)
-          ? '$path $verb $uri, but $package is only a dev '
-              'dependency of the app.'
-          : '$path $verb $uri, but the app does not depend on '
-              '$package.',
-      origin: file.owner,
-      path: path,
-    );
+    final (:path, file: _, :packages, added: _) = checked;
+    if (packages.contains(package)) return const [];
+    final problem = devDependencies.contains(package)
+        ? 'but $package is only a dev dependency of the app.'
+        : 'but the app does not depend on $package.';
+    return [
+      for (final who in users.users)
+        SmfIssue(
+          '$path $verb $uri ${_how(who, users)}, $problem',
+          origin: who,
+          path: path,
+        ),
+    ];
   }
 
   /// Whether [who] may use the file of the app at [target].

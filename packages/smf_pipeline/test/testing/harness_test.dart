@@ -837,17 +837,65 @@ void main() {
               'on nor knows through a role.',
             ),
             equals(
-              'lib/user/user.dart imports package:contract_app/nowhere.dart, '
-              'but the app has no lib/nowhere.dart.',
+              'lib/user/user.dart imports package:contract_app/nowhere.dart '
+              'in the template of user, but the app has no lib/nowhere.dart.',
             ),
             equals(
-              'lib/user/user.dart imports package:zeta/zeta.dart, but the app '
-              'does not depend on zeta.',
+              'lib/user/user.dart imports package:zeta/zeta.dart in the '
+              'template of user, but the app does not depend on zeta.',
             ),
             equals(
               'lib/user/user.dart imports lib/nav/nav.dart in the template of '
               'user, but that file is of go, which user neither depends on '
               'nor knows through a role.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'reports an import that the app cannot resolve on the module whose '
+          'fragment needs it', () async {
+        final harness = ContractHarness(
+          ModuleRegistry([
+            ...modules,
+            TestModule(
+              'teller',
+              contributions: const [
+                SocketContribution.code(
+                  AppEntryRole.bootstrapLate,
+                  Fragment(
+                    'tell();',
+                    imports: [
+                      ImportRef.app('nowhere.dart'),
+                      ImportRef('package:zeta/zeta.dart'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase('teller', requested: [ModuleId('teller')]),
+        );
+
+        // The file is of scaffold, but the fragment of teller needs them.
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'teller: lib/bootstrap.dart imports '
+              'package:contract_app/nowhere.dart for a fragment of teller, '
+              'but the app has no lib/nowhere.dart.',
+            ),
+            equals(
+              'teller: lib/bootstrap.dart imports package:zeta/zeta.dart for '
+              'a fragment of teller, but the app does not depend on zeta.',
             ),
           ],
         );
@@ -1155,8 +1203,14 @@ void main() {
         expect(
           await errorsOf('banner with riverpod', ['banner', 'riverpod']),
           [
-            'banner: lib/banner/banner.dart imports $uri, $notInApp',
-            'scaffold: lib/bootstrap.dart imports $uri, $notInApp',
+            equals(
+              'banner: lib/banner/banner.dart imports $uri in the template of '
+              'banner, $notInApp',
+            ),
+            equals(
+              'banner: lib/bootstrap.dart imports $uri for a fragment of '
+              'banner, $notInApp',
+            ),
           ],
         );
         expect(await errorsOf('helper', ['helper']), isEmpty);
@@ -1212,8 +1266,9 @@ void main() {
           [for (final issue in result.errors) issue.message],
           [
             equals(
-              'lib/user/user.dart imports package:mocks/mocks.dart, but mocks '
-              'is only a dev dependency of the app.',
+              'lib/user/user.dart imports package:mocks/mocks.dart in the '
+              'template of user, but mocks is only a dev dependency of the '
+              'app.',
             ),
             equals(
               'lib/user/user.dart exports lib/a/a.dart in the template of '
@@ -1221,8 +1276,8 @@ void main() {
               'on nor knows through a role.',
             ),
             equals(
-              'lib/user/user.dart exports ../none.dart, but the app has no '
-              'lib/none.dart.',
+              'lib/user/user.dart exports ../none.dart in the template of '
+              'user, but the app has no lib/none.dart.',
             ),
           ],
         );
@@ -1265,8 +1320,8 @@ void main() {
           [for (final issue in result.errors) issue.message],
           [
             equals(
-              'lib/l10n_user.dart imports generated/other.dart, but the app '
-              'has no lib/generated/other.dart.',
+              'lib/l10n_user.dart imports generated/other.dart in the '
+              'template of l10n, but the app has no lib/generated/other.dart.',
             ),
           ],
         );
