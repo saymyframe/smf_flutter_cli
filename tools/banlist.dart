@@ -153,9 +153,9 @@ const _lasting = [
     'templates; its tests keep patches of the old modules as examples.',
   ),
   _Exception(
-    ['pubspec.yaml'],
+    ['pubspec.yaml', 'AGENTS.md', 'packages/smf_modules/README.md'],
     {'smf_contribution_engine'},
-    'The workspace has the contribution engine.',
+    'The workspace has the contribution engine, and its layout names it.',
   ),
   _Exception(
     [
@@ -170,15 +170,18 @@ const _lasting = [
 const _migrating = <_Exception>[];
 
 /// Whether the check reads the tracked file [path]: Dart code but the
-/// generated bundles, pubspecs, the templates of bricks, and the workflows
-/// of CI.
+/// generated bundles, pubspecs, the templates of bricks, the workflows of
+/// CI, and Markdown but the changelogs, which record what the packages had.
 bool _checked(String path) =>
     (path.endsWith('.dart') && !path.contains('/lib/bundles/')) ||
     path == 'pubspec.yaml' ||
     path.endsWith('/pubspec.yaml') ||
     path.contains('/__brick__/') ||
     (path.startsWith('.github/') &&
-        (path.endsWith('.yml') || path.endsWith('.yaml')));
+        (path.endsWith('.yml') || path.endsWith('.yaml'))) ||
+    (path.endsWith('.md') &&
+        path != 'CHANGELOG.md' &&
+        !path.endsWith('/CHANGELOG.md'));
 
 /// The problems of [files], the text of each file by its path from the
 /// root of the repository: every line that uses a banned name that no

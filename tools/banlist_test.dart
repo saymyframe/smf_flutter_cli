@@ -38,16 +38,22 @@ void main() {
     );
   });
 
-  test('reads Dart code, pubspecs, templates and workflows only', () {
+  test('reads Dart code, pubspecs, templates, workflows and Markdown only', () {
     expect(
       _names({
         'README.md': 'ModuleProfile',
+        'packages/a/README.md': 'Use `-s bloc` with kBlocStateManagement.',
+        // Changelogs record what the packages had.
+        'CHANGELOG.md': 'ModuleProfile',
+        'packages/a/CHANGELOG.md': 'ModuleProfile',
         'packages/a/lib/bundles/b_bundle.dart': 'ModuleProfile',
         'packages/a/analysis_options.yaml': 'ModuleProfile',
         '.github/workflows/other.yml': 'melos run analyze:hooks',
         'packages/a/tool/run.dart': 'ModuleProfile',
       }),
       [
+        'README.md:1: ModuleProfile',
+        'packages/a/README.md:1: kBlocStateManagement',
         '.github/workflows/other.yml:1: analyze:hooks',
         'packages/a/tool/run.dart:1: ModuleProfile',
       ],
