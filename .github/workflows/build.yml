@@ -139,8 +139,9 @@ jobs:
 
       # Every app is generated with `smf create --no-input
       # --skip-external-setup --no-dart-fix --strict` and must pass
-      # `flutter analyze`.
-      - name: Generate and analyze the apps of the CLI's modules
+      # `flutter analyze`, and then the tests that the modules keep for it
+      # in `app_tests/`, with `flutter test`.
+      - name: Generate, analyze and test the apps of the CLI's modules
         if: matrix.registry == 'real'
         run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/apps"
 
@@ -151,6 +152,6 @@ jobs:
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
 
-      - name: Generate and analyze the apps of the fixture modules
+      - name: Generate, analyze and test the apps of the fixture modules
         if: matrix.registry == 'fixtures'
         run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/apps"

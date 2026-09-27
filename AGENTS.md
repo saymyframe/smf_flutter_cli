@@ -50,7 +50,7 @@ melos run test              # dart test in every package with a test/ dir, and i
 melos run check             # format:check + analyze + banlist + test
 ```
 
-A second CI job generates apps with Flutter and runs `flutter analyze` on each: `packages/smf_flutter_cli/tool/matrix.dart` for the modules of the CLI and `packages/smf_pipeline/fixture_registry/tool/matrix.dart` for the fixture modules. Each takes a directory for the apps and needs `flutter` on the `PATH`.
+A second CI job generates apps with Flutter and runs `flutter analyze` on each: `packages/smf_flutter_cli/tool/matrix.dart` for the modules of the CLI and `packages/smf_pipeline/fixture_registry/tool/matrix.dart` for the fixture modules. Each takes a directory for the apps and needs `flutter` on the `PATH`. Then it copies into each app the tests that apply to it, from the `app_tests/` directories of the packages that each tool lists (`MatrixAppTest`), such as the start-up of Firebase with its platform side mocked, and runs `flutter test`: tests of what only a running app shows, which are not part of the generated apps.
 
 Run the CLI from source. It finds the Flutter SDK through `flutter` on the `PATH` before it generates anything, and runs `flutter pub get`, `dart fix` and `dart format` in the new app:
 
