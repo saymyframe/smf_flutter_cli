@@ -710,6 +710,10 @@ final class ContractHarness {
   ///   file that code generation or Flutter's localizations generate;
   /// - every imported or exported package is a dependency of the app, a
   ///   regular one for the code in `lib/` and `bin/`;
+  /// - a module imports or exports the package of a provider of a role in
+  ///   the app, in a template or for a fragment, only when it contributes
+  ///   the package too, itself or in its variant, so that the pipeline
+  ///   checks that it may take the package (see [casesOfModule]);
   /// - a file imports and exports only files that its owner may use, and
   ///   the pipeline added only imports that the contributors of the
   ///   fragments may use: their own files, the files of the modules they
@@ -852,6 +856,11 @@ typedef _CheckedFile = ({
   Map<String, Set<ContributionOrigin>> added,
 });
 
+/// Who uses an import or export of a file: the contributors of the
+/// fragments that need it, when the pipeline added it, or the owner of the
+/// file.
+typedef _Users = ({Set<ContributionOrigin> users, bool byPipeline});
+
 /// The checks of the imports and exports of the Dart files of a rendered
 /// app; see [ContractHarness.checkRendered].
 final class _ImportCheck {
@@ -869,7 +878,9 @@ final class _ImportCheck {
           ..._flutterOutputs(app, pubspec),
           for (final collected in collection.applyingOf<CodegenRequest>())
             ...(collected.contribution as CodegenRequest).outputs,
-        };
+        },
+        packageOwners = providerPackages(resolution, collection),
+        contributed = _contributedPackagesOf(collection);
 
   final ModuleRegistry registry;
   final Resolution resolution;
@@ -888,6 +899,30 @@ final class _ImportCheck {
 
   /// The files of the app that code generation or Flutter generate.
   final Set<String> generated;
+
+  /// The packages of the providers of roles in the app, each with the
+  /// providers it belongs to; see [providerPackages].
+  final Map<String, List<ResolvedModule>> packageOwners;
+
+  /// The packages that each module of the app contributes, itself or in
+  /// its variant, whether the contribution applies or not.
+  final Map<ModuleId, Set<String>> contributed;
+
+  static Map<ModuleId, Set<String>> _contributedPackagesOf(
+    Collection collection,
+  ) {
+    final packages = <ModuleId, Set<String>>{};
+    for (final collected in collection.all) {
+      if ((collected.origin, collected.contribution)
+          case (
+            ModuleOrigin(:final module),
+            PubspecDependency(:final package),
+          )) {
+        packages.putIfAbsent(module, () => {}).add(package);
+      }
+    }
+    return packages;
+  }
 
   /// The template and the providers of a role render the data of its
   /// contributors, so they may import their files.
@@ -936,14 +971,12 @@ final class _ImportCheck {
     String verb,
     IndexedImport directive,
   ) {
-    final (:path, :file, :packages, :added) = checked;
+    final (:path, :file, packages: _, added: _) = checked;
     final uri = directive.uri;
     if (uri.startsWith('dart:')) return const [];
+    final users = _usersOf(checked, verb, directive);
     final target = _appPathOf(uri, path, appName);
-    if (target == null) {
-      final issue = _packageIssue(checked, verb, uri);
-      return issue == null ? const [] : [issue];
-    }
+    if (target == null) return _libraryIssues(checked, verb, uri, users);
     if (generated.contains(target)) return const [];
     if (!app.files.containsKey(target)) {
       return [
@@ -954,16 +987,12 @@ final class _ImportCheck {
         ),
       ];
     }
-    final key = '${_packageUriOf(uri, path, appName)} as ${directive.prefix}';
-    final byPipeline = verb == 'imports' && added.containsKey(key);
     final issues = <SmfIssue>[];
-    for (final who in byPipeline ? added[key]! : {file.owner}) {
+    for (final who in users.users) {
       if (_mayImport(who, target)) continue;
-      final by =
-          byPipeline ? 'for a fragment of $who' : 'in the template of $who';
       issues.add(
         SmfIssue(
-          '$path $verb $target $by, but that file is of '
+          '$path $verb $target ${_how(who, users)}, but that file is of '
           '${app.files[target]!.owner}, which $who neither depends on '
           'nor knows through a role.',
           origin: who,
@@ -974,14 +1003,73 @@ final class _ImportCheck {
     return issues;
   }
 
-  /// The problem of [uri], a library outside the app that [checked] uses as
-  /// [verb] says, when the file may not use its package.
-  SmfIssue? _packageIssue(_CheckedFile checked, String verb, String uri) {
+  /// Who uses [directive] of [checked], as [verb] says: the contributors of
+  /// the fragments that need it, if the pipeline added it, or else the
+  /// owner of the file.
+  _Users _usersOf(_CheckedFile checked, String verb, IndexedImport directive) {
+    final uri = _packageUriOf(directive.uri, checked.path, appName);
+    final contributors = checked.added['$uri as ${directive.prefix}'];
+    if (verb == 'imports' && contributors != null) {
+      return (users: contributors, byPipeline: true);
+    }
+    return (users: {checked.file.owner}, byPipeline: false);
+  }
+
+  /// How [who], one of [users], uses a library: for a fragment, or in a
+  /// template.
+  static String _how(ContributionOrigin who, _Users users) =>
+      users.byPipeline ? 'for a fragment of $who' : 'in the template of $who';
+
+  /// The problems of [uri], a library outside the app that [checked] uses
+  /// as [verb] says, for its [users]: the file may not use its package, or
+  /// a module uses the package of a provider of a role without
+  /// contributing it, as the pipeline would check the contribution.
+  List<SmfIssue> _libraryIssues(
+    _CheckedFile checked,
+    String verb,
+    String uri,
+    _Users users,
+  ) {
+    if (!uri.startsWith('package:')) return const [];
+    final package = uri.substring('package:'.length).split('/').first;
+    final issues = <SmfIssue>[];
+    if (_packageIssue(checked, verb, uri, package) case final issue?) {
+      issues.add(issue);
+    }
+    final owners = packageOwners[package];
+    if (owners == null) return issues;
+    for (final who in users.users) {
+      // An owner of the package contributes it too.
+      if (ownerOf(who) case ModuleOrigin(:final module)
+          when !(contributed[module]?.contains(package) ?? false)) {
+        issues.add(
+          SmfIssue(
+            '${checked.path} $verb $uri ${_how(who, users)}, a package of '
+            '${packageOwnersText(owners)}, but $module does not contribute '
+            '$package.',
+            hint: 'A module contributes the packages that its code uses, and '
+                'the package of a provider of a role only in its variant for '
+                'the provider, with the constraint any, or when it depends on '
+                'the provider.',
+            origin: who,
+            path: checked.path,
+          ),
+        );
+      }
+    }
+    return issues;
+  }
+
+  /// The problem of [uri], a library of [package] that [checked] uses as
+  /// [verb] says, when the file may not use the package.
+  SmfIssue? _packageIssue(
+    _CheckedFile checked,
+    String verb,
+    String uri,
+    String package,
+  ) {
     final (:path, :file, :packages, added: _) = checked;
-    final package = uri.startsWith('package:')
-        ? uri.substring('package:'.length).split('/').first
-        : null;
-    if (package == null || packages.contains(package)) return null;
+    if (packages.contains(package)) return null;
     return SmfIssue(
       devDependencies.contains(package)
           ? '$path $verb $uri, but $package is only a dev '

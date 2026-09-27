@@ -1048,6 +1048,135 @@ void main() {
         );
       });
 
+      test(
+          'reports a module that imports the package of a provider without '
+          'contributing it', () async {
+        final state = TestRole<NoDsl>('state');
+        const pinned = PubspecContribution.hosted('flutter_bloc', '^9.1.1');
+        const taken = PubspecContribution.hosted('flutter_bloc', 'any');
+        const import = "import 'package:flutter_bloc/flutter_bloc.dart';\n";
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'bloc',
+              providers: [RoleProvider.plain(state)],
+              contributions: const [pinned],
+            ),
+            TestModule(
+              'riverpod',
+              providers: [RoleProvider.plain(state)],
+              contributions: const [
+                PubspecContribution.hosted('flutter_riverpod', '^3.0.0'),
+              ],
+            ),
+            TestModule(
+              'banner',
+              uses: {state},
+              contributions: [
+                dart(
+                  'lib/banner/banner.dart',
+                  '{{#has_state}}\n$import{{/has_state}}\n'
+                      'class Banner {}\n',
+                ),
+                SocketContribution.code(
+                  AppEntryRole.bootstrapLate,
+                  const Fragment(
+                    'Bloc.observer;',
+                    imports: [
+                      ImportRef('package:flutter_bloc/flutter_bloc.dart'),
+                    ],
+                  ),
+                  when: {state},
+                ),
+              ],
+            ),
+            // Taking the package, as the pipeline allows, lets a module
+            // import it.
+            TestModule(
+              'helper',
+              dependsOn: {'bloc'},
+              contributions: [
+                taken,
+                dart('lib/helper/helper.dart', '$import\nclass Helper {}\n'),
+              ],
+            ),
+            TestModule(
+              'feature',
+              variants: Variants(
+                role: state,
+                byProvider: {
+                  const ModuleId('bloc'): (_) => [
+                        taken,
+                        dart(
+                          'lib/feature/feature.dart',
+                          '$import\nclass Feature {}\n',
+                        ),
+                      ],
+                  const ModuleId('riverpod'): (_) => const [],
+                },
+              ),
+            ),
+            // Depending on the provider is not enough: a module contributes
+            // what its code imports.
+            TestModule(
+              'lazy',
+              dependsOn: {'bloc'},
+              contributions: [
+                dart('lib/lazy/lazy.dart', '$import\nclass Lazy {}\n'),
+              ],
+            ),
+          ]),
+        );
+        Future<List<String>> errorsOf(String name, List<String> modules) async {
+          final result = await harness.check(
+            ContractCase(
+              name,
+              requested: [for (final id in modules) ModuleId(id)],
+            ),
+          );
+          return [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ];
+        }
+
+        const uri = 'package:flutter_bloc/flutter_bloc.dart';
+        const ofBloc = 'a package of bloc, which provides the state';
+        String bannerTakes(String path, String how) =>
+            'banner: $path imports $uri $how of banner, $ofBloc, but banner '
+            'does not contribute flutter_bloc.';
+        expect(await errorsOf('banner with bloc', ['banner', 'bloc']), [
+          bannerTakes('lib/banner/banner.dart', 'in the template'),
+          bannerTakes('lib/bootstrap.dart', 'for a fragment'),
+        ]);
+        // Without bloc, the package is of no provider, and not in the app.
+        const notInApp = 'but the app does not depend on flutter_bloc.';
+        expect(
+          await errorsOf('banner with riverpod', ['banner', 'riverpod']),
+          [
+            'banner: lib/banner/banner.dart imports $uri, $notInApp',
+            'scaffold: lib/bootstrap.dart imports $uri, $notInApp',
+          ],
+        );
+        expect(await errorsOf('helper', ['helper']), isEmpty);
+        expect(await errorsOf('feature', ['feature', 'bloc']), isEmpty);
+        const lazyImports =
+            'lazy: lib/lazy/lazy.dart imports $uri in the template of lazy, '
+            '$ofBloc, but lazy does not contribute flutter_bloc.';
+        expect(await errorsOf('lazy', ['lazy']), [lazyImports]);
+        final lazy = await harness.check(
+          const ContractCase('lazy', requested: [ModuleId('lazy')]),
+        );
+        expect(
+          lazy.errors.single.hint,
+          'A module contributes the packages that its code uses, and the '
+          'package of a provider of a role only in its variant for the '
+          'provider, with the constraint any, or when it depends on the '
+          'provider.',
+        );
+      });
+
       test('exports and dev dependencies follow the same rules', () async {
         final harness = ContractHarness(
           ModuleRegistry([
