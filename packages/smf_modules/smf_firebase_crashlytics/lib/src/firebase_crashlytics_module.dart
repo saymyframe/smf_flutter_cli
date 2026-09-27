@@ -9,13 +9,12 @@ import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dar
 /// The template of the role generates the `CrashReporter` interface,
 /// `createCrashReporter()`, which returns the one reporter of the app that
 /// forwards every report to the reporters of all its providers, and
-/// `installCrashReporting()`, which reports the errors that Flutter, the
-/// platform dispatcher and the current isolate do not handle. This module
-/// adds `firebase_crashlytics` to the dependencies of the app and implements
-/// the reporter in `lib/core/crash_reporting/crashlytics_crash_reporter.dart`
-/// on `FirebaseCrashlytics`. In debug mode, the handlers of the role leave
-/// the errors in the console, so the reporter prints nothing, as Crashlytics
-/// otherwise would.
+/// `installCrashReporting()`, which reports the uncaught errors of the main
+/// isolate. This module adds `firebase_crashlytics` to the dependencies of
+/// the app and implements the reporter in
+/// `lib/core/crash_reporting/crashlytics_crash_reporter.dart` on
+/// `FirebaseCrashlytics`. The handlers of the role already show the errors,
+/// so the reporter prints nothing, as Crashlytics otherwise would.
 ///
 /// Crashlytics works on the Firebase app, so the module depends on
 /// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`, and
