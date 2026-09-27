@@ -28,8 +28,8 @@ Future<ContractResult> renderedApp(List<ModuleId> modules) async {
 }
 
 /// A router for the tests: `createAppRouter()` returns a router that shows
-/// the fallback start screen, and calls the observer factories of its
-/// navigator.
+/// the fallback start screen, calls the observer factories of its navigator,
+/// and tells the screen listeners about the fallback start screen once.
 final class TestRouterModule extends SmfModule {
   /// Creates the module.
   const TestRouterModule();
@@ -77,12 +77,27 @@ final class _TestDelegate extends RouterDelegate<Object> with ChangeNotifier {
       create(),
   ];
 
+  final _screenListeners = <void Function(String? route, String location)>[
+{{{${RouterRole.screenListeners.tag}}}}
+  ];
+
+  bool _shown = false;
+
   @override
-  Widget build(BuildContext context) => Navigator(
-        observers: _observers,
-        pages: const [MaterialPage<Object?>(child: FallbackStartScreen())],
-        onDidRemovePage: (page) {},
-      );
+  Widget build(BuildContext context) {
+    // The fallback start screen, the only screen, is no route of a module.
+    if (!_shown) {
+      _shown = true;
+      for (final listener in _screenListeners) {
+        listener(null, '/');
+      }
+    }
+    return Navigator(
+      observers: _observers,
+      pages: const [MaterialPage<Object?>(child: FallbackStartScreen())],
+      onDidRemovePage: (page) {},
+    );
+  }
 
   @override
   Future<bool> popRoute() async => false;
