@@ -48,60 +48,7 @@ final class GoRoutes {
     FacadeRoute? start,
     bool mainNavigation = false,
   }) {
-    final screens = <String, ImportRef>{};
-    String prefixOf(ImportRef import) => screens
-        .putIfAbsent(
-          // A screen is a file of the app, which its path identifies.
-          import.uri,
-          () => import.withPrefix('screen${screens.length}'),
-        )
-        .prefix!;
-    var checksValues = false;
-
-    String code(FacadeRoute route) {
-      final screen = route.route.screen;
-      final params = route.route.params;
-      // The redirect of the parent checks a path parameter of its own that
-      // the route passes on, since go_router runs the redirects of every
-      // route that matches the location.
-      final checked = [
-        for (final param in params)
-          if (param.isRequired &&
-              _mayBeMissing(param) &&
-              !route.isInherited(param))
-            param,
-      ];
-      checksValues |= checked.isNotEmpty;
-      final widget = '${prefixOf(screen.import)}.${screen.className}';
-      final path = route.parent == null ? route.fullPath : route.route.path;
-      return [
-        'GoRoute(',
-        '  path: ${SmfNames.dartString(path)},',
-        '  name: ${SmfNames.dartString(route.fullName)},',
-        if (checked.isNotEmpty) ...[
-          '  redirect: (context, state) => _checkValues({',
-          for (final param in checked)
-            '    ${SmfNames.dartString(param.name)}: ${_valueOf(param)},',
-          '  }),',
-        ],
-        if (params.isEmpty)
-          '  builder: (context, state) => const $widget(),'
-        else ...[
-          '  builder: (context, state) => $widget(',
-          for (final param in params)
-            '    ${param.name}: ${_argumentOf(param)},',
-          '  ),',
-        ],
-        if (route.children.isNotEmpty) ...[
-          '  routes: [',
-          for (final child in route.children)
-            '${_indented(code(child), '    ')},',
-          '  ],',
-        ],
-        ')',
-      ].join('\n');
-    }
-
+    final code = _RouteCode();
     const fallback = AppEntryRole.fallbackStartScreen;
     final root = start == null
         ? '  builder: (context, state) => const ${fallback.name}(),'
@@ -111,37 +58,10 @@ final class GoRoutes {
         mainNavigation ? facade.destinations : const <FacadeRoute>[];
     final routes = [
       "GoRoute(\n  path: '/',\n$root\n)",
-      if (destinations.isNotEmpty)
-        [
-          'StatefulShellRoute.indexedStack(',
-          '  // The navigator of each branch has observers of its own, so the',
-          '  // observers of the root navigator are not told about its pages.',
-          '  notifyRootObserver: false,',
-          '  builder: (context, state, shell) => AppShell(',
-          '    destinations: const [',
-          for (final route in destinations)
-            '      ${_destinationOf(route.route.destination!)},',
-          '    ],',
-          '    currentIndex: shell.currentIndex,',
-          '    onSelect: shell.goBranch,',
-          '    body: shell,',
-          '  ),',
-          '  branches: [',
-          for (final route in destinations) ...[
-            '    StatefulShellBranch(',
-            '      initialLocation: ${SmfNames.dartString(route.fullPath)},',
-            '      observers: _observers(),',
-            '      routes: [',
-            '${_indented(code(route), '        ')},',
-            '      ],',
-            '    ),',
-          ],
-          '  ],',
-          ')',
-        ].join('\n'),
+      if (destinations.isNotEmpty) code.shellOf(destinations),
       for (final feature in facade.features)
         for (final route in feature.routes)
-          if (!destinations.contains(route)) code(route),
+          if (!destinations.contains(route)) code.of(route),
     ];
     return GoRoutes._(
       routes: Fragment(
@@ -149,16 +69,11 @@ final class GoRoutes {
             .join('\n'),
         imports: [
           if (start == null) fallback.importRef,
-          ...screens.values,
-          if (destinations.isNotEmpty) ...[
-            for (final symbol in [LayoutRole.appShell, LayoutRole.destination])
-              ImportRef.app(symbol.importRef.uri, show: [symbol.name]),
-            for (final route in destinations)
-              ...route.route.destination!.icon.imports,
-          ],
+          ...code.screens.values,
+          if (destinations.isNotEmpty) ..._layoutImports(destinations),
         ],
       ),
-      valueChecks: Fragment(checksValues ? _checkValues : ''),
+      valueChecks: Fragment(code.checksValues ? _checkValues : ''),
       initialLocation: SmfNames.dartString(start?.fullPath ?? '/'),
       hasMainNavigation: destinations.isNotEmpty,
     );
@@ -211,6 +126,15 @@ final class GoRoutes {
       'label: ${SmfNames.dartString(destination.label)}, '
       'icon: ${destination.icon.code})';
 
+  /// The imports of the layout's `AppShell` and `Destination`, and of the
+  /// icons of [destinations].
+  static List<ImportRef> _layoutImports(List<FacadeRoute> destinations) => [
+        for (final symbol in [LayoutRole.appShell, LayoutRole.destination])
+          ImportRef.app(symbol.importRef.uri, show: [symbol.name]),
+        for (final route in destinations)
+          ...route.route.destination!.icon.imports,
+      ];
+
   static String _indented(String code, String indent) =>
       code.split('\n').map((line) => '$indent$line').join('\n');
 
@@ -228,4 +152,103 @@ String? _checkValues(Map<String, Object?> values) {
   if (invalid.isEmpty) return null;
   throw GoException('The location has no valid ${invalid.join(', ')}.');
 }''';
+}
+
+/// Writes the code of the routes of [GoRoutes.of] and keeps what it needs:
+/// the imports of the screens, each with a prefix of its own, and whether a
+/// route checks the values of its location.
+final class _RouteCode {
+  /// The imports of the screens by URI, with their prefixes.
+  final Map<String, ImportRef> screens = {};
+
+  /// Whether a route checks the values of its location.
+  bool checksValues = false;
+
+  String _prefixOf(ImportRef import) => screens
+      .putIfAbsent(
+        // A screen is a file of the app, which its path identifies.
+        import.uri,
+        () => import.withPrefix('screen${screens.length}'),
+      )
+      .prefix!;
+
+  /// The `GoRoute` of [route], with its children.
+  String of(FacadeRoute route) {
+    final screen = route.route.screen;
+    final params = route.route.params;
+    // The redirect of the parent checks a path parameter of its own that
+    // the route passes on, since go_router runs the redirects of every
+    // route that matches the location.
+    final checked = [
+      for (final param in params)
+        if (param.isRequired &&
+            GoRoutes._mayBeMissing(param) &&
+            !route.isInherited(param))
+          param,
+    ];
+    checksValues |= checked.isNotEmpty;
+    final widget = '${_prefixOf(screen.import)}.${screen.className}';
+    final path = route.parent == null ? route.fullPath : route.route.path;
+    return [
+      'GoRoute(',
+      '  path: ${SmfNames.dartString(path)},',
+      '  name: ${SmfNames.dartString(route.fullName)},',
+      if (checked.isNotEmpty) ..._redirectOf(checked),
+      if (params.isEmpty)
+        '  builder: (context, state) => const $widget(),'
+      else ...[
+        '  builder: (context, state) => $widget(',
+        for (final param in params)
+          '    ${param.name}: ${GoRoutes._argumentOf(param)},',
+        '  ),',
+      ],
+      if (route.children.isNotEmpty) ...[
+        '  routes: [',
+        for (final child in route.children)
+          '${GoRoutes._indented(of(child), '    ')},',
+        '  ],',
+      ],
+      ')',
+    ].join('\n');
+  }
+
+  /// The redirect of a route that checks the values of [checked].
+  static List<String> _redirectOf(List<RouteParam> checked) {
+    return [
+      '  redirect: (context, state) => _checkValues({',
+      for (final param in checked)
+        '    ${SmfNames.dartString(param.name)}: ${GoRoutes._valueOf(param)},',
+      '  }),',
+    ];
+  }
+
+  /// The `StatefulShellRoute` of the main navigation with [destinations],
+  /// with a branch for each.
+  String shellOf(List<FacadeRoute> destinations) => [
+        'StatefulShellRoute.indexedStack(',
+        '  // The navigator of each branch has observers of its own, so the',
+        '  // observers of the root navigator are not told about its pages.',
+        '  notifyRootObserver: false,',
+        '  builder: (context, state, shell) => AppShell(',
+        '    destinations: const [',
+        for (final route in destinations)
+          '      ${GoRoutes._destinationOf(route.route.destination!)},',
+        '    ],',
+        '    currentIndex: shell.currentIndex,',
+        '    onSelect: shell.goBranch,',
+        '    body: shell,',
+        '  ),',
+        '  branches: [',
+        for (final route in destinations) ...[
+          '    StatefulShellBranch(',
+          '      initialLocation: ${SmfNames.dartString(route.fullPath)},',
+          '      observers: _observers(),',
+          '      routes: [',
+          '${GoRoutes._indented(of(route), '        ')},',
+          '      ],',
+          '    ),',
+        ],
+        '  ],',
+        ')',
+      ].join('\n');
 }
