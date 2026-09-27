@@ -14,18 +14,20 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// `lib/core/analytics/firebase_analytics_service.dart` on
 /// `FirebaseAnalytics`.
 ///
-/// When the app has a router, the module gives it a listener of the screen
-/// the user sees, which logs a screen view each time the router tells it
-/// that the screen changed: the first screen of the app, a page that a
-/// navigation shows, a page that shows again as the pages above it close,
-/// the page on top when it shows another location, and the page of a
-/// branch of the main navigation that the user switches to, such as a tab.
-/// The name of the screen is the full name of its route, such as
-/// `home.home`, or, for a screen that is no route of a module, such as the
-/// fallback start screen or the error screen of the router, the path of its
-/// location, such as `/`, without the query. A navigation that puts several
-/// pages on a stack at once, such as going to a page whose parents are not
-/// on it yet, logs only the page on top.
+/// When the app has a router, the module gives it `logFirebaseScreenView`
+/// of its file, a listener of the screen the user sees, which logs a screen
+/// view each time the router tells it that the screen changed: the first
+/// screen of the app, a page that a navigation shows, a page that shows
+/// again as the pages above it close, the page on top when it shows another
+/// location, and the page of a branch of the main navigation that the user
+/// switches to, such as a tab. The name of the screen is the full name of
+/// its route, such as `home.home`, or, for a screen that is no route of a
+/// module, such as the fallback start screen or the error screen of the
+/// router, the path of its location, such as `/`, without the query. A
+/// navigation that puts several pages on a stack at once, such as going to
+/// a page whose parents are not on it yet, logs only the page on top.
+/// Nothing waits for a screen view, so an error of the platform is printed
+/// rather than left to the handler of the uncaught errors of the app.
 ///
 /// Analytics works on the Firebase app, so the module depends on
 /// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`. The
@@ -42,13 +44,6 @@ final class FirebaseAnalyticsModule extends SmfModule {
   static const _file = ImportRef.app(
     'core/analytics/firebase_analytics_service.dart',
   );
-
-  /// The listener of the screen that the module gives the router. A screen
-  /// that is no route of a module is logged under the path of its location:
-  /// the query of a location that the app cannot show may hold anything.
-  static const _screenListener = '(route, location) => '
-      'FirebaseAnalytics.instance.logScreenView('
-      'screenName: route ?? Uri.parse(location).path)';
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -69,15 +64,17 @@ final class FirebaseAnalyticsModule extends SmfModule {
             create: FactoryRef('createFirebaseAnalyticsService', import: _file),
           ),
         ),
-        // The router tells the listener about each screen the user sees.
+        // The router tells the listener, a function of the file of the
+        // module, which the file has only in an app with a router, about
+        // each screen the user sees.
         const SocketContribution.item(
           RouterRole.screenListeners,
           Fragment(
-            _screenListener,
+            'logFirebaseScreenView',
             imports: [
-              ImportRef(
-                'package:firebase_analytics/firebase_analytics.dart',
-                show: ['FirebaseAnalytics'],
+              ImportRef.app(
+                'core/analytics/firebase_analytics_service.dart',
+                show: ['logFirebaseScreenView'],
               ),
             ],
           ),

@@ -46,16 +46,33 @@ const List<SmfModule> _navigation = [
 const _implementation = 'lib/core/analytics/firebase_analytics_service.dart';
 
 /// The listener of the screen the user sees that the module gives the
-/// router.
-const _listener = '(route, location) => '
-    'FirebaseAnalytics.instance.logScreenView('
-    'screenName: route ?? Uri.parse(location).path)';
+/// router: a function of the file of the module.
+const _listener = 'logFirebaseScreenView';
 
-/// The import of the name that [_listener] needs, in the file of the
-/// router.
+/// The import of [_listener] in the file of the router.
 const _listenerImport =
-    "import 'package:firebase_analytics/firebase_analytics.dart' "
-    'show FirebaseAnalytics;';
+    "import 'package:contract_app/core/analytics/firebase_analytics_service.dart' "
+    'show logFirebaseScreenView;';
+
+/// The function [_listener] as the analyzer prints its declaration.
+final String _expectedListener = parseString(
+  content: r'''
+void logFirebaseScreenView(String? route, String location) {
+  FirebaseAnalytics.instance
+      .logScreenView(screenName: route ?? Uri.parse(location).path)
+      .catchError(
+        (Object error) => debugPrint('Firebase Analytics: $error'),
+        test: (error) => error is PlatformException,
+      );
+}
+''',
+).unit.declarations.single.toSource();
+
+/// The imports of the file of the module that only [_listener] needs.
+const _listenerImports = [
+  "import 'package:flutter/foundation.dart' show debugPrint;",
+  "import 'package:flutter/services.dart' show PlatformException;",
+];
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
@@ -390,17 +407,18 @@ void main() {
       );
       expect(implementation.create!.import, implementation.type.import);
 
-      // The router tells the listener about the screen the user sees; only
-      // an app with a router gets it. The module gives the navigators no
-      // observer, which would log the pages that enter their stacks.
+      // The router tells the listener, a function of the file of the module,
+      // about the screen the user sees; only an app with a router gets it.
+      // The module gives the navigators no observer, which would log the
+      // pages that enter their stacks.
       final listener = contributions[3] as SocketContribution;
       expect(listener.socket, RouterRole.screenListeners);
       expect(listener.when, {routerRole});
       expect(listener.fragment!.code, _listener);
       expect(listener.fragment!.imports, const [
-        ImportRef(
-          'package:firebase_analytics/firebase_analytics.dart',
-          show: ['FirebaseAnalytics'],
+        ImportRef.app(
+          'core/analytics/firebase_analytics_service.dart',
+          show: ['logFirebaseScreenView'],
         ),
       ]);
     });
@@ -518,11 +536,25 @@ void main() {
           file.text,
           allOf(
             isNot(contains('logScreenView')),
+            isNot(contains('logFirebaseScreenView')),
             isNot(contains('FirebaseAnalyticsObserver')),
           ),
           reason: file.path,
         );
       }
+      // Nor does its file import what the listener would need.
+      expect(
+        [
+          for (final directive in _unitOf(withAnalytics, _implementation)
+              .directives
+              .whereType<ImportDirective>())
+            '$directive',
+        ],
+        [
+          "import 'package:firebase_analytics/firebase_analytics.dart';",
+          "import 'analytics_service.dart';",
+        ],
+      );
     });
 
     group('the implementation', () {
@@ -695,36 +727,84 @@ void main() {
         'Firebase Analytics, and its navigator no observer', () {
       expect(_listenersOf(router), [_listener]);
       expect(_observerFactoriesOf(router), isEmpty);
-      // The listener logs the screen with the name of its route, or the path
-      // of its location, without the query, when it is no route of a module.
-      final listener = _callsOf(
-        _unitOf(withAnalytics, RouterRole.appRouterFactoryFile),
-        'logScreenView',
-        target: 'FirebaseAnalytics.instance',
-      ).single;
-      expect(listener.argumentList.arguments.map((argument) => '$argument'), [
-        'screenName: route ?? Uri.parse(location).path',
-      ]);
-      // Only the name that the listener needs, so that no name of the
-      // package meets another in the file of the router.
+      // Only the name of the listener, so that no name of the file of the
+      // module meets another in the file of the router.
       expect(
-        _importsOfModuleIn(withAnalytics, RouterRole.appRouterFactoryFile),
-        const [
-          ImportRef(
-            'package:firebase_analytics/firebase_analytics.dart',
-            show: ['FirebaseAnalytics'],
-          ),
+        [
+          for (final import in _importsOfModuleIn(
+            withAnalytics,
+            RouterRole.appRouterFactoryFile,
+          ))
+            '${import.uri} as ${import.prefix} show ${import.show.join(', ')}',
+        ],
+        [
+          [
+            'package:contract_app/core/analytics/firebase_analytics_service.dart',
+            'as null show logFirebaseScreenView',
+          ].join(' '),
         ],
       );
       expect(
         [
           for (final directive
               in router.directives.whereType<ImportDirective>())
-            if (directive.uri.stringValue ==
-                'package:firebase_analytics/firebase_analytics.dart')
+            if (directive.uri.stringValue!.contains('/core/analytics/'))
               '$directive',
         ],
         [_listenerImport],
+      );
+    });
+
+    test(
+        'logs a screen view with the name of the route of the screen, or the '
+        'path of its location, and prints an error of the platform', () {
+      final unit = _unitOf(withAnalytics, _implementation);
+      final listener = unit.declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere((function) => function.name.lexeme == _listener);
+
+      expect(listener.toSource(), _expectedListener);
+      // The file has the imports that the listener needs only in an app
+      // with a router.
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            '$directive',
+        ],
+        [
+          "import 'package:firebase_analytics/firebase_analytics.dart';",
+          ..._listenerImports,
+          "import 'analytics_service.dart';",
+        ],
+      );
+    });
+
+    test('has the file of the module of an app without a router otherwise',
+        () async {
+      final withoutRouter = _unitOf(
+        (await _resultOf(const [FirebaseAnalyticsModule.id])).app!,
+        _implementation,
+      );
+      final unit = _unitOf(withAnalytics, _implementation);
+
+      expect(
+        [
+          for (final declaration in unit.declarations)
+            if (declaration is! FunctionDeclaration ||
+                declaration.name.lexeme != _listener)
+              declaration.toSource(),
+        ],
+        [
+          for (final declaration in withoutRouter.declarations)
+            declaration.toSource(),
+        ],
+      );
+      expect(
+        [
+          for (final directive in unit.directives)
+            if (!_listenerImports.contains('$directive')) '$directive',
+        ],
+        [for (final directive in withoutRouter.directives) '$directive'],
       );
     });
   });

@@ -1,5 +1,7 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
-
+{{#has_router}}import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show PlatformException;
+{{/has_router}}
 import 'analytics_service.dart';
 
 /// Creates an analytics service that records to Firebase Analytics, which
@@ -48,4 +50,22 @@ final class FirebaseAnalyticsService implements AnalyticsService {
     required String? value,
   }) =>
       _analytics.setUserProperty(name: name, value: value);
-}
+}{{#has_router}}
+
+/// Logs a screen view to Firebase Analytics for the screen the user sees,
+/// which the router of the app tells it about: the full name of its route,
+/// such as `home.home`, or, for a screen that is no route of a module, the
+/// path of its location, without the query, which may hold anything for a
+/// location that the app cannot show.
+///
+/// Nothing waits for the screen view, so an error of the platform is
+/// printed rather than left to the handler of the uncaught errors of the
+/// app.
+void logFirebaseScreenView(String? route, String location) {
+  FirebaseAnalytics.instance
+      .logScreenView(screenName: route ?? Uri.parse(location).path)
+      .catchError(
+        (Object error) => debugPrint('Firebase Analytics: $error'),
+        test: (error) => error is PlatformException,
+      );
+}{{/has_router}}
