@@ -39,7 +39,7 @@ Module independence is the foundation of the project. Never break it, not even t
 - Nothing is hardcoded for a particular combination. Any selection of modules and variants (e.g. state manager `bloc` / `riverpod`) must generate an app that compiles.
 - Modules describe *what* they need through the DSLs in `smf_contracts`: routes (`RoutesData` of the router role), DI (`DiRegistration` of the DI role), shared-file patches (contribution-engine `Contribution`s) and bricks. The router and DI modules turn those descriptions into code. A feature module must not assume a specific router or DI container.
 - Generated UI talks only to its state-management layer (a Cubit via `context.read`, a Riverpod provider via `ref`), never directly to a DI container or infrastructure service.
-- State-manager variants follow the existing pattern: the module factory picks a variant from `ModuleProfile.stateManager`, and each variant declares its own state-manager package (see `smf_firebase_analytics`).
+- State-manager variants: a module whose code depends on the state manager declares `Variants` of the state management role in its descriptor, keyed by the id of each provider (`bloc`, `riverpod`), and each variant adds the package of its state manager with the constraint `any`, leaving the version to the provider (see the fixture `fake_feature` in `packages/smf_pipeline/test/fixtures/`).
 
 ## Commands
 

@@ -1,0 +1,805 @@
+@TestOn('vm')
+library;
+
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:smf_contracts/lego.dart';
+import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
+import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_get_it/smf_get_it.dart';
+import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/testing.dart';
+import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
+
+import 'support/navigation.dart';
+
+/// The modules of the tests: flutter_core, which creates the app,
+/// firebase_core, which this module depends on, this module, get_it, a DI
+/// container, which registers the service in the apps that have it, and
+/// go_router, a router, whose navigators the observers watch in the apps
+/// that have it.
+const List<SmfModule> _modules = [
+  FlutterCoreModule(),
+  FirebaseCoreModule(),
+  FirebaseAnalyticsModule(),
+  GetItModule(),
+  GoRouterModule(),
+];
+
+/// The modules of the apps with a main navigation: those of [_modules], two
+/// features whose routes are destinations of the main navigation, one whose
+/// route is not, and a layout.
+const List<SmfModule> _navigation = [
+  ..._modules,
+  TestFeature('inbox'),
+  TestFeature('search'),
+  TestFeature('about', destination: false),
+  TestLayout(),
+];
+
+/// The path of the file of the module.
+const _implementation = 'lib/core/analytics/firebase_analytics_service.dart';
+
+/// The factory of the observer of a navigator that the module gives the
+/// router.
+const _observer =
+    '() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)';
+
+/// The import of the names that [_observer] needs, in the file of the
+/// router.
+const _observerImport =
+    "import 'package:firebase_analytics/firebase_analytics.dart' "
+    'show FirebaseAnalytics, FirebaseAnalyticsObserver;';
+
+/// The statement of firebase_core that initializes Firebase in
+/// `bootstrap()`.
+const _initializeFirebase = 'await Firebase.initializeApp(options: '
+    'DefaultFirebaseOptions.currentPlatform);';
+
+/// The text of the file of [_OtherAnalyticsModule]: a service that records
+/// nothing.
+const _otherService = '''
+import 'analytics_service.dart';
+
+AnalyticsService createOtherAnalyticsService() => const OtherAnalyticsService();
+
+final class OtherAnalyticsService implements AnalyticsService {
+  const OtherAnalyticsService();
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) async {}
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) async {}
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) async {}
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setUserId(String? userId) async {}
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) async {}
+}
+''';
+
+/// Another provider of the analytics role, which does not use Firebase, as
+/// a service of another vendor would not, and gives the router no observer.
+final class _OtherAnalyticsModule extends SmfModule {
+  const _OtherAnalyticsModule();
+
+  static const id = ModuleId('other_analytics');
+
+  static const _file = ImportRef.app('core/analytics/other_service.dart');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Analytics of another service',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(analyticsRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('other_analytics', {
+            'lib/core/analytics/other_service.dart': _otherService,
+          }),
+        ),
+        analyticsRole.data(
+          const RoleImplementation(
+            type: TypeRef('OtherAnalyticsService', import: _file),
+            create: FactoryRef('createOtherAnalyticsService', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// What the contract harness finds for the app of [modules] of [registry],
+/// which has no errors and is rendered.
+Future<ContractResult> _resultOf(
+  List<ModuleId> modules, {
+  List<SmfModule> registry = _modules,
+}) async {
+  final result = await ContractHarness(ModuleRegistry(registry)).check(
+    ContractCase(modules.join(', '), requested: modules),
+  );
+  if (result.errors.isNotEmpty || result.app == null) {
+    throw StateError(
+      'The app of $modules has errors: ${result.errors.join('\n')}',
+    );
+  }
+  return result;
+}
+
+/// The pubspec [text] as plain maps and lists.
+Map<String, Object?> _yamlOf(String text) {
+  Object? plain(Object? node) => switch (node) {
+        final YamlMap map => {
+            for (final MapEntry(:key, :value) in map.entries)
+              '$key': plain(value),
+          },
+        final YamlList list => [for (final item in list) plain(item)],
+        _ => node,
+      };
+  return plain(loadYaml(text))! as Map<String, Object?>;
+}
+
+/// The pubspec of [app] without the dependency on firebase_analytics.
+Map<String, Object?> _pubspecWithoutAnalytics(RenderedApp app) {
+  final pubspec = _yamlOf(app.files['pubspec.yaml']!.text);
+  final dependencies = {
+    ...pubspec['dependencies']! as Map<String, Object?>,
+  }..remove('firebase_analytics');
+  return {...pubspec, 'dependencies': dependencies};
+}
+
+/// Checks that [app] is [without] but for the files of the analytics, the
+/// dependency on firebase_analytics and the files at [changed]; its
+/// `bootstrap()` included, since the service starts without waiting.
+void _expectTheAppWithout(
+  RenderedApp app,
+  RenderedApp without, {
+  Set<String> changed = const {},
+}) {
+  expect(
+    app.files.keys.toSet(),
+    {...without.files.keys, AnalyticsRole.file, _implementation},
+  );
+  expect(
+    app.files[AnalyticsRole.file]!.owner,
+    const RoleTemplateOrigin(analyticsRole),
+  );
+  expect(
+    app.files[_implementation]!.owner,
+    const ModuleOrigin(FirebaseAnalyticsModule.id),
+  );
+  for (final MapEntry(key: path, value: file) in without.files.entries) {
+    if (path == 'pubspec.yaml' || changed.contains(path)) continue;
+    expect(app.files[path]!.bytes, file.bytes, reason: path);
+    expect(app.files[path]!.owner, file.owner, reason: path);
+  }
+  expect(
+    _pubspecWithoutAnalytics(app),
+    _yamlOf(without.files['pubspec.yaml']!.text),
+  );
+}
+
+/// Checks that the file of the router of [app] is that of [without] but for
+/// the import of firebase_analytics and the factory of the observer, each on
+/// a line of its own.
+void _expectTheRouterWithout(RenderedApp app, RenderedApp without) {
+  List<String> linesOf(RenderedApp app) =>
+      app.files[RouterRole.appRouterFactoryFile]!.text.split('\n');
+  final lines = linesOf(app);
+
+  expect(lines.where((line) => line == _observerImport), hasLength(1));
+  expect(lines.where((line) => line == '$_observer,'), hasLength(1));
+  expect(
+    [
+      for (final line in lines)
+        if (line != _observerImport && line != '$_observer,') line,
+    ],
+    linesOf(without),
+  );
+}
+
+/// The parsed file at [path] of [app].
+CompilationUnit _unitOf(RenderedApp app, String path) =>
+    parseString(content: app.files[path]!.text).unit;
+
+/// The statements of `bootstrap()` in [app], as written.
+List<String> _bootstrapOf(RenderedApp app) {
+  final bootstrap = _unitOf(app, AppEntryRole.bootstrapFile)
+      .declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((function) => function.name.lexeme == 'bootstrap');
+  final body = bootstrap.functionExpression.body as BlockFunctionBody;
+  return [for (final statement in body.block.statements) '$statement'];
+}
+
+/// The factories that the analytics service of the app in [app] forwards
+/// to, as written in the list of the services of the template of the role.
+List<String> _servicesOf(RenderedApp app) {
+  final services = _unitOf(app, AnalyticsRole.file)
+      .declarations
+      .whereType<TopLevelVariableDeclaration>()
+      .expand((declaration) => declaration.variables.variables)
+      .singleWhere((variable) => variable.name.lexeme == '_analyticsServices');
+  final list = services.initializer! as ListLiteral;
+  return [for (final element in list.elements) '$element'];
+}
+
+/// The methods of the class [name] in [unit], by name.
+Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
+  final declaration = unit.declarations
+      .whereType<ClassDeclaration>()
+      .singleWhere((declaration) => declaration.name.lexeme == name);
+  return {
+    for (final member in declaration.members)
+      if (member is MethodDeclaration) member.name.lexeme: member,
+  };
+}
+
+/// The named argument [label] of [call], or `null`.
+Expression? _argument(MethodInvocation call, String label) => [
+      for (final argument in call.argumentList.arguments)
+        if (argument case NamedExpression(:final name, :final expression)
+            when name.label.name == label)
+          expression,
+    ].firstOrNull;
+
+/// Collects the invocations of a unit whose method is [name], with the
+/// target [target], or none.
+final class _Calls extends RecursiveAstVisitor<void> {
+  _Calls(this.name, {this.target});
+
+  final String name;
+  final String? target;
+  final List<MethodInvocation> found = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == name && node.target?.toSource() == target) {
+      found.add(node);
+    }
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// The invocations in [unit] of the method [name] of [target], or of the
+/// function [name].
+List<MethodInvocation> _callsOf(
+  CompilationUnit unit,
+  String name, {
+  String? target,
+}) {
+  final calls = _Calls(name, target: target);
+  unit.accept(calls);
+  return calls.found;
+}
+
+/// The factories of the observers that the function `_observers()` of the
+/// file of the router in [unit] calls for a navigator, as written.
+List<String> _observerFactoriesOf(CompilationUnit unit) {
+  final function = unit.declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((function) => function.name.lexeme == '_observers');
+  final list = (function.functionExpression.body as ExpressionFunctionBody)
+      .expression as ListLiteral;
+  final loop = list.elements.single as ForElement;
+  final parts = loop.forLoopParts as ForEachPartsWithDeclaration;
+  return [
+    for (final element in (parts.iterable as ListLiteral).elements) '$element',
+  ];
+}
+
+/// The imports that the fragments of this module add to the file at [path]
+/// of [app].
+List<ImportRef> _importsOfModuleIn(RenderedApp app, String path) => [
+      for (final added in app.files[path]!.addedImports)
+        if (added.contributor == const ModuleOrigin(FirebaseAnalyticsModule.id))
+          added.import,
+    ];
+
+void main() {
+  const module = FirebaseAnalyticsModule();
+
+  group('FirebaseAnalyticsModule', () {
+    test(
+        'is infrastructure that provides the analytics, uses the DI container '
+        'and the router of its role, and depends on firebase_core', () {
+      final descriptor = module.descriptor;
+
+      expect(descriptor.id, const ModuleId('firebase_analytics'));
+      expect(descriptor.kind, ModuleKinds.infrastructure);
+      expect(descriptor.provides, {analyticsRole});
+      expect(descriptor.dependsOn, {FirebaseCoreModule.id});
+      expect(descriptor.requires, isEmpty);
+      expect(descriptor.uses, isEmpty);
+      expect(descriptor.effectiveRequires, isEmpty);
+      expect(descriptor.effectiveUses, {diRole, routerRole});
+      expect(descriptor.variants, isNull);
+    });
+
+    test('forms a valid registry with the modules of the tests', () {
+      expect(ModuleRegistry.problemsOf(_modules), isEmpty);
+      expect(ModuleRegistry.problemsOf(_navigation), isEmpty);
+    });
+
+    test(
+        'contributes its brick, firebase_analytics, its implementation of the '
+        'service, created without waiting, and an observer for each navigator '
+        'of a router, and nothing else', () {
+      final contributions = module.contribute(ContractHarness.defaultContext);
+
+      expect(contributions, hasLength(4));
+      final brick = contributions[0] as BrickContribution;
+      expect(brick.bundle, same(firebaseAnalyticsBundle));
+      expect(brick.bundle.name, 'firebase_analytics');
+      expect(
+        [for (final file in brick.bundle.files) file.path],
+        [_implementation],
+      );
+      expect(brick.when, isEmpty);
+
+      final dependency = contributions[1] as PubspecDependency;
+      expect(dependency.package, 'firebase_analytics');
+      expect(dependency.constraint, '^12.6.0');
+      expect(dependency.dev, isFalse);
+
+      final data = contributions[2] as RoleData<Object>;
+      expect(data.role, analyticsRole);
+      final implementation = data.value as RoleImplementation;
+      expect(implementation.isAsync, isFalse);
+      expect(implementation.type.name, 'FirebaseAnalyticsService');
+      expect(implementation.create!.name, 'createFirebaseAnalyticsService');
+      expect(implementation.create!.deps, isEmpty);
+      expect(
+        implementation.type.import,
+        const ImportRef.app('core/analytics/firebase_analytics_service.dart'),
+      );
+      expect(implementation.create!.import, implementation.type.import);
+
+      // An observer watches one navigator, so the router calls the factory
+      // for each of its navigators; only an app with a router gets it.
+      final observers = contributions[3] as SocketContribution;
+      expect(observers.socket, RouterRole.observers);
+      expect(observers.when, {routerRole});
+      expect(observers.fragment!.code, _observer);
+      expect(observers.fragment!.imports, const [
+        ImportRef(
+          'package:firebase_analytics/firebase_analytics.dart',
+          show: ['FirebaseAnalytics', 'FirebaseAnalyticsObserver'],
+        ),
+      ]);
+    });
+  });
+
+  group('the contract harness', () {
+    late List<ContractResult> results;
+
+    setUpAll(() async {
+      results = await ContractHarness(ModuleRegistry(_modules)).checkAll();
+    });
+
+    test(
+        'builds the apps of the analytics with and without a DI container and '
+        'a router', () {
+      expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router',
+        'flutter_core',
+        'firebase_core',
+        'firebase_analytics with di, router',
+        'firebase_analytics with di',
+        'firebase_analytics with router',
+        'firebase_analytics',
+        'get_it',
+      ]);
+      // firebase_core comes with the module, as the module depends on it.
+      for (final result in results.skip(3).take(4)) {
+        expect(
+          result.resolution!.modules.map((module) => module.id),
+          contains(FirebaseCoreModule.id),
+          reason: '${result.contractCase}',
+        );
+      }
+    });
+
+    test('finds no errors in any app, rendered code included', () {
+      for (final result in results) {
+        expect(
+          result.errors.map((issue) => '$issue'),
+          isEmpty,
+          reason: '${result.contractCase}',
+        );
+        expect(result.app, isNotNull, reason: '${result.contractCase}');
+      }
+    });
+  });
+
+  group('an app without a router or a DI container', () {
+    late RenderedApp withAnalytics;
+    late RenderedApp without;
+
+    setUpAll(() async {
+      withAnalytics =
+          (await _resultOf(const [FirebaseAnalyticsModule.id])).app!;
+      without = (await _resultOf(const [FirebaseCoreModule.id])).app!;
+    });
+
+    test(
+        'is the app of Firebase but for the service, its implementation and '
+        'firebase_analytics', () {
+      // Its native files, the Gradle files and the Xcode project among
+      // them, and its README are those of Firebase: the module sets up
+      // nothing of the platforms.
+      _expectTheAppWithout(withAnalytics, without);
+      expect(
+        _yamlOf(withAnalytics.files['pubspec.yaml']!.text)['dependencies'],
+        {
+          'firebase_analytics': '^12.6.0',
+          'firebase_core': '^4.15.0',
+          'flutter': {'sdk': 'flutter'},
+        },
+      );
+    });
+
+    test('starts nothing in bootstrap(), as the service needs no waiting', () {
+      expect(_bootstrapOf(withAnalytics), [_initializeFirebase]);
+    });
+
+    test(
+        'forwards the calls of the app to the implementation of Firebase '
+        'Analytics, created on first use', () {
+      final file = withAnalytics.files[AnalyticsRole.file]!;
+
+      expect(_servicesOf(withAnalytics), [
+        'impl0.createFirebaseAnalyticsService()',
+      ]);
+      expect(
+        [
+          for (final added in file.addedImports)
+            (added.import.uri, added.import.prefix, '${added.contributor}'),
+        ],
+        [
+          (
+            'package:contract_app/core/analytics/'
+                'firebase_analytics_service.dart',
+            'impl0',
+            'role:analytics',
+          ),
+        ],
+      );
+      // Nothing to await: the service is created without waiting.
+      expect(
+        _unitOf(withAnalytics, AnalyticsRole.file)
+            .declarations
+            .whereType<FunctionDeclaration>()
+            .map((function) => function.name.lexeme),
+        ['createAnalyticsService'],
+      );
+    });
+
+    test('has no observer, as it has no navigator to watch', () {
+      for (final file in withAnalytics.files.values) {
+        if (!file.isText) continue;
+        expect(
+          file.text,
+          isNot(contains('FirebaseAnalyticsObserver')),
+          reason: file.path,
+        );
+      }
+    });
+
+    group('the implementation', () {
+      late CompilationUnit unit;
+      late Map<String, MethodDeclaration> methods;
+
+      setUpAll(() {
+        unit = _unitOf(withAnalytics, _implementation);
+        methods = _methodsOf(unit, 'FirebaseAnalyticsService');
+      });
+
+      test('is the service on the Firebase Analytics of the Firebase app', () {
+        final declaration =
+            unit.declarations.whereType<ClassDeclaration>().single;
+        expect(
+          '${declaration.implementsClause!.interfaces.single}',
+          'AnalyticsService',
+        );
+        final factory =
+            unit.declarations.whereType<FunctionDeclaration>().single;
+        expect(factory.name.lexeme, 'createFirebaseAnalyticsService');
+        expect('${factory.returnType}', 'AnalyticsService');
+        expect(factory.functionExpression.parameters!.parameters, isEmpty);
+        final body = factory.functionExpression.body as ExpressionFunctionBody;
+        expect(
+          '${body.expression}',
+          'FirebaseAnalyticsService(FirebaseAnalytics.instance)',
+        );
+      });
+
+      test(
+          'implements every method of the service with the parameters of the '
+          'interface', () {
+        final interface = _methodsOf(
+          _unitOf(withAnalytics, AnalyticsRole.file),
+          'AnalyticsService',
+        );
+
+        expect(methods.keys.toSet(), interface.keys.toSet());
+        for (final MapEntry(key: name, value: method) in methods.entries) {
+          expect(
+            '${method.returnType} ${method.parameters}',
+            '${interface[name]!.returnType} ${interface[name]!.parameters}',
+            reason: name,
+          );
+        }
+      });
+
+      test(
+          'forwards each call to Firebase Analytics, a sign-in and a sign-up '
+          'as its standard events with their parameters', () {
+        String callOf(String method) =>
+            '${(methods[method]!.body as ExpressionFunctionBody).expression}';
+
+        expect(
+          callOf('logEvent'),
+          '_analytics.logEvent(name: name, parameters: parameters)',
+        );
+        expect(
+          callOf('logSignIn'),
+          '_analytics.logLogin(loginMethod: method, parameters: parameters)',
+        );
+        expect(
+          callOf('logSignUp'),
+          '_analytics.logSignUp(signUpMethod: method, parameters: parameters)',
+        );
+        expect(
+          callOf('setAnalyticsCollectionEnabled'),
+          '_analytics.setAnalyticsCollectionEnabled(enabled)',
+        );
+        expect(callOf('setUserId'), '_analytics.setUserId(id: userId)');
+        expect(
+          callOf('setUserProperty'),
+          '_analytics.setUserProperty(name: name, value: value)',
+        );
+      });
+    });
+  });
+
+  group('an app with a DI container', () {
+    late ContractResult result;
+    late RenderedApp withAnalytics;
+    late RenderedApp without;
+
+    setUpAll(() async {
+      result = await _resultOf(
+        const [FirebaseAnalyticsModule.id, GetItModule.id],
+      );
+      withAnalytics = result.app!;
+      without = (await _resultOf(
+        const [FirebaseCoreModule.id, GetItModule.id],
+      ))
+          .app!;
+    });
+
+    test(
+        'is the app of Firebase and the container but for the analytics and '
+        'its registration', () {
+      _expectTheAppWithout(
+        withAnalytics,
+        without,
+        changed: const {DiRole.dependenciesFile},
+      );
+      expect(_bootstrapOf(withAnalytics), [
+        _initializeFirebase,
+        'await registerDependencies();',
+      ]);
+    });
+
+    test('registers the service in the container, which creates it', () {
+      final registrations = [
+        for (final data in result.collection!.roleData)
+          if (identical(data.role, diRole) &&
+              data.origin == const RoleTemplateOrigin(analyticsRole))
+            data.value as DiRegistration,
+      ];
+      expect(registrations, hasLength(1));
+      final registration = registrations.single;
+      expect(registration.type.name, 'AnalyticsService');
+      expect(registration.create.name, 'createAnalyticsService');
+      expect(registration.create.deps, isEmpty);
+      expect(registration.lifetime, DiLifetime.lazySingleton);
+
+      final container = withAnalytics.files[DiRole.dependenciesFile]!;
+      final calls = DartFileIndexer.index(container.path, container.text)
+          .invocations
+          .where((call) => call.name == 'createAnalyticsService');
+      expect(calls, hasLength(1));
+      expect(
+        calls.single.enclosingDeclaration,
+        DiRole.registerDependencies.name,
+      );
+    });
+  });
+
+  group('an app with a router', () {
+    late RenderedApp withAnalytics;
+    late RenderedApp without;
+    late CompilationUnit router;
+
+    setUpAll(() async {
+      withAnalytics = (await _resultOf(
+        const [FirebaseAnalyticsModule.id, GoRouterModule.id],
+      ))
+          .app!;
+      without = (await _resultOf(
+        const [FirebaseCoreModule.id, GoRouterModule.id],
+      ))
+          .app!;
+      router = _unitOf(withAnalytics, RouterRole.appRouterFactoryFile);
+    });
+
+    test(
+        'is the app of Firebase and the router but for the analytics and the '
+        'observers of the router', () {
+      _expectTheAppWithout(
+        withAnalytics,
+        without,
+        changed: const {RouterRole.appRouterFactoryFile},
+      );
+      _expectTheRouterWithout(withAnalytics, without);
+      expect(
+        _observerFactoriesOf(
+          _unitOf(without, RouterRole.appRouterFactoryFile),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('gives the navigator of the router an observer of Firebase Analytics',
+        () {
+      expect(_observerFactoriesOf(router), [_observer]);
+      final goRouter = _callsOf(router, 'GoRouter').single;
+      expect('${_argument(goRouter, 'observers')}', '_observers()');
+      // Only the names that the factory needs, so that no name of the
+      // package meets another in the file of the router.
+      expect(
+        _importsOfModuleIn(withAnalytics, RouterRole.appRouterFactoryFile),
+        const [
+          ImportRef(
+            'package:firebase_analytics/firebase_analytics.dart',
+            show: ['FirebaseAnalytics', 'FirebaseAnalyticsObserver'],
+          ),
+        ],
+      );
+      expect(
+        [
+          for (final directive
+              in router.directives.whereType<ImportDirective>())
+            if (directive.uri.stringValue ==
+                'package:firebase_analytics/firebase_analytics.dart')
+              '$directive',
+        ],
+        [_observerImport],
+      );
+    });
+  });
+
+  group('an app with a main navigation', () {
+    late RenderedApp withAnalytics;
+    late RenderedApp without;
+    late CompilationUnit router;
+
+    setUpAll(() async {
+      Future<RenderedApp> appWith(ModuleId module) async => (await _resultOf(
+            [
+              module,
+              const ModuleId('inbox'),
+              const ModuleId('search'),
+              const ModuleId('about'),
+              TestLayout.id,
+            ],
+            registry: _navigation,
+          ))
+              .app!;
+      withAnalytics = await appWith(FirebaseAnalyticsModule.id);
+      without = await appWith(FirebaseCoreModule.id);
+      router = _unitOf(withAnalytics, RouterRole.appRouterFactoryFile);
+    });
+
+    test(
+        'is the app of Firebase and the main navigation but for the analytics '
+        'and the observers of the router', () {
+      _expectTheAppWithout(
+        withAnalytics,
+        without,
+        changed: const {RouterRole.appRouterFactoryFile},
+      );
+      _expectTheRouterWithout(withAnalytics, without);
+    });
+
+    test(
+        'gives every navigator an observer of its own, the root navigator and '
+        'that of each branch, and the root one does not see the pages of the '
+        'branches', () {
+      expect(_observerFactoriesOf(router), [_observer]);
+      final goRouter = _callsOf(router, 'GoRouter').single;
+      expect('${_argument(goRouter, 'observers')}', '_observers()');
+      final shell =
+          _callsOf(router, 'indexedStack', target: 'StatefulShellRoute').single;
+      expect('${_argument(shell, 'notifyRootObserver')}', 'false');
+      final branches = _callsOf(router, 'StatefulShellBranch');
+      expect(
+        [
+          for (final branch in branches)
+            (
+              '${_argument(branch, 'initialLocation')}',
+              '${_argument(branch, 'observers')}',
+            ),
+        ],
+        [("'/inbox'", '_observers()'), ("'/search'", '_observers()')],
+      );
+    });
+  });
+
+  group('an app with another analytics service', () {
+    const registry = [..._modules, _OtherAnalyticsModule()];
+
+    test(
+        'forwards the calls to both, in the order of the modules, and gives '
+        'the router the observer of Firebase Analytics alone', () async {
+      for (final (modules, services) in [
+        (
+          const [
+            FirebaseAnalyticsModule.id,
+            _OtherAnalyticsModule.id,
+            GoRouterModule.id,
+          ],
+          [
+            'impl0.createFirebaseAnalyticsService()',
+            'impl1.createOtherAnalyticsService()',
+          ],
+        ),
+        (
+          const [
+            _OtherAnalyticsModule.id,
+            FirebaseAnalyticsModule.id,
+            GoRouterModule.id,
+          ],
+          [
+            'impl0.createOtherAnalyticsService()',
+            'impl1.createFirebaseAnalyticsService()',
+          ],
+        ),
+      ]) {
+        final app = (await _resultOf(modules, registry: registry)).app!;
+
+        expect(_servicesOf(app), services, reason: '$modules');
+        expect(
+          _observerFactoriesOf(_unitOf(app, RouterRole.appRouterFactoryFile)),
+          [_observer],
+          reason: '$modules',
+        );
+        expect(_bootstrapOf(app), [_initializeFirebase], reason: '$modules');
+      }
+    });
+  });
+}

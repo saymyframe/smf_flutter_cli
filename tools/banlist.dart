@@ -191,11 +191,6 @@ const _migrating = [
     {'smf_contribution_engine'},
     'The old contracts API uses the contribution engine.',
   ),
-  _Exception(
-    ['packages/smf_modules/smf_firebase_analytics/'],
-    null,
-    'The module has not moved to the new model yet.',
-  ),
 ];
 
 /// Whether the check reads the tracked file [path]: Dart code but the
