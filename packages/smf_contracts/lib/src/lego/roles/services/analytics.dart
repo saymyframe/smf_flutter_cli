@@ -15,9 +15,9 @@ const analyticsRole = AnalyticsRole._();
 /// a lazy singleton.
 ///
 /// A provider contributes its implementation as a [RoleImplementation]. It
-/// may also watch the router's navigators, with `when: {routerRole}`, as
-/// Firebase Analytics does with `FirebaseAnalyticsObserver` in
-/// [RouterRole.observers].
+/// may also follow the router, with `when: {routerRole}`: log the screens
+/// the user sees with a listener in [RouterRole.screenListeners], or watch
+/// the navigators of the router with observers in [RouterRole.observers].
 final class AnalyticsRole extends Role<RoleImplementation> {
   const AnalyticsRole._();
 

@@ -159,11 +159,12 @@ final class WrapperSocket extends SocketKind {
       };
 }
 
-/// A socket for a list of factory expressions, such as
-/// `() => MyNavigatorObserver()`, that the owner of the socket calls as many
-/// times as it needs instances.
+/// A socket for a list of function expressions that the owner of the socket
+/// calls: factories, such as `() => MyNavigatorObserver()`, which it calls
+/// as many times as it needs instances, or listeners, which it calls when
+/// something happens.
 ///
-/// It renders the factories as list items, each followed by a comma.
+/// It renders the functions as list items, each followed by a comma.
 final class FactoryListSocket extends SocketKind {
   /// Creates the kind.
   const FactoryListSocket();

@@ -67,7 +67,8 @@ final class SocketContribution extends Contribution {
         entryValue = null,
         origin = null;
 
-  /// Adds the factory expression [fragment] to a [FactoryListSocket].
+  /// Adds the function expression [fragment], such as a factory, to a
+  /// [FactoryListSocket].
   const SocketContribution.item(
     SocketRef<FactoryListSocket> this.socket,
     Fragment this.fragment, {

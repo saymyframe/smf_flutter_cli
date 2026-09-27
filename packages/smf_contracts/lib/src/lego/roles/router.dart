@@ -30,8 +30,9 @@ const routerRole = RouterRole._();
 ///
 /// A provider renders the routes from [facadeOf], so it agrees with the
 /// facade on every path and name. It:
-/// - names each route by its [FacadeRoute.fullName], which navigator
-///   observers such as analytics report as the screen name;
+/// - names each route by its [FacadeRoute.fullName], which the listeners of
+///   [screenListeners] get as the name of the screen and navigator
+///   observers as the name of its page;
 /// - builds the start route of [startIn] at `/`, or the fallback screen of
 ///   the app entry if there is none;
 /// - when a layout is present and the app has destinations, puts them into
@@ -44,6 +45,8 @@ const routerRole = RouterRole._();
 ///   over the main navigation, or to replace such a page with one, with a
 ///   `StateError` that leaves the stack as it is;
 /// - calls every factory of [observers] for each navigator it creates;
+/// - calls the listeners of [screenListeners] each time the screen the user
+///   sees changes;
 /// - imports screens with a prefix of its own and does not name its router
 ///   class `AppRouter`;
 /// - creates `config` once.
@@ -70,8 +73,7 @@ final class RouterRole extends Role<RoutesData> {
     returnType: 'AppRouter',
   );
 
-  /// Factories of navigator observers, such as
-  /// `() => FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance)`.
+  /// Factories of navigator observers, such as `() => MyNavigatorObserver()`.
   ///
   /// A provider calls each factory once for every navigator it creates,
   /// such as the navigator of each branch of the main navigation, because
@@ -81,10 +83,44 @@ final class RouterRole extends Role<RoutesData> {
   /// branch shows its first page when it is first selected. When a page
   /// shown over the main navigation closes, the observers of the root
   /// navigator see the main navigation come back, not the page of its
-  /// selected branch.
+  /// selected branch. To follow the screen the user sees, use
+  /// [screenListeners].
   static const observers = SocketRef<FactoryListSocket>.role(
     routerRole,
     'observers',
+    FactoryListSocket(),
+  );
+
+  /// Listeners of the screen the user sees, such as
+  /// `(route, location) => debugPrint('$location: $route')`: functions of
+  /// the type `void Function(String? route, String location)`.
+  ///
+  /// The screen the user sees is the page on top of the app. A provider
+  /// calls every listener once for each change of it, a switch to another
+  /// branch of the main navigation, such as another tab, included:
+  /// - when the app shows its first screen;
+  /// - when another page comes on top, such as a page that a navigation
+  ///   shows, a page that shows again as the pages above it close, or the
+  ///   page of the branch of the main navigation that the user selects;
+  /// - when the page on top shows another location, such as the same route
+  ///   with other values of its parameters.
+  ///
+  /// It does not call them for the pages that a navigation puts below the
+  /// one on top, such as the parents of a route that `go()` shows, and
+  /// never twice in a row for the same page at the same location, such as
+  /// for a navigation that leaves the page on top as it is.
+  ///
+  /// A listener gets the full name of the route of the screen among the
+  /// routes of the modules, such as `home.details` (see
+  /// [FacadeRoute.fullName]), and the location of the screen as a path with
+  /// its query, such as `/home/details/5`. For a screen that is not a route
+  /// of a module, the route is `null`, and the location is still that of
+  /// the screen: `/` for the fallback screen of the app entry, and for the
+  /// error screen of the router, the location it could not show. A listener
+  /// takes note of the screen and does not navigate.
+  static const screenListeners = SocketRef<FactoryListSocket>.role(
+    routerRole,
+    'screen_listeners',
     FactoryListSocket(),
   );
 
@@ -143,7 +179,7 @@ final class RouterRole extends Role<RoutesData> {
   Set<Role> get uses => {layoutRole};
 
   @override
-  List<SocketRef> get sockets => const [observers];
+  List<SocketRef> get sockets => const [observers, screenListeners];
 
   @override
   List<SocketFamily<Object?, SocketKind>> get socketFamilies =>

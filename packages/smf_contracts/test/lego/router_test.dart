@@ -853,7 +853,42 @@ void main() {
       );
       expect(RouterRole.screenAnnotations.memberOfTag(screen.tag), screen);
       expect(RouterRole.paramAnnotations.memberOfTag(param.tag), param);
+    });
+  });
+
+  group('the sockets of the navigation', () {
+    test('are the observers of the navigators and the screen listeners', () {
+      expect(routerRole.sockets, [
+        RouterRole.observers,
+        RouterRole.screenListeners,
+      ]);
       expect(RouterRole.observers.tag, 'smf_router__observers');
+      expect(RouterRole.screenListeners.tag, 'smf_router__screen_listeners');
+      for (final socket in routerRole.sockets) {
+        expect(socket.kind, isA<FactoryListSocket>(), reason: '$socket');
+        expect(socket.kind.carriesImports, isTrue, reason: '$socket');
+      }
+    });
+
+    test('render screen listeners as the items of a list of functions', () {
+      const socket = RouterRole.screenListeners;
+      // The example of the documentation of the socket, and another.
+      const printed = r"(route, location) => debugPrint('$location: $route')";
+      const noted = '(route, location) => seen.add(route ?? location)';
+      final rendered = socket.render([
+        const SocketContribution.item(socket, Fragment(printed)),
+        const SocketContribution.item(socket, Fragment(noted)),
+      ]);
+
+      expect(rendered, {socket.tag: '$printed,\n$noted,'});
+      // A list of the type of the functions that the listeners are.
+      expectParses(
+        [
+          'final listeners = <void Function(String? route, String location)>[',
+          rendered[socket.tag]!,
+          '];',
+        ].join('\n'),
+      );
     });
   });
   group('the module rule router.routes', () {
