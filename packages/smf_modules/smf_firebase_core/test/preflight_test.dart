@@ -814,6 +814,22 @@ void main() {
       }
     });
 
+    test('lets the cancellation of the run through, and runs nothing more',
+        () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => throw const SmfCancelledException(),
+      );
+
+      await expectLater(
+        check.check(machine),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      expect(machine.calls.map((call) => call.line), [
+        '$_firebase login:list --json',
+      ]);
+    });
+
     test('says the same when the Firebase CLI cannot start', () async {
       final machine = FakeMachine(
         executables: {'firebase': _firebase},
@@ -1182,6 +1198,13 @@ void main() {
       expect(
         await check.check(machineWith(_result(65))),
         _failed('"dart pub global list" exited with code 65.'),
+      );
+    });
+
+    test('cannot activate it without dart', () async {
+      await expectLater(
+        check.install(FakeMachine()),
+        _setupFailure('dart of the Flutter SDK was not found.'),
       );
     });
 
