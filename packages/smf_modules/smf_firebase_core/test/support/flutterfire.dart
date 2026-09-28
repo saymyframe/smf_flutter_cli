@@ -382,6 +382,23 @@ const crashlyticsPhases = {
 ''',
 };
 
+/// The name of the build phase for Crashlytics that flutterfire adds, which
+/// it finds the phase by when it configures the app again.
+const crashlyticsPhaseName =
+    'FlutterFire: "flutterfire upload-crashlytics-symbols"';
+
+/// The script of the build phase for Crashlytics of flutterfire_cli
+/// [version]: the `shellScript` of its object in [crashlyticsPhases],
+/// without the quoting of the Xcode project (`\n`, `\"` and `\\`).
+String crashlyticsPhaseScript(String version) {
+  final quoted = RegExp(r'shellScript = "((?:[^"\\]|\\.)*)";')
+      .firstMatch(crashlyticsPhases[version]!)![1]!;
+  return quoted.replaceAllMapped(
+    RegExp(r'\\(.)'),
+    (match) => match[1] == 'n' ? '\n' : match[1]!,
+  );
+}
+
 /// [project], the text of an Xcode project, with the build phase for
 /// Crashlytics of flutterfire_cli [version] among its phases of shell
 /// scripts; see [crashlyticsPhases].
