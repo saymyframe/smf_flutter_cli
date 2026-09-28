@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:smf_flutter_cli/src/io/greeting.dart';
 import 'package:smf_flutter_cli/src/io/logger.dart';
 import 'package:test/test.dart';
 
@@ -57,6 +58,37 @@ void main() {
 
     expect(out, 'info\ndone\nshown\n');
     expect(err, '[WARN] careful\nbroken\n');
+  });
+
+  test(
+      'drops the greeting once it prints anything, but not for a detail '
+      'that it hides', () {
+    final greeting = Greeting('Hello!');
+    final (out, _) = _capture(
+      () => IoLogger(verbose: false, greeting: greeting).detail('hidden'),
+    );
+
+    expect(out, isEmpty);
+    expect(greeting.take(), 'Hello!');
+
+    final reports = <String, void Function(IoLogger logger)>{
+      'info': (logger) => logger.info('Adding flutter_core'),
+      'detail when verbose': (logger) => logger.detail('shown'),
+      'warn': (logger) => logger.warn('careful'),
+      'error': (logger) => logger.error('broken'),
+      'success': (logger) => logger.success('done'),
+      'progress': (logger) => logger.progress('Rendering the app'),
+    };
+    for (final MapEntry(key: kind, value: report) in reports.entries) {
+      final greeting = Greeting('Hello!');
+      _capture(
+        () => report(
+          IoLogger(verbose: true, terminal: false, greeting: greeting),
+        ),
+      );
+
+      expect(greeting.take(), isNull, reason: kind);
+    }
   });
 
   test('without a terminal, a progress is a line when it starts and ends', () {

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
+import 'package:smf_flutter_cli/src/io/greeting.dart';
 import 'package:smf_flutter_cli/src/io/prompter.dart';
 import 'package:test/test.dart';
 
@@ -72,7 +73,7 @@ void main() {
     );
   });
 
-  TerminalPrompter prompter(_Terminal terminal, {String? greeting}) =>
+  TerminalPrompter prompter(_Terminal terminal, {Greeting? greeting}) =>
       TerminalPrompter(
         terminal,
         interruption: interruption,
@@ -236,13 +237,26 @@ void main() {
 
   test('says the greeting before the first question only', () async {
     final terminal = _Terminal([_enter, _enter]);
-    final asking = prompter(terminal, greeting: 'Hello!');
+    final asking = prompter(terminal, greeting: Greeting('Hello!'));
 
     await asking.confirm('One?');
     await asking.confirm('Two?');
 
     expect(terminal.output.toString(), startsWith('Hello!\n? One?'));
     expect('Hello!'.allMatches(terminal.output.toString()), hasLength(1));
+  });
+
+  test('says no greeting that the run dropped before the first question',
+      () async {
+    final terminal = _Terminal([_enter]);
+    final greeting = Greeting('Hello!');
+    final asking = prompter(terminal, greeting: greeting);
+
+    greeting.drop();
+    await asking.confirm('Run it now?');
+
+    expect(terminal.output.toString(), startsWith('? Run it now?'));
+    expect(terminal.output.toString(), isNot(contains('Hello!')));
   });
 
   group('cancelling', () {

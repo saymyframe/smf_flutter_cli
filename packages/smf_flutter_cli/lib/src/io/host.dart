@@ -2,7 +2,8 @@ import 'dart:io' as io;
 
 import 'package:file/local.dart';
 import 'package:smf_contracts/core.dart';
-import 'package:smf_flutter_cli/src/banner.dart';
+import 'package:smf_flutter_cli/src/banner.dart' as banner;
+import 'package:smf_flutter_cli/src/io/greeting.dart';
 import 'package:smf_flutter_cli/src/io/interruption.dart';
 import 'package:smf_flutter_cli/src/io/logger.dart';
 import 'package:smf_flutter_cli/src/io/process_runner.dart';
@@ -16,11 +17,17 @@ final class IoHost {
   /// Creates the machine of a run, which reports details if [verbose] and
   /// handles Ctrl-C with [interruption].
   IoHost({required bool verbose, required Interruption interruption})
-      : logger = IoLogger(verbose: verbose),
-        _interruption = interruption;
+      : this._(verbose, interruption, Greeting(banner.greeting));
+
+  IoHost._(bool verbose, this._interruption, this.greeting)
+      : logger = IoLogger(verbose: verbose, greeting: greeting);
 
   /// Reports to the terminal.
   final SmfLogger logger;
+
+  /// The greeting of the run, which the prompter says before its first
+  /// question unless the logger has printed something before.
+  final Greeting greeting;
 
   final Interruption _interruption;
 

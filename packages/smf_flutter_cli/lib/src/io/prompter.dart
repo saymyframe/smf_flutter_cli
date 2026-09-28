@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:mason_logger/mason_logger.dart' show darkGray, green, lightCyan;
 import 'package:smf_contracts/core.dart';
+import 'package:smf_flutter_cli/src/io/greeting.dart';
 import 'package:smf_flutter_cli/src/io/interruption.dart';
 
 /// A key the user pressed.
@@ -76,17 +77,19 @@ abstract interface class PromptTerminal {
 /// interrupted. The terminal is restored whatever happens.
 final class TerminalPrompter implements SmfPrompter {
   /// Creates the prompter that asks in a terminal, and says [greeting]
-  /// before its first question, if given.
+  /// before its first question, if given and not dropped by then.
   TerminalPrompter(
     this._terminal, {
     required Interruption interruption,
-    String? greeting,
-  })  : _interruption = interruption,
-        _greeting = greeting;
+    this.greeting,
+  }) : _interruption = interruption;
 
   final PromptTerminal _terminal;
   final Interruption _interruption;
-  String? _greeting;
+
+  /// The greeting that the prompter says before its first question, unless
+  /// the logger dropped it; see [Greeting].
+  final Greeting? greeting;
 
   static const _hideCursor = '\x1b[?25l';
   static const _showCursor = '\x1b[?25h';
@@ -109,10 +112,7 @@ final class TerminalPrompter implements SmfPrompter {
 
   Future<T> _ask<T>(String question, T Function() answer) async {
     _interruption.throwIfInterrupted();
-    if (_greeting case final greeting?) {
-      _terminal.write('$greeting\n');
-      _greeting = null;
-    }
+    if (greeting?.take() case final text?) _terminal.write('$text\n');
     try {
       _terminal
         ..enterRawMode()

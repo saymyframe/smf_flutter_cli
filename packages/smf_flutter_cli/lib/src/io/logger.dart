@@ -2,6 +2,7 @@ import 'dart:io' as io;
 
 import 'package:mason_logger/mason_logger.dart';
 import 'package:smf_contracts/core.dart';
+import 'package:smf_flutter_cli/src/io/greeting.dart';
 
 /// Reports to the standard output and error of the process, with the
 /// styles and the progress animation of `mason_logger`.
@@ -10,24 +11,32 @@ import 'package:smf_contracts/core.dart';
 /// message clears first; otherwise, as in CI, a progress is a line when it
 /// starts and one when it ends.
 final class IoLogger implements SmfLogger {
-  /// Creates the logger, which shows the details only if [verbose].
+  /// Creates the logger, which shows the details only if [verbose], and
+  /// drops [greeting], if given, once it has printed something.
   ///
   /// [terminal] is whether the standard output is a terminal, which tests
   /// may set.
-  IoLogger({required bool verbose, bool? terminal})
+  IoLogger({required bool verbose, bool? terminal, Greeting? greeting})
       : _logger = Logger(level: verbose ? Level.verbose : Level.info),
+        _verbose = verbose,
         _stdout = io.stdout,
-        _terminal = terminal ?? io.stdout.hasTerminal;
+        _terminal = terminal ?? io.stdout.hasTerminal,
+        _greeting = greeting;
 
   final Logger _logger;
+  final bool _verbose;
   final io.Stdout _stdout;
   final bool _terminal;
+  final Greeting? _greeting;
   _IoProgress? _active;
 
-  /// Clears the line of the animated progress, so that a message does not
-  /// land after it, and lets long lines wrap again, which the animation
-  /// stops; the progress draws itself again below the message.
-  void _clearProgress() {
+  /// Makes room for a message: drops the greeting, which only opens the
+  /// output of a run, and clears the line of the animated progress, so that
+  /// the message does not land after it, and lets long lines wrap again,
+  /// which the animation stops; the progress draws itself again below the
+  /// message.
+  void _beforeMessage() {
+    _greeting?.drop();
     if (_terminal && (_active?.running ?? false)) {
       _stdout.write('\u001b[2K\r\u001b[?7h');
     }
@@ -35,37 +44,39 @@ final class IoLogger implements SmfLogger {
 
   @override
   void info(String message) {
-    _clearProgress();
+    _beforeMessage();
     _logger.info(message);
   }
 
   @override
   void detail(String message) {
-    _clearProgress();
+    // Details are shown only in verbose output.
+    if (!_verbose) return;
+    _beforeMessage();
     _logger.detail(message);
   }
 
   @override
   void warn(String message) {
-    _clearProgress();
+    _beforeMessage();
     _logger.warn(message);
   }
 
   @override
   void error(String message) {
-    _clearProgress();
+    _beforeMessage();
     _logger.err(message);
   }
 
   @override
   void success(String message) {
-    _clearProgress();
+    _beforeMessage();
     _logger.success(message);
   }
 
   @override
   SmfProgress progress(String message) {
-    _clearProgress();
+    _beforeMessage();
     return _active = _IoProgress(
       message,
       animated: _terminal ? _logger.progress(message) : null,
