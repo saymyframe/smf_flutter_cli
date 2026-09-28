@@ -464,9 +464,10 @@ Future<(int, String)> _flutter(List<String> arguments, String directory) async {
     arguments,
     workingDirectory: directory,
     runInShell: Platform.isWindows,
-    // Flutter writes UTF-8, on Windows too.
-    stdoutEncoding: utf8,
-    stderrEncoding: utf8,
+    // Flutter writes UTF-8, on Windows too; cmd.exe, which runs it there,
+    // may write a message of its own in another encoding.
+    stdoutEncoding: const Utf8Codec(allowMalformed: true),
+    stderrEncoding: const Utf8Codec(allowMalformed: true),
   );
   return (result.exitCode, '${result.stdout}${result.stderr}');
 }
