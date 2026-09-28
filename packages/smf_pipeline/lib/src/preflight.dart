@@ -237,7 +237,12 @@ final class PlannedCheck {
 /// The result of one check.
 final class CheckResult {
   /// Creates the result.
-  const CheckResult(this.planned, this.status, {this.installed = false});
+  const CheckResult(
+    this.planned,
+    this.status, {
+    this.installed = false,
+    this.setupFailure,
+  });
 
   /// The check.
   final PlannedCheck planned;
@@ -247,6 +252,10 @@ final class CheckResult {
 
   /// Whether the pipeline installed what the check found missing.
   final bool installed;
+
+  /// Why setting up what the check found missing failed, if the user agreed
+  /// to it and it failed; [status] is then what the check found before.
+  final String? setupFailure;
 
   /// Whether the check passed.
   bool get passed => status is PreflightPassed;
@@ -436,8 +445,9 @@ Future<List<CheckResult>> _installMissing(
 }
 
 /// The problems of the [results] that did not pass: an error for a
-/// required check, a warning otherwise. Unless it is an [explain] run, the
-/// checks that passed are reported to the detailed log.
+/// required check, a warning otherwise, which ends with why setting it up
+/// failed, if it did. Unless it is an [explain] run, the checks that passed
+/// are reported to the detailed log.
 List<SmfIssue> _checkIssues(
   List<CheckResult> results,
   SmfLogger logger, {
@@ -450,7 +460,7 @@ List<SmfIssue> _checkIssues(
       if (!explain) logger.detail('✓ ${check.description}');
       continue;
     }
-    final problem = switch (result.status) {
+    final state = switch (result.status) {
       PreflightMissing(:final instructions, found: null) =>
         '${check.description} is missing. $instructions',
       PreflightMissing(:final instructions, :final found?) =>
@@ -458,6 +468,10 @@ List<SmfIssue> _checkIssues(
       PreflightFailed(:final message) =>
         '${check.description} could not be checked: $message',
       PreflightPassed() => '',
+    };
+    final problem = switch (result.setupFailure) {
+      final failure? => '$state Setting it up failed: $failure',
+      null => state,
     };
     final origin = result.planned.origin;
     final issueOrigin = origin is PipelineOrigin ? null : origin;
@@ -480,7 +494,9 @@ bool _installable(CheckResult result) => switch (result.status) {
 ///
 /// The question tells what the check found and how to set it up by hand,
 /// such as which version the installation activates in place of the one
-/// that is active.
+/// that is active. When setting it up fails, such as a login that the user
+/// stops, what the check found still holds, and the result tells why the
+/// setup failed; see [CheckResult.setupFailure].
 Future<CheckResult> _install(
   CheckResult found,
   PipelineEnvironment environment,
@@ -508,10 +524,7 @@ Future<CheckResult> _install(
   } on SmfCancelledException {
     rethrow;
   } on Object catch (error) {
-    return CheckResult(
-      planned,
-      PreflightFailed('The installation failed: $error'),
-    );
+    return CheckResult(planned, found.status, setupFailure: '$error');
   }
 }
 

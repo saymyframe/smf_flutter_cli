@@ -37,10 +37,13 @@ const _installFirebase = 'Firebase CLI is missing (needed by firebase_core). '
     'Install it with "npm install -g firebase-tools", or see '
     'https://firebase.google.com/docs/cli. Set it up now?';
 
+/// The instructions for logging in to the Firebase CLI.
+const _howToLogIn = 'Log in with "firebase login", or on a remote machine, '
+    'such as over SSH, with "firebase login --no-localhost".';
+
 /// The question whether to log in to the Firebase CLI.
-const _logIn = 'Firebase login is missing (needed by firebase_core). Log in '
-    'with "firebase login", or on a remote machine, such as over SSH, with '
-    '"firebase login --no-localhost". Set it up now?';
+const _logIn = 'Firebase login is missing (needed by firebase_core). '
+    '$_howToLogIn Set it up now?';
 
 /// The question whether to activate flutterfire_cli.
 const _flutterfireMissing = 'FlutterFire CLI 1.4.1 or a later 1.x is missing '
@@ -401,7 +404,9 @@ void main() {
     ]);
   });
 
-  test('a login that fails leaves a warning that says how it ended', () async {
+  test(
+      'a login that fails leaves the login missing, with how the login '
+      'ended', () async {
     final machine = _Machine(confirmations: [true, true, false], loginCode: 1);
 
     final code = await machine.create();
@@ -416,13 +421,16 @@ void main() {
       '$_firebase login',
       '$_dart pub global list',
     ]);
+    // The check found no login, and the login failed; the check itself
+    // did not fail.
     expect(machine.warnings, [
-      contains('Firebase login could not be checked: The installation '
-          'failed: "firebase login" exited with code 1.'),
+      endsWith(
+        'Firebase login is missing. $_howToLogIn Setting it up failed: '
+        '"firebase login" exited with code 1.',
+      ),
       contains('FlutterFire CLI 1.4.1 or a later 1.x is missing.'),
       _notConfigured(
-        'FlutterFire CLI 1.4.1 or a later 1.x is missing, and Firebase login '
-        'could not be checked',
+        'Firebase login and FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),
       _fixAfterConfigure,
     ]);
@@ -587,6 +595,31 @@ void main() {
       (call) => call.line == '$_firebase login --no-localhost',
     );
     expect(login.interactive, isTrue);
+  });
+
+  test(
+      'over SSH, a login that the user stops at the authorization code '
+      'leaves the login missing, and Firebase configured later', () async {
+    // The Firebase CLI ends its login with code 2 on Ctrl-C at the prompt
+    // for the code.
+    final machine = _Machine(
+      confirmations: [true, true, true],
+      operatingSystem: HostOperatingSystem.linux,
+      variables: {'SSH_CONNECTION': '10.0.0.2 51234 10.0.0.1 22'},
+      loginCode: 2,
+    );
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.warnings, [
+      endsWith(
+        'Firebase login is missing. $_howToLogIn Setting it up failed: '
+        '"firebase login --no-localhost" exited with code 2.',
+      ),
+      contains('Setup of the Xcode project on a Mac is needed'),
+      _notConfigured('Firebase login is missing'),
+    ]);
   });
 
   test('a run that skips external setup installs nothing and asks nothing',

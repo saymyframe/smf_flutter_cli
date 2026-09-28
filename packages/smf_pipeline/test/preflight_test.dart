@@ -410,7 +410,9 @@ void main() {
       expect(report.issues.last.origin, isNull);
     });
 
-    test('a check or an installation that throws fails', () async {
+    test(
+        'a setup that throws leaves what the check found, and says why it '
+        'failed', () async {
       final host = FakeHost(answers: [true], terminal: true);
       final report = await runPreflight(
         [
@@ -419,11 +421,21 @@ void main() {
         host.environment(),
       );
 
+      // Not that the check failed: it found the tool missing, and the
+      // setup failed.
+      final result = report.results.single;
+      expect(result.status, isA<PreflightMissing>());
+      expect(result.installed, isFalse);
+      expect(result.setupFailure, 'Bad state: no npm');
       expect(
         report.issues.single.message,
-        contains('The installation failed: Bad state: no npm'),
+        'Throwing is missing. Install it. Setting it up failed: Bad state: '
+        'no npm',
       );
+      expect(report.issues.single.isError, isFalse);
+    });
 
+    test('a check that throws fails', () async {
       final checkFails = await runPreflight(
         [PlannedCheck(_ThrowingCheck(), _module)],
         FakeHost().environment(),
@@ -654,7 +666,10 @@ final class _ThrowingCheck extends PreflightCheck {
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
     if (installs) {
-      return const PreflightMissing(instructions: 'Install', installable: true);
+      return const PreflightMissing(
+        instructions: 'Install it.',
+        installable: true,
+      );
     }
     throw StateError('cannot check');
   }

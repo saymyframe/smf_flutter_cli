@@ -659,6 +659,26 @@ void main() {
         expect(skipped.single.reason, 'Tool and Account are missing');
       });
 
+      test('call missing what a failed setup left missing', () async {
+        environment = environmentOf(interactive: true);
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [_step('firebase', needsBoth)],
+          checks: const [
+            CheckResult(tool, PreflightPassed()),
+            CheckResult(
+              account,
+              missing,
+              setupFailure: '"firebase login" exited with code 2.',
+            ),
+          ],
+        );
+
+        expect(skipped.single.reason, 'Account is missing');
+      });
+
       test('name what a check found in place of what it looks for', () async {
         environment = environmentOf(interactive: true);
         const older = PreflightMissing(
