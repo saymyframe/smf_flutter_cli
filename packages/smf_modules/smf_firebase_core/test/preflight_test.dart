@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:io';
+
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
@@ -175,6 +177,44 @@ void main() {
           instructions: '$run exited with code 1. $install',
           installable: false,
         ),
+      );
+    });
+
+    test(
+        'offers to install it again when firebase cannot start, and says '
+        'why on one line', () async {
+      final machine = FakeMachine(
+        operatingSystem: HostOperatingSystem.linux,
+        executables: {'firebase': _firebase},
+        reply: (call) => throw ProcessException(
+          call.executable,
+          call.arguments,
+          'Permission denied',
+          13,
+        ),
+      );
+
+      expect(
+        await check.check(machine),
+        _missing(
+          found: '$_firebase does not run',
+          instructions: '"firebase --version" could not start: '
+              'ProcessException: Permission denied Command: $_firebase '
+              '--version. $install',
+          installable: true,
+        ),
+      );
+    });
+
+    test('lets the cancellation of the run through', () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => throw const SmfCancelledException(),
+      );
+
+      await expectLater(
+        check.check(machine),
+        throwsA(isA<SmfCancelledException>()),
       );
     });
 
@@ -453,6 +493,43 @@ void main() {
         expect(machine.calls.last.environment, {'NO_UPDATE_NOTIFIER': '1'});
         expect(machine.calls.last.workingDirectory, isNotNull);
       }
+    });
+
+    test('says the same when the Firebase CLI cannot start', () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (call) => throw ProcessException(
+          call.executable,
+          call.arguments,
+          'Permission denied',
+          13,
+        ),
+      );
+
+      expect(
+        await check.check(machine),
+        _missing(
+          found: 'the Firebase CLI does not run',
+          instructions: startsWith('Install the Firebase CLI, then log in'),
+          installable: false,
+        ),
+      );
+      expect(machine.calls.map((call) => call.line), [
+        '$_firebase login:list --json',
+        '$_firebase --version',
+      ]);
+      // A command of a Firebase CLI that runs that cannot start is the
+      // error of the check.
+      final starts = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (call) => call.arguments.first == '--version'
+            ? _result(0, stdout: '15.14.0\n')
+            : throw ProcessException(call.executable, call.arguments, 'x'),
+      );
+      await expectLater(
+        check.check(starts),
+        throwsA(isA<ProcessException>()),
+      );
     });
 
     test('offers to log in when there is no account', () async {

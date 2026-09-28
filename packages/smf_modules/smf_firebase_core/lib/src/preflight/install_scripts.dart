@@ -112,9 +112,10 @@ const _macos = r'''
 # command runs already.
 #
 # When Node.js is missing or older than 20, which the Firebase CLI needs, it
-# installs it first: with Homebrew if there is one, or else with nvm in the
-# home directory. It adds the directory of the global npm executables to the
-# PATH of new terminals. A Node.js of nvm is on the PATH of new terminals
+# installs it first: with nvm when the node on the PATH is one of nvm, which
+# puts its directory first on the PATH, or else with Homebrew if there is
+# one, or else with nvm in the home directory. It adds the directory of the
+# global npm executables to the PATH of new terminals. A Node.js of nvm is on the PATH of new terminals
 # only while it is the default one of nvm, so for the Firebase CLI of one,
 # it adds a firebase command in ~/.local/bin that runs it with that Node.js.
 # It prints the directories of the Firebase CLI and of Node.js as lines
@@ -159,10 +160,21 @@ load_nvm() {
   set -u
 }
 
+# Whether the node on the PATH is one of nvm, which a Node.js of Homebrew
+# would not come before.
+node_of_nvm() {
+  command_exists node && is_of_nvm "$(dirname "$(command -v node)")"
+}
+
 install_node() {
-  if command_exists brew; then
+  if command_exists brew && ! node_of_nvm; then
+    local before
+    before="$(brew list --versions node 2>/dev/null || true)"
     brew install node
-    echo "smf-note=Installed Node.js with Homebrew."
+    # Homebrew installs nothing when it has Node.js already.
+    if [ "$(brew list --versions node 2>/dev/null || true)" != "$before" ]; then
+      echo "smf-note=Installed Node.js with Homebrew."
+    fi
     return
   fi
   if ! load_nvm; then
@@ -188,13 +200,29 @@ node_major_version() {
   echo "${version%%.*}"
 }
 
+# The profile of the login shell of the user, which new terminals read. Of
+# ~/.bash_profile, ~/.bash_login and ~/.profile, bash reads only the first
+# that there is, so a new ~/.bash_profile would hide the others.
+login_profile() {
+  case "${SHELL:-}" in
+    */bash)
+      local file
+      for file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        if [ -f "$file" ]; then
+          echo "$file"
+          return
+        fi
+      done
+      echo "$HOME/.bash_profile" ;;
+    *) echo "$HOME/.zprofile" ;;
+  esac
+}
+
 # Adds the directory $1 to the PATH in the profile of the login shell, which
 # new terminals read.
 add_to_path_of_new_terminals() {
-  local profile="$HOME/.zprofile"
-  case "${SHELL:-}" in
-    */bash) profile="$HOME/.bash_profile" ;;
-  esac
+  local profile
+  profile="$(login_profile)"
   touch "$profile"
   if ! grep -Fq "$1" "$profile"; then
     echo "export PATH=\"\$PATH:$1\"" >> "$profile"
@@ -230,10 +258,14 @@ is_of_nvm() {
 # terminal has. Installing again writes it again.
 add_firebase_command() {
   local node cli
-  node="$(command -v node)"
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
   {
     echo '#!/usr/bin/env bash'
     echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
@@ -413,10 +445,14 @@ link_target() {
 # it again.
 add_firebase_command() {
   local node cli
-  node="$(command -v node)"
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
   {
     echo '#!/usr/bin/env bash'
     echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
