@@ -254,7 +254,11 @@ String? _enclosing(AstNode node) {
       ExtensionDeclaration(:final name) => name?.lexeme,
       TopLevelVariableDeclaration(:final variables) =>
         _variableOf(variables, node),
+      // coverage:ignore-start
+      // The other children of a compilation unit are its directives and
+      // script tag, in which the index records no use.
       _ => null,
+      // coverage:ignore-end
     };
   }
   return null;

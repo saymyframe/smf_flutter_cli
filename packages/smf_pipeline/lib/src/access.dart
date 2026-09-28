@@ -23,8 +23,13 @@ import 'package:smf_pipeline/src/resolver.dart';
     case RoleTemplateOrigin(:final role):
       final roles = {role, ...role.visibleRoles};
       return (access: {...roles, ...open}, when: roles);
+    // coverage:ignore-start
+    // No check of access meets the contributions of the pipeline: the
+    // build_runner dependency goes to the merge of the pubspec only, and
+    // the check of the Flutter SDK to the preflight checks.
     case PipelineOrigin():
       return (access: open, when: const {});
+    // coverage:ignore-end
   }
 }
 

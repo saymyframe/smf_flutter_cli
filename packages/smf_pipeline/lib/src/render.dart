@@ -207,9 +207,11 @@ RenderedApp renderApp({
   for (final template in {...texts.imports.keys, ...variables.imports.keys}) {
     final (owner, templatePath) = template;
     // Only text files hold tags and read variables, and every brick
-    // rendered.
+    // rendered, so no test can reach the error.
     final path = bricks.renderedPaths[template] ??
+        // coverage:ignore-start
         (throw StateError('$templatePath of $owner was not rendered.'));
+    // coverage:ignore-end
     try {
       files[path] = _withImports(
         files[path]!,
