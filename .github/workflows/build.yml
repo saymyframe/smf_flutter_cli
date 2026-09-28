@@ -155,3 +155,85 @@ jobs:
       - name: Generate, analyze and test the apps of the fixture modules
         if: matrix.registry == 'fixtures'
         run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/apps"
+
+  macos:
+    name: macOS
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      FLUTTER_VERSION: "3.44.2"
+      # The SHA-256 of the release archive of FLUTTER_VERSION for macOS on
+      # Apple silicon, from
+      # https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json
+      FLUTTER_SHA256: "57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23"
+      PUB_ENVIRONMENT: ci
+      # The Xcode of the image that builds the apps.
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        run: |
+          archive="$RUNNER_TEMP/flutter.zip"
+          curl -fsSL --retry 3 -o "$archive" \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+          echo "$FLUTTER_SHA256  $archive" | shasum -a 256 -c -
+          unzip -q "$archive" -d "$RUNNER_TEMP"
+          rm "$archive"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
+
+      - name: Check the versions of the tools
+        run: |
+          flutter --version --machine > "$RUNNER_TEMP/flutter.json"
+          cat "$RUNNER_TEMP/flutter.json"
+          jq -e --arg flutter "$FLUTTER_VERSION" --arg dart "$DART_SDK" \
+            '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
+            "$RUNNER_TEMP/flutter.json"
+          xcodebuild -version
+          which -a ruby
+          ruby --version
+          ruby -e "require 'xcodeproj'; puts \"xcodeproj #{Xcodeproj::VERSION}\""
+          /usr/bin/ruby --version
+
+      - name: Cache pub packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-
+
+      - name: Get the packages of the workspace
+        run: dart pub get
+
+      - name: Test the packages
+        run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded
+
+      - name: Test the tools
+        if: ${{ !cancelled() }}
+        run: dart test tools
+
+      - name: Generate an app without Firebase and one with every module
+        if: ${{ !cancelled() }}
+        run: |
+          smf() {
+            dart run packages/smf_flutter_cli/bin/smf_flutter.dart create "$@" \
+              -o "$RUNNER_TEMP/apps" --no-input --skip-external-setup \
+              --no-dart-fix --strict
+          }
+          smf plain_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus
+          smf firebase_app -m home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics
+
+      - name: Build the app without Firebase for the iOS simulator
+        if: ${{ !cancelled() }}
+        working-directory: ${{ runner.temp }}/apps/plain_app
+        run: flutter build ios --simulator --no-codesign
+
+      - name: Build the app with every module for the iOS simulator
+        if: ${{ !cancelled() }}
+        working-directory: ${{ runner.temp }}/apps/firebase_app
+        run: flutter build ios --simulator --no-codesign
+
