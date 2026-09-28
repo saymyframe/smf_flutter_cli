@@ -82,9 +82,9 @@ melos:
         melos exec -c 4 --fail-fast --dir-exists=test -- dart test --reporter expanded && \
         dart test tools
     test:coverage:
-      description: Run tests and write coverage/lcov.info in every package with tests, then test the tools.
+      description: Run tests and write coverage/lcov.info, with the branches, in every package with tests, then test the tools.
       run: |
-        melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage && \
+        melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage --branch-coverage && \
         dart test tools
     check:
       run: |
