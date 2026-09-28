@@ -155,9 +155,9 @@ abstract interface class TerminalDevice {
 
 // coverage:ignore-start
 // The terminal of a user and the console of Windows, which no test has; the
-// tests give IoPromptTerminal and restoreTerminal a device of their own. This
-// is checked by hand in the terminals of macOS and Linux and in the console
-// of Windows.
+// tests give IoPromptTerminal and restoreTerminal a device of their own.
+// Check a change here by hand, in a terminal of macOS or Linux and in the
+// console of Windows.
 
 /// The terminal of the process, through `dart:io`, `stty` and
 /// `kernel32.dll`.

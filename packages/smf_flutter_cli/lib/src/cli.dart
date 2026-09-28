@@ -32,8 +32,9 @@ Future<int> runCli(
       version: packageVersion,
       usageLineLength: io.stdout.hasTerminal ? io.stdout.terminalColumns : 80,
       // coverage:ignore-start
-      // It runs once smf has created an app, which takes Flutter: the runs
-      // of the matrix in CI run it, and no test.
+      // It runs once smf has created an app, which takes Flutter, so no
+      // test runs it. In CI, the matrix runs it without the banner; the
+      // jobs that run smf create from its binary show the banner too.
       onCreated: (app) {
         if (banner) machine?.logger.info(communityBanner);
         onCreated?.call(app);
