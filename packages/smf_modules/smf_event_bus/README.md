@@ -14,7 +14,7 @@ smf create my_app -m event_bus
 
 You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
-SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS and Linux; Windows is not tested yet.
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
 
 ## Documentation
 
