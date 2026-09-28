@@ -87,11 +87,12 @@ const _revoked = '''
 Error: Failed to list Firebase projects. See firebase-debug.log for more info.
 ''';
 
-/// What `firebase projects:list --debug` printed on its standard output
-/// for the login of [_revoked] when no request reached Google, as on a
-/// machine without a network, shortened: the Firebase CLI says that the
-/// credentials are no longer valid when it cannot refresh the access token
-/// for any reason.
+/// What `firebase projects:list --debug` of firebase-tools 15.14.0 printed
+/// on its standard output for the login of [_revoked] when no request
+/// reached Google, shortened, with the reasons of a machine without a
+/// network in place of those of the run, whose proxy refused connections
+/// (see [_refused]): the Firebase CLI says that the credentials are no
+/// longer valid when it cannot refresh the access token for any reason.
 const _offline = '''
 [2026-09-28T12:52:54.917Z] > authorizing via signed-in user (me@example.com)
 [2026-09-28T12:52:54.921Z] > refreshing access token with scopes: []
@@ -107,9 +108,10 @@ For CI servers and headless environments, generate a new token with firebase log
 Error: Failed to list Firebase projects. See firebase-debug.log for more info.
 ''';
 
-/// What `firebase projects:list --debug` of firebase-tools 15.14.0 prints on
-/// its standard output for a login that works, with one project, shortened;
-/// the check reads only its exit code.
+/// The standard output of `firebase projects:list --debug` for a login that
+/// works, with one project, in the form of the sources of firebase-tools
+/// 15.14.0, since no such login was at hand; the check reads only the exit
+/// code of the command.
 const _oneProject = '''
 [2026-09-28T12:50:01.101Z] > authorizing via signed-in user (me@example.com)
 [2026-09-28T12:50:01.402Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
@@ -122,8 +124,8 @@ const _oneProject = '''
 1 project(s) total.
 ''';
 
-/// What `firebase projects:list --debug` prints on its standard output for
-/// a login that works without a project, shortened.
+/// The standard output of `firebase projects:list --debug` for a login that
+/// works without a project, in the same form as [_oneProject].
 const _noProject = '''
 [2026-09-28T12:50:01.101Z] > authorizing via signed-in user (me@example.com)
 No projects found.
@@ -131,6 +133,17 @@ No projects found.
 
 /// The API that lists the Firebase projects.
 const _projectsUrl = 'https://firebase.googleapis.com/v1beta1/projects';
+
+/// The line of a failed request as firebase-tools 15.14.0 printed it for a
+/// proxy that refused connections, with the options of the request
+/// shortened.
+const _refused = '[2026-09-28T12:52:54.926Z] *** [apiv2] error from '
+    'fetch($_tokenUrl, {"headers":{}, "method":"POST"}): FetchError: '
+    'request to $_tokenUrl failed, reason: connect ECONNREFUSED 127.0.0.1:9';
+
+/// The endpoint of Google that refreshes the access token of the Firebase
+/// CLI.
+const _tokenUrl = 'https://www.googleapis.com/oauth2/v3/token';
 
 /// What `firebase projects:list` writes on its standard error when it
 /// fails.
@@ -503,11 +516,9 @@ void main() {
     FakeMachine machineWith(
       SmfProcessResult result, {
       SmfProcessResult? projects,
-      Map<String, String> variables = const {},
     }) =>
         FakeMachine(
           executables: {'firebase': _firebase},
-          variables: variables,
           reply: (call) => switch (call.arguments.first) {
             '--version' => _result(0, stdout: '15.14.0\n'),
             'projects:list' => projects ?? _result(0, stdout: _oneProject),
@@ -626,6 +637,25 @@ void main() {
       );
       // The email in the output is never shown.
       expect((offline as PreflightFailed).message, isNot(contains('@')));
+
+      // A proxy that refuses connections, as in the run of the fixtures.
+      expect(
+        await check.check(
+          loggedIn(
+            _result(
+              2,
+              stdout: '$_refused\n\nError: Failed to list Firebase projects. '
+                  'See firebase-debug.log for more info.\n',
+            ),
+          ),
+        ),
+        _failed(
+          '"firebase projects:list --debug" exited with code 2:\n'
+          'Failed to list Firebase projects.\n'
+          'request to https://www.googleapis.com/oauth2/v3/token failed, '
+          'reason: connect ECONNREFUSED 127.0.0.1:9',
+        ),
+      );
 
       // A request that got no answer in time.
       expect(
