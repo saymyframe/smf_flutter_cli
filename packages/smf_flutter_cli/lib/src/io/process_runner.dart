@@ -71,12 +71,13 @@ final class IoProcessRunner implements SmfProcessRunner {
             },
           ));
     // Once the command is stopped, a process that it started may still hold
-    // its output.
+    // its output, both streams at once.
     final limit = timedOut ? stopGrace : null;
+    final output = await Future.wait([stdout.text(limit), stderr.text(limit)]);
     final result = SmfProcessResult(
       exitCode: exitCode,
-      stdout: await stdout.text(limit),
-      stderr: await stderr.text(limit),
+      stdout: output.first,
+      stderr: output.last,
       timedOut: timedOut,
     );
     _interruption.throwIfInterrupted();

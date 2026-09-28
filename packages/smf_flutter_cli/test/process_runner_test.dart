@@ -292,8 +292,16 @@ void main() {
         addTearDown(() => Process.killPid(sleep, ProcessSignal.sigkill));
         expect(result.timedOut, isTrue);
         expect(result.stdout, 'started\n');
-        // Not the minute for which the process holds the output.
-        expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
+        // Not the minute for which the process holds both streams, nor
+        // stopGrace for each of them.
+        expect(
+          clock.elapsed,
+          lessThan(
+            const Duration(seconds: 1) +
+                IoProcessRunner.stopGrace +
+                const Duration(milliseconds: 1500),
+          ),
+        );
       },
       testOn: '!windows',
     );
