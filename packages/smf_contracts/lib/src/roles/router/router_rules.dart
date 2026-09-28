@@ -823,9 +823,9 @@ List<SmfIssue> _checkScreenConstructors(StructuralRuleInput<RoutesData> input) {
   final issues = <SmfIssue>[];
   for (final route in routerRole.facadeOf(input.roleInput).routes) {
     final screen = route.route.screen;
-    // The rule router.routes rejects a screen outside the app, so no app
-    // with one renders.
-    final path = screen.file!;
+    final path = screen.file;
+    // The rule router.routes reports a screen outside the app.
+    if (path == null) continue;
     final origin = ModuleOrigin(route.feature.module);
     final required = RequiredClass(
       screen.className,

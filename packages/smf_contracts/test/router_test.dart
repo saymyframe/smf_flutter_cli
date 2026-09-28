@@ -1905,6 +1905,33 @@ class DetailsScreen extends StatelessWidget {
       expect(problems.single, contains('must have a const unnamed'));
     });
 
+    test('skips a screen outside the app, which router.routes reports', () {
+      const outside = RoutesData([
+        Route(
+          '/',
+          name: 'home',
+          screen: ScreenRef(
+            'HomeScreen',
+            import: ImportRef('package:other/home_screen.dart'),
+          ),
+        ),
+      ]);
+
+      expect(
+        routerRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [dataOf(routerRole, outside)],
+              presentRoles: {routerRole},
+              context: testContext,
+            ),
+            files: const {},
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
     test('rejects a screen whose file is missing', () {
       final issues = check(const {});
 

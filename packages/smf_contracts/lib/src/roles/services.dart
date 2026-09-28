@@ -239,6 +239,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   /// The file of each implementation is imported with a prefix of the
   /// template's own, `impl0`, `impl1` and so on, so that no factory can hide
   /// or be hidden by a name of the template or of another implementation.
+  ///
+  /// [input] has an implementation from every provider, as the rule of the
+  /// role makes sure before an app renders, so a role that has one provider
+  /// has one implementation.
   @override
   RoleOutput render(RoleHookInput<RoleImplementation> input) {
     final all = [
@@ -275,9 +279,7 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
-  /// The code of the only implementation in [all]: the rule of the role
-  /// makes every provider contribute one, and the role is present only
-  /// with a provider.
+  /// The code of the only implementation in [all]; see [render].
   String _single(List<_Prefixed> all) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
