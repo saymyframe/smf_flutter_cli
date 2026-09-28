@@ -1091,6 +1091,7 @@ void main() {
         preflight: const PreflightReport([], []),
         leftOut: const [],
         strict: false,
+        canDoWithout: (_) => true,
         operatingSystem: HostOperatingSystem.linux,
       ).lines;
 
@@ -1129,6 +1130,7 @@ void main() {
         ),
         leftOut: const [],
         strict: false,
+        canDoWithout: (_) => true,
         operatingSystem: HostOperatingSystem.linux,
         sdkIssues: const [SmfIssue('The app needs Dart ^3.99.0.')],
       ).lines;

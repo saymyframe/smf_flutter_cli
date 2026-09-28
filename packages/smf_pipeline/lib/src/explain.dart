@@ -38,8 +38,8 @@ final class Explanation {
     required this.preflight,
     required this.leftOut,
     required this.strict,
+    required this.canDoWithout,
     required this.operatingSystem,
-    this.canDoWithout = _anyModules,
     this.onConflict = OnConflict.prompt,
     this.sdkIssues = const [],
     this.codegen = const [],
@@ -303,7 +303,3 @@ const Map<HostOperatingSystem, String> _systemNames = {
   HostOperatingSystem.windows: 'Windows',
   HostOperatingSystem.other: 'other systems',
 };
-
-/// The default of [Explanation.canDoWithout]: an app can be made without
-/// any modules.
-bool _anyModules(Set<ModuleId> modules) => true;
