@@ -90,6 +90,11 @@ String _firebaseCommandNote(String home, String node) =>
     'Added a firebase command to $home/.local/bin, which runs the Firebase '
     'CLI with $node.';
 
+/// The note that the firebase command [path], which did not run, still
+/// does not.
+String _staleNote(String path) => '$path does not run, and a new terminal '
+    'may run it in place of the Firebase CLI that SMF installed: remove it.';
+
 /// The script of the Firebase CLI in the global npm directory [prefix].
 String _cliIn(String prefix) =>
     '$prefix/lib/node_modules/firebase-tools/lib/bin/firebase.js';
@@ -506,6 +511,11 @@ void main() {
         'node $nodeBin/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}'), [nodeBin]);
+      // It stays first on the PATH of new terminals.
+      expect(
+        notesIn('${result.stdout}'),
+        [_staleNote('${machine.bin('stale').path}/firebase')],
+      );
     });
   });
 
@@ -675,6 +685,43 @@ void main() {
         'node $home/.npm-global/bin/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}').first, '$home/.npm-global/bin');
+      expect(
+        notesIn('${result.stdout}').last,
+        _staleNote('${machine.bin('stale').path}/firebase'),
+      );
+    });
+
+    test(
+        'tells about a Firebase CLI of the default Node.js of nvm that does '
+        'not run, which new terminals find first', () {
+      final home = machine.home.path;
+      final nvm = Directory('$home/.nvm')..createSync();
+      File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+      // The default Node.js of nvm, older than 20, with a Firebase CLI that
+      // stops on it, as npm installs one.
+      final node18 = machine.installNodeOfNvm('v18.20.8');
+      final prefix = Directory(node18).parent.path;
+      final cli = Directory(
+        '$prefix/lib/node_modules/firebase-tools/lib/bin',
+      )..createSync(recursive: true);
+      File('${cli.path}/firebase.js').writeAsStringSync(_firebase);
+      Process.runSync('chmod', ['+x', '${cli.path}/firebase.js']);
+      Link('$node18/firebase').createSync(
+        '../lib/node_modules/firebase-tools/lib/bin/firebase.js',
+      );
+
+      final result = machine.run(HostOperatingSystem.linux, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final node22 = '${nvm.path}/versions/node/v22.11.0';
+      expect(binDirsIn('${result.stdout}'), ['$node22/bin']);
+      const added = r'Added $HOME/.local/bin to the PATH in';
+      expect(notesIn('${result.stdout}'), [
+        'Installed the Firebase CLI with Node.js v22.11.0 of nvm.',
+        _firebaseCommandNote(home, '$node22/bin/node'),
+        '$added $home/.bashrc, for new terminals.',
+        _staleNote('$node18/firebase'),
+      ]);
     });
   });
 

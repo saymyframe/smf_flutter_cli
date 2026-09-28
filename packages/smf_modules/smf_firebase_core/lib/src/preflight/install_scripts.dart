@@ -132,6 +132,15 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 # that is too old for it.
 firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
 
+# Tells about $1, a firebase command that did not run before the
+# installation, if it still does not with the PATH $2 of before: a new
+# terminal may run it in place of the Firebase CLI that the script installs.
+note_stale_firebase() {
+  if [ -n "$1" ] && ! PATH="$2" "$1" --version >/dev/null 2>&1; then
+    echo "smf-note=$1 does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  fi
+}
+
 path_contains() {
   case ":$PATH:" in
     *":$1:"*) return 0 ;;
@@ -239,6 +248,8 @@ add_firebase_command() {
 }
 
 if ! firebase_runs; then
+  stale="$(command -v firebase || true)"
+  stale_path="$PATH"
   if [ "$(node_major_version)" -lt 20 ]; then
     install_node
     # An older node earlier on the PATH still comes first.
@@ -263,6 +274,7 @@ if ! firebase_runs; then
     add_firebase_command "$npm_bin"
   fi
   export PATH="$npm_bin:$PATH"
+  note_stale_firebase "$stale" "$stale_path"
 fi
 
 firebase --version
@@ -296,6 +308,15 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 # runs the Firebase CLI of another Node.js, or a Firebase CLI on a Node.js
 # that is too old for it.
 firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
+
+# Tells about $1, a firebase command that did not run before the
+# installation, if it still does not with the PATH $2 of before: a new
+# terminal may run it in place of the Firebase CLI that the script installs.
+note_stale_firebase() {
+  if [ -n "$1" ] && ! PATH="$2" "$1" --version >/dev/null 2>&1; then
+    echo "smf-note=$1 does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  fi
+}
 
 path_contains() {
   case ":$PATH:" in
@@ -410,6 +431,8 @@ add_firebase_command() {
 }
 
 if ! firebase_runs; then
+  stale="$(command -v firebase || true)"
+  stale_path="$PATH"
   if [ "$(node_major_version)" -lt 20 ]; then
     install_nvm
     set +u
@@ -433,6 +456,7 @@ if ! firebase_runs; then
   fi
   add_firebase_command "$npm_bin"
   export PATH="$npm_bin:$PATH"
+  note_stale_firebase "$stale" "$stale_path"
 fi
 
 firebase --version
