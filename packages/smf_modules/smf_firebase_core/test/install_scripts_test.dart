@@ -49,9 +49,11 @@ echo 15.14.0
 ''';
 
 /// Node.js [version], which runs a script, such as the Firebase CLI, with
-/// sh, telling it the version in `FAKE_NODE`.
+/// sh, telling it the version in `FAKE_NODE`, and prints its own path for
+/// `-p process.execPath`.
 String _node(String version) => '#!/bin/sh\n'
     'echo "node \$*" >> "\$HOME/calls.log"\n'
+    'if [ "\$1" = -p ]; then echo "\$0"; exit 0; fi\n'
     'if [ -f "\$1" ]; then export FAKE_NODE=$version; exec /bin/sh "\$@"; fi\n'
     'echo $version\n';
 
@@ -431,6 +433,8 @@ void main() {
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        // For the firebase command of ~/.local/bin.
+        'node -p process.execPath',
         'node $nodeBin/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}'), [nodeBin]);
@@ -607,6 +611,7 @@ void main() {
         'npm config set prefix $home/.npm-global',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        'node -p process.execPath',
         'node $home/.npm-global/bin/firebase --version',
       ]);
       expect(
@@ -630,6 +635,33 @@ void main() {
         _firebaseCommandNote(home, node),
         'Added \$HOME/.local/bin to the PATH in $rc, for new terminals.',
       ]);
+    });
+
+    test(
+        'runs the Firebase CLI with the Node.js behind a shim, which picks a '
+        'version by the directory', () {
+      // A shim of a version manager first on the PATH, which runs the
+      // Node.js it picks, as asdf does.
+      machine.installNode('real');
+      final real = machine.path.removeLast();
+      final shims = machine.bin('shims');
+      for (final tool in ['node', 'npm']) {
+        File('${shims.path}/$tool')
+            .writeAsStringSync('#!/bin/sh\nexec "$real/$tool" "\$@"\n');
+        Process.runSync('chmod', ['+x', '${shims.path}/$tool']);
+      }
+      machine.path.add(shims.path);
+
+      final result = machine.run(HostOperatingSystem.linux, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(
+        machine.homeFile('.local/bin/firebase'),
+        _firebaseCommand(
+          '$real/node',
+          _cliIn('${machine.home.path}/.npm-global'),
+        ),
+      );
     });
 
     test('uses the rc file of zsh for zsh', () {
@@ -749,6 +781,7 @@ void main() {
         'npm config set prefix $home/.npm-global',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        'node -p process.execPath',
         // The one it installed comes first on the PATH.
         'node $home/.npm-global/bin/firebase --version',
       ]);

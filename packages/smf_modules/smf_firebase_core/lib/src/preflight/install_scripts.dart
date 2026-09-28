@@ -242,7 +242,9 @@ is_of_nvm() {
 # terminal has. Installing again writes it again.
 add_firebase_command() {
   local node cli
-  node="$(command -v node)"
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
@@ -425,7 +427,9 @@ link_target() {
 # it again.
 add_firebase_command() {
   local node cli
-  node="$(command -v node)"
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
