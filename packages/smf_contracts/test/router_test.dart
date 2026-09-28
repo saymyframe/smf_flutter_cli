@@ -507,7 +507,8 @@ void main() {
       );
 
       expect(result.stderr, isEmpty);
-      final lines = (result.stdout as String).trim().split('\n');
+      // print ends a line with \r\n on Windows.
+      final lines = LineSplitter.split(result.stdout as String).toList();
       expect(lines, hasLength(9));
       expect(lines[0], 'home.root | /home | /home');
       expect(
