@@ -42,13 +42,15 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// there, and the instructions give that command for any remote machine.
 ///
 /// Like every command of the Firebase CLI, `login:list` and `projects:list`
-/// keep records of their own while they only read: they update the time of
-/// their last error in the configuration of the Firebase CLI and fetch its
-/// message of the day once a day, `projects:list` keeps there the access
-/// token that it refreshes, as every command that asks Google does, and
-/// `--debug` leaves `firebase-debug.log` in the directory where the command
-/// runs, which is among the temporary files of the run. The check turns off
-/// the check for updates, which would run in the background after them.
+/// keep records of their own while they only read: they clear the time of
+/// the last error of the Firebase CLI in its configuration, since their
+/// output is not a terminal, and fetch its message of the day once a day;
+/// `projects:list` keeps there the access token that it refreshes, as every
+/// command that asks Google does; and `--debug` leaves `firebase-debug.log`,
+/// with the email of the account and the names of its projects, in the
+/// directory where the command runs, among the temporary files of the run,
+/// which the pipeline deletes. The check turns off the check for updates,
+/// which would run in the background after them.
 final class FirebaseLoginCheck extends PreflightCheck {
   /// Creates the check.
   const FirebaseLoginCheck();
