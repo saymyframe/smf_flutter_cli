@@ -346,6 +346,27 @@ void main() {
         cyclic.dependsOnOf(cyclic.registrationOf(_service('A'))!),
         isEmpty,
       );
+
+      // Two singletons: each asks whether the other waits.
+      final singletons = _graph([
+        _registration(
+          'A',
+          lifetime: DiLifetime.singleton,
+          deps: [_service('B')],
+        ),
+        _registration(
+          'B',
+          lifetime: DiLifetime.singleton,
+          deps: [_service('A')],
+        ),
+      ]);
+      for (final name in ['A', 'B']) {
+        expect(
+          singletons.dependsOnOf(singletons.registrationOf(_service(name))!),
+          isEmpty,
+          reason: name,
+        );
+      }
     });
   });
 
@@ -409,6 +430,25 @@ void main() {
         const _Container({DiCapability.asyncInit, DiCapability.dependsOn})
             .validate(input),
         isEmpty,
+      );
+    });
+
+    test('leaves a service that nobody registers to the template', () {
+      final missing = inputOf(
+        diRole,
+        data: _data([
+          _registration(
+            'A',
+            lifetime: DiLifetime.singleton,
+            deps: [_service('Missing')],
+          ),
+        ]),
+      );
+
+      expect(const _Container({}).validate(missing), isEmpty);
+      expect(
+        diRole.template.validate(missing).single.message,
+        contains('needs Missing, which no module registers'),
       );
     });
 
