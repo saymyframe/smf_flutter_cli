@@ -326,6 +326,8 @@ void main() {
       expect(machine.calls.first, 'brew install node');
       expect(binDirsIn('${result.stdout}'), [brew.path]);
       expect(notesIn('${result.stdout}'), ['Installed Node.js with Homebrew.']);
+      // New terminals have the Node.js of Homebrew.
+      expect(machine.homeFile('.local/bin/firebase'), isNull);
     });
 
     test('installs Node.js 20 or newer when the one it finds is older', () {
@@ -385,10 +387,63 @@ void main() {
         'node $nodeBin/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}'), [nodeBin]);
-      // nvm puts the directory of its Node.js on the PATH itself.
+      // nvm puts the directory of its Node.js on the PATH of new terminals
+      // only while it is its default one.
+      final home = machine.home.path;
+      final profile = '$home/.zprofile';
       expect(notesIn('${result.stdout}'), [
         'Installed the Firebase CLI with Node.js v22.11.0 of nvm.',
+        _firebaseCommandNote(home, '$nodeBin/node'),
+        'Added \$HOME/.local/bin to the PATH in $profile, for new terminals.',
       ]);
+      expect(
+        machine.homeFile('.local/bin/firebase'),
+        _firebaseCommand(
+          '$nodeBin/node',
+          _cliIn('${nvm.path}/versions/node/v22.11.0'),
+        ),
+      );
+      expect(
+        machine.homeFile('.zprofile'),
+        r'export PATH="$PATH:$HOME/.local/bin"'
+        '\n',
+      );
+    });
+
+    test(
+        'writes a firebase command that a new terminal runs with an older '
+        'default Node.js of nvm', () {
+      final home = machine.home.path;
+      final nvm = Directory('$home/.nvm')..createSync();
+      File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+      // The default Node.js of nvm, older than 20 and without the Firebase
+      // CLI, first on the PATH of the terminal.
+      final node18 = machine.installNodeOfNvm('v18.20.8');
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final node22 = '${nvm.path}/versions/node/v22.11.0';
+      expect(binDirsIn('${result.stdout}'), ['$node22/bin']);
+      expect(
+        machine.homeFile('.local/bin/firebase'),
+        _firebaseCommand('$node22/bin/node', _cliIn(node22)),
+      );
+      final before = machine.runInTerminal(
+        'firebase --version',
+        path: [node18],
+      );
+      expect(before.exitCode, 127, reason: 'no firebase on the PATH');
+
+      // A new terminal, whose profile adds ~/.local/bin to the PATH.
+      final after = machine.runInTerminal(
+        'firebase --version',
+        path: [node18, '$home/.local/bin'],
+      );
+
+      expect(after.exitCode, 0, reason: '${after.stderr}');
+      expect('${after.stdout}', '15.14.0\n');
+      expect(machine.calls.last, 'node ${_cliIn(node22)} --version');
     });
 
     test('downloads nvm when there is no Node.js, Homebrew or nvm', () {
