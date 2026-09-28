@@ -237,6 +237,15 @@ jobs:
         working-directory: ${{ runner.temp }}/apps/firebase_app
         run: flutter build ios --simulator --no-codesign
 
+      # With the build phase for Crashlytics that flutterfire configure adds,
+      # fixed by the command that the README of the app gives.
+      - name: Archive the app with every module
+        if: ${{ !cancelled() }}
+        working-directory: packages/smf_modules/smf_firebase_core
+        env:
+          SMF_CRASHLYTICS_APP: ${{ runner.temp }}/apps/firebase_app
+        run: dart test test/crashlytics_archive_test.dart
+
   windows:
     name: Windows
     runs-on: windows-latest
