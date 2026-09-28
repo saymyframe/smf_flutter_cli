@@ -714,7 +714,8 @@ Iterable<SmfIssue> _wrapperIssues(
   SocketRef socket,
   Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
 ) sync* {
-  final [open, close] = socket.tags;
+  final open = socket.tags.first;
+  final close = socket.tags.last;
   final opening = tags[open];
   final closing = tags[close];
   if (opening == null || closing == null) {
@@ -806,10 +807,9 @@ bool _mayHold(
       return identical(owner, role) ||
           (known.family != null && owner.visibleRoles.contains(role));
     }
-    if (module == null) return false;
-    final descriptor = module.descriptor;
-    return descriptor.provides.contains(role) ||
-        (known.family != null && descriptor.roles.contains(role));
+    return module != null &&
+        (module.descriptor.provides.contains(role) ||
+            (known.family != null && module.descriptor.roles.contains(role)));
   }
   return module != null && module.id == socket.module;
 }
