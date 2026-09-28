@@ -90,7 +90,7 @@ void main() {
       expect(SmfNames.dartString('Home'), "'Home'");
       expect(SmfNames.dartString("It's"), r"'It\'s'");
       expect(SmfNames.dartString(r'$5 \ x'), r"'\$5 \\ x'");
-      expect(SmfNames.dartString('a\nb\tc'), r"'a\nb\tc'");
+      expect(SmfNames.dartString('a\r\nb\tc'), r"'a\r\nb\tc'");
       expect(SmfNames.dartString('\x01'), r"'\x01'");
     });
 

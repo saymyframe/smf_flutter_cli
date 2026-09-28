@@ -229,6 +229,18 @@ void main() {
       expect(family.segments, isNull);
     });
 
+    test('tells apart members whose keys differ only in their length', () {
+      final paths = SocketFamily<List<String>, CodeSocket>.role(
+        role,
+        'paths',
+        const CodeSocket(),
+        keyOf: (key) => key,
+      );
+
+      expect(paths(const ['home']), isNot(paths(const ['home', 'tab'])));
+      expect(paths(const ['home', 'tab']), isNot(paths(const ['home'])));
+    });
+
     test('rejects keys that are empty or not lower snake_case', () {
       final bad = SocketFamily<List<String>, CodeSocket>.role(
         role,
