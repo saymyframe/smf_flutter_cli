@@ -671,6 +671,31 @@ void main() {
           reason: status,
         );
       }
+      // The message of the day, which the Firebase CLI fetches without the
+      // login, and a host that is not an API of Google.
+      for (final url in [
+        'https://firebase-public.firebaseio.com/cli.json',
+        'https://example.com/v1beta1/projects',
+        'https://notgoogleapis.com/oauth2/v3/token',
+      ]) {
+        expect(
+          await check.check(
+            loggedIn(
+              _result(
+                2,
+                stdout: '<<< [apiv2][status] GET $url 401\n'
+                    '<<< [apiv2][status] POST $url 400\n'
+                    'Error: Failed to list Firebase projects.\n',
+              ),
+            ),
+          ),
+          _failed(
+            '"firebase projects:list --debug" exited with code 2:\n'
+            'Failed to list Firebase projects.',
+          ),
+          reason: url,
+        );
+      }
       // A bad request elsewhere than to refresh the access token.
       expect(
         await check.check(

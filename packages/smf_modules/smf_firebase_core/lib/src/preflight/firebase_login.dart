@@ -222,21 +222,31 @@ Future<PreflightStatus> _useLogin(
 final _status = RegExp(r'<<< \[apiv2\]\[status\] [A-Z]+ (\S+) (\d{3})\b');
 
 /// Whether [output], the debug output of a Firebase CLI command, has an
-/// answer of Google that rejects the login: 401 from an API, or 400 from the
-/// endpoint that refreshes the access token, which is how Google rejects a
-/// refresh token that has expired or was revoked (`invalid_grant`), and a
-/// login that needs to be renewed (`invalid_rapt`).
+/// answer of Google that rejects the login: 401 from an API of Google, or
+/// 400 from the endpoint that refreshes the access token, which is how
+/// Google rejects a refresh token that has expired or was revoked
+/// (`invalid_grant`), and a login that needs to be renewed (`invalid_rapt`).
 ///
-/// A machine without a network gets no answer at all, even when the Firebase
-/// CLI says that the credentials are no longer valid, which it says for any
-/// failure to refresh the token.
-bool _rejectedIn(String output) => _status.allMatches(output).any(
-      (match) => switch (match[2]) {
+/// Only the hosts of Google that the Firebase CLI reaches with the login
+/// count, under `googleapis.com`: it also fetches its message of the day
+/// from `firebase-public.firebaseio.com`, without the login. A machine
+/// without a network gets no answer at all, even when the Firebase CLI says
+/// that the credentials are no longer valid, which it says for any failure
+/// to refresh the token.
+bool _rejectedIn(String output) => _status.allMatches(output).any((match) {
+      final url = Uri.tryParse(match[1]!);
+      if (url == null || !_isGoogleApi(url.host)) return false;
+      return switch (match[2]) {
         '401' => true,
-        '400' => match[1]!.endsWith('/token'),
+        '400' => url.path.endsWith('/token'),
         _ => false,
-      },
-    );
+      };
+    });
+
+/// Whether [host] is one of the APIs of Google, such as
+/// `firebase.googleapis.com` or `www.googleapis.com`.
+bool _isGoogleApi(String host) =>
+    host == 'googleapis.com' || host.endsWith('.googleapis.com');
 
 /// The line of the error with which a Firebase CLI command ended, such as
 /// `Error: Failed to list Firebase projects. See firebase-debug.log for more
