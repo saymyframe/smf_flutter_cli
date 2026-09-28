@@ -277,19 +277,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Show the drives and the temporary directories
+      # SMF generates an app in %TEMP% and moves it into place, which the
+      # job puts on another drive, as moving between drives copies the app.
+      - name: Check that the temporary directories are on two drives
         run: |
           "TEMP: $env:TEMP"
-          "GetTempPath: $([IO.Path]::GetTempPath())"
           "RUNNER_TEMP: $env:RUNNER_TEMP"
-          "GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE"
-          "LOCALAPPDATA: $env:LOCALAPPDATA"
-          git config --show-origin --get-all core.autocrlf
-          Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize Name, Root, Used, Free
-          $PSVersionTable
-          powershell -NoLogo -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
-          Get-Command node, npm, winget, choco, scoop -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
-          node --version
+          if ((Split-Path -Qualifier $env:TEMP) -eq (Split-Path -Qualifier $env:RUNNER_TEMP)) {
+            throw 'TEMP and RUNNER_TEMP are on one drive.'
+          }
 
       - name: Setup Flutter
         run: |
@@ -326,24 +322,33 @@ jobs:
         if: ${{ !cancelled() }}
         run: dart test tools
 
-      # In a directory with a space. flutter analyze of Flutter 3.44 fails in
-      # one whose path has letters beyond ASCII, on every system:
-      # https://github.com/flutter/flutter/pull/191377
+      # In a directory with a space in its name, and then in one whose name
+      # has letters beyond ASCII too, where the matrix analyzes the app with
+      # dart analyze, as flutter analyze of Flutter 3.44 fails there on every
+      # system (https://github.com/flutter/flutter/pull/191377).
       - name: Generate, analyze and test the apps with every module
         if: ${{ !cancelled() }}
-        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)' 'every module (riverpod)'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)'
+          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps застосунки é" 'every module (riverpod)'
 
+      # As a user runs it, with the full dart fix of the app.
       - name: Generate an app in a directory with letters beyond ASCII
         if: ${{ !cancelled() }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          # smf writes UTF-8.
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é'
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create my_app -m home,bottom_tabs,riverpod,get_it,event_bus,firebase_crashlytics,firebase_analytics -o $apps --no-input --skip-external-setup --strict
-          Set-Location (Join-Path $apps 'my_app')
-          # flutter analyze fails here, as above.
+          $output = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create my_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus,firebase_crashlytics,firebase_analytics -o $apps --no-input --skip-external-setup --strict | Out-String
+          $output
+          $app = Join-Path $apps 'my_app'
+          if (-not $output.Contains("cd `"$app`"")) { throw 'SMF does not say how to go to the app.' }
+          Set-Location $app
           dart analyze --fatal-infos
           flutter test
-          # SMF generates the apps in %TEMP%, on C:, and moves them to D:.
+          # SMF generates the apps in %TEMP% and moves them to another drive.
           $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
           if ($left) { throw "SMF left $left in $env:TEMP." }
 
@@ -365,3 +370,4 @@ jobs:
           if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
             throw 'SMF does not find the FlutterFire CLI.'
           }
+
