@@ -23,7 +23,7 @@ Future<void> bootstrap() async {
 }
 ```
 
-From then on, the errors that the app does not handle go to Crashlytics. The code of the app reports other errors with `createCrashReporter().recordError(error, stackTrace)`.
+From then on, the errors of the main isolate that the app does not handle go to Crashlytics. The code of the app reports other errors with `createCrashReporter().recordError(error, stackTrace)`.
 
 After `flutterfire configure`, SMF on macOS fixes the Crashlytics build phase that the FlutterFire CLI adds, so that `flutter build ipa` works when the app uses Swift Package Manager.
 

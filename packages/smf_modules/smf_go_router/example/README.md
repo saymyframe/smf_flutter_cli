@@ -10,6 +10,7 @@ smf create my_app -m go_router,home --no-input
 The module adds go_router to the `pubspec.yaml` of the app, and `lib/core/router/app_router_factory.dart`, which turns the routes of the features into a `GoRouter`:
 
 ```dart
+@override
 late final GoRouter config = GoRouter(
   initialLocation: '/home',
   observers: _observers(),

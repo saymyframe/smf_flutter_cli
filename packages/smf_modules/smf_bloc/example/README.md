@@ -17,7 +17,7 @@ dependencies:
   go_router: "^17.5.0"
 ```
 
-BLoC needs no widget around the app and no start-up code, so that is all the module adds. A feature that keeps state brings the Cubits or Blocs of its screens in its variant for `bloc`. The start screen `home` has no state, which is why this app gets only the package.
+`go_router` is there for the start screen. BLoC needs no widget around the app and no start-up code, so `flutter_bloc` is all the module adds. A feature that keeps state brings the Cubits or Blocs of its screens in its variant for `bloc`. The start screen `home` has no state, which is why this app gets only the package.
 
 Without `-m`, `smf create` asks which module manages the state of the app, and offers `riverpod` and None as well. An app has at most one.
 
