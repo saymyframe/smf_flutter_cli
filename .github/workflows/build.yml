@@ -237,3 +237,99 @@ jobs:
         working-directory: ${{ runner.temp }}/apps/firebase_app
         run: flutter build ios --simulator --no-codesign
 
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      FLUTTER_VERSION: "3.44.2"
+      # The SHA-256 of the release archive of FLUTTER_VERSION for Windows,
+      # from
+      # https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
+      FLUTTER_SHA256: "d79ae99807ba744b843e54f048308c629061456fdc7b0753251fb96eb5346a0e"
+      PUB_ENVIRONMENT: ci
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show the drives and the temporary directories
+        run: |
+          "TEMP: $env:TEMP"
+          "GetTempPath: $([IO.Path]::GetTempPath())"
+          "RUNNER_TEMP: $env:RUNNER_TEMP"
+          "GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE"
+          "LOCALAPPDATA: $env:LOCALAPPDATA"
+          git config --show-origin --get-all core.autocrlf
+          Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize Name, Root, Used, Free
+          $PSVersionTable
+          powershell -NoLogo -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+          Get-Command node, npm, winget, choco, scoop -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
+          node --version
+
+      - name: Setup Flutter
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'flutter.zip'
+          curl.exe -fsSL --retry 3 -o $archive "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_$env:FLUTTER_VERSION-stable.zip"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          if ($hash -ne $env:FLUTTER_SHA256) { throw "The SHA-256 of the archive is $hash." }
+          # The tar of Windows, which reads a ZIP archive; that of Git does not.
+          & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item $archive
+          Join-Path $env:RUNNER_TEMP 'flutter\bin' >> $env:GITHUB_PATH
+          & (Join-Path $env:RUNNER_TEMP 'flutter\bin\flutter.bat') --disable-analytics
+
+      - name: Check the versions of Flutter and Dart
+        run: |
+          $machine = flutter --version --machine | Out-String
+          $machine
+          $versions = $machine | ConvertFrom-Json
+          if ($versions.frameworkVersion -ne $env:FLUTTER_VERSION -or -not $versions.dartSdkVersion.StartsWith($env:DART_SDK)) {
+            throw 'Flutter or Dart is not the pinned version.'
+          }
+
+      - name: Cache pub packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~\AppData\Local\Pub\Cache
+          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-
+
+      - name: Get the packages of the workspace
+        run: dart pub get
+
+      - name: Test the packages
+        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded
+
+      - name: Test the tools
+        if: ${{ !cancelled() }}
+        run: dart test tools
+
+      - name: Generate apps in a directory with a space and letters beyond ASCII
+        if: ${{ !cancelled() }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é'
+          foreach ($app in @(
+            @('plain_app', 'go_router,home,bottom_tabs,riverpod,get_it,event_bus'),
+            @('firebase_app', 'home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics')
+          )) {
+            dart run packages/smf_flutter_cli/bin/smf_flutter.dart create $app[0] -m $app[1] -o $apps --no-input --skip-external-setup --no-dart-fix --strict
+            Push-Location (Join-Path $apps $app[0])
+            flutter analyze
+            Pop-Location
+          }
+          Get-ChildItem $env:TEMP -Filter 'smf_*' -ErrorAction SilentlyContinue
+
+      - name: Run the FlutterFire CLI through dart.bat
+        if: ${{ !cancelled() }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          dart pub global activate flutterfire_cli 1.4.1
+          dart pub global run flutterfire_cli:flutterfire --version
