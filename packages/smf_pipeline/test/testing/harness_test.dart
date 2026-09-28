@@ -874,21 +874,21 @@ void main() {
       });
 
       test('lets its template report what it does', () async {
+        // As a template that reads the themes of the app to choose does.
         final role = colors(
           _AskTemplate(
             alsoDoes: (environment) async {
-              final logger = environment.logger;
-              final progress = logger.progress('Choosing a color')
-                ..update('Still choosing');
-              logger
-                ..detail('No color given')
+              final logger = environment.logger
                 ..info('Choosing a color')
+                ..detail('Reading lib/theme.dart');
+              logger.progress('Reading the light theme')
+                ..update('Reading the colors of the light theme')
+                ..complete('Read the light theme');
+              logger.progress('Reading the dark theme').fail('No dark theme');
+              logger
+                ..error('lib/theme.dart has no dark theme')
                 ..warn('Green unless --color says otherwise')
-                ..error('A problem that the template reports')
-                ..success('Chose a color');
-              progress
-                ..complete('Chose a color')
-                ..fail('Could not choose');
+                ..success('Read the themes');
             },
           ),
         );
