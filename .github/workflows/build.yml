@@ -140,10 +140,12 @@ jobs:
       # Every app is generated with `smf create --no-input
       # --skip-external-setup --no-dart-fix --strict` and must pass
       # `flutter analyze`, and then the tests that the packages keep for it
-      # in `app_tests/`, with `flutter test`.
+      # in `app_tests/`, with `flutter test`. The matrices run in a directory
+      # with a space in its name, and the last step checks one app in a
+      # directory whose name has letters beyond ASCII too.
       - name: Generate, analyze and test the apps of the CLI's modules
         if: matrix.registry == 'real'
-        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/apps"
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
 
       - name: Compare the brick of flutter_core with flutter create
         if: ${{ !cancelled() && matrix.registry == 'real' }}
@@ -154,7 +156,24 @@ jobs:
 
       - name: Generate, analyze and test the apps of the fixture modules
         if: matrix.registry == 'fixtures'
-        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/apps"
+        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
+
+      # flutter analyze of Flutter 3.44 fails in a directory whose path has
+      # letters beyond ASCII, on every system
+      # (https://github.com/flutter/flutter/pull/191377), so the matrix
+      # analyzes the app there with dart analyze.
+      - name: Generate, analyze and test an app in a directory with letters beyond ASCII
+        if: ${{ !cancelled() }}
+        run: |
+          apps="$RUNNER_TEMP/SMF apps застосунки é"
+          if [ "$REGISTRY" = real ]; then
+            dart run packages/smf_flutter_cli/tool/matrix.dart "$apps" 'every module (riverpod)'
+          else
+            # With the fixture module that generates code with build_runner.
+            dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$apps" 'every module (go_router, get_it, fake_riverpod)'
+          fi
+        env:
+          REGISTRY: ${{ matrix.registry }}
 
   macos:
     name: macOS
