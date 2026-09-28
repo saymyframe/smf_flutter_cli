@@ -427,6 +427,71 @@ void main() {
         _setupFailure('The Firebase CLI was not found.'),
       );
     });
+
+    test(
+        'logs in with --no-localhost over SSH, where the browser is on '
+        'another machine', () async {
+      for (final (name, value) in [
+        ('SSH_CONNECTION', '10.0.0.2 51234 10.0.0.1 22'),
+        ('SSH_CLIENT', '10.0.0.2 51234 22'),
+        ('SSH_TTY', '/dev/pts/0'),
+      ]) {
+        var code = 0;
+        final machine = FakeMachine(
+          operatingSystem: HostOperatingSystem.linux,
+          executables: {'firebase': _firebase},
+          variables: {name: value},
+          reply: (_) => _result(code),
+        );
+
+        await check.install(machine);
+
+        expect(
+          machine.calls.single.line,
+          '$_firebase login --no-localhost',
+          reason: name,
+        );
+        expect(machine.calls.single.interactive, isTrue);
+
+        code = 1;
+        await expectLater(
+          check.install(machine),
+          _setupFailure('"firebase login --no-localhost" exited with code 1.'),
+          reason: name,
+        );
+      }
+    });
+
+    test('logs in on the machine itself when a variable of SSH is empty',
+        () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        variables: {'SSH_CONNECTION': '', 'SSH_TTY': ''},
+      );
+
+      await check.install(machine);
+
+      expect(machine.calls.single.line, '$_firebase login');
+    });
+
+    test('tells a session over SSH by its variables', () {
+      expect(isOverSsh(FakeMachine()), isFalse);
+      expect(
+        isOverSsh(FakeMachine(variables: {'SSH_AUTH_SOCK': '/tmp/agent'})),
+        isFalse,
+        reason: 'an SSH agent runs on the machine of the user too',
+      );
+      expect(
+        isOverSsh(
+          FakeMachine(
+            operatingSystem: HostOperatingSystem.windows,
+            variables: {'SSH_CONNECTION': '10.0.0.2 51234 10.0.0.1 22'},
+          ),
+        ),
+        isTrue,
+        reason: 'the OpenSSH server of Windows sets it too',
+      );
+    });
   });
 
   group('FlutterfireCliCheck', () {

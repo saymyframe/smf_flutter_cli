@@ -47,13 +47,15 @@ typedef Reply = FutureOr<SmfProcessResult> Function(Call call);
 /// to the constructor, which succeeds without output by default; the lines
 /// of its output go to the `onOutput` of the caller, those of the standard
 /// output first. The confirmations given to it answer the yes-or-no
-/// questions in order. It records the commands, the questions, what was
-/// reported and the temporary files.
+/// questions in order. Its environment variables are [variables]. It
+/// records the commands, the questions, what was reported and the temporary
+/// files.
 final class FakeMachine implements SmfEnvironment {
   /// Creates the machine.
   FakeMachine({
     this.operatingSystem = HostOperatingSystem.macos,
     Map<String, String> executables = const {},
+    this.variables = const {},
     Reply? reply,
     List<bool> confirmations = const [],
   })  : executables = {...executables},
@@ -65,6 +67,9 @@ final class FakeMachine implements SmfEnvironment {
 
   /// The absolute path of each executable on the `PATH`, by name.
   final Map<String, String> executables;
+
+  /// The environment variables of the process, by name.
+  final Map<String, String> variables;
 
   final Reply _reply;
   final List<bool> _confirmations;
@@ -89,7 +94,7 @@ final class FakeMachine implements SmfEnvironment {
   bool get skipExternalSetup => false;
 
   @override
-  String? environmentVariable(String name) => null;
+  String? environmentVariable(String name) => variables[name];
 
   @override
   SmfProcessRunner get processRunner => _Runner(this);

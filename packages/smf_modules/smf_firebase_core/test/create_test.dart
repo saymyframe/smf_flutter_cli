@@ -91,11 +91,12 @@ final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 /// [operatingSystem] says otherwise.
 ///
 /// The Firebase CLI is missing until the install script puts `firebase`
-/// into `/opt/npm/bin`, and `firebase login` logs in unless it exits with
-/// [loginCode]. flutterfire_cli is not active, or in version [flutterfire],
-/// until `dart pub global activate` activates flutterfire_cli 1.4.1.
-/// `flutterfire configure` exits with [configureCode], and every other
-/// command succeeds.
+/// into `/opt/npm/bin`, and `firebase login`, with `--no-localhost` or
+/// not, logs in unless it exits with [loginCode]. flutterfire_cli is not
+/// active, or in version [flutterfire], until `dart pub global activate`
+/// activates flutterfire_cli 1.4.1. `flutterfire configure` exits with
+/// [configureCode], and every other command succeeds. The environment
+/// variables of the run are [variables] and the `PATH`.
 final class _Machine {
   _Machine({
     List<bool> confirmations = const [],
@@ -105,6 +106,7 @@ final class _Machine {
     this.flutterfire,
     this.operatingSystem = HostOperatingSystem.macos,
     this.configureCode = 0,
+    this.variables = const {},
   }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
@@ -129,6 +131,7 @@ final class _Machine {
   final String? flutterfire;
   final HostOperatingSystem operatingSystem;
   final int configureCode;
+  final Map<String, String> variables;
   late final FakeMachine fake;
   var _loggedIn = false;
   var _activated = false;
@@ -150,7 +153,8 @@ final class _Machine {
             : '{"status": "success"}',
       );
     }
-    if (line == '$_firebase login') {
+    if (line == '$_firebase login' ||
+        line == '$_firebase login --no-localhost') {
       _loggedIn = loginCode == 0;
       return SmfProcessResult(exitCode: loginCode);
     }
@@ -194,7 +198,7 @@ final class _Machine {
           processRunner: fake.processRunner,
           logger: fake.logger,
           fileSystem: files,
-          environmentVariables: const {'PATH': '/sdk/bin:/bin'},
+          environmentVariables: {...variables, 'PATH': '/sdk/bin:/bin'},
           operatingSystem: operatingSystem,
           hasTerminal: hasTerminal,
         ),
@@ -452,6 +456,35 @@ void main() {
           'machine is not a Mac. flutterfire configure changes the Xcode '
           'project only on macOS.'),
     ]);
+  });
+
+  test(
+      'over SSH, a user who agrees to log in logs in with --no-localhost, '
+      'and is asked as anywhere else', () async {
+    final machine = _Machine(
+      confirmations: [true, true, true, true],
+      operatingSystem: HostOperatingSystem.linux,
+      variables: {'SSH_CONNECTION': '10.0.0.2 51234 10.0.0.1 22'},
+    );
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions.take(2), [_installFirebase, _logIn]);
+    expect(
+      machine.checks,
+      containsAllInOrder([
+        '$_firebase login:list --json',
+        '$_firebase login --no-localhost',
+        '$_firebase login:list --json',
+        _configure,
+      ]),
+    );
+    expect(machine.checks, isNot(contains('$_firebase login')));
+    final login = machine.fake.calls.firstWhere(
+      (call) => call.line == '$_firebase login --no-localhost',
+    );
+    expect(login.interactive, isTrue);
   });
 
   test('a run that skips external setup installs nothing and asks nothing',

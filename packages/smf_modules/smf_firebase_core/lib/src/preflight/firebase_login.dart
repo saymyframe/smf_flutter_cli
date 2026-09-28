@@ -16,9 +16,11 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// in the terminal.
 ///
 /// `firebase login` waits for the browser to come back to a server on the
-/// machine, which a browser on another machine cannot reach, so the
-/// instructions give `firebase login --no-localhost` for a remote machine,
-/// such as one reached over SSH.
+/// machine, which a browser on another machine cannot reach. So over SSH, as
+/// [isOverSsh] tells, the check logs in with `firebase login --no-localhost`,
+/// which gives a link to open on any device and asks for the authorization
+/// code shown there, and the instructions give that command for any remote
+/// machine.
 ///
 /// Like every command of the Firebase CLI, `login:list` keeps records of its
 /// own while it only reads the accounts: it notes the time of its last
@@ -82,26 +84,39 @@ final class FirebaseLoginCheck extends PreflightCheck {
     };
   }
 
-  /// Runs `firebase login` in the terminal.
+  /// Runs `firebase login` in the terminal, with `--no-localhost` over SSH.
   @override
   Future<ToolInstall> install(SmfEnvironment environment) async {
     final firebase = await environment.findExecutable('firebase');
     if (firebase == null) {
       throw const PreflightSetupException('The Firebase CLI was not found.');
     }
+    final arguments = [
+      'login',
+      if (isOverSsh(environment)) '--no-localhost',
+    ];
     final code = await environment.processRunner.runInteractive(
       firebase,
-      const ['login'],
+      arguments,
       workingDirectory: await scratchDirectory(environment),
     );
     if (code != 0) {
+      final command = ['firebase', ...arguments].join(' ');
       throw PreflightSetupException(
-        '${endOf('firebase login', code, environment.operatingSystem)}.',
+        '${endOf(command, code, environment.operatingSystem)}.',
       );
     }
     return const ToolInstall();
   }
 }
+
+/// Whether the user reached the machine over SSH, whose server sets
+/// `SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` for the session: then the
+/// browser of the user runs on another machine.
+bool isOverSsh(SmfEnvironment environment) =>
+    const ['SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY'].any(
+      (name) => environment.environmentVariable(name)?.isNotEmpty ?? false,
+    );
 
 /// How to log in with the Firebase CLI, in the terminal of the machine or of
 /// a remote one.
