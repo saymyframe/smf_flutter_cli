@@ -1638,6 +1638,39 @@ class DetailsScreen extends StatelessWidget {
       );
     });
 
+    test('rejects parameter tags of a screen without an unnamed constructor',
+        () {
+      expect(
+        problems(
+          screen.replaceFirst(
+            'const DetailsScreen({',
+            'const DetailsScreen.of({',
+          ),
+        ),
+        [
+          contains('right before the parameter id'),
+          contains('right before the parameter tab'),
+        ],
+      );
+    });
+
+    test('finds the parameters after a default value with parentheses', () {
+      expect(
+        problems(
+          screen
+              .replaceFirst(
+                '({\n    $idTag',
+                '({\n    this.delay = const Duration(seconds: 1),\n    $idTag',
+              )
+              .replaceFirst(
+                '  final int id;',
+                '  final Duration delay;\n\n  final int id;',
+              ),
+        ),
+        isEmpty,
+      );
+    });
+
     test('skips screens with invalid names, which router.routes reports', () {
       expect(
         _moduleIssues(
