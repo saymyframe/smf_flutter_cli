@@ -86,7 +86,14 @@ final class IoProcessRunner implements SmfProcessRunner {
 
   /// Stops [process], which ran past its timeout, with the processes that
   /// it started, and returns its exit code.
+  ///
+  /// On Windows, `taskkill /t /f` ends the tree of the process, or else the
+  /// process is ended alone. Elsewhere, the process and the processes that
+  /// [_descendantsOf] finds get `SIGTERM`. Whatever is still there after
+  /// [stopGrace] gets `SIGKILL`; on Windows, which has no signals, that
+  /// ends the process.
   Future<int> _stop(io.Process process) async {
+    var started = const <int>[];
     if (_isWindows) {
       try {
         await io.Process.run(
@@ -96,17 +103,11 @@ final class IoProcessRunner implements SmfProcessRunner {
       } on Object {
         process.kill();
       }
-      return process.exitCode.timeout(
-        stopGrace,
-        onTimeout: () {
-          process.kill();
-          return process.exitCode;
-        },
-      );
+    } else {
+      started = await _descendantsOf(process.pid)
+        ..forEach(io.Process.killPid);
+      process.kill();
     }
-    final started = await _descendantsOf(process.pid);
-    started.forEach(io.Process.killPid);
-    process.kill();
     return process.exitCode.timeout(
       stopGrace,
       onTimeout: () {
