@@ -239,6 +239,8 @@ void main() {
 
         clock.stop();
         expect(result.timedOut, isTrue);
+        // SIGTERM at once, not SIGKILL after stopGrace.
+        expect(result.exitCode, -ProcessSignal.sigterm.signalNumber);
         expect(result.succeeded, isFalse);
         expect(result.stdout, 'started\n');
         // Not the minute of sleep, which holds the output until it ends.
@@ -320,6 +322,12 @@ void main() {
 
           clock.stop();
           expect(result.timedOut, isTrue, reason: ps);
+          // SIGTERM at once, not SIGKILL after stopGrace.
+          expect(
+            result.exitCode,
+            -ProcessSignal.sigterm.signalNumber,
+            reason: ps,
+          );
           expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
         }
       },
@@ -340,6 +348,8 @@ void main() {
 
         clock.stop();
         expect(result.timedOut, isTrue);
+        // SIGTERM at once, not SIGKILL after stopGrace.
+        expect(result.exitCode, -ProcessSignal.sigterm.signalNumber);
         expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
       },
       testOn: '!windows',
