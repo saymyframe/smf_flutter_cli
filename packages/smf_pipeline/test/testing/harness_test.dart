@@ -824,6 +824,81 @@ void main() {
         );
       });
 
+      test('is an error when its template asks without a terminal', () async {
+        final questions = <String, Future<void> Function(SmfPrompter)>{
+          'Sure?': (prompter) => prompter.confirm('Sure?'),
+          'Name?': (prompter) => prompter.input('Name?'),
+          'Which one?': (prompter) => prompter.select('Which one?', ['a']),
+          'Which?': (prompter) => prompter.multiSelect('Which?', ['a']),
+        };
+        for (final MapEntry(key: question, value: ask) in questions.entries) {
+          // The harness answers the question in a terminal, and then makes
+          // the choice again without one, where the option decides.
+          final result = await harnessOf(
+            colors(
+              _AskTemplate(
+                alsoDoes: (environment) => ask(environment.prompter),
+              ),
+            ),
+          ).check(asker);
+
+          expect(result.app, isNull, reason: question);
+          expect(
+            result.errors.single.message,
+            'The template of the colors role failed to choose: Bad state: The '
+            'contract harness cannot ask: $question',
+            reason: question,
+          );
+        }
+      });
+
+      test('is an error when its template runs a command', () async {
+        for (final run in <Future<void> Function(SmfProcessRunner)>[
+          (runner) => runner.run('git', ['config', 'user.name']),
+          (runner) => runner.runInteractive('git', ['config', 'user.name']),
+        ]) {
+          final result = await harnessOf(
+            colors(
+              _AskTemplate(
+                alsoDoes: (environment) => run(environment.processRunner),
+              ),
+            ),
+          ).check(asker);
+
+          expect(
+            result.errors.single.message,
+            'The template of the colors role failed to choose: Bad state: The '
+            'contract harness runs no commands: git',
+          );
+        }
+      });
+
+      test('lets its template report what it does', () async {
+        final role = colors(
+          _AskTemplate(
+            alsoDoes: (environment) async {
+              final logger = environment.logger;
+              final progress = logger.progress('Choosing a color')
+                ..update('Still choosing');
+              logger
+                ..detail('No color given')
+                ..info('Choosing a color')
+                ..warn('Green unless --color says otherwise')
+                ..error('A problem that the template reports')
+                ..success('Chose a color');
+              progress
+                ..complete('Chose a color')
+                ..fail('Could not choose');
+            },
+          ),
+        );
+
+        final result = await harnessOf(role).check(asker);
+
+        expect(result.errors, isEmpty);
+        expect(result.choices, {role: 'green'});
+      });
+
       test('of every kind gets its default or first choice', () async {
         final curious = TestRole<String>(
           'curious',
@@ -1677,9 +1752,14 @@ final class _PickTemplate extends RoleTemplate<String> {
 /// A template that asks which color, green or red, unless the option
 /// `--color` gives one, and gives [optionsFor] of its answer. If
 /// [needsTerminal] is set, it fails without a terminal even with the
+/// option. It does [alsoDoes] before it chooses, with or without the
 /// option.
 final class _AskTemplate extends RoleTemplate<String> {
-  _AskTemplate({this.optionsFor = _colorOf, this.needsTerminal = false});
+  _AskTemplate({
+    this.optionsFor = _colorOf,
+    this.needsTerminal = false,
+    this.alsoDoes,
+  });
 
   static Map<String, String> _colorOf(Object? choice) => {'color': '$choice'};
 
@@ -1689,11 +1769,16 @@ final class _AskTemplate extends RoleTemplate<String> {
   /// Whether the template cannot choose without a terminal.
   final bool needsTerminal;
 
+  /// What the template does with the machine and the user before it
+  /// chooses.
+  final Future<void> Function(SmfEnvironment environment)? alsoDoes;
+
   @override
   Future<Object?> choose(RoleChoiceContext<String> context) async {
     if (!context.environment.interactive && needsTerminal) {
       throw SmfUsageException('The ${context.role.id} needs a terminal.');
     }
+    await alsoDoes?.call(context.environment);
     return context.option('color') ??
         await context.environment.prompter.select(
           'Which color?',
