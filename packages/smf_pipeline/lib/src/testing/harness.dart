@@ -802,7 +802,8 @@ final class ContractHarness {
   ///   file that code generation or Flutter's localizations generate;
   /// - `l10n.yaml`, when the pubspec has Flutter generate the
   ///   localizations, is what `flutter pub get` can read: YAML with a map
-  ///   of options, whose options that name the generated file are text;
+  ///   of options, each of the type that Flutter reads it as, and without
+  ///   `synthetic-package: true`;
   /// - every imported or exported package is a dependency of the app, a
   ///   regular one for the code in `lib/` and `bin/`;
   /// - a module imports or exports the package of a provider of a role in
@@ -1252,9 +1253,10 @@ final class _ImportCheck {
 /// that `l10n.yaml` describes, in `output-dir`, or else in `arb-dir`, which
 /// is `lib/l10n` unless set. As Flutter 3.44 reads the file, an empty one
 /// and an option without a value take the defaults, and YAML that does not
-/// parse, a file that is not a map of options, and an option of those that
-/// is not text fail; the outputs then are those of the defaults, so that
-/// the problem of `l10n.yaml` is the only one.
+/// parse, a file that is not a map of options, and an option with a value
+/// of another type than Flutter reads it as fail (see [_l10nOptionProblems]);
+/// the outputs then are those of the defaults, so that the problem of
+/// `l10n.yaml` is the only one.
 ({Set<String> outputs, List<SmfIssue> issues}) _localizationsOf(
   RenderedApp app,
   MergedPubspec? pubspec,
@@ -1273,18 +1275,66 @@ final class _ImportCheck {
         ),
       );
   final options = _l10nOptions(l10n.text, fails);
-  String? read(String key) {
-    final value = options[key];
-    if (value is String?) return value;
-    fails('The option $key in l10n.yaml is not text');
-    return null;
-  }
-
-  final outputDirectory = read('output-dir');
-  final arbDirectory = read('arb-dir');
+  _l10nOptionProblems(options).forEach(fails);
+  String? read(String key) => switch (options[key]) {
+        final String value => value,
+        _ => null,
+      };
+  final directory =
+      _cleanPath(read('output-dir') ?? read('arb-dir') ?? 'lib/l10n');
   final file = read('output-localization-file') ?? 'app_localizations.dart';
-  final directory = _cleanPath(outputDirectory ?? arbDirectory ?? 'lib/l10n');
   return (outputs: {'$directory/$file'}, issues: issues);
+}
+
+/// The options of `l10n.yaml` that Flutter 3.44 reads as text.
+const _l10nTextOptions = [
+  'arb-dir',
+  'output-dir',
+  'template-arb-file',
+  'output-localization-file',
+  'untranslated-messages-file',
+  'output-class',
+  'header',
+  'header-file',
+];
+
+/// The options of `l10n.yaml` that Flutter 3.44 reads as true or false.
+const _l10nFlagOptions = [
+  'synthetic-package',
+  'use-deferred-loading',
+  'required-resource-attributes',
+  'nullable-getter',
+  'format',
+  'use-escaping',
+  'suppress-warnings',
+  'relax-syntax',
+  'use-named-parameters',
+];
+
+/// Why Flutter 3.44 fails on the options of `l10n.yaml`, [options]: one
+/// that it reads as text or as true or false with a value of another type,
+/// `preferred-supported-locales` that is neither text nor a list, and
+/// `synthetic-package: true`, a feature that Flutter removed. It ignores
+/// other options.
+Iterable<String> _l10nOptionProblems(YamlMap options) sync* {
+  for (final option in _l10nTextOptions) {
+    if (options[option] case final value? when value is! String) {
+      yield 'The option $option in l10n.yaml is not text';
+    }
+  }
+  for (final option in _l10nFlagOptions) {
+    if (options[option] case final value? when value is! bool) {
+      yield 'The option $option in l10n.yaml is not true or false';
+    }
+  }
+  if (options['preferred-supported-locales'] case final value?
+      when value is! String && value is! List<Object?>) {
+    yield 'The option preferred-supported-locales in l10n.yaml is neither '
+        'text nor a list';
+  }
+  if (options['synthetic-package'] == true) {
+    yield 'l10n.yaml turns on synthetic-package, which Flutter removed';
+  }
 }
 
 /// The options of `l10n.yaml`, [text], as Flutter reads them: none for an

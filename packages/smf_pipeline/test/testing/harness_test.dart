@@ -1696,35 +1696,84 @@ void main() {
         }
 
         // Flutter takes the defaults for an empty file and an option
-        // without a value.
+        // without a value, and the values below, and it ignores an option
+        // it does not know.
         expect(await errorsWith(''), isEmpty);
         expect(await errorsWith('output-dir:\n'), isEmpty);
+        expect(
+          await errorsWith(
+            'synthetic-package: false\n'
+            'nullable-getter: false\n'
+            'preferred-supported-locales: [en]\n'
+            'unknown-option: 5\n',
+          ),
+          isEmpty,
+        );
+        expect(await errorsWith('preferred-supported-locales: en\n'), isEmpty);
 
-        const fails = 'so flutter pub get fails to generate the localizations';
+        /// The error of the module for [problem] of its `l10n.yaml`.
+        String error(String problem) => 'error [l10n] l10n.yaml: $problem, '
+            'so flutter pub get fails to generate the localizations.';
+
         expect(await errorsWith('arb-dir: [lib/l10n\n'), [
           startsWith(
-            'error [l10n] l10n.yaml: l10n.yaml is not valid YAML, $fails: ',
+            'error [l10n] l10n.yaml: l10n.yaml is not valid YAML, so flutter '
+            'pub get fails to generate the localizations: ',
           ),
         ]);
         expect(await errorsWith('# No options yet.\n'), [
-          'error [l10n] l10n.yaml: l10n.yaml is not a map of options, $fails.',
+          error('l10n.yaml is not a map of options'),
         ]);
         expect(await errorsWith('- lib/l10n\n'), [
-          'error [l10n] l10n.yaml: l10n.yaml is not a map of options, $fails.',
+          error('l10n.yaml is not a map of options'),
         ]);
+
+        // Every option that Flutter 3.44 reads as text or as true or false,
+        // with a value of another type: a list, or yes, which is text in
+        // YAML 1.2.
+        const textOptions = [
+          'arb-dir',
+          'output-dir',
+          'template-arb-file',
+          'output-localization-file',
+          'untranslated-messages-file',
+          'output-class',
+          'header',
+          'header-file',
+        ];
+        const flagOptions = [
+          'synthetic-package',
+          'use-deferred-loading',
+          'required-resource-attributes',
+          'nullable-getter',
+          'format',
+          'use-escaping',
+          'suppress-warnings',
+          'relax-syntax',
+          'use-named-parameters',
+        ];
         expect(
-          await errorsWith('output-dir: 5\noutput-localization-file: true\n'),
+          await errorsWith(
+            [
+              for (final option in textOptions) '$option: [a]',
+              for (final option in flagOptions) '$option: yes',
+              'preferred-supported-locales: 5',
+            ].join('\n'),
+          ),
           [
-            equals(
-              'error [l10n] l10n.yaml: The option output-dir in l10n.yaml is '
-              'not text, $fails.',
-            ),
-            equals(
-              'error [l10n] l10n.yaml: The option output-localization-file '
-              'in l10n.yaml is not text, $fails.',
+            for (final option in textOptions)
+              error('The option $option in l10n.yaml is not text'),
+            for (final option in flagOptions)
+              error('The option $option in l10n.yaml is not true or false'),
+            error(
+              'The option preferred-supported-locales in l10n.yaml is neither '
+              'text nor a list',
             ),
           ],
         );
+        expect(await errorsWith('synthetic-package: true\n'), [
+          error('l10n.yaml turns on synthetic-package, which Flutter removed'),
+        ]);
       });
     });
   });
