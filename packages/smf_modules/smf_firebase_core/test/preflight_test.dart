@@ -379,9 +379,13 @@ void main() {
   group('FirebaseLoginCheck', () {
     const check = FirebaseLoginCheck();
 
+    /// A machine whose Firebase CLI runs, and whose `login:list` gives
+    /// [result].
     FakeMachine machineWith(SmfProcessResult result) => FakeMachine(
           executables: {'firebase': _firebase},
-          reply: (_) => result,
+          reply: (call) => call.arguments.first == '--version'
+              ? _result(0, stdout: '15.14.0\n')
+              : result,
         );
 
     test('needs the Firebase CLI first', () async {
@@ -409,6 +413,46 @@ void main() {
       expect(call.workingDirectory, directoryOf(machine.tempFiles.keys.single));
       expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
       expect(machine.reports, isEmpty);
+    });
+
+    test(
+        'says only that the Firebase CLI does not run when firebase '
+        '--version fails too', () async {
+      for (final failure in [
+        // The Firebase CLI stops before its JSON on an old Node.js.
+        _result(
+          1,
+          stderr: 'Firebase CLI v15.14.0 is incompatible with Node.js '
+              'v18.20.0 Please upgrade Node.js to version >=20.0.0',
+        ),
+        // A firebase command that runs the Firebase CLI of another
+        // Node.js, which has none.
+        _result(127, stderr: 'firebase: No such file or directory'),
+      ]) {
+        final machine = FakeMachine(
+          executables: {'firebase': _firebase},
+          reply: (_) => failure,
+        );
+
+        expect(
+          await check.check(machine),
+          _missing(
+            found: 'the Firebase CLI does not run',
+            instructions: 'Install the Firebase CLI, then log in with '
+                '"firebase login", or on a remote machine, such as over SSH, '
+                'with "firebase login --no-localhost".',
+            installable: false,
+          ),
+          reason: failure.stderr,
+        );
+        expect(machine.calls.map((call) => call.line), [
+          '$_firebase login:list --json',
+          '$_firebase --version',
+        ]);
+        // As the check of the Firebase CLI runs it.
+        expect(machine.calls.last.environment, {'NO_UPDATE_NOTIFIER': '1'});
+        expect(machine.calls.last.workingDirectory, isNotNull);
+      }
     });
 
     test('offers to log in when there is no account', () async {
@@ -455,21 +499,14 @@ void main() {
           'the accounts.\nUpdate available 15.14.0 → 15.15.0',
         ),
       );
-      // The Firebase CLI stops before its JSON on an old Node.js.
+      // An error of its own before its JSON, while the Firebase CLI runs.
       expect(
         await check.check(
-          machineWith(
-            _result(
-              1,
-              stderr: 'Firebase CLI v15.14.0 is incompatible with Node.js '
-                  'v18.20.0 Please upgrade Node.js to version >=20.0.0',
-            ),
-          ),
+          machineWith(_result(2, stderr: 'Error: Unexpected token in JSON')),
         ),
         _failed(
-          '"firebase login:list --json" exited with code 1:\nFirebase CLI '
-          'v15.14.0 is incompatible with Node.js v18.20.0 Please upgrade '
-          'Node.js to version >=20.0.0',
+          '"firebase login:list --json" exited with code 2:\nError: '
+          'Unexpected token in JSON',
         ),
       );
       for (final output in [

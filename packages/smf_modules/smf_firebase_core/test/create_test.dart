@@ -554,14 +554,16 @@ void main() {
           'Firebase CLI is needed, but /bin/firebase does not run. $why',
         ),
         endsWith(
-          'Firebase login could not be checked: "firebase login:list '
-          '--json" exited with code 127:\n$_noCli',
+          'Firebase login is needed, but the Firebase CLI does not run. '
+          'Install the Firebase CLI, then log in with "firebase login", or on '
+          'a remote machine, such as over SSH, with "firebase login '
+          '--no-localhost".',
         ),
         contains('FlutterFire CLI 1.4.1 or a later 1.x is missing.'),
         _notConfigured(
           'FlutterFire CLI 1.4.1 or a later 1.x is missing, and Firebase CLI '
-          'is needed, but /bin/firebase does not run, and Firebase login '
-          'could not be checked',
+          'is needed, but /bin/firebase does not run, and Firebase login is '
+          'needed, but the Firebase CLI does not run',
         ),
         _fixAfterConfigure,
       ]);

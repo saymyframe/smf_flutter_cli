@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
+import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 
 /// Checks that the user has logged in to the Firebase CLI, which
 /// `flutterfire configure` needs to reach the Firebase projects.
@@ -11,7 +12,9 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// exiting with code 0 either way. Its output holds the tokens of the
 /// accounts, so the check never shows it: when the command fails, it shows
 /// the error that the Firebase CLI reported in its JSON, and the end of the
-/// standard error, such as that the Node.js version is too old. The check
+/// standard error. When `firebase --version` fails too, the Firebase CLI
+/// does not run, such as on a Node.js that is too old for it, which
+/// [FirebaseCliCheck] tells about, so the check says only that. The check
 /// can log the user in with `firebase login`, which asks its own questions
 /// in the terminal.
 ///
@@ -55,6 +58,14 @@ final class FirebaseLoginCheck extends PreflightCheck {
     );
     final json = _jsonIn(result.stdout);
     if (!result.succeeded) {
+      // A Firebase CLI that does not run fails every command, and the check
+      // of the Firebase CLI tells how; the login is unknown until it runs.
+      if (!(await firebaseVersion(firebase, environment)).succeeded) {
+        return const PreflightMissing(
+          found: 'the Firebase CLI does not run',
+          instructions: 'Install the Firebase CLI, then log in $_howToLogIn.',
+        );
+      }
       final reasons = [
         if (json case {'status': 'error', 'error': final String error}
             when error.trim().isNotEmpty)

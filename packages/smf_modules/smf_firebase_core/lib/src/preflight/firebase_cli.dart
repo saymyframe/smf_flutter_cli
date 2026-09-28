@@ -2,6 +2,21 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
 import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 
+/// Runs `firebase --version` with the Firebase CLI [firebase], which tells
+/// whether it runs: in a directory of its own, where it may leave its
+/// `firebase-debug.log`, and without the check for updates, which would run
+/// in the background after it.
+Future<SmfProcessResult> firebaseVersion(
+  String firebase,
+  SmfEnvironment environment,
+) async =>
+    environment.processRunner.run(
+      firebase,
+      const ['--version'],
+      workingDirectory: await scratchDirectory(environment),
+      environment: const {'NO_UPDATE_NOTIFIER': '1'},
+    );
+
 /// Checks that the Firebase CLI is installed and runs, which
 /// `flutterfire configure` runs to reach the Firebase projects of the user.
 ///
@@ -38,13 +53,7 @@ final class FirebaseCliCheck extends PreflightCheck {
     if (firebase == null) {
       return PreflightMissing(instructions: _install, installable: installable);
     }
-    final result = await environment.processRunner.run(
-      firebase,
-      const ['--version'],
-      // The Firebase CLI writes firebase-debug.log where it runs.
-      workingDirectory: await scratchDirectory(environment),
-      environment: const {'NO_UPDATE_NOTIFIER': '1'},
-    );
+    final result = await firebaseVersion(firebase, environment);
     if (result.succeeded) return const PreflightPassed();
     final end = endOf(
       'firebase --version',
