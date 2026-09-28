@@ -128,6 +128,19 @@ void main() {
     expect(out, matches(RegExp(r'\x1b\[\?7h\x1b\[2K\r.*✓.* Got .*\n$')));
   });
 
+  test('in a terminal, a progress that fails ends on its line with ✗', () {
+    final (out, _) = _capture(
+      () {
+        IoLogger(verbose: false, terminal: true)
+            .progress('Getting')
+            .fail('Could not get');
+      },
+      terminal: true,
+    );
+
+    expect(out, matches(RegExp(r'\x1b\[2K\r.*✗.* Could not get .*\n$')));
+  });
+
   test('in a terminal, a message clears the line of the progress first', () {
     final (out, _) = _capture(() {
       final logger = IoLogger(verbose: false, terminal: true);

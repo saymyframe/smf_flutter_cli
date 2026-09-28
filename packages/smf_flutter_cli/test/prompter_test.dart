@@ -152,6 +152,19 @@ void main() {
       expect(terminal.output.toString(), contains('❯ ◯ a\n  ◉ b\n  ◯ c\n'));
     });
 
+    test('ignores other keys, and draws nothing for them', () async {
+      Future<String> outputWith(List<PromptKey> keys) async {
+        final terminal = _Terminal(keys);
+        await prompter(terminal).multiSelect('Which ones?', ['a', 'b']);
+        return '${terminal.output}';
+      }
+
+      expect(
+        await outputWith([_other, _key('x'), _enter]),
+        await outputWith([_enter]),
+      );
+    });
+
     test('may choose none', () async {
       final terminal = _Terminal([_enter]);
 

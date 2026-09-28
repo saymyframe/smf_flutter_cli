@@ -34,8 +34,9 @@ void main() {
         [0x20],
         [0xc3, 0xa9],
         [0xe2, 0x86, 0x91],
+        [0xf0, 0x9f, 0x98, 0x80],
       ]),
-      ['a', ' ', 'é', '↑', 'PromptControl.endOfInput'],
+      ['a', ' ', 'é', '↑', '😀', 'PromptControl.endOfInput'],
     );
   });
 
