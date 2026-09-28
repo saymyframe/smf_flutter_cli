@@ -73,6 +73,27 @@ echo started
 wait
 ''';
 
+/// A shell script that ignores SIGTERM, as the `sleep` it starts does
+/// then, and writes the process id of `sleep` to the file in its first
+/// argument; the script says so and waits for it.
+const _stubborn = r'''
+trap '' TERM
+sleep 60 &
+echo $! > "$1"
+echo started
+wait
+''';
+
+/// A shell script whose subshell starts `sleep` and ends, so that `sleep`
+/// belongs to no process of the script but keeps its output; the script
+/// writes the process id of `sleep` to the file in its first argument,
+/// says so, and runs a minute.
+const _escaping = r'''
+( sleep 60 & echo $! > "$1" )
+echo started
+sleep 60
+''';
+
 /// A Dart script that writes its process id to the file in its first
 /// argument, says so, and waits a minute.
 const _child = r'''
@@ -224,6 +245,94 @@ void main() {
         expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
         final sleep = File(started).readAsStringSync().trim();
         expect(await _gone(sleep), isTrue, reason: 'sleep $sleep still runs');
+      },
+      testOn: '!windows',
+    );
+
+    test(
+      'kills a command that ignores SIGTERM, and what it started, with '
+      'SIGKILL after stopGrace',
+      () async {
+        final started = p.join(temporary.path, 'sleep.pid');
+        final clock = Stopwatch()..start();
+
+        final result = await runner.run(
+          '/bin/sh',
+          [scriptOf('stubborn.sh', _stubborn), started],
+          timeout: const Duration(seconds: 1),
+        );
+
+        clock.stop();
+        expect(result.timedOut, isTrue);
+        expect(result.exitCode, -ProcessSignal.sigkill.signalNumber);
+        expect(result.stdout, 'started\n');
+        expect(clock.elapsed, greaterThan(IoProcessRunner.stopGrace));
+        expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
+        final sleep = File(started).readAsStringSync().trim();
+        expect(await _gone(sleep), isTrue, reason: 'sleep $sleep still runs');
+      },
+      testOn: '!windows',
+    );
+
+    test(
+      'gives what came when a process that left the command holds its output',
+      () async {
+        final escaped = p.join(temporary.path, 'escaped.pid');
+        final clock = Stopwatch()..start();
+
+        final result = await runner.run(
+          '/bin/sh',
+          [scriptOf('escaping.sh', _escaping), escaped],
+          timeout: const Duration(seconds: 1),
+        );
+
+        clock.stop();
+        // It outlives the command, so the test stops it.
+        final sleep = int.parse(File(escaped).readAsStringSync().trim());
+        addTearDown(() => Process.killPid(sleep, ProcessSignal.sigkill));
+        expect(result.timedOut, isTrue);
+        expect(result.stdout, 'started\n');
+        // Not the minute for which the process holds the output.
+        expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
+      },
+      testOn: '!windows',
+    );
+
+    test(
+      'stops the command itself when ps cannot list what it started',
+      () async {
+        for (final ps in [p.join(temporary.path, 'missing'), 'false']) {
+          final clock = Stopwatch()..start();
+
+          final result = await IoProcessRunner(interruption, ps: ps).run(
+            dart,
+            [scriptOf('sleeper.dart', _sleeper)],
+            timeout: const Duration(seconds: 1),
+          );
+
+          clock.stop();
+          expect(result.timedOut, isTrue, reason: ps);
+          expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
+        }
+      },
+      testOn: '!windows',
+    );
+
+    test(
+      'ends the command alone when taskkill of Windows cannot run',
+      () async {
+        final clock = Stopwatch()..start();
+
+        // taskkill is not there outside Windows.
+        final result = await IoProcessRunner(interruption, isWindows: true).run(
+          dart,
+          [scriptOf('sleeper.dart', _sleeper)],
+          timeout: const Duration(seconds: 1),
+        );
+
+        clock.stop();
+        expect(result.timedOut, isTrue);
+        expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
       },
       testOn: '!windows',
     );
