@@ -158,8 +158,8 @@ jobs:
         if: matrix.registry == 'fixtures'
         run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
 
-      # flutter analyze of Flutter 3.44 fails in a directory whose path has
-      # letters beyond ASCII, on every system
+      # flutter analyze of Flutter 3.44 and 3.47 fails in a directory whose
+      # path has letters beyond ASCII, on every system
       # (https://github.com/flutter/flutter/pull/191377), so the matrix
       # analyzes the app there with dart analyze.
       - name: Generate, analyze and test an app in a directory with letters beyond ASCII
@@ -324,8 +324,8 @@ jobs:
 
       # In a directory with a space in its name, and then in one whose name
       # has letters beyond ASCII too, where the matrix analyzes the app with
-      # dart analyze, as flutter analyze of Flutter 3.44 fails there on every
-      # system (https://github.com/flutter/flutter/pull/191377).
+      # dart analyze, as flutter analyze of Flutter 3.44 and 3.47 fails there
+      # on every system (https://github.com/flutter/flutter/pull/191377).
       - name: Generate, analyze and test the apps with every module
         if: ${{ !cancelled() }}
         run: |

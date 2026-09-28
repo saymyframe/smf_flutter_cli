@@ -463,7 +463,7 @@ final class _MatrixRun {
 /// The command that the matrix runs for `flutter` with [arguments] in
 /// [directory]: `flutter` with them, but for `flutter analyze` in a
 /// directory whose path has letters beyond ASCII, where `flutter analyze`
-/// of Flutter 3.44 fails on every system
+/// of Flutter 3.44 and 3.47 fails on every system
 /// (https://github.com/flutter/flutter/pull/191377). There it is
 /// `dart analyze --fatal-infos`, which reports the same issues.
 List<String> matrixCommand(List<String> arguments, String directory) =>
