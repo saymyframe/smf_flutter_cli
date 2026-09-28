@@ -14,8 +14,9 @@ import 'package:test/test.dart';
 
 /// npm, which reports as its global directory the parent of its own
 /// directory, like an npm installed with Node.js, or the one that
-/// `npm config set prefix` stored; `npm install -g firebase-tools` puts a
-/// firebase command into its `bin`.
+/// `npm config set prefix` stored. As npm does, `npm install -g
+/// firebase-tools` puts the Firebase CLI into its `lib/node_modules`, and a
+/// link to it, the firebase command, into its `bin`.
 const _npm = r'''#!/bin/sh
 echo "npm $*" >> "$HOME/calls.log"
 prefix="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,17 +26,33 @@ case "$1 $2" in
   "config get") echo "$prefix" ;;
   "config set") echo "$4" > "$HOME/npm_prefix" ;;
   "install -g")
-    mkdir -p "$prefix/bin"
-    printf '#!/bin/sh\necho 15.14.0\n' > "$prefix/bin/firebase"
-    chmod +x "$prefix/bin/firebase"
+    cli="$prefix/lib/node_modules/firebase-tools/lib/bin"
+    mkdir -p "$prefix/bin" "$cli"
+    cp "$TEMPLATES/firebase.js" "$cli/firebase.js"
+    chmod +x "$cli/firebase.js"
+    ln -sf ../lib/node_modules/firebase-tools/lib/bin/firebase.js \
+      "$prefix/bin/firebase"
     echo "added 600 packages in 9s" ;;
   *) echo "unexpected: npm $*" >&2; exit 64 ;;
 esac
 ''';
 
-/// Node.js [version].
+/// The Firebase CLI, whose shebang runs it with the node on the PATH, and
+/// which stops on a Node.js older than 20, as the real one does.
+const _firebase = r'''#!/usr/bin/env node
+case "$FAKE_NODE" in
+  v1[0-9].*)
+    echo "Firebase CLI v15.14.0 is incompatible with Node.js $FAKE_NODE" >&2
+    exit 1 ;;
+esac
+echo 15.14.0
+''';
+
+/// Node.js [version], which runs a script, such as the Firebase CLI, with
+/// sh, telling it the version in `FAKE_NODE`.
 String _node(String version) => '#!/bin/sh\n'
     'echo "node \$*" >> "\$HOME/calls.log"\n'
+    'if [ -f "\$1" ]; then export FAKE_NODE=$version; exec /bin/sh "\$@"; fi\n'
     'echo $version\n';
 
 /// Homebrew, which installs Node.js 22 with npm into its own directory.
@@ -64,7 +81,17 @@ nvm() {
 const _network = '#!/bin/sh\necho "network: \$0 \$*" >&2\nexit 97\n';
 
 /// The tools that the scripts and the fakes use besides the fakes.
-const _coreutils = ['cat', 'chmod', 'cp', 'dirname', 'grep', 'mkdir', 'touch'];
+const _coreutils = [
+  'cat',
+  'chmod',
+  'cp',
+  'dirname',
+  'grep',
+  'ln',
+  'mkdir',
+  'readlink',
+  'touch',
+];
 
 /// A machine for one run of a script, in a temporary directory.
 final class _Machine {
@@ -73,6 +100,7 @@ final class _Machine {
     templates.createSync();
     File('${templates.path}/npm').writeAsStringSync(_npm);
     File('${templates.path}/node').writeAsStringSync(_node('v22.11.0'));
+    File('${templates.path}/firebase.js').writeAsStringSync(_firebase);
     templates.listSync().whereType<File>().forEach(_executable);
     for (final tool in _coreutils) {
       final path = Process.runSync('which', [tool]).stdout.toString().trim();
@@ -103,6 +131,19 @@ final class _Machine {
     _write(directory, 'node', _node(version));
     File('${templates.path}/npm').copySync('${directory.path}/npm');
     _executable(File('${directory.path}/npm'));
+    path.add(directory.path);
+  }
+
+  /// Puts a firebase command that does not run first on the PATH, such as
+  /// one that runs the Firebase CLI of a Node.js that has none.
+  void staleFirebase() {
+    final directory = bin('stale');
+    _write(
+      directory,
+      'firebase',
+      '#!/bin/sh\necho "firebase of another Node.js: not found" >&2\n'
+          'exit 127\n',
+    );
     path.add(directory.path);
   }
 
@@ -183,6 +224,8 @@ void main() {
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        // The Firebase CLI that it installed runs.
+        'node $nodeBin/firebase --version',
       ]);
       // The directory is on the PATH already.
       expect(machine.homeFile('.zprofile'), isNull);
@@ -248,6 +291,7 @@ void main() {
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        'node ${brew.path}/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}'), [brew.path]);
     });
@@ -278,17 +322,16 @@ void main() {
       final result = machine.run(HostOperatingSystem.macos);
 
       expect(result, succeeded(), reason: '${result.stderr}');
+      final nodeBin = '${nvm.path}/versions/node/v22.11.0/bin';
       expect(machine.calls, [
         'nvm install --lts',
         'node -v',
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        'node $nodeBin/firebase --version',
       ]);
-      expect(
-        binDirsIn('${result.stdout}'),
-        ['${nvm.path}/versions/node/v22.11.0/bin'],
-      );
+      expect(binDirsIn('${result.stdout}'), [nodeBin]);
       // nvm puts the directory of its Node.js on the PATH itself.
       expect(notesIn('${result.stdout}'), [
         'Installed the Firebase CLI with Node.js v22.11.0 of nvm.',
@@ -316,6 +359,26 @@ void main() {
       expect(machine.calls, isEmpty);
       expect(binDirsIn('${result.stdout}'), [machine.bin('node').path]);
     });
+
+    test('installs the Firebase CLI when the firebase command does not run',
+        () {
+      machine
+        ..staleFirebase()
+        ..installNode('node');
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final nodeBin = machine.bin('node').path;
+      expect(machine.calls, [
+        'node -v',
+        'npm install -g firebase-tools',
+        'npm prefix -g',
+        // The one it installed comes first on the PATH.
+        'node $nodeBin/firebase --version',
+      ]);
+      expect(binDirsIn('${result.stdout}'), [nodeBin]);
+    });
   });
 
   group('the Linux script', () {
@@ -338,6 +401,7 @@ void main() {
         'npm config set prefix $home/.npm-global',
         'npm install -g firebase-tools',
         'npm prefix -g',
+        'node $home/.npm-global/bin/firebase --version',
       ]);
       expect(
         machine.homeFile('.bashrc'),
@@ -407,6 +471,28 @@ void main() {
 
       expect(result.exitCode, isNot(0));
       expect('${result.stderr}', contains('network: '));
+    });
+
+    test('installs the Firebase CLI when the firebase command does not run',
+        () {
+      machine
+        ..staleFirebase()
+        ..installNode('usr');
+
+      final result = machine.run(HostOperatingSystem.linux, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final home = machine.home.path;
+      expect(machine.calls, [
+        'node -v',
+        'npm config get prefix',
+        'npm config set prefix $home/.npm-global',
+        'npm install -g firebase-tools',
+        'npm prefix -g',
+        // The one it installed comes first on the PATH.
+        'node $home/.npm-global/bin/firebase --version',
+      ]);
+      expect(binDirsIn('${result.stdout}').first, '$home/.npm-global/bin');
     });
   });
 

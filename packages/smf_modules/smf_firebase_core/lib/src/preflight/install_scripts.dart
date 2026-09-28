@@ -108,7 +108,8 @@ const standaloneBinDir = '/usr/local/bin';
 
 const _macos = r'''
 #!/usr/bin/env bash
-# Installs the Firebase CLI on macOS with npm, for SMF.
+# Installs the Firebase CLI on macOS with npm, for SMF, unless a firebase
+# command runs already.
 #
 # When Node.js is missing or older than 20, which the Firebase CLI needs, it
 # installs it first: with Homebrew if there is one, or else with nvm in the
@@ -122,6 +123,11 @@ set -euo pipefail
 nvm_node=""
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+# Whether a firebase command runs: one on the PATH may not, such as one that
+# runs the Firebase CLI of another Node.js, or a Firebase CLI on a Node.js
+# that is too old for it.
+firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
 
 path_contains() {
   case ":$PATH:" in
@@ -184,7 +190,7 @@ add_to_path_of_new_terminals() {
   fi
 }
 
-if ! command_exists firebase; then
+if ! firebase_runs; then
   if [ "$(node_major_version)" -lt 20 ]; then
     install_node
     # An older node earlier on the PATH still comes first.
@@ -216,7 +222,8 @@ fi
 
 const _linux = r'''
 #!/usr/bin/env bash
-# Installs the Firebase CLI on Linux with npm, without sudo, for SMF.
+# Installs the Firebase CLI on Linux with npm, without sudo, for SMF, unless
+# a firebase command runs already.
 #
 # When Node.js is missing or older than 20, it installs its LTS version with
 # nvm in the home directory. When the global npm directory is outside the
@@ -231,6 +238,11 @@ set -euo pipefail
 nvm_node=""
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+# Whether a firebase command runs: one on the PATH may not, such as one that
+# runs the Firebase CLI of another Node.js, or a Firebase CLI on a Node.js
+# that is too old for it.
+firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
 
 path_contains() {
   case ":$PATH:" in
@@ -326,7 +338,7 @@ EOF
   esac
 }
 
-if ! command_exists firebase; then
+if ! firebase_runs; then
   if [ "$(node_major_version)" -lt 20 ]; then
     install_nvm
     set +u
