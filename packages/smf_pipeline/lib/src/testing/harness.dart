@@ -1272,19 +1272,7 @@ final class _ImportCheck {
           path: 'l10n.yaml',
         ),
       );
-  var options = YamlMap();
-  if (l10n.text.trim().isNotEmpty) {
-    try {
-      switch (loadYamlNode(l10n.text)) {
-        case final YamlMap map:
-          options = map;
-        case _:
-          fails('l10n.yaml is not a map of options');
-      }
-    } on YamlException catch (error) {
-      fails('l10n.yaml is not valid YAML', error.message);
-    }
-  }
+  final options = _l10nOptions(l10n.text, fails);
   String? read(String key) {
     final value = options[key];
     if (value is String?) return value;
@@ -1292,16 +1280,36 @@ final class _ImportCheck {
     return null;
   }
 
-  String clean(String path) => [
-        for (final segment in path.split('/'))
-          if (segment.isNotEmpty && segment != '.') segment,
-      ].join('/');
   final outputDirectory = read('output-dir');
   final arbDirectory = read('arb-dir');
   final file = read('output-localization-file') ?? 'app_localizations.dart';
-  final directory = clean(outputDirectory ?? arbDirectory ?? 'lib/l10n');
+  final directory = _cleanPath(outputDirectory ?? arbDirectory ?? 'lib/l10n');
   return (outputs: {'$directory/$file'}, issues: issues);
 }
+
+/// The options of `l10n.yaml`, [text], as Flutter reads them: none for an
+/// empty file. [fails] gets why Flutter fails on YAML that does not parse
+/// or on a file that is not a map of options, which then has none either.
+YamlMap _l10nOptions(
+  String text,
+  void Function(String problem, [String? detail]) fails,
+) {
+  if (text.trim().isEmpty) return YamlMap();
+  try {
+    if (loadYamlNode(text) case final YamlMap map) return map;
+    fails('l10n.yaml is not a map of options');
+  } on YamlException catch (error) {
+    fails('l10n.yaml is not valid YAML', error.message);
+  }
+  return YamlMap();
+}
+
+/// [path] without empty segments and `.`, as in `lib/generated` for
+/// `./lib/generated/`.
+String _cleanPath(String path) => [
+      for (final segment in path.split('/'))
+        if (segment.isNotEmpty && segment != '.') segment,
+    ].join('/');
 
 /// The path relative to the root of the app of the file of the app that
 /// [uri] imports in the file at [from], or `null` for a library outside the
