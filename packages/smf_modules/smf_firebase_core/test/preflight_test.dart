@@ -77,12 +77,105 @@ void main() {
 
   group('FirebaseCliCheck', () {
     const check = FirebaseCliCheck();
+    const install = 'Install it with "npm install -g firebase-tools", or see '
+        'https://firebase.google.com/docs/cli.';
 
-    test('passes when firebase is on the PATH', () async {
-      final machine = FakeMachine(executables: {'firebase': _firebase});
+    test('passes when firebase runs, and shows nothing of it', () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => _result(0, stdout: '15.14.0\n'),
+      );
 
       expect(await check.check(machine), isA<PreflightPassed>());
-      expect(machine.calls, isEmpty);
+      final call = machine.calls.single;
+      expect(call.line, '$_firebase --version');
+      expect(call.interactive, isFalse);
+      // A directory of its own for firebase-debug.log, and no check for
+      // updates in the background.
+      expect(call.workingDirectory, directoryOf(machine.tempFiles.keys.single));
+      expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
+      expect(machine.reports, isEmpty);
+    });
+
+    test(
+        'offers to install it again when firebase does not run, and says how '
+        'it ended, on one line', () async {
+      const wrapper = '/home/me/.local/bin/firebase';
+      const node18 = '/home/me/.nvm/versions/node/v18.20.8/bin/firebase';
+      const run = '"firebase --version"';
+      for (final (result, why) in [
+        // A firebase command that runs the Firebase CLI of the Node.js of
+        // the terminal, which has none.
+        (
+          _result(
+            127,
+            stderr: '$wrapper: line 2: $node18: No such file or directory\n',
+          ),
+          '$run exited with code 127: $wrapper: line 2: $node18: No such '
+              'file or directory.',
+        ),
+        // The Firebase CLI on a Node.js that is too old for it.
+        (
+          _result(
+            1,
+            stderr: 'Firebase CLI v15.14.0 is incompatible with Node.js '
+                'v18.20.8 Please upgrade Node.js to version >=20.0.0 || '
+                '>=22.0.0 || >=24.0.0\n',
+          ),
+          '$run exited with code 1: Firebase CLI v15.14.0 is incompatible '
+              'with Node.js v18.20.8 Please upgrade Node.js to version '
+              '>=20.0.0 || >=22.0.0 || >=24.0.0.',
+        ),
+        // Lines of errors that end with a period.
+        (
+          _result(
+            1,
+            stderr: 'Error: CLI is out of date (on 15.14.0, need at least '
+                '15.20.0)\n\nRun npm install -g firebase-tools to upgrade.\n',
+          ),
+          '$run exited with code 1: Error: CLI is out of date (on 15.14.0, '
+              'need at least 15.20.0) Run npm install -g firebase-tools to '
+              'upgrade.',
+        ),
+        // The last lines of long errors.
+        (
+          _result(1, stderr: [for (var i = 1; i <= 8; i++) 'e$i'].join('\n')),
+          '$run exited with code 1: … e4 e5 e6 e7 e8.',
+        ),
+        (_result(1), '$run exited with code 1.'),
+        (_result(-9), '$run was stopped by signal 9.'),
+      ]) {
+        final machine = FakeMachine(
+          operatingSystem: HostOperatingSystem.linux,
+          executables: {'firebase': wrapper},
+          reply: (_) => result,
+        );
+
+        expect(
+          await check.check(machine),
+          _missing(
+            found: '$wrapper does not run',
+            instructions: '$why $install',
+            installable: true,
+          ),
+          reason: why,
+        );
+      }
+      // Where SMF has no install script, it only tells.
+      expect(
+        await check.check(
+          FakeMachine(
+            operatingSystem: HostOperatingSystem.other,
+            executables: {'firebase': wrapper},
+            reply: (_) => _result(1),
+          ),
+        ),
+        _missing(
+          found: '$wrapper does not run',
+          instructions: '$run exited with code 1. $install',
+          installable: false,
+        ),
+      );
     });
 
     test('can install it on macOS, Linux and Windows only', () async {
@@ -90,8 +183,7 @@ void main() {
         expect(
           await check.check(FakeMachine(operatingSystem: system)),
           _missing(
-            instructions: 'Install it with "npm install -g firebase-tools", '
-                'or see https://firebase.google.com/docs/cli.',
+            instructions: install,
             installable: system != HostOperatingSystem.other,
           ),
           reason: '$system',

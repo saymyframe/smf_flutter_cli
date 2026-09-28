@@ -2,8 +2,15 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
 import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 
-/// Checks that the Firebase CLI is installed, which `flutterfire configure`
-/// runs to reach the Firebase projects of the user.
+/// Checks that the Firebase CLI is installed and runs, which
+/// `flutterfire configure` runs to reach the Firebase projects of the user.
+///
+/// A `firebase` command on the `PATH` may not run, such as one that needs
+/// another Node.js than the one of the terminal, so the check runs
+/// `firebase --version`, without the check for updates, which would run in
+/// the background after it. When the command fails, the check tells that
+/// the command does not run and how it ended, with the last lines of its
+/// errors, and offers the installation, as for a missing CLI.
 ///
 /// It can install it with npm, and Node.js first when it is missing or too
 /// old: the pipeline asks the user before. The progress shows what the
@@ -21,15 +28,37 @@ final class FirebaseCliCheck extends PreflightCheck {
   @override
   String get description => 'Firebase CLI';
 
+  static const _install = 'Install it with "npm install -g firebase-tools", '
+      'or see https://firebase.google.com/docs/cli.';
+
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
-    if (await environment.findExecutable('firebase') != null) {
-      return const PreflightPassed();
+    final installable = InstallScript.of(environment.operatingSystem) != null;
+    final firebase = await environment.findExecutable('firebase');
+    if (firebase == null) {
+      return PreflightMissing(instructions: _install, installable: installable);
     }
+    final result = await environment.processRunner.run(
+      firebase,
+      const ['--version'],
+      // The Firebase CLI writes firebase-debug.log where it runs.
+      workingDirectory: await scratchDirectory(environment),
+      environment: const {'NO_UPDATE_NOTIFIER': '1'},
+    );
+    if (result.succeeded) return const PreflightPassed();
+    final end = endOf(
+      'firebase --version',
+      result.exitCode,
+      environment.operatingSystem,
+    );
+    // On one line, since a question shows the instructions.
+    final errors = outputTail(result, lines: 5).split('\n').join(' ');
+    var why = errors.isEmpty ? end : '$end: $errors';
+    if (why.endsWith('.')) why = why.substring(0, why.length - 1);
     return PreflightMissing(
-      instructions: 'Install it with "npm install -g firebase-tools", or see '
-          'https://firebase.google.com/docs/cli.',
-      installable: InstallScript.of(environment.operatingSystem) != null,
+      found: '$firebase does not run',
+      instructions: '$why. $_install',
+      installable: installable,
     );
   }
 

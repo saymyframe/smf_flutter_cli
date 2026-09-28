@@ -82,6 +82,12 @@ const _fixAfterConfigure =
     'flutterfire", which is not done. Run it in the app: '
     '$crashlyticsPhaseFixCommand';
 
+/// What a firebase command in `/bin` that runs the Firebase CLI of another
+/// Node.js writes when it cannot find it.
+const _noCli = '/bin/firebase: line 2: '
+    '/home/me/.nvm/versions/node/v18.20.8/bin/firebase: No such file or '
+    'directory';
+
 /// The path of an install script of the Firebase CLI in a command.
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 
@@ -97,6 +103,10 @@ final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 /// activates flutterfire_cli 1.4.1. `flutterfire configure` exits with
 /// [configureCode], and every other command succeeds. The environment
 /// variables of the run are [variables] and the `PATH`.
+///
+/// With [brokenFirebase], a firebase command that does not run is in `/bin`
+/// on the `PATH`, as a command that runs the Firebase CLI of another
+/// Node.js does.
 final class _Machine {
   _Machine({
     List<bool> confirmations = const [],
@@ -107,12 +117,19 @@ final class _Machine {
     this.operatingSystem = HostOperatingSystem.macos,
     this.configureCode = 0,
     this.variables = const {},
+    this.brokenFirebase = false,
   }) {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
           '{"flutterVersion": "3.44.2", "dartSdkVersion": "3.12.2"}',
         );
-    for (final tool in ['/sdk/bin/flutter', _dart, '/bin/bash', '/bin/ruby']) {
+    for (final tool in [
+      '/sdk/bin/flutter',
+      _dart,
+      '/bin/bash',
+      '/bin/ruby',
+      if (brokenFirebase) '/bin/firebase',
+    ]) {
       files.file(tool).createSync(recursive: true);
     }
     files.directory('/work').createSync();
@@ -132,12 +149,16 @@ final class _Machine {
   final HostOperatingSystem operatingSystem;
   final int configureCode;
   final Map<String, String> variables;
+  final bool brokenFirebase;
   late final FakeMachine fake;
   var _loggedIn = false;
   var _activated = false;
 
   SmfProcessResult _reply(Call call) {
     final line = call.line;
+    if (line.startsWith('/bin/firebase ')) {
+      return const SmfProcessResult(exitCode: 127, stderr: '$_noCli\n');
+    }
     if (_script.hasMatch(line)) {
       files.file(_firebase).createSync(recursive: true);
       return const SmfProcessResult(
@@ -282,6 +303,8 @@ void main() {
       '$_dart pub global list',
       "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
       '/bin/bash <script>',
+      // The Firebase CLI is checked again after its installation.
+      '$_firebase --version',
       // The login is checked once the Firebase CLI is there.
       '$_firebase login:list --json',
       '$_firebase login',
@@ -388,6 +411,7 @@ void main() {
       '$_dart pub global list',
       "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
       '/bin/bash <script>',
+      '$_firebase --version',
       '$_firebase login:list --json',
       '$_firebase login',
       '$_dart pub global list',
@@ -439,6 +463,7 @@ void main() {
     expect(machine.checks, [
       '$_dart pub global list',
       '/bin/bash <script>',
+      '$_firebase --version',
       '$_firebase login:list --json',
       '$_firebase login',
       '$_firebase login:list --json',
@@ -456,6 +481,83 @@ void main() {
           'machine is not a Mac. flutterfire configure changes the Xcode '
           'project only on macOS.'),
     ]);
+  });
+
+  group('with a firebase command that does not run', () {
+    // How the command ended, before the instructions for a missing one.
+    const why = '"firebase --version" exited with code 127: $_noCli. Install '
+        'it with "npm install -g firebase-tools", or see '
+        'https://firebase.google.com/docs/cli.';
+    const installAgain = 'Firebase CLI is needed by firebase_core, but '
+        '/bin/firebase does not run. $why Set it up now?';
+
+    test(
+        'a user who agrees gets the Firebase CLI again, which runs, and is '
+        'told why', () async {
+      final machine = _Machine(
+        confirmations: [true, true, true, true],
+        brokenFirebase: true,
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions, [
+        installAgain,
+        _logIn,
+        _flutterfireMissing,
+        _configureNow,
+      ]);
+      expect(
+        machine.checks,
+        containsAllInOrder([
+          '/bin/firebase --version',
+          '/bin/firebase login:list --json',
+          '/bin/bash <script>',
+          // The one it installed comes first on the PATH.
+          '$_firebase --version',
+          '$_firebase login:list --json',
+          '$_firebase login',
+          _configure,
+        ]),
+      );
+      expect(machine.warnings, isEmpty);
+    });
+
+    test('a user who declines gets the reason in the warnings', () async {
+      final machine = _Machine(
+        confirmations: [false, false],
+        brokenFirebase: true,
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.warnings, [
+        endsWith(
+          'Firebase CLI is needed, but /bin/firebase does not run. $why',
+        ),
+        endsWith(
+          'Firebase login could not be checked: "firebase login:list '
+          '--json" exited with code 127:\n$_noCli',
+        ),
+        contains('FlutterFire CLI 1.4.1 or a later 1.x is missing.'),
+        _notConfigured(
+          'FlutterFire CLI 1.4.1 or a later 1.x is missing, and Firebase CLI '
+          'is needed, but /bin/firebase does not run, and Firebase login '
+          'could not be checked',
+        ),
+        _fixAfterConfigure,
+      ]);
+    });
   });
 
   test(
