@@ -216,15 +216,8 @@ jobs:
           ruby -e "require 'xcodeproj'; puts \"xcodeproj #{Xcodeproj::VERSION}\""
           /usr/bin/ruby --version
 
-      - name: Cache pub packages
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-
-
+      # Without a cache of pub packages: restoring it takes longer than
+      # getting them.
       - name: Get the packages of the workspace
         run: dart pub get
 
@@ -320,15 +313,8 @@ jobs:
             throw 'Flutter or Dart is not the pinned version.'
           }
 
-      - name: Cache pub packages
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~\AppData\Local\Pub\Cache
-          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-
-
+      # Without a cache of pub packages: restoring it takes longer than
+      # getting them.
       - name: Get the packages of the workspace
         run: dart pub get
 
