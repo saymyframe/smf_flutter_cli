@@ -77,6 +77,23 @@ nvm() {
 }
 ''';
 
+/// The firebase command of `~/.local/bin` that runs the Firebase CLI [cli]
+/// with [node].
+String _firebaseCommand(String node, String cli) => '#!/usr/bin/env bash\n'
+    '# Added by SMF: runs the Firebase CLI with the Node.js that installed '
+    'it.\n'
+    'exec $node $cli "\$@"\n';
+
+/// The note of the firebase command of `~/.local/bin` in [home], which runs
+/// the Firebase CLI with [node].
+String _firebaseCommandNote(String home, String node) =>
+    'Added a firebase command to $home/.local/bin, which runs the Firebase '
+    'CLI with $node.';
+
+/// The script of the Firebase CLI in the global npm directory [prefix].
+String _cliIn(String prefix) =>
+    '$prefix/lib/node_modules/firebase-tools/lib/bin/firebase.js';
+
 /// A command that would reach the network.
 const _network = '#!/bin/sh\necho "network: \$0 \$*" >&2\nexit 97\n';
 
@@ -126,12 +143,33 @@ final class _Machine {
 
   /// Puts Node.js [version] and npm into the directory of executables
   /// [name] and on the PATH.
-  void installNode(String name, {String version = 'v22.11.0'}) {
-    final directory = bin(name);
+  void installNode(String name, {String version = 'v22.11.0'}) =>
+      _installNodeIn(bin(name), version);
+
+  /// Puts Node.js [version] of nvm and its npm into their directory in the
+  /// nvm of the home directory, and on the PATH, as nvm does with its
+  /// default Node.js in a terminal; returns the directory.
+  String installNodeOfNvm(String version) => _installNodeIn(
+        Directory('${home.path}/.nvm/versions/node/$version/bin')
+          ..createSync(recursive: true),
+        version,
+      );
+
+  String _installNodeIn(Directory directory, String version) {
     _write(directory, 'node', _node(version));
     File('${templates.path}/npm').copySync('${directory.path}/npm');
     _executable(File('${directory.path}/npm'));
     path.add(directory.path);
+    return directory.path;
+  }
+
+  /// The directory with bash, for commands whose shebang looks for it on
+  /// the PATH.
+  String get shell {
+    final directory = bin('shell');
+    final bash = Link('${directory.path}/bash');
+    if (!bash.existsSync()) bash.createSync('/bin/bash');
+    return directory.path;
   }
 
   /// Puts a firebase command that does not run first on the PATH, such as
@@ -178,6 +216,21 @@ final class _Machine {
       },
     );
   }
+
+  /// Runs [command] as a new terminal of the user would, with the
+  /// directories [path] first on its PATH.
+  ProcessResult runInTerminal(String command, {required List<String> path}) =>
+      Process.runSync(
+        '/bin/bash',
+        ['-c', command],
+        workingDirectory: root.path,
+        includeParentEnvironment: false,
+        environment: {
+          'PATH': [...path, shell, bin('system').path].join(':'),
+          'HOME': home.path,
+          'TEMPLATES': templates.path,
+        },
+      );
 
   /// The commands of the fakes that ran.
   List<String> get calls {
@@ -409,20 +462,19 @@ void main() {
         r'export PATH="$PATH:$HOME/.local/bin"'
         '\n',
       );
+      // It runs the Firebase CLI with the Node.js that installed it.
+      final node = '${machine.bin('usr').path}/node';
       expect(
         machine.homeFile('.local/bin/firebase'),
-        '#!/usr/bin/env bash\n'
-        r'exec "$(npm prefix -g)/bin/firebase" "$@"'
-        '\n',
+        _firebaseCommand(node, _cliIn('$home/.npm-global')),
       );
       final rc = '$home/.bashrc';
-      final firebase = '$home/.local/bin';
       final moved = 'Moved the global directory of npm to $home/.npm-global, '
           'in ~/.npmrc, so that it needs no sudo.';
       expect(notesIn('${result.stdout}'), [
         moved,
         'Added $home/.npm-global/bin to the PATH in $rc, for new terminals.',
-        'Added a firebase command to $firebase, which runs the one of npm.',
+        _firebaseCommandNote(home, node),
         'Added \$HOME/.local/bin to the PATH in $rc, for new terminals.',
       ]);
     });
@@ -471,6 +523,61 @@ void main() {
 
       expect(result.exitCode, isNot(0));
       expect('${result.stderr}', contains('network: '));
+    });
+
+    test(
+        'writes a firebase command that runs the Firebase CLI with the '
+        'Node.js of nvm that installed it, which a new terminal runs with an '
+        'older default Node.js of nvm', () {
+      final home = machine.home.path;
+      final nvm = Directory('$home/.nvm')..createSync();
+      File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+      // The default Node.js of nvm, older than 20 and without the Firebase
+      // CLI, first on the PATH of the terminal.
+      final node18 = machine.installNodeOfNvm('v18.20.8');
+      // The firebase command of an earlier installation, which runs the
+      // Firebase CLI of the Node.js of the terminal, and so fails.
+      final local = Directory('$home/.local/bin')..createSync(recursive: true);
+      final earlier = File('${local.path}/firebase')
+        ..writeAsStringSync(
+          '#!/usr/bin/env bash\nexec "\$(npm prefix -g)/bin/firebase" "\$@"\n',
+        );
+      Process.runSync('chmod', ['+x', earlier.path]);
+      machine.path.addAll([local.path, machine.shell]);
+      final before = machine.runInTerminal(
+        'firebase --version',
+        path: [node18, local.path],
+      );
+      expect(before.exitCode, isNot(0), reason: 'the earlier one fails');
+      expect('${before.stderr}', contains('No such file or directory'));
+
+      final result = machine.run(HostOperatingSystem.linux, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final node22 = '${nvm.path}/versions/node/v22.11.0';
+      final cli = _cliIn(node22);
+      // Written again.
+      expect(
+        machine.homeFile('.local/bin/firebase'),
+        _firebaseCommand('$node22/bin/node', cli),
+      );
+      expect(notesIn('${result.stdout}'), [
+        'Installed the Firebase CLI with Node.js v22.11.0 of nvm.',
+        _firebaseCommandNote(home, '$node22/bin/node'),
+      ]);
+      // nvm has its directory on the PATH, and ~/.local/bin was there.
+      expect(machine.homeFile('.bashrc'), isNull);
+      expect(binDirsIn('${result.stdout}'), ['$node22/bin']);
+
+      // A new terminal, whose default Node.js of nvm is the older one.
+      final after = machine.runInTerminal(
+        'firebase --version',
+        path: [node18, local.path],
+      );
+
+      expect(after.exitCode, 0, reason: '${after.stderr}');
+      expect('${after.stdout}', '15.14.0\n');
+      expect(machine.calls.last, 'node $cli --version');
     });
 
     test('installs the Firebase CLI when the firebase command does not run',

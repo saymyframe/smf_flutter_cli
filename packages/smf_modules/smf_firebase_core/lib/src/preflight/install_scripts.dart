@@ -229,9 +229,10 @@ const _linux = r'''
 # nvm in the home directory. When the global npm directory is outside the
 # home directory, it moves it to ~/.npm-global. It adds the directory of the
 # global npm executables to the PATH of new terminals, with a firebase
-# command in ~/.local/bin. It prints the directories of the Firebase CLI and
-# of Node.js as lines "smf-bin-dir=<directory>", and each change that
-# outlives it as a line "smf-note=<change>".
+# command in ~/.local/bin that runs the Firebase CLI with the Node.js that
+# installed it. It prints the directories of the Firebase CLI and of Node.js
+# as lines "smf-bin-dir=<directory>", and each change that outlives it as a
+# line "smf-note=<change>".
 set -euo pipefail
 
 # The version of the Node.js of nvm that the script chose, if it did.
@@ -322,16 +323,34 @@ use_npm_prefix_in_home() {
   fi
 }
 
-# A firebase command in ~/.local/bin that runs the one of the global npm
-# directory, for shells that have ~/.local/bin on the PATH.
+# The file that the link $1 points to, or $1 when it is no link.
+link_target() {
+  local target
+  target="$(readlink "$1")" || { echo "$1"; return 0; }
+  case "$target" in
+    /*) echo "$target" ;;
+    *) echo "$(cd "$(dirname "$1")/$(dirname "$target")" && pwd)/${target##*/}" ;;
+  esac
+}
+
+# A firebase command in ~/.local/bin, for shells that have ~/.local/bin on
+# the PATH, that runs the Firebase CLI of the global npm directory $1 with
+# the Node.js that installed it, by their paths, whichever Node.js a new
+# terminal has, such as another default one of nvm. Installing again writes
+# it again.
 add_firebase_command() {
+  local node cli
+  node="$(command -v node)"
+  # npm links the command to the script of the Firebase CLI.
+  cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
-  cat > "$HOME/.local/bin/firebase" <<'EOF'
-#!/usr/bin/env bash
-exec "$(npm prefix -g)/bin/firebase" "$@"
-EOF
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
+    printf 'exec %q %q "$@"\n' "$node" "$cli"
+  } > "$HOME/.local/bin/firebase"
   chmod +x "$HOME/.local/bin/firebase"
-  echo "smf-note=Added a firebase command to $HOME/.local/bin, which runs the one of npm."
+  echo "smf-note=Added a firebase command to $HOME/.local/bin, which runs the Firebase CLI with $node."
   case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) add_to_path_of_new_terminals '$HOME/.local/bin' ;;
@@ -360,7 +379,7 @@ if ! firebase_runs; then
   if ! path_contains "$npm_bin"; then
     add_to_path_of_new_terminals "$npm_bin"
   fi
-  add_firebase_command
+  add_firebase_command "$npm_bin"
   export PATH="$npm_bin:$PATH"
 fi
 
