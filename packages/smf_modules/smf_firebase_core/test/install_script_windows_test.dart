@@ -1,8 +1,9 @@
 // The install script of Windows, run for real with Windows PowerShell, as
 // the check of the Firebase CLI runs it. It installs the Firebase CLI with
-// npm and adds its directory to the PATH of the user, so it runs only where
-// SMF_INSTALL_FIREBASE_CLI is 1, such as on a machine of CI that is thrown
-// away after the run, which has Node.js 20 or newer.
+// npm and adds its directory to the PATH of the user, which the test puts
+// back afterwards, so it runs only where SMF_INSTALL_FIREBASE_CLI is 1, such
+// as on a machine of CI that is thrown away after the run, which has
+// Node.js 20 or newer.
 @TestOn('windows')
 library;
 
@@ -12,6 +13,17 @@ import 'dart:io';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 import 'package:test/test.dart';
+
+/// What makes Windows PowerShell write in UTF-8.
+const _utf8Output =
+    r'[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false;';
+
+/// The environment variables of the user in the registry, to read and to
+/// write.
+const _environmentKey =
+    "[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')";
+const _writableEnvironmentKey =
+    r"[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)";
 
 void main() {
   final enabled = Platform.environment['SMF_INSTALL_FIREBASE_CLI'] == '1';
@@ -45,6 +57,56 @@ void main() {
   String resolved(String directory) =>
       Directory(directory).resolveSymbolicLinksSync();
 
+  /// Runs [command] with Windows PowerShell, with the variables of
+  /// [environment], and returns what it prints.
+  String powershell(
+    String command, [
+    Map<String, String> environment = const {},
+  ]) {
+    final result = Process.runSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '$_utf8Output $command',
+      ],
+      environment: environment,
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+    if (result.exitCode != 0) {
+      throw StateError('PowerShell failed: ${result.stderr}');
+    }
+    return '${result.stdout}'.trim();
+  }
+
+  /// The PATH of the user in the registry: the kind of its value, such as
+  /// `ExpandString`, and the value as it is, with variables such as
+  /// `%USERPROFILE%` unexpanded; `null` without one.
+  (String, String)? userPath() {
+    final text = powershell(
+      '\$key = $_environmentKey; '
+      r"if ($key.GetValueNames() -contains 'Path') { "
+      r"$key.GetValueKind('Path').ToString() + '|' + "
+      r"$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames') }",
+    );
+    if (text.isEmpty) return null;
+    final separator = text.indexOf('|');
+    return (text.substring(0, separator), text.substring(separator + 1));
+  }
+
+  /// Sets the PATH of the user in the registry to [value] of [kind], or
+  /// deletes it without [kind].
+  void setUserPath(String? kind, String value) => powershell(
+        kind == null
+            ? '\$key = $_writableEnvironmentKey; '
+                r"$key.DeleteValue('Path', $false)"
+            : '\$key = $_writableEnvironmentKey; '
+                r"$key.SetValue('Path', $env:SMF_VALUE, $env:SMF_KIND)",
+        {'SMF_VALUE': value, 'SMF_KIND': kind ?? ''},
+      );
+
   /// Runs `firebase --version` with the firebase command of [directory].
   ProcessResult firebaseVersion(String directory) => Process.runSync(
         '$directory\\firebase.cmd',
@@ -57,6 +119,10 @@ void main() {
     'the Windows script',
     () {
       final path = Platform.environment['PATH']!;
+      late (String, String)? original;
+
+      setUp(() => original = userPath());
+      tearDown(() => setUserPath(original?.$1, original?.$2 ?? ''));
 
       test(
           'installs the Firebase CLI with npm over a firebase command that '
@@ -73,6 +139,11 @@ void main() {
         // name may have any letters.
         final prefix = '${temporary.path}\\npm – Євген é';
         final npm = {'npm_config_prefix': prefix};
+        // The PATH of the user refers to other variables, as that of a new
+        // user of Windows does.
+        final before = '${original?.$2 ?? ''};%USERPROFILE%\\smf path test'
+            .replaceFirst(RegExp('^;'), '');
+        setUserPath('ExpandString', before);
 
         final installed = run('${broken.path};$path', npm);
 
@@ -84,6 +155,8 @@ void main() {
           contains('Added $prefix to the PATH of the user, for new terminals.'),
         );
         expect(firebaseVersion(prefix).exitCode, 0);
+        // The PATH of the user keeps its variables unexpanded, and its kind.
+        expect(userPath(), ('ExpandString', '$before;$prefix'));
 
         final again = run('$prefix;$path', npm);
 
