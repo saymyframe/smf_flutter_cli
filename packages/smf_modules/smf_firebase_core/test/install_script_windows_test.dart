@@ -155,6 +155,20 @@ void main() {
           contains('Added $prefix to the PATH of the user, for new terminals.'),
         );
         expect(firebaseVersion(prefix).exitCode, 0);
+        // The broken one stays first on the PATH of the run, as it may on
+        // that of a new terminal.
+        const stale = ' does not run, and a new terminal may run it in place '
+            'of the Firebase CLI that SMF installed: remove it.';
+        final staleCommands = [
+          for (final note in notesIn('${installed.stdout}'))
+            if (note.endsWith(stale))
+              note.substring(0, note.length - stale.length),
+        ];
+        expect(staleCommands, hasLength(1));
+        expect(
+          resolved(File(staleCommands.single).parent.path),
+          resolved(broken.path),
+        );
         // The PATH of the user keeps its variables unexpanded, and its kind.
         expect(userPath(), ('ExpandString', '$before;$prefix'));
 

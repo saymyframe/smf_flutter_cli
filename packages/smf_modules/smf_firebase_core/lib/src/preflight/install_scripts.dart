@@ -537,6 +537,27 @@ function Firebase-Runs {
   return ($LASTEXITCODE -eq 0)
 }
 
+# Tells about $stale, the firebase command that did not run before the
+# installation, if it still does not with the PATH $stalePath of before: a
+# new terminal may run it in place of the Firebase CLI that the script
+# installed. One that the installation replaced, or removed, is left out.
+function Write-StaleFirebaseNote($stale, $stalePath) {
+  if (-not $stale -or -not (Test-Path -LiteralPath $stale)) { return }
+  $installed = Get-Command firebase -ErrorAction SilentlyContinue
+  if ($installed -and $installed.Source -eq $stale) { return }
+  # What it writes to the standard error does not stop the script here.
+  $ErrorActionPreference = "Continue"
+  $path = $env:Path
+  $env:Path = $stalePath
+  $global:LASTEXITCODE = 1
+  try { & $stale --version *> $null } catch { }
+  $runs = ($LASTEXITCODE -eq 0)
+  $env:Path = $path
+  if (-not $runs) {
+    Write-Output "smf-note=$stale does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  }
+}
+
 # Adds $pathEntry to the PATH of the user, for new terminals. It changes the
 # value in the registry as it is, with the variables that it refers to, such
 # as %USERPROFILE%, unexpanded, and keeps its kind: that of a new Windows
@@ -590,6 +611,9 @@ function Install-PortableNode {
 }
 
 if (-not (Firebase-Runs)) {
+  $staleCommand = Get-Command firebase -ErrorAction SilentlyContinue
+  $stale = if ($staleCommand) { $staleCommand.Source } else { $null }
+  $stalePath = $env:Path
   if ((Get-NodeMajorVersion) -lt 20) {
     if (Command-Exists 'winget') {
       winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
@@ -623,6 +647,7 @@ if (-not (Firebase-Runs)) {
   }
   Add-UserPathEntry $npmBin
   $env:Path = "$npmBin;$env:Path"
+  Write-StaleFirebaseNote $stale $stalePath
 }
 
 $firebase = Get-Command firebase -ErrorAction SilentlyContinue

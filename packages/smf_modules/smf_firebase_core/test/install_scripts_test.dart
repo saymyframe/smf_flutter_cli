@@ -883,10 +883,15 @@ void main() {
   test('the Windows script installs Node.js 20 or newer', () {
     final script = InstallScript.of(HostOperatingSystem.windows)!.text;
 
+    // Within the installation, after the firebase command of before is
+    // noted.
     expect(
       script,
-      contains('if (-not (Firebase-Runs)) {\n'
-          '  if ((Get-NodeMajorVersion) -lt 20) {\n'),
+      contains(
+        r'  $stalePath = $env:Path'
+        '\n'
+        '  if ((Get-NodeMajorVersion) -lt 20) {\n',
+      ),
     );
     expect(
       script,
@@ -923,6 +928,47 @@ void main() {
       ),
     );
     expect(script, isNot(contains("if (-not (Command-Exists 'firebase'))")));
+  });
+
+  test(
+      'the Windows script tells about a firebase command that still does not '
+      'run after the installation, which new terminals may find first', () {
+    final script = InstallScript.of(HostOperatingSystem.windows)!.text;
+
+    // As the other scripts do: the one found before the installation, run
+    // with the PATH of before, unless the installation replaced it.
+    expect(
+      script,
+      contains(
+        'if (-not (Firebase-Runs)) {\n'
+        r'  $staleCommand = Get-Command firebase -ErrorAction SilentlyContinue'
+        '\n'
+        r'  $stale = if ($staleCommand) { $staleCommand.Source } '
+        r'else { $null }'
+        '\n'
+        r'  $stalePath = $env:Path'
+        '\n',
+      ),
+    );
+    expect(
+      script,
+      contains(
+        r'  $env:Path = "$npmBin;$env:Path"'
+        '\n'
+        r'  Write-StaleFirebaseNote $stale $stalePath'
+        '\n}\n',
+      ),
+    );
+    expect(
+      script,
+      contains(
+        r'  if ($installed -and $installed.Source -eq $stale) { return }',
+      ),
+    );
+    expect(
+      script,
+      contains('Write-Output "smf-note=${_staleNote(r'$stale')}"'),
+    );
   });
 
   test('the Windows script fails when the Firebase CLI does not run', () {
