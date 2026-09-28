@@ -139,6 +139,7 @@ final class _Commands implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) async =>
       const SmfProcessResult(exitCode: 0);
 

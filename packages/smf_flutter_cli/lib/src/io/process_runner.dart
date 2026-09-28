@@ -13,6 +13,13 @@ import 'package:smf_flutter_cli/src/io/interruption.dart';
 /// characters of the command line as its own, though, so neither a batch
 /// file nor a command in a shell gets an argument with them; see
 /// `batchArgumentProblem`.
+///
+/// A command that runs past the timeout of [run] is stopped with the
+/// processes that it started, such as the `node` that `cmd.exe` starts for
+/// the `firebase.cmd` of npm: on Windows with `taskkill /t /f`, elsewhere
+/// with `SIGTERM` to it and to the processes that `ps` lists under it, and
+/// `SIGKILL` to those left after [stopGrace]. A process that escaped them
+/// and keeps its output open is not waited for longer than [stopGrace].
 final class IoProcessRunner implements SmfProcessRunner {
   /// Creates the runner of a run, which stops its commands when the run is
   /// interrupted.
@@ -32,6 +39,7 @@ final class IoProcessRunner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) async {
     _interruption.throwIfInterrupted();
     _checkCommandLine(executable, arguments, runInShell: runInShell);
@@ -46,16 +54,100 @@ final class IoProcessRunner implements SmfProcessRunner {
     // The command gets no input, so one that reads it ends instead of
     // waiting; Process.run does the same.
     unawaited(process.stdin.close());
-    final stdout = _read(process.stdout, onOutput);
-    final stderr = _read(process.stderr, onOutput);
-    final exitCode = await process.exitCode;
+    final stdout = _Output(process.stdout, onOutput);
+    final stderr = _Output(process.stderr, onOutput);
+    var timedOut = false;
+    final exitCode = await (timeout == null
+        ? process.exitCode
+        : process.exitCode.timeout(
+            timeout,
+            onTimeout: () {
+              timedOut = true;
+              return _stop(process);
+            },
+          ));
+    // Once the command is stopped, a process that it started may still hold
+    // its output.
+    final limit = timedOut ? stopGrace : null;
     final result = SmfProcessResult(
       exitCode: exitCode,
-      stdout: await stdout,
-      stderr: await stderr,
+      stdout: await stdout.text(limit),
+      stderr: await stderr.text(limit),
+      timedOut: timedOut,
     );
     _interruption.throwIfInterrupted();
     return result;
+  }
+
+  /// How long a stopped command has to end, and its output to close, before
+  /// the runner gives up on them.
+  static const stopGrace = Duration(seconds: 2);
+
+  /// Stops [process], which ran past its timeout, with the processes that
+  /// it started, and returns its exit code.
+  Future<int> _stop(io.Process process) async {
+    if (_isWindows) {
+      try {
+        await io.Process.run(
+          'taskkill',
+          ['/pid', '${process.pid}', '/t', '/f'],
+        );
+      } on Object {
+        process.kill();
+      }
+      return process.exitCode.timeout(
+        stopGrace,
+        onTimeout: () {
+          process.kill();
+          return process.exitCode;
+        },
+      );
+    }
+    final started = await _descendantsOf(process.pid);
+    started.forEach(io.Process.killPid);
+    process.kill();
+    return process.exitCode.timeout(
+      stopGrace,
+      onTimeout: () {
+        for (final pid in started) {
+          io.Process.killPid(pid, io.ProcessSignal.sigkill);
+        }
+        process.kill(io.ProcessSignal.sigkill);
+        return process.exitCode;
+      },
+    );
+  }
+
+  /// The processes that the process [pid] started, and theirs, as
+  /// `ps -A -o pid= -o ppid=` lists them on macOS and Linux; none if it
+  /// cannot tell.
+  static Future<List<int>> _descendantsOf(int pid) async {
+    final io.ProcessResult result;
+    try {
+      result = await io.Process.run('ps', ['-A', '-o', 'pid=', '-o', 'ppid=']);
+    } on Object {
+      return const [];
+    }
+    if (result.exitCode != 0) return const [];
+    final children = <int, List<int>>{};
+    for (final line in '${result.stdout}'.split('\n')) {
+      final fields = line.trim().split(RegExp(r'\s+'));
+      if (fields.length != 2) continue;
+      final child = int.tryParse(fields[0]);
+      final parent = int.tryParse(fields[1]);
+      if (child == null || parent == null) continue;
+      (children[parent] ??= []).add(child);
+    }
+    final found = <int>[];
+    final waiting = [pid];
+    while (waiting.isNotEmpty) {
+      for (final child in children[waiting.removeLast()] ?? const <int>[]) {
+        if (found.contains(child)) continue;
+        found.add(child);
+        waiting.add(child);
+      }
+    }
+    return found;
   }
 
   @override
@@ -101,22 +193,48 @@ final class IoProcessRunner implements SmfProcessRunner {
       }
     }
   }
+}
 
-  /// Reads [stream] as text, which it returns, and gives [onOutput] its
-  /// lines as they come.
-  static Future<String> _read(
-    Stream<List<int>> stream,
-    void Function(String line)? onOutput,
-  ) async {
-    final text = StringBuffer();
-    final lines = _Lines(onOutput);
-    await for (final chunk
-        in stream.transform(const Utf8Decoder(allowMalformed: true))) {
-      text.write(chunk);
-      lines.add(chunk);
+/// One stream of the output of a command, read as text from the start,
+/// with its lines for the callback of [SmfProcessRunner.run] as they come.
+final class _Output {
+  _Output(Stream<List<int>> stream, void Function(String line)? onOutput)
+      : _lines = _Lines(onOutput) {
+    _subscription =
+        stream.transform(const Utf8Decoder(allowMalformed: true)).listen(
+      (chunk) {
+        _text.write(chunk);
+        _lines.add(chunk);
+      },
+      onDone: () {
+        _lines.flush();
+        _done.complete();
+      },
+      onError: _done.completeError,
+      cancelOnError: true,
+    );
+  }
+
+  final _text = StringBuffer();
+  final _Lines _lines;
+  final _done = Completer<void>();
+  late final StreamSubscription<String> _subscription;
+
+  /// The text of the stream once it ends, or, with [limit], what came until
+  /// then if it has not ended by then.
+  Future<String> text([Duration? limit]) async {
+    if (limit == null) {
+      await _done.future;
+    } else {
+      await _done.future.timeout(
+        limit,
+        onTimeout: () async {
+          await _subscription.cancel();
+          _lines.flush();
+        },
+      );
     }
-    lines.flush();
-    return text.toString();
+    return _text.toString();
   }
 }
 

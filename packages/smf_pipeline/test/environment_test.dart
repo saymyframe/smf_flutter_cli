@@ -151,6 +151,25 @@ void main() {
       ]);
     });
 
+    test('commands keep their timeout', () async {
+      final recording = _Recording(
+        ScriptedProcessRunner({
+          'firebase': const SmfProcessResult(exitCode: 0),
+        }),
+        [],
+      );
+      final environment = FakeHost(processRunner: recording).environment();
+
+      await environment.processRunner.run(
+        'firebase',
+        ['projects:list'],
+        timeout: const Duration(seconds: 40),
+      );
+      await environment.processRunner.run('firebase', ['--version']);
+
+      expect(recording.timeouts, [const Duration(seconds: 40), null]);
+    });
+
     test('on Windows a Path of any case counts', () {
       final host = FakeHost(
         operatingSystem: HostOperatingSystem.windows,
@@ -298,12 +317,14 @@ void main() {
   });
 }
 
-/// Records the environment of every call, then delegates.
+/// Records the environment of every call, and the timeout of those that
+/// capture the output, then delegates.
 final class _Recording implements SmfProcessRunner {
   _Recording(this._runner, this._seen);
 
   final SmfProcessRunner _runner;
   final List<Map<String, String>> _seen;
+  final List<Duration?> timeouts = [];
 
   @override
   Future<SmfProcessResult> run(
@@ -313,8 +334,10 @@ final class _Recording implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) {
     _seen.add(environment);
+    timeouts.add(timeout);
     return _runner.run(executable, arguments);
   }
 

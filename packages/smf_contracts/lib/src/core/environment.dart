@@ -116,11 +116,13 @@ abstract interface class SmfPrompter {
 
 /// The result of a command run by [SmfProcessRunner.run].
 final class SmfProcessResult {
-  /// Creates the result of a command that exited with [exitCode].
+  /// Creates the result of a command that exited with [exitCode], or that
+  /// the runner stopped when it [timedOut].
   const SmfProcessResult({
     required this.exitCode,
     this.stdout = '',
     this.stderr = '',
+    this.timedOut = false,
   });
 
   /// The exit code of the command.
@@ -132,8 +134,14 @@ final class SmfProcessResult {
   /// What the command wrote to its standard error.
   final String stderr;
 
-  /// Whether the command exited with code 0.
-  bool get succeeded => exitCode == 0;
+  /// Whether the command did not finish within the `timeout` of
+  /// [SmfProcessRunner.run], so the runner stopped it: [exitCode] is then how
+  /// it ended once stopped, and [stdout] and [stderr] what it wrote until
+  /// then.
+  final bool timedOut;
+
+  /// Whether the command exited with code 0 on its own.
+  bool get succeeded => exitCode == 0 && !timedOut;
 }
 
 /// Runs external commands.
@@ -157,6 +165,11 @@ abstract interface class SmfProcessRunner {
   /// for something; the result has the whole output anyway. A carriage
   /// return ends a line too, since tools use it to rewrite their last line.
   ///
+  /// With [timeout], a command that has not finished by then is stopped,
+  /// with the processes that it started, and the result says so; see
+  /// [SmfProcessResult.timedOut]. Without it, the command may run as long as
+  /// it needs.
+  ///
   /// Throws an [SmfCancelledException] when the user interrupts the run
   /// before or while the command runs, such as with Ctrl-C; the command is
   /// stopped then.
@@ -167,6 +180,7 @@ abstract interface class SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   });
 
   /// Runs [executable] with [arguments] attached to the terminal, so the

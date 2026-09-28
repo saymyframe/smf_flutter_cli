@@ -11,6 +11,7 @@ final class Call {
     this.workingDirectory,
     this.environment = const {},
     this.interactive = false,
+    this.timeout,
   });
 
   /// The absolute path of the executable.
@@ -27,6 +28,9 @@ final class Call {
 
   /// Whether it ran with the terminal attached.
   final bool interactive;
+
+  /// How long the caller let it run, if it said.
+  final Duration? timeout;
 
   /// The command as a line, such as `/bin/firebase login:list --json`.
   String get line => [executable, ...arguments].join(' ');
@@ -129,12 +133,14 @@ final class _Runner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) async {
     final call = Call(
       executable,
       arguments,
       workingDirectory: workingDirectory,
       environment: environment,
+      timeout: timeout,
     );
     _machine.calls.add(call);
     final result = await _machine._reply(call);

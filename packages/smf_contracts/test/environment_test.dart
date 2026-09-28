@@ -32,6 +32,18 @@ void main() {
       const SmfProcessResult(exitCode: 1, stderr: 'boom').succeeded,
       isFalse,
     );
+    expect(result.timedOut, isFalse);
+  });
+
+  test('SmfProcessResult of a command stopped at its timeout did not succeed',
+      () {
+    // Whatever its exit code once stopped.
+    const stopped =
+        SmfProcessResult(exitCode: 0, stdout: 'so far', timedOut: true);
+
+    expect(stopped.timedOut, isTrue);
+    expect(stopped.succeeded, isFalse);
+    expect(stopped.stdout, 'so far');
   });
 
   test('SmfCancelledException says that the user cancelled the run', () {

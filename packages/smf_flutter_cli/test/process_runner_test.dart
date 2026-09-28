@@ -63,6 +63,33 @@ Future<void> main(List<String> arguments) async {
 }
 ''';
 
+/// A shell script that starts a shell, which starts `sleep` and writes its
+/// process id to the file in its first argument; once it is there, the
+/// script says so and waits for them.
+const _tree = r'''
+sh -c 'sleep 60 & echo $! > "$1"; wait' inner "$1" &
+while [ ! -s "$1" ]; do sleep 0.1; done
+echo started
+wait
+''';
+
+/// A Dart script that writes its process id to the file in its first
+/// argument, says so, and waits a minute.
+const _child = r'''
+import 'dart:io';
+
+Future<void> main(List<String> arguments) async {
+  File(arguments.first).writeAsStringSync('$pid');
+  stdout.writeln('child runs');
+  await stdout.flush();
+  await Future<void>.delayed(const Duration(minutes: 1));
+}
+''';
+
+/// A batch file that runs [_child], next to it, with the Dart in
+/// `SMF_TEST_DART`, as the `firebase.cmd` of npm runs `node`.
+const _childBatch = '@echo off\r\n"%SMF_TEST_DART%" "%~dp0child.dart" %1\r\n';
+
 /// A batch file that runs [_arguments], next to it, with the Dart in
 /// `SMF_TEST_DART` and every argument it gets, as `dart.bat` of the
 /// Flutter SDK passes its arguments to the Dart VM.
@@ -105,6 +132,7 @@ void main() {
 
     expect(result.exitCode, 3);
     expect(result.succeeded, isFalse);
+    expect(result.timedOut, isFalse);
     expect(result.stdout, startsWith('first\nhalf line\n\nin '));
     expect(result.stdout, endsWith(': set\nlast'));
     expect(result.stderr, 'waiting...\r      \rdone\n');
@@ -172,6 +200,45 @@ void main() {
     signals.add(ProcessSignal.sigint);
 
     await expectLater(running, throwsA(isA<SmfCancelledException>()));
+  });
+
+  group('with a timeout', () {
+    test(
+      'stops a command that runs past it with the processes it started, and '
+      'says so with what the command wrote',
+      () async {
+        final started = p.join(temporary.path, 'sleep.pid');
+        final clock = Stopwatch()..start();
+
+        final result = await runner.run(
+          '/bin/sh',
+          [scriptOf('tree.sh', _tree), started],
+          timeout: const Duration(seconds: 2),
+        );
+
+        clock.stop();
+        expect(result.timedOut, isTrue);
+        expect(result.succeeded, isFalse);
+        expect(result.stdout, 'started\n');
+        // Not the minute of sleep, which holds the output until it ends.
+        expect(clock.elapsed, lessThan(const Duration(seconds: 10)));
+        final sleep = File(started).readAsStringSync().trim();
+        expect(await _gone(sleep), isTrue, reason: 'sleep $sleep still runs');
+      },
+      testOn: '!windows',
+    );
+
+    test('gives the result of a command that ends before it as always',
+        () async {
+      final result = await runner.run(
+        dart,
+        [scriptOf('exit.dart', _exit), '3'],
+        timeout: const Duration(minutes: 1),
+      );
+
+      expect(result.exitCode, 3);
+      expect(result.timedOut, isFalse);
+    });
   });
 
   test('a command that owns the terminal keeps Ctrl-C and its exit code',
@@ -308,6 +375,29 @@ void main() {
           }
         });
 
+        test(
+            'stops at its timeout with the command that it runs, as '
+            'taskkill stops the tree of its processes', () async {
+          final directory = p.dirname(batch);
+          File(p.join(directory, 'child.dart')).writeAsStringSync(_child);
+          final slow = p.join(directory, 'slow.cmd');
+          File(slow).writeAsStringSync(_childBatch);
+          final started = p.join(temporary.path, 'child.pid');
+
+          final result = await runner.run(
+            slow,
+            [started],
+            environment: {'SMF_TEST_DART': dart},
+            // Long enough for the Dart of the child to start.
+            timeout: const Duration(seconds: 10),
+          );
+
+          expect(result.timedOut, isTrue);
+          expect(result.stdout, contains('child runs'));
+          final child = File(started).readAsStringSync().trim();
+          expect(await _gone(child), isTrue, reason: 'child $child runs');
+        });
+
         test('gives the exit code of an interactive command too', () async {
           for (final code in [0, 64]) {
             expect(
@@ -324,4 +414,25 @@ void main() {
       testOn: 'windows',
     );
   });
+}
+
+/// Whether the process [pid] ends within a few seconds, as `ps` tells, or
+/// `tasklist` on Windows.
+Future<bool> _gone(String pid) async {
+  bool running() {
+    if (!Platform.isWindows) {
+      return Process.runSync('ps', ['-p', pid]).exitCode == 0;
+    }
+    final tasks = Process.runSync(
+      'tasklist',
+      ['/fi', 'PID eq $pid', '/fo', 'csv', '/nh'],
+    );
+    return '${tasks.stdout}'.contains('"$pid"');
+  }
+
+  for (var attempt = 0; attempt < 30; attempt++) {
+    if (!running()) return true;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  return false;
 }

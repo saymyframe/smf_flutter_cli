@@ -492,6 +492,7 @@ final class ScriptedProcessRunner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) async {
     calls.add([executable, ...arguments]);
     return results[executable] ??
@@ -520,6 +521,7 @@ final class NoProcessRunner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) =>
       throw UnimplementedError('run $executable');
 
@@ -704,6 +706,7 @@ final class RecordingRunner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) async {
     final call = RecordedCall(
       executable: executable,

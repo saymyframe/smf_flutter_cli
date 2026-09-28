@@ -1409,6 +1409,7 @@ final class _NoProcessRunner implements SmfProcessRunner {
     Map<String, String> environment = const {},
     bool runInShell = false,
     void Function(String line)? onOutput,
+    Duration? timeout,
   }) =>
       throw StateError('The contract harness runs no commands: $executable');
 
