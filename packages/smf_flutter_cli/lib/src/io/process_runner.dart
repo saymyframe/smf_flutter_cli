@@ -18,8 +18,9 @@ import 'package:smf_flutter_cli/src/io/interruption.dart';
 /// processes that it started, such as the `node` that `cmd.exe` starts for
 /// the `firebase.cmd` of npm: on Windows with `taskkill /t /f`, elsewhere
 /// with `SIGTERM` to it and to the processes that `ps` lists under it, and
-/// `SIGKILL` to those left after [stopGrace]. A process that escaped them
-/// and keeps its output open is not waited for longer than [stopGrace].
+/// with `SIGKILL` to them all if the command is still there after
+/// [stopGrace]. A process that escaped them and keeps the output of the
+/// command open is not waited for longer than [stopGrace].
 final class IoProcessRunner implements SmfProcessRunner {
   /// Creates the runner of a run, which stops its commands when the run is
   /// interrupted.
