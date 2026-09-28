@@ -25,12 +25,15 @@ final class IoProcessRunner implements SmfProcessRunner {
   /// Creates the runner of a run, which stops its commands when the run is
   /// interrupted.
   ///
-  /// [isWindows] is whether the machine runs Windows, which tests may set.
-  IoProcessRunner(this._interruption, {bool? isWindows})
-      : _isWindows = isWindows ?? io.Platform.isWindows;
+  /// [isWindows] is whether the machine runs Windows, and [ps] the command
+  /// that lists the processes elsewhere, which tests may set.
+  IoProcessRunner(this._interruption, {bool? isWindows, String ps = 'ps'})
+      : _isWindows = isWindows ?? io.Platform.isWindows,
+        _ps = ps;
 
   final Interruption _interruption;
   final bool _isWindows;
+  final String _ps;
 
   @override
   Future<SmfProcessResult> run(
@@ -121,36 +124,35 @@ final class IoProcessRunner implements SmfProcessRunner {
   }
 
   /// The processes that the process [pid] started, and theirs, as
-  /// `ps -A -o pid= -o ppid=` lists them on macOS and Linux; none if it
-  /// cannot tell.
-  static Future<List<int>> _descendantsOf(int pid) async {
+  /// `ps -A -o pid= -o ppid=` lists them on macOS and Linux; none if `ps`
+  /// cannot start or lists none, as one that does not know the options
+  /// does.
+  Future<List<int>> _descendantsOf(int pid) async {
     final io.ProcessResult result;
     try {
-      result = await io.Process.run('ps', ['-A', '-o', 'pid=', '-o', 'ppid=']);
+      result = await io.Process.run(_ps, ['-A', '-o', 'pid=', '-o', 'ppid=']);
     } on Object {
       return const [];
     }
-    if (result.exitCode != 0) return const [];
     final children = <int, List<int>>{};
-    for (final line in '${result.stdout}'.split('\n')) {
-      final fields = line.trim().split(RegExp(r'\s+'));
-      if (fields.length != 2) continue;
-      final child = int.tryParse(fields[0]);
-      final parent = int.tryParse(fields[1]);
-      if (child == null || parent == null) continue;
-      (children[parent] ??= []).add(child);
+    for (final line in _processLine.allMatches('${result.stdout}')) {
+      (children[int.parse(line[2]!)] ??= []).add(int.parse(line[1]!));
     }
-    final found = <int>[];
+    final found = <int>{};
     final waiting = [pid];
     while (waiting.isNotEmpty) {
       for (final child in children[waiting.removeLast()] ?? const <int>[]) {
-        if (found.contains(child)) continue;
-        found.add(child);
-        waiting.add(child);
+        if (found.add(child)) waiting.add(child);
       }
     }
-    return found;
+    return found.toList();
   }
+
+  /// A line of `ps` with the id of a process and the id of its parent.
+  static final RegExp _processLine = RegExp(
+    r'^[ \t]*(\d+)[ \t]+(\d+)[ \t]*\r?$',
+    multiLine: true,
+  );
 
   @override
   Future<int> runInteractive(
