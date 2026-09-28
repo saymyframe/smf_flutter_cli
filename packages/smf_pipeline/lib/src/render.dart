@@ -874,23 +874,13 @@ final class _BrickRenderer {
       );
       return null;
     }
-    try {
-      final rendered = _withoutEmptyLines(
-        text,
-        (tag) => texts[tag] == '' || fragments[tag]?.code == '',
-      ).render(vars);
-      return (bytes: utf8.encode(rendered), isText: true);
-    } on Object catch (error) {
-      issues.add(
-        SmfIssue(
-          'The template $template in the brick $name of $origin cannot '
-          'be rendered: $error',
-          origin: origin,
-          path: template,
-        ),
-      );
-      return null;
-    }
+    // Stage 5 rendered the template once, and its variables are plain
+    // data, which mustache renders.
+    final rendered = _withoutEmptyLines(
+      text,
+      (tag) => texts[tag] == '' || fragments[tag]?.code == '',
+    ).render(vars);
+    return (bytes: utf8.encode(rendered), isText: true);
   }
 
   /// Whether [origin] generates [path] although another file of the app
