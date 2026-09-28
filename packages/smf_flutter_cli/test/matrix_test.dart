@@ -1,4 +1,5 @@
 import 'package:file/memory.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
@@ -138,11 +139,13 @@ void main() {
       int analyzeCode = 0,
       List<MatrixAppTest> appTests = const [],
       int testCode = 0,
+      Set<String>? only,
     }) =>
         runMatrix(
           modules,
           directory: '/apps',
           appTests: appTests,
+          only: only,
           log: log.add,
           commands: MatrixCommands(
             create: (arguments, onCreated) async {
@@ -264,6 +267,40 @@ void main() {
         'app_1 (flutter_core (flutter_core)): its tests failed with the exit '
         'code 2.',
       );
+    });
+
+    test('checks only the apps it is given, which keep their numbers',
+        () async {
+      const modules = [FlutterCoreModule(), BlocModule()];
+      final bloc = MatrixAppTest(
+        '/tests/bloc',
+        appliesTo: (app) => app.modules.contains(BlocModule.id),
+      );
+
+      expect(
+        await run(modules: modules, appTests: [bloc], only: {'bloc'}),
+        0,
+      );
+      expect(created.single.take(2), ['create', 'app_2']);
+      expect(tested, ['app_2 (bloc): /tests/bloc']);
+      expect(log.last, '\n1 apps generated in /apps.');
+
+      // Tests must apply to one of them.
+      expect(
+        await run(modules: modules, appTests: [bloc], only: {'flutter_core'}),
+        1,
+      );
+      expect(log.last, 'The tests of /tests/bloc apply to no app.');
+    });
+
+    test('fails when it is given an app that the matrix does not have',
+        () async {
+      expect(await run(only: {'flutter_core', 'bloc'}), 1);
+
+      expect(created, hasLength(1));
+      expect(log.sublist(log.indexOf('Problems:') + 1), [
+        'No app of the matrix is bloc.',
+      ]);
     });
 
     test('fails when tests apply to no app', () async {

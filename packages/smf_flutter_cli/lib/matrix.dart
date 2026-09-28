@@ -336,6 +336,10 @@ final class MatrixCommands {
 /// passes its tests, and each of the [appTests] applies to some app; 1
 /// otherwise.
 ///
+/// With [only], it checks only the apps of the matrix with those names,
+/// such as `every module (bloc)`, and each of the [appTests] must apply to
+/// one of them; a name that no app of the matrix has is a problem too.
+///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory], with the tests. [commands] run for each app.
 Future<int> runMatrix(
@@ -343,6 +347,7 @@ Future<int> runMatrix(
   required String directory,
   Map<String, String?> roleOptions = const {},
   List<MatrixAppTest> appTests = const [],
+  Set<String>? only,
   void Function(String line)? log,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
@@ -365,17 +370,24 @@ Future<int> runMatrix(
   final problems = [
     for (final result in failed)
       '${result.contractCase}: ${result.errors.join('; ')}',
+    for (final name in only ?? const <String>{})
+      if (!apps.any((app) => app.name == name))
+        'No app of the matrix is $name.',
   ];
+  final checked = <MatrixApp>[];
   for (final (index, app) in apps.indexed) {
+    if (only != null && !only.contains(app.name)) continue;
+    checked.add(app);
+    // An app keeps its number in the matrix when only some are checked.
     problems.addAll(await run.check(app, 'app_${index + 1}'));
   }
   // Tests that apply to no app would leave CI without saying so.
   for (final test in appTests) {
-    if (!apps.any(test.appliesTo)) {
+    if (!checked.any(test.appliesTo)) {
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }
-  run.say('\n${apps.length} apps generated in $directory.');
+  run.say('\n${checked.length} apps generated in $directory.');
   if (problems.isEmpty) return 0;
   run.say('Problems:');
   problems.forEach(run.say);

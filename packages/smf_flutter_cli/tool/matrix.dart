@@ -10,18 +10,20 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 
 /// Generates the apps of the matrix of the modules of `smf create` in the
-/// directory given as the only argument, analyzes each with Flutter and
+/// directory given as the first argument, analyzes each with Flutter and
 /// runs the tests that the modules keep for the apps they are in; see
-/// `runMatrix`.
+/// `runMatrix`. Any further argument names an app of the matrix, such as
+/// `every module (bloc)`, and only the apps named are checked.
 Future<void> main(List<String> arguments) async {
-  if (arguments.length != 1) {
-    stderr.writeln('Usage: dart run tool/matrix.dart <directory>');
+  if (arguments.isEmpty) {
+    stderr.writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]');
     exit(64);
   }
   final code = await runMatrix(
     smfModules,
-    directory: arguments.single,
+    directory: arguments.first,
     appTests: await _appTests(),
+    only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
