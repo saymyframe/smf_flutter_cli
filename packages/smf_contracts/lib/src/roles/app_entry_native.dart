@@ -153,9 +153,6 @@ final class PlistMergePolicy extends MergePolicy<PlistValue> {
   const PlistMergePolicy();
 
   @override
-  String get name => 'plist';
-
-  @override
   PlistValue merge(String key, PlistValue existing, PlistValue incoming) {
     if (existing is PlistStringArray && incoming is PlistStringArray) {
       return PlistStringArray(
@@ -171,9 +168,6 @@ final class PlistMergePolicy extends MergePolicy<PlistValue> {
 /// heading is one line and that a section has text.
 final class _ReadmeSectionPolicy extends MergePolicy<String> {
   const _ReadmeSectionPolicy();
-
-  @override
-  String get name => 'conflict';
 
   @override
   String? problemWith(String key, String value) {

@@ -45,7 +45,6 @@ void main() {
     test('keeps equal values and rejects different ones', () {
       const policy = ConflictPolicy<String>();
 
-      expect(policy.name, 'conflict');
       expect(policy.problemWith('k', 'anything'), isNull);
       expect(policy.merge('k', 'a', 'a'), 'a');
       expect(
@@ -74,7 +73,6 @@ void main() {
     test('keeps the higher version and the earlier of equal ones', () {
       const policy = MaxPolicy();
 
-      expect(policy.name, 'max');
       expect(policy.merge('ios', '13.0', '15.0'), '15.0');
       expect(policy.merge('ios', '15.0', '13.0'), '15.0');
       expect(policy.merge('ios', '15', '15.0'), '15');
@@ -97,7 +95,6 @@ void main() {
     test('unites lists in order of first appearance', () {
       const policy = UnionPolicy<String>();
 
-      expect(policy.name, 'union');
       expect(policy.merge('k', ['a', 'a'], ['b', 'a', 'b']), ['a', 'b']);
       expect(
         policy.merge('modes', [

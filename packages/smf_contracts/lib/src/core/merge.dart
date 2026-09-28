@@ -10,9 +10,6 @@ abstract base class MergePolicy<V extends Object> {
   /// Allows subclasses to have constant constructors.
   const MergePolicy();
 
-  /// A short name of the policy for diagnostics, such as `max`.
-  String get name;
-
   /// Describes what is wrong with [value] for [key] on its own, or returns
   /// `null` if the policy accepts it.
   ///
@@ -93,9 +90,6 @@ final class ConflictPolicy<V extends Object> extends MergePolicy<V> {
   const ConflictPolicy();
 
   @override
-  String get name => 'conflict';
-
-  @override
   V merge(String key, V existing, V incoming) {
     if (existing == incoming) return existing;
     throw MergeConflict(key, existing, incoming, 'only one value is allowed');
@@ -114,9 +108,6 @@ final class MaxPolicy extends MergePolicy<String> {
   /// Orders two values; it throws a [FormatException] for values it cannot
   /// order.
   final Comparator<String> compare;
-
-  @override
-  String get name => 'max';
 
   @override
   String? problemWith(String key, String value) {
@@ -144,9 +135,6 @@ final class MaxPolicy extends MergePolicy<String> {
 final class UnionPolicy<E extends Object> extends MergePolicy<List<E>> {
   /// Creates the policy.
   const UnionPolicy();
-
-  @override
-  String get name => 'union';
 
   @override
   List<E> merge(String key, List<E> existing, List<E> incoming) =>

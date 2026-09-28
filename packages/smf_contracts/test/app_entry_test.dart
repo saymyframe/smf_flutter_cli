@@ -861,7 +861,6 @@ Future<void> bootstrap() async {
       expect('${const PlistBoolean(true)}', 'true');
       expect('${const PlistInteger(2)}', '2');
       expect('${const PlistStringArray(['a'])}', '[a]');
-      expect(const PlistMergePolicy().name, 'plist');
     });
   });
 
