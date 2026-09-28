@@ -96,6 +96,14 @@ void main() {
       },
     );
 
+    test('keeps the trailing comment of a last line without a line break',
+        () async {
+      const source =
+          "import 'package:flutter/material.dart'; // ignore: unused_import";
+
+      expect(await insert(source), '$source\n$firebaseImport');
+    });
+
     test(
       'does not duplicate an import that the formatter wrapped over two lines',
       () async {
