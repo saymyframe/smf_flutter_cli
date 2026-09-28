@@ -554,6 +554,11 @@ void main() {
           // It asks Google, and only reads.
           '$_firebase projects:list --debug',
         ]);
+        // As long as flutterfire configure waits for its list of projects.
+        expect(
+          machine.calls.map((call) => call.timeout),
+          [null, const Duration(seconds: 40)],
+        );
         final directories = machine.tempFiles.keys.map(directoryOf).toList();
         for (final (index, call) in machine.calls.indexed) {
           // A directory of its own for firebase-debug.log, and no check for
@@ -641,6 +646,25 @@ void main() {
           'Timeout reached making request to $_projectsUrl?pageSize=1000',
         ),
       );
+    });
+
+    test(
+        'says that the login could not be checked when the listing does not '
+        'finish in 40 s, as on a network that drops the requests', () async {
+      final machine = loggedIn(
+        const SmfProcessResult(
+          exitCode: -15,
+          stdout: '[2026-09-28T13:59:21.071Z] >>> [apiv2][body] POST '
+              'https://www.googleapis.com/oauth2/v3/token [omitted]\n',
+          timedOut: true,
+        ),
+      );
+
+      expect(
+        await check.check(machine),
+        _failed('"firebase projects:list --debug" did not finish in 40 s.'),
+      );
+      expect(machine.reports, isEmpty);
     });
 
     test(

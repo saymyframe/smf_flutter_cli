@@ -28,7 +28,11 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// rejects the login means that the login has expired or is no longer
 /// valid; any other failure is a check that could not run, with the error
 /// and the requests that failed, as the output names them. The output holds
-/// the email of the account, so the check shows nothing else of it.
+/// the email of the account, so the check shows nothing else of it. On a
+/// network that drops the requests, the command waits until the system
+/// gives up on the connection, which can take minutes, so the check stops
+/// it after 40 seconds, as long as `flutterfire configure` waits for its own
+/// list of the projects, and says so.
 ///
 /// The check can log the user in with `firebase login`, which asks its own
 /// questions in the terminal, or again with `firebase login --reauth` when
@@ -188,6 +192,10 @@ bool _hasAccounts(Object? json) => switch (json) {
       _ => false,
     };
 
+/// How long the check of the login lets `firebase projects:list` run: as
+/// long as `flutterfire configure` waits for its own list of the projects.
+const _listingTimeout = Duration(seconds: 40);
+
 /// Whether the Firebase CLI [firebase] can use its login, as
 /// `firebase projects:list --debug` tells; see [FirebaseLoginCheck].
 Future<PreflightStatus> _useLogin(
@@ -200,7 +208,13 @@ Future<PreflightStatus> _useLogin(
     const ['projects:list', '--debug'],
     workingDirectory: await scratchDirectory(environment),
     environment: const {'NO_UPDATE_NOTIFIER': '1'},
+    timeout: _listingTimeout,
   );
+  if (result.timedOut) {
+    return PreflightFailed(
+      '"$command" did not finish in ${_listingTimeout.inSeconds} s.',
+    );
+  }
   if (result.succeeded) return const PreflightPassed();
   final output = '${result.stdout}\n${result.stderr}';
   if (_rejectedIn(output)) return _expired;
