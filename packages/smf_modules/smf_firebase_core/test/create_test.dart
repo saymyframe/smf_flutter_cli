@@ -857,11 +857,13 @@ void main() {
     expect(
       explained.infos,
       contains(
-        '  ✗ Firebase login (for firebase_core): "firebase projects:list '
-        '--debug" exited with code 2:\n'
-        'Failed to list Firebase projects.\n'
-        'request to https://www.googleapis.com/oauth2/v3/token failed, reason: '
-        'getaddrinfo ENOTFOUND www.googleapis.com',
+        stringContainsInOrder([
+          'Firebase login (for firebase_core) could not be checked:',
+          '"firebase projects:list --debug" exited with code 2:',
+          'Failed to list Firebase projects.',
+          'request to https://www.googleapis.com/oauth2/v3/token failed,',
+          'reason: getaddrinfo ENOTFOUND www.googleapis.com',
+        ]),
       ),
     );
   });

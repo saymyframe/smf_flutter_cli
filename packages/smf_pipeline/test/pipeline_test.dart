@@ -975,7 +975,9 @@ void main() {
             Preflight([
               TestCheck(
                 'broken',
-                status: const PreflightFailed('no network'),
+                status: const PreflightFailed(
+                  '"tool --list" exited with code 2:\nno network',
+                ),
                 required: true,
               ),
             ]),
@@ -996,10 +998,14 @@ void main() {
       final report = host.logger.infos.join('\n');
       expect(report, contains('  ✗ Flutter SDK: missing'));
       expect(report, contains('  home: requested'));
+      // It could not tell, which differs from a missing tool, and the
+      // lines of the reason stay under the check.
       expect(
         report,
         contains(
-          '  ✗ Tool broken (for scaffold): no network\n'
+          '  ✗ Tool broken (for scaffold) could not be checked: "tool --list" '
+          'exited with code 2:\n'
+          '    no network\n'
           '    Generation would stop.',
         ),
       );

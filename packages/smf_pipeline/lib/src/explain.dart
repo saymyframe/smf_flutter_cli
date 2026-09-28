@@ -231,18 +231,25 @@ final class Explanation {
           :final found
         ):
         lines
-          ..add('  ✗ ${check.description}$by: ${found ?? 'missing'}')
-          ..add('    $instructions');
+          ..add('  ✗ ${check.description}$by: ${_indented(found ?? 'missing')}')
+          ..add('    ${_indented(instructions)}');
         if (installable) {
           lines.add('    An interactive run offers to set it up.');
         }
       case PreflightFailed(:final message):
-        lines.add('  ✗ ${check.description}$by: $message');
+        lines.add(
+          '  ✗ ${check.description}$by could not be checked: '
+          '${_indented(message)}',
+        );
     }
     if (!result.passed && check.required) lines.add(_outcome(origin));
     return lines;
   }
 }
+
+/// [text] with the lines after its first indented under the line of the
+/// check, such as the reasons of a check that could not run.
+String _indented(String text) => text.replaceAll('\n', '\n    ');
 
 const Map<OnConflict, String> _conflicts = {
   OnConflict.prompt: ' (exists and is not empty; a run asks what to do, '
