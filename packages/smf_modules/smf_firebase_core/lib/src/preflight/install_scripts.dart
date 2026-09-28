@@ -431,7 +431,8 @@ fi
 ''';
 
 const _windows = r'''
-# Installs the Firebase CLI on Windows with npm, for SMF.
+# Installs the Firebase CLI on Windows with npm, for SMF, unless a firebase
+# command runs already.
 #
 # When Node.js is missing or older than 20, which the Firebase CLI needs, it
 # installs it first: with winget, Chocolatey or Scoop, or else from the
@@ -444,6 +445,18 @@ $ErrorActionPreference = "Stop"
 
 function Command-Exists($name) {
   try { Get-Command $name -ErrorAction Stop | Out-Null; return $true } catch { return $false }
+}
+
+# Whether a firebase command runs: one on the PATH may not, such as a
+# Firebase CLI on a Node.js that is too old for it.
+function Firebase-Runs {
+  $firebase = Get-Command firebase -ErrorAction SilentlyContinue
+  if (-not $firebase) { return $false }
+  # What it writes to the standard error does not stop the script here.
+  $ErrorActionPreference = "Continue"
+  $global:LASTEXITCODE = 1
+  try { & $firebase.Source --version *> $null } catch { return $false }
+  return ($LASTEXITCODE -eq 0)
 }
 
 function Add-UserPathEntry($pathEntry) {
@@ -486,7 +499,7 @@ function Install-PortableNode {
   $env:Path = "$portableNode;$env:Path"
 }
 
-if (-not (Command-Exists 'firebase')) {
+if (-not (Firebase-Runs)) {
   if ((Get-NodeMajorVersion) -lt 20) {
     if (Command-Exists 'winget') {
       winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements | Out-Null

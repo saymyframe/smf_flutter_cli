@@ -673,13 +673,44 @@ void main() {
 
     expect(
       script,
-      contains("if (-not (Command-Exists 'firebase')) {\n"
+      contains('if (-not (Firebase-Runs)) {\n'
           '  if ((Get-NodeMajorVersion) -lt 20) {\n'),
     );
     expect(
       script,
       contains('if ((Get-NodeMajorVersion) -lt 20) { Install-PortableNode }'),
     );
+  });
+
+  test(
+      'the Windows script installs the Firebase CLI unless a firebase '
+      'command runs', () {
+    final script = InstallScript.of(HostOperatingSystem.windows)!.text;
+
+    // As the other scripts do with firebase --version; a stale exit code
+    // does not count, nor do errors that the command writes.
+    expect(
+      script,
+      contains(
+        'function Firebase-Runs {\n'
+        '  \$firebase = Get-Command firebase -ErrorAction SilentlyContinue\n'
+        '  if (-not \$firebase) { return \$false }\n',
+      ),
+    );
+    const run = r'  try { & $firebase.Source --version *> $null } '
+        r'catch { return $false }';
+    expect(
+      script,
+      contains(
+        [
+          r'  $ErrorActionPreference = "Continue"',
+          r'  $global:LASTEXITCODE = 1',
+          run,
+          r'  return ($LASTEXITCODE -eq 0)',
+        ].join('\n'),
+      ),
+    );
+    expect(script, isNot(contains("if (-not (Command-Exists 'firebase'))")));
   });
 
   test('the Windows script fails when the Firebase CLI does not run', () {
