@@ -6,12 +6,13 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 
 /// Generates the apps of the matrix of the fixture modules in the directory
-/// given as the only argument, analyzes each with Flutter, so that every
+/// given as the first argument, analyzes each with Flutter, so that every
 /// feature of the module model compiles, and runs the tests of the apps in
-/// `app_tests`; see `runMatrix`.
+/// `app_tests`; see `runMatrix`. Any further argument names an app of the
+/// matrix, such as `fake_codegen`, and only the apps named are checked.
 Future<void> main(List<String> arguments) async {
-  if (arguments.length != 1) {
-    stderr.writeln('Usage: dart run tool/matrix.dart <directory>');
+  if (arguments.isEmpty) {
+    stderr.writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]');
     exit(64);
   }
   final library = await Isolate.resolvePackageUri(
@@ -21,7 +22,8 @@ Future<void> main(List<String> arguments) async {
       Directory.fromUri(library!).parent.uri.resolve('app_tests').toFilePath();
   final code = await runMatrix(
     fixtureModules(),
-    directory: arguments.single,
+    directory: arguments.first,
+    only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
     appTests: [
       // The listeners of the screen under go_router, with a main navigation
       // for the destinations of the two fixture features.
