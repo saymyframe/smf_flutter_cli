@@ -807,6 +807,9 @@ bool _mayHold(
       return identical(owner, role) ||
           (known.family != null && owner.visibleRoles.contains(role));
     }
+    // No module here means the pipeline, which has no bricks, or a module
+    // outside the app, which only a collection of another resolution than
+    // [resolution] has.
     return module != null &&
         (module.descriptor.provides.contains(role) ||
             (known.family != null && module.descriptor.roles.contains(role)));
