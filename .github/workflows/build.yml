@@ -352,13 +352,6 @@ jobs:
           $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
           if ($left) { throw "SMF left $left in $env:TEMP." }
 
-      - name: Install the Firebase CLI with the script of SMF
-        if: ${{ !cancelled() }}
-        working-directory: packages/smf_modules/smf_firebase_core
-        env:
-          SMF_INSTALL_FIREBASE_CLI: "1"
-        run: dart test test/install_script_windows_test.dart
-
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() }}
         run: |
@@ -371,3 +364,26 @@ jobs:
             throw 'SMF does not find the FlutterFire CLI.'
           }
 
+  # The PowerShell script that installs the Firebase CLI, run for real: it
+  # takes minutes, so it runs next to the job above rather than in it.
+  windows-install:
+    name: Firebase CLI install (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_SDK }}
+
+      - name: Get the packages of the workspace
+        run: dart pub get
+
+      # It changes the PATH of the user, which a machine of CI can take.
+      - name: Install the Firebase CLI with the script of SMF
+        working-directory: packages/smf_modules/smf_firebase_core
+        env:
+          SMF_INSTALL_FIREBASE_CLI: "1"
+        run: dart test test/install_script_windows_test.dart
