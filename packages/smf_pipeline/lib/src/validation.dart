@@ -1028,7 +1028,8 @@ Map<String, List<ResolvedModule>> providerPackages(
 /// `any` does, which leaves the constraint to another module.
 bool bringsPackage(PubspecDependency dependency) =>
     dependency.source == PubspecSource.hosted &&
-    !_allowsAny(dependency.constraint);
+    // A hosted dependency has a constraint.
+    !_allowsAny(dependency.constraint!);
 
 /// [owners], the providers a package belongs to, as a message names them:
 /// `bloc, which provides the state management role`, with `, and of `
@@ -1039,8 +1040,7 @@ String packageOwnersText(Iterable<ResolvedModule> owners) => [
     ].join(', and of ');
 
 /// Whether [constraint] allows every version, as `any` does.
-bool _allowsAny(String? constraint) {
-  if (constraint == null) return false;
+bool _allowsAny(String constraint) {
   try {
     return VersionConstraint.parse(constraint).isAny;
   } on FormatException {
