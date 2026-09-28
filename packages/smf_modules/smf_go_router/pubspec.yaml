@@ -4,6 +4,7 @@ version: 0.2.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_go_router
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
+documentation: https://doc.saymyframe.com/modules/go-router
 topics: [flutter, routing, go-router, navigation, scaffolding]
 license: Apache-2.0
 
