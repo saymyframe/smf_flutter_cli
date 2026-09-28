@@ -55,11 +55,17 @@ String _node(String version) => '#!/bin/sh\n'
     'if [ -f "\$1" ]; then export FAKE_NODE=$version; exec /bin/sh "\$@"; fi\n'
     'echo $version\n';
 
-/// Homebrew, which installs Node.js 22 with npm into its own directory.
+/// Homebrew, which installs Node.js 22 with npm into its own directory and
+/// lists the version of Node.js it has in `$HOME/brew_node`.
 const _brew = r'''#!/bin/sh
 echo "brew $*" >> "$HOME/calls.log"
-[ "$*" = "install node" ] || exit 64
-cp "$TEMPLATES/node" "$TEMPLATES/npm" "$(dirname "$0")/"
+case "$*" in
+  "list --versions node") cat "$HOME/brew_node" 2>/dev/null ;;
+  "install node")
+    cp "$TEMPLATES/node" "$TEMPLATES/npm" "$(dirname "$0")/"
+    echo "node 22.11.0" > "$HOME/brew_node" ;;
+  *) exit 64 ;;
+esac
 ''';
 
 /// nvm, loaded from `$NVM_DIR/nvm.sh`, which installs Node.js 22 with npm.
@@ -178,10 +184,14 @@ final class _Machine {
   }
 
   /// Puts Homebrew into the directory of executables `brew` and on the
-  /// PATH, and returns its directory.
-  String installBrew() {
+  /// PATH, with Node.js [node] if it has one already, and returns its
+  /// directory.
+  String installBrew({String? node}) {
     final directory = bin('brew');
     _write(directory, 'brew', _brew);
+    if (node != null) {
+      File('${home.path}/brew_node').writeAsStringSync('node $node\n');
+    }
     if (!path.contains(directory.path)) path.add(directory.path);
     return directory.path;
   }
@@ -340,7 +350,11 @@ void main() {
       final result = machine.run(HostOperatingSystem.macos);
 
       expect(result, succeeded(), reason: '${result.stderr}');
-      expect(machine.calls.first, 'brew install node');
+      expect(machine.calls.take(3), [
+        'brew list --versions node',
+        'brew install node',
+        'brew list --versions node',
+      ]);
       expect(binDirsIn('${result.stdout}'), [brew]);
       expect(notesIn('${result.stdout}'), ['Installed Node.js with Homebrew.']);
       // New terminals have the Node.js of Homebrew.
@@ -350,20 +364,38 @@ void main() {
     test('installs Node.js 20 or newer when the one it finds is older', () {
       // An older Node.js of Homebrew, which it upgrades.
       machine.installNode('brew', version: 'v18.20.0');
-      final brew = machine.installBrew();
+      final brew = machine.installBrew(node: '18.20.0');
 
       final result = machine.run(HostOperatingSystem.macos);
 
       expect(result, succeeded(), reason: '${result.stderr}');
       expect(machine.calls, [
         'node -v',
+        'brew list --versions node',
         'brew install node',
+        'brew list --versions node',
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
         'node $brew/firebase --version',
       ]);
       expect(binDirsIn('${result.stdout}'), [brew]);
+      expect(notesIn('${result.stdout}'), ['Installed Node.js with Homebrew.']);
+    });
+
+    test(
+        'does not say that it installed the Node.js that Homebrew had '
+        'already', () {
+      // An older Node.js comes before the one of Homebrew.
+      machine
+        ..installNode('old', version: 'v18.20.0')
+        ..installBrew(node: '22.11.0');
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result.exitCode, isNot(0));
+      expect(machine.calls, contains('brew install node'));
+      expect(notesIn('${result.stdout}'), isEmpty);
     });
 
     test('stops when an older Node.js comes first on the PATH', () {
@@ -489,7 +521,7 @@ void main() {
       machine.installNodeOfNvm('v18.20.8');
       // The Firebase CLI of the npm of Homebrew, whose shebang runs the
       // first node on the PATH.
-      final brew = machine.installBrew();
+      final brew = machine.installBrew(node: '22.11.0');
       final cli = Directory(
         '${Directory(brew).parent.path}/lib/node_modules/firebase-tools/lib/'
         'bin',

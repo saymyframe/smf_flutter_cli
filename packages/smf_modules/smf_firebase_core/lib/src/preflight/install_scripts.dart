@@ -168,8 +168,13 @@ node_of_nvm() {
 
 install_node() {
   if command_exists brew && ! node_of_nvm; then
+    local before
+    before="$(brew list --versions node 2>/dev/null || true)"
     brew install node
-    echo "smf-note=Installed Node.js with Homebrew."
+    # Homebrew installs nothing when it has Node.js already.
+    if [ "$(brew list --versions node 2>/dev/null || true)" != "$before" ]; then
+      echo "smf-note=Installed Node.js with Homebrew."
+    fi
     return
   fi
   if ! load_nvm; then
