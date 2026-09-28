@@ -71,7 +71,9 @@ final class DartApp {
       final problems = <String>[];
       for (final file in _files) {
         if (!owners.contains(file.owner)) continue;
-        final path = '$appPath/${file.path}';
+        // The analyzer takes only the paths of the system, such as
+        // C:\app\lib\main.dart on Windows.
+        final path = Uri.directory(appPath).resolve(file.path).toFilePath();
         final result = await collection
             .contextFor(path)
             .currentSession
