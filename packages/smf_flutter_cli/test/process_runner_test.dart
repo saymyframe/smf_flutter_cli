@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -48,6 +49,24 @@ Future<void> main() async {
 const _sleeper = '''
 Future<void> main() => Future<void>.delayed(const Duration(minutes: 1));
 ''';
+
+/// A Dart script that writes its arguments as JSON in UTF-8 and exits with
+/// the code in its first argument.
+const _arguments = '''
+import 'dart:convert';
+import 'dart:io';
+
+Future<void> main(List<String> arguments) async {
+  stdout.add(utf8.encode(jsonEncode(arguments)));
+  await stdout.flush();
+  exitCode = int.parse(arguments.first);
+}
+''';
+
+/// A batch file that runs [_arguments], next to it, with the Dart in
+/// `SMF_TEST_DART` and every argument it gets, as `dart.bat` of the
+/// Flutter SDK passes its arguments to the Dart VM.
+const _batch = '@echo off\r\n"%SMF_TEST_DART%" "%~dp0arguments.dart" %*\r\n';
 
 void main() {
   late Directory temporary;
@@ -231,5 +250,78 @@ void main() {
         throwsA(isA<ProcessException>()),
       );
     });
+
+    group(
+      'a batch file',
+      () {
+        late String batch;
+
+        setUp(() {
+          // As the Flutter SDK may be, in a directory whose name has a
+          // space and letters beyond ASCII.
+          final directory = Directory(
+            p.join(temporary.path, 'Flutter SDK – é ї'),
+          )..createSync();
+          File(p.join(directory.path, 'arguments.dart'))
+              .writeAsStringSync(_arguments);
+          batch = p.join(directory.path, 'dart.bat');
+          File(batch).writeAsStringSync(_batch);
+        });
+
+        Future<SmfProcessResult> runBatch(List<String> arguments) => runner.run(
+              batch,
+              arguments,
+              workingDirectory: temporary.path,
+              environment: {'SMF_TEST_DART': dart},
+            );
+
+        test('runs without a shell and gets the arguments as they are',
+            () async {
+          // Those of the commands that SMF runs, such as flutterfire through
+          // dart.bat, and a path like those of the apps.
+          final arguments = [
+            '0',
+            'pub',
+            'global',
+            'run',
+            'flutterfire_cli:flutterfire',
+            'configure',
+            '--platforms=android,ios',
+            '--ios-bundle-id=com.example.my-app',
+            '--android-package-name=com.example.my_app',
+            p.join(temporary.path, 'SMF apps – застосунки é', 'my_app'),
+            "it's (x); a=b",
+          ];
+
+          final result = await runBatch(arguments);
+
+          expect(result.exitCode, 0, reason: result.stderr);
+          expect(result.stdout, jsonEncode(arguments));
+        });
+
+        test('gives the exit code of the command it runs', () async {
+          for (final code in [0, 1, 64, 70]) {
+            final result = await runBatch(['$code']);
+
+            expect(result.exitCode, code, reason: result.stderr);
+            expect(result.stdout, jsonEncode(['$code']));
+          }
+        });
+
+        test('gives the exit code of an interactive command too', () async {
+          for (final code in [0, 64]) {
+            expect(
+              await runner.runInteractive(
+                batch,
+                ['$code'],
+                environment: {'SMF_TEST_DART': dart},
+              ),
+              code,
+            );
+          }
+        });
+      },
+      testOn: 'windows',
+    );
   });
 }
