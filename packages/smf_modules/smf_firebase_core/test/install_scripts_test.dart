@@ -347,6 +347,24 @@ void main() {
       }
     });
 
+    test(
+        'adds to the ~/.profile that bash reads, rather than a new '
+        '~/.bash_profile that would hide it', () {
+      machine.installNode('node');
+      final prefix = '${machine.home.path}/.npm-custom';
+      File('${machine.home.path}/npm_prefix').writeAsStringSync(prefix);
+      File('${machine.home.path}/.profile').writeAsStringSync('umask 022\n');
+
+      final result = machine.run(HostOperatingSystem.macos, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(
+        machine.homeFile('.profile'),
+        'umask 022\nexport PATH="\$PATH:$prefix/bin"\n',
+      );
+      expect(machine.homeFile('.bash_profile'), isNull);
+    });
+
     test('installs Node.js with Homebrew when it is missing', () {
       final brew = machine.installBrew();
 

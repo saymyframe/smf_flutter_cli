@@ -200,13 +200,29 @@ node_major_version() {
   echo "${version%%.*}"
 }
 
+# The profile of the login shell of the user, which new terminals read. Of
+# ~/.bash_profile, ~/.bash_login and ~/.profile, bash reads only the first
+# that there is, so a new ~/.bash_profile would hide the others.
+login_profile() {
+  case "${SHELL:-}" in
+    */bash)
+      local file
+      for file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        if [ -f "$file" ]; then
+          echo "$file"
+          return
+        fi
+      done
+      echo "$HOME/.bash_profile" ;;
+    *) echo "$HOME/.zprofile" ;;
+  esac
+}
+
 # Adds the directory $1 to the PATH in the profile of the login shell, which
 # new terminals read.
 add_to_path_of_new_terminals() {
-  local profile="$HOME/.zprofile"
-  case "${SHELL:-}" in
-    */bash) profile="$HOME/.bash_profile" ;;
-  esac
+  local profile
+  profile="$(login_profile)"
   touch "$profile"
   if ! grep -Fq "$1" "$profile"; then
     echo "export PATH=\"\$PATH:$1\"" >> "$profile"
