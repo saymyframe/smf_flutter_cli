@@ -299,12 +299,15 @@ List<PlannedCheck> plannedChecks(
 /// Stage 6 of the pipeline: runs [checks] on the machine.
 ///
 /// First it runs [PreflightCheck.check] of every check, which only reads
-/// the machine; with [explain], that is all. Then, when a check reports
+/// the machine, with a progress "Checking the machine", since a check may
+/// take a while, such as one that asks a service over the network; with
+/// [explain], that is all. Then, when a check reports
 /// something missing that it can install, the run is interactive and does
 /// not skip external setup, the pipeline asks the user and installs it,
 /// going through the checks in order: the directories of the installed
 /// tools go into the environment's `PATH`, and the checks after an
-/// installation run again, since they may need what it installed.
+/// installation run again, since they may need what it installed, each
+/// with a progress that names it.
 ///
 /// Nothing is installed when generation cannot go on anyway: when a
 /// required check that nothing can fix fails for the pipeline itself, or
@@ -335,7 +338,13 @@ Future<PreflightReport> runPreflight(
       !explain && environment.interactive && !environment.skipExternalSetup;
 
   // Everything the checks find before anything is installed.
-  final first = await _checkAll(checks, environment, known);
+  final first = checks.every((planned) => known?[planned.key] != null)
+      ? await _checkAll(checks, environment, known)
+      : await _withProgress(
+          environment.logger,
+          'Checking the machine',
+          () => _checkAll(checks, environment, known),
+        );
 
   final doomed = _doomedBy(first);
   final versionIssues = pubspec == null
@@ -430,7 +439,7 @@ Future<List<CheckResult>> _installMissing(
       if (installed && !result.passed) {
         result = CheckResult(
           planned,
-          await _statusOf(planned.check, environment),
+          await _checkAgain(planned.check, environment),
         );
       }
       if (mayInstall(planned) && _installable(result)) {
@@ -518,13 +527,42 @@ Future<CheckResult> _install(
     environment.addBinDirs(result.binDirs);
     return CheckResult(
       planned,
-      await _statusOf(check, environment),
+      await _checkAgain(check, environment),
       installed: true,
     );
   } on SmfCancelledException {
     rethrow;
   } on Object catch (error) {
     return CheckResult(planned, found.status, setupFailure: '$error');
+  }
+}
+
+/// Runs [check] again after an installation, with a progress that names it.
+Future<PreflightStatus> _checkAgain(
+  PreflightCheck check,
+  SmfEnvironment environment,
+) =>
+    _withProgress(
+      environment.logger,
+      'Checking ${check.description} again',
+      () => _statusOf(check, environment),
+    );
+
+/// Runs [body] with a progress of [message], which fails if [body] throws,
+/// such as when the user interrupts the run.
+Future<T> _withProgress<T>(
+  SmfLogger logger,
+  String message,
+  Future<T> Function() body,
+) async {
+  final progress = logger.progress(message);
+  try {
+    final result = await body();
+    progress.complete();
+    return result;
+  } on Object {
+    progress.fail();
+    rethrow;
   }
 }
 

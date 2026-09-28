@@ -275,6 +275,11 @@ void main() {
       expect(report.issues, isEmpty);
       expect(report.results.single.passed, isTrue);
       expect(host.logger.details, ['✓ Tool tool']);
+      // A check may take a while, so the run shows that it checks.
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+      ]);
     });
 
     test('installs after the user agrees, and adds its directories', () async {
@@ -298,6 +303,13 @@ void main() {
       expect(report.results.single.passed, isTrue);
       expect(report.issues, isEmpty);
       expect(environment.binDirs, ['/npm/bin']);
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+        // After the question and the installation.
+        'start: Checking Tool firebase_cli again',
+        'complete: null',
+      ]);
       // The instructions come before the question, so the user knows what
       // setting it up means.
       expect(
@@ -445,6 +457,7 @@ void main() {
 
     test('a check or an installation the user cancels cancels the run',
         () async {
+      final cancelled = FakeHost();
       await expectLater(
         runPreflight(
           [
@@ -453,10 +466,14 @@ void main() {
               _module,
             ),
           ],
-          FakeHost().environment(),
+          cancelled.environment(),
         ),
         throwsA(isA<SmfCancelledException>()),
       );
+      expect(cancelled.logger.progresses, [
+        'start: Checking the machine',
+        'fail: null',
+      ]);
       final host = FakeHost(answers: [true], terminal: true);
       await expectLater(
         runPreflight(
@@ -575,6 +592,14 @@ void main() {
       expect(cli.installs, 1);
       expect(login.checks, 2);
       expect(report.issues.single.message, contains('no firebase'));
+      expect(
+        host.logger.progresses.where((event) => event.startsWith('start: ')),
+        [
+          'start: Checking the machine',
+          'start: Checking Tool cli again',
+          'start: Checking Tool login again',
+        ],
+      );
     });
 
     test('installs nothing when the SDK is too old for the app', () async {
@@ -619,6 +644,11 @@ void main() {
       expect(host.prompter.asked, hasLength(1));
       expect(declined.checks, 1);
       expect(fresh.checks, 1);
+      // The second run checks nothing, so it shows no progress.
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+      ]);
       expect(known.keys, {'firebase/cli', 'firebase/fresh'});
       expect(second.issues.single.message, first.issues.single.message);
       expect(second.issues.single.isError, isFalse);

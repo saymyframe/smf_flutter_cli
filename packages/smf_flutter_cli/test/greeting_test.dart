@@ -36,6 +36,51 @@ final class _LaterModule extends SmfModule {
       ];
 }
 
+/// A module with a check of the machine that finds a tool missing until it
+/// installs it, which a run in a terminal offers to set up.
+final class _SetupModule extends SmfModule {
+  const _SetupModule();
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: ModuleId('setup'),
+        description: 'A tool to set up (test)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        Preflight([_ToolCheck()]),
+      ];
+}
+
+/// The check of [_SetupModule].
+final class _ToolCheck extends PreflightCheck {
+  _ToolCheck();
+
+  var _installed = false;
+
+  @override
+  String get id => 'tool';
+
+  @override
+  String get description => 'Tool';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async => _installed
+      ? const PreflightPassed()
+      : const PreflightMissing(
+          instructions: 'Install it.',
+          installable: true,
+        );
+
+  @override
+  Future<ToolInstall> install(SmfEnvironment environment) async {
+    _installed = true;
+    return const ToolInstall();
+  }
+}
+
 /// A terminal that answers with scripted keys and writes into [transcript].
 final class _Terminal implements PromptTerminal {
   _Terminal(this.transcript, List<PromptKey> keys) : _keys = [...keys];
@@ -88,7 +133,11 @@ final class _Stream implements Stdout {
 /// that answers with [keys], on a machine with a Flutter SDK whose commands
 /// all succeed, with the prompter and the logger of the CLI, and returns
 /// what the terminal showed, without escape sequences.
-Future<String> _create(List<String> options, List<PromptKey> keys) async {
+Future<String> _create(
+  List<String> options,
+  List<PromptKey> keys, {
+  List<SmfModule> modules = const [FlutterCoreModule(), _LaterModule()],
+}) async {
   final files = MemoryFileSystem.test();
   files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
   files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
@@ -104,7 +153,7 @@ Future<String> _create(List<String> options, List<PromptKey> keys) async {
   final code = await IOOverrides.runZoned(
     () => runSmf(
       ['create', 'my_app', '--org', 'com.example', ...options],
-      modules: const [FlutterCoreModule(), _LaterModule()],
+      modules: modules,
       hostFor: ({required verbose}) => SmfHost(
         prompter: TerminalPrompter(
           _Terminal(transcript, keys),
@@ -164,11 +213,36 @@ void main() {
       [const PromptKey.character('n')],
     );
 
+    // The run opens with the progress of the checks of the machine.
+    expect(shown, startsWith('Checking the machine...'));
     expect(
       shown,
       stringContainsInOrder([
+        '✓ Checking the machine',
         '✓ Rendering the app',
         '? Setting up the app (dart run setup), for later. Run it now? No',
+      ]),
+    );
+    expect(shown, isNot(contains('Hello!')));
+  });
+
+  test(
+      'a run whose first question is to set up what a check found missing, '
+      'after the checks of the machine, says no greeting after them', () async {
+    final shown = await _create(
+      ['-m', 'setup'],
+      [const PromptKey.character('y')],
+      modules: const [FlutterCoreModule(), _SetupModule()],
+    );
+
+    expect(
+      shown,
+      stringContainsInOrder([
+        'Checking the machine...',
+        '✓ Checking the machine',
+        '? Tool is missing (needed by setup). Install it. Set it up now? Yes',
+        '✓ Checking Tool again',
+        '✓ Rendering the app',
       ]),
     );
     expect(shown, isNot(contains('Hello!')));
@@ -181,7 +255,17 @@ void main() {
       [const PromptKey.control(PromptControl.enter)],
     );
 
+    // The greeting first, then the question, then the progress of the
+    // checks of the machine for the modules chosen.
     expect(shown, startsWith('Hello!\n? Infrastructure: which do you want?'));
+    expect(
+      shown,
+      stringContainsInOrder([
+        '? Infrastructure: which do you want?',
+        'Checking the machine...',
+        '✓ Checking the machine',
+      ]),
+    );
     expect('Hello!'.allMatches(shown), hasLength(1));
   });
 }
