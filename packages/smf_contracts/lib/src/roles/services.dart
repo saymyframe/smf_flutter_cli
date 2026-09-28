@@ -275,8 +275,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
+  /// The code of the only implementation in [all]: the rule of the role
+  /// makes every provider contribute one, and the role is present only
+  /// with a provider.
   String _single(List<_Prefixed> all) {
-    if (all.isEmpty) return '';
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
     if (!implementation.isAsync) {

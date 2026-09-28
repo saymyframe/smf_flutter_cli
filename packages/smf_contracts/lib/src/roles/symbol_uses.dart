@@ -34,13 +34,13 @@ bool usesSymbols(DartFileIndex file, Set<String> names, String libraryPath) {
 }
 
 /// The path relative to the project root of the library that [uri] imports
-/// in the file at [from], or `null` for a library outside the app.
+/// in the file at [from], or `null` for a `package:` URI without a path.
 ///
 /// `package:` URIs are taken to be of the app, as `package:<app>/<path>`
 /// stands for `lib/<path>`; a library of another package with the same
-/// path would count too, which no real package has.
+/// path would count too, which no real package has. A `dart:` library
+/// resolves to its name alone, such as `async`, which is no path in `lib/`.
 String? _pathOf(String uri, String from) {
-  if (uri.startsWith('dart:')) return null;
   if (uri.startsWith('package:')) {
     final slash = uri.indexOf('/');
     return slash < 0 ? null : 'lib/${uri.substring(slash + 1)}';
