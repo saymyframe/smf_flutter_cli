@@ -127,7 +127,8 @@ final class Resolution {
       module.descriptor.providers
           .firstWhere((provider) => identical(provider.role, role));
 
-  /// The modules [id] depends on, directly or not.
+  /// The modules [id] depends on, directly or not, or none if [id] is not
+  /// in the app.
   Set<ModuleId> dependencyClosure(ModuleId id) {
     final closure = <ModuleId>{};
     void visit(ModuleId current) {

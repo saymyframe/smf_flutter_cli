@@ -74,6 +74,7 @@ void main() {
       resolution.dependencyClosure(const ModuleId('analytics')),
       {const ModuleId('core')},
     );
+    expect(resolution.dependencyClosure(const ModuleId('none')), isEmpty);
   });
 
   test('a provider of several roles is added once', () async {

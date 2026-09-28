@@ -117,6 +117,29 @@ void main() {
       );
     });
 
+    test('suggests the closest of several similar modules', () {
+      final similar = ModuleRegistry([
+        scaffold(),
+        TestModule('homes'),
+        TestModule('home'),
+      ]);
+
+      expect(
+        select(
+          const CreateRequest(appName: 'app', modules: [ModuleId('hom')]),
+          similar,
+          FakeHost().environment(),
+        ),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('Did you mean home?'),
+          ),
+        ),
+      );
+    });
+
     test('rejects an invalid organization', () {
       expect(
         select(
@@ -452,6 +475,30 @@ void main() {
 
       // go provides the nav through links, so the nav is not asked.
       expect(ids(selection), ['links']);
+      expect(host.prompter.asked, hasLength(1));
+    });
+
+    test('asks nothing about a role that no module provides', () async {
+      final logs = TestRole<NoDsl>('logs');
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('home', uses: {logs}),
+      ]);
+      final host = FakeHost(
+        answers: [
+          ['home'],
+        ],
+        terminal: true,
+      );
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      expect(ids(selection), ['home']);
+      expect(selection.declined, isEmpty);
       expect(host.prompter.asked, hasLength(1));
     });
 
