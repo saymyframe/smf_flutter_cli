@@ -320,25 +320,42 @@ jobs:
         if: ${{ !cancelled() }}
         run: dart test tools
 
-      - name: Generate apps in a directory with a space and letters beyond ASCII
+      # In a directory with a space. flutter analyze of Flutter 3.44 fails in
+      # one whose path has letters beyond ASCII, on every system:
+      # https://github.com/flutter/flutter/pull/191377
+      - name: Generate, analyze and test the apps with every module
+        if: ${{ !cancelled() }}
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)' 'every module (riverpod)'
+
+      - name: Generate an app in a directory with letters beyond ASCII
         if: ${{ !cancelled() }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é'
-          foreach ($app in @(
-            @('plain_app', 'go_router,home,bottom_tabs,riverpod,get_it,event_bus'),
-            @('firebase_app', 'home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics')
-          )) {
-            dart run packages/smf_flutter_cli/bin/smf_flutter.dart create $app[0] -m $app[1] -o $apps --no-input --skip-external-setup --no-dart-fix --strict
-            Push-Location (Join-Path $apps $app[0])
-            flutter analyze
-            Pop-Location
-          }
-          Get-ChildItem $env:TEMP -Filter 'smf_*' -ErrorAction SilentlyContinue
+          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create my_app -m home,bottom_tabs,riverpod,get_it,event_bus,firebase_crashlytics,firebase_analytics -o $apps --no-input --skip-external-setup --strict
+          Set-Location (Join-Path $apps 'my_app')
+          # flutter analyze fails here, as above.
+          dart analyze --fatal-infos
+          flutter test
+          # SMF generates the apps in %TEMP%, on C:, and moves them to D:.
+          $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
+          if ($left) { throw "SMF left $left in $env:TEMP." }
 
-      - name: Run the FlutterFire CLI through dart.bat
+      - name: Install the Firebase CLI with the script of SMF
+        if: ${{ !cancelled() }}
+        working-directory: packages/smf_modules/smf_firebase_core
+        env:
+          SMF_INSTALL_FIREBASE_CLI: "1"
+        run: dart test test/install_script_windows_test.dart
+
+      - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           dart pub global activate flutterfire_cli 1.4.1
           dart pub global run flutterfire_cli:flutterfire --version
+          $explain = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create probe -m firebase_core --explain | Out-String
+          $explain
+          if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
+            throw 'SMF does not find the FlutterFire CLI.'
+          }
