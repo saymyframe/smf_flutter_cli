@@ -10,7 +10,9 @@ const _raw = '-icanon -echo -isig -iexten min 0 time 1';
 ///
 /// `stty` gives the output in [sttyOutputs] for its arguments, and fails
 /// for others; the console of Windows gives [console]; the input gives
-/// its bytes, and -1 once they are read.
+/// its bytes, and -1 once they are read, as a terminal that is gone does.
+/// A read at the end of the input again and again fails the test, as the
+/// process would wait forever.
 final class _Device implements TerminalDevice {
   _Device({
     this.isWindows = false,
@@ -38,6 +40,7 @@ final class _Device implements TerminalDevice {
   final Map<String, String> sttyOutputs;
   final (int, int)? console;
   final List<int> _bytes;
+  var _readsAtEnd = 0;
 
   /// Whether turning line mode on throws, as it does for a terminal that is
   /// gone.
@@ -77,7 +80,11 @@ final class _Device implements TerminalDevice {
   }
 
   @override
-  int readByte() => _bytes.isEmpty ? -1 : _bytes.removeAt(0);
+  int readByte() {
+    if (_bytes.isNotEmpty) return _bytes.removeAt(0);
+    if (++_readsAtEnd > 10) throw StateError('The input ended long ago.');
+    return -1;
+  }
 
   @override
   String? stty(String arguments) {
@@ -110,6 +117,24 @@ void main() {
 
       expect(device.calls.last, "stty 'gfmt1:lflag=5cb:min=1'");
       expect(device.calls, hasLength(3));
+
+      // Only once: the terminal may have changed since.
+      terminal.leaveRawMode();
+      expect(device.calls, hasLength(3));
+    });
+
+    test('forgets the settings of stty once it restores them', () {
+      // As when the terminal is gone before the next question: stty fails,
+      // and a read without a key is the end of the input again.
+      final device = _Device(sttyOutputs: {'-g': 'saved', _raw: ''});
+      final terminal = IoPromptTerminal(device)
+        ..enterRawMode()
+        ..leaveRawMode();
+      device.sttyOutputs.clear();
+
+      terminal.enterRawMode();
+
+      expect(terminal.readKey().control, PromptControl.endOfInput);
     });
 
     test('without stty, turns off the echo and the line mode of dart:io', () {
@@ -157,11 +182,15 @@ void main() {
         'on Windows, switches the console and restores its mode and code '
         'page', () {
       final device = _Device(isWindows: true, console: (0x1f7, 437));
-      IoPromptTerminal(device)
+      final terminal = IoPromptTerminal(device)
         ..enterRawMode()
         ..leaveRawMode();
 
       expect(device.calls, ['console raw', 'console restore (503, 437)']);
+
+      // Only once: the console may have changed since.
+      terminal.leaveRawMode();
+      expect(device.calls, hasLength(2));
     });
 
     test('on Windows without a console, turns to the modes of dart:io', () {
