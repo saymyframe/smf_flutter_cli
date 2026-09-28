@@ -60,6 +60,9 @@ Future<ProcessResult> _smf(
 /// A Flutter SDK in [directory] whose `flutter` and `dart` write their
 /// arguments and working directory to `calls.log` next to them and
 /// succeed; returns its `bin`.
+///
+/// On Windows they are batch files, `flutter.bat` and `dart.bat`, as in a
+/// Flutter SDK there, which the CLI runs without a shell.
 String _fakeSdk(Directory directory) {
   final bin = p.join(directory.path, 'flutter', 'bin');
   Directory(p.join(bin, 'cache', 'dart-sdk')).createSync(recursive: true);
@@ -67,6 +70,12 @@ String _fakeSdk(Directory directory) {
     '{"flutterVersion": "3.44.2", "dartSdkVersion": "3.12.2"}',
   );
   for (final name in ['flutter', 'dart']) {
+    if (Platform.isWindows) {
+      File(p.join(bin, '$name.bat')).writeAsStringSync(
+        '@echo off\r\n>> "%~dp0calls.log" echo $name %* in %CD%\r\n',
+      );
+      continue;
+    }
     final file = File(p.join(bin, name))
       ..writeAsStringSync(
         '#!/bin/sh\necho "$name \$* in \$PWD" >> "${p.join(bin, 'calls.log')}"\n',
@@ -75,6 +84,15 @@ String _fakeSdk(Directory directory) {
   }
   return bin;
 }
+
+/// The executable [name] of the Flutter SDK of [_fakeSdk] in its [bin].
+String _sdkExecutable(String bin, String name) =>
+    p.join(bin, Platform.isWindows ? '$name.bat' : name);
+
+/// The directory [path], as a call of the SDK of [_fakeSdk] names it, with
+/// links resolved: the shell of macOS resolves them for the SDK already,
+/// and Windows may name a directory by its short name, such as `RUNNER~1`.
+String _resolved(String path) => Directory(path).resolveSymbolicLinksSync();
 
 void main() {
   const timeout = Timeout(Duration(minutes: 2));
@@ -172,7 +190,7 @@ void main() {
           );
 
           expect(result.exitCode, 1);
-          final flutter = p.join(sdk, 'flutter');
+          final flutter = _sdkExecutable(sdk, 'flutter');
           expect(
             result.stderr,
             allOf(
@@ -227,11 +245,15 @@ void main() {
             File(p.join(app, 'pubspec.yaml')).readAsStringSync(),
             startsWith('name: my_app\n'),
           );
-          // The shell reports the directories with links resolved.
-          final resolved = Directory(app).resolveSymbolicLinksSync();
-          expect(calls().first, startsWith('flutter pub get in '));
+          // The first flutter pub get runs in the temporary directory of the
+          // app, and the last in its place.
+          const pubGet = 'flutter pub get in ';
+          final resolved = _resolved(app);
+          expect(calls().first, startsWith(pubGet));
           expect(calls().first, isNot(contains(p.dirname(resolved))));
-          expect(calls().last, 'flutter pub get in $resolved');
+          expect(calls().first, isNot(contains(p.dirname(app))));
+          expect(calls().last, startsWith(pubGet));
+          expect(_resolved(calls().last.substring(pubGet.length)), resolved);
         },
         timeout: timeout,
       );
@@ -796,6 +818,5 @@ void main() {
         timeout: timeout,
       );
     },
-    testOn: '!windows',
   );
 }
