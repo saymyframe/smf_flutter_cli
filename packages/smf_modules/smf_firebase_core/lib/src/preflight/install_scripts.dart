@@ -112,9 +112,10 @@ const _macos = r'''
 # command runs already.
 #
 # When Node.js is missing or older than 20, which the Firebase CLI needs, it
-# installs it first: with Homebrew if there is one, or else with nvm in the
-# home directory. It adds the directory of the global npm executables to the
-# PATH of new terminals. A Node.js of nvm is on the PATH of new terminals
+# installs it first: with nvm when the node on the PATH is one of nvm, which
+# puts its directory first on the PATH, or else with Homebrew if there is
+# one, or else with nvm in the home directory. It adds the directory of the
+# global npm executables to the PATH of new terminals. A Node.js of nvm is on the PATH of new terminals
 # only while it is the default one of nvm, so for the Firebase CLI of one,
 # it adds a firebase command in ~/.local/bin that runs it with that Node.js.
 # It prints the directories of the Firebase CLI and of Node.js as lines
@@ -159,8 +160,14 @@ load_nvm() {
   set -u
 }
 
+# Whether the node on the PATH is one of nvm, which a Node.js of Homebrew
+# would not come before.
+node_of_nvm() {
+  command_exists node && is_of_nvm "$(dirname "$(command -v node)")"
+}
+
 install_node() {
-  if command_exists brew; then
+  if command_exists brew && ! node_of_nvm; then
     brew install node
     echo "smf-note=Installed Node.js with Homebrew."
     return

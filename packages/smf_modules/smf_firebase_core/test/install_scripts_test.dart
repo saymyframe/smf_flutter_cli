@@ -177,6 +177,15 @@ final class _Machine {
     return directory.path;
   }
 
+  /// Puts Homebrew into the directory of executables `brew` and on the
+  /// PATH, and returns its directory.
+  String installBrew() {
+    final directory = bin('brew');
+    _write(directory, 'brew', _brew);
+    if (!path.contains(directory.path)) path.add(directory.path);
+    return directory.path;
+  }
+
   /// Puts a firebase command that does not run first on the PATH, such as
   /// one that runs the Firebase CLI of a Node.js that has none.
   void staleFirebase() {
@@ -326,27 +335,22 @@ void main() {
     });
 
     test('installs Node.js with Homebrew when it is missing', () {
-      final brew = machine.bin('brew');
-      File('${brew.path}/brew').writeAsStringSync(_brew);
-      Process.runSync('chmod', ['+x', '${brew.path}/brew']);
-      machine.path.add(brew.path);
+      final brew = machine.installBrew();
 
       final result = machine.run(HostOperatingSystem.macos);
 
       expect(result, succeeded(), reason: '${result.stderr}');
       expect(machine.calls.first, 'brew install node');
-      expect(binDirsIn('${result.stdout}'), [brew.path]);
+      expect(binDirsIn('${result.stdout}'), [brew]);
       expect(notesIn('${result.stdout}'), ['Installed Node.js with Homebrew.']);
       // New terminals have the Node.js of Homebrew.
       expect(machine.homeFile('.local/bin/firebase'), isNull);
     });
 
     test('installs Node.js 20 or newer when the one it finds is older', () {
-      final brew = machine.bin('brew');
-      File('${brew.path}/brew').writeAsStringSync(_brew);
-      Process.runSync('chmod', ['+x', '${brew.path}/brew']);
       // An older Node.js of Homebrew, which it upgrades.
       machine.installNode('brew', version: 'v18.20.0');
+      final brew = machine.installBrew();
 
       final result = machine.run(HostOperatingSystem.macos);
 
@@ -357,9 +361,9 @@ void main() {
         'node -v',
         'npm install -g firebase-tools',
         'npm prefix -g',
-        'node ${brew.path}/firebase --version',
+        'node $brew/firebase --version',
       ]);
-      expect(binDirsIn('${result.stdout}'), [brew.path]);
+      expect(binDirsIn('${result.stdout}'), [brew]);
     });
 
     test('stops when an older Node.js comes first on the PATH', () {
@@ -436,18 +440,23 @@ void main() {
     });
 
     test(
-        'writes a firebase command that a new terminal runs with an older '
-        'default Node.js of nvm', () {
+        'installs Node.js with nvm, not Homebrew, and writes a firebase '
+        'command that a new terminal runs with an older default Node.js of '
+        'nvm', () {
       final home = machine.home.path;
       final nvm = Directory('$home/.nvm')..createSync();
       File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
       // The default Node.js of nvm, older than 20 and without the Firebase
-      // CLI, first on the PATH of the terminal.
+      // CLI, first on the PATH of the terminal, which has Homebrew too: nvm
+      // puts its directory before that of Homebrew.
       final node18 = machine.installNodeOfNvm('v18.20.8');
+      machine.installBrew();
 
       final result = machine.run(HostOperatingSystem.macos);
 
       expect(result, succeeded(), reason: '${result.stderr}');
+      expect(machine.calls, contains('nvm install --lts'));
+      expect(machine.calls, isNot(contains(startsWith('brew'))));
       final node22 = '${nvm.path}/versions/node/v22.11.0';
       expect(binDirsIn('${result.stdout}'), ['$node22/bin']);
       expect(
@@ -469,6 +478,33 @@ void main() {
       expect(after.exitCode, 0, reason: '${after.stderr}');
       expect('${after.stdout}', '15.14.0\n');
       expect(machine.calls.last, 'node ${_cliIn(node22)} --version');
+    });
+
+    test(
+        'tells about the Firebase CLI of Homebrew that the older default '
+        'Node.js of nvm cannot run, which new terminals find first', () {
+      final home = machine.home.path;
+      final nvm = Directory('$home/.nvm')..createSync();
+      File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+      machine.installNodeOfNvm('v18.20.8');
+      // The Firebase CLI of the npm of Homebrew, whose shebang runs the
+      // first node on the PATH.
+      final brew = machine.installBrew();
+      final cli = Directory(
+        '${Directory(brew).parent.path}/lib/node_modules/firebase-tools/lib/'
+        'bin',
+      )..createSync(recursive: true);
+      File('${cli.path}/firebase.js').writeAsStringSync(_firebase);
+      Process.runSync('chmod', ['+x', '${cli.path}/firebase.js']);
+      Link('$brew/firebase').createSync(
+        '../lib/node_modules/firebase-tools/lib/bin/firebase.js',
+      );
+
+      final result = machine.run(HostOperatingSystem.macos);
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(machine.calls, isNot(contains('brew install node')));
+      expect(notesIn('${result.stdout}').last, _staleNote('$brew/firebase'));
     });
 
     test('downloads nvm when there is no Node.js, Homebrew or nvm', () {
