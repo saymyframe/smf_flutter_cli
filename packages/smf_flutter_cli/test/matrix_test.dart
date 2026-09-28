@@ -329,6 +329,28 @@ void main() {
     });
   });
 
+  test(
+      'the matrix runs flutter, but dart analyze in place of flutter analyze '
+      'in a directory whose path has letters beyond ASCII', () {
+    expect(matrixCommand(['analyze'], '/tmp/SMF apps/app_1'), [
+      'flutter',
+      'analyze',
+    ]);
+    expect(matrixCommand(['analyze'], '/tmp/SMF apps застосунки é/app_1'), [
+      'dart',
+      'analyze',
+      '--fatal-infos',
+    ]);
+    expect(
+      matrixCommand(['test'], '/tmp/SMF apps застосунки é/app_1'),
+      ['flutter', 'test'],
+    );
+    expect(
+      matrixCommand(['pub', 'add', 'dev:x'], r'C:\застосунки\app_1'),
+      ['flutter', 'pub', 'add', 'dev:x'],
+    );
+  });
+
   test('the tests of an app go into it with their placeholders filled', () {
     final fileSystem = MemoryFileSystem();
     fileSystem.file('/tests/core/test/core_test.dart')

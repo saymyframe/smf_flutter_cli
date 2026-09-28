@@ -456,12 +456,26 @@ final class _MatrixRun {
   }
 }
 
+/// The command that the matrix runs for `flutter` with [arguments] in
+/// [directory]: `flutter` with them, but for `flutter analyze` in a
+/// directory whose path has letters beyond ASCII, where `flutter analyze`
+/// of Flutter 3.44 fails on every system
+/// (https://github.com/flutter/flutter/pull/191377). There it is
+/// `dart analyze --fatal-infos`, which reports the same issues.
+List<String> matrixCommand(List<String> arguments, String directory) =>
+    arguments.length == 1 &&
+            arguments.single == 'analyze' &&
+            directory.runes.any((rune) => rune > 0x7F)
+        ? const ['dart', 'analyze', '--fatal-infos']
+        : ['flutter', ...arguments];
+
 // Tests have no Flutter SDK.
 // coverage:ignore-start
 Future<(int, String)> _flutter(List<String> arguments, String directory) async {
+  final [executable, ...rest] = matrixCommand(arguments, directory);
   final result = await Process.run(
-    'flutter',
-    arguments,
+    executable,
+    rest,
     workingDirectory: directory,
     runInShell: Platform.isWindows,
     // Flutter writes UTF-8, on Windows too; cmd.exe, which runs it there,
@@ -469,6 +483,10 @@ Future<(int, String)> _flutter(List<String> arguments, String directory) async {
     stdoutEncoding: const Utf8Codec(allowMalformed: true),
     stderrEncoding: const Utf8Codec(allowMalformed: true),
   );
-  return (result.exitCode, '${result.stdout}${result.stderr}');
+  final instead = executable == 'flutter'
+      ? ''
+      : '${[executable, ...rest].join(' ')} in place of flutter '
+          '${arguments.join(' ')}, which fails in this directory:\n';
+  return (result.exitCode, '$instead${result.stdout}${result.stderr}');
 }
 // coverage:ignore-end
