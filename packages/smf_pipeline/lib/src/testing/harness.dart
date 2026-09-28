@@ -800,6 +800,9 @@ final class ContractHarness {
   /// - the structural rules and symbols of the roles, see [checkStructure];
   /// - every import or export of a file of the app finds the file, or a
   ///   file that code generation or Flutter's localizations generate;
+  /// - `l10n.yaml`, when the pubspec has Flutter generate the
+  ///   localizations, is what `flutter pub get` can read: YAML with a map
+  ///   of options, whose options that name the generated file are text;
   /// - every imported or exported package is a dependency of the app, a
   ///   regular one for the code in `lib/` and `bin/`;
   /// - a module imports or exports the package of a provider of a role in
@@ -924,15 +927,19 @@ final class ContractHarness {
     Map<String, DartFileIndex> indexes,
   ) {
     final (:resolution, :collection) = _resolved(result);
+    final pubspec = result.validation?.pubspec;
+    final localizations = _localizationsOf(app, pubspec);
     final check = _ImportCheck(
       registry: registry,
       resolution: resolution,
       collection: collection,
       app: app,
       appName: context.appName,
-      pubspec: result.validation?.pubspec,
+      pubspec: pubspec,
+      localizations: localizations.outputs,
     );
     return [
+      ...localizations.issues,
       for (final MapEntry(key: path, value: index) in indexes.entries)
         if (app.files[path] case final file?)
           ...check.issuesOf(path, file, index),
@@ -965,11 +972,12 @@ final class _ImportCheck {
     required this.app,
     required this.appName,
     required MergedPubspec? pubspec,
+    required Set<String> localizations,
   })  : dependencies = {appName, ...?pubspec?.dependencies.keys},
         devDependencies = {...?pubspec?.devDependencies.keys},
         dataContributors = _dataContributorsOf(collection),
         generated = {
-          ..._flutterOutputs(app, pubspec),
+          ...localizations,
           for (final collected in collection.applyingOf<CodegenRequest>())
             ...(collected.contribution as CodegenRequest).outputs,
         },
@@ -1237,32 +1245,61 @@ final class _ImportCheck {
 }
 
 /// The files of the app that Flutter generates when `flutter pub get` runs
-/// after rendering: with `generate: true` in [pubspec], the localizations
+/// after rendering, and the problems of `l10n.yaml` that make it fail.
+///
+/// With `generate: true` in [pubspec], Flutter generates the localizations
 /// that `l10n.yaml` describes, in `output-dir`, or else in `arb-dir`, which
-/// is `lib/l10n` unless set.
-Set<String> _flutterOutputs(RenderedApp app, MergedPubspec? pubspec) {
+/// is `lib/l10n` unless set. As Flutter 3.44 reads the file, an empty one
+/// and an option without a value take the defaults, and YAML that does not
+/// parse, a file that is not a map of options, and an option of those that
+/// is not text fail; the outputs then are those of the defaults, so that
+/// the problem of `l10n.yaml` is the only one.
+({Set<String> outputs, List<SmfIssue> issues}) _localizationsOf(
+  RenderedApp app,
+  MergedPubspec? pubspec,
+) {
   final l10n = app.files['l10n.yaml'];
-  if (!(pubspec?.generate ?? false) || l10n == null) return const {};
-  final Object? yaml;
-  try {
-    yaml = loadYaml(l10n.text);
-  } on YamlException {
-    return const {};
+  if (!(pubspec?.generate ?? false) || l10n == null) {
+    return (outputs: const {}, issues: const []);
   }
-  String? read(String key) => switch (yaml) {
-        YamlMap(:final nodes) => switch (nodes[key]?.value) {
-            final String value => value,
-            _ => null,
-          },
-        _ => null,
-      };
+  final issues = <SmfIssue>[];
+  void fails(String problem, [String? detail]) => issues.add(
+        SmfIssue(
+          '$problem, so flutter pub get fails to generate the '
+          'localizations${detail == null ? '.' : ': $detail'}',
+          origin: l10n.owner,
+          path: 'l10n.yaml',
+        ),
+      );
+  var options = YamlMap();
+  if (l10n.text.trim().isNotEmpty) {
+    try {
+      switch (loadYamlNode(l10n.text)) {
+        case final YamlMap map:
+          options = map;
+        case _:
+          fails('l10n.yaml is not a map of options');
+      }
+    } on YamlException catch (error) {
+      fails('l10n.yaml is not valid YAML', error.message);
+    }
+  }
+  String? read(String key) {
+    final value = options[key];
+    if (value is String?) return value;
+    fails('The option $key in l10n.yaml is not text');
+    return null;
+  }
+
   String clean(String path) => [
         for (final segment in path.split('/'))
           if (segment.isNotEmpty && segment != '.') segment,
       ].join('/');
-  final directory = clean(read('output-dir') ?? read('arb-dir') ?? 'lib/l10n');
+  final outputDirectory = read('output-dir');
+  final arbDirectory = read('arb-dir');
   final file = read('output-localization-file') ?? 'app_localizations.dart';
-  return {'$directory/$file'};
+  final directory = clean(outputDirectory ?? arbDirectory ?? 'lib/l10n');
+  return (outputs: {'$directory/$file'}, issues: issues);
 }
 
 /// The path relative to the root of the app of the file of the app that

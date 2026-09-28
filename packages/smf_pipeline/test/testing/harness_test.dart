@@ -1588,6 +1588,67 @@ void main() {
           ],
         );
       });
+
+      test('an l10n.yaml that flutter pub get fails on is a problem', () async {
+        /// The errors of the app of a module with [l10n] as its
+        /// `l10n.yaml`, whose code imports the default localizations.
+        Future<List<String>> errorsWith(String l10n) async {
+          final result = await ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule(
+                'l10n',
+                contributions: [
+                  const PubspecContribution.sdk('flutter_localizations'),
+                  const PubspecContribution.flutter(generate: true),
+                  BrickContribution(
+                    bundle(
+                      'l10n',
+                      files: {
+                        'l10n.yaml': l10n,
+                        'lib/l10n_user.dart':
+                            "import 'l10n/app_localizations.dart';\n",
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ]),
+          ).check(const ContractCase('l10n', requested: [ModuleId('l10n')]));
+          return [for (final issue in result.errors) '$issue'];
+        }
+
+        // Flutter takes the defaults for an empty file and an option
+        // without a value.
+        expect(await errorsWith(''), isEmpty);
+        expect(await errorsWith('output-dir:\n'), isEmpty);
+
+        const fails = 'so flutter pub get fails to generate the localizations';
+        expect(await errorsWith('arb-dir: [lib/l10n\n'), [
+          startsWith(
+            'error [l10n] l10n.yaml: l10n.yaml is not valid YAML, $fails: ',
+          ),
+        ]);
+        expect(await errorsWith('# No options yet.\n'), [
+          'error [l10n] l10n.yaml: l10n.yaml is not a map of options, $fails.',
+        ]);
+        expect(await errorsWith('- lib/l10n\n'), [
+          'error [l10n] l10n.yaml: l10n.yaml is not a map of options, $fails.',
+        ]);
+        expect(
+          await errorsWith('output-dir: 5\noutput-localization-file: true\n'),
+          [
+            equals(
+              'error [l10n] l10n.yaml: The option output-dir in l10n.yaml is '
+              'not text, $fails.',
+            ),
+            equals(
+              'error [l10n] l10n.yaml: The option output-localization-file '
+              'in l10n.yaml is not text, $fails.',
+            ),
+          ],
+        );
+      });
     });
   });
 }
