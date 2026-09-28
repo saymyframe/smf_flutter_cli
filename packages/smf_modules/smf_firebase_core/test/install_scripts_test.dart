@@ -193,8 +193,13 @@ final class _Machine {
           ? null
           : throw StateError('chmod failed');
 
-  /// Runs the install script for [system] with the shell [shell].
-  ProcessResult run(HostOperatingSystem system, {String shell = '/bin/zsh'}) {
+  /// Runs the install script for [system] with the shell [shell], and the
+  /// environment variables [variables] besides those of the machine.
+  ProcessResult run(
+    HostOperatingSystem system, {
+    String shell = '/bin/zsh',
+    Map<String, String> variables = const {},
+  }) {
     final script = InstallScript.of(system)!;
     final file = File('${root.path}/${script.fileName}')
       ..writeAsStringSync(script.text);
@@ -213,6 +218,7 @@ final class _Machine {
         'HOME': home.path,
         'SHELL': shell,
         'TEMPLATES': templates.path,
+        ...variables,
       },
     );
   }
@@ -408,6 +414,20 @@ void main() {
         r'export PATH="$PATH:$HOME/.local/bin"'
         '\n',
       );
+    });
+
+    test('knows the directory of nvm when its NVM_DIR ends with a slash', () {
+      final home = machine.home.path;
+      final nvm = Directory('$home/.nvm')..createSync();
+      File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+
+      final result = machine.run(
+        HostOperatingSystem.macos,
+        variables: {'NVM_DIR': '$home/.nvm/'},
+      );
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(machine.homeFile('.local/bin/firebase'), isNotNull);
     });
 
     test(

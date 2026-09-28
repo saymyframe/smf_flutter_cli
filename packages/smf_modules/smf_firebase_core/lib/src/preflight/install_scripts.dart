@@ -203,6 +203,18 @@ link_target() {
   esac
 }
 
+# Whether the directory $1 is one of nvm, whose directory may be a link or
+# end with a slash.
+is_of_nvm() {
+  local nvm_dir directory
+  nvm_dir="$(cd "${NVM_DIR:-$HOME/.nvm}" 2>/dev/null && pwd -P)" || return 1
+  directory="$(cd "$1" && pwd -P)" || return 1
+  case "$directory" in
+    "$nvm_dir"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # A firebase command in ~/.local/bin, which it adds to the PATH of new
 # terminals, that runs the Firebase CLI of the global npm directory $1 with
 # the Node.js that installed it, by their paths, whichever Node.js a new
@@ -247,9 +259,9 @@ if ! firebase_runs; then
     add_to_path_of_new_terminals "$npm_bin"
   fi
   # nvm has it on the PATH now, but a new terminal has the default one.
-  case "$npm_bin" in
-    "${NVM_DIR:-$HOME/.nvm}"/*) add_firebase_command "$npm_bin" ;;
-  esac
+  if is_of_nvm "$npm_bin"; then
+    add_firebase_command "$npm_bin"
+  fi
   export PATH="$npm_bin:$PATH"
 fi
 
