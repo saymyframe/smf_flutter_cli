@@ -1075,7 +1075,9 @@ final class _ImportCheck {
   ) {
     final (:path, file: _, packages: _, added: _) = checked;
     final uri = directive.uri;
-    if (uri.startsWith('dart:')) return const [];
+    // Only the files of the app and packages have rules: a library of the
+    // SDK, such as dart:async, is always there.
+    if (uri.contains(':') && !uri.startsWith('package:')) return const [];
     final users = _usersOf(checked, verb, directive);
     final target = _appPathOf(uri, path, appName);
     if (target == null) return _libraryIssues(checked, verb, uri, users);
@@ -1124,17 +1126,16 @@ final class _ImportCheck {
   static String _how(ContributionOrigin who, _Users users) =>
       users.byPipeline ? 'for a fragment of $who' : 'in the template of $who';
 
-  /// The problems of [uri], a library outside the app that [checked] uses
-  /// as [verb] says, for its [users]: the file may not use its package, or
-  /// a module uses the package of a provider of a role without
-  /// contributing it, as the pipeline would check the contribution.
+  /// The problems of [uri], the `package:` URI of a library outside the app
+  /// that [checked] uses as [verb] says, for its [users]: the file may not
+  /// use its package, or a module uses the package of a provider of a role
+  /// without contributing it, as the pipeline would check the contribution.
   List<SmfIssue> _libraryIssues(
     _CheckedFile checked,
     String verb,
     String uri,
     _Users users,
   ) {
-    if (!uri.startsWith('package:')) return const [];
     final package = uri.substring('package:'.length).split('/').first;
     final issues = [..._packageIssues(checked, verb, uri, package, users)];
     final owners = packageOwners[package];

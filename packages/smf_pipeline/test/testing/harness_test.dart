@@ -898,7 +898,9 @@ void main() {
           contributions: [
             dart(
               'lib/user/user.dart',
-              "import 'package:contract_app/a/a.dart';\n"
+              // A library of the SDK is always there.
+              "import 'dart:async';\n"
+                  "import 'package:contract_app/a/a.dart';\n"
                   "import 'package:contract_app/nowhere.dart';\n"
                   "import 'package:zeta/zeta.dart';\n"
                   "import '../nav/nav.dart';\n"
