@@ -127,9 +127,10 @@ final class ArgsSocket extends SocketKind {
       tag: [
         for (final MapEntry(key: name, value: shape) in args.entries)
           if (byName[name] case final items?)
-            shape == ArgShape.scalar
-                ? '$name: ${codes(items)},'
-                : '$name: [${codes(items)}],',
+            if (shape == ArgShape.scalar)
+              '$name: ${codes(items)},'
+            else
+              '$name: [${codes(items)}],',
       ].join('\n'),
     };
   }
