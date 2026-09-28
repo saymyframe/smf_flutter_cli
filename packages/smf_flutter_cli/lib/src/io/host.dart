@@ -19,15 +19,15 @@ final class IoHost {
   IoHost({required bool verbose, required Interruption interruption})
       : this._(verbose, interruption, Greeting(banner.greeting));
 
-  IoHost._(bool verbose, this._interruption, this.greeting)
-      : logger = IoLogger(verbose: verbose, greeting: greeting);
+  IoHost._(bool verbose, this._interruption, this._greeting)
+      : logger = IoLogger(verbose: verbose, greeting: _greeting);
 
   /// Reports to the terminal.
   final SmfLogger logger;
 
   /// The greeting of the run, which the prompter says before its first
   /// question unless the logger has printed something before.
-  final Greeting greeting;
+  final Greeting _greeting;
 
   final Interruption _interruption;
 
@@ -51,7 +51,7 @@ final class IoHost {
     prompter: TerminalPrompter(
       IoPromptTerminal(),
       interruption: _interruption,
-      greeting: greeting,
+      greeting: _greeting,
     ),
     processRunner: IoProcessRunner(_interruption),
     logger: logger,

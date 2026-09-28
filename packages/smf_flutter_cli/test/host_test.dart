@@ -31,18 +31,19 @@ void main() {
   test(
       'says the greeting before the first question, unless the logger has '
       'printed something before', () {
+    TerminalPrompter prompterOf(IoHost machine) =>
+        machine.host.prompter as TerminalPrompter;
     final machine = IoHost(verbose: false, interruption: Interruption());
-    final prompter = machine.host.prompter as TerminalPrompter;
 
-    expect(prompter.greeting, same(machine.greeting));
-    expect(machine.greeting.take(), greeting);
+    expect(prompterOf(machine).greeting?.take(), greeting);
 
+    // The logger of the same host drops the greeting of its prompter.
     final printed = IoHost(verbose: false, interruption: Interruption());
     IOOverrides.runZoned(
       () => printed.logger.info('Adding flutter_core'),
       stdout: _Discarded.new,
     );
-    expect(printed.greeting.take(), isNull);
+    expect(prompterOf(printed).greeting?.take(), isNull);
   });
 
   test('knows the operating systems by their names', () {
