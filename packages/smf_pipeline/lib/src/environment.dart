@@ -82,6 +82,20 @@ final class PipelineEnvironment implements SmfEnvironment {
   @override
   HostOperatingSystem get operatingSystem => _host.operatingSystem;
 
+  /// The variable [name] of the host's environment; on Windows, a variable
+  /// whose name has another case counts too.
+  @override
+  String? environmentVariable(String name) {
+    final variables = _host.environmentVariables;
+    if (variables[name] case final value?) return value;
+    if (!_isWindows) return null;
+    final upper = name.toUpperCase();
+    for (final MapEntry(:key, :value) in variables.entries) {
+      if (key.toUpperCase() == upper) return value;
+    }
+    return null;
+  }
+
   /// Runs commands with [path] as their `PATH`, unless a call sets its own,
   /// so tools that call each other, such as the Firebase CLI calling
   /// `node`, find what the run installed and the Flutter SDK it found.

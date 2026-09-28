@@ -89,6 +89,9 @@ final class FakeMachine implements SmfEnvironment {
   bool get skipExternalSetup => false;
 
   @override
+  String? environmentVariable(String name) => null;
+
+  @override
   SmfProcessRunner get processRunner => _Runner(this);
 
   @override

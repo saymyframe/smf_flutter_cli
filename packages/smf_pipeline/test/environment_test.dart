@@ -163,6 +163,41 @@ void main() {
     });
   });
 
+  group('environmentVariable', () {
+    test('reads a variable of the host by its name', () {
+      final environment = FakeHost(
+        environment: {
+          'PATH': '/sdk/bin',
+          'SSH_CONNECTION': '10.0.0.2 51234 10.0.0.1 22',
+        },
+      ).environment();
+
+      expect(
+        environment.environmentVariable('SSH_CONNECTION'),
+        '10.0.0.2 51234 10.0.0.1 22',
+      );
+      expect(environment.environmentVariable('PATH'), '/sdk/bin');
+      // Elsewhere than on Windows, the case of a name counts.
+      expect(environment.environmentVariable('ssh_connection'), isNull);
+      expect(environment.environmentVariable('SSH_TTY'), isNull);
+    });
+
+    test('on Windows reads a name of any case', () {
+      final environment = FakeHost(
+        operatingSystem: HostOperatingSystem.windows,
+        environment: {'Path': r'C:\sdk\bin', 'SSH_CLIENT': '10.0.0.2 51234 22'},
+      ).environment();
+
+      expect(environment.environmentVariable('PATH'), r'C:\sdk\bin');
+      expect(environment.environmentVariable('Path'), r'C:\sdk\bin');
+      expect(
+        environment.environmentVariable('ssh_client'),
+        '10.0.0.2 51234 22',
+      );
+      expect(environment.environmentVariable('SSH_TTY'), isNull);
+    });
+  });
+
   group('resolveTool', () {
     test("puts the tool's own PATH first", () async {
       final environment = FakeHost().environment();
@@ -255,6 +290,7 @@ void main() {
     expect(environment.interactive, isTrue);
     expect(environment.skipExternalSetup, isTrue);
     expect(environment.operatingSystem, HostOperatingSystem.linux);
+    expect(environment.environmentVariable('PATH'), host.variables['PATH']);
     expect(environment.prompter, same(host.prompter));
     expect(environment.logger, same(host.logger));
     expect(environment.processRunner, isNot(same(host.processRunner)));

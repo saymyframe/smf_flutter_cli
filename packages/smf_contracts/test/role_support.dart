@@ -221,6 +221,9 @@ final class PromptingEnvironment implements SmfEnvironment {
   HostOperatingSystem get operatingSystem => HostOperatingSystem.linux;
 
   @override
+  String? environmentVariable(String name) => null;
+
+  @override
   SmfProcessRunner get processRunner => throw UnimplementedError();
 
   @override

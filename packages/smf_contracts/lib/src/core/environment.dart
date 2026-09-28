@@ -34,6 +34,13 @@ abstract interface class SmfEnvironment {
   /// The operating system the pipeline runs on.
   HostOperatingSystem get operatingSystem;
 
+  /// The value of the environment variable [name] of the process that runs
+  /// the pipeline, or `null` if it is not set.
+  ///
+  /// On Windows, where the names of environment variables have no case,
+  /// [name] may be written in any case.
+  String? environmentVariable(String name);
+
   /// Runs external commands.
   SmfProcessRunner get processRunner;
 
