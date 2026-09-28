@@ -419,9 +419,11 @@ void main() {
           packageName: 'my_app',
           fileSystem: fileSystem,
         );
+    // A problem reads as its message, also where it is printed.
     Matcher throwsProblem(String message) => throwsA(
           isA<MatrixAppTestException>()
-              .having((error) => error.message, 'message', message),
+              .having((error) => error.message, 'message', message)
+              .having((error) => '$error', 'text', message),
         );
 
     expect(
