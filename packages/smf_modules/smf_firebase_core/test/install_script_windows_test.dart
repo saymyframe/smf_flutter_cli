@@ -21,14 +21,18 @@ void main() {
   setUp(() => temporary = Directory.systemTemp.createTempSync('smf_script_'));
   tearDown(() => temporary.deleteSync(recursive: true));
 
-  /// Runs the script as the check does, with [path] as the `PATH`.
-  ProcessResult run(String path) {
+  /// Runs the script as the check does, with [path] as the `PATH` and the
+  /// variables of [environment], and reads its output as the check does.
+  ProcessResult run(
+    String path, [
+    Map<String, String> environment = const {},
+  ]) {
     final file = File('${temporary.path}\\${script.fileName}')
       ..writeAsStringSync(script.text);
     final result = Process.runSync(
       script.shell,
       [...script.arguments, file.path],
-      environment: {'Path': path},
+      environment: {'Path': path, ...environment},
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
     );
@@ -50,30 +54,9 @@ void main() {
       final path = Platform.environment['PATH']!;
 
       test(
-          'installs the Firebase CLI with npm, and prints its directory, '
-          'where firebase runs', () {
-        final result = run(path);
-
-        expect(result.exitCode, 0);
-        final directories = binDirsIn('${result.stdout}');
-        expect(directories, isNotEmpty);
-        expect(firebaseVersion(directories.first).exitCode, 0);
-      });
-
-      test('installs nothing when a firebase command runs', () {
-        final installed = binDirsIn('${run(path).stdout}').first;
-
-        final result = run('$installed;$path');
-
-        expect(result.exitCode, 0);
-        expect('${result.stdout}', isNot(contains('added')));
-        expect(binDirsIn('${result.stdout}').first, installed);
-        expect(notesIn('${result.stdout}'), isEmpty);
-      });
-
-      test(
-          'installs the Firebase CLI over a firebase command that does not '
-          'run, and prints the directory of the one that does', () {
+          'installs the Firebase CLI with npm over a firebase command that '
+          'does not run, prints the directory of the one that does, whatever '
+          'letters its name has, and installs nothing once it runs', () {
         // Such as a Firebase CLI on a Node.js that is too old for it.
         final broken = Directory('${temporary.path}\\broken')..createSync();
         File('${broken.path}\\firebase.cmd').writeAsStringSync(
@@ -81,13 +64,27 @@ void main() {
           'echo The Firebase CLI needs a newer Node.js. 1>&2\r\n'
           'exit /b 1\r\n',
         );
+        // The global directory of npm is in the profile of the user, whose
+        // name may have any letters.
+        final prefix = '${temporary.path}\\npm – Євген é';
+        final npm = {'npm_config_prefix': prefix};
 
-        final result = run('${broken.path};$path');
+        final installed = run('${broken.path};$path', npm);
 
-        expect(result.exitCode, 0);
-        final directories = binDirsIn('${result.stdout}');
-        expect(directories.first, isNot(broken.path));
-        expect(firebaseVersion(directories.first).exitCode, 0);
+        expect(installed.exitCode, 0);
+        expect(binDirsIn('${installed.stdout}').first, prefix);
+        expect(
+          notesIn('${installed.stdout}'),
+          contains('Added $prefix to the PATH of the user, for new terminals.'),
+        );
+        expect(firebaseVersion(prefix).exitCode, 0);
+
+        final again = run('$prefix;$path', npm);
+
+        expect(again.exitCode, 0);
+        expect('${again.stdout}', isNot(contains('added')));
+        expect(binDirsIn('${again.stdout}').first, prefix);
+        expect(notesIn('${again.stdout}'), isEmpty);
       });
     },
     skip: enabled ? null : 'Set SMF_INSTALL_FIREBASE_CLI to 1 to run it.',
