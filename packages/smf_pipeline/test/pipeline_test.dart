@@ -748,6 +748,10 @@ void main() {
       issueLine(const SmfIssue.warning('Careful.', path: 'lib/a.dart')),
       'lib/a.dart: Careful.',
     );
+    expect(
+      issueLine(const SmfIssue.warning('Careful.', hint: 'Look.')),
+      'Careful. (Look.)',
+    );
     expect(issueLine(const SmfIssue.warning('Careful.')), 'Careful.');
   });
 
