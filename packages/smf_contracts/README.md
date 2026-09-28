@@ -18,7 +18,7 @@ The package has two libraries to import:
 
 ## A module
 
-This module adds the logging package to the app and a line to the start-up of the app that prints every log record:
+This module adds the logging package to the app and a line to the start-up of the app that prints the log records, INFO and above by default:
 
 ```dart
 import 'package:smf_contracts/smf_contracts.dart';

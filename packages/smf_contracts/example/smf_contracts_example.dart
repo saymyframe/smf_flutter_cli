@@ -2,9 +2,9 @@
 // in the Flutter apps that SMF generates.
 //
 // The module adds the package to the dependencies of the app, puts a line
-// into the early phase of `bootstrap()` that prints every log record, and
-// adds a section to the README of the app. It names no other module, so it
-// fits any app.
+// into the early phase of `bootstrap()` that prints the log records (INFO
+// and above by default), and adds a section to the README of the app. It
+// names no other module, so it fits any app.
 //
 // To offer it in `smf create`, pass it to `runCli` of smf_flutter_cli
 // together with the modules of SMF. The example of smf_pipeline tests it
@@ -46,8 +46,9 @@ final class LoggingModule extends SmfModule {
         AppEntryRole.readmeSections.entry(
           'Logging',
           'The app logs with the [logging](https://pub.dev/packages/logging) '
-              'package: create a `Logger` for each class, and `bootstrap()` '
-              'prints every record.',
+              'package: create a `Logger` for each class. `bootstrap()` '
+              'prints the records at `Logger.root.level` and above, which is '
+              'INFO by default.',
         ),
       ];
 }
