@@ -67,7 +67,6 @@ final class FirebaseLoginCheck extends PreflightCheck {
         instructions: 'Install the Firebase CLI, then log in $_howToLogIn.',
       );
     }
-    const command = 'firebase login:list --json';
     final SmfProcessResult result;
     try {
       result = await _listAccounts(firebase, environment);
@@ -81,25 +80,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
     }
     final json = _jsonIn(result.stdout);
     if (!result.succeeded) {
-      // A Firebase CLI that does not run fails every command, and the check
-      // of the Firebase CLI tells why; the login is unknown until it runs.
-      if (await whyFirebaseDoesNotRun(firebase, environment) != null) {
-        return _cliDoesNotRun;
-      }
-      final reasons = [
-        if (json case {'status': 'error', 'error': final String error}
-            when error.trim().isNotEmpty)
-          error.trim(),
-        if (tailOf(result.stderr) case final tail when tail.isNotEmpty) tail,
-      ];
-      final end = endOf(
-        command,
-        result.exitCode,
-        environment.operatingSystem,
-      );
-      return PreflightFailed(
-        reasons.isEmpty ? '$end.' : '$end:\n${reasons.join('\n')}',
-      );
+      return _failedListing(firebase, environment, result, json);
     }
     if (_hasAccounts(json)) return _useLogin(firebase, environment);
     return switch (json) {
@@ -108,7 +89,7 @@ final class FirebaseLoginCheck extends PreflightCheck {
           installable: true,
         ),
       _ => const PreflightFailed(
-          '"$command" did not report the accounts it knows.',
+          '"$_listing" did not report the accounts it knows.',
         ),
     };
   }
@@ -152,6 +133,9 @@ bool isOverSsh(SmfEnvironment environment) =>
       (name) => environment.environmentVariable(name)?.isNotEmpty ?? false,
     );
 
+/// The command that lists the accounts of the Firebase CLI.
+const _listing = 'firebase login:list --json';
+
 /// Runs `firebase login:list --json` with [firebase] in a directory of its
 /// own, where the Firebase CLI may leave its `firebase-debug.log`, and
 /// without its check for updates.
@@ -165,6 +149,34 @@ Future<SmfProcessResult> _listAccounts(
       workingDirectory: await scratchDirectory(environment),
       environment: const {'NO_UPDATE_NOTIFIER': '1'},
     );
+
+/// What the check finds when `firebase login:list --json` of [firebase]
+/// failed with [result], whose output holds [json]: that the Firebase CLI
+/// does not run, when `firebase --version` fails too, or else how the
+/// command ended, with the error of its JSON and the end of its standard
+/// error.
+Future<PreflightStatus> _failedListing(
+  String firebase,
+  SmfEnvironment environment,
+  SmfProcessResult result,
+  Object? json,
+) async {
+  // A Firebase CLI that does not run fails every command, and the check of
+  // the Firebase CLI tells why; the login is unknown until it runs.
+  if (await whyFirebaseDoesNotRun(firebase, environment) != null) {
+    return _cliDoesNotRun;
+  }
+  final reasons = [
+    if (json case {'status': 'error', 'error': final String error}
+        when error.trim().isNotEmpty)
+      error.trim(),
+    if (tailOf(result.stderr) case final tail when tail.isNotEmpty) tail,
+  ];
+  final end = endOf(_listing, result.exitCode, environment.operatingSystem);
+  return PreflightFailed(
+    reasons.isEmpty ? '$end.' : '$end:\n${reasons.join('\n')}',
+  );
+}
 
 /// Whether [json], the output of `firebase login:list --json`, lists an
 /// account.
