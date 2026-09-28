@@ -55,8 +55,9 @@ melos:
           dart $MELOS_ROOT_PATH/tools/bundle_bricks.dart
 
     # Quality gates. Formatting covers hand-written package code only
-    # (lib, test, bin, tool, and app_tests, the tests that CI copies into
-    # the apps it generates), and the tools of the repository:
+    # (lib, test, bin, tool, app_tests, the tests that CI copies into the
+    # apps it generates, and example, which pub.dev shows and pana checks),
+    # and the tools of the repository:
     # bricks/**/__brick__ holds mustache templates, and lib/bundles is
     # generated (CI checks it matches the bricks instead). test/fixtures holds
     # packages of their own, which melos formats separately, with templates in
@@ -67,11 +68,11 @@ melos:
         dart analyze --fatal-infos --fatal-warnings tools
     format:
       run: |
-        melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool app_tests 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
+        melos exec -c 6 -- 'dart format $(find $(ls -d lib test bin tool app_tests example 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
         dart format tools
     format:check:
       run: |
-        melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool app_tests 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
+        melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool app_tests example 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
         dart format --output=none --set-exit-if-changed tools
     banlist:
       description: Check that no file uses what the module model replaced; see tools/banlist.dart.
