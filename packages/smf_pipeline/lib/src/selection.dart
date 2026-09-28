@@ -435,22 +435,20 @@ final class _ModuleQuestions {
   }
 }
 
-/// [chosen] and the modules they depend on, directly or not.
+/// [chosen] and the modules they depend on, directly or not, each once, in
+/// the order that a walk through the dependencies meets them.
 List<SmfModule> _withDependencies(
   List<SmfModule> chosen,
   ModuleRegistry registry,
 ) {
-  final all = <ModuleId, SmfModule>{};
-  void add(SmfModule module) {
-    if (all.containsKey(module.descriptor.id)) return;
-    all[module.descriptor.id] = module;
-    for (final dependency in module.descriptor.dependsOn) {
-      if (registry[dependency] case final dependency?) add(dependency);
-    }
-  }
-
-  chosen.forEach(add);
-  return all.values.toList();
+  // The registry has no cycle of dependsOn, so the walk ends.
+  Map<ModuleId, SmfModule> withTheirs(SmfModule module) => {
+        module.descriptor.id: module,
+        for (final dependency in module.descriptor.dependsOn)
+          if (registry[dependency] case final dependency?)
+            ...withTheirs(dependency),
+      };
+  return {for (final module in chosen) ...withTheirs(module)}.values.toList();
 }
 
 final class _Choice {
