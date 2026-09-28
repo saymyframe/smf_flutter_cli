@@ -105,6 +105,31 @@ void main() {
     return events;
   }
 
+  test('listening again changes nothing, so one Ctrl-C only marks the run',
+      () async {
+    final events = <String>[];
+    // Like the signals of the process, which several may listen to.
+    final stream = StreamController<ProcessSignal>.broadcast();
+    late Interruption twice;
+    runZonedGuarded(
+      () => twice = Interruption(
+        signals: stream.stream,
+        exit: (code) => throw _Exited(code),
+      )
+        ..listen()
+        ..listen(),
+      (error, _) => events.add('exit ${(error as _Exited).code}'),
+    );
+
+    stream.add(ProcessSignal.sigint);
+    await pumpEventQueue();
+
+    expect(twice.interrupted, isTrue);
+    expect(events, isEmpty);
+    await twice.close();
+    await stream.close();
+  });
+
   test('a second Ctrl-C restores the terminal and quits with 130', () async {
     expect(
       await quitting([ProcessSignal.sigint, ProcessSignal.sigint]),

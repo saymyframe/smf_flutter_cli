@@ -44,7 +44,7 @@ final class Interruption {
   /// Whether the user interrupted the run.
   bool get interrupted => _interrupted;
 
-  /// Starts listening to Ctrl-C.
+  /// Starts listening to Ctrl-C; listening again changes nothing.
   void listen() {
     if (_subscriptions.isNotEmpty) return;
     for (final signals in [
