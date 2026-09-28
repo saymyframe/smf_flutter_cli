@@ -229,6 +229,35 @@ void main() {
       ]);
     });
 
+    test('a role template puts no code into a socket of a module', () {
+      const parent = SocketRef<CodeSocket>.module(
+        ModuleId('parent'),
+        'hook',
+        CodeSocket(),
+      );
+      final shelf = TestRole<NoDsl>(
+        'shelf',
+        template: TestTemplate(
+          contributions: [
+            const SocketContribution.code(parent, Fragment('a();')),
+          ],
+        ),
+      );
+
+      final result = _validate([
+        entry,
+        TestModule('parent', sockets: const [parent]),
+        TestModule('store', providers: [RoleProvider.plain(shelf)]),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'role:shelf: role:shelf puts code into the socket parent.hook, but '
+          'only modules that depend on parent directly may.',
+        ),
+      ]);
+    });
+
     test('socket families accept their members', () {
       final families = <SocketFamily<Object?, SocketKind>>[];
       final familyRole = TestRole<NoDsl>('family', socketFamilies: families);
@@ -1157,6 +1186,20 @@ void main() {
       older.issues.single.origin,
       const ModuleOrigin(ModuleId('scaffold')),
     );
+  });
+
+  test('a constraint that is not one is reported once, by the merge', () {
+    final result = _validate([
+      entry,
+      TestModule(
+        'store',
+        contributions: const [PubspecContribution.hosted('y', 'not a version')],
+      ),
+    ]);
+
+    expect(_messages(result), [
+      'store: The constraint "not a version" of y is invalid.',
+    ]);
   });
 
   test('pubspec problems are reported', () {

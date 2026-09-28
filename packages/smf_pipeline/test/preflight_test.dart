@@ -1,3 +1,5 @@
+import 'dart:io' show ProcessException;
+
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:test/test.dart';
@@ -131,6 +133,7 @@ void main() {
         const SmfProcessResult(exitCode: 0, stdout: 'no json'),
         const SmfProcessResult(exitCode: 0, stdout: '{"flutterRoot": 1}'),
         const SmfProcessResult(exitCode: 0, stdout: '{broken'),
+        const SmfProcessResult(exitCode: 0, stdout: '{broken}'),
         const SmfProcessResult(exitCode: 0, stdout: '{"flutterRoot": "/x"}'),
       ]) {
         final host = FakeHost(
@@ -157,6 +160,33 @@ void main() {
           reason: result.stdout,
         );
       }
+    });
+
+    test('a launcher that cannot start leaves the SDK missing', () async {
+      final host = FakeHost(
+        flutter: false,
+        environment: {'PATH': '/snap/bin'},
+        processRunner: RecordingRunner(
+          onRun: (call) => throw ProcessException(
+            call.executable,
+            call.arguments,
+            'Permission denied',
+            13,
+          ),
+        ),
+      );
+      host.fileSystem.file('/snap/bin/flutter').createSync(recursive: true);
+      final check = FlutterSdkCheck(host.fileSystem);
+
+      expect(
+        await check.check(host.environment()),
+        isA<PreflightMissing>().having(
+          (missing) => missing.found,
+          'found',
+          'the Flutter SDK of /snap/bin/flutter has no dart',
+        ),
+      );
+      expect(check.found, isNull);
     });
 
     test('reads the versions the SDK records', () async {

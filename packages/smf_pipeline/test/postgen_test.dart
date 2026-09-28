@@ -518,6 +518,26 @@ void main() {
       ]);
     });
 
+    test('a missing tool named by its path keeps the path for later', () async {
+      final skipped = await runPostGen(
+        directory: '/tmp/app',
+        environment: environment,
+        steps: [
+          _step(
+            'a',
+            const PostGenStep(
+              ToolRef('/opt/tidy/bin/tidy'),
+              ['--all'],
+              skippable: true,
+            ),
+          ),
+        ],
+      );
+
+      expect(skipped.single.command, '/opt/tidy/bin/tidy --all');
+      expect(skipped.single.reason, '/opt/tidy/bin/tidy was not found');
+    });
+
     test('a missing tool is not offered to run', () async {
       environment = environmentOf(interactive: true);
       final skipped = await runPostGen(
