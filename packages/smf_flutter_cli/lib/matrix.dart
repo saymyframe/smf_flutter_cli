@@ -5,6 +5,7 @@
 /// It serves the repository of SMF, and its API may change in any release.
 library;
 
+import 'dart:convert';
 import 'dart:io' show Platform, Process, stdout;
 
 import 'package:file/file.dart';
@@ -462,6 +463,9 @@ Future<(int, String)> _flutter(List<String> arguments, String directory) async {
     arguments,
     workingDirectory: directory,
     runInShell: Platform.isWindows,
+    // Flutter writes UTF-8, on Windows too.
+    stdoutEncoding: utf8,
+    stderrEncoding: utf8,
   );
   return (result.exitCode, '${result.stdout}${result.stderr}');
 }
