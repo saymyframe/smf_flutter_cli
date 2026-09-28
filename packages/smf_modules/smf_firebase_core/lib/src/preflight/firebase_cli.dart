@@ -2,30 +2,56 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
 import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 
-/// Runs `firebase --version` with the Firebase CLI [firebase], which tells
-/// whether it runs: in a directory of its own, where it may leave its
-/// `firebase-debug.log`, and without the check for updates, which would run
-/// in the background after it.
-Future<SmfProcessResult> firebaseVersion(
+/// Why the Firebase CLI [firebase] does not run, or `null` if it runs, as
+/// `firebase --version` tells: how the command ended and the last lines of
+/// what it wrote, or that it could not start, such as a file that may not be
+/// executed, on one line and without a final period.
+///
+/// The command runs in a directory of its own, where the Firebase CLI may
+/// leave its `firebase-debug.log`, and without its check for updates, which
+/// would run in the background after it.
+Future<String?> whyFirebaseDoesNotRun(
   String firebase,
   SmfEnvironment environment,
-) async =>
-    environment.processRunner.run(
+) async {
+  const command = 'firebase --version';
+  final SmfProcessResult result;
+  try {
+    result = await environment.processRunner.run(
       firebase,
       const ['--version'],
       workingDirectory: await scratchDirectory(environment),
       environment: const {'NO_UPDATE_NOTIFIER': '1'},
     );
+  } on SmfCancelledException {
+    rethrow;
+  } on Exception catch (error) {
+    return _withoutPeriod('"$command" could not start: ${_oneLine('$error')}');
+  }
+  if (result.succeeded) return null;
+  final end = endOf(command, result.exitCode, environment.operatingSystem);
+  final errors = _oneLine(outputTail(result, lines: 5));
+  return _withoutPeriod(errors.isEmpty ? end : '$end: $errors');
+}
+
+/// [text] without its final period, which the sentence around it ends with.
+String _withoutPeriod(String text) =>
+    text.endsWith('.') ? text.substring(0, text.length - 1) : text;
+
+/// The lines of [text] that are not blank, on one line.
+String _oneLine(String text) => [
+      for (final line in text.split('\n'))
+        if (line.trim() case final trimmed when trimmed.isNotEmpty) trimmed,
+    ].join(' ');
 
 /// Checks that the Firebase CLI is installed and runs, which
 /// `flutterfire configure` runs to reach the Firebase projects of the user.
 ///
 /// A `firebase` command on the `PATH` may not run, such as one that needs
 /// another Node.js than the one of the terminal, so the check runs
-/// `firebase --version`, without the check for updates, which would run in
-/// the background after it. When the command fails, the check tells that
-/// the command does not run and how it ended, with the last lines of its
-/// errors, and offers the installation, as for a missing CLI.
+/// `firebase --version`; see [whyFirebaseDoesNotRun]. When the command fails
+/// or cannot start, the check tells that the command does not run and why,
+/// and offers the installation, as for a missing CLI.
 ///
 /// It can install it with npm, and Node.js first when it is missing or too
 /// old: the pipeline asks the user before. The progress shows what the
@@ -53,17 +79,9 @@ final class FirebaseCliCheck extends PreflightCheck {
     if (firebase == null) {
       return PreflightMissing(instructions: _install, installable: installable);
     }
-    final result = await firebaseVersion(firebase, environment);
-    if (result.succeeded) return const PreflightPassed();
-    final end = endOf(
-      'firebase --version',
-      result.exitCode,
-      environment.operatingSystem,
-    );
+    final why = await whyFirebaseDoesNotRun(firebase, environment);
+    if (why == null) return const PreflightPassed();
     // On one line, since a question shows the instructions.
-    final errors = outputTail(result, lines: 5).split('\n').join(' ');
-    var why = errors.isEmpty ? end : '$end: $errors';
-    if (why.endsWith('.')) why = why.substring(0, why.length - 1);
     return PreflightMissing(
       found: '$firebase does not run',
       instructions: '$why. $_install',

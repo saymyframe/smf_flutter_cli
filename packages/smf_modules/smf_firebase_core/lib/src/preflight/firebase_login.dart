@@ -49,22 +49,29 @@ final class FirebaseLoginCheck extends PreflightCheck {
       );
     }
     const command = 'firebase login:list --json';
-    final result = await environment.processRunner.run(
-      firebase,
-      const ['login:list', '--json'],
-      // The Firebase CLI writes firebase-debug.log where it runs.
-      workingDirectory: await scratchDirectory(environment),
-      environment: const {'NO_UPDATE_NOTIFIER': '1'},
-    );
+    final SmfProcessResult result;
+    try {
+      result = await environment.processRunner.run(
+        firebase,
+        const ['login:list', '--json'],
+        // The Firebase CLI writes firebase-debug.log where it runs.
+        workingDirectory: await scratchDirectory(environment),
+        environment: const {'NO_UPDATE_NOTIFIER': '1'},
+      );
+    } on SmfCancelledException {
+      rethrow;
+    } on Exception {
+      if (await whyFirebaseDoesNotRun(firebase, environment) != null) {
+        return _cliDoesNotRun;
+      }
+      rethrow;
+    }
     final json = _jsonIn(result.stdout);
     if (!result.succeeded) {
       // A Firebase CLI that does not run fails every command, and the check
-      // of the Firebase CLI tells how; the login is unknown until it runs.
-      if (!(await firebaseVersion(firebase, environment)).succeeded) {
-        return const PreflightMissing(
-          found: 'the Firebase CLI does not run',
-          instructions: 'Install the Firebase CLI, then log in $_howToLogIn.',
-        );
+      // of the Firebase CLI tells why; the login is unknown until it runs.
+      if (await whyFirebaseDoesNotRun(firebase, environment) != null) {
+        return _cliDoesNotRun;
       }
       final reasons = [
         if (json case {'status': 'error', 'error': final String error}
@@ -128,6 +135,12 @@ bool isOverSsh(SmfEnvironment environment) =>
     const ['SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY'].any(
       (name) => environment.environmentVariable(name)?.isNotEmpty ?? false,
     );
+
+/// What the check finds when the Firebase CLI does not run.
+const _cliDoesNotRun = PreflightMissing(
+  found: 'the Firebase CLI does not run',
+  instructions: 'Install the Firebase CLI, then log in $_howToLogIn.',
+);
 
 /// How to log in with the Firebase CLI, in the terminal of the machine or of
 /// a remote one.
