@@ -6,6 +6,9 @@ repository: https://github.com/saymyframe/smf_flutter_cli
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
 documentation: https://doc.saymyframe.com
 topics: [flutter, cli, code-generation, boilerplate, template]
+screenshots:
+  - description: "smf create in a terminal: the answers for a Flutter app with a start screen, tabs at the bottom, BLoC and get_it, and the steps that generate it."
+    path: screenshots/smf_create.png
 license: Apache-2.0
 
 environment:
