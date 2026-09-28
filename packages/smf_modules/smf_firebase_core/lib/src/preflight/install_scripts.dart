@@ -537,14 +537,26 @@ function Firebase-Runs {
   return ($LASTEXITCODE -eq 0)
 }
 
+# Adds $pathEntry to the PATH of the user, for new terminals. It changes the
+# value in the registry as it is, with the variables that it refers to, such
+# as %USERPROFILE%, unexpanded, and keeps its kind: that of a new Windows
+# expands them, which a value of another kind does not.
 function Add-UserPathEntry($pathEntry) {
   if ([string]::IsNullOrWhiteSpace($pathEntry)) { return }
-  $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
-  if ([string]::IsNullOrWhiteSpace($cur)) { $cur = "" }
-  if ($cur.ToLower().Split(';') -contains $pathEntry.ToLower()) { return }
-  $newPath = if ($cur.Trim().Length -gt 0) { "$cur;$pathEntry" } else { $pathEntry }
-  # Unlike setx, it does not cut a PATH longer than 1024 characters.
-  [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+  $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+  try {
+    $cur = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $entries = [Environment]::ExpandEnvironmentVariables($cur).ToLower().Split(';')
+    if ($entries -contains $pathEntry.ToLower()) { return }
+    $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+    $newPath = if ($cur.Trim().Length -gt 0) { "$cur;$pathEntry" } else { $pathEntry }
+    # Unlike setx, it does not cut a PATH longer than 1024 characters.
+    $key.SetValue('Path', $newPath, $kind)
+  } finally { $key.Close() }
+  # Deleting a variable of the user that there is not changes nothing, and
+  # tells the running programs, such as Explorer, which starts new
+  # terminals, that the environment changed, as it does after every change.
+  [Environment]::SetEnvironmentVariable('SMF_NO_VARIABLE', $null, 'User')
   Write-Output "smf-note=Added $pathEntry to the PATH of the user, for new terminals."
 }
 
