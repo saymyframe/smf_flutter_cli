@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io' as io;
 
+import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
@@ -735,4 +737,91 @@ final class RecordingRunner implements SmfProcessRunner {
     calls.add(call);
     return onInteractive?.call(call) ?? 0;
   }
+}
+
+/// A file system where the directories at some paths fail: they cannot be
+/// renamed, as if they were on another file system, deleted, or listed.
+final class FaultyFileSystem extends ForwardingFileSystem {
+  /// Creates the file system over [delegate].
+  FaultyFileSystem(
+    super.delegate, {
+    this.noRename = const {},
+    this.noDelete = const {},
+    this.unreadable = const {},
+  });
+
+  /// The paths of the directories that cannot be renamed.
+  final Set<String> noRename;
+
+  /// The paths of the directories that cannot be deleted.
+  final Set<String> noDelete;
+
+  /// The paths of the directories that cannot be listed.
+  final Set<String> unreadable;
+
+  @override
+  Directory directory(dynamic path) {
+    final directory = delegate.directory(path);
+    final faulty = {...noRename, ...noDelete, ...unreadable};
+    return faulty.contains(directory.path)
+        ? _FaultyDirectory(this, directory)
+        : directory;
+  }
+}
+
+final class _FaultyDirectory
+    extends ForwardingFileSystemEntity<Directory, io.Directory>
+    with ForwardingDirectory<Directory> {
+  _FaultyDirectory(this._faulty, this.delegate);
+
+  final FaultyFileSystem _faulty;
+
+  @override
+  final io.Directory delegate;
+
+  @override
+  FileSystem get fileSystem => _faulty;
+
+  @override
+  Directory wrapDirectory(io.Directory delegate) =>
+      _faulty.directory(delegate.path);
+
+  @override
+  File wrapFile(io.File delegate) => delegate as File;
+
+  @override
+  Link wrapLink(io.Link delegate) => delegate as Link;
+
+  @override
+  Directory childDirectory(String basename) =>
+      (delegate as Directory).childDirectory(basename);
+
+  @override
+  File childFile(String basename) =>
+      (delegate as Directory).childFile(basename);
+
+  @override
+  Link childLink(String basename) =>
+      (delegate as Directory).childLink(basename);
+
+  @override
+  Future<Directory> rename(String newPath) async =>
+      _faulty.noRename.contains(path)
+          ? throw FileSystemException('Cross-device link', path)
+          : super.rename(newPath);
+
+  @override
+  Future<Directory> delete({bool recursive = false}) async =>
+      _faulty.noDelete.contains(path)
+          ? throw FileSystemException('Permission denied', path)
+          : super.delete(recursive: recursive);
+
+  @override
+  Stream<FileSystemEntity> list({
+    bool recursive = false,
+    bool followLinks = true,
+  }) =>
+      _faulty.unreadable.contains(path)
+          ? Stream.error(FileSystemException('Permission denied', path))
+          : super.list(recursive: recursive, followLinks: followLinks);
 }

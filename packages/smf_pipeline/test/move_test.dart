@@ -1,92 +1,9 @@
-import 'dart:io' as io;
-
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_pipeline/src/move.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
-
-/// A file system where the directories at some paths fail: they cannot be
-/// renamed, as if they were on another file system, deleted, or listed.
-final class _Faulty extends ForwardingFileSystem {
-  _Faulty(
-    super.delegate, {
-    this.noRename = const {},
-    this.noDelete = const {},
-    this.unreadable = const {},
-  });
-
-  final Set<String> noRename;
-  final Set<String> noDelete;
-  final Set<String> unreadable;
-
-  @override
-  Directory directory(dynamic path) {
-    final directory = delegate.directory(path);
-    final faulty = {...noRename, ...noDelete, ...unreadable};
-    return faulty.contains(directory.path)
-        ? _FaultyDirectory(this, directory)
-        : directory;
-  }
-}
-
-final class _FaultyDirectory
-    extends ForwardingFileSystemEntity<Directory, io.Directory>
-    with ForwardingDirectory<Directory> {
-  _FaultyDirectory(this._faulty, this.delegate);
-
-  final _Faulty _faulty;
-
-  @override
-  final io.Directory delegate;
-
-  @override
-  FileSystem get fileSystem => _faulty;
-
-  @override
-  Directory wrapDirectory(io.Directory delegate) =>
-      _faulty.directory(delegate.path);
-
-  @override
-  File wrapFile(io.File delegate) => delegate as File;
-
-  @override
-  Link wrapLink(io.Link delegate) => delegate as Link;
-
-  @override
-  Directory childDirectory(String basename) =>
-      (delegate as Directory).childDirectory(basename);
-
-  @override
-  File childFile(String basename) =>
-      (delegate as Directory).childFile(basename);
-
-  @override
-  Link childLink(String basename) =>
-      (delegate as Directory).childLink(basename);
-
-  @override
-  Future<Directory> rename(String newPath) async =>
-      _faulty.noRename.contains(path)
-          ? throw FileSystemException('Cross-device link', path)
-          : super.rename(newPath);
-
-  @override
-  Future<Directory> delete({bool recursive = false}) async =>
-      _faulty.noDelete.contains(path)
-          ? throw FileSystemException('Permission denied', path)
-          : super.delete(recursive: recursive);
-
-  @override
-  Stream<FileSystemEntity> list({
-    bool recursive = false,
-    bool followLinks = true,
-  }) =>
-      _faulty.unreadable.contains(path)
-          ? Stream.error(FileSystemException('Permission denied', path))
-          : super.list(recursive: recursive, followLinks: followLinks);
-}
 
 void main() {
   late MemoryFileSystem fileSystem;
@@ -226,7 +143,7 @@ void main() {
 
     await move(
       const TargetDecision(path: '/work/app'),
-      on: _Faulty(fileSystem, noRename: {'/tmp/smf/app'}),
+      on: FaultyFileSystem(fileSystem, noRename: {'/tmp/smf/app'}),
     );
 
     expect(filesIn('/work/app'), moved);
@@ -245,7 +162,7 @@ void main() {
   test('a temporary copy that cannot be deleted only warns', () async {
     await move(
       const TargetDecision(path: '/work/app'),
-      on: _Faulty(
+      on: FaultyFileSystem(
         fileSystem,
         noRename: {'/tmp/smf/app'},
         noDelete: {'/tmp/smf/app'},
@@ -267,7 +184,7 @@ void main() {
     await expectLater(
       move(
         const TargetDecision(path: '/work/app', replaceExisting: true),
-        on: _Faulty(
+        on: FaultyFileSystem(
           fileSystem,
           noRename: {'/tmp/smf/app'},
           unreadable: {'/tmp/smf/app'},
@@ -293,7 +210,7 @@ void main() {
     await expectLater(
       move(
         const TargetDecision(path: '/work/app', replaceExisting: true),
-        on: _Faulty(
+        on: FaultyFileSystem(
           fileSystem,
           noRename: {'/tmp/smf/app', '/work/app.smf-replaced-1'},
           unreadable: {'/tmp/smf/app'},
@@ -318,7 +235,7 @@ void main() {
     await expectLater(
       move(
         const TargetDecision(path: '/work/app', replaceExisting: true),
-        on: _Faulty(fileSystem, noRename: {'/work/app'}),
+        on: FaultyFileSystem(fileSystem, noRename: {'/work/app'}),
       ),
       throwsA(
         isA<GenerationFailedException>().having(
@@ -337,7 +254,7 @@ void main() {
 
     await move(
       const TargetDecision(path: '/work/app', replaceExisting: true),
-      on: _Faulty(fileSystem, noDelete: {'/work/app.smf-replaced-1'}),
+      on: FaultyFileSystem(fileSystem, noDelete: {'/work/app.smf-replaced-1'}),
     );
 
     expect(filesIn('/work/app'), moved);
