@@ -338,8 +338,8 @@ final class MatrixCommands {
 /// otherwise.
 ///
 /// With [only], it checks only the apps of the matrix with those names,
-/// such as `every module (bloc)`, and each of the [appTests] must apply to
-/// one of them; a name that no app of the matrix has is a problem too.
+/// such as `every module (bloc)`, and runs the [appTests] that apply to
+/// them; a name that no app of the matrix has is a problem too.
 ///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory], with the tests. [commands] run for each app.
@@ -382,9 +382,10 @@ Future<int> runMatrix(
     // An app keeps its number in the matrix when only some are checked.
     problems.addAll(await run.check(app, 'app_${index + 1}'));
   }
-  // Tests that apply to no app would leave CI without saying so.
+  // Tests that apply to no app would leave CI without saying so. Those of
+  // the apps that are not checked run where the whole matrix is.
   for (final test in appTests) {
-    if (!checked.any(test.appliesTo)) {
+    if (!apps.any(test.appliesTo)) {
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }

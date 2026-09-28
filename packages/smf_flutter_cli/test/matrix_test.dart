@@ -285,12 +285,13 @@ void main() {
       expect(tested, ['app_2 (bloc): /tests/bloc']);
       expect(log.last, '\n1 apps generated in /apps.');
 
-      // Tests must apply to one of them.
+      // Tests of an app that is not checked do not run, and are no problem.
       expect(
         await run(modules: modules, appTests: [bloc], only: {'flutter_core'}),
-        1,
+        0,
       );
-      expect(log.last, 'The tests of /tests/bloc apply to no app.');
+      expect(created.last.take(2), ['create', 'app_1']);
+      expect(tested, hasLength(1));
     });
 
     test('fails when it is given an app that the matrix does not have',
