@@ -479,6 +479,12 @@ const _windows = r'''
 # "smf-note=<change>".
 $ErrorActionPreference = "Stop"
 
+# npm prints its directories in UTF-8, and SMF reads the output of the script
+# in UTF-8, while Windows PowerShell reads and writes in the code page of the
+# console. The global directory of npm is in the profile of the user, whose
+# name may have letters beyond ASCII.
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
+
 function Command-Exists($name) {
   try { Get-Command $name -ErrorAction Stop | Out-Null; return $true } catch { return $false }
 }
