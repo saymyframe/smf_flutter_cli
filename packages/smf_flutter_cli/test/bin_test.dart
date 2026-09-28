@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -55,6 +56,9 @@ Future<ProcessResult> _smf(
         ...environment,
       },
       includeParentEnvironment: false,
+      // The CLI writes UTF-8, on Windows too.
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
     );
 
 /// A Flutter SDK in [directory] whose `flutter` and `dart` write their
@@ -84,6 +88,17 @@ String _fakeSdk(Directory directory) {
   }
   return bin;
 }
+
+/// The option of the platforms of `flutterfire configure` as the CLI prints
+/// a command for later: in double quotes on Windows, since PowerShell reads
+/// a comma as its own.
+final _platforms = Platform.isWindows
+    ? '"--platforms=android,ios"'
+    : '--platforms=android,ios';
+
+/// The quote of an argument with spaces in a command that the CLI prints
+/// for later: double on Windows, single elsewhere.
+final _quote = Platform.isWindows ? '"' : "'";
 
 /// The executable [name] of the Flutter SDK of [_fakeSdk] in its [bin].
 String _sdkExecutable(String bin, String name) =>
@@ -526,16 +541,16 @@ void main() {
               contains(
                 'After generation\n'
                 '  dart pub global run flutterfire_cli:flutterfire configure '
-                '--platforms=android,ios --overwrite-firebase-options '
+                '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n'
                 // Once it succeeded, on macOS, the fix of the phase for
                 // Crashlytics, quoted as a run prints it for later.
-                "    then ruby -e 'f = ARGV[0]; ",
+                '    then ruby -e ${_quote}f = ARGV[0]; ',
               ),
               contains(
-                "' ios/Runner.xcodeproj/project.pbxproj (firebase_core, on "
-                'macOS)\n',
+                '$_quote ios/Runner.xcodeproj/project.pbxproj (firebase_core, '
+                'on macOS)\n',
               ),
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n'
@@ -619,7 +634,7 @@ void main() {
               ),
               contains(
                 '  dart pub global run flutterfire_cli:flutterfire configure '
-                '--platforms=android,ios --overwrite-firebase-options '
+                '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n',
               ),
@@ -673,7 +688,7 @@ void main() {
               ),
               contains(
                 '  dart pub global run flutterfire_cli:flutterfire configure '
-                '--platforms=android,ios --overwrite-firebase-options '
+                '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n',
               ),
