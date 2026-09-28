@@ -228,25 +228,26 @@ jobs:
         if: ${{ !cancelled() }}
         run: dart test tools
 
+      # In a directory whose name has a space and letters beyond ASCII.
       - name: Generate an app without Firebase and one with every module
         if: ${{ !cancelled() }}
         run: |
           smf() {
             dart run packages/smf_flutter_cli/bin/smf_flutter.dart create "$@" \
-              -o "$RUNNER_TEMP/apps" --no-input --skip-external-setup \
-              --no-dart-fix --strict
+              -o "$RUNNER_TEMP/SMF apps застосунки é" --no-input \
+              --skip-external-setup --no-dart-fix --strict
           }
           smf plain_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus
-          smf firebase_app -m home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics
+          smf firebase_app -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics
 
       - name: Build the app without Firebase for the iOS simulator
         if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/apps/plain_app
+        working-directory: ${{ runner.temp }}/SMF apps застосунки é/plain_app
         run: flutter build ios --simulator --no-codesign
 
       - name: Build the app with every module for the iOS simulator
         if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/apps/firebase_app
+        working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
         run: flutter build ios --simulator --no-codesign
 
       # With the build phase for Crashlytics that flutterfire configure adds,
@@ -255,7 +256,7 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: packages/smf_modules/smf_firebase_core
         env:
-          SMF_CRASHLYTICS_APP: ${{ runner.temp }}/apps/firebase_app
+          SMF_CRASHLYTICS_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
         run: dart test test/crashlytics_archive_test.dart
 
   windows:
