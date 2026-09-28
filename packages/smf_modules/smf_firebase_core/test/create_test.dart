@@ -94,18 +94,55 @@ const _noCli = '/bin/firebase: line 2: '
 /// The path of an install script of the Firebase CLI in a command.
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 
+/// The endpoint of Google that refreshes the access token of the Firebase
+/// CLI.
+const _tokenUrl = 'https://www.googleapis.com/oauth2/v3/token';
+
+/// The API that lists the Firebase projects.
+const _projectsUrl = 'https://firebase.googleapis.com/v1beta1/projects';
+
+/// How `firebase projects:list --debug` of firebase-tools ends when Google
+/// rejects the login, shortened: 400 for the refresh token, then 401 for
+/// the refresh token in place of an access token.
+const _rejected = SmfProcessResult(
+  exitCode: 2,
+  stdout: '<<< [apiv2][status] POST $_tokenUrl 400\n'
+      '<<< [apiv2][status] GET $_projectsUrl 401\n\n'
+      'Error: Failed to list Firebase projects. See firebase-debug.log for '
+      'more info.\n',
+);
+
+/// How `firebase projects:list --debug` ends when no request reaches
+/// Google, shortened.
+const _offline = SmfProcessResult(
+  exitCode: 2,
+  stdout: '*** [apiv2] error from fetch($_tokenUrl, {"method":"POST"}): '
+      'FetchError: request to $_tokenUrl failed, reason: getaddrinfo '
+      'ENOTFOUND www.googleapis.com\n'
+      'Authentication Error: Your credentials are no longer valid. Please run '
+      'firebase login --reauth\n\n'
+      'Error: Failed to list Firebase projects. See firebase-debug.log for '
+      'more info.\n',
+);
+
 /// A machine with a Flutter SDK, bash and Ruby with xcodeproj 1.27.0, or
 /// without the gem unless [xcodeproj], on which `smf create` runs in a
 /// terminal; the app goes to `/work/my_app`. It runs macOS unless
 /// [operatingSystem] says otherwise.
 ///
 /// The Firebase CLI is missing until the install script puts `firebase`
-/// into `/opt/npm/bin`, and `firebase login`, with `--no-localhost` or
-/// not, logs in unless it exits with [loginCode]. flutterfire_cli is not
-/// active, or in version [flutterfire], until `dart pub global activate`
-/// activates flutterfire_cli 1.4.1. `flutterfire configure` exits with
-/// [configureCode], and every other command succeeds. The environment
-/// variables of the run are [variables] and the `PATH`.
+/// into `/opt/npm/bin`, unless the machine has an [expiredLogin] or is
+/// [offline]. `firebase login`, with `--no-localhost` or not, logs in unless
+/// it exits with [loginCode], and keeps a login that the Firebase CLI has
+/// without `--reauth`, as firebase-tools does. With an [expiredLogin], the
+/// Firebase CLI has an account whose login Google rejects until `firebase
+/// login --reauth`. `firebase projects:list` fails as without a network when
+/// the machine is [offline], and lists no project otherwise.
+///
+/// flutterfire_cli is not active, or in version [flutterfire], until `dart
+/// pub global activate` activates flutterfire_cli 1.4.1. `flutterfire
+/// configure` exits with [configureCode], and every other command succeeds.
+/// The environment variables of the run are [variables] and the `PATH`.
 ///
 /// With [brokenFirebase], a firebase command that does not run is in `/bin`
 /// on the `PATH`, as a command that runs the Firebase CLI of another
@@ -121,7 +158,10 @@ final class _Machine {
     this.configureCode = 0,
     this.variables = const {},
     this.brokenFirebase = false,
-  }) {
+    this.expiredLogin = false,
+    this.offline = false,
+  })  : _loggedIn = expiredLogin || offline,
+        _expired = expiredLogin {
     files.directory('/sdk/bin/cache/dart-sdk').createSync(recursive: true);
     files.file('/sdk/bin/cache/flutter.version.json').writeAsStringSync(
           '{"flutterVersion": "3.44.2", "dartSdkVersion": "3.12.2"}',
@@ -132,6 +172,7 @@ final class _Machine {
       '/bin/bash',
       '/bin/ruby',
       if (brokenFirebase) '/bin/firebase',
+      if (_loggedIn) _firebase,
     ]) {
       files.file(tool).createSync(recursive: true);
     }
@@ -153,8 +194,11 @@ final class _Machine {
   final int configureCode;
   final Map<String, String> variables;
   final bool brokenFirebase;
+  final bool expiredLogin;
+  final bool offline;
   late final FakeMachine fake;
-  var _loggedIn = false;
+  bool _loggedIn;
+  bool _expired;
   var _activated = false;
 
   SmfProcessResult _reply(Call call) {
@@ -177,9 +221,22 @@ final class _Machine {
             : '{"status": "success"}',
       );
     }
-    if (line == '$_firebase login' ||
-        line == '$_firebase login --no-localhost') {
-      _loggedIn = loginCode == 0;
+    if (line == '$_firebase projects:list --debug') {
+      if (offline) return _offline;
+      if (_expired) return _rejected;
+      return const SmfProcessResult(
+        exitCode: 0,
+        stdout: 'No projects found.\n',
+      );
+    }
+    if (call.executable == _firebase && call.arguments.first == 'login') {
+      if (_loggedIn && !call.arguments.contains('--reauth')) {
+        return const SmfProcessResult(exitCode: 0);
+      }
+      if (loginCode == 0) {
+        _loggedIn = true;
+        _expired = false;
+      }
       return SmfProcessResult(exitCode: loginCode);
     }
     if (line == '$_dart pub global list') {
@@ -222,7 +279,15 @@ final class _Machine {
           processRunner: fake.processRunner,
           logger: fake.logger,
           fileSystem: files,
-          environmentVariables: {...variables, 'PATH': '/sdk/bin:/bin'},
+          environmentVariables: {
+            ...variables,
+            'PATH': [
+              '/sdk/bin',
+              '/bin',
+              // Where the Firebase CLI of a machine with an account is.
+              if (expiredLogin || offline) '/opt/npm/bin',
+            ].join(':'),
+          },
           operatingSystem: operatingSystem,
           hasTerminal: hasTerminal,
         ),
@@ -310,8 +375,12 @@ void main() {
       '$_firebase --version',
       // The login is checked once the Firebase CLI is there.
       '$_firebase login:list --json',
+      // Whether to log in again.
+      '$_firebase login:list --json',
       '$_firebase login',
       '$_firebase login:list --json',
+      // Google accepts the new login.
+      '$_firebase projects:list --debug',
       '$_dart pub global list',
       _activate,
       '$_dart pub global list',
@@ -418,6 +487,7 @@ void main() {
       '/bin/bash <script>',
       '$_firebase --version',
       '$_firebase login:list --json',
+      '$_firebase login:list --json',
       '$_firebase login',
       '$_dart pub global list',
     ]);
@@ -473,8 +543,10 @@ void main() {
       '/bin/bash <script>',
       '$_firebase --version',
       '$_firebase login:list --json',
+      '$_firebase login:list --json',
       '$_firebase login',
       '$_firebase login:list --json',
+      '$_firebase projects:list --debug',
       '$_dart pub global list',
       _activate,
       '$_dart pub global list',
@@ -622,6 +694,176 @@ void main() {
       contains('Setup of the Xcode project on a Mac is needed'),
       _notConfigured('Firebase login is missing'),
     ]);
+  });
+
+  group('with a login that Google no longer accepts', () {
+    const found = 'the login has expired or is no longer valid';
+    const expired = 'Firebase login is needed, but $found';
+    const logInAgain = 'Log in again with "firebase login --reauth", or on a '
+        'remote machine, such as over SSH, with "firebase login --reauth '
+        '--no-localhost".';
+
+    /// The question whether to log in again.
+    const logInAgainNow = 'Firebase login is needed by firebase_core, but '
+        '$found. $logInAgain Set it up now?';
+
+    test(
+        'a user who agrees logs in again with --reauth, and gets Firebase '
+        'configured', () async {
+      final machine = _Machine(
+        confirmations: [true, true],
+        expiredLogin: true,
+        flutterfire: '1.4.1',
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions, [logInAgainNow, _configureNow]);
+      expect(machine.checks, [
+        '$_firebase --version',
+        '$_firebase login:list --json',
+        // Google rejects the login that login:list reports.
+        '$_firebase projects:list --debug',
+        '$_dart pub global list',
+        "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
+        '$_firebase login:list --json',
+        // firebase login would keep the login it has.
+        '$_firebase login --reauth',
+        '$_firebase login:list --json',
+        '$_firebase projects:list --debug',
+        _configure,
+        _fix,
+      ]);
+      final login = machine.fake.calls.singleWhere(
+        (call) => call.line == '$_firebase login --reauth',
+      );
+      expect(login.interactive, isTrue);
+      expect(machine.warnings, isEmpty);
+    });
+
+    test(
+        'a user who declines gets the reason and how to log in again, and '
+        'Firebase configured later', () async {
+      final machine = _Machine(
+        confirmations: [false],
+        expiredLogin: true,
+        flutterfire: '1.4.1',
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions, [logInAgainNow]);
+      expect(machine.checks, isNot(contains(startsWith('$_firebase login '))));
+      expect(machine.checks, isNot(contains(_configure)));
+      expect(machine.warnings, [
+        endsWith('$expired. $logInAgain'),
+        _notConfigured(expired),
+        _fixAfterConfigure,
+      ]);
+    });
+
+    test(
+        'over SSH, a user who agrees logs in again with --reauth '
+        '--no-localhost, and is asked as anywhere else', () async {
+      final machine = _Machine(
+        confirmations: [true, true],
+        expiredLogin: true,
+        flutterfire: '1.4.1',
+        operatingSystem: HostOperatingSystem.linux,
+        variables: {'SSH_TTY': '/dev/pts/0'},
+      );
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(machine.fake.questions, [logInAgainNow, _configureNow]);
+      expect(
+        machine.checks,
+        containsAllInOrder([
+          '$_firebase projects:list --debug',
+          '$_firebase login:list --json',
+          '$_firebase login --reauth --no-localhost',
+          '$_firebase projects:list --debug',
+          _configure,
+        ]),
+      );
+      expect(machine.checks, isNot(contains('$_firebase login --reauth')));
+    });
+
+    test('--explain shows that the login has expired, and changes nothing',
+        () async {
+      final machine = _Machine(expiredLogin: true, flutterfire: '1.4.1');
+
+      final code = await machine.create(['--explain']);
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.fake.reports.join('\n'),
+      );
+      expect(
+        machine.infos,
+        containsAllInOrder([
+          '  ✓ Firebase CLI (for firebase_core)',
+          '  ✗ Firebase login (for firebase_core): $found',
+          '    $logInAgain',
+          '    An interactive run offers to set it up.',
+          '  ✓ FlutterFire CLI 1.4.1 or a later 1.x (for firebase_core)',
+        ]),
+      );
+      expect(machine.fake.questions, isEmpty);
+      expect(machine.checks, isNot(contains(startsWith('$_firebase login '))));
+      expect(machine.files.directory('/work/my_app').existsSync(), isFalse);
+    });
+  });
+
+  test(
+      'without a network, the login could not be checked, and Firebase is '
+      'configured later without a question about the login', () async {
+    const unchecked = 'Firebase login could not be checked: "firebase '
+        'projects:list --debug" exited with code 2:\n'
+        'Failed to list Firebase projects.\n'
+        'request to https://www.googleapis.com/oauth2/v3/token failed, reason: '
+        'getaddrinfo ENOTFOUND www.googleapis.com';
+    final machine = _Machine(offline: true, flutterfire: '1.4.1');
+
+    final code = await machine.create();
+
+    expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
+    expect(machine.fake.questions, isEmpty);
+    expect(machine.checks, isNot(contains(startsWith('$_firebase login '))));
+    expect(machine.warnings, [
+      endsWith(unchecked),
+      _notConfigured('Firebase login could not be checked'),
+      _fixAfterConfigure,
+    ]);
+
+    final explained = _Machine(offline: true, flutterfire: '1.4.1');
+    await explained.create(['--explain']);
+    expect(
+      explained.infos,
+      contains(
+        '  ✗ Firebase login (for firebase_core): "firebase projects:list '
+        '--debug" exited with code 2:\n'
+        'Failed to list Firebase projects.\n'
+        'request to https://www.googleapis.com/oauth2/v3/token failed, reason: '
+        'getaddrinfo ENOTFOUND www.googleapis.com',
+      ),
+    );
   });
 
   test('a run that skips external setup installs nothing and asks nothing',

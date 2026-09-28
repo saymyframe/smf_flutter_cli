@@ -58,6 +58,85 @@ String _accounts(List<String> emails) => '{\n'
     ].join(', ')}]\n'
     '}';
 
+/// What `firebase projects:list --debug` of firebase-tools 15.14.0 printed
+/// on its standard output for a login that Google rejects, a refresh token
+/// that was revoked, of the account `me@example.com`, shortened.
+///
+/// Google answers 400 when the Firebase CLI refreshes the access token, so
+/// the Firebase CLI tries the refresh token itself, which the API rejects
+/// with 401.
+const _revoked = '''
+[2026-09-28T12:52:53.938Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[2026-09-28T12:52:53.939Z] > authorizing via signed-in user (me@example.com)
+[2026-09-28T12:52:53.940Z] Checked if tokens are valid: false, expires at: 1000
+[2026-09-28T12:52:53.940Z] > refreshing access token with scopes: []
+[2026-09-28T12:52:53.941Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[2026-09-28T12:52:53.941Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[2026-09-28T12:52:54.101Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[2026-09-28T12:52:54.101Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[2026-09-28T12:52:54.102Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[2026-09-28T12:52:54.315Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[2026-09-28T12:52:54.340Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 401
+[2026-09-28T12:52:54.340Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[2026-09-28T12:52:54.340Z] Got a 401 Unauthenticated error for a call that required authentication. Refreshing tokens.
+[2026-09-28T12:52:54.341Z] > refreshing access token with scopes: []
+[2026-09-28T12:52:54.341Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[2026-09-28T12:52:54.387Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[2026-09-28T12:52:54.388Z] Request to https://firebase.googleapis.com/v1beta1/projects?pageSize=1000 had HTTP Error: 401, Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+
+Error: Failed to list Firebase projects. See firebase-debug.log for more info.
+''';
+
+/// What `firebase projects:list --debug` printed on its standard output
+/// for the login of [_revoked] when no request reached Google, as on a
+/// machine without a network, shortened: the Firebase CLI says that the
+/// credentials are no longer valid when it cannot refresh the access token
+/// for any reason.
+const _offline = '''
+[2026-09-28T12:52:54.917Z] > authorizing via signed-in user (me@example.com)
+[2026-09-28T12:52:54.921Z] > refreshing access token with scopes: []
+[2026-09-28T12:52:54.921Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[2026-09-28T12:52:54.926Z] *** [apiv2] error from fetch(https://firebase-public.firebaseio.com/cli.json, {"headers":{},"method":"GET"}): FetchError: request to https://firebase-public.firebaseio.com/cli.json failed, reason: getaddrinfo ENOTFOUND firebase-public.firebaseio.com
+⚠  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection.
+[2026-09-28T12:52:54.926Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST"}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: getaddrinfo ENOTFOUND www.googleapis.com
+Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[2026-09-28T12:52:54.927Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+Error: Failed to list Firebase projects. See firebase-debug.log for more info.
+''';
+
+/// What `firebase projects:list --debug` of firebase-tools 15.14.0 prints on
+/// its standard output for a login that works, with one project, shortened;
+/// the check reads only its exit code.
+const _oneProject = '''
+[2026-09-28T12:50:01.101Z] > authorizing via signed-in user (me@example.com)
+[2026-09-28T12:50:01.402Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+┌──────────────────────┬──────────────┬────────────────┬──────────────────────┐
+│ Project Display Name │ Project ID   │ Project Number │ Resource Location ID │
+├──────────────────────┼──────────────┼────────────────┼──────────────────────┤
+│ My App               │ my-app-1a2b3 │ 123456789012   │ [Not specified]      │
+└──────────────────────┴──────────────┴────────────────┴──────────────────────┘
+
+1 project(s) total.
+''';
+
+/// What `firebase projects:list --debug` prints on its standard output for
+/// a login that works without a project, shortened.
+const _noProject = '''
+[2026-09-28T12:50:01.101Z] > authorizing via signed-in user (me@example.com)
+No projects found.
+''';
+
+/// The API that lists the Firebase projects.
+const _projectsUrl = 'https://firebase.googleapis.com/v1beta1/projects';
+
+/// What `firebase projects:list` writes on its standard error when it
+/// fails.
+const _spinner = '- Preparing the list of your Firebase projects\n'
+    '✖ Preparing the list of your Firebase projects\n';
+
 void main() {
   test('the module checks the machine for flutterfire configure in order', () {
     final preflight = const FirebaseCoreModule()
@@ -419,14 +498,34 @@ void main() {
   group('FirebaseLoginCheck', () {
     const check = FirebaseLoginCheck();
 
-    /// A machine whose Firebase CLI runs, and whose `login:list` gives
-    /// [result].
-    FakeMachine machineWith(SmfProcessResult result) => FakeMachine(
+    /// A machine whose Firebase CLI runs, whose `login:list` gives [result],
+    /// and whose `projects:list` gives [projects], a project by default.
+    FakeMachine machineWith(
+      SmfProcessResult result, {
+      SmfProcessResult? projects,
+      Map<String, String> variables = const {},
+    }) =>
+        FakeMachine(
           executables: {'firebase': _firebase},
-          reply: (call) => call.arguments.first == '--version'
-              ? _result(0, stdout: '15.14.0\n')
-              : result,
+          variables: variables,
+          reply: (call) => switch (call.arguments.first) {
+            '--version' => _result(0, stdout: '15.14.0\n'),
+            'projects:list' => projects ?? _result(0, stdout: _oneProject),
+            _ => result,
+          },
         );
+
+    /// A machine whose Firebase CLI has the account `me@example.com`, and
+    /// whose `projects:list` gives [projects].
+    FakeMachine loggedIn(SmfProcessResult projects) => machineWith(
+          _result(0, stdout: _accounts(['me@example.com'])),
+          projects: projects,
+        );
+
+    const expired = 'the login has expired or is no longer valid';
+    const logInAgain = 'Log in again with "firebase login --reauth", or on a '
+        'remote machine, such as over SSH, with "firebase login --reauth '
+        '--no-localhost".';
 
     test('needs the Firebase CLI first', () async {
       final machine = FakeMachine();
@@ -443,16 +542,157 @@ void main() {
       expect(machine.calls, isEmpty);
     });
 
-    test('passes with an account, and shows nothing of the output', () async {
-      final machine = machineWith(_result(0, stdout: _accounts(['a@b.c'])));
+    test(
+        'passes with an account whose login lists the projects, however '
+        'many, and shows nothing of the output', () async {
+      for (final projects in [_oneProject, _noProject]) {
+        final machine = loggedIn(_result(0, stdout: projects));
 
-      expect(await check.check(machine), isA<PreflightPassed>());
-      final call = machine.calls.single;
-      expect(call.line, '$_firebase login:list --json');
-      // A directory of its own for firebase-debug.log.
-      expect(call.workingDirectory, directoryOf(machine.tempFiles.keys.single));
-      expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
-      expect(machine.reports, isEmpty);
+        expect(await check.check(machine), isA<PreflightPassed>());
+        expect(machine.calls.map((call) => call.line), [
+          '$_firebase login:list --json',
+          // It asks Google, and only reads.
+          '$_firebase projects:list --debug',
+        ]);
+        final directories = machine.tempFiles.keys.map(directoryOf).toList();
+        for (final (index, call) in machine.calls.indexed) {
+          // A directory of its own for firebase-debug.log, and no check for
+          // updates in the background.
+          expect(call.workingDirectory, directories[index]);
+          expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
+          expect(call.interactive, isFalse);
+        }
+        expect(machine.reports, isEmpty);
+      }
+    });
+
+    test(
+        'tells that the login has expired when Google rejects it, and offers '
+        'to log in again', () async {
+      for (final (name, output) in [
+        ('a revoked refresh token', _revoked),
+        ('the same on Windows', _revoked.replaceAll('\n', '\r\n')),
+        // Google asks for a new login, as a policy of Google Workspace does,
+        // when the Firebase CLI refreshes the access token.
+        (
+          'a login to renew',
+          '[2026-09-28T12:52:54.101Z] <<< [apiv2][status] POST '
+              'https://www.googleapis.com/oauth2/v3/token 400\n'
+              'Authentication Error: Your credentials are no longer valid. '
+              'Please run firebase login --reauth\n\n'
+              'Error: Failed to list Firebase projects. See firebase-debug.log '
+              'for more info.\n'
+        ),
+        // An access token that Google no longer accepts, before it expires.
+        (
+          'an access token that was revoked',
+          '[2026-09-28T12:52:54.340Z] <<< [apiv2][status] GET '
+              'https://firebase.googleapis.com/v1beta1/projects 401\n'
+        ),
+      ]) {
+        final machine = loggedIn(_result(2, stdout: output, stderr: _spinner));
+
+        expect(
+          await check.check(machine),
+          _missing(found: expired, instructions: logInAgain, installable: true),
+          reason: name,
+        );
+        expect(machine.reports, isEmpty, reason: name);
+      }
+    });
+
+    test(
+        'says that the login could not be checked when no request reached '
+        'Google, as without a network, and not that it has expired', () async {
+      final offline = await check.check(
+        loggedIn(_result(2, stdout: _offline, stderr: _spinner)),
+      );
+
+      expect(
+        offline,
+        _failed(
+          '"firebase projects:list --debug" exited with code 2:\n'
+          'Failed to list Firebase projects.\n'
+          'request to https://firebase-public.firebaseio.com/cli.json failed, '
+          'reason: getaddrinfo ENOTFOUND firebase-public.firebaseio.com\n'
+          'request to https://www.googleapis.com/oauth2/v3/token failed, '
+          'reason: getaddrinfo ENOTFOUND www.googleapis.com',
+        ),
+      );
+      // The email in the output is never shown.
+      expect((offline as PreflightFailed).message, isNot(contains('@')));
+
+      // A request that got no answer in time.
+      expect(
+        await check.check(
+          loggedIn(
+            _result(
+              2,
+              stdout: '[2026-09-28T12:53:25.012Z] Timeout reached making '
+                  'request to $_projectsUrl?pageSize=1000\r\n'
+                  'Error: Failed to list Firebase projects. See '
+                  'firebase-debug.log for more info.\r\n',
+            ),
+          ),
+        ),
+        _failed(
+          '"firebase projects:list --debug" exited with code 2:\n'
+          'Failed to list Firebase projects.\n'
+          'Timeout reached making request to $_projectsUrl?pageSize=1000',
+        ),
+      );
+    });
+
+    test(
+        'says how the listing ended when it fails otherwise, with only its '
+        'error', () async {
+      // Google answered, but did not reject the login.
+      for (final status in ['403', '500']) {
+        expect(
+          await check.check(
+            loggedIn(
+              _result(
+                2,
+                stdout: '[2026-09-28T12:52:54.101Z] <<< [apiv2][status] POST '
+                    'https://www.googleapis.com/oauth2/v3/token 200\n'
+                    '[2026-09-28T12:52:54.340Z] <<< [apiv2][status] GET '
+                    'https://firebase.googleapis.com/v1beta1/projects '
+                    '$status\n\n'
+                    'Error: Failed to list Firebase projects. See '
+                    'firebase-debug.log for more info.\n',
+                stderr: _spinner,
+              ),
+            ),
+          ),
+          _failed(
+            '"firebase projects:list --debug" exited with code 2:\n'
+            'Failed to list Firebase projects.',
+          ),
+          reason: status,
+        );
+      }
+      // A bad request elsewhere than to refresh the access token.
+      expect(
+        await check.check(
+          loggedIn(
+            _result(
+              1,
+              stdout: '<<< [apiv2][status] GET $_projectsUrl 400\n'
+                  'Error: Request to $_projectsUrl had HTTP Error: 400, Bad '
+                  'request\n',
+            ),
+          ),
+        ),
+        _failed(
+          '"firebase projects:list --debug" exited with code 1:\n'
+          'Request to $_projectsUrl had HTTP Error: 400, Bad request',
+        ),
+      );
+      // Nothing that tells why.
+      expect(
+        await check.check(loggedIn(_result(1, stderr: _spinner))),
+        _failed('"firebase projects:list --debug" exited with code 1.'),
+      );
     });
 
     test(
@@ -607,15 +847,20 @@ void main() {
       var code = 0;
       final machine = FakeMachine(
         executables: {'firebase': _firebase},
+        // No account: login:list prints no JSON of one, or fails.
         reply: (_) => _result(code),
       );
 
       final installed = await check.install(machine);
 
       expect(installed.binDirs, isEmpty);
-      expect(machine.calls.single.line, '$_firebase login');
-      expect(machine.calls.single.interactive, isTrue);
-      expect(machine.calls.single.workingDirectory, isNotNull);
+      expect(machine.calls.map((call) => call.line), [
+        '$_firebase login:list --json',
+        '$_firebase login',
+      ]);
+      expect(machine.calls.first.interactive, isFalse);
+      expect(machine.calls.last.interactive, isTrue);
+      expect(machine.calls.last.workingDirectory, isNotNull);
 
       code = 1;
       await expectLater(
@@ -635,6 +880,33 @@ void main() {
     });
 
     test(
+        'logs in again with --reauth when the Firebase CLI has an account, '
+        'whose login firebase login would keep', () async {
+      var code = 0;
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (call) => call.arguments.first == 'login:list'
+            ? _result(0, stdout: _accounts(['me@example.com']))
+            : _result(code),
+      );
+
+      await check.install(machine);
+
+      expect(machine.calls.map((call) => call.line), [
+        '$_firebase login:list --json',
+        '$_firebase login --reauth',
+      ]);
+      expect(machine.calls.last.interactive, isTrue);
+      expect(machine.reports, isEmpty);
+
+      code = 1;
+      await expectLater(
+        check.install(machine),
+        _setupFailure('"firebase login --reauth" exited with code 1.'),
+      );
+    });
+
+    test(
         'logs in with --no-localhost over SSH, where the browser is on '
         'another machine', () async {
       for (final (name, value) in [
@@ -642,29 +914,36 @@ void main() {
         ('SSH_CLIENT', '10.0.0.2 51234 22'),
         ('SSH_TTY', '/dev/pts/0'),
       ]) {
-        var code = 0;
-        final machine = FakeMachine(
-          operatingSystem: HostOperatingSystem.linux,
-          executables: {'firebase': _firebase},
-          variables: {name: value},
-          reply: (_) => _result(code),
-        );
+        for (final (accounts, login) in [
+          ('', 'login --no-localhost'),
+          (_accounts(['me@example.com']), 'login --reauth --no-localhost'),
+        ]) {
+          var code = 0;
+          final machine = FakeMachine(
+            operatingSystem: HostOperatingSystem.linux,
+            executables: {'firebase': _firebase},
+            variables: {name: value},
+            reply: (call) => call.arguments.first == 'login:list'
+                ? _result(0, stdout: accounts)
+                : _result(code),
+          );
 
-        await check.install(machine);
+          await check.install(machine);
 
-        expect(
-          machine.calls.single.line,
-          '$_firebase login --no-localhost',
-          reason: name,
-        );
-        expect(machine.calls.single.interactive, isTrue);
+          expect(
+            machine.calls.last.line,
+            '$_firebase $login',
+            reason: name,
+          );
+          expect(machine.calls.last.interactive, isTrue);
 
-        code = 1;
-        await expectLater(
-          check.install(machine),
-          _setupFailure('"firebase login --no-localhost" exited with code 1.'),
-          reason: name,
-        );
+          code = 1;
+          await expectLater(
+            check.install(machine),
+            _setupFailure('"firebase $login" exited with code 1.'),
+            reason: name,
+          );
+        }
       }
     });
 
@@ -677,7 +956,7 @@ void main() {
 
       await check.install(machine);
 
-      expect(machine.calls.single.line, '$_firebase login');
+      expect(machine.calls.last.line, '$_firebase login');
     });
 
     test('tells a session over SSH by its variables', () {
