@@ -465,19 +465,19 @@ List<SmfIssue> _checkIssues(
   final issues = <SmfIssue>[];
   for (final result in results) {
     final check = result.planned.check;
-    if (result.passed) {
-      if (!explain) logger.detail('✓ ${check.description}');
-      continue;
-    }
     final state = switch (result.status) {
+      PreflightPassed() => null,
       PreflightMissing(:final instructions, found: null) =>
         '${check.description} is missing. $instructions',
       PreflightMissing(:final instructions, :final found?) =>
         '${check.description} is needed, but $found. $instructions',
       PreflightFailed(:final message) =>
         '${check.description} could not be checked: $message',
-      PreflightPassed() => '',
     };
+    if (state == null) {
+      if (!explain) logger.detail('✓ ${check.description}');
+      continue;
+    }
     final problem = switch (result.setupFailure) {
       final failure? => '$state Setting it up failed: $failure',
       null => state,
