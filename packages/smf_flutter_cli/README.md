@@ -2,6 +2,8 @@
 
 `smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
+![smf create in a terminal: it asks for the app name and the modules, adds go_router for the start screen and generates a Flutter app with bottom tabs, BLoC and get_it](https://doc.saymyframe.com/demo/smf_create.gif)
+
 SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
 
 The documentation is at [doc.saymyframe.com](https://doc.saymyframe.com).
