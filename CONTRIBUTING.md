@@ -50,9 +50,9 @@ dart run packages/smf_flutter_cli/tool/matrix.dart /tmp/smf_apps
 dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart /tmp/smf_fixture_apps
 ```
 
-To check only some apps of the matrix, name them after the directory, such as `'every module (bloc)'`.
+To check only some apps of the matrix, name them after the directory, such as `'every module (bloc)'`. In a directory whose path has letters beyond ASCII, the matrix analyzes the apps with `dart analyze`, as `flutter analyze` of Flutter 3.44 fails there.
 
-CI also runs the tests on macOS and Windows. The macOS job builds apps for the iOS simulator and archives one with Crashlytics. The Windows job generates apps in directories whose names have a space and letters beyond ASCII, and runs the install script of the Firebase CLI.
+CI also runs the tests on macOS and Windows, and on all three systems it generates apps in directories whose names have a space and letters beyond ASCII. The macOS job builds apps for the iOS simulator and archives one with Crashlytics, and a Windows job runs the install script of the Firebase CLI.
 
 The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
 
