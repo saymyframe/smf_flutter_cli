@@ -40,6 +40,11 @@ void main() {
     return result;
   }
 
+  /// [directory] with links resolved: Windows may name a directory by its
+  /// short name, such as `RUNNER~1`, which the script does not print.
+  String resolved(String directory) =>
+      Directory(directory).resolveSymbolicLinksSync();
+
   /// Runs `firebase --version` with the firebase command of [directory].
   ProcessResult firebaseVersion(String directory) => Process.runSync(
         '$directory\\firebase.cmd',
@@ -72,7 +77,8 @@ void main() {
         final installed = run('${broken.path};$path', npm);
 
         expect(installed.exitCode, 0);
-        expect(binDirsIn('${installed.stdout}').first, prefix);
+        final directory = binDirsIn('${installed.stdout}').first;
+        expect(resolved(directory), resolved(prefix));
         expect(
           notesIn('${installed.stdout}'),
           contains('Added $prefix to the PATH of the user, for new terminals.'),
@@ -83,7 +89,7 @@ void main() {
 
         expect(again.exitCode, 0);
         expect('${again.stdout}', isNot(contains('added')));
-        expect(binDirsIn('${again.stdout}').first, prefix);
+        expect(resolved(binDirsIn('${again.stdout}').first), resolved(prefix));
         expect(notesIn('${again.stdout}'), isEmpty);
       });
     },
