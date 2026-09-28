@@ -38,6 +38,19 @@ final class RegistryException implements Exception {
       ].join('\n');
 }
 
+/// [issue] as a line for a logger that marks its severity itself, such as
+/// `[WARN]`: [SmfIssue.toString] without the severity, such as
+/// `[firebase_core]: Firebase login is missing. …`.
+String issueLine(SmfIssue issue) {
+  final about = [
+    if (issue.origin case final origin?) '[$origin]',
+    if (issue.path case final path?) path,
+  ].join(' ');
+  final hint = issue.hint;
+  return '${about.isEmpty ? '' : '$about: '}${issue.message}'
+      '${hint == null ? '' : ' ($hint)'}';
+}
+
 /// Returns [issue] with [origin] if it names no origin itself.
 SmfIssue issueWithOrigin(SmfIssue issue, ContributionOrigin origin) {
   if (issue.origin != null) return issue;

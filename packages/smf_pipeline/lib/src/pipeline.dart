@@ -451,7 +451,10 @@ final class _Lenience {
   /// with the hints that tell how to fix them, stop generation.
   bool leaveOut(List<SmfIssue> issues) {
     for (final issue in issues) {
-      if (!issue.isError && _warned.add('$issue')) logger.warn('$issue');
+      // The logger marks a warning itself.
+      if (!issue.isError && _warned.add('$issue')) {
+        logger.warn(issueLine(issue));
+      }
     }
     final errors = [
       for (final issue in issues)

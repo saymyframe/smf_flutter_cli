@@ -312,7 +312,7 @@ void main() {
         expect(installable.installs, 0);
         expect(host.prompter.asked, isEmpty);
         expect(host.logger.warnings, [
-          'warning [firebase]: Tool cli is missing. Install it.',
+          '[firebase]: Tool cli is missing. Install it.',
         ]);
       });
 
@@ -724,7 +724,31 @@ void main() {
     final plan = await pipeline(modules, host).plan(request(['firebase']));
 
     expect(plan, isNotNull);
-    expect(host.logger.warnings.single, contains('Tool cli is missing'));
+    // Without the word warning, which the logger of the CLI adds as
+    // [WARN].
+    expect(
+      host.logger.warnings.single,
+      '[firebase]: Tool cli is missing. Install it.',
+    );
+  });
+
+  test('the line of a warning has all of it but the severity', () {
+    expect(
+      issueLine(
+        const SmfIssue.warning(
+          'Unused import.',
+          hint: 'Remove it.',
+          origin: ModuleOrigin(ModuleId('home')),
+          path: 'lib/main.dart',
+        ),
+      ),
+      '[home] lib/main.dart: Unused import. (Remove it.)',
+    );
+    expect(
+      issueLine(const SmfIssue.warning('Careful.', path: 'lib/a.dart')),
+      'lib/a.dart: Careful.',
+    );
+    expect(issueLine(const SmfIssue.warning('Careful.')), 'Careful.');
   });
 
   test('deletes temporary files when generation fails', () async {
