@@ -123,6 +123,24 @@ void main() {
     );
   });
 
+  test('a pubspec without dev dependencies lacks those of the tests', () {
+    expect(
+      _problemsOf(
+        _package(
+          const {},
+          pubspec: 'name: smf_router\n'
+              'dependencies:\n'
+              '  mason: any\n'
+              '  smf_contracts: any\n',
+        ),
+      ),
+      [
+        'smf_router has no dev dependency on smf_flutter_core.',
+        'smf_router has no dev dependency on smf_pipeline.',
+      ],
+    );
+  });
+
   test('the code uses only the module model and what the package has', () {
     expect(
       _problemsOf(

@@ -164,6 +164,45 @@ void main() {
     expect(index.declaration('Mode')!.constructors, isEmpty);
   });
 
+  test('an initializing formal of a field without a type has no type', () {
+    final counter = DartFileIndexer.index('lib/counter.dart', '''
+class Counter {
+  Counter(this.count, this.step);
+
+  var count = 0;
+  final int step;
+}
+''').declaration('Counter')!;
+
+    expect(
+      [
+        for (final p in counter.unnamedConstructor!.parameters)
+          '${p.name} ${p.type}',
+      ],
+      ['count null', 'step int'],
+    );
+  });
+
+  test('names the extension around a use, and none for an unnamed one', () {
+    final extensions = DartFileIndexer.index('lib/extensions.dart', '''
+extension Twice on int {
+  int twice() => double(this);
+}
+
+extension on String {
+  String loud() => shout(this);
+}
+''');
+
+    expect(
+      [
+        for (final i in extensions.invocations)
+          '${i.name} in ${i.enclosingDeclaration}',
+      ],
+      ['double in Twice', 'shout in null'],
+    );
+  });
+
   test('indexes invocations with targets, arguments and awaits', () {
     String describe(IndexedInvocation i) =>
         '${i.target}.${i.name}<${i.typeArguments.join(',')}>'
