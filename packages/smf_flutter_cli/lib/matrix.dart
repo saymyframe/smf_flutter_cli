@@ -355,6 +355,9 @@ Future<int> runMatrix(
   final run = _MatrixRun(
     directory: directory,
     appTests: appTests,
+    // coverage:ignore-start
+    // The defaults run smf and Flutter, as the runs of the matrix in CI do;
+    // the tests give their own.
     say: log ?? (String line) => stdout.writeln(line),
     create: commands.create ??
         (arguments, onCreated) => runCli(
@@ -365,6 +368,7 @@ Future<int> runMatrix(
             ),
     analyze:
         commands.analyze ?? (directory) => _flutter(['analyze'], directory),
+    // coverage:ignore-end
     test: commands.test ?? runAppTests,
   );
   final (:apps, :failed) = await matrixOf(modules, roleOptions: roleOptions);

@@ -31,10 +31,14 @@ Future<int> runCli(
           (machine = IoHost(verbose: verbose, interruption: interruption)).host,
       version: packageVersion,
       usageLineLength: io.stdout.hasTerminal ? io.stdout.terminalColumns : 80,
+      // coverage:ignore-start
+      // It runs once smf has created an app, which takes Flutter: the runs
+      // of the matrix in CI run it, and no test.
       onCreated: (app) {
         if (banner) machine?.logger.info(communityBanner);
         onCreated?.call(app);
       },
+      // coverage:ignore-end
     );
   } finally {
     await interruption.close();
