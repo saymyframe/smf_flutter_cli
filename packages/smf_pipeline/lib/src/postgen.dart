@@ -535,15 +535,15 @@ final class _Commands {
 
   /// Runs [tool] with [arguments], the command of [description], and
   /// returns `null` if it succeeded, or why it failed.
+  ///
+  /// [tool] is `flutter` or `dart` of the Flutter SDK, which the preflight
+  /// checks found before anything was generated.
   Future<_Failure?> run(
     String description,
     ToolRef tool,
     List<String> arguments,
-  ) async {
-    final resolved = await resolve(tool, arguments);
-    if (resolved == null) return _Failure('${tool.executable} was not found');
-    return runResolved(description, resolved);
-  }
+  ) async =>
+      runResolved(description, await _environment.resolveTool(tool, arguments));
 
   /// Runs [tool] and throws a [GenerationFailedException] if it fails.
   Future<void> require(
