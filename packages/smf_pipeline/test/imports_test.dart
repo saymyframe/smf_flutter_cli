@@ -205,6 +205,18 @@ void main() {
     );
   });
 
+  test('adds imports after a last line without a line break', () {
+    expect(
+      _add("import 'dart:io';", [_zeta]),
+      "import 'dart:io';\n\nimport 'package:zeta/zeta.dart';",
+    );
+    expect(
+      _add("import 'package:a/a.dart';", [_zeta]),
+      "import 'package:a/a.dart';\nimport 'package:zeta/zeta.dart';",
+    );
+    expect(_add('library;', [_async]), "library;\n\nimport 'dart:async';");
+  });
+
   test('nothing to add leaves the text as it is', () {
     expect(_add('void f() {}\n', const []), 'void f() {}\n');
   });

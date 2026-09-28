@@ -357,6 +357,52 @@ void f() {{{{smf_after__brace}}}
       );
     });
 
+    test('a role template holds the tags of families of the roles it sees', () {
+      final families = <SocketFamily<Object?, SocketKind>>[];
+      final router = TestRole<NoDsl>('router', socketFamilies: families);
+      families.add(
+        SocketFamily<String, CodeSocket>.role(
+          router,
+          'screens',
+          const CodeSocket(),
+          keyOf: (screen) => [screen],
+        ),
+      );
+      TestRole<NoDsl> holding(String id, {Set<Role> uses = const {}}) =>
+          TestRole<NoDsl>(
+            id,
+            uses: uses,
+            template: TestTemplate(
+              contributions: [
+                BrickContribution(
+                  bundle(
+                    id,
+                    files: {'lib/$id.dart': '{{{smf_router__screens__home}}}'},
+                  ),
+                ),
+              ],
+            ),
+          );
+      final layout = holding('layout', uses: {router});
+      final other = holding('other');
+
+      expect(
+        check(
+          [
+            scaffold(),
+            TestModule('go', providers: [RoleProvider.plain(router)]),
+            TestModule('tabs', providers: [RoleProvider.plain(layout)]),
+            TestModule('extra', providers: [RoleProvider.plain(other)]),
+          ],
+          complete: false,
+        ),
+        [
+          contains('in lib/other.dart:1 of role:other is a tag of the socket '
+              'router.screens.home, which role:other may not hold'),
+        ],
+      );
+    });
+
     test('only tags of sockets for one value appear more than once', () {
       expect(
         check(

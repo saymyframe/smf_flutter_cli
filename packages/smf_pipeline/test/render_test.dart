@@ -641,6 +641,44 @@ flutter:
     );
   });
 
+  test('a cycle that only a fragment of a render hook meets stops rendering',
+      () {
+    final y = TestRole<NoDsl>('y');
+    final z = TestRole<NoDsl>('z');
+    final rendering = _Rendering(
+      providerOutput: const RoleOutput(
+        fragments: [
+          SocketContribution.code(
+            AppEntryRole.bootstrapLate,
+            Fragment('late();'),
+          ),
+        ],
+      ),
+    );
+
+    // p comes after q, which comes after m, which comes after p; stage 5
+    // sees no socket that more than one of them contributes to.
+    expect(
+      _failures([
+        entry,
+        TestModule('p', providers: [rendering.provider], requires: {z}),
+        TestModule(
+          'm',
+          requires: {rendering.role},
+          providers: [RoleProvider.plain(y)],
+        ),
+        TestModule('q', requires: {y}, providers: [RoleProvider.plain(z)]),
+      ]),
+      [
+        endsWith(
+          'The contributors to the socket app_entry.bootstrap_late cannot be '
+          'ordered, because their order edges form a cycle: m, p, q. (Run '
+          'with --explain to see the edges.)',
+        ),
+      ],
+    );
+  });
+
   test('renders bricks the way mason generate does', () async {
     const templates = {
       'android/app/src/main/kotlin/{{android_package.pathCase()}}/Main.kt':
@@ -885,13 +923,16 @@ flutter:
                 {
                   'lib/a.dart': '{{title}} {{#items}}{{name}}{{/items}} '
                       '{{name.snakeCase()}} {{#flag}}{{/flag}} '
-                      '{{#loud}}{{.}}{{/loud}} {{__LEFT_CURLY_BRACKET__}}',
+                      '{{#loud}}{{.}}{{/loud}} {{__LEFT_CURLY_BRACKET__}} '
+                      // A section over a flag gives no items with fields.
+                      '{{#shown}}{{label}}{{/shown}}',
                 },
                 vars: {
                   'items': [
                     {'name': 'a'},
                   ],
                   'loud': ['x'],
+                  'shown': true,
                 },
               ),
             ],
@@ -900,7 +941,7 @@ flutter:
         [
           equals(
             'home: error [home] lib/a.dart: The template lib/a.dart in the '
-            'brick b of home reads title, name, flag, which neither the '
+            'brick b of home reads title, name, label, flag, which neither the '
             'brick nor a render hook of home sets, so mustache would render '
             'nothing. (Set every variable a template reads, to "" or false '
             'when there is nothing.)',
