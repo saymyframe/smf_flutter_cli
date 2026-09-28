@@ -248,6 +248,8 @@ add_firebase_command() {
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
   {
     echo '#!/usr/bin/env bash'
     echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
@@ -433,6 +435,8 @@ add_firebase_command() {
   # npm links the command to the script of the Firebase CLI.
   cli="$(link_target "$1/firebase")"
   mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
   {
     echo '#!/usr/bin/env bash'
     echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'

@@ -120,6 +120,7 @@ const _coreutils = [
   'ln',
   'mkdir',
   'readlink',
+  'rm',
   'touch',
 ];
 
@@ -661,6 +662,31 @@ void main() {
           '$real/node',
           _cliIn('${machine.home.path}/.npm-global'),
         ),
+      );
+    });
+
+    test(
+        'writes its firebase command in place of a link, not into the file '
+        'that the link points to', () {
+      machine.installNode('usr');
+      final other = File('${machine.root.path}/other/firebase.js')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('the Firebase CLI of another Node.js\n');
+      final local = Directory('${machine.home.path}/.local/bin')
+        ..createSync(recursive: true);
+      Link('${local.path}/firebase').createSync(other.path);
+
+      final result = machine.run(HostOperatingSystem.linux, shell: '/bin/bash');
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      expect(other.readAsStringSync(), 'the Firebase CLI of another Node.js\n');
+      expect(
+        FileSystemEntity.isLinkSync('${local.path}/firebase'),
+        isFalse,
+      );
+      expect(
+        machine.homeFile('.local/bin/firebase'),
+        startsWith('#!/usr/bin/env bash\n'),
       );
     });
 
