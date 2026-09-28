@@ -332,6 +332,83 @@ void main() {
     expect(host.fileSystem.file('$kept/lib/main.dart').existsSync(), isTrue);
   });
 
+  test('temporary files of the run that cannot be deleted only warn', () async {
+    final check = TempFileCheck();
+    final paths = host.fileSystem.path;
+    host.hostFileSystem = FaultyFileSystem(
+      host.fileSystem,
+      // The directory of the temporary files, which holds the file's own.
+      noDelete: (path) =>
+          check.path != null &&
+          path == paths.dirname(paths.dirname(check.path!)),
+    );
+
+    final app = await pipeline(
+      modulesWith([
+        Preflight([check]),
+      ]),
+    ).run(request());
+
+    expect(app!.path, '/work/my_app');
+    expect(
+      host.logger.warnings.single,
+      startsWith('The temporary files of the run could not be deleted: '
+          'FileSystemException: Permission denied'),
+    );
+  });
+
+  test('a file of the app that cannot be written stops generation', () async {
+    host.hostFileSystem = FaultyFileSystem(
+      host.fileSystem,
+      unwritable: (path) => path.endsWith('/pubspec.yaml'),
+    );
+
+    late GenerationFailedException failure;
+    try {
+      await pipeline(modulesWith()).run(request());
+      fail('The generation succeeded.');
+    } on GenerationFailedException catch (error) {
+      failure = error;
+    }
+
+    final [problem, kept] = failure.message.split('\nThe app so far is in ');
+    expect(
+      problem,
+      startsWith('The app could not be written: FileSystemException: No space '
+          'left on device'),
+    );
+    expect(kept, endsWith('/my_app.'));
+    expect(
+      host.fileSystem
+          .directory(kept.substring(0, kept.length - 1))
+          .existsSync(),
+      isTrue,
+    );
+    expect(runner.calls, isEmpty);
+  });
+
+  test('a temporary directory that cannot be deleted after the move warns',
+      () async {
+    host.hostFileSystem = FaultyFileSystem(
+      host.fileSystem,
+      noDelete: (path) =>
+          runner.calls.isNotEmpty && path == temporaryOf(runner.calls.first),
+    );
+
+    final app = await pipeline(modulesWith()).run(request());
+
+    expect(app!.path, '/work/my_app');
+    expect(
+      host.fileSystem.file('/work/my_app/lib/main.dart').existsSync(),
+      isTrue,
+    );
+    expect(
+      host.logger.warnings.single,
+      startsWith('The temporary directory ${temporaryOf(runner.calls.first)} '
+          'could not be deleted: FileSystemException: Permission denied'),
+    );
+  });
+
   test('--explain generates nothing', () async {
     expect(await pipeline(modulesWith()).run(request(explain: true)), isNull);
 

@@ -149,7 +149,7 @@ void main() {
     final logger = FakeLogger();
 
     await moveApp(
-      FaultyFileSystem(const LocalFileSystem(), noRename: {source}),
+      FaultyFileSystem(const LocalFileSystem(), noRename: {source}.contains),
       source: source,
       target: TargetDecision(path: target),
       logger: logger,

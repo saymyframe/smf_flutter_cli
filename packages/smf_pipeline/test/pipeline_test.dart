@@ -4,23 +4,6 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-/// A check that writes a temporary file, to see that the run deletes it.
-final class _TempFileCheck extends PreflightCheck {
-  String? path;
-
-  @override
-  String get id => 'temp';
-
-  @override
-  String get description => 'Temporary file';
-
-  @override
-  Future<PreflightStatus> check(SmfEnvironment environment) async {
-    path = await environment.writeTempFile('probe.sh', 'true');
-    return const PreflightPassed();
-  }
-}
-
 final class _OneTab extends LayoutProvider {
   const _OneTab();
 
@@ -757,7 +740,7 @@ void main() {
 
   test('deletes temporary files when generation fails', () async {
     final host = FakeHost(flutter: false);
-    final check = _TempFileCheck();
+    final check = TempFileCheck();
     final modules = [
       scaffold(
         contributions: [

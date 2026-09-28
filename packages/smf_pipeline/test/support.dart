@@ -583,11 +583,15 @@ final class FakeHost {
   final bool _terminal;
   late final Map<String, String> variables;
 
+  /// The file system that [host] gives the pipeline: [fileSystem], unless a
+  /// test puts a [FaultyFileSystem] over it.
+  late FileSystem hostFileSystem = fileSystem;
+
   SmfHost get host => SmfHost(
         prompter: prompter,
         processRunner: processRunner,
         logger: logger,
-        fileSystem: fileSystem,
+        fileSystem: hostFileSystem,
         environmentVariables: variables,
         operatingSystem: operatingSystem,
         hasTerminal: _terminal,
@@ -609,6 +613,24 @@ final class FakeHost {
 Resolution resolutionOf(List<SmfModule> modules) => Resolution([
       for (final module in modules) ResolvedModule(module, const Requested()),
     ]);
+
+/// A check that writes a temporary file, to see what the run does with it.
+final class TempFileCheck extends PreflightCheck {
+  /// The path of the file, once the check wrote it.
+  String? path;
+
+  @override
+  String get id => 'temp';
+
+  @override
+  String get description => 'Temporary file';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async {
+    path = await environment.writeTempFile('probe.sh', 'true');
+    return const PreflightPassed();
+  }
+}
 
 /// A check for tests that reports [status], and after [install] reports
 /// [afterInstall].
@@ -742,34 +764,48 @@ final class RecordingRunner implements SmfProcessRunner {
   }
 }
 
-/// A file system where the directories at some paths fail: they cannot be
-/// renamed, as if they were on another file system, deleted, or listed.
+/// A file system where some paths fail: directories that cannot be
+/// renamed, as if they were on another file system, deleted or listed, and
+/// files that cannot be written, as [noRename], [noDelete], [unreadable]
+/// and [unwritable] tell.
+///
+/// Every directory and file of it asks them when the operation runs, so a
+/// test can name a path that the pipeline creates later, such as a
+/// temporary directory.
 final class FaultyFileSystem extends ForwardingFileSystem {
   /// Creates the file system over [delegate].
   FaultyFileSystem(
     super.delegate, {
-    this.noRename = const {},
-    this.noDelete = const {},
-    this.unreadable = const {},
+    this.noRename = _nowhere,
+    this.noDelete = _nowhere,
+    this.unreadable = _nowhere,
+    this.unwritable = _nowhere,
   });
 
-  /// The paths of the directories that cannot be renamed.
-  final Set<String> noRename;
+  static bool _nowhere(String path) => false;
 
-  /// The paths of the directories that cannot be deleted.
-  final Set<String> noDelete;
+  /// Whether the directory at a path cannot be renamed.
+  final bool Function(String path) noRename;
 
-  /// The paths of the directories that cannot be listed.
-  final Set<String> unreadable;
+  /// Whether the directory at a path cannot be deleted.
+  final bool Function(String path) noDelete;
+
+  /// Whether the directory at a path cannot be listed.
+  final bool Function(String path) unreadable;
+
+  /// Whether the file at a path cannot be written.
+  final bool Function(String path) unwritable;
 
   @override
-  Directory directory(dynamic path) {
-    final directory = delegate.directory(path);
-    final faulty = {...noRename, ...noDelete, ...unreadable};
-    return faulty.contains(directory.path)
-        ? _FaultyDirectory(this, directory)
-        : directory;
-  }
+  Directory directory(dynamic path) =>
+      _FaultyDirectory(this, delegate.directory(path));
+
+  @override
+  File file(dynamic path) => _FaultyFile(this, delegate.file(path));
+
+  @override
+  Directory get systemTempDirectory =>
+      _FaultyDirectory(this, delegate.systemTempDirectory);
 }
 
 final class _FaultyDirectory
@@ -790,32 +826,31 @@ final class _FaultyDirectory
       _faulty.directory(delegate.path);
 
   @override
-  File wrapFile(io.File delegate) => delegate as File;
+  File wrapFile(io.File delegate) => _faulty.file(delegate.path);
 
   @override
   Link wrapLink(io.Link delegate) => delegate as Link;
 
   @override
   Directory childDirectory(String basename) =>
-      (delegate as Directory).childDirectory(basename);
+      _faulty.directory(_faulty.path.join(path, basename));
 
   @override
   File childFile(String basename) =>
-      (delegate as Directory).childFile(basename);
+      _faulty.file(_faulty.path.join(path, basename));
 
   @override
   Link childLink(String basename) =>
       (delegate as Directory).childLink(basename);
 
   @override
-  Future<Directory> rename(String newPath) async =>
-      _faulty.noRename.contains(path)
-          ? throw FileSystemException('Cross-device link', path)
-          : super.rename(newPath);
+  Future<Directory> rename(String newPath) async => _faulty.noRename(path)
+      ? throw FileSystemException('Cross-device link', path)
+      : super.rename(newPath);
 
   @override
   Future<Directory> delete({bool recursive = false}) async =>
-      _faulty.noDelete.contains(path)
+      _faulty.noDelete(path)
           ? throw FileSystemException('Permission denied', path)
           : super.delete(recursive: recursive);
 
@@ -824,7 +859,40 @@ final class _FaultyDirectory
     bool recursive = false,
     bool followLinks = true,
   }) =>
-      _faulty.unreadable.contains(path)
+      _faulty.unreadable(path)
           ? Stream.error(FileSystemException('Permission denied', path))
           : super.list(recursive: recursive, followLinks: followLinks);
+}
+
+final class _FaultyFile extends ForwardingFileSystemEntity<File, io.File>
+    with ForwardingFile {
+  _FaultyFile(this._faulty, this.delegate);
+
+  final FaultyFileSystem _faulty;
+
+  @override
+  final io.File delegate;
+
+  @override
+  FileSystem get fileSystem => _faulty;
+
+  @override
+  Directory wrapDirectory(io.Directory delegate) =>
+      _faulty.directory(delegate.path);
+
+  @override
+  File wrapFile(io.File delegate) => _faulty.file(delegate.path);
+
+  @override
+  Link wrapLink(io.Link delegate) => delegate as Link;
+
+  @override
+  Future<File> writeAsBytes(
+    List<int> bytes, {
+    FileMode mode = FileMode.write,
+    bool flush = false,
+  }) async =>
+      _faulty.unwritable(path)
+          ? throw FileSystemException('No space left on device', path)
+          : super.writeAsBytes(bytes, mode: mode, flush: flush);
 }

@@ -143,7 +143,7 @@ void main() {
 
     await move(
       const TargetDecision(path: '/work/app'),
-      on: FaultyFileSystem(fileSystem, noRename: {'/tmp/smf/app'}),
+      on: FaultyFileSystem(fileSystem, noRename: {'/tmp/smf/app'}.contains),
     );
 
     expect(filesIn('/work/app'), moved);
@@ -164,8 +164,8 @@ void main() {
       const TargetDecision(path: '/work/app'),
       on: FaultyFileSystem(
         fileSystem,
-        noRename: {'/tmp/smf/app'},
-        noDelete: {'/tmp/smf/app'},
+        noRename: {'/tmp/smf/app'}.contains,
+        noDelete: {'/tmp/smf/app'}.contains,
       ),
     );
 
@@ -177,6 +177,34 @@ void main() {
     );
   });
 
+  test('a partial copy that cannot be deleted only adds a warning', () async {
+    await expectLater(
+      move(
+        const TargetDecision(path: '/work/app'),
+        on: FaultyFileSystem(
+          fileSystem,
+          noRename: {'/tmp/smf/app'}.contains,
+          unreadable: {'/tmp/smf/app'}.contains,
+          noDelete: {'/work/app.smf-new-1'}.contains,
+        ),
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          startsWith('The app could not be moved to /work/app, so it stays in '
+              '/tmp/smf/app:'),
+        ),
+      ),
+    );
+    expect(
+      logger.warnings.single,
+      startsWith('The partial copy at /work/app.smf-new-1 could not be '
+          'deleted:'),
+    );
+    expect(filesIn('/tmp/smf/app'), moved);
+  });
+
   test('puts the replaced directory back when the app cannot be moved',
       () async {
     write('/work/app/old.txt');
@@ -186,8 +214,8 @@ void main() {
         const TargetDecision(path: '/work/app', replaceExisting: true),
         on: FaultyFileSystem(
           fileSystem,
-          noRename: {'/tmp/smf/app'},
-          unreadable: {'/tmp/smf/app'},
+          noRename: {'/tmp/smf/app'}.contains,
+          unreadable: {'/tmp/smf/app'}.contains,
         ),
       ),
       throwsA(
@@ -212,8 +240,8 @@ void main() {
         const TargetDecision(path: '/work/app', replaceExisting: true),
         on: FaultyFileSystem(
           fileSystem,
-          noRename: {'/tmp/smf/app', '/work/app.smf-replaced-1'},
-          unreadable: {'/tmp/smf/app'},
+          noRename: {'/tmp/smf/app', '/work/app.smf-replaced-1'}.contains,
+          unreadable: {'/tmp/smf/app'}.contains,
         ),
       ),
       throwsA(
@@ -235,7 +263,7 @@ void main() {
     await expectLater(
       move(
         const TargetDecision(path: '/work/app', replaceExisting: true),
-        on: FaultyFileSystem(fileSystem, noRename: {'/work/app'}),
+        on: FaultyFileSystem(fileSystem, noRename: {'/work/app'}.contains),
       ),
       throwsA(
         isA<GenerationFailedException>().having(
@@ -254,7 +282,10 @@ void main() {
 
     await move(
       const TargetDecision(path: '/work/app', replaceExisting: true),
-      on: FaultyFileSystem(fileSystem, noDelete: {'/work/app.smf-replaced-1'}),
+      on: FaultyFileSystem(
+        fileSystem,
+        noDelete: {'/work/app.smf-replaced-1'}.contains,
+      ),
     );
 
     expect(filesIn('/work/app'), moved);
