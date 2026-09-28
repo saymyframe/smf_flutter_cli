@@ -96,10 +96,6 @@ final _platforms = Platform.isWindows
     ? '"--platforms=android,ios"'
     : '--platforms=android,ios';
 
-/// The quote of an argument with spaces in a command that the CLI prints
-/// for later: double on Windows, single elsewhere.
-final _quote = Platform.isWindows ? '"' : "'";
-
 /// The executable [name] of the Flutter SDK of [_fakeSdk] in its [bin].
 String _sdkExecutable(String bin, String name) =>
     p.join(bin, Platform.isWindows ? '$name.bat' : name);
@@ -545,12 +541,12 @@ void main() {
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n'
                 // Once it succeeded, on macOS, the fix of the phase for
-                // Crashlytics, quoted as a run prints it for later.
-                '    then ruby -e ${_quote}f = ARGV[0]; ',
+                // Crashlytics, quoted for a shell of macOS on any system.
+                "    then ruby -e 'f = ARGV[0]; ",
               ),
               contains(
-                '$_quote ios/Runner.xcodeproj/project.pbxproj (firebase_core, '
-                'on macOS)\n',
+                "' ios/Runner.xcodeproj/project.pbxproj (firebase_core, on "
+                'macOS)\n',
               ),
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n'

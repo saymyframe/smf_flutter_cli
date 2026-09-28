@@ -263,19 +263,23 @@ List<String> _contributors(ContributionOrder order) => {
     }.toList();
 
 /// The lines of [step] of [origin] under `After generation`: its command,
-/// quoted for a shell of [system], with the systems it runs on if it runs
-/// only on some, then, a level deeper each, those of its follow-ups, which
-/// run once it succeeded; [depth] is the level of [step].
+/// quoted for a shell of [system], or of a system it runs on if it runs
+/// only on others, with the systems it runs on if it runs only on some,
+/// then, a level deeper each, those of its follow-ups, which run once it
+/// succeeded; [depth] is the level of [step].
 Iterable<String> _stepLines(
   PostGenStep step,
   ContributionOrigin origin,
   HostOperatingSystem system, {
   int depth = 0,
 }) sync* {
+  final shell = step.hosts.isEmpty || step.hosts.contains(system)
+      ? system
+      : step.hosts.first;
   final command = [
     step.tool.executable,
     ...step.tool.argumentsFor(step.arguments),
-  ].map((argument) => shellQuoted(argument, system)).join(' ');
+  ].map((argument) => shellQuoted(argument, shell)).join(' ');
   final systems = [for (final host in step.hosts) _systemNames[host]];
   final where = systems.isEmpty ? '' : ', on ${systems.join(', ')}';
   yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command '

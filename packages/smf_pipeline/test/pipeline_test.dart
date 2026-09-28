@@ -923,6 +923,50 @@ void main() {
       );
     });
 
+    test(
+        'quotes a step for a shell of the systems it runs on, which may not '
+        'be this one', () async {
+      final host = FakeHost(operatingSystem: HostOperatingSystem.windows);
+      final modules = [
+        scaffold(),
+        TestModule(
+          'core',
+          contributions: const [
+            PostGenStep(
+              ToolRef('tool'),
+              ['--platforms=android,ios'],
+              followUps: [
+                PostGenStep(
+                  ToolRef('ruby'),
+                  ['-e', r'puts "$HOME"', 'a b'],
+                  hosts: {HostOperatingSystem.macos},
+                ),
+              ],
+            ),
+          ],
+        ),
+      ];
+
+      await pipeline(modules, host).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('core')],
+          explain: true,
+        ),
+      );
+
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'After generation\n'
+          // PowerShell reads the comma as its own.
+          '  tool "--platforms=android,ios" (core)\n'
+          // The shell of macOS would expand \$HOME in double quotes.
+          '    then ruby -e \'puts "\$HOME"\' \'a b\' (core, on macOS)',
+        ),
+      );
+    });
+
     test('says when generation would stop', () async {
       final host = FakeHost(flutter: false);
       final modules = [
