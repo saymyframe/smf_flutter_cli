@@ -54,6 +54,9 @@ Future<void> main(List<String> arguments) async {
     smfModules,
     directory: arguments.first,
     appTests: await _appTests(),
+    // Each provider of the router role gets a test of the listeners of the
+    // screen; the fixture registry tests the rest of the role.
+    testedRoles: {routerRole},
     only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
@@ -96,10 +99,12 @@ Future<List<MatrixAppTest>> _appTests() async {
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
     ),
-    // The first screen of an app with a router is logged once. Of the
-    // modules of the CLI, only home has a start screen, its route
-    // home.home; an app without it starts on the fallback start screen at
-    // `/`. A module of the CLI with another start screen goes here too.
+    // The first screen of an app with a router is logged once, whichever
+    // module provides the router, which calls the listener of the screen
+    // of Firebase Analytics: a test of the router role too. Of the modules
+    // of the CLI, only home has a start screen, its route home.home; an app
+    // without it starts on the fallback start screen at `/`. A module of
+    // the CLI with another start screen goes here too.
     MatrixAppTest(
       '$analytics/screen_views',
       appliesTo: (app) =>
@@ -110,6 +115,7 @@ Future<List<MatrixAppTest>> _appTests() async {
       values: (app) => {
         'start_screen': app.modules.contains(HomeModule.id) ? 'home.home' : '/',
       },
+      roles: {routerRole},
     ),
   ];
 }

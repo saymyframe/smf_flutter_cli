@@ -7,6 +7,7 @@ import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -17,6 +18,30 @@ import 'host.dart';
 void main() {
   test('the fixtures form a valid registry', () {
     expect(ModuleRegistry.problemsOf(fixtureModules()), isEmpty);
+  });
+
+  test(
+      'has every module of the CLI that provides the router role or the '
+      'layout role, so that the tests of the apps of the fixtures check the '
+      'listeners of the screen with each', () {
+    final fixtures = {
+      for (final module in fixtureModules()) module.descriptor.id,
+    };
+    final providers = [
+      for (final module in smfModules)
+        if (module.descriptor.provides.any({routerRole, layoutRole}.contains))
+          module.descriptor.id,
+    ];
+
+    expect(providers, isNotEmpty);
+    for (final id in providers) {
+      expect(
+        fixtures,
+        contains(id),
+        reason: '$id provides the router role or the layout role: add it to '
+            'fixtureModules().',
+      );
+    }
   });
 
   group('the contract harness', () {

@@ -11,6 +11,10 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// `app_tests`; see `runMatrix`. Any further argument names an app of the
 /// matrix, such as `fake_codegen`, and only the apps named are checked.
 ///
+/// The tests of the router role and of the layout role apply to the apps
+/// of every module that provides the role, and the run fails when a
+/// provider has apps that none of them applies to.
+///
 /// With `--app-tests` alone, it prints the directory of each of its
 /// `MatrixAppTest`s on a line of its own instead, for the test of the
 /// repository that finds directories of app tests that no matrix tool
@@ -33,6 +37,7 @@ Future<void> main(List<String> arguments) async {
     directory: arguments.first,
     only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
     appTests: await _appTests(),
+    testedRoles: {routerRole, layoutRole},
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
@@ -54,6 +59,7 @@ Future<List<MatrixAppTest>> _appTests() async {
       appliesTo: (app) =>
           _hasProviderOf(routerRole)(app) &&
           _hasAll(const {'fake_feature', 'fake_analytics'})(app),
+      roles: {routerRole},
     ),
     // The listeners of the screen as the user switches between the
     // destinations of the two fixture features, whichever modules provide
@@ -68,10 +74,12 @@ Future<List<MatrixAppTest>> _appTests() async {
           _hasAll(const {'fake_feature', 'fake_second', 'fake_analytics'})(
             app,
           ),
+      roles: {routerRole, layoutRole},
     ),
     // What only go_router does: a refresh of its routes, which the
-    // listeners of the screen do not hear of. The apps it applies to have
-    // the tests of router_screens, whose helpers it uses.
+    // listeners of the screen do not hear of. It checks no role, so it
+    // names its module. The apps it applies to have the tests of
+    // router_screens, whose helpers it uses.
     MatrixAppTest(
       '$appTests/go_router_screens',
       appliesTo: _hasAll(const {'go_router', 'fake_feature', 'fake_analytics'}),

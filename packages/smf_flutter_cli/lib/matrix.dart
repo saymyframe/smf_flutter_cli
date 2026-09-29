@@ -125,6 +125,7 @@ final class MatrixAppTest {
     required this.appliesTo,
     this.devDependencies = const [],
     this.values,
+    this.roles = const {},
   });
 
   /// The directory of the files that go into an app, each at its path
@@ -154,6 +155,16 @@ final class MatrixAppTest {
   /// The values of the placeholders of the files in an app of the matrix,
   /// besides `app_name`.
   final Map<String, String> Function(MatrixApp app)? values;
+
+  /// The roles whose contract the tests check, whichever module provides
+  /// each, such as the router role, whose provider calls the listeners of
+  /// the screen once for each screen the user sees.
+  ///
+  /// Such tests apply to the apps of every provider of each of the roles,
+  /// which [appliesTo] selects by the role rather than by the modules that
+  /// provide it; [runMatrix] fails when they apply to no app of one of
+  /// them. Tests of what only one provider does name no role.
+  final Set<Role> roles;
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
@@ -403,6 +414,13 @@ final class MatrixCommands {
 /// passes its tests, and each of the [appTests] applies to some app; 1
 /// otherwise.
 ///
+/// The tests of a role (see [MatrixAppTest.roles]) must apply to an app of
+/// each module of [modules] that provides the role and is in the matrix,
+/// and so must some test of each role of [testedRoles]: a provider of the
+/// role that the tests leave out, such as one that a module adds later,
+/// fails the run, since its apps would be generated and analyzed, but
+/// nothing would check at runtime that it keeps the contract of the role.
+///
 /// With [only], it checks only the apps of the matrix with those names,
 /// such as `every module (bloc)`, and runs the [appTests] that apply to
 /// them; a name that no app of the matrix has is a problem too.
@@ -414,6 +432,7 @@ Future<int> runMatrix(
   required String directory,
   Map<String, String?> roleOptions = const {},
   List<MatrixAppTest> appTests = const [],
+  Set<Role> testedRoles = const {},
   Set<String>? only,
   void Function(String line)? log,
   MatrixCommands commands = const MatrixCommands(),
@@ -460,11 +479,60 @@ Future<int> runMatrix(
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }
+  problems.addAll(_roleTestProblems(modules, apps, appTests, testedRoles));
   run.say('\n${checked.length} apps generated in $directory.');
   if (problems.isEmpty) return 0;
   run.say('Problems:');
   problems.forEach(run.say);
   return 1;
+}
+
+/// The problems of the tests of roles among [appTests] in the matrix of
+/// [modules], whose apps are [apps]: for each role of the tests and of
+/// [testedRoles], and each module that provides it and is in [apps], a
+/// test of the role that applies to none of the apps of the module, and no
+/// test of a role of [testedRoles] at all.
+List<String> _roleTestProblems(
+  List<SmfModule> modules,
+  List<MatrixApp> apps,
+  List<MatrixAppTest> appTests,
+  Set<Role> testedRoles,
+) {
+  final problems = <String>[];
+  final roles = {...testedRoles, for (final test in appTests) ...test.roles};
+  for (final role in roles) {
+    final tests = [
+      for (final test in appTests)
+        if (test.roles.contains(role)) test,
+    ];
+    for (final module in modules) {
+      if (!module.descriptor.provides.contains(role)) continue;
+      final id = module.descriptor.id;
+      final withModule = [
+        for (final app in apps)
+          if (app.modules.contains(id)) app,
+      ];
+      if (withModule.isEmpty) continue;
+      if (tests.isEmpty) {
+        problems.add(
+          'No test of the $role applies to an app with $id, which provides '
+          'it: nothing checks at runtime that $id keeps the contract of the '
+          'role.',
+        );
+      }
+      for (final test in tests) {
+        if (!withModule.any(test.appliesTo)) {
+          problems.add(
+            'The tests of ${test.directory} check the $role, but apply to no '
+            'app with $id, which provides it: a test of a role applies to '
+            'the apps of every provider of the role, which it selects by the '
+            'role.',
+          );
+        }
+      }
+    }
+  }
+  return problems;
 }
 
 /// A run of [runMatrix], which checks one app after another.
