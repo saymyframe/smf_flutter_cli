@@ -44,10 +44,12 @@ final class MatrixApp {
   /// For an app with every module, one of those that the contract harness
   /// builds for each combination of the providers of the roles that take
   /// one (see [ContractHarness.casesOfAll]): the providers of its roles
-  /// other than the first registered provider of each, in the order of the
-  /// roles, such as `[riverpod]` for the app with riverpod rather than
-  /// bloc, and none for the app with the first provider of every role.
-  /// `null` for any other app of the matrix.
+  /// that take one other than the first registered provider of each, in
+  /// the order of the roles, such as `[riverpod]` for the app with riverpod
+  /// rather than bloc, and none for the app with the first provider of
+  /// every role. The providers of a role that takes many, which every app
+  /// with every module has, set no app apart. `null` for any other app of
+  /// the matrix.
   ///
   /// Unlike the [name] of the case, which names the provider of every role
   /// that has several, they stay the same when another role gets a second
@@ -232,8 +234,11 @@ Future<
 }
 
 /// The providers that [contractCase], a case of an app with every module,
-/// picks other than the first provider of their role in [names]; see
-/// [MatrixApp.everyModuleWith].
+/// picks for the roles that take one other than the first provider of
+/// their role in [names]; see [MatrixApp.everyModuleWith]. The pick of a
+/// role that takes many is its first provider in the registry of the case,
+/// which is another one when the apps without external steps leave the
+/// first of [names] out, and the app has all of them anyway.
 List<ModuleId> _everyModuleWith(
   ContractCase contractCase,
   ModuleRegistry names,
@@ -242,7 +247,9 @@ List<ModuleId> _everyModuleWith(
       ...{
         for (final MapEntry(key: role, value: provider)
             in contractCase.picks.entries)
-          if (provider != names.providersOf(role).first.descriptor.id) provider,
+          if (!role.cardinality.allowsMany &&
+              provider != names.providersOf(role).first.descriptor.id)
+            provider,
       },
     ];
 
@@ -986,8 +993,10 @@ Future<int> runMatrix(
 ///
 /// Returns the exit code: 0 if every app was generated with every module
 /// and every step that the options of CI do not leave for later, 1
-/// otherwise. The log of [commands] gets what happens, and their create
-/// generates each app; they analyze and test nothing here.
+/// otherwise, and 64, without generating an app, when [name] starts with
+/// `-`, which `smf create` would take for an option. The log of [commands]
+/// gets what happens, and their create generates each app; they analyze
+/// and test nothing here.
 Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
   required String directory,
@@ -1003,6 +1012,14 @@ Future<int> createEveryModuleApps(
   final say = commands.log ?? _print;
   final generate = commands.create ?? _smfCreate(modules);
   // coverage:ignore-end
+  if (name.startsWith('-')) {
+    say(
+      'The name of the apps, $name, starts with -, so smf create would take '
+      'it for an option: give the name right after the directory, and the '
+      'options of smf create after it.',
+    );
+    return 64;
+  }
   final (:apps, :failed) = await everyModuleAppsOf(
     modules,
     roleOptions: roleOptions,
