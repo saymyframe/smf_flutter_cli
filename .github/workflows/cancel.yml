@@ -1,0 +1,25 @@
+name: Cancel
+on:
+  pull_request:
+    types: [ closed ]
+
+# The group of the runs of Build of the pull request (see build.yml). This
+# run joins it with cancel-in-progress, so the run of Build that is still
+# in progress stops once the pull request is merged or closed, as nobody
+# needs its checks any more. Concurrency groups are shared by the workflows
+# of the repository.
+concurrency:
+  group: build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  cancel:
+    name: Cancel the checks of the pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Tell what was cancelled
+        run: echo "The pull request is closed, so its run of Build, if one was in progress, is cancelled."

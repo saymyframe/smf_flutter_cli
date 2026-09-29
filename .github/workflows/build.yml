@@ -9,8 +9,13 @@ on:
   # other than main that changes the jobs with Flutter.
   workflow_dispatch:
 
+# A new run cancels the run that is still in progress: of a pull request,
+# whose runs share a group by its number, and of a branch otherwise.
+# cancel.yml joins the group of a pull request when the pull request is
+# merged or closed, so that its run, whose checks nobody needs any more,
+# stops.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
