@@ -1,7 +1,8 @@
 // The packages of the workspace as the tests of the repository read them:
-// their pubspecs, whether they declare modules, and the URIs that their
-// Dart files use; and the matrix tools, with the directories of their app
-// tests. Paths join their names with `/`, on Windows too.
+// their pubspecs, whether they declare modules, the modules that their app
+// tests know, and the URIs that their Dart files use; and the matrix tools,
+// with the libraries that register their app tests and what they report of
+// them. Paths join their names with `/`, on Windows too.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -10,12 +11,16 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:yaml/yaml.dart';
 
-/// The matrix tools, by path from the root of the repository. Each reports
-/// its MatrixAppTests with `--app-tests --json`.
-const matrixTools = [
-  'packages/smf_flutter_cli/tool/matrix.dart',
-  'packages/smf_pipeline/fixture_registry/tool/matrix.dart',
-];
+/// The matrix tools, by path from the root of the repository, each with the
+/// library of its package that registers its MatrixAppTests, whose code
+/// selects the apps of each test and fills the values of its files. Each
+/// tool reports its MatrixAppTests with `--app-tests --json`.
+const matrixTools = {
+  'packages/smf_flutter_cli/tool/matrix.dart':
+      'packages/smf_flutter_cli/lib/src/matrix_app_tests.dart',
+  'packages/smf_pipeline/fixture_registry/tool/matrix.dart':
+      'packages/smf_pipeline/fixture_registry/lib/matrix_app_tests.dart',
+};
 
 /// A MatrixAppTest of a matrix tool, as the tool reports it with
 /// `--app-tests --json` (`appTestsReport` of smf_flutter_cli).
@@ -25,6 +30,7 @@ final class ListedAppTest {
     this.directory, {
     this.modules = const [],
     this.appliesWithout = const [],
+    this.uses = const [],
   });
 
   /// Reads the report of a MatrixAppTest.
@@ -33,6 +39,10 @@ final class ListedAppTest {
         modules: [...(json['modules']! as List<Object?>).cast<String>()],
         appliesWithout: [
           ...(json['appliesWithout']! as List<Object?>).cast<String>(),
+        ],
+        uses: [
+          for (final use in json['uses']! as List<Object?>)
+            UsedModule.fromJson(use! as Map<String, Object?>),
         ],
       );
 
@@ -46,6 +56,35 @@ final class ListedAppTest {
   /// The names of the apps of the matrix that it applies to once [modules]
   /// are taken out of their modules.
   final List<String> appliesWithout;
+
+  /// The modules of the matrix whose ids the tool uses to select the apps
+  /// of the test or to fill the values of its files.
+  final List<UsedModule> uses;
+}
+
+/// A module whose id a matrix tool uses for a MatrixAppTest: with another
+/// id in its place in some apps of the matrix, the test applies to them
+/// otherwise, or gets other values of its files there.
+final class UsedModule {
+  /// Describes the module [module] of the package [package], whose id the
+  /// tool uses in the apps [apps].
+  const UsedModule(this.module, {required this.package, required this.apps});
+
+  /// Reads the report of a module that a MatrixAppTest uses.
+  factory UsedModule.fromJson(Map<String, Object?> json) => UsedModule(
+        json['module']! as String,
+        package: json['package']! as String,
+        apps: [...(json['apps']! as List<Object?>).cast<String>()],
+      );
+
+  /// The id of the module.
+  final String module;
+
+  /// The package that declares the module.
+  final String package;
+
+  /// The names of the apps of the matrix where the tool uses the id.
+  final List<String> apps;
 }
 
 /// The MatrixAppTests of the matrix [tool] of the repository at [root],
@@ -126,7 +165,49 @@ final class WorkspacePackage {
   /// `SmfModule`: it is a package of modules, whose code knows only the
   /// modules of the packages it depends on (see `ModulePackage` of
   /// `smf_pipeline`).
+  ///
+  /// It sees the classes that extend `SmfModule` itself, not a module class
+  /// that extends it through another class or that is a class alias. The
+  /// matrix tools know the packages of their modules exactly, and
+  /// `tools/app_tests_test.dart` fails when a package whose app tests a tool
+  /// registers declares modules by the tool but not by this.
   final bool declaresModules;
+}
+
+/// The packages of the modules that the app tests of [package] know, among
+/// the [packages] of the workspace by name: the app tests may import the
+/// files that those modules generate, beyond those that roles guarantee,
+/// and a matrix tool may select them by the ids of those modules. If
+/// [package] declares modules, [package] itself, and otherwise the fixture
+/// modules among the packages it depends on, which exist only for its
+/// tests and are never published; then the packages of modules among the
+/// dependencies of each, which its modules depend on.
+List<WorkspacePackage> knownModules(
+  WorkspacePackage package,
+  Map<String, WorkspacePackage> packages,
+) {
+  final known = <WorkspacePackage>[];
+  void know(WorkspacePackage module) {
+    if (known.contains(module)) return;
+    known.add(module);
+    for (final name in module.dependencies) {
+      if (packages[name] case final other? when other.declaresModules) {
+        know(other);
+      }
+    }
+  }
+
+  if (package.declaresModules) {
+    know(package);
+  } else {
+    for (final name in package.dependencies) {
+      if (packages[name] case final other?
+          when other.declaresModules && !other.published) {
+        know(other);
+      }
+    }
+  }
+  return known;
 }
 
 /// The root of the repository that the tests run in.
