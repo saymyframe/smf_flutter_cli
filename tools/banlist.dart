@@ -94,6 +94,11 @@ final List<_Ban> _bans = [
     'DiScopes',
     'ConditionData',
     'DiRuntimeNeed',
+    // The untyped factory parameters of the DI role, after get_it: a
+    // composition function takes such values as parameters, and a service
+    // that creates objects with them is a factory class.
+    'resolveWith',
+    'factoryWithParams',
     // Navigation of the old router module.
     'NavigationService',
     'NavigationTarget',
