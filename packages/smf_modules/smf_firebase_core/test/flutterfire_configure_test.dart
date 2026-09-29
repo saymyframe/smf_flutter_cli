@@ -9,9 +9,10 @@
 // firebase_core in SMF_FIREBASE_APP, the id of the project in
 // SMF_FIREBASE_PROJECT, the path of the key in SMF_FIREBASE_SERVICE_ACCOUNT
 // and the platform, android or ios, in SMF_FIREBASE_PLATFORM, as CI gives
-// them; the test changes the app. CI gives it each app with every module,
-// and it skips an app that does not depend on firebase_core, which has
-// nothing for flutterfire to configure.
+// them; the test changes the app. CI gives it the app with every module of
+// each provider of the app entry, one in each job, and it skips an app that
+// does not depend on firebase_core, which has nothing for flutterfire to
+// configure.
 //
 // flutterfire registers the Android or iOS app in the project when the
 // project has no app with its id yet, and otherwise takes the first app

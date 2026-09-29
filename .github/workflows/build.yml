@@ -101,11 +101,12 @@ jobs:
         if: ${{ !cancelled() && steps.test.outcome == 'success' }}
         run: melos run coverage:check
 
-  # The jobs with Flutter, with the pinned one. They take the better part of
-  # an hour, so a pull request into a branch other than main, such as one
-  # that collects the pull requests of a larger change, gets only the checks
-  # above, and the pull request of that branch into main runs them. Pushes
-  # to main and runs by hand run them too.
+  # The jobs with Flutter, with the pinned one: many jobs, one for each app
+  # or shard of the plan of apps.yml, those on macOS among them, for about
+  # half an hour. So a pull request into a branch other than main, such as
+  # one that collects the pull requests of a larger change, gets only the
+  # checks above, and the pull request of that branch into main runs them.
+  # Pushes to main and runs by hand run them too.
   apps:
     name: Pinned Flutter
     if: &every_job ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}

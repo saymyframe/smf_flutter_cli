@@ -3,8 +3,9 @@
 // for Crashlytics that flutterfire adds. It needs Flutter, Xcode and the gem
 // xcodeproj, so it runs only with an app generated with firebase_crashlytics
 // in SMF_CRASHLYTICS_APP, as CI gives it; the test changes the app. CI gives
-// it each app with every module, and it skips an app that does not depend
-// on firebase_crashlytics, to which flutterfire adds no such phase.
+// it the app with every module of each provider of the app entry, one in
+// each job, and it skips an app that does not depend on
+// firebase_crashlytics, to which flutterfire adds no such phase.
 @TestOn('mac-os')
 library;
 

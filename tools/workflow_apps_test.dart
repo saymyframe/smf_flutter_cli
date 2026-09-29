@@ -5,10 +5,11 @@
 // A module is independent of the others, and a role may get another
 // provider at any time, such as a second app entry, which owns the Android
 // and Xcode projects. So the workflows take the apps they generate, build
-// and start from the matrix tools, which give one app with every module for
-// each combination of the providers of the roles that take one, and a new
-// provider gets its app without a change of the workflows. The check fails
-// when a step of a workflow, or a script of .github/scripts:
+// and start from the matrix tools, whose plan gives the apps with every
+// module of a covering of the combinations of the providers of the roles
+// that take one, and a new provider gets its apps without a change of the
+// workflows. The check fails when a step of a workflow, or a script of
+// .github/scripts:
 // - selects an app of a matrix tool by its name, such as
 //   'every module (bloc)', which names the provider of each role that has
 //   several and changes when another role gets a second provider, also
@@ -61,18 +62,18 @@ const modulePaths = {
       'The test of flutter_core that compares its brick with the app of '
           'flutter create of the pinned Flutter.',
   (
-    'Configure the apps with every module with Firebase for Android',
+    'Configure the app with every module with Firebase for Android',
     'smf_firebase_core',
-  ): 'The test of firebase_core that configures each app with Firebase '
-      'with the command of its README, before CI starts it.',
+  ): 'The test of firebase_core that configures the app of the job with '
+      'Firebase with the command of its README, before CI starts it.',
   (
-    'Configure the apps with every module with Firebase for iOS',
+    'Configure the app with every module with Firebase for iOS',
     'smf_firebase_core',
-  ): 'The test of firebase_core that configures each app with Firebase '
-      'with the command of its README, before CI starts it.',
-  ('Archive the apps with every module', 'smf_firebase_core'):
-      'The test of firebase_core that archives each app with the build '
-          'phase for Crashlytics fixed by the command of its README.',
+  ): 'The test of firebase_core that configures the app of the job with '
+      'Firebase with the command of its README, before CI starts it.',
+  ('Archive the app with every module', 'smf_firebase_core'):
+      'The test of firebase_core that archives the app of the job with the '
+          'build phase for Crashlytics fixed by the command of its README.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',
@@ -261,8 +262,9 @@ String _selected(String where, List<String> names) =>
 String _byHand(String where, String what) =>
     '$where $what. Generate the apps with the --create of '
     'packages/smf_flutter_cli/tool/matrix.dart, which names a provider of '
-    'every role, and one app for each combination of the providers of the '
-    'roles that take one.';
+    'every role: the app of the plan of the job with --app, or the apps of '
+    'a covering of the combinations of the providers of the roles that take '
+    'one.';
 
 /// The problem that [where] refers to an app of --create by its name, in
 /// [word].
@@ -496,20 +498,22 @@ String _whole(String where, String what) =>
 
 /// The problems of the matrix tools that [script] runs: a run of
 /// [_wholeSelection], and, in a job whose matrix has the keys [planKeys]
-/// from the plan, all of them for `*`, an --app or a --shard that does not
-/// come from the matrix of the plan, directly or through a variable of the
-/// environment of the step. A script of .github/scripts, which has no
-/// matrix, has no [planKeys] and takes them as it is given them.
+/// from the plan, all of them for `*`, an --app or a --shard of a run that
+/// generates or checks apps that does not come from the matrix of the plan,
+/// directly or through a variable of the environment of the step. A run
+/// that only explains what smf create would generate may take an app of the
+/// plan as it likes. A script of .github/scripts, which has no matrix, has
+/// no [planKeys] and takes them as it is given them.
 List<String> _planProblemsOfScript(_Script script, Set<String>? planKeys) {
   final problems = <String>[];
   for (final words in script.commands) {
     if (_wholeSelection(words, script._isTool) case final what?) {
       problems.add(_whole(script.where, what));
     }
-    if (planKeys == null) continue;
-    final (arguments: _, :choice) = _choiceOf(
+    final (:arguments, :choice) = _choiceOf(
       _argumentsOfTool(words, script._isTool),
     );
+    if (planKeys == null || arguments.contains('--explain')) continue;
     for (final option in ['--app', '--shard']) {
       final value = choice[option];
       if (value == null) continue;
@@ -1092,7 +1096,7 @@ jobs:
         run: |
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
-      - name: Archive the apps with every module
+      - name: Archive the app with every module
         working-directory: packages/smf_modules/smf_firebase_core
         run: dart run tool/archive.dart
       - name: Start the app with every module
@@ -1106,7 +1110,7 @@ jobs:
       ),
       [
         equals(
-          'apps.yml, job a, step "Archive the apps with every module" refers '
+          'apps.yml, job a, step "Archive the app with every module" refers '
           'to the package smf_firebase_core of a module, but runs no test of '
           'it with dart test.',
         ),
@@ -1326,6 +1330,9 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app $env:APP "$env:RUNNER_TEMP\SMF apps"
           dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app "${{ matrix.app }}" "$env:RUNNER_TEMP\SMF apps"
           dart run packages/smf_flutter_cli/tool/matrix.dart --create "$env:RUNNER_TEMP\probe" probe --explain
+          foreach ($app in @($env:ENTRIES | ConvertFrom-Json)) {
+            dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $app "$env:RUNNER_TEMP\probe" probe --explain
+          }
   shards:
     needs: plan
     strategy:
