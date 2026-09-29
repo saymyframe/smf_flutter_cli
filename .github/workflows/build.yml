@@ -22,7 +22,7 @@ env:
   # that ships with the Flutter stable used for development.
   DART_SDK: "3.12.2"
   # "true" on the runs with the latest stable Flutter.
-  LATEST_STABLE_FLUTTER: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+  LATEST_STABLE_FLUTTER: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' }}
 
 jobs:
   checks:
