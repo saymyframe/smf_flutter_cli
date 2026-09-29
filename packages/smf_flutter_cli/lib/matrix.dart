@@ -334,62 +334,77 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   `app_tests` holds the directory declares, by [packages], the package
 ///   of each module of the matrix, such as `smf_home_flutter` for `home`;
 /// - `appliesWithout`, the names of the apps of the matrix that it applies
-///   to once those modules are taken out of their modules, with the same
-///   name, role options and hook.
+///   to once those modules are taken out of their modules, and out of their
+///   [MatrixApp.everyModuleWith], with the same name, role options and
+///   hook;
+/// - `uses`, the modules of the matrix whose ids it uses: those that, with
+///   another id in their place in an app of the matrix, change whether it
+///   applies to the app or the values of its files there. Each has the id
+///   of the module (`module`), its package (`package`) and the names of
+///   those apps (`apps`), in the order of the apps.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
 /// the matrix has: a check of the start of every app that the provider of
-/// the app entry kept would reach no app with another provider. [apps]
-/// gives the apps of the matrix, which it builds only when a test has
-/// modules.
+/// the app entry kept would reach no app with another provider. And what
+/// they depend on of the other modules of an app comes from its roles
+/// ([MatrixApp.hook]), not from the ids of its modules: the screen that an
+/// app starts on is the choice of the router role, which a second feature
+/// that can start the app, or `--start`, changes while the app keeps the
+/// modules it had. [apps] gives the apps of the matrix, which it builds
+/// once, if there are [tests].
 Future<List<Map<String, Object>>> appTestsReport(
   List<MatrixAppTest> tests, {
   required Map<ModuleId, String> packages,
   required Future<List<MatrixApp>> Function() apps,
 }) async {
-  const fileSystem = LocalFileSystem();
-  final appTests = await _appTestsOf({...packages.values}, fileSystem);
+  final path = const LocalFileSystem().path;
+  final appTests = {
+    for (final package in {...packages.values})
+      package: await appTestsDirectoryOf(package),
+  };
   List<MatrixApp>? all;
   final report = <Map<String, Object>>[];
   for (final test in tests) {
+    final matrix = all ??= await apps();
     final ids = {
       for (final MapEntry(key: id, value: package) in packages.entries)
-        if (fileSystem.path.isWithin(appTests[package]!, test.directory)) id,
+        if (path.isWithin(appTests[package]!, test.directory)) id,
     };
     report.add({
       'directory': test.directory,
       'modules': [for (final id in ids) id.value],
-      'appliesWithout': ids.isEmpty
-          ? const <String>[]
-          : _appliesWithout(test, ids, all ??= await apps()),
+      'appliesWithout':
+          ids.isEmpty ? const <String>[] : _appliesWithout(test, ids, matrix),
+      'uses': [
+        for (final MapEntry(key: id, value: names)
+            in _usesOf(test, matrix).entries)
+          {'module': id.value, 'package': packages[id]!, 'apps': names},
+      ],
     });
   }
   return report;
 }
 
-/// The directory `app_tests` of each of [packages], which are in the
-/// configuration of the packages that loaded their modules.
-Future<Map<String, String>> _appTestsOf(
-  Set<String> packages,
-  FileSystem fileSystem,
-) async {
-  final path = fileSystem.path;
-  return {
-    for (final package in packages)
-      package: path.join(
-        path.dirname(
-          path.fromUri(
-            await Isolate.resolvePackageUri(Uri.parse('package:$package/')),
-          ),
-        ),
-        'app_tests',
+/// The directory `app_tests` of the package [package], next to its `lib/`
+/// in the configuration of the packages of this program: the directory of
+/// the files of the [MatrixAppTest]s that the package keeps, each in a
+/// directory of its own.
+Future<String> appTestsDirectoryOf(String package) async {
+  final path = const LocalFileSystem().path;
+  return path.join(
+    path.dirname(
+      path.fromUri(
+        await Isolate.resolvePackageUri(Uri.parse('package:$package/')),
       ),
-  };
+    ),
+    'app_tests',
+  );
 }
 
 /// The names of [apps] that [test] applies to once the modules [ids] are
-/// taken out of their modules, with the same name, role options and hook.
+/// taken out of their modules and their [MatrixApp.everyModuleWith], with
+/// the same name, role options and hook.
 List<String> _appliesWithout(
   MatrixAppTest test,
   Set<ModuleId> ids,
@@ -405,11 +420,67 @@ List<String> _appliesWithout(
                 if (!ids.contains(id)) id,
             ],
             roleOptions: app.roleOptions,
+            everyModuleWith:
+                app.everyModuleWith?.where((id) => !ids.contains(id)).toList(),
             hook: app.hook,
           ),
         ))
           app.name,
     ];
+
+/// The modules of [apps] whose ids [test] uses, each with the names of the
+/// apps where another id in its place changes whether [test] applies, or
+/// the values of its files; in the order of the apps and of their modules.
+Map<ModuleId, List<String>> _usesOf(
+  MatrixAppTest test,
+  List<MatrixApp> apps,
+) {
+  final uses = <ModuleId, List<String>>{};
+  for (final app in apps) {
+    for (final id in app.modules) {
+      if (_usesId(test, app, id)) (uses[id] ??= []).add(app.name);
+    }
+  }
+  return uses;
+}
+
+/// Whether [test] uses the id of the module [id] of [app]: whether it
+/// applies to [app] with another id in place of [id] other than to [app],
+/// or fills the values of its files there otherwise, or throws there, as a
+/// test that looks the module up by its id does.
+bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
+  final selection = _selectionOf(test, app);
+  try {
+    return _selectionOf(test, _renamed(app, id)) != selection;
+  } on Object {
+    return true;
+  }
+}
+
+/// Whether [test] applies to [app] and, if it does, the values of its
+/// files there, as text.
+String _selectionOf(MatrixAppTest test, MatrixApp app) =>
+    test.appliesTo(app) ? jsonEncode(test.values?.call(app) ?? const {}) : '';
+
+/// [app] with another id in place of the module [id], in its modules, its
+/// [MatrixApp.everyModuleWith] and its name, as if another module took the
+/// place of the module: with the same roles, role options and hook.
+MatrixApp _renamed(MatrixApp app, ModuleId id) {
+  ModuleId rename(ModuleId module) => module == id ? _otherModule : module;
+  return MatrixApp(
+    app.name.replaceAll(
+      RegExp('\\b${RegExp.escape(id.value)}\\b'),
+      _otherModule.value,
+    ),
+    [for (final module in app.modules) rename(module)],
+    roleOptions: app.roleOptions,
+    everyModuleWith: app.everyModuleWith?.map(rename).toList(),
+    hook: app.hook,
+  );
+}
+
+/// The id that [_renamed] puts in place of the id of a module.
+const _otherModule = ModuleId('other_module');
 
 /// Tests that the matrix adds to the apps it generates and runs with
 /// `flutter test`: the files of a [directory] for the apps that
@@ -463,10 +534,12 @@ final class MatrixAppTest {
   /// the screen once for each screen the user sees.
   ///
   /// Such tests apply to the apps of every provider of each of the roles,
-  /// which [appliesTo] selects by the role rather than by the modules that
-  /// provide it; [runMatrix] fails when they apply to no app of one of
-  /// them (see [MatrixAppTests]). Tests of what only one provider does name
-  /// no role.
+  /// which [appliesTo] selects by the role, through the roles of the app
+  /// ([MatrixApp.hook]), rather than by the ids of the modules that provide
+  /// it; [runMatrix] fails when they apply to no app of one of them, or
+  /// when they select their apps, or take their [values], by the id of one
+  /// of them (see [MatrixAppTests]). Tests of what only one provider does
+  /// name no role.
   final Set<Role> roles;
 }
 
@@ -487,13 +560,17 @@ final class MatrixAppTests {
   /// The problems of the tests of roles in the matrix of [modules], whose
   /// apps are [apps]: for each role of the [tests] and of [testedRoles],
   /// and each module that provides it and is in [apps], a test of the role
-  /// that applies to none of the apps of the module, and no test of a role
-  /// of [testedRoles] at all.
+  /// that applies to none of the apps of the module, or that selects its
+  /// apps or takes its values by the id of the module, and no test of a
+  /// role of [testedRoles] at all.
   ///
   /// A provider of the role that the tests leave out, such as one that a
   /// module adds later, is a problem, since its apps would be generated and
   /// analyzed, but nothing would check at runtime that it keeps the
-  /// contract of the role.
+  /// contract of the role. So is a test that tells the providers apart by
+  /// their ids, which a new provider would not have: with another id in
+  /// place of that of a provider in one of its apps, it must apply to the
+  /// app and fill its values as before.
   List<String> roleProblems(List<SmfModule> modules, List<MatrixApp> apps) {
     final roles = {...testedRoles, for (final test in tests) ...test.roles};
     return [
@@ -534,10 +611,19 @@ final class MatrixAppTests {
     ];
     if (withModule.isEmpty) return const [];
     if (ofRole.isEmpty) return [_untested(role, id)];
-    return [
-      for (final test in ofRole)
-        if (!withModule.any(test.appliesTo)) _leftOut(test, role, id),
-    ];
+    final problems = <String>[];
+    for (final test in ofRole) {
+      final using = [
+        for (final app in withModule)
+          if (_usesId(test, app, id)) app.name,
+      ];
+      if (!withModule.any(test.appliesTo)) {
+        problems.add(_leftOut(test, role, id));
+      } else if (using.isNotEmpty) {
+        problems.add(_byId(test, role, id, using));
+      }
+    }
+    return problems;
   }
 
   /// The problem that no test checks [role], which the module [id]
@@ -552,6 +638,24 @@ final class MatrixAppTests {
       'The tests of ${test.directory} check the $role, but apply to no app '
       'with $id, which provides it: a test of a role applies to the apps of '
       'every provider of the role, which it selects by the role.';
+
+  /// The problem that [test], a test of [role], selects its apps or takes
+  /// its values by the id of the module [id], which provides it, in the
+  /// apps [using].
+  static String _byId(
+    MatrixAppTest test,
+    Role role,
+    ModuleId id,
+    List<String> using,
+  ) =>
+      'The tests of ${test.directory} check the $role, but select their apps, '
+      'or take the values of their files, by the id of $id, which provides '
+      'it: with another module in its place, they would apply otherwise, or '
+      'get other values, in these apps of the matrix: ${using.join(', ')}. '
+      'A test of a role takes what it needs of the providers of the role '
+      'from the roles of the app (MatrixApp.hook), such as whether the app '
+      'has the role (presentRoles), so that a new provider of the role gets '
+      'the test as it is.';
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
