@@ -447,6 +447,29 @@ void main() {
     });
   });
 
+  test(
+      'reads the reports of every member that the root pubspec lists, with '
+      'comments and quotes', () {
+    final root = Directory.systemTemp.createTempSync('test_annotations_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n',
+    );
+    void write(String path, String text) => File('${root.path}/$path')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+    write('packages/a/build/test-results/test.json', 'a');
+    write('packages/b/build/test-results/test.json', 'b');
+
+    expect(reportsOf(root.path), {
+      'packages/a': ['a'],
+      'packages/b': ['b'],
+    });
+  });
+
   group('the workflows', () {
     test('find a run of tests that writes no report', () {
       String withoutReport(String step, String command) =>
