@@ -17,6 +17,7 @@ import 'workspace_members.dart';
 const matrixTools = [
   'packages/smf_flutter_cli/tool/matrix.dart',
   'packages/smf_pipeline/fixture_registry/tool/matrix.dart',
+  'packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart',
 ];
 
 /// A MatrixAppTest of a matrix tool, as the tool reports it with

@@ -8,6 +8,7 @@ import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -231,9 +232,10 @@ final class FakeOverlapModule extends SmfModule {
       ];
 }
 
-/// A provider of the analytics role whose service logs nothing, with a
-/// navigator observer for every navigator of the router and a listener of
-/// the screen the user sees.
+/// A provider of the analytics role whose service starts asynchronously and
+/// sends what it records to a platform side of its own, which only the
+/// mocks of its app tests answer, with a navigator observer for every
+/// navigator of the router and a listener of the screen the user sees.
 final class FakeAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FakeAnalyticsModule();
@@ -248,7 +250,7 @@ final class FakeAnalyticsModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'Analytics that logs nothing (fixture)',
+        description: 'Analytics with a platform side (fixture)',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(analyticsRole)],
       );
@@ -257,9 +259,9 @@ final class FakeAnalyticsModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeAnalyticsBundle),
         analyticsRole.data(
-          const RoleImplementation(
+          const RoleImplementation.async(
             type: TypeRef('FixtureAnalytics', import: _file),
-            create: FactoryRef('createFixtureAnalytics', import: _file),
+            init: FactoryRef('initFixtureAnalytics', import: _file),
           ),
         ),
         const SocketContribution.item(
@@ -279,7 +281,8 @@ final class FakeAnalyticsModule extends SmfModule {
 }
 
 /// A provider of the crash reporting role whose service is ready only
-/// after an asynchronous start.
+/// after an asynchronous start, and which sends every report to a platform
+/// side of its own, which only the mocks of its app tests answer.
 final class FakeCrashModule extends SmfModule {
   /// Creates the module.
   const FakeCrashModule();
@@ -304,6 +307,37 @@ final class FakeCrashModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureCrashReporter', import: _file),
             init: FactoryRef('initFixtureCrashReporter', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module whose start-up does what the start-up of a real app may do and
+/// what the fake time of a widget test does not let finish: it waits for a
+/// timer, leaves another one running and replaces the widget that shows
+/// the errors of a build.
+final class FakeSlowStartModule extends SmfModule {
+  /// Creates the module.
+  const FakeSlowStartModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_slow_start');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A start-up that waits for a timer (fixture)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeSlowStartBundle),
+        const SocketContribution.code(
+          AppEntryRole.bootstrapLate,
+          Fragment(
+            'await startFixture();',
+            imports: [ImportRef.app('core/fixture_start/fixture_start.dart')],
           ),
         ),
       ];

@@ -57,7 +57,8 @@ jobs:
     # About 10 minutes for the row of the modules of the CLI, and 7 more
     # for each app with every module, which it builds for Android and starts
     # on the Android emulator. The row of the fixtures takes about 11
-    # minutes, and 1 more for each app with every module.
+    # minutes, 1 more for each app with every module, and a few for the app
+    # of several providers of a role.
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -357,6 +358,17 @@ jobs:
       - name: Generate, analyze and test the apps of the fixture modules
         if: matrix.registry == 'fixtures'
         run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
+
+      # The tests that the modules of the CLI keep for the apps they are in,
+      # in an app with fixture providers of the roles that an app can have
+      # several providers of, next to the modules of the CLI that provide
+      # them. The start-up and the services of the fixtures go through
+      # platform channels that no test of the CLI knows, and another fixture
+      # waits for a timer in the start-up: the tests of a module must pass
+      # whatever else an app with the module has.
+      - name: Generate, analyze and test the app of several providers of a role
+        if: ${{ !cancelled() && matrix.registry == 'fixtures' }}
+        run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
 
       # The apps with every module of the matrix, one for each combination
       # of the providers of the roles that take one, among them those with

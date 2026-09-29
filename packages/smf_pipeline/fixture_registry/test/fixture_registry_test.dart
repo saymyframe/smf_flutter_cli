@@ -44,6 +44,66 @@ void main() {
     }
   });
 
+  group('the registry of several providers', () {
+    test('is a valid registry', () {
+      expect(ModuleRegistry.problemsOf(severalProvidersModules()), isEmpty);
+    });
+
+    test(
+        'has every module of the CLI that provides a role that an app can '
+        'have several providers of, and a fixture provider of each such role '
+        'besides, so that the app tests of the modules run next to another '
+        'provider of their roles', () {
+      final modules = severalProvidersModules();
+      final ids = {for (final module in modules) module.descriptor.id};
+      final ofCli = {for (final module in smfModules) module.descriptor.id};
+      final roles = <Role>{};
+      for (final module in smfModules) {
+        for (final role in module.descriptor.provides) {
+          if (!role.cardinality.allowsMany) continue;
+          roles.add(role);
+          expect(
+            ids,
+            contains(module.descriptor.id),
+            reason: '${module.descriptor.id} provides the $role, which an app '
+                'can have several providers of: add it to '
+                'severalProvidersModules(), and register its app tests in '
+                'tool/several_providers_matrix.dart.',
+          );
+        }
+      }
+
+      expect(roles, isNotEmpty);
+      for (final role in roles) {
+        expect(
+          [
+            for (final module in modules)
+              if (module.descriptor.provides.contains(role) &&
+                  !ofCli.contains(module.descriptor.id))
+                module.descriptor.id,
+          ],
+          isNotEmpty,
+          reason: 'No fixture provides the $role next to the modules of the '
+              'CLI that do.',
+        );
+      }
+    });
+
+    test('builds one app with every module, whose cases have no errors',
+        () async {
+      final (:apps, :failed) = await everyModuleAppsOf(
+        severalProvidersModules(),
+      );
+
+      expect(failed, isEmpty);
+      expect(apps.map((app) => app.modules), [
+        unorderedEquals([
+          for (final module in severalProvidersModules()) module.descriptor.id,
+        ]),
+      ]);
+    });
+  });
+
   group('the contract harness', () {
     late List<ContractResult> results;
 

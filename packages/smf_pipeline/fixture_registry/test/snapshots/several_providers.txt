@@ -1,0 +1,1060 @@
+=== README.md (flutter_core) ===
+# fixture_app
+
+A new Flutter project.
+
+## Firebase
+
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
+
+To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
+
+```bash
+dart pub global activate flutterfire_cli 1.4.1
+firebase login
+flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.fixture-app --android-package-name=com.example.fixture_app
+```
+
+The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages, such as the upload of the debug symbols of Crashlytics, run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+
+Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. The phase for Crashlytics that flutterfire_cli 1.4.0 adds does not find the upload script of Crashlytics where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase; configuring the app again on macOS with 1.4.1 or a later 1.x replaces the phase.
+
+With Crashlytics, `flutter build ipa` needs one more change on macOS: the phase of flutterfire_cli 1.4.1 looks for the upload script of Crashlytics in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`, so SMF points the phase at `build/ios/SourcePackages` right after it configures the app. `flutterfire configure` writes the phase again, so after running it yourself on macOS, run in the directory of the app:
+
+```bash
+ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
+```
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.fixture_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.fixture_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Fixture App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Fixture App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FixtureApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'Fixture App',
+    routerConfig: appRouter.config,
+    builder: (context, child) => child!,
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:firebase_core/firebase_core.dart';
+import 'package:fixture_app/core/analytics/analytics_service.dart';
+import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
+import 'package:fixture_app/core/fixture_start/fixture_start.dart';
+import 'package:fixture_app/firebase_options.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initAnalytics();
+  await initCrashReporting();
+  installCrashReporting();
+  await startFixture();
+}
+=== lib/core/analytics/analytics_service.dart (role:analytics) ===
+import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
+    as impl0;
+import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
+    as impl1;
+
+/// Records what users do in the app.
+abstract interface class AnalyticsService {
+  /// Logs the event [name] with [parameters].
+  Future<void> logEvent(String name, {Map<String, Object>? parameters});
+
+  /// Logs that the user signed in, with the sign-in [method].
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters});
+
+  /// Logs that the user signed up, with the sign-up [method].
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  });
+
+  /// Turns the collection of analytics data on or off.
+  Future<void> setAnalyticsCollectionEnabled(bool enabled);
+
+  /// Sets the id of the signed-in user, or clears it with `null`.
+  Future<void> setUserId(String? userId);
+
+  /// Sets the user property [name] to [value], or clears it with `null`.
+  Future<void> setUserProperty({required String name, required String? value});
+}
+
+/// Returns the analytics service of the app, which forwards every call to
+/// the analytics services of all modules.
+AnalyticsService createAnalyticsService() => _analyticsService;
+
+final AnalyticsService _analyticsService = _AnalyticsServices(
+  _analyticsServices,
+);
+
+final List<AnalyticsService> _analyticsServices = [
+  impl0.createFirebaseAnalyticsService(),
+];
+
+/// Creates the implementations of AnalyticsService that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initAnalytics() async {
+  _analyticsServices.addAll(
+    await Future.wait<AnalyticsService>([impl1.initFixtureAnalytics()]),
+  );
+}
+
+final class _AnalyticsServices implements AnalyticsService {
+  const _AnalyticsServices(this._services);
+
+  final List<AnalyticsService> _services;
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _forAll((service) => service.logEvent(name, parameters: parameters));
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _forAll(
+        (service) => service.logSignIn(method: method, parameters: parameters),
+      );
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _forAll(
+    (service) => service.logSignUp(method: method, parameters: parameters),
+  );
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _forAll((service) => service.setAnalyticsCollectionEnabled(enabled));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((service) => service.setUserId(userId));
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _forAll((service) => service.setUserProperty(name: name, value: value));
+
+  Future<void> _forAll(
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    await Future.wait(_services.map(call));
+  }
+}
+=== lib/core/analytics/firebase_analytics_service.dart (firebase_analytics) ===
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show PlatformException;
+
+import 'analytics_service.dart';
+
+/// Creates an analytics service that records to Firebase Analytics, which
+/// needs Firebase to be initialized.
+///
+/// The app has one analytics service, which `createAnalyticsService()`
+/// returns and which forwards every call to this one.
+AnalyticsService createFirebaseAnalyticsService() =>
+    FirebaseAnalyticsService(FirebaseAnalytics.instance);
+
+/// Records what users do in the app with Firebase Analytics.
+///
+/// A sign-in and a sign-up are the standard `login` and `sign_up` events of
+/// Firebase Analytics, with the method in their `method` parameter.
+final class FirebaseAnalyticsService implements AnalyticsService {
+  /// Creates the service on the given [FirebaseAnalytics].
+  FirebaseAnalyticsService(this._analytics);
+
+  final FirebaseAnalytics _analytics;
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _analytics.logEvent(name: name, parameters: parameters);
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _analytics.logLogin(loginMethod: method, parameters: parameters);
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _analytics.logSignUp(signUpMethod: method, parameters: parameters);
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _analytics.setAnalyticsCollectionEnabled(enabled);
+
+  @override
+  Future<void> setUserId(String? userId) => _analytics.setUserId(id: userId);
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _analytics.setUserProperty(name: name, value: value);
+}
+
+/// Logs a screen view to Firebase Analytics for the screen the user sees,
+/// which the router of the app tells it about, named by the full name of
+/// its route, such as `home.home`.
+///
+/// A screen that is no route of a module is the fallback start screen of
+/// the app, logged as `/`, or the error screen of the router, which is not
+/// logged: the location that the app cannot show may hold anything, such
+/// as a token of a link.
+///
+/// Nothing waits for the screen view, so an error of the platform is
+/// printed rather than left to the handler of the uncaught errors of the
+/// app.
+void logFirebaseScreenView(String? route, String location) {
+  final name = route ?? (Uri.parse(location).path == '/' ? '/' : null);
+  if (name == null) return;
+  FirebaseAnalytics.instance
+      .logScreenView(screenName: name)
+      .catchError(
+        (Object error) => debugPrint('Firebase Analytics: $error'),
+        test: (error) => error is PlatformException,
+      );
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on when no route of the app can start it.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('Fixture App')));
+}
+=== lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/crash_reporting/crashlytics_crash_reporter.dart'
+    as impl0;
+import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl1;
+import 'package:flutter/foundation.dart';
+
+/// Reports the errors of the app.
+abstract interface class CrashReporter {
+  /// Reports [error] with its [stackTrace]; a [fatal] error ended the app.
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  });
+
+  /// Reports an error that Flutter caught, described by [details].
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  });
+
+  /// Adds [message] to the log sent with the next report.
+  Future<void> log(String message);
+
+  /// Sets the id of the signed-in user for the next reports, or clears it
+  /// with `null`.
+  Future<void> setUserId(String? userId);
+}
+
+/// Returns the crash reporter of the app, which forwards every call to the
+/// crash reporters of all modules.
+CrashReporter createCrashReporter() => _crashReporter;
+
+/// Reports the errors of the main isolate that nothing handles, each once.
+///
+/// `bootstrap()` calls it once the crash reporting services are ready. Two
+/// handlers cover the main isolate:
+/// - `FlutterError.onError` gets the errors that Flutter catches, such as in
+///   a build or a layout, and still presents them as Flutter does by
+///   default;
+/// - `PlatformDispatcher.instance.onError` gets every other uncaught error,
+///   such as in a `Future`, a `Timer` or the handler of a port, with its
+///   type. In debug mode it leaves the error unhandled, so the engine prints
+///   it.
+///
+/// `compute()` and `Isolate.run()` throw the error of their isolate to the
+/// code that awaits them, so it reaches the platform dispatcher unless that
+/// code catches it. The uncaught errors of an isolate that the app spawns
+/// itself go only to the error listener of that isolate, such as the
+/// `onError` port of `Isolate.spawn`, so the app reports them there to its
+/// crash reporter.
+void installCrashReporting() {
+  final reporter = createCrashReporter();
+  final presentError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    presentError?.call(details);
+    unawaited(reporter.recordFlutterError(details, fatal: true));
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    unawaited(reporter.recordError(error, stackTrace, fatal: true));
+    return !kDebugMode;
+  };
+}
+
+final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
+
+final List<CrashReporter> _crashReporters = [
+  impl0.createCrashlyticsCrashReporter(),
+];
+
+/// Creates the implementations of CrashReporter that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initCrashReporting() async {
+  _crashReporters.addAll(
+    await Future.wait<CrashReporter>([impl1.initFixtureCrashReporter()]),
+  );
+}
+
+final class _CrashReporters implements CrashReporter {
+  const _CrashReporters(this._reporters);
+
+  final List<CrashReporter> _reporters;
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _forAll(
+    (reporter) =>
+        reporter.recordError(error, stackTrace, fatal: fatal, reason: reason),
+  );
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) =>
+      _forAll((reporter) => reporter.recordFlutterError(details, fatal: fatal));
+
+  @override
+  Future<void> log(String message) =>
+      _forAll((reporter) => reporter.log(message));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((reporter) => reporter.setUserId(userId));
+
+  Future<void> _forAll(
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    await Future.wait(_reporters.map(call));
+  }
+}
+=== lib/core/crash_reporting/crashlytics_crash_reporter.dart (firebase_crashlytics) ===
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
+
+import 'crash_reporter.dart';
+
+/// Creates a crash reporter that reports to Firebase Crashlytics, which
+/// needs Firebase to be initialized.
+///
+/// The app has one crash reporter, which `createCrashReporter()` returns and
+/// which forwards every report to this one.
+CrashReporter createCrashlyticsCrashReporter() =>
+    CrashlyticsCrashReporter(FirebaseCrashlytics.instance);
+
+/// Reports the errors of the app to Firebase Crashlytics.
+///
+/// It prints nothing. Of the errors that `installCrashReporting()` reports,
+/// Flutter already presents those it catches, in every mode, and in debug
+/// mode the engine prints the others, while Crashlytics would present each
+/// error of Flutter again and, in debug mode, print each report. So an
+/// error that the code of the app reports itself is not printed either.
+final class CrashlyticsCrashReporter implements CrashReporter {
+  /// Creates the reporter on the given [FirebaseCrashlytics].
+  CrashlyticsCrashReporter(this._crashlytics);
+
+  final FirebaseCrashlytics _crashlytics;
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _crashlytics.recordError(
+    error,
+    stackTrace,
+    reason: reason,
+    printDetails: false,
+    fatal: fatal,
+  );
+
+  /// Reports what [FirebaseCrashlytics.recordFlutterError] reports, without
+  /// presenting the error as it also does.
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) => _crashlytics.recordError(
+    details.exceptionAsString(),
+    details.stack,
+    reason: details.context
+        ?.toStringDeep(minLevel: DiagnosticLevel.info)
+        .trim(),
+    information: details.informationCollector?.call() ?? const [],
+    printDetails: false,
+    fatal: fatal,
+  );
+
+  @override
+  Future<void> log(String message) => _crashlytics.log(message);
+
+  /// Sets the id of the user, or clears it with `null`, which Crashlytics
+  /// does with an empty id.
+  @override
+  Future<void> setUserId(String? userId) =>
+      _crashlytics.setUserIdentifier(userId ?? '');
+}
+=== lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+import '../analytics/analytics_service.dart';
+
+/// The platform side of the analytics of the fixture, which only the mocks
+/// of its own tests answer, as only the tests of a plugin know its
+/// platform side.
+const fixtureAnalyticsChannel = MethodChannel('smf.fixture/analytics');
+
+/// Creates the analytics service of the fixture once its platform side has
+/// started.
+Future<AnalyticsService> initFixtureAnalytics() async {
+  await fixtureAnalyticsChannel.invokeMethod<void>('start');
+  return const FixtureAnalytics();
+}
+
+/// A navigator observer that the fixture adds to every navigator.
+final class FixtureObserver extends NavigatorObserver {}
+
+/// The screens the user saw, as the screen listener of the fixture heard of
+/// them: the full name of the route of each, or `null`, and its location.
+final List<(String?, String)> fixtureScreens = [];
+
+/// Analytics that sends what it records to its platform side.
+final class FixtureAnalytics implements AnalyticsService {
+  /// Creates the service.
+  const FixtureAnalytics();
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _record('logEvent', {'name': name, 'parameters': parameters});
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _record('logSignIn', {'method': method, 'parameters': parameters});
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _record('logSignUp', {'method': method, 'parameters': parameters});
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _record('setAnalyticsCollectionEnabled', {'enabled': enabled});
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _record('setUserId', {'userId': userId});
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _record('setUserProperty', {'name': name, 'value': value});
+
+  Future<void> _record(String method, Map<String, Object?> arguments) =>
+      fixtureAnalyticsChannel.invokeMethod<void>(method, arguments);
+}
+=== lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+import '../crash_reporting/crash_reporter.dart';
+
+/// The platform side of the crash reporting of the fixture, which only the
+/// mocks of its own tests answer, as only the tests of a plugin know its
+/// platform side.
+const fixtureCrashChannel = MethodChannel('smf.fixture/crash');
+
+/// Creates the crash reporter of the fixture once its platform side has
+/// started.
+Future<CrashReporter> initFixtureCrashReporter() async {
+  await fixtureCrashChannel.invokeMethod<void>('start');
+  return const FixtureCrashReporter();
+}
+
+/// Crash reporting that sends every report to its platform side.
+final class FixtureCrashReporter implements CrashReporter {
+  /// Creates the reporter.
+  const FixtureCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => fixtureCrashChannel.invokeMethod<void>('recordError', {
+    'error': '$error',
+    'fatal': fatal,
+    'reason': reason,
+  });
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) => fixtureCrashChannel.invokeMethod<void>('recordError', {
+    'error': details.exceptionAsString(),
+    'fatal': fatal,
+  });
+
+  @override
+  Future<void> log(String message) =>
+      fixtureCrashChannel.invokeMethod<void>('log', message);
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      fixtureCrashChannel.invokeMethod<void>('setUserId', userId);
+}
+=== lib/core/fixture_start/fixture_start.dart (fake_slow_start) ===
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+
+/// What the start-up of the fixture does, as the start-up of a real app
+/// may: it waits for a timer, as it would wait for a service that takes a
+/// moment to answer; it leaves a timer running, as a refresh that it
+/// schedules; and it shows the errors of a build with a widget of its own.
+Future<void> startFixture() async {
+  await Future<void>.delayed(const Duration(milliseconds: 20));
+  Timer(const Duration(seconds: 1), () {});
+  ErrorWidget.builder = (details) =>
+      ErrorWidget.withDetails(message: details.exceptionAsString());
+}
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
+  void replace(AppLocation location);
+}
+=== lib/core/router/app_router_factory.dart (go_router) ===
+import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
+    show logFirebaseScreenView;
+import 'package:fixture_app/core/app/fallback_start_screen.dart';
+import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+
+import 'app_router.dart' show AppNavigator, AppRouter;
+import 'navigation.dart' show AppLocation;
+
+/// Creates the router of the app: a [GoRouter] with the routes of the
+/// modules of the app.
+AppRouter createAppRouter() => _GoAppRouter();
+
+/// The router of the app with go_router, which navigates between the
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
+final class _GoAppRouter implements AppRouter, AppNavigator {
+  /// The router, created once, on first use. Navigation goes through it
+  /// rather than through the router above a context, so that any context
+  /// can navigate, even one above the router.
+  @override
+  late final GoRouter config = GoRouter(
+    initialLocation: '/',
+    observers: _observers(),
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
+      ),
+    ],
+  )..routerDelegate.addListener(_showScreen);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => this;
+
+  @override
+  void go(AppLocation location) => config.go(location.path);
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    return config.push<T>(location.path);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      listener(top?.route.name, location);
+    }
+  }
+}
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[() => FixtureObserver()])
+    create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [
+  (route, location) => fixtureScreens.add((route, location)),
+  logFirebaseScreenView,
+];
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => const AppNav._();
+}
+
+/// The routes of the app by module; it has none.
+final class AppNav {
+  const AppNav._();
+}
+=== lib/firebase_options.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// Default [FirebaseOptions] for use with your Firebase apps.
+///
+/// Example:
+/// ```dart
+/// import 'firebase_options.dart';
+/// // ...
+/// await Firebase.initializeApp(
+///   options: DefaultFirebaseOptions.currentPlatform,
+/// );
+/// ```
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for android - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for ios - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: fixture_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_analytics: "^12.6.0"
+  firebase_core: "^4.15.0"
+  firebase_crashlytics: "^5.4.0"
+  go_router: "^17.5.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fixture_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('Fixture App'), findsOneWidget);
+  });
+}
