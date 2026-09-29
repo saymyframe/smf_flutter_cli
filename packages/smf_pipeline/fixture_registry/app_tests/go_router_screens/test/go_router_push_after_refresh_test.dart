@@ -17,7 +17,6 @@ import 'package:go_router/go_router.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
-import 'package:{{app_name}}/main.dart' as app;
 
 import 'screens.dart';
 
@@ -53,13 +52,7 @@ void main() {
   // fails sooner.
   testWidgets('push() completes with the value of its page after a refresh',
       (tester) async {
-    // The app starts as on a device, with what its main() puts around it.
-    // runAsync reports an error of main() to Flutter rather than throwing
-    // it, so the test fails on it here.
-    await tester.runAsync(app.main);
-    final error = tester.takeException();
-    if (error != null) fail('main() of the app failed: $error');
-    await tester.pumpAndSettle();
+    await startApp(tester);
     tester
         .element(find.byType(FixtureHomeScreen))
         .nav

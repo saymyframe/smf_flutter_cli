@@ -18,7 +18,7 @@ The real SMF modules do not yet use every feature of the module model in `packag
 | `fake_di` | A DI container whose capabilities each test sets, which renders the registrations with the imports of their files as a variable of its render hook. |
 | `fake_router` | A router with navigator observers, listeners of the screen, the main navigation of a layout and annotations on screens, which renders the screens with the imports of their files as a variable of its render hook. |
 | `fake_feature` | A feature with a variant per state manager, a composition file and the navigation facade; a second feature whose start screen is a destination of the main navigation too, so an app with both has two screens that can start it. |
-| `fake_infra` | Every socket of the app entry and the `flutter:` section of the pubspec; a second module with the same keys, so their values merge; analytics with navigator observers and a listener of the screen; crash reporting and events that start asynchronously; services with every DI capability; a module whose sockets a module that depends on it fills; code generation. |
+| `fake_infra` | Every socket of the app entry and the `flutter:` section of the pubspec; a second module with the same keys, so their values merge; analytics with navigator observers, which note the routes they see, and a listener of the screen; a log of the screens, a second listener, which requires a router and has no routes, so an app with it alone starts on the fallback screen; crash reporting and events that start asynchronously; services with every DI capability; a module whose sockets a module that depends on it fills; code generation. |
 
 ## Rules
 

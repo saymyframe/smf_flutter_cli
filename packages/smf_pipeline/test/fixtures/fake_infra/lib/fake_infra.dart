@@ -8,6 +8,7 @@ import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -232,8 +233,9 @@ final class FakeOverlapModule extends SmfModule {
 }
 
 /// A provider of the analytics role whose service logs nothing, with a
-/// navigator observer for every navigator of the router and a listener of
-/// the screen the user sees.
+/// navigator observer for every navigator of the router, which notes the
+/// routes that come on its navigator, and a listener of the screen the user
+/// sees.
 final class FakeAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FakeAnalyticsModule();
@@ -274,6 +276,43 @@ final class FakeAnalyticsModule extends SmfModule {
             imports: [_file],
           ),
           when: {routerRole},
+        ),
+      ];
+}
+
+/// A module that logs the screens the user sees with a listener of the
+/// screen of the router role, which it requires, and has no routes: so an
+/// app with it and without routes to start on starts on the fallback screen
+/// of the app entry, and an app with it and the fixture analytics has two
+/// listeners of the screen.
+final class FakeScreenLogModule extends SmfModule {
+  /// Creates the module.
+  const FakeScreenLogModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_screen_log');
+
+  static const _file = ImportRef.app(
+    'core/fixture_screen_log/fixture_screen_log.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A log of the screens the user sees (fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {routerRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeScreenLogBundle),
+        const SocketContribution.item(
+          RouterRole.screenListeners,
+          Fragment(
+            '(route, location) => fixtureScreenLog.add((route, location))',
+            imports: [_file],
+          ),
         ),
       ];
 }

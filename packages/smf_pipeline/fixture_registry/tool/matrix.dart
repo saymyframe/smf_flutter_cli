@@ -75,9 +75,10 @@ Future<List<MatrixAppTest>> _appTests() async {
   final appTests =
       Directory.fromUri(library!).parent.uri.resolve('app_tests').toFilePath();
   return [
-    // The listeners of the screen, whichever module provides the router:
-    // the test starts the app with main() and navigates through the
-    // navigation facade of the router role.
+    // The listeners of the screen, the navigator observers and the back
+    // button of the system, whichever module provides the router: the test
+    // starts the app with main() and navigates through the navigation
+    // facade of the router role.
     MatrixAppTest(
       '$appTests/router_screens',
       appliesTo: (app) =>
@@ -85,32 +86,67 @@ Future<List<MatrixAppTest>> _appTests() async {
           _hasAll(const {'fake_feature', 'fake_analytics'})(app),
       roles: {routerRole},
     ),
+    // The fallback screen of the app entry, which the router shows when no
+    // route starts the app, as the router role chose it, whichever module
+    // provides the router, and which the listener of the fixture screen log
+    // hears of.
+    MatrixAppTest(
+      '$appTests/router_fallback',
+      appliesTo: (app) =>
+          _hasProviderOf(routerRole)(app) &&
+          _startIn(app) == null &&
+          _hasAll(const {'fake_screen_log'})(app),
+      roles: {routerRole},
+    ),
     // The listeners of the screen as the user switches between the
     // destinations of the two fixture features, whichever modules provide
     // the router and the layout: the test selects a destination through
-    // the AppShell of the layout role. The apps it applies to have the
-    // tests of router_screens, whose helpers it uses.
+    // the AppShell of the layout role. Every listener of the app hears of
+    // each switch, those of the fixture analytics and of the fixture screen
+    // log, and each navigator of a branch has observers of its own. The
+    // apps it applies to have the tests of router_screens, whose helpers it
+    // uses.
     MatrixAppTest(
       '$appTests/layout_screens',
       appliesTo: (app) =>
           _hasProviderOf(routerRole)(app) &&
           _hasProviderOf(layoutRole)(app) &&
-          _hasAll(const {'fake_feature', 'fake_second', 'fake_analytics'})(
-            app,
-          ),
+          _hasAll(
+            const {
+              'fake_feature',
+              'fake_second',
+              'fake_analytics',
+              'fake_screen_log',
+            },
+          )(app),
       roles: {routerRole, layoutRole},
     ),
-    // What only go_router does: a refresh of its routes, which the
-    // listeners of the screen do not hear of, and after which push() still
-    // completes with the value of its page. It checks no role, so it names
-    // its module. The apps it applies to have the tests of router_screens,
-    // whose helpers it uses.
+    // What only go_router does: notifications of its delegate that leave
+    // the page on top as it is, such as a refresh of its routes, which the
+    // listeners of the screen do not hear of, and a push() that still
+    // completes with the value of its page after a refresh. It checks no
+    // role, so it names its module. The apps it applies to have the tests
+    // of router_screens, whose helpers it uses.
     MatrixAppTest(
       '$appTests/go_router_screens',
       appliesTo: _hasAll(const {'go_router', 'fake_feature', 'fake_analytics'}),
     ),
+    // What only bottom_tabs does: a tap on a tab of its bar selects the
+    // destination. It checks no role, so it names its module. The apps it
+    // applies to have the tests of router_screens, whose helpers it uses.
+    MatrixAppTest(
+      '$appTests/bottom_tabs_screens',
+      appliesTo: _hasAll(
+        const {'bottom_tabs', 'fake_feature', 'fake_second', 'fake_analytics'},
+      ),
+    ),
   ];
 }
+
+/// The route that [app] starts on, as the router role chose it, or `null`
+/// if it starts on the fallback screen of its app entry.
+FacadeRoute? _startIn(MatrixApp app) =>
+    routerRole.startIn(routerRole.hookInput(app.hook!));
 
 /// The package that declares the class of each of [modules], such as
 /// fake_infra for fake_analytics.
