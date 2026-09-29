@@ -229,14 +229,15 @@ jobs:
           cat "$RUNNER_TEMP/emulator.log"
           exit 1
 
-      # The test that the app starts is a test of flutter_core in
-      # app_tests/start, which the matrix tool adds to the app as it adds it
-      # to the apps of the matrix, where it is only analyzed.
-      # .github/scripts/start_app_test.sh runs it, giving a try that never
-      # reaches the app on the emulator or simulator one more try.
+      # The check that the app starts is an entry of the app that
+      # flutter_core keeps in app_tests/start, which the matrix tool adds to
+      # the app as it adds it to the apps of the matrix, where it is only
+      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # starts the app with adb and reads the result that the check writes,
+      # in one try: unlike flutter test, it does not connect to the app.
       - name: Start an app without Firebase on the Android emulator
         if: ${{ !cancelled() && matrix.registry == 'real' }}
-        timeout-minutes: 25
+        timeout-minutes: 12
         run: |
           dart run packages/smf_flutter_cli/bin/smf_flutter.dart create plain_app \
             -m go_router,home,bottom_tabs,riverpod,get_it,event_bus \
@@ -244,7 +245,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
             "$RUNNER_TEMP/SMF apps/plain_app" packages/smf_modules/smf_flutter_core/app_tests/start
           cd "$RUNNER_TEMP/SMF apps/plain_app"
-          "$GITHUB_WORKSPACE/.github/scripts/start_app_test.sh" emulator-5554 480
+          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
 
       # An app with Firebase starts only once flutterfire configured it: the
       # placeholder of its options throws at start-up. flutterfire writes
@@ -300,9 +301,9 @@ jobs:
 
       - name: Start the app with every module on the Android emulator
         if: ${{ !cancelled() && steps.firebase_android.outcome == 'success' }}
-        timeout-minutes: 20
+        timeout-minutes: 10
         working-directory: ${{ runner.temp }}/SMF apps/firebase_start_app
-        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app_test.sh" emulator-5554 480'
+        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480'
 
       - name: Leave out the app with Firebase without the key
         if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY != 'true' }}
@@ -484,18 +485,22 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
 
-      # The test that the app starts is a test of flutter_core in
-      # app_tests/start, which the matrix tool adds to the app as it adds it
-      # to the apps of the matrix, where it is only analyzed.
+      # The check that the app starts is an entry of the app that
+      # flutter_core keeps in app_tests/start, which the matrix tool adds to
+      # the app as it adds it to the apps of the matrix, where it is only
+      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # starts the app with simctl and reads the result that the check
+      # writes, in one try: unlike flutter test, it does not connect to the
+      # app.
       - name: Start the app without Firebase on the iOS simulator
         if: ${{ !cancelled() && env.SIMULATOR != '' }}
-        timeout-minutes: 25
+        timeout-minutes: 15
         run: |
           app="$RUNNER_TEMP/SMF apps застосунки é/plain_app"
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
             "$app" packages/smf_modules/smf_flutter_core/app_tests/start
           cd "$app"
-          "$GITHUB_WORKSPACE/.github/scripts/start_app_test.sh" "$SIMULATOR" 600
+          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
       # An app of its own rather than firebase_app, whose Xcode project has
       # the build phase for Crashlytics of the test of the archive:
@@ -546,9 +551,9 @@ jobs:
 
       - name: Start the app with every module on the iOS simulator
         if: ${{ !cancelled() && env.SIMULATOR != '' && steps.firebase_ios.outcome == 'success' }}
-        timeout-minutes: 25
+        timeout-minutes: 13
         working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
-        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app_test.sh" "$SIMULATOR" 600'
+        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600'
 
       - name: Leave out the app with Firebase without the key
         if: ${{ !cancelled() && env.HAS_FIREBASE_KEY != 'true' }}
