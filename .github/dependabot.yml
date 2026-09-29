@@ -1,11 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: "pub"
-    directories:
-      - "/packages/smf_flutter_cli"
-      - "/packages/smf_contracts"
-      - "/packages/smf_pipeline"
-      - "/packages/smf_modules/*"
+    # The packages form a pub workspace, which pub updates only from its
+    # root, for every package in it.
+    directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
