@@ -37,6 +37,10 @@ on:
         description: Whether the jobs on Linux keep their pub packages in the cache of the repository.
         type: boolean
         default: true
+      save_gradle_cache:
+        description: Whether the job of the real modules on Linux saves what Gradle downloaded to the cache of the repository, rather than only restoring it.
+        type: boolean
+        default: true
 
 jobs:
   flutter:
@@ -94,6 +98,37 @@ jobs:
           key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-${{ hashFiles('**/pubspec.yaml') }}
           restore-keys: |
             ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-
+
+      # Gradle downloads the Android Gradle Plugin, Kotlin and the Android
+      # side of the plugins from Maven Central, which answers 403 to a
+      # runner that downloads too much, as when the nightly run builds on
+      # every version of Flutter at once. So the job of the real modules
+      # keeps what Gradle downloaded, and Gradle itself, in one cache for
+      # every version of Flutter, by the Gradle files of the brick of
+      # flutter_core. The runs of pushes and pull requests save it; the
+      # nightly run, on main, only restores the one that the pushes to main
+      # saved.
+      - name: Cache Gradle
+        if: matrix.registry == 'real' && inputs.save_gradle_cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Restore the cache of Gradle
+        if: matrix.registry == 'real' && !inputs.save_gradle_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Get the packages of the workspace
         run: dart pub get

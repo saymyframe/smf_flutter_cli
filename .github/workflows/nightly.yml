@@ -56,4 +56,7 @@ jobs:
       # A cache for each version and row would crowd the caches of the pull
       # requests out of the 10 GB of the repository.
       pub_cache: false
+      # Its jobs only restore the cache of Gradle, which the pushes to main
+      # save, rather than each saving its own.
+      save_gradle_cache: false
     secrets: inherit
