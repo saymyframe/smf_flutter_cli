@@ -121,6 +121,10 @@ jobs:
       macos_sha256: "57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23"
       windows_sha256: "d79ae99807ba744b843e54f048308c629061456fdc7b0753251fb96eb5346a0e"
       compare_brick: true
+      # Only these runs let flutterfire register the apps of CI in the
+      # Firebase project, such as those of a new provider in the run of its
+      # pull request into main; the nightly run finds them.
+      register_firebase_apps: true
     secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it

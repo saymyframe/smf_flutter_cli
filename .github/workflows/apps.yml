@@ -45,6 +45,10 @@ on:
         description: Whether the job of the real modules on Linux also checks the apps of smf_flutter_cli from pub.dev, which users install.
         type: boolean
         default: false
+      register_firebase_apps:
+        description: Whether flutterfire may register the apps with Firebase in the Firebase project of CI when it has none with their ids yet. Only build.yml lets it, so that runs at the same time, such as the jobs of the nightly run, cannot register an app each; tools/firebase_registration_test.dart checks this.
+        type: boolean
+        default: false
     secrets:
       FIREBASE_SERVICE_ACCOUNT:
         description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the app without Firebase.
@@ -283,12 +287,15 @@ jobs:
       # firebase_start_app for the app with the first provider of each role
       # and firebase_start_app_<providers> for the others, such as
       # firebase_start_app_riverpod, which stay when another role gets a
-      # second provider. The first run with an app registers it, the
-      # Android one on Linux and the iOS one on macOS, one job each: the run
-      # of the pull request that brings a new provider. Were they deleted,
-      # jobs that run at the same time, such as those of the nightly, could
-      # register one each, and the test of the configuration fails on a
-      # project with several.
+      # second provider. Jobs that run at the same time, such as those of
+      # the nightly run, could register an app each, and the test of the
+      # configuration fails on a project with several. So only the runs of
+      # build.yml, with the input register_firebase_apps, let flutterfire
+      # register an app, the Android one on Linux and the iOS one on macOS,
+      # one job each: the run of the pull request into main that brings a
+      # new provider, or of main after it. The test of any other run fails
+      # before flutterfire when the project has no app with the id, asking
+      # to run Build first.
       - name: Generate the apps with every module to configure with Firebase
         id: firebase_apps
         if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
@@ -323,6 +330,7 @@ jobs:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: android
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
@@ -588,7 +596,8 @@ jobs:
       # Apps of their own rather than the apps with every module above,
       # whose Xcode projects have the build phase for Crashlytics of the
       # test of the archive: flutterfire configures them in the Firebase
-      # project of CI, with the names and ids of the apps on Linux.
+      # project of CI, with the names and ids of the apps on Linux, and
+      # registers them only in the runs of build.yml, as on Linux.
       - name: Generate the apps with every module to configure with Firebase
         id: firebase_apps
         if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
@@ -626,6 +635,7 @@ jobs:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: ios
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
