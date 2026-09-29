@@ -27,6 +27,6 @@ late final GoRouter config = GoRouter(
 
 Screens navigate with `context.nav`, such as `context.nav.home.home().go()`, which the router role writes into `lib/core/router/navigation.dart`. It does not name go_router, so the screens of a feature work with any router. With a layout such as `bottom_tabs`, the router builds the main navigation with a branch for each tab.
 
-A feature needs a router, so `smf create -m home` adds `go_router` by itself. Without `-m`, `smf create` asks which module provides the router.
+A feature needs a router, so `smf create -m home` adds `go_router` by itself while it is the only module that provides the router. Without `-m`, `smf create` asks which module provides the router.
 
 The documentation has more on [the go_router module](https://doc.saymyframe.com/modules/go-router) and on [navigation in the generated app](https://doc.saymyframe.com/guides/navigation).

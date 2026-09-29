@@ -1,13 +1,13 @@
 # The Flutter app that every SMF app starts from
 
-`flutter_core` is part of every app that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates, so you never choose it. Without `-m`, an app has this module alone:
+Every app that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates has the app entry role, and `flutter_core` provides it. While it is the only module that does, you don't choose it. Without `-m`, an app has this module alone:
 
 ```bash
 dart pub global activate smf_flutter_cli
 smf create my_app --no-input
 ```
 
-`smf create` adds it by itself and says why:
+`smf create` adds it by itself as the only module that provides the app entry role, and says why:
 
 ```text
 Adding flutter_core: the only provider of the app entry role, which every app needs.
