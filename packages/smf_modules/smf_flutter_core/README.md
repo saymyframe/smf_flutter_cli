@@ -13,7 +13,7 @@ The app runs on iOS 15 or newer. For iOS builds with Xcode 27, use Flutter 3.47 
 
 ## Use with the SMF CLI
 
-`smf create` adds this module to every app by itself.
+Every app needs a module that provides the app entry role. While this is the only one, `smf create` adds it to every app by itself.
 
 You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
