@@ -9,7 +9,9 @@
 // firebase_core in SMF_FIREBASE_APP, the id of the project in
 // SMF_FIREBASE_PROJECT, the path of the key in SMF_FIREBASE_SERVICE_ACCOUNT
 // and the platform, android or ios, in SMF_FIREBASE_PLATFORM, as CI gives
-// them; the test changes the app.
+// them; the test changes the app. CI gives it each app with every module,
+// and it skips an app that does not depend on firebase_core, which has
+// nothing for flutterfire to configure.
 //
 // flutterfire registers the Android or iOS app in the project when the
 // project has no app with its id yet, and otherwise takes the first app
@@ -30,6 +32,7 @@ import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:test/test.dart';
 
+import 'support/app_pubspec.dart';
 import 'support/firebase_apps.dart';
 
 /// The option of `flutterfire configure` that gives the id of the app of
@@ -227,7 +230,10 @@ void main() {
             'project in SMF_FIREBASE_PROJECT, the key of a service account '
             'of the project in SMF_FIREBASE_SERVICE_ACCOUNT and the platform '
             'in SMF_FIREBASE_PLATFORM.'
-        : null,
+        : !dependsOn(app!, 'firebase_core')
+            ? 'The app in SMF_FIREBASE_APP does not depend on firebase_core, '
+                'so it has nothing for flutterfire to configure.'
+            : null,
     timeout: const Timeout(Duration(minutes: 10)),
   );
 }

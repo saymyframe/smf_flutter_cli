@@ -320,7 +320,8 @@ jobs:
 
       # A test of smf_firebase_core runs the command of the README of each
       # app for Android, with the key of the service account in a file that
-      # only this step has.
+      # only this step has, and skips an app that does not depend on
+      # firebase_core, which starts without it.
       - name: Configure the apps with every module with Firebase for Android
         id: firebase_android
         if: ${{ !cancelled() && steps.firebase_apps.outcome == 'success' }}
@@ -535,7 +536,9 @@ jobs:
             flutter build ios --simulator --no-codesign
 
       # With the build phase for Crashlytics that flutterfire configure adds,
-      # fixed by the command that the README of the app gives.
+      # fixed by the command that the README of the app gives. The test
+      # skips an app that does not depend on firebase_crashlytics, to which
+      # flutterfire adds no such phase.
       - name: Archive the apps with every module
         if: ${{ !cancelled() && steps.ios_apps.outcome == 'success' }}
         working-directory: packages/smf_modules/smf_firebase_core
@@ -625,7 +628,8 @@ jobs:
       # A test of smf_firebase_core runs the command of the README of each
       # app for iOS, with the key of the service account in a file that only
       # this step has, and fixes the build phase for Crashlytics with the
-      # command of the README, as SMF does after it configures an app.
+      # command of the README, as SMF does after it configures an app. It
+      # skips an app that does not depend on firebase_core, as on Linux.
       - name: Configure the apps with every module with Firebase for iOS
         id: firebase_ios
         if: ${{ !cancelled() && steps.firebase_apps.outcome == 'success' }}
