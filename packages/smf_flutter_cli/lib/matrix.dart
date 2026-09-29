@@ -1,6 +1,7 @@
 /// The matrix of apps that the continuous integration of SMF generates
 /// with `smf create` and analyzes with Flutter: every app that the contract
-/// harness builds for a set of modules, and the apps with every module.
+/// harness builds for a set of modules, and the apps with every module; and
+/// the versions of Flutter that its nightly run checks them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
 library;
@@ -14,6 +15,8 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+
+export 'src/flutter_versions.dart';
 
 /// An app of the matrix: the modules to ask for, which name every module of
 /// the app so that no question is left, and the options of its roles.
