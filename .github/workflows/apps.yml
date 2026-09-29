@@ -431,7 +431,20 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null
+          # A download of the SDK manager that breaks off leaves an archive
+          # that it cannot open ("Error on ZipFile unknown archive"), and
+          # each job that starts an app downloads the emulator and the image,
+          # so it tries three times.
+          for attempt in 1 2 3; do
+            if "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              exit 1
+            fi
+            echo "::warning::The SDK manager could not install the emulator and the image, attempt $attempt of 3; trying again."
+            sleep 15
+          done
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --name smf --package "$ANDROID_IMAGE" --device pixel_6
