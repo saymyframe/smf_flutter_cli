@@ -9,7 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  smf_contracts: ^0.2.0
+  smf_contracts: ^0.3.0
 
 dev_dependencies:
   very_good_analysis: ^10.3.0
