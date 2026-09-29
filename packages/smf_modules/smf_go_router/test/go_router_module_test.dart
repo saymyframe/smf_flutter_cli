@@ -84,6 +84,61 @@ class _GoAppRouter {
     .single
     .toSource();
 
+/// The members of the router that let each push complete with the value
+/// that its page returns when it closes, whatever completer go_router gives
+/// the page, as the analyzer prints their declarations, by name.
+final Map<String, String> _expectedPushMembers = {
+  for (final member in parseString(
+    content: '''
+class _GoAppRouter {
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  final Expando<Completer<Object?>> _pushes = Expando();
+
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
+  }
+}
+''',
+  ).unit.declarations.whereType<ClassDeclaration>().single.members)
+    _nameOf(member)!: member.toSource(),
+};
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -243,6 +298,65 @@ List<String> _listenersOf(CompilationUnit unit) => [
         element.toSource(),
     ];
 
+/// The name of [member] of a class if it is a field or a method, or
+/// `null`.
+String? _nameOf(ClassMember member) => switch (member) {
+      FieldDeclaration(:final fields) => fields.variables.single.name.lexeme,
+      MethodDeclaration(:final name) => name.lexeme,
+      _ => null,
+    };
+
+/// Checks that the delegate of the router of [unit], created once, tells
+/// the router of every change of its configuration, which then keeps the
+/// pushes complete and tells the listeners of the screen.
+void _expectPagesChanged(CompilationUnit unit) {
+  final router = _routerClassOf(unit);
+  final config = router.members
+      .whereType<FieldDeclaration>()
+      .singleWhere((field) => _nameOf(field) == 'config')
+      .fields
+      .variables
+      .single
+      .initializer!;
+  expect(config, isA<CascadeExpression>());
+  config as CascadeExpression;
+  expect(config.target, _goRouterOf(unit));
+  expect(
+    config.cascadeSections.map((section) => section.toSource()),
+    ['..routerDelegate.addListener(_pagesChanged)'],
+  );
+  expect(
+    router.members
+        .singleWhere((member) => _nameOf(member) == '_pagesChanged')
+        .toSource(),
+    _expectedPushMembers['_pagesChanged'],
+  );
+}
+
+/// Checks that the router of [unit] lets each push complete with the value
+/// that its page returns when it closes, whatever completer go_router gives
+/// the page: go_router gives each pushed page a new completer when it shows
+/// its pages anew, as on refresh()
+/// (https://github.com/flutter/flutter/issues/128122).
+void _expectPushResults(CompilationUnit unit) {
+  final router = _routerClassOf(unit);
+  final members = {
+    for (final member in router.members) _nameOf(member): member.toSource(),
+  };
+  for (final MapEntry(key: name, value: source)
+      in _expectedPushMembers.entries) {
+    expect(members[name], source, reason: name);
+  }
+  expect(
+    [
+      for (final directive in unit.directives.whereType<ImportDirective>())
+        directive.uri.stringValue,
+    ],
+    contains('dart:async'),
+  );
+  _expectPagesChanged(unit);
+}
+
 /// Checks that the router of [unit] tells the listeners of the screen, whose
 /// sources are [listeners], about the screen the user sees.
 void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
@@ -252,16 +366,9 @@ void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
       field.fields.variables.single.name.lexeme: field.fields,
   };
 
-  // The delegate of the router, created once, tells the router of every
-  // change of its configuration.
-  final config = fields['config']!.variables.single.initializer!;
-  expect(config, isA<CascadeExpression>());
-  config as CascadeExpression;
-  expect(config.target, _goRouterOf(unit));
-  expect(
-    config.cascadeSections.map((section) => section.toSource()),
-    ['..routerDelegate.addListener(_showScreen)'],
-  );
+  // The delegate of the router tells the router of every change of its
+  // configuration, which tells the listeners of the screen.
+  _expectPagesChanged(unit);
   expect(fields['_screen']!.type!.toSource(), '(LocalKey?, String)?');
   expect(
     router.members
@@ -701,6 +808,15 @@ void main() {
       );
     });
 
+    test(
+        'lets each push complete with the value of its page, whatever '
+        'completer go_router gives the page', () {
+      // go_router completes push() with the completer that it gives the
+      // page it pushed, and gives the page a new one when it shows its
+      // pages anew, as on refresh(): the router passes on its value.
+      _expectPushResults(unit);
+    });
+
     test('has no main navigation without a layout', () {
       expect(_shellOf(unit), isNull);
       expect(
@@ -863,6 +979,14 @@ void main() {
       // The delegate of go_router hears of a switch of branches, which no
       // navigator observer sees, so the listeners hear of it too.
       _expectScreenListeners(unit, const [ObservingModule.listener]);
+    });
+
+    test(
+        'lets each push complete with the value of its page, in the stacks '
+        'of the main navigation too', () {
+      // A page pushed in a branch is among the matches of the shell of the
+      // main navigation.
+      _expectPushResults(unit);
     });
 
     test(

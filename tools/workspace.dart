@@ -11,6 +11,8 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:yaml/yaml.dart';
 
+import 'workspace_members.dart';
+
 /// The matrix tools, by path from the root of the repository, each with the
 /// library of its package that registers its MatrixAppTests, whose code
 /// selects the apps of each test and fills the values of its files. Each
@@ -222,11 +224,10 @@ String repositoryRoot() {
 /// The packages of the workspace of the repository at [root], in the order
 /// of its pubspec.
 List<WorkspacePackage> workspacePackages(String root) {
-  final pubspec =
-      loadYaml(File('$root/pubspec.yaml').readAsStringSync()) as YamlMap;
+  final pubspec = File('$root/pubspec.yaml').readAsStringSync();
   return [
-    for (final path in pubspec['workspace'] as YamlList)
-      WorkspacePackage.read(root, path as String),
+    for (final path in workspaceMembers(pubspec))
+      WorkspacePackage.read(root, path),
   ];
 }
 

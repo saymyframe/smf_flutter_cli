@@ -730,8 +730,26 @@ import '../analytics/analytics_service.dart';
 /// Creates the analytics service of the fixture, which logs nothing.
 AnalyticsService createFixtureAnalytics() => const FixtureAnalytics();
 
-/// A navigator observer that the fixture adds to every navigator.
-final class FixtureObserver extends NavigatorObserver {}
+/// A navigator observer that the fixture adds to every navigator, which
+/// notes the routes that come on its navigator.
+final class FixtureObserver extends NavigatorObserver {
+  /// Creates the observer, which [fixtureObservers] notes.
+  FixtureObserver() {
+    fixtureObservers.add(this);
+  }
+
+  /// The names of the routes pushed on the navigator of the observer, in
+  /// order: for a page of the router, the full name of its route.
+  final List<String?> pushed = [];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      pushed.add(route.settings.name);
+}
+
+/// The navigator observers of the fixture, in the order the router created
+/// them: one for each navigator.
+final List<FixtureObserver> fixtureObservers = [];
 
 /// The screens the user saw, as the screen listener of the fixture heard of
 /// them: the full name of the route of each, or `null`, and its location.
@@ -858,6 +876,11 @@ void _openAlerts() {
 }
 
 void _openNews() {}
+=== lib/core/fixture_screen_log/fixture_screen_log.dart (fake_screen_log) ===
+/// The screens the user saw, as the screen listener of the fixture screen
+/// log heard of them: the full name of the route of each, or `null`, and
+/// its location.
+final List<(String?, String)> fixtureScreenLog = [];
 === lib/core/fixture_services/fixture_services.dart (fake_registrations) ===
 /// The configuration of the fixture's services.
 final class FixtureConfig {
@@ -1075,6 +1098,7 @@ abstract interface class AppNavigator {
 import 'dart:async';
 
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log.dart';
 import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
@@ -1134,6 +1158,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   final _screenListeners = <void Function(String? route, String location)>[
     (route, location) => fixtureScreens.add((route, location)),
+    (route, location) => fixtureScreenLog.add((route, location)),
   ];
 
   /// The stack of the root navigator: locations, and the main navigation.
@@ -1146,6 +1171,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   /// The observers of the navigator of each branch that was selected.
   final Map<int, List<NavigatorObserver>> _branchObservers = {};
+
+  /// The key of the navigator of each branch that was selected.
+  final Map<int, GlobalKey<NavigatorState>> _branchNavigators = {};
 
   /// The branch of the main navigation that is selected.
   int _selected = 0;
@@ -1200,6 +1228,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       for (final (index, stack) in _branches.indexed)
         if (index == _selected || _branchObservers.containsKey(index))
           Navigator(
+            key: _branchNavigators.putIfAbsent(index, GlobalKey.new),
             observers: _branchObservers.putIfAbsent(index, _newObservers),
             pages: [for (final location in stack) _page(location)],
             onDidRemovePage: (page) => _removed(stack, page),
@@ -1290,18 +1319,29 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     );
   }
 
+  /// Closes the route on top when the user presses the back button of the
+  /// system, with [NavigatorState.maybePop] of the navigators that the user
+  /// sees, the innermost first. A navigator tells [_removed] about a page
+  /// that it closes.
   @override
   Future<bool> popRoute() async {
-    final branch = _onMainNavigation ? _branches[_selected] : null;
-    if (branch != null && branch.length > 1) {
-      _results.remove(branch.removeLast())?.complete();
-    } else if (_stack.length > 1) {
-      _results.remove(_stack.removeLast())?.complete();
-    } else {
-      return false;
+    for (final navigator in _shownNavigators()) {
+      if (await navigator.maybePop()) return true;
     }
-    notifyListeners();
-    return true;
+    return false;
+  }
+
+  /// The navigators that the user sees, the innermost first: that of the
+  /// selected branch of the main navigation, unless a route of the root
+  /// navigator, such as a dialog, covers the main navigation, and the root
+  /// navigator.
+  List<NavigatorState> _shownNavigators() {
+    final branch = _branchNavigators[_selected]?.currentState;
+    return [
+      if (branch != null && (ModalRoute.of(branch.context)?.isCurrent ?? false))
+        branch,
+      ?_navigatorKey.currentState,
+    ];
   }
 
   @override

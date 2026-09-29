@@ -532,6 +532,8 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_app/core/analytics/firebase_analytics_service.dart'
@@ -562,11 +564,19 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         builder: (context, state) => const FallbackStartScreen(),
       ),
     ],
-  )..routerDelegate.addListener(_showScreen);
+  )..routerDelegate.addListener(_pagesChanged);
 
   /// The key of the page on top and its location, as the listeners of the
   /// screen last heard of them.
   (LocalKey?, String)? _screen;
+
+  /// The pages that pushes showed, by their keys, as the router last saw
+  /// them among the pages of go_router.
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  /// For each completer that go_router gave a pushed page anew, the
+  /// completer of the push that showed the page.
+  final Expando<Completer<Object?>> _pushes = Expando();
 
   @override
   AppNavigator navigatorOf(BuildContext context) => this;
@@ -582,6 +592,66 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   @override
   void replace(AppLocation location) {
     config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Follows the pages of go_router, whose delegate notifies its listeners
+  /// of each change of them: keeps each push completing with the value of
+  /// its page, and tells the listeners of the screen about the page on top.
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  /// Lets each push complete with the value that its page returns when it
+  /// closes, whatever completer go_router gives the page.
+  ///
+  /// go_router completes a push with the completer that it gives the page
+  /// it pushed, which the page completes when it closes. When go_router
+  /// shows its pages anew from their encoded form, as on [GoRouter.refresh],
+  /// such as when its `refreshListenable` notifies, it gives each pushed
+  /// page a new completer, though the page keeps its key and its location,
+  /// so the push would never complete
+  /// (https://github.com/flutter/flutter/issues/128122). So when a page
+  /// comes back at its location with another completer, the router passes
+  /// on the value of that completer to that of the push. A branch of the
+  /// main navigation that is not selected keeps its pages as they were, so
+  /// a page that comes back with its branch passes on its value as before.
+  /// Once go_router keeps the completers of its pages, this does nothing
+  /// and can go.
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  /// The pages that pushes showed among [matches], in the stacks of the
+  /// main navigation too.
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
   }
 
   /// Tells the listeners of the screen about the page on top when another

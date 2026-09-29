@@ -45,6 +45,7 @@ void main() {
       'of the app only', () {
     expect(appTests.testedRoles, containsAll([routerRole, layoutRole]));
     expect(named('router_screens').roles, {routerRole});
+    expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
@@ -55,7 +56,11 @@ void main() {
       'apps that have them', () {
     final routerScreens = appsOf(named('router_screens'));
 
-    for (final name in ['layout_screens', 'go_router_screens']) {
+    for (final name in [
+      'layout_screens',
+      'go_router_screens',
+      'bottom_tabs_screens',
+    ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
   });

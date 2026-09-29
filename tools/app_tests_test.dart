@@ -307,10 +307,16 @@ List<String> moduleProblemsOf(
 /// use for it besides those that it knows. Every other test selects its
 /// apps by their roles and by the modules it knows.
 const _ofOneProvider = {
-  // The refresh of the routes of go_router, which the listeners of the
-  // screen do not hear of.
+  // The notifications of the delegate of go_router that leave the page on
+  // top as it is, which the listeners of the screen do not hear of, and
+  // push() after a refresh of its routes.
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_screens': {
     'go_router',
+  },
+  // A tap on a tab of the bar of bottom_tabs, which selects its
+  // destination.
+  'packages/smf_pipeline/fixture_registry/app_tests/bottom_tabs_screens': {
+    'bottom_tabs',
   },
 };
 
