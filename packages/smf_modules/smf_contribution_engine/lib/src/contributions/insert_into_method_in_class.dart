@@ -17,11 +17,13 @@ import 'package:smf_contribution_engine/src/utils/statement_inserts.dart';
 /// method body is an expression, and a `FormatterException` when [insert]
 /// leaves invalid code.
 ///
+/// When the body already has the statements of [insert] in a row, as the
+/// parser prints them, nothing is inserted, so running it again changes
+/// nothing; an insert of nothing but comments is added on every run.
+///
 /// Only the new lines are added: the comments and blank lines of the body
 /// stay, and a comment that trails a statement stays on its line. The whole
 /// file is then reformatted, or returned as it is when nothing is inserted.
-/// Nothing checks whether [insert] is already there: every run adds it
-/// again.
 class InsertIntoMethodInClass extends Contribution {
   /// Creates a contribution that inserts [insert] into [method] of
   /// [className].

@@ -1,3 +1,4 @@
+import 'package:dart_style/dart_style.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:test/test.dart';
 
@@ -223,15 +224,24 @@ List<Widget> buildRows() {
           'occurrence of parentExpressionMatch in the file matches',
     );
 
-    test(
-      'is idempotent',
-      () async {
-        final once = await intoProviders().apply(providerMainDart);
+    test('is idempotent', () async {
+      final once = await intoProviders().apply(providerMainDart);
 
-        expect(await intoProviders().apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the element is already in the list, '
-          'so every run adds it again',
-    );
+      expect(await intoProviders().apply(once), once);
+    });
+
+    test('throws instead of writing broken code when the insert is invalid',
+        () {
+      expect(
+        const InsertIntoListInFunction(
+          file: 'lib/main.dart',
+          function: 'main',
+          listVariableMatch: 'providers',
+          parentExpressionMatch: 'MultiProvider',
+          insert: 'Provider(create: (_) => Analytics(),',
+        ).apply(providerMainDart),
+        throwsA(isA<FormatterException>()),
+      );
+    });
   });
 }

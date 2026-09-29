@@ -124,16 +124,11 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     });
 
-    test(
-      'is idempotent',
-      () async {
-        final once = await intoInitState().apply(homePageStateDart);
+    test('is idempotent', () async {
+      final once = await intoInitState().apply(homePageStateDart);
 
-        expect(await intoInitState().apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the insert is already there, so every '
-          'run adds it again',
-    );
+      expect(await intoInitState().apply(once), once);
+    });
 
     test('preserves comments in the method body', () async {
       final source = homePageStateDart.replaceFirst(

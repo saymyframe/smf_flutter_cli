@@ -2,6 +2,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
+import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 
 /// Adds an element at the start of a list literal passed as a named
 /// argument, such as the `providers` of a `MultiProvider` built in `main`.
@@ -17,8 +18,9 @@ import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 /// Although the function has to exist, the candidates are currently looked
 /// for in the whole file, not just in its body.
 ///
-/// Nothing checks whether [insert] is already in the list: every run adds it
-/// again. Comments in the file are kept, but the whole file is reformatted.
+/// When the list already has every element of [insert], as the parser prints
+/// them, the file is returned as it is, so running it again changes nothing.
+/// Comments in the file are kept, but the whole file is reformatted.
 class InsertIntoListInFunction extends Contribution {
   /// Creates a contribution that adds [insert] to a list in [function].
   const InsertIntoListInFunction({
@@ -86,6 +88,8 @@ class InsertIntoListInFunction extends Contribution {
     }
 
     final targetList = childrenMatches[index];
+    if (ListInsert.parse(insert)?.isIn(targetList) ?? false) return original;
+
     final start = targetList.leftBracket.end;
     final updated = fullContent.replaceRange(start, start, '\n  $insert');
 

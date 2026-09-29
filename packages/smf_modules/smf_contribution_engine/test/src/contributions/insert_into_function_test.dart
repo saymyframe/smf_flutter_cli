@@ -151,17 +151,54 @@ void main() {
       );
     });
 
-    test(
-      'is idempotent',
-      () async {
-        final contribution = afterEnsureInitialized(initFirebase);
-        final once = await contribution.apply(monolithMainDart);
+    test('is idempotent', () async {
+      final contribution = afterEnsureInitialized(initFirebase);
+      final once = await contribution.apply(monolithMainDart);
 
-        expect(await contribution.apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the insert is already there, so every '
-          'run adds it again',
-    );
+      expect(await contribution.apply(once), once);
+    });
+
+    test('is idempotent with an insert of several statements', () async {
+      final contribution = afterEnsureInitialized('''
+final onError = FlutterError.onError;
+FlutterError.onError = (details) {
+  onError?.call(details);
+  FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+};
+''');
+      final once = await contribution.apply(monolithMainDart);
+
+      expect(await contribution.apply(once), once);
+    });
+
+    test('inserts statements that are only partly there', () async {
+      final source = monolithMainDart.replaceFirst(
+        '  runApp',
+        '  $initFirebase\n  runApp',
+      );
+
+      final result = await afterEnsureInitialized(
+        '$initFirebase\nsetUpCoreDI();',
+      ).apply(source);
+
+      expect(functionStatements(result, 'main'), [
+        ensureInitialized,
+        initFirebase,
+        'setUpCoreDI();',
+        initFirebase,
+        runApp,
+      ]);
+    });
+
+    test('adds an insert of nothing but comments on every run', () async {
+      final contribution = afterEnsureInitialized('// Firebase comes later.');
+      final once = await contribution.apply(monolithMainDart);
+
+      expect(
+        '// Firebase comes later.'.allMatches(await contribution.apply(once)),
+        hasLength(2),
+      );
+    });
 
     test('preserves comments and blank lines in the function body', () async {
       const source = '''

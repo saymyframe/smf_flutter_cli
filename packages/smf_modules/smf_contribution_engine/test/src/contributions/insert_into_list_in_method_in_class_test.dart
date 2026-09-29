@@ -1,3 +1,4 @@
+import 'package:dart_style/dart_style.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:test/test.dart';
 
@@ -239,15 +240,18 @@ class HomePage extends StatelessWidget {
           'occurrence of parentExpressionMatch in the file matches',
     );
 
-    test(
-      'is idempotent',
-      () async {
-        final once = await contribution().apply(_localizedApp);
+    test('is idempotent', () async {
+      final once = await contribution().apply(_localizedApp);
 
-        expect(await contribution().apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the element is already in the list, '
-          'so every run adds it again',
-    );
+      expect(await contribution().apply(once), once);
+    });
+
+    test('throws instead of writing broken code when the insert is invalid',
+        () {
+      expect(
+        contribution(insert: "Locale('uk',").apply(_localizedApp),
+        throwsA(isA<FormatterException>()),
+      );
+    });
   });
 }

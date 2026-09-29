@@ -2,6 +2,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
+import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 
 /// Adds an element at the end of a list literal passed as a named argument
 /// in a method, such as the `supportedLocales` of the `MaterialApp` built in
@@ -16,8 +17,9 @@ import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 /// Throws an [Exception] when the class or the method is missing, when the
 /// method body is an expression, or when there is no candidate at [index].
 ///
-/// Nothing checks whether [insert] is already in the list: every run adds it
-/// again. Comments in the file are kept, but the whole file is reformatted.
+/// When the list already has every element of [insert], as the parser prints
+/// them, the file is returned as it is, so running it again changes nothing.
+/// Comments in the file are kept, but the whole file is reformatted.
 class InsertIntoListInMethodInClass extends Contribution {
   /// Creates a contribution that adds [insert] to a list in [method] of
   /// [className].
@@ -98,6 +100,8 @@ class InsertIntoListInMethodInClass extends Contribution {
     }
 
     final targetList = matches[index];
+    if (ListInsert.parse(insert)?.isIn(targetList) ?? false) return original;
+
     final updated = original.replaceRange(
       targetList.rightBracket.offset,
       targetList.rightBracket.offset,
