@@ -182,12 +182,16 @@ void main() {
       expect(pubspec.usesMaterialDesign, isTrue);
       expect(result.collection!.applyingOf<CodegenRequest>(), hasLength(1));
       // The analytics of the fixtures watches the navigators of the router
-      // and listens to the screen the user sees.
-      for (final socket in [RouterRole.observers, RouterRole.screenListeners]) {
+      // and listens to the screen the user sees, and so does the screen log
+      // of the fixtures, so the router has two listeners.
+      for (final (socket, contributors) in [
+        (RouterRole.observers, ['fake_analytics']),
+        (RouterRole.screenListeners, ['fake_analytics', 'fake_screen_log']),
+      ]) {
         expect(
           result.validation!.socketOrders[socket]!.contributions
               .map((collected) => '${collected.origin}'),
-          ['fake_analytics'],
+          contributors,
           reason: '$socket',
         );
       }
@@ -620,6 +624,8 @@ const _cases = [
   'fake_analytics with di',
   'fake_analytics with router',
   'fake_analytics',
+  'fake_screen_log (fake_router)',
+  'fake_screen_log (go_router)',
   'fake_crash with di',
   'fake_crash',
   'fake_events with di',
