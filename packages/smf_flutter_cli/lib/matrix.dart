@@ -22,7 +22,12 @@ export 'src/flutter_versions.dart';
 /// the app so that no question is left, and the options of its roles.
 final class MatrixApp {
   /// Creates the app that the contract harness built for [name].
-  const MatrixApp(this.name, this.modules, {this.roleOptions = const {}});
+  const MatrixApp(
+    this.name,
+    this.modules, {
+    this.roleOptions = const {},
+    this.hook,
+  });
 
   /// The case of the contract harness that the app comes from.
   final String name;
@@ -32,6 +37,17 @@ final class MatrixApp {
 
   /// The values of role options by name.
   final Map<String, String?> roleOptions;
+
+  /// The data and roles of the app, as for the hooks of its roles, with
+  /// the choices that the roles made when the contract harness rendered
+  /// it, which `smf create` makes the same with the [roleOptions]; `null`
+  /// for an app that the harness did not build.
+  ///
+  /// A role reads what it chose for the app from the input that
+  /// [Role.hookInput] builds of it, such as the route the app starts on,
+  /// so a [MatrixAppTest] can expect what the app does without knowing
+  /// its modules.
+  final RoleHookRequest? hook;
 
   /// The arguments of `smf create` that generate the app as [appName] in
   /// [directory], as CI does: without questions, external setup or the
@@ -68,9 +84,10 @@ final class MatrixApp {
 /// questions of the roles that they leave open (see
 /// [ContractResult.answers]), such as `--start` with the first of several
 /// screens that can start the app: `smf create` then makes the same
-/// choices without a terminal. The harness renders each app in memory
-/// first, so a case that it finds errors in is among the `failed` ones,
-/// since its app could not be generated.
+/// choices without a terminal. It gets the choices too, with the data and
+/// roles of its case ([MatrixApp.hook]). The harness renders each app in
+/// memory first, so a case that it finds errors in is among the `failed`
+/// ones, since its app could not be generated.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   List<SmfModule> modules, {
   Map<String, String?> roleOptions = const {},
@@ -103,6 +120,16 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
           ...result.contractCase.roleOptions,
           ...result.answers,
         },
+        // In a case without errors, all data of the roles is of the type
+        // they take and comes from modules that may give it, so it is the
+        // data that the hooks of the roles got when the harness rendered
+        // the app.
+        hook: RoleHookRequest(
+          data: result.collection!.roleData,
+          presentRoles: resolution.presentRoles,
+          context: harness.context,
+          choices: result.choices!,
+        ),
       ),
     );
   }
