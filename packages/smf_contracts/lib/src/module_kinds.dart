@@ -31,16 +31,16 @@ abstract final class ModuleKinds {
   /// `lib/features/<id>/`.
   ///
   /// It may resolve services in its optional composition file,
-  /// `lib/features/<id>/<id>_composition.dart`, which creates what its
-  /// screens need, such as a Cubit; a feature that does requires the
-  /// [DiRole].
+  /// `lib/features/<id>/<id>_composition.dart` (see [CompositionFile]),
+  /// which creates what its screens need, such as a Cubit; a feature that
+  /// does requires the [DiRole].
   static const feature = ModuleKind(
     id: 'feature',
     label: 'Features',
     impliedRequires: {routerRole},
     fileRoots: ['lib/features/<id>/'],
     requiredData: {routerRole},
-    compositionFile: 'lib/features/<id>/<id>_composition.dart',
+    roleRules: [CompositionFile('lib/features/<id>/<id>_composition.dart')],
   );
 
   /// A module that provides the main navigation of the app, such as bottom

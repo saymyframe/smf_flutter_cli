@@ -16,8 +16,9 @@ const diRole = DiRole._();
 /// renders them in the form of its container. The role abstracts how
 /// services are registered, not how they are consumed: code gets its
 /// services as parameters of its factory function (see
-/// [FactoryRef.deps]), and only the composition file of a feature resolves
-/// them itself, to create what the feature's screens need, such as a Cubit.
+/// [FactoryRef.deps]), and only the composition file of a feature (see
+/// [CompositionFile]) resolves them itself, to create what the feature's
+/// screens need, such as a Cubit.
 /// Consumption through widgets, as with Riverpod or provider, is not part of
 /// this role.
 ///
@@ -157,6 +158,29 @@ abstract base class DiProvider extends RoleProvider<DiRegistration> {
   }
 }
 
+/// The file where a module of a kind may resolve services, such as the
+/// composition file of a feature, which creates what its screens need.
+///
+/// A kind lists it in [ModuleKind.roleRules]. A module of the kind may
+/// resolve services in this file and nowhere else, and only if it requires
+/// the [DiRole]; a module of a kind without it resolves no service itself.
+/// Other code gets its services as parameters of its factory function (see
+/// [FactoryRef.deps]).
+final class CompositionFile extends KindRule {
+  /// Creates the rule for the file at [path].
+  const CompositionFile(this.path);
+
+  /// The path of the file relative to the project root, where `<id>` stands
+  /// for the module id, such as `lib/features/<id>/<id>_composition.dart`.
+  final String path;
+
+  @override
+  Role get role => diRole;
+
+  /// [path] for the module [module].
+  String pathOf(ModuleId module) => path.replaceAll('<id>', module.value);
+}
+
 const _resolveNames = {'resolve', 'resolveWith', 'serviceLocator'};
 
 /// Whether [file] resolves services: it calls, tears off or reads `resolve`,
@@ -173,7 +197,8 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
     final module = input.module(owner.module);
     // The container implements resolving itself.
     if (module?.provides.contains(diRole) ?? false) continue;
-    final allowed = module?.kind.compositionFileOf(owner.module);
+    final allowed =
+        module?.kind.ruleOf<CompositionFile>()?.pathOf(owner.module);
     if (!_resolves(file)) continue;
     if (path == allowed) {
       if (!(module?.effectiveRequires.contains(diRole) ?? false)) {

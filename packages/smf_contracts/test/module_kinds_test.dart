@@ -26,7 +26,6 @@ void main() {
     expect(kind.forbiddenData, {routerRole});
     expect(kind.requiredData, isEmpty);
     expect(kind.allowsVariants, isFalse);
-    expect(kind.compositionFileOf(_home), isNull);
     expect(kind.allowsFile(_home, 'lib/core/router/app_router.dart'), isTrue);
     expect(kind.allowsFile(_home, 'lib/features/home/x.dart'), isFalse);
     // Case does not matter, as on the file systems of macOS and Windows.
@@ -46,14 +45,24 @@ void main() {
     );
     expect(kind.allowsFile(_home, 'lib/features/homes/x.dart'), isFalse);
     expect(
-      kind.compositionFileOf(_home),
-      'lib/features/home/home_composition.dart',
-    );
-    expect(
       const ModuleDescriptor(id: _home, description: 'Home', kind: kind)
           .effectiveRequires,
       {routerRole},
     );
+  });
+
+  test('only a feature may resolve services, in its composition file', () {
+    expect(
+      ModuleKinds.feature.ruleOf<CompositionFile>()?.pathOf(_home),
+      'lib/features/home/home_composition.dart',
+    );
+    for (final kind in const [
+      ModuleKinds.scaffold,
+      ModuleKinds.infrastructure,
+      ModuleKinds.layout,
+    ]) {
+      expect(kind.ruleOf<CompositionFile>(), isNull, reason: kind.id);
+    }
   });
 
   test('a layout provides the layout role in lib/core/layout/', () {

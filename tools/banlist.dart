@@ -85,6 +85,10 @@ final List<_Ban> _bans = [
     'DslContext',
     'DslAwareCodeGenerator',
     'FileMergeStrategy',
+    // The core knows no role: the file where a module may resolve services
+    // is the CompositionFile of the DI role, a rule in ModuleKind.roleRules.
+    'compositionFile',
+    'compositionFileOf',
     // Not in the model yet: DI scopes and route conditions come with a
     // module that needs them.
     'DiScopes',
