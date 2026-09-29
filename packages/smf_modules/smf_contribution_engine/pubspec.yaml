@@ -1,6 +1,6 @@
 name: smf_contribution_engine
 description: Engine for structured code transformations in Dart/Flutter (insert/replace widgets, modify arguments, lists and classes).
-version: 0.2.0
+version: 0.2.1
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_contribution_engine
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues

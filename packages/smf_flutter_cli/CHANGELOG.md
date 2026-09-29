@@ -1,3 +1,11 @@
+## 0.3.0
+
+> Note: This release has breaking changes.
+
+ - **FIX**(firebase_analytics): add bloc and riverpod variants of the demo feature ([#24](https://github.com/saymyframe/smf_flutter_cli/issues/24)). ([52212678](https://github.com/saymyframe/smf_flutter_cli/commit/52212678b9bf3bb825cbcf8f86df7953d7dad36e))
+ - **FIX**(cli): print the real version in smf --version ([#25](https://github.com/saymyframe/smf_flutter_cli/issues/25)). ([ad569837](https://github.com/saymyframe/smf_flutter_cli/commit/ad569837614518f18f216de17d80ee48f9b0fb83))
+ - **BREAKING** **FEAT**: compose apps from roles and sockets ([#31](https://github.com/saymyframe/smf_flutter_cli/issues/31)). ([7cf4d4a4](https://github.com/saymyframe/smf_flutter_cli/commit/7cf4d4a4b58a14e2b497b4e817f04ef466872c01))
+
 ## 0.2.1+1
 
  - **FIX**(safe-write): correct project name in safe write. ([e1cdb985](https://github.com/saymyframe/smf_flutter_cli/commit/e1cdb98564f302c25485418c1c42f04d8c497524))
