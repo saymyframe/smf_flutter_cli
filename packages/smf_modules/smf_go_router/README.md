@@ -1,14 +1,24 @@
 # smf_go_router
 
-GoRouter integration, DSL, and route generators for SMF.
+The SMF module that routes the app with [go_router](https://pub.dev/packages/go_router) 17. It provides the router role of SMF.
 
-## Use with SMF CLI
-This package is not intended to be installed directly. Use the SMF CLI to generate routes, guards, and shells.
+The features of the app declare their routes, and the router role gives the app a typed navigation facade, `context.nav`, with `go()`, `push()` and `replace()` for every route. This module turns the routes into the `GoRouter` of the app. With a layout, such as tabs at the bottom, it builds the main navigation of the app around it. It tells the listeners of the screen, such as analytics, about each screen the user sees.
 
-- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
+## Use with the SMF CLI
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_go_router) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+`smf create` asks which module provides the router, and offers none as well. When a module you chose needs a router, such as the start screen of `home`, `smf create` adds this one by itself. To choose it without the question:
 
-## License
-See LICENSE.
+```bash
+smf create my_app -m go_router
+```
+
+When several routes can start the app, `smf create` asks which one, or takes it from `--start`, such as `--start /home`.
+
+You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
+
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
+
+## Documentation
+
+- [The go_router module](https://doc.saymyframe.com/modules/go-router)
+- [Navigation](https://doc.saymyframe.com/guides/navigation)

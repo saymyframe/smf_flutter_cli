@@ -1,0 +1,7 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    # Tests of the apps with the fixture modules, with placeholders for the
+    # app.
+    - app_tests/**

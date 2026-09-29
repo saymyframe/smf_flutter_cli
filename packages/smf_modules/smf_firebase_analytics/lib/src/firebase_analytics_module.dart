@@ -1,105 +1,84 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_analytics/bundles/smf_firebase_analytics_bloc_bundle.dart';
-import 'package:smf_firebase_analytics/bundles/smf_firebase_analytics_brick_bundle.dart';
-import 'package:smf_firebase_analytics/bundles/smf_firebase_analytics_riverpod_bundle.dart';
+import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
+import 'package:smf_firebase_core/smf_firebase_core.dart';
 
-/// Firebase Analytics: the analytics service plus a demo screen built with
-/// the chosen state manager, so the UI only talks to that layer.
-abstract class FirebaseAnalyticsModule
-    with EmptyModuleCodeContributor
-    implements IModuleCodeContributor {
-  /// Demo feature brick for the chosen state manager.
-  BrickContribution get featureBrick;
+/// The module that records what users do in the app with Firebase
+/// Analytics and the firebase_analytics package, and so provides the
+/// analytics role.
+///
+/// The template of the role generates the `AnalyticsService` interface and
+/// `createAnalyticsService()`, which returns the one analytics service of
+/// the app that forwards every call to the services of all its providers.
+/// This module adds `firebase_analytics` to the dependencies of the app and
+/// implements the service in
+/// `lib/core/analytics/firebase_analytics_service.dart` on
+/// `FirebaseAnalytics`.
+///
+/// When the app has a router, the module gives it `logFirebaseScreenView`
+/// of its file, a listener of the screen the user sees, which logs a screen
+/// view each time the router tells it that the screen changed: the first
+/// screen of the app, a page that a navigation shows, a page that shows
+/// again as the pages above it close, the page on top when it shows another
+/// location, and the page of a branch of the main navigation that the user
+/// switches to, such as a tab. The name of the screen is the full name of
+/// its route, such as `home.home`, or `/` for the fallback start screen of
+/// the app; the error screen of the router is not logged, as the location
+/// that the app cannot show may hold anything. A navigation that puts
+/// several pages on a stack at once, such as going to a page whose parents
+/// are not on it yet, logs only the page on top. Nothing waits for a screen
+/// view, so an error of the platform is printed rather than left to the
+/// handler of the uncaught errors of the app.
+///
+/// Analytics works on the Firebase app, so the module depends on
+/// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`. The
+/// service is created on first use, without waiting, and the first screen
+/// shows after `bootstrap()`. When the app has a DI container, the role
+/// registers the service in it.
+final class FirebaseAnalyticsModule extends SmfModule {
+  /// Creates the module.
+  const FirebaseAnalyticsModule();
 
-  /// Pub dependency of the chosen state manager.
-  String get stateManagerDependency;
+  /// The id of the module.
+  static const id = ModuleId('firebase_analytics');
+
+  static const _file = ImportRef.app(
+    'core/analytics/firebase_analytics_service.dart',
+  );
 
   @override
-  List<BrickContribution> get brickContributions => [
-        BrickContribution(
-          name: 'firebase_analytics',
-          bundle: smfFirebaseAnalyticsBrickBundle,
-        ),
-        featureBrick,
-      ];
-
-  @override
-  ModuleDescriptor get moduleDescriptor => ModuleDescriptor(
-        name: kFirebaseAnalytics,
-        description: 'Firebase Analytics module',
-        dependsOn: {kFirebaseCore, kGetItModule, kGoRouterModule},
-        pubDependency: {'firebase_analytics: ^12.0.1', stateManagerDependency},
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Firebase Analytics with firebase_analytics',
+        kind: ModuleKinds.infrastructure,
+        dependsOn: {FirebaseCoreModule.id},
+        providers: [RoleProvider.plain(analyticsRole)],
       );
 
   @override
-  List<DiDependencyGroup> get di => [
-        DiDependencyGroup(
-          diDependencies: [
-            const DiDependency(
-              abstractType: 'IAnalyticsService',
-              implementation:
-                  'FirebaseAnalyticsService(FirebaseAnalytics.instance)',
-              bindingType: DiBindingType.singleton,
-            ),
-          ],
-          scope: DiScope.core,
-          imports: [
-            const Import.core(
-              ImportAnchor.coreService,
-              'analytics/firebase/firebase_analytics_service.dart',
-            ),
-            const Import.core(
-              ImportAnchor.coreService,
-              'analytics/i_analytics_service.dart',
-            ),
-            const Import.direct(
-              "import 'package:firebase_analytics/firebase_analytics.dart';",
-            ),
-          ],
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(firebaseAnalyticsBundle),
+        const PubspecContribution.hosted('firebase_analytics', '^12.6.0'),
+        analyticsRole.data(
+          const RoleImplementation(
+            type: TypeRef('FirebaseAnalyticsService', import: _file),
+            create: FactoryRef('createFirebaseAnalyticsService', import: _file),
+          ),
         ),
-      ];
-
-  @override
-  RouteGroup get routes => RouteGroup(
-        initialRoute: '/analytics',
-        routes: [
-          NestedRoute(
-            shellLink: RouteShellLink.toMainTabsShell(),
-            children: [
-              const Route(
-                path: '/analytics',
-                screen: RouteScreen('AnalyticsScreen'),
-                meta: RouteMeta(label: 'Analytics', icon: 'Icons.star'),
-                imports: [Import.features('analytics/analytics_screen.dart')],
+        // The router tells the listener, a function of the file of the
+        // module, which the file has only in an app with a router, about
+        // each screen the user sees.
+        const SocketContribution.item(
+          RouterRole.screenListeners,
+          Fragment(
+            'logFirebaseScreenView',
+            imports: [
+              ImportRef.app(
+                'core/analytics/firebase_analytics_service.dart',
+                show: ['logFirebaseScreenView'],
               ),
             ],
           ),
-        ],
-      );
-}
-
-/// The [FirebaseAnalyticsModule] whose demo screen talks to a cubit
-/// (flutter_bloc).
-class FirebaseAnalyticsBlocModule extends FirebaseAnalyticsModule {
-  @override
-  BrickContribution get featureBrick => BrickContribution(
-        name: 'firebase_analytics bloc',
-        bundle: smfFirebaseAnalyticsBlocBundle,
-      );
-
-  @override
-  String get stateManagerDependency => 'flutter_bloc: ^9.1.1';
-}
-
-/// The [FirebaseAnalyticsModule] whose demo screen talks to Riverpod
-/// providers.
-class FirebaseAnalyticsRiverpodModule extends FirebaseAnalyticsModule {
-  @override
-  BrickContribution get featureBrick => BrickContribution(
-        name: 'firebase_analytics riverpod',
-        bundle: smfFirebaseAnalyticsRiverpodBundle,
-      );
-
-  @override
-  String get stateManagerDependency => 'flutter_riverpod: ^2.5.1';
+          when: {routerRole},
+        ),
+      ];
 }

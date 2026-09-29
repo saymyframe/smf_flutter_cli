@@ -1,4 +1,6 @@
-/// The event bus module of SMF: event-based communication between features.
+/// The module that delivers events between the parts of the app with
+/// event_bus: `EventBusModule`, a provider of the events role of the SMF
+/// module model.
 library;
 
-export 'smf_event_bus_factory.dart';
+export 'src/event_bus_module.dart';

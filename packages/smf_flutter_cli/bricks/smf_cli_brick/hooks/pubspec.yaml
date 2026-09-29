@@ -1,9 +1,0 @@
-name: smf_cli_hooks
-
-environment:
-  sdk: ^3.5.4
-
-dependencies:
-  mason: ^0.1.1
-  path: ^1.9.1
-  smf_contracts: ^0.2.0

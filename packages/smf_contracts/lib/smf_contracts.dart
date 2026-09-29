@@ -1,14 +1,16 @@
-export 'smf_contracts_factory.dart';
-export 'smf_contracts_module.dart';
-export 'src/brick_contribution.dart';
-export 'src/constants/constants.dart';
-export 'src/di/di_contract.dart';
-export 'src/file_merge_strategy.dart';
-export 'src/generators/aware_code_generator.dart';
-export 'src/generators/generators.dart';
-export 'src/import/import_barrel.dart';
-export 'src/module/module.dart';
-export 'src/module_contributor.dart';
-export 'src/module_descriptor.dart';
-export 'src/mustache/mustache.dart';
-export 'src/routing/routing.dart';
+/// The module model of SMF: everything a module needs, including the
+/// built-in roles and module kinds.
+///
+/// See `package:smf_contracts/core.dart` for the core without concrete
+/// roles.
+library;
+
+export 'core.dart';
+export 'src/module_kinds.dart';
+export 'src/refs.dart';
+export 'src/roles/app_entry.dart';
+export 'src/roles/di.dart';
+export 'src/roles/layout.dart';
+export 'src/roles/router.dart';
+export 'src/roles/services.dart';
+export 'src/roles/state_management.dart';

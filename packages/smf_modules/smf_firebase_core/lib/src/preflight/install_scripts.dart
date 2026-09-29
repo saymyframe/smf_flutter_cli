@@ -1,0 +1,664 @@
+import 'package:smf_contracts/smf_contracts.dart';
+
+/// What an install script prints before each directory with the executables
+/// that the rest of the run needs: those of the Firebase CLI and of Node.js,
+/// which the Firebase CLI runs on.
+const binDirPrefix = 'smf-bin-dir=';
+
+/// What an install script prints before each change to the machine that
+/// outlives the run, such as a line in the profile of the shell, for SMF to
+/// show to the user.
+const notePrefix = 'smf-note=';
+
+/// A script that installs the Firebase CLI with npm, and how to run it.
+final class InstallScript {
+  /// Creates the script [text] named [fileName], which [shell] runs with
+  /// [arguments] before its path.
+  const InstallScript({
+    required this.fileName,
+    required this.shell,
+    required this.text,
+    this.arguments = const [],
+    this.standaloneFallback = false,
+  });
+
+  /// The name of the temporary file of the script.
+  final String fileName;
+
+  /// The executable that runs the script.
+  final String shell;
+
+  /// The arguments of [shell] before the path of the script.
+  final List<String> arguments;
+
+  /// The script.
+  final String text;
+
+  /// Whether the standalone binary of the Firebase CLI can replace it when
+  /// the installation with npm fails.
+  final bool standaloneFallback;
+
+  /// The script for [system], or `null` if there is none.
+  static InstallScript? of(HostOperatingSystem system) => switch (system) {
+        HostOperatingSystem.macos => const InstallScript(
+            fileName: 'install_firebase_macos.sh',
+            shell: 'bash',
+            text: _macos,
+            standaloneFallback: true,
+          ),
+        HostOperatingSystem.linux => const InstallScript(
+            fileName: 'install_firebase_linux.sh',
+            shell: 'bash',
+            text: _linux,
+            standaloneFallback: true,
+          ),
+        HostOperatingSystem.windows => const InstallScript(
+            fileName: 'install_firebase_windows.ps1',
+            shell: 'powershell',
+            arguments: [
+              '-ExecutionPolicy',
+              'Bypass',
+              '-NoLogo',
+              '-NonInteractive',
+              '-File',
+            ],
+            text: _windows,
+          ),
+        HostOperatingSystem.other => null,
+      };
+}
+
+/// The directories that an install script printed in [output], each once.
+List<String> binDirsIn(String output) => [
+      ...{
+        for (final line in output.split('\n'))
+          if (line.trim() case final text when text.startsWith(binDirPrefix))
+            if (text.substring(binDirPrefix.length).trim() case final directory
+                when directory.isNotEmpty)
+              directory,
+      },
+    ];
+
+/// The changes to the machine that an install script printed in [output],
+/// in order.
+List<String> notesIn(String output) => [
+      for (final line in output.split('\n'))
+        if (line.trim() case final text when text.startsWith(notePrefix))
+          if (text.substring(notePrefix.length).trim() case final note
+              when note.isNotEmpty)
+            note,
+    ];
+
+/// [output] without the lines of the directories and the changes, which
+/// are for SMF.
+String withoutReports(String output) => [
+      for (final line in output.split('\n'))
+        if (!line.trim().startsWith(binDirPrefix) &&
+            !line.trim().startsWith(notePrefix))
+          line,
+    ].join('\n');
+
+/// The command that installs the standalone binary of the Firebase CLI, in
+/// /usr/local/bin, on macOS and Linux; it asks for the password of the user
+/// when it needs sudo to write there.
+const standaloneInstallCommand = 'curl -sL https://firebase.tools | bash';
+
+/// The directory where [standaloneInstallCommand] puts the Firebase CLI.
+const standaloneBinDir = '/usr/local/bin';
+
+const _macos = r'''
+#!/usr/bin/env bash
+# Installs the Firebase CLI on macOS with npm, for SMF, unless a firebase
+# command runs already.
+#
+# When Node.js is missing or older than 20, which the Firebase CLI needs, it
+# installs it first: with nvm when the node on the PATH is one of nvm, which
+# puts its directory first on the PATH, or else with Homebrew if there is
+# one, or else with nvm in the home directory. It adds the directory of the
+# global npm executables to the PATH of new terminals. A Node.js of nvm is on the PATH of new terminals
+# only while it is the default one of nvm, so for the Firebase CLI of one,
+# it adds a firebase command in ~/.local/bin that runs it with that Node.js.
+# It prints the directories of the Firebase CLI and of Node.js as lines
+# "smf-bin-dir=<directory>", and each change that outlives it as a line
+# "smf-note=<change>".
+set -euo pipefail
+
+# The version of the Node.js of nvm that the script chose, if it did.
+nvm_node=""
+
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+# Whether a firebase command runs: one on the PATH may not, such as one that
+# runs the Firebase CLI of another Node.js, or a Firebase CLI on a Node.js
+# that is too old for it.
+firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
+
+# Tells about $1, a firebase command that did not run before the
+# installation, if it still does not with the PATH $2 of before: a new
+# terminal may run it in place of the Firebase CLI that the script installs.
+note_stale_firebase() {
+  if [ -n "$1" ] && ! PATH="$2" "$1" --version >/dev/null 2>&1; then
+    echo "smf-note=$1 does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  fi
+}
+
+path_contains() {
+  case ":$PATH:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Loads nvm into this shell; fails when nvm is not installed.
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] || return 1
+  # nvm reads variables that may be unset.
+  set +u
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh"
+  set -u
+}
+
+# Whether the node on the PATH is one of nvm, which a Node.js of Homebrew
+# would not come before.
+node_of_nvm() {
+  command_exists node && is_of_nvm "$(dirname "$(command -v node)")"
+}
+
+install_node() {
+  if command_exists brew && ! node_of_nvm; then
+    local before
+    before="$(brew list --versions node 2>/dev/null || true)"
+    brew install node
+    # Homebrew installs nothing when it has Node.js already.
+    if [ "$(brew list --versions node 2>/dev/null || true)" != "$before" ]; then
+      echo "smf-note=Installed Node.js with Homebrew."
+    fi
+    return
+  fi
+  if ! load_nvm; then
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    load_nvm
+    echo "smf-note=Installed nvm in $NVM_DIR."
+  fi
+  set +u
+  nvm install --lts
+  set -u
+  nvm_node="$(node -v)"
+}
+
+# The major version of Node.js, or 0 if it is missing.
+node_major_version() {
+  if ! command_exists node; then
+    echo 0
+    return
+  fi
+  local version
+  version="$(node -v 2>/dev/null || echo v0)"
+  version="${version#v}"
+  echo "${version%%.*}"
+}
+
+# The profile of the login shell of the user, which new terminals read. Of
+# ~/.bash_profile, ~/.bash_login and ~/.profile, bash reads only the first
+# that there is, so a new ~/.bash_profile would hide the others.
+login_profile() {
+  case "${SHELL:-}" in
+    */bash)
+      local file
+      for file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        if [ -f "$file" ]; then
+          echo "$file"
+          return
+        fi
+      done
+      echo "$HOME/.bash_profile" ;;
+    *) echo "$HOME/.zprofile" ;;
+  esac
+}
+
+# Adds the directory $1 to the PATH in the profile of the login shell, which
+# new terminals read.
+add_to_path_of_new_terminals() {
+  local profile
+  profile="$(login_profile)"
+  touch "$profile"
+  if ! grep -Fq "$1" "$profile"; then
+    echo "export PATH=\"\$PATH:$1\"" >> "$profile"
+    echo "smf-note=Added $1 to the PATH in $profile, for new terminals."
+  fi
+}
+
+# The file that the link $1 points to, or $1 when it is no link.
+link_target() {
+  local target
+  target="$(readlink "$1")" || { echo "$1"; return 0; }
+  case "$target" in
+    /*) echo "$target" ;;
+    *) echo "$(cd "$(dirname "$1")/$(dirname "$target")" && pwd)/${target##*/}" ;;
+  esac
+}
+
+# Whether the directory $1 is one of nvm, whose directory may be a link or
+# end with a slash.
+is_of_nvm() {
+  local nvm_dir directory
+  nvm_dir="$(cd "${NVM_DIR:-$HOME/.nvm}" 2>/dev/null && pwd -P)" || return 1
+  directory="$(cd "$1" && pwd -P)" || return 1
+  case "$directory" in
+    "$nvm_dir"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# A firebase command in ~/.local/bin, which it adds to the PATH of new
+# terminals, that runs the Firebase CLI of the global npm directory $1 with
+# the Node.js that installed it, by their paths, whichever Node.js a new
+# terminal has. Installing again writes it again.
+add_firebase_command() {
+  local node cli
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
+  # npm links the command to the script of the Firebase CLI.
+  cli="$(link_target "$1/firebase")"
+  mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
+    printf 'exec %q %q "$@"\n' "$node" "$cli"
+  } > "$HOME/.local/bin/firebase"
+  chmod +x "$HOME/.local/bin/firebase"
+  echo "smf-note=Added a firebase command to $HOME/.local/bin, which runs the Firebase CLI with $node."
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) add_to_path_of_new_terminals '$HOME/.local/bin' ;;
+  esac
+}
+
+if ! firebase_runs; then
+  stale="$(command -v firebase || true)"
+  stale_path="$PATH"
+  if [ "$(node_major_version)" -lt 20 ]; then
+    install_node
+    # An older node earlier on the PATH still comes first.
+    if [ "$(node_major_version)" -lt 20 ]; then
+      echo "The Firebase CLI needs Node.js 20 or newer, but node is $(node -v 2>/dev/null || echo missing)." >&2
+      exit 1
+    fi
+  fi
+  if ! command_exists npm; then
+    load_nvm || true
+  fi
+  npm install -g firebase-tools
+  if [ -n "$nvm_node" ]; then
+    echo "smf-note=Installed the Firebase CLI with Node.js $nvm_node of nvm."
+  fi
+  npm_bin="$(npm prefix -g)/bin"
+  if ! path_contains "$npm_bin"; then
+    add_to_path_of_new_terminals "$npm_bin"
+  fi
+  # nvm has it on the PATH now, but a new terminal has the default one.
+  if is_of_nvm "$npm_bin"; then
+    add_firebase_command "$npm_bin"
+  fi
+  export PATH="$npm_bin:$PATH"
+  note_stale_firebase "$stale" "$stale_path"
+fi
+
+firebase --version
+echo "smf-bin-dir=$(dirname "$(command -v firebase)")"
+if command_exists node; then
+  echo "smf-bin-dir=$(dirname "$(command -v node)")"
+fi
+''';
+
+const _linux = r'''
+#!/usr/bin/env bash
+# Installs the Firebase CLI on Linux with npm, without sudo, for SMF, unless
+# a firebase command runs already.
+#
+# When Node.js is missing or older than 20, it installs its LTS version with
+# nvm in the home directory. When the global npm directory is outside the
+# home directory, it moves it to ~/.npm-global. It adds the directory of the
+# global npm executables to the PATH of new terminals, with a firebase
+# command in ~/.local/bin that runs the Firebase CLI with the Node.js that
+# installed it. It prints the directories of the Firebase CLI and of Node.js
+# as lines "smf-bin-dir=<directory>", and each change that outlives it as a
+# line "smf-note=<change>".
+set -euo pipefail
+
+# The version of the Node.js of nvm that the script chose, if it did.
+nvm_node=""
+
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+# Whether a firebase command runs: one on the PATH may not, such as one that
+# runs the Firebase CLI of another Node.js, or a Firebase CLI on a Node.js
+# that is too old for it.
+firebase_runs() { command_exists firebase && firebase --version >/dev/null 2>&1; }
+
+# Tells about $1, a firebase command that did not run before the
+# installation, if it still does not with the PATH $2 of before: a new
+# terminal may run it in place of the Firebase CLI that the script installs.
+note_stale_firebase() {
+  if [ -n "$1" ] && ! PATH="$2" "$1" --version >/dev/null 2>&1; then
+    echo "smf-note=$1 does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  fi
+}
+
+path_contains() {
+  case ":$PATH:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The file that new terminals of the shell of the user read.
+shell_rc() {
+  if [[ "${SHELL:-}" = *zsh ]]; then
+    echo "$HOME/.zshrc"
+  else
+    echo "$HOME/.bashrc"
+  fi
+}
+
+# Adds $1, as it is written, to the PATH in the rc file of the shell.
+add_to_path_of_new_terminals() {
+  local rc
+  rc="$(shell_rc)"
+  touch "$rc"
+  if ! grep -Fq "$1" "$rc"; then
+    echo "export PATH=\"\$PATH:$1\"" >> "$rc"
+    echo "smf-note=Added $1 to the PATH in $rc, for new terminals."
+  fi
+}
+
+# Loads nvm into this shell; fails when nvm is not installed.
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] || return 1
+  # nvm reads variables that may be unset.
+  set +u
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh"
+  set -u
+}
+
+install_nvm() {
+  if load_nvm; then
+    return 0
+  fi
+  if command_exists curl; then
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  elif command_exists wget; then
+    wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  else
+    echo "Installing nvm needs curl or wget." >&2
+    exit 1
+  fi
+  load_nvm || { echo "nvm did not load after its installation." >&2; exit 1; }
+  echo "smf-note=Installed nvm in $NVM_DIR."
+}
+
+# The major version of Node.js, or 0 if it is missing.
+node_major_version() {
+  if ! command_exists node; then
+    echo 0
+    return
+  fi
+  local version
+  version="$(node -v 2>/dev/null || echo v0)"
+  version="${version#v}"
+  echo "${version%%.*}"
+}
+
+# Moves the global npm directory to ~/.npm-global when it is outside the
+# home directory, so installing needs no sudo.
+use_npm_prefix_in_home() {
+  local prefix
+  prefix="$(npm config get prefix 2>/dev/null || true)"
+  if [[ -z "$prefix" || "$prefix" == /usr* || "$prefix" != "$HOME"* ]]; then
+    mkdir -p "$HOME/.npm-global"
+    npm config set prefix "$HOME/.npm-global" >/dev/null
+    echo "smf-note=Moved the global directory of npm to $HOME/.npm-global, in ~/.npmrc, so that it needs no sudo."
+  fi
+}
+
+# The file that the link $1 points to, or $1 when it is no link.
+link_target() {
+  local target
+  target="$(readlink "$1")" || { echo "$1"; return 0; }
+  case "$target" in
+    /*) echo "$target" ;;
+    *) echo "$(cd "$(dirname "$1")/$(dirname "$target")" && pwd)/${target##*/}" ;;
+  esac
+}
+
+# A firebase command in ~/.local/bin, for shells that have ~/.local/bin on
+# the PATH, that runs the Firebase CLI of the global npm directory $1 with
+# the Node.js that installed it, by their paths, whichever Node.js a new
+# terminal has, such as another default one of nvm. Installing again writes
+# it again.
+add_firebase_command() {
+  local node cli
+  # Not a shim on the PATH, such as one of asdf, which picks a version of
+  # Node.js by the directory it runs in.
+  node="$(node -p 'process.execPath')"
+  # npm links the command to the script of the Firebase CLI.
+  cli="$(link_target "$1/firebase")"
+  mkdir -p "$HOME/.local/bin"
+  # A new file, not one that a link there points to.
+  rm -f "$HOME/.local/bin/firebase"
+  {
+    echo '#!/usr/bin/env bash'
+    echo '# Added by SMF: runs the Firebase CLI with the Node.js that installed it.'
+    printf 'exec %q %q "$@"\n' "$node" "$cli"
+  } > "$HOME/.local/bin/firebase"
+  chmod +x "$HOME/.local/bin/firebase"
+  echo "smf-note=Added a firebase command to $HOME/.local/bin, which runs the Firebase CLI with $node."
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) add_to_path_of_new_terminals '$HOME/.local/bin' ;;
+  esac
+}
+
+if ! firebase_runs; then
+  stale="$(command -v firebase || true)"
+  stale_path="$PATH"
+  if [ "$(node_major_version)" -lt 20 ]; then
+    install_nvm
+    set +u
+    nvm install --lts
+    nvm use --lts >/dev/null
+    set -u
+    nvm_node="$(node -v)"
+  fi
+  if ! command_exists npm; then
+    load_nvm || true
+  fi
+  use_npm_prefix_in_home
+  npm install -g firebase-tools
+  if [ -n "$nvm_node" ]; then
+    echo "smf-note=Installed the Firebase CLI with Node.js $nvm_node of nvm."
+  fi
+  npm_bin="$(npm prefix -g)/bin"
+  # nvm puts the directory of its Node.js on the PATH itself.
+  if ! path_contains "$npm_bin"; then
+    add_to_path_of_new_terminals "$npm_bin"
+  fi
+  add_firebase_command "$npm_bin"
+  export PATH="$npm_bin:$PATH"
+  note_stale_firebase "$stale" "$stale_path"
+fi
+
+firebase --version
+echo "smf-bin-dir=$(dirname "$(command -v firebase)")"
+if command_exists node; then
+  echo "smf-bin-dir=$(dirname "$(command -v node)")"
+fi
+''';
+
+const _windows = r'''
+# Installs the Firebase CLI on Windows with npm, for SMF, unless a firebase
+# command runs already.
+#
+# When Node.js is missing or older than 20, which the Firebase CLI needs, it
+# installs it first: with winget, Chocolatey or Scoop, or else from the
+# portable ZIP of its LTS version in %LOCALAPPDATA%\Programs\node. It adds
+# the directories to the PATH of the user for new terminals. It prints the
+# directories of the Firebase CLI and of Node.js as lines
+# "smf-bin-dir=<directory>", and each change that outlives it as a line
+# "smf-note=<change>".
+$ErrorActionPreference = "Stop"
+
+# npm prints its directories in UTF-8, and SMF reads the output of the script
+# in UTF-8, while Windows PowerShell reads and writes in the code page of the
+# console. The global directory of npm is in the profile of the user, whose
+# name may have letters beyond ASCII.
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
+
+function Command-Exists($name) {
+  try { Get-Command $name -ErrorAction Stop | Out-Null; return $true } catch { return $false }
+}
+
+# Whether a firebase command runs: one on the PATH may not, such as a
+# Firebase CLI on a Node.js that is too old for it.
+function Firebase-Runs {
+  $firebase = Get-Command firebase -ErrorAction SilentlyContinue
+  if (-not $firebase) { return $false }
+  # What it writes to the standard error does not stop the script here.
+  $ErrorActionPreference = "Continue"
+  $global:LASTEXITCODE = 1
+  try { & $firebase.Source --version *> $null } catch { return $false }
+  return ($LASTEXITCODE -eq 0)
+}
+
+# Tells about $stale, the firebase command that did not run before the
+# installation, if it still does not with the PATH $stalePath of before: a
+# new terminal may run it in place of the Firebase CLI that the script
+# installed. One that the installation replaced, or removed, is left out.
+function Write-StaleFirebaseNote($stale, $stalePath) {
+  if (-not $stale -or -not (Test-Path -LiteralPath $stale)) { return }
+  $installed = Get-Command firebase -ErrorAction SilentlyContinue
+  if ($installed -and $installed.Source -eq $stale) { return }
+  # What it writes to the standard error does not stop the script here.
+  $ErrorActionPreference = "Continue"
+  $path = $env:Path
+  $env:Path = $stalePath
+  $global:LASTEXITCODE = 1
+  try { & $stale --version *> $null } catch { }
+  $runs = ($LASTEXITCODE -eq 0)
+  $env:Path = $path
+  if (-not $runs) {
+    Write-Output "smf-note=$stale does not run, and a new terminal may run it in place of the Firebase CLI that SMF installed: remove it."
+  }
+}
+
+# Adds $pathEntry to the PATH of the user, for new terminals. It changes the
+# value in the registry as it is, with the variables that it refers to, such
+# as %USERPROFILE%, unexpanded, and keeps its kind: that of a new Windows
+# expands them, which a value of another kind does not.
+function Add-UserPathEntry($pathEntry) {
+  if ([string]::IsNullOrWhiteSpace($pathEntry)) { return }
+  $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+  try {
+    $cur = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $entries = [Environment]::ExpandEnvironmentVariables($cur).ToLower().Split(';')
+    if ($entries -contains $pathEntry.ToLower()) { return }
+    $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+    $newPath = if ($cur.Trim().Length -gt 0) { "$cur;$pathEntry" } else { $pathEntry }
+    # Unlike setx, it does not cut a PATH longer than 1024 characters.
+    $key.SetValue('Path', $newPath, $kind)
+  } finally { $key.Close() }
+  # Deleting a variable of the user that there is not changes nothing, and
+  # tells the running programs, such as Explorer, which starts new
+  # terminals, that the environment changed, as it does after every change.
+  [Environment]::SetEnvironmentVariable('SMF_NO_VARIABLE', $null, 'User')
+  Write-Output "smf-note=Added $pathEntry to the PATH of the user, for new terminals."
+}
+
+# The major version of Node.js, or 0 if it is missing.
+function Get-NodeMajorVersion {
+  try {
+    $version = (& node -v | Out-String).Trim().TrimStart('v')
+    return [int]($version.Split('.')[0])
+  } catch { return 0 }
+}
+
+$portableNode = Join-Path $env:LOCALAPPDATA "Programs\node"
+
+function Install-PortableNode {
+  # The ZIP of the latest LTS version, extracted to %LOCALAPPDATA%\Programs\node.
+  $index = Invoke-RestMethod https://nodejs.org/dist/index.json
+  $lts = $index | Where-Object { $_.lts -ne $false -and $_.lts -ne $null } | Select-Object -First 1
+  $ver = $lts.version.TrimStart('v')
+  $zipUrl = "https://nodejs.org/dist/v$ver/node-v$ver-win-x64.zip"
+  $tmpZip = Join-Path $env:TEMP "node-v$ver-win-x64.zip"
+
+  Invoke-WebRequest $zipUrl -OutFile $tmpZip
+  if (Test-Path $portableNode) { Remove-Item $portableNode -Recurse -Force }
+  Expand-Archive $tmpZip -DestinationPath (Split-Path $portableNode)
+  Rename-Item (Join-Path (Split-Path $portableNode) "node-v$ver-win-x64") $portableNode
+  Write-Output "smf-note=Installed Node.js $ver in $portableNode."
+
+  Add-UserPathEntry $portableNode
+  if (-not (Test-Path (Join-Path $portableNode "node.exe"))) { throw "The portable Node.js was not installed." }
+  $env:Path = "$portableNode;$env:Path"
+}
+
+if (-not (Firebase-Runs)) {
+  $staleCommand = Get-Command firebase -ErrorAction SilentlyContinue
+  $stale = if ($staleCommand) { $staleCommand.Source } else { $null }
+  $stalePath = $env:Path
+  if ((Get-NodeMajorVersion) -lt 20) {
+    if (Command-Exists 'winget') {
+      winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+      if ($LASTEXITCODE -eq 0) { Write-Output "smf-note=Installed Node.js with winget." }
+    } elseif (Command-Exists 'choco') {
+      choco install nodejs-lts -y | Out-Null
+      if ($LASTEXITCODE -eq 0) { Write-Output "smf-note=Installed Node.js with Chocolatey." }
+    } elseif (Command-Exists 'scoop') {
+      scoop install nodejs-lts | Out-Null
+      if ($LASTEXITCODE -eq 0) { Write-Output "smf-note=Installed Node.js with Scoop." }
+    }
+    # A new installation is on the PATH of new terminals only.
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = "$env:Path;$machinePath;$userPath"
+    # The portable one goes first on the PATH of this script.
+    if ((Get-NodeMajorVersion) -lt 20) { Install-PortableNode }
+  }
+
+  if (Command-Exists 'npm') {
+    npm install -g firebase-tools
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $npmBin = (npm prefix -g | Out-String).Trim()
+  } else {
+    $nodeExe = Join-Path $portableNode "node.exe"
+    $npmCli = Join-Path $portableNode "node_modules\npm\bin\npm-cli.js"
+    if (-not (Test-Path $nodeExe)) { throw "npm was not found, and there is no portable Node.js." }
+    & $nodeExe $npmCli install -g firebase-tools
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $npmBin = (& $nodeExe $npmCli prefix -g | Out-String).Trim()
+  }
+  Add-UserPathEntry $npmBin
+  $env:Path = "$npmBin;$env:Path"
+  Write-StaleFirebaseNote $stale $stalePath
+}
+
+$firebase = Get-Command firebase -ErrorAction SilentlyContinue
+if (-not $firebase) {
+  Write-Error "The Firebase CLI was not found after its installation."
+  exit 1
+}
+# The Firebase CLI stops at once on a Node.js that is too old for it.
+& $firebase.Source --version
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Output "smf-bin-dir=$(Split-Path $firebase.Source)"
+$node = Get-Command node -ErrorAction SilentlyContinue
+if ($node) { Write-Output "smf-bin-dir=$(Split-Path $node.Source)" }
+''';

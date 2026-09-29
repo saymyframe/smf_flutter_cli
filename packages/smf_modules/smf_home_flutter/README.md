@@ -1,14 +1,24 @@
 # smf_home_flutter
 
-Home feature module for SMF Flutter applications.
+The SMF module of the start screen of the app. It is a feature: a screen with its route, which the module that provides the router renders.
 
-## Use with SMF CLI
-This package is not intended to be installed directly. Use the SMF CLI to add this feature module to a project.
+It generates `HomeScreen`, a screen that shows the name of the app in its app bar and nothing else, at `/home`. The app can start on it, and the main navigation of the app, when there is one, shows it as Home with the home icon. The screen has no state, so the module works with any module that manages state, or with none.
 
-- SMF Flutter CLI on pub.dev: https://pub.dev/packages/smf_flutter_cli
+## Use with the SMF CLI
 
-## 🌐 Links
-[Repository](https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_home_flutter) • [Docs](https://doc.saymyframe.com) • [Issues](https://github.com/saymyframe/smf_flutter_cli/issues)
+`smf create` asks which features the app has. To choose this one without the question:
 
-## License
-See LICENSE.
+```bash
+smf create my_app -m home
+```
+
+The feature requires a router, which `smf create` adds when only one module provides it.
+
+You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
+
+SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
+
+## Documentation
+
+- [The home module](https://doc.saymyframe.com/modules/home)
+- [Navigation](https://doc.saymyframe.com/guides/navigation)

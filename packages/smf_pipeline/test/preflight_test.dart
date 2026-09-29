@@ -1,0 +1,759 @@
+import 'dart:io' show ProcessException;
+
+import 'package:pub_semver/pub_semver.dart';
+import 'package:smf_contracts/core.dart';
+import 'package:test/test.dart';
+
+import 'support.dart';
+
+const _module = ModuleOrigin(ModuleId('firebase'));
+
+const _missing = PreflightMissing(
+  instructions: 'Run npm install -g firebase-tools.',
+  installable: true,
+);
+
+void main() {
+  group('the Flutter SDK check', () {
+    test('finds flutter and the dart next to it', () async {
+      final host = FakeHost();
+      final check = FlutterSdkCheck(host.fileSystem);
+
+      final status = await check.check(host.environment());
+
+      expect(status, isA<PreflightPassed>());
+      expect(check.found!.flutter, '/sdk/bin/flutter');
+      expect(check.found!.dart, '/sdk/bin/dart');
+      expect(check.id, 'flutter_sdk');
+      expect(check.description, 'Flutter SDK');
+      expect(check.required, isTrue);
+    });
+
+    test('follows a link to flutter, not another dart on the PATH', () async {
+      final host = FakeHost(
+        flutter: false,
+        environment: {
+          'PATH': '/usr/local/bin',
+        },
+      );
+      final fs = host.fileSystem;
+      fs.file('/opt/flutter/bin/flutter').createSync(recursive: true);
+      fs.file('/opt/flutter/bin/dart').createSync();
+      fs.directory('/opt/flutter/bin/internal').createSync();
+      fs.directory('/usr/local/bin').createSync(recursive: true);
+      fs.link('/usr/local/bin/flutter').createSync('/opt/flutter/bin/flutter');
+      fs.file('/usr/local/bin/dart').createSync();
+      final check = FlutterSdkCheck(fs);
+
+      await check.check(host.environment());
+
+      expect(check.found!.flutter, '/usr/local/bin/flutter');
+      expect(check.found!.dart, '/opt/flutter/bin/dart');
+    });
+
+    test('asks a launcher of flutter for its SDK', () async {
+      final runner = ScriptedProcessRunner({
+        '/snap/bin/flutter': const SmfProcessResult(
+          exitCode: 0,
+          stdout: 'Waiting for another command...\n'
+              '{"flutterRoot": "/home/me/snap/flutter/common/flutter"}\n'
+              'The Flutter CLI developer tool uses Google Analytics to '
+              'report usage (https://policies.google.com/privacy).\n',
+        ),
+      });
+      final host = FakeHost(
+        flutter: false,
+        environment: {'PATH': '/snap/bin:/usr/bin'},
+        processRunner: runner,
+      );
+      final fs = host.fileSystem;
+      // The snap links every app to its launcher, next to which may lie a
+      // dart of another SDK.
+      fs.file('/usr/bin/snap').createSync(recursive: true);
+      fs.file('/usr/bin/dart').createSync();
+      fs.directory('/snap/bin').createSync(recursive: true);
+      fs.link('/snap/bin/flutter').createSync('/usr/bin/snap');
+      fs
+          .file('/home/me/snap/flutter/common/flutter/bin/dart')
+          .createSync(recursive: true);
+      fs
+          .directory('/home/me/snap/flutter/common/flutter/bin/cache/dart-sdk')
+          .createSync(recursive: true);
+      final check = FlutterSdkCheck(fs);
+
+      await check.check(host.environment());
+
+      expect(
+        runner.calls.single,
+        ['/snap/bin/flutter', '--version', '--machine'],
+      );
+      expect(
+        check.found!.dart,
+        '/home/me/snap/flutter/common/flutter/bin/dart',
+      );
+      expect(check.launcher, isNull);
+
+      final explaining = FlutterSdkCheck(fs, explain: true);
+      expect(
+        await explaining.check(host.environment()),
+        isA<PreflightPassed>(),
+      );
+      expect(explaining.launcher, '/snap/bin/flutter');
+      expect(explaining.found, isNull);
+      expect(runner.calls, hasLength(1));
+    });
+
+    test('a launcher the user interrupts cancels the run', () async {
+      final host = FakeHost(
+        flutter: false,
+        environment: {'PATH': '/snap/bin'},
+        processRunner: RecordingRunner(
+          onRun: (call) => throw const SmfCancelledException(),
+        ),
+      );
+      host.fileSystem.file('/snap/bin/flutter').createSync(recursive: true);
+
+      await expectLater(
+        FlutterSdkCheck(host.fileSystem).check(host.environment()),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
+    test('reports a missing flutter or dart', () async {
+      final none = FakeHost(flutter: false);
+      final noFlutter = FlutterSdkCheck(none.fileSystem);
+      expect(
+        await noFlutter.check(none.environment()),
+        isA<PreflightMissing>(),
+      );
+      expect(noFlutter.found, isNull);
+
+      for (final result in [
+        const SmfProcessResult(exitCode: 1),
+        const SmfProcessResult(exitCode: 0, stdout: 'no json'),
+        const SmfProcessResult(exitCode: 0, stdout: '{"flutterRoot": 1}'),
+        const SmfProcessResult(exitCode: 0, stdout: '{broken'),
+        const SmfProcessResult(exitCode: 0, stdout: '{broken}'),
+        const SmfProcessResult(exitCode: 0, stdout: '{"flutterRoot": "/x"}'),
+      ]) {
+        final host = FakeHost(
+          flutter: false,
+          processRunner: ScriptedProcessRunner({'/sdk/bin/flutter': result}),
+        );
+        host.fileSystem.file('/sdk/bin/flutter').createSync(recursive: true);
+        host.fileSystem.file('/usr/bin/dart').createSync(recursive: true);
+        final check = FlutterSdkCheck(host.fileSystem);
+        final status = await check.check(host.environment());
+        expect(
+          status,
+          isA<PreflightMissing>()
+              .having(
+                (missing) => missing.found,
+                'found',
+                'the Flutter SDK of /sdk/bin/flutter has no dart',
+              )
+              .having(
+                (missing) => missing.instructions,
+                'instructions',
+                'Reinstall Flutter, or run "flutter doctor".',
+              ),
+          reason: result.stdout,
+        );
+      }
+    });
+
+    test('a launcher that cannot start leaves the SDK missing', () async {
+      final host = FakeHost(
+        flutter: false,
+        environment: {'PATH': '/snap/bin'},
+        processRunner: RecordingRunner(
+          onRun: (call) => throw ProcessException(
+            call.executable,
+            call.arguments,
+            'Permission denied',
+            13,
+          ),
+        ),
+      );
+      host.fileSystem.file('/snap/bin/flutter').createSync(recursive: true);
+      final check = FlutterSdkCheck(host.fileSystem);
+
+      expect(
+        await check.check(host.environment()),
+        isA<PreflightMissing>().having(
+          (missing) => missing.found,
+          'found',
+          'the Flutter SDK of /snap/bin/flutter has no dart',
+        ),
+      );
+      expect(check.found, isNull);
+    });
+
+    test('reads the versions the SDK records', () async {
+      final host = FakeHost();
+      host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          '{"flutterVersion": "3.44.2", "dartSdkVersion": "3.12.2 (stable)"}',
+        );
+      final check = FlutterSdkCheck(host.fileSystem);
+
+      await check.check(host.environment());
+
+      expect(check.found!.flutterVersion, '3.44.2');
+      expect(check.found!.dartVersion, '3.12.2');
+
+      host.fileSystem
+          .file('/sdk/bin/cache/flutter.version.json')
+          .writeAsStringSync('[]');
+      await check.check(host.environment());
+      expect(check.found!.flutterVersion, isNull);
+    });
+
+    test('compares the versions with the constraints of the pubspec', () {
+      const sdk = FlutterSdk(
+        flutter: '/f/flutter',
+        dart: '/f/dart',
+        flutterVersion: '3.44.2',
+        dartVersion: '3.12.2',
+      );
+
+      expect(
+        sdkVersionIssues(
+          sdk,
+          MergedPubspec(
+            sdk: VersionConstraint.parse('^3.8.0'),
+            flutter: VersionConstraint.parse('>=3.32.0'),
+          ),
+        ),
+        isEmpty,
+      );
+      final issues = sdkVersionIssues(
+        sdk,
+        MergedPubspec(
+          sdk: VersionConstraint.parse('^3.13.0'),
+          flutter: VersionConstraint.parse('>=3.47.0'),
+          sdkOrigins: const [_module],
+          flutterOrigins: const [_module, ModuleOrigin(ModuleId('other'))],
+        ),
+      );
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'firebase needs Dart ^3.13.0, but the Flutter SDK at /f/flutter has '
+          'Dart 3.12.2.',
+        ),
+        equals(
+          'firebase, other need Flutter >=3.47.0, but the Flutter SDK at '
+          '/f/flutter has Flutter 3.44.2.',
+        ),
+      ]);
+      // One module's constraint is its problem; lenient mode can drop it.
+      expect(issues.first.origin, _module);
+      expect(issues.first.hint, 'Upgrade Flutter, or leave out firebase.');
+      expect(issues.last.origin, isNull);
+      expect(issues.last.hint, 'Upgrade Flutter.');
+      // Unless no app can be made without it.
+      expect(
+        sdkVersionIssues(
+          sdk,
+          MergedPubspec(
+            sdk: VersionConstraint.parse('^3.13.0'),
+            sdkOrigins: const [_module],
+          ),
+          canDoWithout: (modules) => false,
+        ).single.hint,
+        'Upgrade Flutter.',
+      );
+      expect(
+        sdkVersionIssues(
+          sdk,
+          MergedPubspec(sdk: VersionConstraint.parse('^3.13.0')),
+        ).single.message,
+        startsWith('The app needs Dart'),
+      );
+      expect(sdkVersionIssues(null, const MergedPubspec()), isEmpty);
+      expect(
+        sdkVersionIssues(
+          const FlutterSdk(flutter: 'f', dart: 'd', dartVersion: 'dev'),
+          MergedPubspec(sdk: VersionConstraint.parse('^3.8.0')),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('on Windows takes dart.bat', () async {
+      final host = FakeHost(operatingSystem: HostOperatingSystem.windows);
+      final check = FlutterSdkCheck(host.fileSystem);
+
+      await check.check(host.environment());
+
+      expect(check.found!.flutter, r'C:\sdk\bin\flutter.bat');
+      expect(check.found!.dart, r'C:\sdk\bin\dart.bat');
+    });
+  });
+
+  group('runPreflight', () {
+    test('passes checks that pass', () async {
+      final host = FakeHost();
+      final check = TestCheck('tool', status: const PreflightPassed());
+
+      final report = await runPreflight(
+        [PlannedCheck(check, _module)],
+        host.environment(),
+      );
+
+      expect(report.issues, isEmpty);
+      expect(report.results.single.passed, isTrue);
+      expect(host.logger.details, ['✓ Tool tool']);
+      // A check may take a while, so the run shows that it checks.
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+      ]);
+    });
+
+    test('installs after the user agrees, and adds its directories', () async {
+      final host = FakeHost(answers: [true], terminal: true);
+      final environment = host.environment();
+      final check = TestCheck(
+        'firebase_cli',
+        status: _missing,
+        afterInstall: const PreflightPassed(),
+        binDirs: ['/npm/bin'],
+      );
+
+      final report = await runPreflight(
+        [PlannedCheck(check, _module)],
+        environment,
+      );
+
+      expect(check.installs, 1);
+      expect(check.checks, 2);
+      expect(report.results.single.installed, isTrue);
+      expect(report.results.single.passed, isTrue);
+      expect(report.issues, isEmpty);
+      expect(environment.binDirs, ['/npm/bin']);
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+        // After the question and the installation.
+        'start: Checking Tool firebase_cli again',
+        'complete: null',
+      ]);
+      // The instructions come before the question, so the user knows what
+      // setting it up means.
+      expect(
+        host.prompter.asked.single.message,
+        'Tool firebase_cli is missing (needed by firebase). Run npm install '
+        '-g firebase-tools. Set it up now?',
+      );
+    });
+
+    test('says what a check found in place of what it looks for', () async {
+      const older = PreflightMissing(
+        found: 'tool 1.0.0 is active',
+        instructions: 'Activate 2.0.0 in its place with "activate 2.0.0".',
+        installable: true,
+      );
+      final declining = FakeHost(answers: [false], terminal: true);
+
+      final report = await runPreflight(
+        [PlannedCheck(TestCheck('cli', status: older), _module)],
+        declining.environment(),
+      );
+
+      expect(
+        declining.prompter.asked.single.message,
+        'Tool cli is needed by firebase, but tool 1.0.0 is active. Activate '
+        '2.0.0 in its place with "activate 2.0.0". Set it up now?',
+      );
+      expect(
+        report.issues.single.message,
+        'Tool cli is needed, but tool 1.0.0 is active. Activate 2.0.0 in its '
+        'place with "activate 2.0.0".',
+      );
+    });
+
+    test('does not install when the user declines', () async {
+      final host = FakeHost(answers: [false], terminal: true);
+      final check = TestCheck('firebase_cli', status: _missing);
+
+      final report = await runPreflight(
+        [PlannedCheck(check, _module)],
+        host.environment(),
+      );
+
+      expect(check.installs, 0);
+      expect(report.issues.single.isError, isFalse);
+      expect(
+        report.issues.single.message,
+        'Tool firebase_cli is missing. Run npm install -g firebase-tools.',
+      );
+      expect(report.issues.single.origin, _module);
+    });
+
+    test('only prints instructions without a terminal', () async {
+      final host = FakeHost();
+      final check = TestCheck('firebase_cli', status: _missing);
+
+      final report = await runPreflight(
+        [PlannedCheck(check, _module)],
+        host.environment(),
+      );
+
+      expect(check.installs, 0);
+      expect(host.prompter.asked, isEmpty);
+      expect(report.issues, hasLength(1));
+    });
+
+    test('never installs with --skip-external-setup or --explain', () async {
+      for (final (skip, explain) in [(true, false), (false, true)]) {
+        final host = FakeHost(terminal: true);
+        final check = TestCheck('firebase_cli', status: _missing);
+
+        await runPreflight(
+          [PlannedCheck(check, _module)],
+          host.environment(skipExternalSetup: skip),
+          explain: explain,
+        );
+
+        expect(check.installs, 0);
+        expect(host.prompter.asked, isEmpty);
+      }
+    });
+
+    test('a failed required check is an error; the pipeline has no origin',
+        () async {
+      final host = FakeHost();
+      final report = await runPreflight(
+        [
+          PlannedCheck(
+            TestCheck(
+              'login',
+              status: const PreflightFailed('no network'),
+              required: true,
+            ),
+            _module,
+          ),
+          PlannedCheck(
+            TestCheck('sdk', status: _missing, required: true),
+            const PipelineOrigin(),
+          ),
+        ],
+        host.environment(),
+      );
+
+      expect(report.issues.map((issue) => issue.isError), [true, true]);
+      expect(
+        report.issues.first.message,
+        'Tool login could not be checked: no network',
+      );
+      expect(report.issues.first.origin, _module);
+      expect(report.issues.last.origin, isNull);
+    });
+
+    test(
+        'a setup that throws leaves what the check found, and says why it '
+        'failed', () async {
+      final host = FakeHost(answers: [true], terminal: true);
+      final report = await runPreflight(
+        [
+          PlannedCheck(_ThrowingCheck(installs: true), _module),
+        ],
+        host.environment(),
+      );
+
+      // Not that the check failed: it found the tool missing, and the
+      // setup failed.
+      final result = report.results.single;
+      expect(result.status, isA<PreflightMissing>());
+      expect(result.installed, isFalse);
+      expect(result.setupFailure, 'Bad state: no npm');
+      expect(
+        report.issues.single.message,
+        'Throwing is missing. Install it. Setting it up failed: Bad state: '
+        'no npm',
+      );
+      expect(report.issues.single.isError, isFalse);
+    });
+
+    test('a check that throws fails', () async {
+      final checkFails = await runPreflight(
+        [PlannedCheck(_ThrowingCheck(), _module)],
+        FakeHost().environment(),
+      );
+      expect(checkFails.issues.single.message, contains('cannot check'));
+    });
+
+    test('a check or an installation the user cancels cancels the run',
+        () async {
+      final cancelled = FakeHost();
+      await expectLater(
+        runPreflight(
+          [
+            PlannedCheck(
+              _Probe((_) => throw const SmfCancelledException()),
+              _module,
+            ),
+          ],
+          cancelled.environment(),
+        ),
+        throwsA(isA<SmfCancelledException>()),
+      );
+      expect(cancelled.logger.progresses, [
+        'start: Checking the machine',
+        'fail: null',
+      ]);
+      final host = FakeHost(answers: [true], terminal: true);
+      await expectLater(
+        runPreflight(
+          [
+            PlannedCheck(
+              _ThrowingCheck(installs: true, cancels: true),
+              _module,
+            ),
+          ],
+          host.environment(),
+        ),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
+    test('checks after the SDK check find the SDK', () async {
+      final host = FakeHost();
+      final environment = host.environment();
+      final sdk = FlutterSdkCheck(host.fileSystem);
+      String? dart;
+      final probe = _Probe((environment) async {
+        dart = await environment.findExecutable('dart');
+      });
+
+      await runPreflight(
+        [
+          PlannedCheck(sdk, const PipelineOrigin()),
+          PlannedCheck(probe, _module),
+        ],
+        environment,
+      );
+
+      expect(environment.sdk, same(sdk.found));
+      expect(dart, '/sdk/bin/dart');
+    });
+
+    test('installs nothing when generation cannot go on', () async {
+      for (final (strict, origin) in [
+        (false, const PipelineOrigin() as ContributionOrigin),
+        (true, _module as ContributionOrigin),
+      ]) {
+        final host = FakeHost(terminal: true);
+        final cli = TestCheck('cli', status: _missing);
+        final report = await runPreflight(
+          [
+            PlannedCheck(
+              TestCheck(
+                'sdk',
+                status: const PreflightMissing(instructions: 'Get it.'),
+                required: true,
+              ),
+              origin,
+            ),
+            PlannedCheck(cli, const ModuleOrigin(ModuleId('other'))),
+          ],
+          host.environment(),
+          strict: strict,
+        );
+
+        expect(host.prompter.asked, isEmpty);
+        expect(cli.installs, 0);
+        expect(report.issues, hasLength(2));
+      }
+    });
+
+    test('offers no installation to a module lenient mode leaves out',
+        () async {
+      final host = FakeHost(answers: [true], terminal: true);
+      final doomedTool = TestCheck('tool', status: _missing);
+      final otherTool = TestCheck(
+        'tool',
+        status: _missing,
+        afterInstall: const PreflightPassed(),
+      );
+      await runPreflight(
+        [
+          PlannedCheck(
+            TestCheck(
+              'needed',
+              status: const PreflightFailed('broken'),
+              required: true,
+            ),
+            _module,
+          ),
+          PlannedCheck(doomedTool, _module),
+          PlannedCheck(otherTool, const ModuleOrigin(ModuleId('other'))),
+        ],
+        host.environment(),
+      );
+
+      expect(doomedTool.installs, 0);
+      expect(otherTool.installs, 1);
+      expect(host.prompter.asked.single.message, contains('needed by other'));
+    });
+
+    test('checks again what comes after an installation', () async {
+      final host = FakeHost(answers: [true], terminal: true);
+      final cli = TestCheck(
+        'cli',
+        status: _missing,
+        afterInstall: const PreflightPassed(),
+      );
+      final login = TestCheck(
+        'login',
+        status: const PreflightFailed('no firebase'),
+        required: true,
+      );
+
+      final report = await runPreflight(
+        [PlannedCheck(cli, _module), PlannedCheck(login, _module)],
+        host.environment(),
+      );
+
+      // A required check after an installable one is not doomed: the
+      // installation may fix it.
+      expect(cli.installs, 1);
+      expect(login.checks, 2);
+      expect(report.issues.single.message, contains('no firebase'));
+      expect(
+        host.logger.progresses.where((event) => event.startsWith('start: ')),
+        [
+          'start: Checking the machine',
+          'start: Checking Tool cli again',
+          'start: Checking Tool login again',
+        ],
+      );
+    });
+
+    test('installs nothing when the SDK is too old for the app', () async {
+      final host = FakeHost(terminal: true);
+      host.fileSystem.file('/sdk/bin/cache/flutter.version.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"dartSdkVersion": "3.0.0"}');
+      final cli = TestCheck('cli', status: _missing);
+
+      final report = await runPreflight(
+        [
+          PlannedCheck(
+            FlutterSdkCheck(host.fileSystem),
+            const PipelineOrigin(),
+          ),
+          PlannedCheck(cli, _module),
+        ],
+        host.environment(),
+        pubspec: MergedPubspec(sdk: VersionConstraint.parse('^3.8.0')),
+      );
+
+      expect(cli.installs, 0);
+      expect(host.prompter.asked, isEmpty);
+      expect(report.versionIssues.single.message, contains('Dart ^3.8.0'));
+      expect(report.issues, containsAll(report.versionIssues));
+    });
+
+    test('reuses known results, so the user is asked once', () async {
+      final host = FakeHost(answers: [false], terminal: true);
+      final environment = host.environment();
+      final declined = TestCheck('cli', status: _missing);
+      final fresh = TestCheck('fresh', status: const PreflightPassed());
+      final known = <String, CheckResult>{};
+      final checks = [
+        PlannedCheck(declined, _module),
+        PlannedCheck(fresh, _module),
+      ];
+
+      final first = await runPreflight(checks, environment, known: known);
+      final second = await runPreflight(checks, environment, known: known);
+
+      expect(host.prompter.asked, hasLength(1));
+      expect(declined.checks, 1);
+      expect(fresh.checks, 1);
+      // The second run checks nothing, so it shows no progress.
+      expect(host.logger.progresses, [
+        'start: Checking the machine',
+        'complete: null',
+      ]);
+      expect(known.keys, {'firebase/cli', 'firebase/fresh'});
+      expect(second.issues.single.message, first.issues.single.message);
+      expect(second.issues.single.isError, isFalse);
+    });
+  });
+
+  test('plannedChecks puts the SDK first, then the modules in order', () {
+    final first = TestCheck('a', status: const PreflightPassed());
+    final second = TestCheck('b', status: const PreflightPassed());
+    final sdk = FlutterSdkCheck(FakeHost().fileSystem);
+    final collection = Collection([
+      Collected(Preflight([first, second]), _module, applies: true),
+      Collected(
+        Preflight([TestCheck('c', status: _missing)]),
+        _module,
+        applies: false,
+      ),
+    ]);
+
+    final planned = plannedChecks(collection, sdk);
+
+    expect(planned.map((p) => p.check), [sdk, first, second]);
+    expect(planned.map((p) => p.key), [
+      'pipeline/flutter_sdk',
+      'firebase/a',
+      'firebase/b',
+    ]);
+  });
+}
+
+final class _ThrowingCheck extends PreflightCheck {
+  _ThrowingCheck({this.installs = false, this.cancels = false});
+
+  final bool installs;
+
+  /// Whether the installation throws as when the user cancels the run.
+  final bool cancels;
+
+  @override
+  String get id => 'throwing';
+
+  @override
+  String get description => 'Throwing';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async {
+    if (installs) {
+      return const PreflightMissing(
+        instructions: 'Install it.',
+        installable: true,
+      );
+    }
+    throw StateError('cannot check');
+  }
+
+  @override
+  Future<ToolInstall> install(SmfEnvironment environment) async => cancels
+      ? throw const SmfCancelledException()
+      : throw StateError('no npm');
+}
+
+final class _Probe extends PreflightCheck {
+  _Probe(this._probe);
+
+  final Future<void> Function(SmfEnvironment environment) _probe;
+
+  @override
+  String get id => 'probe';
+
+  @override
+  String get description => 'Probe';
+
+  @override
+  Future<PreflightStatus> check(SmfEnvironment environment) async {
+    await _probe(environment);
+    return const PreflightPassed();
+  }
+}

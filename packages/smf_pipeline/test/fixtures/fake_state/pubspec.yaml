@@ -1,0 +1,15 @@
+name: fake_state
+description: Fake state managers for the tests of the SMF pipeline. Not a module to use.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  smf_contracts: ^0.2.0
+
+dev_dependencies:
+  very_good_analysis: ^10.3.0

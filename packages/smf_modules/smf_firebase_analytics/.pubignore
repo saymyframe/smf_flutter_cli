@@ -1,3 +1,5 @@
 # Exclude Mason bricks from the published package
 bricks/
 
+# Exclude the tests that continuous integration runs in the apps
+app_tests/
