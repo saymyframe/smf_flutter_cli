@@ -1,0 +1,8 @@
+# A .pubignore replaces the .gitignore of its directory for pub, so it
+# repeats it.
+.dart_tool/
+.packages
+build/
+
+# Exclude the checks that continuous integration adds to the apps
+app_tests/

@@ -2,8 +2,14 @@
 // generates as the entry of the app, in place of lib/main.dart, and starts
 // on an Android emulator and on an iOS simulator: the app starts. It runs
 // main() of the app, with what its modules put into bootstrap(), waits for
-// the first screen to settle and looks at the widgets on it: the root
-// widget of the app shows its first screen without an error.
+// the first screen to settle and looks at the widgets on it: the app shows
+// its first screen without an error.
+//
+// It knows no module, only what every app has: main() in lib/main.dart,
+// which the app entry role puts there (AppEntryRole.mainFile), whichever
+// module provides it, and a WidgetsApp at the root, which MaterialApp and
+// CupertinoApp build. So the CLI keeps it rather than the module of the
+// app entry, and it applies to every app.
 //
 // Nothing connects to the app to run the check, unlike a test of
 // `flutter test`, which sometimes never reaches the app on the devices of
@@ -17,7 +23,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:{{app_name}}/app.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
 /// How long main() of the app may take.
@@ -100,18 +105,16 @@ Future<String?> _settle(WidgetsBinding binding) async {
   return null;
 }
 
-/// The problems of the widgets under [root]: the root widget of the app
-/// and its [MaterialApp] are there once each, and no [ErrorWidget] is.
+/// The problems of the widgets under [root]: the app has a [WidgetsApp],
+/// which MaterialApp and CupertinoApp build, and no [ErrorWidget] is on
+/// the screen.
 List<String> _problemsOnScreen(Element? root) {
-  var apps = 0;
-  var materialApps = 0;
+  var widgetsApps = 0;
   final errors = <String>[];
   void visit(Element element) {
     switch (element.widget) {
-      case App():
-        apps++;
-      case MaterialApp():
-        materialApps++;
+      case WidgetsApp():
+        widgetsApps++;
       case ErrorWidget(:final message):
         errors.add(_firstLine(message));
     }
@@ -120,9 +123,7 @@ List<String> _problemsOnScreen(Element? root) {
 
   if (root != null) visit(root);
   return [
-    if (apps != 1) 'the screen has $apps App widgets rather than one',
-    if (materialApps != 1)
-      'the screen has $materialApps MaterialApp widgets rather than one',
+    if (widgetsApps == 0) 'the screen has no WidgetsApp',
     for (final error in errors) 'the screen shows an ErrorWidget: $error',
   ];
 }

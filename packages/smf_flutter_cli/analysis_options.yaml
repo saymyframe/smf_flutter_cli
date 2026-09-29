@@ -18,6 +18,11 @@ linter:
     # Dependencies are logically grouped (external packages, then SMF packages)
     sort_pub_dependencies: false
 
+analyzer:
+  exclude:
+    # Checks that CI adds to the apps, with placeholders for the app.
+    - app_tests/**
+
 # For more information about the core and recommended set of lints, see
 # https://dart.dev/go/core-lints
 

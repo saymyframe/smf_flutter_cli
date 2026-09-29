@@ -4,9 +4,9 @@
 # with the UDID $2 with $1 ios, in at most $3 seconds, the build of the app
 # included.
 #
-# The app has the start check of smf_flutter_core,
-# integration_test/start_check.dart, which the matrix tool of the CLI adds
-# with --add-app-tests. The script builds a debug app with the check as its
+# The app has the start check that the CLI keeps in app_tests/start,
+# integration_test/start_check.dart, which its matrix tool adds with
+# --add-app-tests. The script builds a debug app with the check as its
 # entry, installs it anew and launches it with adb or simctl, and waits for
 # the line that the check writes to the file smf_start_check in the
 # temporary directory of the app: `passed`, or `failed: ` and the problems.
