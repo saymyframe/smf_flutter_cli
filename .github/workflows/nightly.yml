@@ -16,6 +16,8 @@ jobs:
       PUB_ENVIRONMENT: ci
     outputs:
       matrix: ${{ steps.versions.outputs.matrix }}
+      # The latest release, the last of the matrix.
+      latest: ${{ steps.versions.outputs.latest }}
 
     steps:
       - uses: actions/checkout@v7
@@ -38,6 +40,7 @@ jobs:
           matrix="$(dart run packages/smf_flutter_cli/tool/flutter_versions.dart)"
           jq . <<< "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "latest=$(jq -er '.include[-1].flutter' <<< "$matrix")" >> "$GITHUB_OUTPUT"
 
   apps:
     name: Flutter ${{ matrix.flutter }}
@@ -56,4 +59,10 @@ jobs:
       # A cache for each version and row would crowd the caches of the pull
       # requests out of the 10 GB of the repository.
       pub_cache: false
+      # Only the job with the latest Flutter saves the cache of Gradle; the
+      # others restore it.
+      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # The CLI on pub.dev does not change with a pull request, so only this
+      # workflow checks it.
+      published_cli: true
     secrets: inherit
