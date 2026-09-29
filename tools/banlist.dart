@@ -127,6 +127,10 @@ final List<_Ban> _bans = [
   const _Ban('{{#modules}}', '{{#modules}}'),
   _Ban('/noModules', RegExp('/noModules(?![A-Za-z0-9_])')),
   _Ban('main-tabs', RegExp('(?<![A-Za-z0-9_-])main-tabs(?![A-Za-z0-9_-])')),
+  // smf create adds a module that a role needs by itself only while the
+  // module is the only one that provides the role, and asks otherwise, so a
+  // paragraph that says so names that condition.
+  _Ban('"by itself" without "only"', RegExp(r'^(?!.*\bonly\b).*\bby itself\b')),
 ];
 
 const _lasting = [
