@@ -1,11 +1,15 @@
 // Checks that the tests that packages keep for the apps of the matrix in
 // `app_tests/` import from the app only files that every app they apply to
 // has, whichever modules provide its roles. An app test imports a file of
-// the app as `package:{{app_name}}/<path>`, and it runs in the apps that
-// have the modules it tests, whatever their other modules. A file that
-// only one provider of a role generates, such as `lib/app.dart` of the
-// brick of flutter_core, is missing from an app with another provider,
-// even when every app of the matrix has it today.
+// the app as `package:{{app_name}}/<path>`, or by a relative path from a
+// file that goes into the app: the files of a directory of app tests go
+// into the app at their paths in the directory, so `import 'app.dart';` in
+// its `lib/` and `import '../lib/app.dart';` in its `test/` both import
+// `lib/app.dart` of the app. It runs in the apps that have the modules it
+// tests, whatever their other modules. A file that only one provider of a
+// role generates, such as `lib/app.dart` of the brick of flutter_core, is
+// missing from an app with another provider, even when every app of the
+// matrix has it today.
 //
 // So an app test imports only:
 // - the files that the roles of smf_contracts guarantee to the apps that
@@ -34,6 +38,20 @@ import 'workspace.dart';
 /// How an app test imports a file of the app, before its path in `lib/`.
 const _app = 'package:{{app_name}}/';
 
+/// The path in the app of the file that [uri] names in the file at [file]
+/// of a directory of app tests, which goes into the app at the same path,
+/// if it is a file of `lib/` of the app: `lib/<path>` for
+/// `package:{{app_name}}/<path>`, and for a relative URI the path it
+/// resolves to from [file]; otherwise `null`.
+String? appFileOf(String file, String uri) {
+  if (uri.startsWith(_app)) return 'lib/${uri.substring(_app.length)}';
+  if (Uri.parse(uri).hasScheme) return null;
+  // The root of the app, whose name no relative URI can reach.
+  const root = '/app/';
+  final path = Uri.parse('file://$root$file').resolve(uri).path;
+  return path.startsWith('${root}lib/') ? path.substring(root.length) : null;
+}
+
 /// The problems of the imports of files of the app in the app tests of the
 /// [packages] of the repository at [root]: one line for each import of a
 /// file that no role guarantees, that the modules its package knows do not
@@ -52,7 +70,7 @@ List<String> problemsOf(
   for (final package in packages) {
     final appTests = Directory('$root/${package.path}/app_tests');
     if (!appTests.existsSync()) continue;
-    final known = _knownModules(package, byName);
+    final known = knownModules(package, byName);
     final generated = {
       for (final module in known) module.name: _brickFiles(root, module),
     };
@@ -74,54 +92,21 @@ List<String> problemsOf(
       for (final file in dartFilesIn('$root/$path')) {
         final text = File('$root/$path/$file').readAsStringSync();
         for (final uri in urisOf(text)) {
-          if (!uri.startsWith(_app)) continue;
-          final inApp = 'lib/${uri.substring(_app.length)}';
-          if (roleFiles.containsKey(inApp) ||
+          final inApp = appFileOf(file, uri);
+          if (inApp == null ||
+              roleFiles.containsKey(inApp) ||
               own.contains(inApp) ||
               patterns.any((pattern) => pattern.hasMatch(inApp))) {
             continue;
           }
           problems.add(
-            _problem('$path/$file', uri, package, generated, roleFiles),
+            _problem('$path/$file', uri, inApp, package, generated, roleFiles),
           );
         }
       }
     }
   }
   return problems;
-}
-
-/// The packages of the modules whose files the app tests of [package] may
-/// import, by the names of the [packages] of the workspace: if [package]
-/// declares modules, [package] itself, and otherwise the fixture modules
-/// among the packages it depends on; then the packages of modules among
-/// the dependencies of each, which its modules depend on.
-List<WorkspacePackage> _knownModules(
-  WorkspacePackage package,
-  Map<String, WorkspacePackage> packages,
-) {
-  final known = <WorkspacePackage>[];
-  void know(WorkspacePackage module) {
-    if (known.contains(module)) return;
-    known.add(module);
-    for (final name in module.dependencies) {
-      if (packages[name] case final other? when other.declaresModules) {
-        know(other);
-      }
-    }
-  }
-
-  if (package.declaresModules) {
-    know(package);
-  } else {
-    for (final name in package.dependencies) {
-      if (packages[name] case final other?
-          when other.declaresModules && !other.published) {
-        know(other);
-      }
-    }
-  }
-  return known;
 }
 
 /// The paths of the files in `lib/` of the bricks of [package] of the
@@ -159,13 +144,14 @@ RegExp brickFilePattern(String path) {
   return RegExp('$pattern');
 }
 
-/// The problem of the import of [uri] in the app test at [file] of
-/// [package], whose app tests may import the files that the modules of
-/// [generated] generate, by the names of their packages, and those of
-/// [roleFiles].
+/// The problem of the import of [uri], the file [inApp] of the app, in the
+/// app test at [file] of [package], whose app tests may import the files
+/// that the modules of [generated] generate, by the names of their
+/// packages, and those of [roleFiles].
 String _problem(
   String file,
   String uri,
+  String inApp,
   WorkspacePackage package,
   Map<String, List<String>> generated,
   Map<String, String> roleFiles,
@@ -186,8 +172,9 @@ String _problem(
     for (final paths in generated.values)
       for (final path in paths) path.substring('lib/'.length),
   ];
-  final problem =
-      StringBuffer('$file imports $uri, a file that no role guarantees');
+  final problem = StringBuffer('$file imports $uri');
+  if (!uri.startsWith(_app)) problem.write(', $inApp of the app');
+  problem.write(', a file that no role guarantees');
   if (modules.isNotEmpty) {
     problem.write(' and no module of ${_list(modules, 'or')} generates');
   }
@@ -260,6 +247,16 @@ void main() {
       'a/lib/a.dart': module,
       'a/bricks/a/__brick__/lib/core/a/a.dart': '',
       'a/app_tests/a/lib/own.dart': '',
+      // A file that goes into lib/ of the app, whose relative imports name
+      // the files of lib/ of the app.
+      'a/app_tests/a/lib/own_root.dart': '''
+import 'dart:io';
+import 'package:flutter/widgets.dart';
+import 'own.dart';
+import 'core/a/a.dart';
+import 'main.dart' as app;
+import 'app.dart';
+''',
       'a/app_tests/a/test/a_test.dart': '''
 import 'package:{{app_name}}/main.dart' as app;
 import 'package:{{app_name}}/core/a/a.dart';
@@ -267,6 +264,9 @@ import 'package:{{app_name}}/core/b/b.dart';
 import 'package:{{app_name}}/features/home/screen.dart';
 import 'package:{{app_name}}/own.dart';
 import 'package:{{app_name}}/app.dart';
+import '../lib/own.dart';
+import '../lib/app.dart';
+import '../../../outside.dart';
 import 'helper.dart'
     if (dart.library.io) 'package:{{app_name}}/core/c/c.dart';
 // import 'package:{{app_name}}/in_a_comment.dart';
@@ -321,8 +321,12 @@ import 'package:{{app_name}}/app.dart';
         'that the bricks of a and b generate: core/a/a.dart, core/b/b.dart and '
         'features/{{name}}/screen.dart, and those that their directory puts '
         'into lib/.';
+    const ownRoot = 'a/app_tests/a/lib/own_root.dart imports app.dart, '
+        'lib/app.dart of the app, $ofA';
     const app = 'a/app_tests/a/test/a_test.dart imports '
         'package:{{app_name}}/app.dart, $ofA';
+    const relative = 'a/app_tests/a/test/a_test.dart imports '
+        '../lib/app.dart, lib/app.dart of the app, $ofA';
     const c = 'a/app_tests/a/test/a_test.dart imports '
         'package:{{app_name}}/core/c/c.dart, $ofA';
     const registry = 'registry/app_tests/r/test/r_test.dart imports '
@@ -334,8 +338,31 @@ import 'package:{{app_name}}/app.dart';
 
     expect(
       problemsOf(root, packages, {'lib/main.dart': 'app entry role'}),
-      [app, c, registry],
+      [ownRoot, app, relative, c, registry],
     );
+  });
+
+  test(
+      'finds the file of lib/ of the app that an import names, also by a '
+      'relative path from a file of app tests, which goes into the app at '
+      'its path in their directory', () {
+    expect(
+      appFileOf('test/a_test.dart', 'package:{{app_name}}/a.dart'),
+      'lib/a.dart',
+    );
+    expect(appFileOf('lib/own.dart', 'app.dart'), 'lib/app.dart');
+    expect(appFileOf('lib/src/own.dart', '../app.dart'), 'lib/app.dart');
+    expect(appFileOf('test/a_test.dart', '../lib/app.dart'), 'lib/app.dart');
+    // Files of the app outside lib/, and the files of other packages.
+    for (final (file, uri) in [
+      ('test/a_test.dart', 'helper.dart'),
+      ('lib/own.dart', '../test/helper.dart'),
+      ('test/a_test.dart', '../../../lib/app.dart'),
+      ('lib/own.dart', 'package:flutter/widgets.dart'),
+      ('lib/own.dart', 'dart:io'),
+    ]) {
+      expect(appFileOf(file, uri), isNull, reason: '$uri in $file');
+    }
   });
 
   test('maps the paths of the files of bricks to the paths in the app', () {
