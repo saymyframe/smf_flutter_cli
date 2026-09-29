@@ -30,7 +30,7 @@ This project and everyone participating in it is governed by our Code of Conduct
 5. Ensure all checks pass (`melos run check`)
 6. Commit using [Conventional Commits](https://www.conventionalcommits.org/) (`git commit -m 'feat(go_router): add amazing feature'`)
 7. Push to the branch (`git push origin feat/amazing-feature`)
-8. Open a Pull Request
+8. Open a Pull Request with a Conventional Commit as its title. PRs are squash-merged and the commit on main takes the title, so CI checks it. Mark a breaking change with `!` in the title (`feat(contracts)!: ...`).
 
 ## Development setup
 

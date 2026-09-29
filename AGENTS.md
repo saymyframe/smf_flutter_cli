@@ -106,6 +106,7 @@ Modules are chosen with `-m`, and every option of `create` comes from the comman
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/) with the package's short name as scope: `fix(go_router): ...`, `feat(contracts): ...`, `test(cli): ...`, `chore(ci): ...`. `melos version` derives version bumps and CHANGELOGs from them.
 - Name branches `fix/<topic>`, `feat/<topic>`, `chore/<topic>`, `docs/<topic>`, `test/<topic>`. PRs are squash-merged.
+- The squash commit on main takes the title of the PR as its only line, so the title must be a Conventional Commit too, and CI checks it (`.github/workflows/pr-title.yml`). A breaking change needs `!` in the title, such as `feat(contracts)!: ...`: a `BREAKING CHANGE:` footer in a commit of the branch does not reach main.
 - Once a branch is pushed, add new commits on top. Don't force-push or rewrite pushed history unless a maintainer asks.
 - Don't bump package versions or edit CHANGELOGs by hand. `melos version` does both, and its preCommit hook syncs `packages/smf_flutter_cli/lib/version.dart`.
 - Keep PRs focused: one concern per PR, one logical change per commit.
