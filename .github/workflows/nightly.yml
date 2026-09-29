@@ -56,4 +56,7 @@ jobs:
       # A cache for each version and row would crowd the caches of the pull
       # requests out of the 10 GB of the repository.
       pub_cache: false
+      # The CLI on pub.dev does not change with a pull request, so only this
+      # workflow checks it.
+      published_cli: true
     secrets: inherit
