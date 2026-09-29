@@ -67,7 +67,9 @@ cd <app>
 
 The last argument is the time for the build and the start, in seconds. The script finds the Android SDK through `ANDROID_HOME`, or where Android Studio installs it. `flutter run -d <device> -t integration_test/start_check.dart` runs the check too, and prints `SMF_START_CHECK: passed`, or `SMF_START_CHECK: failed: ` and the problems. An app with Firebase starts only once `flutterfire configure` configured it, as its README says.
 
-The job `CI` sums up the jobs of `.github/workflows/build.yml`: it fails when any of them failed or was cancelled. The ruleset of main requires the checks `CI` and `PR title` before a pull request can be merged. A new job in `build.yml` goes into the `needs` of `CI`, and a test in `tools/` fails when it does not.
+The jobs with Flutter take the better part of an hour, so only pushes to main and pull requests into main run them. A pull request into another branch, such as one that collects the pull requests of a larger change, gets the job of the checks and the check of its title. The jobs with Flutter run once that branch goes into main through a pull request of its own. To run every job on a branch before that, use Run workflow on the Build workflow in the Actions tab.
+
+The job `CI` sums up the jobs of `.github/workflows/build.yml`: it fails when any of them failed or was cancelled, and when one was skipped in a run that runs every job. The ruleset of main requires the checks `CI` and `PR title` before a pull request can be merged. A new job in `build.yml` goes into the `needs` of `CI`, and a test in `tools/` fails when it does not.
 
 The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
 
