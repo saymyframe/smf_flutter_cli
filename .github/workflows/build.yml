@@ -5,6 +5,9 @@ on:
       - main
   pull_request:
     types: [ opened, synchronize, reopened ]
+  # Every job, on any branch, such as that of a pull request into a branch
+  # other than main that changes the jobs with Flutter.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -89,9 +92,14 @@ jobs:
         if: ${{ !cancelled() && steps.test.outcome == 'success' }}
         run: melos run coverage:check
 
-  # The jobs with Flutter, with the pinned one.
+  # The jobs with Flutter, with the pinned one. They take the better part of
+  # an hour, so a pull request into a branch other than main, such as one
+  # that collects the pull requests of a larger change, gets only the checks
+  # above, and the pull request of that branch into main runs them. Pushes
+  # to main and runs by hand run them too.
   apps:
     name: Pinned Flutter
+    if: &every_job ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
     uses: ./.github/workflows/apps.yml
     with:
       flutter_version: "3.44.2"
@@ -108,9 +116,10 @@ jobs:
 
   # The PowerShell script that installs the Firebase CLI, run for real: it
   # takes minutes, so it runs next to the job on Windows of apps.yml rather
-  # than in it.
+  # than in it, and only when that job runs.
   windows-install:
     name: Firebase CLI install (Windows)
+    if: *every_job
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -134,9 +143,11 @@ jobs:
   # One check for the ruleset of main to require, whose name stays the same
   # when jobs come and go. It needs every other job of this workflow, which
   # tools/build_workflow_test.dart checks, and fails when one of them failed
-  # or was cancelled; a skipped job counts as passed. It runs after a failed
-  # job too, but not in a run that was cancelled, as when a newer commit of
-  # the branch replaces it, so that the older commit gets no failed check.
+  # or was cancelled. A skipped job counts as passed only in a pull request
+  # into a branch other than main, which skips the jobs with Flutter: every
+  # other run runs every job. It runs after a failed job too, but not in a
+  # run that was cancelled, as when a newer commit of the branch replaces
+  # it, so that the older commit gets no failed check.
   ci:
     name: CI
     needs:
@@ -154,10 +165,19 @@ jobs:
           # Each job by its id, with its result: success, failure, cancelled
           # or skipped.
           NEEDS: ${{ toJSON(needs) }}
+          # Whether this run runs every job. Written out rather than taken
+          # from the anchor of the jobs with Flutter, so that a mistake in
+          # their condition that skips them for main fails CI.
+          EVERY_JOB: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
           failed="$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")"
           if [ -n "$failed" ]; then
             echo "::error::These jobs failed or were cancelled: ${failed//$'\n'/, }."
+            exit 1
+          fi
+          skipped="$(jq -r 'to_entries[] | select(.value.result == "skipped") | .key' <<< "$NEEDS")"
+          if [ "$EVERY_JOB" = true ] && [ -n "$skipped" ]; then
+            echo "::error::These jobs were skipped, though pushes to main, pull requests into it and runs by hand run every job: ${skipped//$'\n'/, }."
             exit 1
           fi
