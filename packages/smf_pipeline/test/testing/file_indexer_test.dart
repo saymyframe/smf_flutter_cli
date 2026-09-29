@@ -319,7 +319,11 @@ class A {}
   });
 
   group('runs the structural rules of the roles on parsed code', () {
-    List<SmfIssue> appEntryIssues(Map<String, String> files) =>
+    List<SmfIssue> appEntryIssues(
+      Map<String, String> files, {
+      Map<String, ContributionOrigin> owners = const {},
+      List<ModuleDescriptor> modules = const [],
+    }) =>
         appEntryRole.checkStructure(
           StructuralRuleRequest(
             hook: const RoleHookRequest(
@@ -331,6 +335,8 @@ class A {}
               for (final MapEntry(key: path, value: text) in files.entries)
                 path: DartFileIndexer.index(path, text),
             },
+            owners: owners,
+            modules: modules,
           ),
         );
 
@@ -381,6 +387,44 @@ Future<void> bootstrap() async {}
           contains('in this order'),
         ],
       );
+    });
+
+    test('app entry: the root is a MaterialApp, with or without const', () {
+      const provider = ModuleOrigin(ModuleId('scaffold'));
+      List<SmfIssue> issuesOf(String root) => appEntryIssues(
+            {
+              'lib/app.dart': '''
+import 'package:flutter/material.dart';
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => $root(title: 'My App');
+}
+''',
+            },
+            owners: const {'lib/app.dart': provider},
+            modules: [scaffold().descriptor],
+          );
+
+      for (final root in [
+        'MaterialApp',
+        'const MaterialApp',
+        'MaterialApp.router',
+        'const MaterialApp.router',
+      ]) {
+        expect(issuesOf(root), isEmpty, reason: root);
+      }
+      for (final root in ['CupertinoApp', 'CupertinoApp.router']) {
+        final issues = issuesOf(root);
+        expect(
+          issues.map((issue) => issue.message),
+          [contains('must be a MaterialApp')],
+          reason: root,
+        );
+        expect(issues.single.origin, provider, reason: root);
+      }
     });
 
     test('app entry: the required symbols are checked', () {
