@@ -6,8 +6,8 @@
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
-import 'package:smf_flutter_cli/src/matrix_app_tests.dart';
 import 'package:test/test.dart';
 
 void main() {

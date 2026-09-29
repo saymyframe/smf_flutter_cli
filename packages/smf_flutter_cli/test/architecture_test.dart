@@ -29,11 +29,12 @@ bool _ofModule(String uri) =>
         .any((package) => uri.startsWith('package:$package/'));
 
 /// The library of the tests that the matrix of CI adds to the apps of the
-/// modules of `smf create` (`smfAppTests`), which only `tool/matrix.dart`
-/// and the tests of the package import. It names the modules whose app
-/// tests it registers and the roles whose contract those tests check, so
-/// no library of the binary, or of the matrix, imports it.
-const _appTests = 'lib/src/matrix_app_tests.dart';
+/// modules of `smf create` (`smfAppTests`), which only `tool/matrix.dart`,
+/// the tests of the package and the app of several providers of the
+/// fixture registry import. It names the modules whose app tests it
+/// registers and the roles whose contract those tests check, so no library
+/// of the binary, or of the matrix, imports it.
+const _appTests = 'lib/matrix_app_tests.dart';
 
 /// The path from the package of the library of the package that [uri]
 /// names in the library at [path], or `null` if it names another.

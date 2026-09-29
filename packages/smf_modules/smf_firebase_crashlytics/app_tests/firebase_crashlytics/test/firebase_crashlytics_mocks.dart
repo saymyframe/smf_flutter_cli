@@ -1,8 +1,10 @@
 // The platform side of Firebase Crashlytics for the tests that continuous
 // integration runs in the apps with Firebase Crashlytics: it records what
-// reaches it, through the mocks for tests of its package. The mocks of
-// Firebase Core come with the tests of firebase_core, which every app with
-// Crashlytics has.
+// reaches it, through the mocks for tests of its package. The matrix sets
+// it up before the tests of every module of such an app
+// (MatrixAppTest.mocks), so that any of them may run the start-up of the
+// app and report errors to Crashlytics. The mocks of Firebase Core come
+// with the tests of firebase_core, which every app with Crashlytics has.
 import 'package:firebase_crashlytics_platform_interface/test.dart';
 
 import 'firebase_core_mocks.dart';
@@ -63,19 +65,16 @@ final class MockCrashlytics implements TestFirebaseCrashlyticsHostApi {
   Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// Answers the platform side of Firebase Core, with the constants that
-/// Crashlytics reads when it starts, and that of Firebase Crashlytics,
-/// which records what reaches it in the [MockCrashlytics] returned.
+/// Answers the platform side of Firebase Crashlytics, which records what
+/// reaches it in the [MockCrashlytics] returned, and adds the constants
+/// that Crashlytics reads when it starts to those that the mocks of
+/// Firebase Core give an app that initializes Firebase.
 ///
 /// The binding of the tests must be initialized first.
 MockCrashlytics mockFirebaseCrashlytics() {
-  mockFirebaseCore(
-    pluginConstants: {
-      'plugins.flutter.io/firebase_crashlytics': {
-        'isCrashlyticsCollectionEnabled': true,
-      },
-    },
-  );
+  firebasePluginConstants['plugins.flutter.io/firebase_crashlytics'] = {
+    'isCrashlyticsCollectionEnabled': true,
+  };
   final crashlytics = MockCrashlytics();
   TestFirebaseCrashlyticsHostApi.setUp(crashlytics);
   return crashlytics;

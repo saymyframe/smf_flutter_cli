@@ -17,6 +17,11 @@ dependencies:
   fake_state: any
   smf_bottom_tabs: ^0.3.0
   smf_contracts: ^0.3.0
+  # The providers of the roles that an app can have several providers of,
+  # in the registry of several providers.
+  smf_firebase_analytics: ^0.3.0
+  smf_firebase_core: ^0.3.0
+  smf_firebase_crashlytics: ^0.3.0
   # The matrix of CI, for the tests of the apps of the fixtures.
   smf_flutter_cli: ^0.3.0
   smf_flutter_core: ^0.3.0

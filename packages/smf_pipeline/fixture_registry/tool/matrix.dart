@@ -10,10 +10,11 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// Generates the apps of the matrix of the fixture modules in the directory
 /// given as the first argument, analyzes each with Flutter, so that every
 /// feature of the module model compiles, and runs the tests of the apps in
-/// `app_tests`, those of `fixtureAppTests` in `lib/matrix_app_tests.dart`;
-/// see `runMatrix`. Any further argument names an app of the matrix, such
-/// as `fake_codegen`, and only the apps named are checked. With
-/// `--every-module` before the directory, it checks only the apps with
+/// `app_tests`, those of `fixtureAppTests` in `lib/matrix_app_tests.dart`,
+/// with the mocks of their platform side that the fixture modules keep in
+/// theirs; see `runMatrix`. Any further argument names an app of the
+/// matrix, such as `fake_codegen`, and only the apps named are checked.
+/// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
 /// that take one; see `everyModuleAppsOf`. Of those, a run takes a pairwise
 /// covering of the combinations, or those of `--combinations 3-wise` or
@@ -51,6 +52,7 @@ Future<void> main(List<String> given) async {
   if (arguments case ['--app-tests', '--json']) {
     final report = await appTestsReport(
       (await fixtureAppTests()).tests,
+      modules: fixtureModules(),
       packages: _packagesOf(fixtureModules()),
       apps: () async => (await matrixOf(fixtureModules())).apps,
     );

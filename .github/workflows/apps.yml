@@ -259,6 +259,31 @@ jobs:
           dart run "$tool" --every-module --combinations "$COMBINATIONS" --shard "$SHARD" \
             "$RUNNER_TEMP/SMF apps застосунки é"
 
+  # The tests that the modules of the CLI keep for the apps they are in, in
+  # the one app with every module of the registry of several providers
+  # (severalProvidersModules of the fixture registry): the modules of the
+  # CLI that provide a role an app can have several providers of, next to
+  # fixture providers of the same roles, whose start-up and services go
+  # through platform channels that no test of the CLI knows, and a fixture
+  # whose start-up waits for a timer. The tests of a module must pass
+  # whatever else an app with the module has. The tool checks that one app
+  # only, so the job takes neither a shard nor an app of the plan.
+  several-providers:
+    name: Generated apps (several providers)
+    runs-on: ubuntu-latest
+    # About 5 minutes for its one app.
+    timeout-minutes: 15
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *pub_get
+
+      - name: Generate, analyze and test the app of several providers of a role
+        run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
+
   # An app with every module of the plan, of a pairwise covering of them,
   # built for Android with the versions of Gradle, the Android Gradle Plugin
   # and Kotlin that the app entry sets, and the Android side of the plugins

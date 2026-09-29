@@ -4,12 +4,15 @@
 // handlers of the crash reporting role for the errors that nothing
 // catches, and they report those errors to Crashlytics as fatal.
 //
-// The handlers report to every crash reporter of the app, and the platform
-// side of another reporter is known only to the tests of its own module.
-// So the test leaves out the errors of the reports that nothing awaits,
-// and checks only what reaches Crashlytics: what else the app presents or
-// prints is not up to Crashlytics. firebase_crashlytics_test.dart checks
-// that the reporter of Crashlytics neither presents nor prints an error.
+// The handlers report to every crash reporter of the app, and what another
+// reporter does is known only to the tests of its own module. So the test
+// leaves out the errors of the reports that nothing awaits, and checks
+// only what reaches Crashlytics: what else the app presents or prints is
+// not up to Crashlytics. firebase_crashlytics_test.dart checks that the
+// reporter of Crashlytics neither presents nor prints an error. The matrix
+// sets up the mocks of the platform side of every module of the app before
+// the tests, so the start-up runs whatever other modules the app has; the
+// test takes its own mocks of Crashlytics, which record what reaches it.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

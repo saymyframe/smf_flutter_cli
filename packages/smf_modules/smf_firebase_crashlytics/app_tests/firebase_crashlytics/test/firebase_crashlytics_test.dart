@@ -5,14 +5,16 @@
 // and neither presents nor prints what it reports, which the handlers of
 // the crash reporting role leave to Flutter and to the engine.
 //
-// The app may have other crash reporters, whose platform side only the
-// tests of their own modules know, so the test uses the reporter of the
-// module rather than createCrashReporter(), which reports to all of them.
-// It initializes Firebase as the start-up of the app does, and runs none
-// of the rest of the start-up; firebase_crashlytics_uncaught_errors_test.dart
-// checks the handlers of the errors that the start-up installs. The
-// options of Firebase come with the tests of firebase_core, which every
-// app with Crashlytics has.
+// The app may have other crash reporters, which only the tests of their
+// own modules know, so the test uses the reporter of the module rather
+// than createCrashReporter(), which reports to all of them. It initializes
+// Firebase as the start-up of the app does, and runs none of the rest of
+// the start-up; firebase_crashlytics_uncaught_errors_test.dart checks the
+// handlers of the errors that the start-up installs. The options of
+// Firebase come with the tests of firebase_core, which every app with
+// Crashlytics has, and the matrix sets up the mocks of the platform side
+// of every module of the app before the tests; the test takes its own
+// mocks of Crashlytics, which record what reaches it.
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';

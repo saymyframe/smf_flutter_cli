@@ -1,10 +1,14 @@
 /// The tests that the matrix of CI adds to the apps of the fixture modules,
 /// which this package keeps in its `app_tests`, and the roles whose
 /// contract they check with every provider; `tool/matrix.dart` runs them.
+/// And those of the app of several providers, which
+/// `tool/several_providers_matrix.dart` runs.
 library;
 
+import 'package:fake_infra/fake_infra.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_app_tests.dart';
 
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
@@ -18,6 +22,10 @@ Future<MatrixAppTests> fixtureAppTests() async {
   final appTests = await appTestsDirectoryOf('fixture_registry');
   return MatrixAppTests(
     [
+      // The platform side of the fixture providers of crash reporting and
+      // analytics, which their start-up and services reach, for the tests
+      // of every module of the apps with them.
+      ...await _fixtureMocks(),
       // The listeners of the screen, the navigator observers and the back
       // button of the system, whichever module provides the router: the
       // test starts the app with main() and navigates through the
@@ -94,3 +102,37 @@ bool _hearsScreens(MatrixApp app) =>
     app.hook!.presentRoles.contains(routerRole) &&
     app.modules.contains(const ModuleId('fake_feature')) &&
     app.modules.contains(const ModuleId('fake_analytics'));
+
+/// The tests of the app with every module of the registry of several
+/// providers (`severalProvidersModules`): those that the modules of the CLI
+/// keep for the apps they are in (`smfAppTests`), which must pass next to
+/// the fixture providers of their roles and whatever else the start-up of
+/// the app does, with the mocks of the platform side of those fixtures.
+Future<MatrixAppTests> severalProvidersAppTests() async => MatrixAppTests([
+      ...(await smfAppTests()).tests,
+      ...await _fixtureMocks(),
+    ]);
+
+/// The mocks of the platform side of the fixture providers of crash
+/// reporting and analytics, which their start-up and services reach, in the
+/// directory `app_tests` of their package: the matrix sets them up for the
+/// tests of every module of the apps with them (`MatrixAppTest.mocks`).
+Future<List<MatrixAppTest>> _fixtureMocks() async {
+  final appTests = await appTestsDirectoryOf('fake_infra');
+  return [
+    MatrixAppTest(
+      '$appTests/fake_crash',
+      appliesTo: (app) => app.modules.contains(FakeCrashModule.id),
+      mocks:
+          const MatrixMocks('test/fake_crash_mocks.dart', 'mockFixtureCrash'),
+    ),
+    MatrixAppTest(
+      '$appTests/fake_analytics',
+      appliesTo: (app) => app.modules.contains(FakeAnalyticsModule.id),
+      mocks: const MatrixMocks(
+        'test/fake_analytics_mocks.dart',
+        'mockFixtureAnalytics',
+      ),
+    ),
+  ];
+}

@@ -262,6 +262,7 @@ class App extends StatelessWidget {
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
+import 'package:fixture_app/core/analytics/analytics_service.dart';
 import 'package:fixture_app/core/badge/badge_factory.dart';
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
 import 'package:fixture_app/core/di/dependencies.dart';
@@ -278,6 +279,7 @@ Future<void> fixtureBackgroundHandler() async {}
 Future<void> bootstrap() async {
   debugPrint('early');
   debugPrint('platform');
+  await initAnalytics();
   await initCrashReporting();
   installCrashReporting();
   await initEvents();
@@ -323,9 +325,15 @@ final AnalyticsService _analyticsService = _AnalyticsServices(
   _analyticsServices,
 );
 
-final List<AnalyticsService> _analyticsServices = [
-  impl0.createFixtureAnalytics(),
-];
+final List<AnalyticsService> _analyticsServices = [];
+
+/// Creates the implementations of AnalyticsService that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initAnalytics() async {
+  _analyticsServices.addAll(
+    await Future.wait<AnalyticsService>([impl0.initFixtureAnalytics()]),
+  );
+}
 
 final class _AnalyticsServices implements AnalyticsService {
   const _AnalyticsServices(this._services);
@@ -723,12 +731,22 @@ Future<void> initEvents() async {
   _communicationService = await impl0.openFixtureEvents();
 }
 === lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../analytics/analytics_service.dart';
 
-/// Creates the analytics service of the fixture, which logs nothing.
-AnalyticsService createFixtureAnalytics() => const FixtureAnalytics();
+/// The platform side of the analytics of the fixture, which only the mocks
+/// of its own tests answer, as only the tests of a plugin know its
+/// platform side.
+const fixtureAnalyticsChannel = MethodChannel('smf.fixture/analytics');
+
+/// Creates the analytics service of the fixture once its platform side has
+/// started.
+Future<AnalyticsService> initFixtureAnalytics() async {
+  await fixtureAnalyticsChannel.invokeMethod<void>('start');
+  return const FixtureAnalytics();
+}
 
 /// A navigator observer that the fixture adds to every navigator, which
 /// notes the routes that come on its navigator.
@@ -755,37 +773,41 @@ final List<FixtureObserver> fixtureObservers = [];
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
 
-/// Analytics that logs nothing.
+/// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
   /// Creates the service.
   const FixtureAnalytics();
 
   @override
-  Future<void> logEvent(String name, {Map<String, Object>? parameters}) async {}
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _record('logEvent', {'name': name, 'parameters': parameters});
 
   @override
-  Future<void> logSignIn({
-    String? method,
-    Map<String, Object>? parameters,
-  }) async {}
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _record('logSignIn', {'method': method, 'parameters': parameters});
 
   @override
   Future<void> logSignUp({
     required String method,
     Map<String, Object>? parameters,
-  }) async {}
+  }) => _record('logSignUp', {'method': method, 'parameters': parameters});
 
   @override
-  Future<void> setAnalyticsCollectionEnabled(bool enabled) async {}
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _record('setAnalyticsCollectionEnabled', {'enabled': enabled});
 
   @override
-  Future<void> setUserId(String? userId) async {}
+  Future<void> setUserId(String? userId) =>
+      _record('setUserId', {'userId': userId});
 
   @override
   Future<void> setUserProperty({
     required String name,
     required String? value,
-  }) async {}
+  }) => _record('setUserProperty', {'name': name, 'value': value});
+
+  Future<void> _record(String method, Map<String, Object?> arguments) =>
+      fixtureAnalyticsChannel.invokeMethod<void>(method, arguments);
 }
 === lib/core/fixture_codegen/fixture_model.dart (fake_codegen) ===
 import 'package:json_annotation/json_annotation.dart';
@@ -810,14 +832,23 @@ final class FixtureModel {
 }
 === lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../crash_reporting/crash_reporter.dart';
 
-/// Creates the crash reporter of the fixture once it is ready.
-Future<CrashReporter> initFixtureCrashReporter() async =>
-    const FixtureCrashReporter();
+/// The platform side of the crash reporting of the fixture, which only the
+/// mocks of its own tests answer, as only the tests of a plugin know its
+/// platform side.
+const fixtureCrashChannel = MethodChannel('smf.fixture/crash');
 
-/// Crash reporting that records nothing.
+/// Creates the crash reporter of the fixture once its platform side has
+/// started.
+Future<CrashReporter> initFixtureCrashReporter() async {
+  await fixtureCrashChannel.invokeMethod<void>('start');
+  return const FixtureCrashReporter();
+}
+
+/// Crash reporting that sends every report to its platform side.
 final class FixtureCrashReporter implements CrashReporter {
   /// Creates the reporter.
   const FixtureCrashReporter();
@@ -828,19 +859,28 @@ final class FixtureCrashReporter implements CrashReporter {
     StackTrace? stackTrace, {
     bool fatal = false,
     String? reason,
-  }) async {}
+  }) => fixtureCrashChannel.invokeMethod<void>('recordError', {
+    'error': '$error',
+    'fatal': fatal,
+    'reason': reason,
+  });
 
   @override
   Future<void> recordFlutterError(
     FlutterErrorDetails details, {
     bool fatal = false,
-  }) async {}
+  }) => fixtureCrashChannel.invokeMethod<void>('recordError', {
+    'error': details.exceptionAsString(),
+    'fatal': fatal,
+  });
 
   @override
-  Future<void> log(String message) async {}
+  Future<void> log(String message) =>
+      fixtureCrashChannel.invokeMethod<void>('log', message);
 
   @override
-  Future<void> setUserId(String? userId) async {}
+  Future<void> setUserId(String? userId) =>
+      fixtureCrashChannel.invokeMethod<void>('setUserId', userId);
 }
 === lib/core/fixture_events/fixture_events.dart (fake_events) ===
 import 'dart:async';
