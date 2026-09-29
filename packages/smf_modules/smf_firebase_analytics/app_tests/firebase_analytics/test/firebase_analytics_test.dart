@@ -4,27 +4,26 @@
 // which createFirebaseAnalyticsService() creates, records reaches Firebase
 // Analytics.
 //
-// The app may have other analytics services, whose platform side only the
-// tests of their own modules know, so the test uses the service of the
-// module rather than createAnalyticsService(), which forwards to all of
-// them. It initializes Firebase as the start-up of the app does, and runs
-// none of the rest of the start-up. The options and the mocks of Firebase
-// Core come with the tests of firebase_core, which every app with Firebase
-// Analytics has.
+// The app may have other analytics services, which only the tests of their
+// own modules know, so the test uses the service of the module rather than
+// createAnalyticsService(), which forwards to all of them. It initializes
+// Firebase as the start-up of the app does, and runs none of the rest of
+// the start-up. The options of Firebase come with the tests of
+// firebase_core, which every app with Firebase Analytics has, and the
+// matrix sets up the mocks of the platform side of every module of the app
+// before the tests, those of Firebase Analytics among them, which record
+// what reaches it (firebase_analytics_mocks.dart).
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/analytics/firebase_analytics_service.dart';
 import 'package:{{app_name}}/firebase_options.dart';
 
 import 'firebase_analytics_mocks.dart';
-import 'firebase_core_mocks.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
-    mockFirebaseCore();
-    mockFirebaseAnalytics();
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );

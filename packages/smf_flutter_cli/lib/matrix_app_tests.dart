@@ -1,3 +1,8 @@
+/// The tests that the matrix of CI adds to the apps of the modules of
+/// `smf create`, for `tool/matrix.dart` and for the app of several
+/// providers of the fixture registry. No library of the binary imports it.
+library;
+
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -9,9 +14,10 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// `app_tests`, and the roles whose contract they check with every
 /// provider; `tool/matrix.dart` runs them in CI.
 ///
-/// Only that tool and the tests of the CLI use them: they name the modules
-/// whose app tests they register and the roles whose contract those check,
-/// which the binary knows nothing of.
+/// Only that tool, the tests of the CLI and the app of several providers of
+/// the fixture registry, which runs them next to other providers of their
+/// roles, use them: they name the modules whose app tests they register and
+/// the roles whose contract those check, which the binary knows nothing of.
 Future<MatrixAppTests> smfAppTests() async {
   final cli = await appTestsDirectoryOf('smf_flutter_cli');
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
@@ -29,12 +35,16 @@ Future<MatrixAppTests> smfAppTests() async {
       // flutter test runs the tests that the modules put into each app.
       MatrixAppTest('$cli/start', appliesTo: (_) => true),
       // The start-up of the app initializes Firebase, with the options that
-      // `flutterfire configure` would write, and the mocks of Firebase Core
-      // for the tests of the other Firebase modules.
+      // `flutterfire configure` would write, and the mocks of Firebase Core,
+      // which the matrix sets up for the tests of every module of the app.
       MatrixAppTest(
         '$firebaseCore/firebase_core',
         appliesTo: _has(FirebaseCoreModule.id),
         devDependencies: const ['firebase_core_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/firebase_core_mocks.dart',
+          'mockFirebaseCore',
+        ),
       ),
       // The crash reporter of the module reaches Crashlytics, and the
       // errors that nothing catches reach it through the handlers that the
@@ -45,12 +55,20 @@ Future<MatrixAppTests> smfAppTests() async {
         '$crashlytics/firebase_crashlytics',
         appliesTo: _has(FirebaseCrashlyticsModule.id),
         devDependencies: const ['firebase_crashlytics_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/firebase_crashlytics_mocks.dart',
+          'mockFirebaseCrashlytics',
+        ),
       ),
       // The analytics service of the module reaches Firebase Analytics. The
       // test leaves out the other analytics services that the app may have.
       MatrixAppTest(
         '$analytics/firebase_analytics',
         appliesTo: _has(FirebaseAnalyticsModule.id),
+        mocks: const MatrixMocks(
+          'test/firebase_analytics_mocks.dart',
+          'mockFirebaseAnalytics',
+        ),
       ),
       // The first screen of an app with a router is logged once, under the
       // name of the screen that the app starts on (see _startScreenOf),

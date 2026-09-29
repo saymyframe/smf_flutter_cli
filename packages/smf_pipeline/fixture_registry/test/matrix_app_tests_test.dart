@@ -1,5 +1,7 @@
 // The tests that the matrix of CI adds to the apps of the fixture modules
-// (fixtureAppTests, which tool/matrix.dart runs). CI runs them only in its
+// (fixtureAppTests, which tool/matrix.dart runs), and to the app of
+// several providers (severalProvidersAppTests, which
+// tool/several_providers_matrix.dart runs). CI runs them only in its
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
@@ -20,11 +22,14 @@ void main() {
     apps = matrix;
   });
 
-  /// The app test whose files are in the directory [name], whose path
-  /// joins its names with `\` on Windows, but for the last.
-  MatrixAppTest named(String name) => appTests.tests.singleWhere(
-        (test) => test.directory.split(RegExp(r'[/\\]')).last == name,
-      );
+  /// The name of the directory of the files of [test], whose path joins its
+  /// names with `\` on Windows, but for the last.
+  String nameOf(MatrixAppTest test) =>
+      test.directory.split(RegExp(r'[/\\]')).last;
+
+  /// The app test whose files are in the directory [name].
+  MatrixAppTest named(String name) =>
+      appTests.tests.singleWhere((test) => nameOf(test) == name);
 
   /// The names of the apps that [test] applies to.
   List<String> appsOf(MatrixAppTest test) => [
@@ -63,5 +68,42 @@ void main() {
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the app of several providers gets the app tests of the modules of the '
+      'CLI and the mocks of the fixture providers, which all apply to it',
+      () async {
+    final severalProviders = await severalProvidersAppTests();
+    final (apps: matrix, :failed) = await matrixOf(severalProvidersModules());
+    expect(failed, isEmpty);
+    final everyModule = [
+      for (final app in matrix)
+        if (app.everyModuleWith != null) app,
+    ];
+    expect(everyModule, hasLength(1));
+
+    expect(
+      [for (final test in severalProviders.tests) nameOf(test)],
+      containsAll([
+        'firebase_core',
+        'firebase_crashlytics',
+        'firebase_analytics',
+        'screen_views',
+        'fake_crash',
+        'fake_analytics',
+      ]),
+    );
+    for (final test in severalProviders.tests) {
+      expect(
+        test.appliesTo(everyModule.single),
+        isTrue,
+        reason: test.directory,
+      );
+    }
+    expect(
+      severalProviders.roleProblems(severalProvidersModules(), matrix),
+      isEmpty,
+    );
   });
 }

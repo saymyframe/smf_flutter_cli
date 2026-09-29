@@ -5,8 +5,8 @@ import 'dart:mirrors';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
-import 'package:smf_flutter_cli/src/matrix_app_tests.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:yaml/yaml.dart';
 
@@ -15,8 +15,7 @@ import 'package:yaml/yaml.dart';
 /// runs the tests that the modules keep for the apps they are in; see
 /// `runMatrix`. The tests, and the roles whose contract they check with
 /// every provider, are those of `smfAppTests` in
-/// `lib/src/matrix_app_tests.dart`, which the tests of the package check
-/// too. Any further argument names an app of the matrix, such as
+/// `lib/matrix_app_tests.dart`, which the tests of the package check too. Any further argument names an app of the matrix, such as
 /// `flutter_core (flutter_core)`, and only the apps named are checked.
 ///
 /// With `--every-module` before the directory, it checks only the apps with
@@ -48,8 +47,12 @@ import 'package:yaml/yaml.dart';
 /// generated outside the matrix and the directories of some of its
 /// `MatrixAppTest`s, as `--app-tests` prints them or relative to the
 /// working directory, it adds those tests to the app instead, with their
-/// dev dependencies, and runs nothing else; see `addAppTestsTo`. So CI
-/// runs tests of the matrix in apps of its own, such as on a device.
+/// dev dependencies and the configuration that sets up their mocks, and
+/// runs nothing else; see `addAppTestsTo`. So CI runs tests of the matrix
+/// in apps of its own, such as on a device. Tests that run the start-up of
+/// the app with `flutter test` need the mocks of every module of the app,
+/// which the tests of each module declare, so those tests go into the app
+/// too.
 Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests']) {
     for (final test in (await smfAppTests()).tests) {
@@ -60,6 +63,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests', '--json']) {
     final report = await appTestsReport(
       (await smfAppTests()).tests,
+      modules: smfModules,
       packages: _packagesOf(smfModules),
       apps: () async => (await matrixOf(smfModules)).apps,
     );

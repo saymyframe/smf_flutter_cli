@@ -11,6 +11,10 @@
 ///   screens that can start it;
 /// - get_it registers the services of the fixtures too, so their
 ///   registrations compile with a real container.
+///
+/// The registry of several providers ([severalProvidersModules]) puts the
+/// modules of the CLI that provide a role an app can have several
+/// providers of next to fixture providers of the same roles.
 library;
 
 import 'package:fake_di/fake_di.dart';
@@ -21,6 +25,9 @@ import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -81,4 +88,28 @@ List<ModuleId> everyFixture({
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
+    ];
+
+/// The registry of several providers: the modules of the CLI that provide a
+/// role an app can have several providers of, Firebase Crashlytics and
+/// Firebase Analytics, with the module they depend on, next to the fixture
+/// providers of the same roles, whose start-up and services go through
+/// platform channels of their own; a fixture module whose start-up waits
+/// for a timer; and flutter_core and go_router, the app entry and a router,
+/// for the screens that Firebase Analytics logs.
+///
+/// Its app with every module is where the tests that the providers keep
+/// for the apps they are in run next to the other providers of their
+/// roles and whatever else the start-up of an app does: they must pass in
+/// every app with their module, whose other modules only their own tests
+/// know.
+List<SmfModule> severalProvidersModules() => const [
+      FlutterCoreModule(),
+      GoRouterModule(),
+      FirebaseCoreModule(),
+      FirebaseCrashlyticsModule(),
+      FirebaseAnalyticsModule(),
+      FakeCrashModule(),
+      FakeAnalyticsModule(),
+      FakeSlowStartModule(),
     ];

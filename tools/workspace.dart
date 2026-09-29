@@ -19,8 +19,10 @@ import 'workspace_members.dart';
 /// tool reports its MatrixAppTests with `--app-tests --json`.
 const matrixTools = {
   'packages/smf_flutter_cli/tool/matrix.dart':
-      'packages/smf_flutter_cli/lib/src/matrix_app_tests.dart',
+      'packages/smf_flutter_cli/lib/matrix_app_tests.dart',
   'packages/smf_pipeline/fixture_registry/tool/matrix.dart':
+      'packages/smf_pipeline/fixture_registry/lib/matrix_app_tests.dart',
+  'packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart':
       'packages/smf_pipeline/fixture_registry/lib/matrix_app_tests.dart',
 };
 
@@ -33,6 +35,7 @@ final class ListedAppTest {
     this.modules = const [],
     this.appliesWithout = const [],
     this.uses = const [],
+    this.roleFunctionUses,
   });
 
   /// Reads the report of a MatrixAppTest.
@@ -46,6 +49,10 @@ final class ListedAppTest {
           for (final use in json['uses']! as List<Object?>)
             UsedModule.fromJson(use! as Map<String, Object?>),
         ],
+        roleFunctionUses: switch (json['roleFunctionUses']) {
+          final List<Object?> uses => [...uses.cast<String>()],
+          _ => null,
+        },
       );
 
   /// The directory of its files, as the tool prints it.
@@ -62,6 +69,13 @@ final class ListedAppTest {
   /// The modules of the matrix whose ids the tool uses to select the apps
   /// of the test or to fill the values of its files.
   final List<UsedModule> uses;
+
+  /// The uses, in its files, of the functions of the roles of the modules
+  /// of the matrix that an app can have several providers of, such as
+  /// `test/a_test.dart: createCrashReporter() of
+  /// lib/core/crash_reporting/crash_reporter.dart`, or `null` if the tool
+  /// does not report them.
+  final List<String>? roleFunctionUses;
 }
 
 /// A module whose id a matrix tool uses for a MatrixAppTest: with another
