@@ -58,6 +58,10 @@ on:
         description: Whether the first job that builds an app for Android saves what Gradle downloaded to the cache of the repository, once a week, rather than only restoring it.
         type: boolean
         default: true
+      save_swiftpm_cache:
+        description: Whether the first job that builds an app for iOS saves what Swift Package Manager downloaded to the cache of the repository, once a week, rather than only restoring it.
+        type: boolean
+        default: true
       published_cli:
         description: Whether a job also checks the apps of smf_flutter_cli from pub.dev, which users install.
         type: boolean
@@ -766,6 +770,37 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_macos
       - *check_tools_macos
+
+      # Swift Package Manager downloads the packages of the plugins for iOS,
+      # such as the Firebase SDK, from their repositories, and xcodebuild
+      # keeps the clones in its cache of the repositories of packages,
+      # ~/Library/Caches/org.swift.swiftpm, from which it checks out the
+      # packages of each app. So that cache goes into one cache of the
+      # repository for every version of Flutter and every app, by the week,
+      # as the cache of Gradle does for Android: every job that builds for
+      # iOS restores the newest one, and this job saves it for the first app
+      # of the plan, in the runs of pushes and pull requests, and of the
+      # nightly run only with the latest Flutter. A new version of a package
+      # gets into it within a week.
+      - &swiftpm_week
+        name: Find the week of the cache of Swift packages
+        id: swiftpm_week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Swift packages
+        if: inputs.save_swiftpm_cache && strategy.job-index == 0
+        uses: actions/cache@v6
+        with: &swiftpm_cache
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-${{ steps.swiftpm_week.outputs.week }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-
+
+      - name: Restore the cache of Swift packages
+        if: ${{ !(inputs.save_swiftpm_cache && strategy.job-index == 0) }}
+        uses: actions/cache/restore@v6
+        with: *swiftpm_cache
+
       - *pub_get
 
       - name: Generate the app with every module
@@ -802,6 +837,11 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_macos
       - *check_tools_macos
+      - *swiftpm_week
+      - &restore_swiftpm
+        name: Restore the cache of Swift packages
+        uses: actions/cache/restore@v6
+        with: *swiftpm_cache
       - *pub_get
 
       - name: Generate the app without external services to start
@@ -869,6 +909,8 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_macos
       - *check_tools_macos
+      - *swiftpm_week
+      - *restore_swiftpm
       - *pub_get
 
       - name: Generate the app with every module to archive
@@ -909,6 +951,8 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_macos
       - *check_tools_macos
+      - *swiftpm_week
+      - *restore_swiftpm
       - *pub_get
 
       - name: Generate the app with every module to configure with Firebase
