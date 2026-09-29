@@ -43,6 +43,8 @@ CI pins Dart 3.12.2, and the output of the formatter depends on its version, so 
 
 The bundles in `lib/bundles/` are generated from the bricks, so change the brick, run `melos bootstrap` and commit both. When a change alters what an app renders, update the snapshots of the CLI or of the fixtures with `SMF_UPDATE_SNAPSHOTS=1 dart test test/snapshot_test.dart` in the package, and review their diff.
 
+CI also runs the tests with coverage, and fails when they do not cover a line or a branch of `lib/`. To check it locally, install the coverage tool with `dart pub global activate coverage`, then run `melos run test:coverage` and `melos run coverage:check`, which names each line and branch that no test reaches. Code that no test can run goes between `// coverage:ignore-start` and `// coverage:ignore-end`, with the reason in a comment.
+
 Besides these checks, CI generates apps with Flutter and runs `flutter analyze` on each, then `flutter test` with the tests that packages keep for the apps in `app_tests/`. To run it locally, with `flutter` on the `PATH`:
 
 ```bash
