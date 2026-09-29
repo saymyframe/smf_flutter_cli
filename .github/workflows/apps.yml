@@ -45,6 +45,10 @@ on:
         description: Whether the job of the real modules on Linux also checks the apps of smf_flutter_cli from pub.dev, which users install.
         type: boolean
         default: false
+      register_firebase_apps:
+        description: Whether flutterfire may register the apps with Firebase in the Firebase project of CI when it has none with their ids yet. Only build.yml lets it, so that runs at the same time, such as the jobs of the nightly run, cannot register an app each; tools/firebase_registration_test.dart checks this.
+        type: boolean
+        default: false
     secrets:
       FIREBASE_SERVICE_ACCOUNT:
         description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the app without Firebase.
@@ -284,12 +288,15 @@ jobs:
       # firebase_start_app for the app with the first provider of each role
       # and firebase_start_app_<providers> for the others, such as
       # firebase_start_app_riverpod, which stay when another role gets a
-      # second provider. The first run with an app registers it, the
-      # Android one on Linux and the iOS one on macOS, one job each: the run
-      # of the pull request that brings a new provider. Were they deleted,
-      # jobs that run at the same time, such as those of the nightly, could
-      # register one each, and the test of the configuration fails on a
-      # project with several.
+      # second provider. Jobs that run at the same time, such as those of
+      # the nightly run, could register an app each, and the test of the
+      # configuration fails on a project with several. So only the runs of
+      # build.yml, with the input register_firebase_apps, let flutterfire
+      # register an app, the Android one on Linux and the iOS one on macOS,
+      # one job each: the run of the pull request into main that brings a
+      # new provider, or of main after it. The test of any other run fails
+      # before flutterfire when the project has no app with the id, asking
+      # to run Build first.
       - name: Generate the apps with every module to configure with Firebase
         id: firebase_apps
         if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
@@ -314,7 +321,8 @@ jobs:
 
       # A test of smf_firebase_core runs the command of the README of each
       # app for Android, with the key of the service account in a file that
-      # only this step has.
+      # only this step has, and skips an app that does not depend on
+      # firebase_core, which starts without it.
       - name: Configure the apps with every module with Firebase for Android
         id: firebase_android
         if: ${{ !cancelled() && steps.firebase_apps.outcome == 'success' }}
@@ -324,6 +332,7 @@ jobs:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: android
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
@@ -392,24 +401,11 @@ jobs:
       # What users install: smf_flutter_cli from pub.dev, with the versions
       # of its dependencies that pub resolves there rather than the packages
       # of the workspace. As a user does, outside the checkout, it generates
-      # an app with every module for each state manager, with the full dart
-      # fix, in a directory with a space in its name. A failure of these
-      # steps affects the users of the published version, and its fix needs
-      # a release of the packages.
-      #
-      # Unlike the steps above, these name the modules by hand: the CLI on
-      # pub.dev has the modules of its release, which may differ from those
-      # of the workspace, and it has no tool that lists them. The matrix of
-      # the workspace checked every combination of their providers before
-      # the release, so what these steps check besides is what only an
-      # install from pub.dev has, the dependencies that pub resolves today
-      # and the full dart fix, with a selection of modules as a user makes
-      # it: every module, with each state manager, whose packages the other
-      # modules do not bring. A release that changes the modules of the CLI
-      # changes this selection too; one that adds a second provider of a
-      # role that every app has, such as the app entry, fails here until it
-      # names one. tools/workflow_apps_test.dart allows this step, and no
-      # other, to name modules.
+      # the apps with every module of that release, with the full dart fix,
+      # in a directory with a space in its name, and analyzes, tests and
+      # builds each for Android. A failure of these steps affects the users
+      # of the published version, and its fix needs a release of the
+      # packages.
       - name: Activate the CLI from pub.dev
         id: pub_dev_cli
         if: ${{ !cancelled() && matrix.registry == 'real' && inputs.published_cli }}
@@ -420,26 +416,49 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
           "$bin/smf" --version
 
+      # The CLI on pub.dev has the modules of its release, which may differ
+      # from those of the workspace, so the apps come from the matrix of
+      # that release: packages/smf_flutter_cli/tool/every_module_apps.dart,
+      # in a package of its own that depends on the version of
+      # smf_flutter_cli that is active, prints the arguments of smf create
+      # of each app with every module of the release, one for each
+      # combination of the providers of the roles that take one, as the
+      # matrix generates them but with the full dart fix. So a release with
+      # another provider of a role gets its apps here without a change of
+      # the workflow.
       - name: Generate the apps with every module with the CLI from pub.dev
         id: pub_dev_apps
         if: ${{ !cancelled() && steps.pub_dev_cli.outcome == 'success' }}
         working-directory: ${{ runner.temp }}
         run: |
-          for state in bloc riverpod; do
-            smf create "${state}_app" \
-              -m "go_router,home,bottom_tabs,$state,get_it,event_bus,firebase_crashlytics,firebase_analytics" \
-              -o "$RUNNER_TEMP/SMF apps from pub.dev" --no-input --skip-external-setup --strict
+          version="$(dart pub global list | awk '$1 == "smf_flutter_cli" { print $2 }')"
+          if [ -z "$version" ]; then
+            echo "::error::dart pub global list shows no smf_flutter_cli."
+            exit 1
+          fi
+          lister="$RUNNER_TEMP/every_module_apps"
+          mkdir -p "$lister/bin"
+          cp "$GITHUB_WORKSPACE/packages/smf_flutter_cli/tool/every_module_apps.dart" "$lister/bin/"
+          printf 'name: every_module_apps\npublish_to: none\nenvironment:\n  sdk: ^3.6.0\ndependencies:\n  smf_flutter_cli: %s\n' \
+            "$version" > "$lister/pubspec.yaml"
+          (cd "$lister" && dart pub get)
+          dart --packages="$lister/.dart_tool/package_config.json" "$lister/bin/every_module_apps.dart" \
+            "$RUNNER_TEMP/SMF apps from pub.dev" > "$lister/apps.json"
+          jq . "$lister/apps.json"
+          count="$(jq length "$lister/apps.json")"
+          for index in $(seq 0 $((count - 1))); do
+            mapfile -t arguments < <(jq -r ".[$index].arguments[]" "$lister/apps.json")
+            echo "=== ${arguments[1]}: $(jq -r ".[$index].name" "$lister/apps.json")"
+            smf "${arguments[@]}"
           done
 
       - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
         if: ${{ !cancelled() && steps.pub_dev_apps.outcome == 'success' }}
         run: |
-          for app in bloc_app riverpod_app; do
-            cd "$RUNNER_TEMP/SMF apps from pub.dev/$app"
-            flutter analyze
-            flutter test
-            flutter build apk --debug
-          done
+          apps="$RUNNER_TEMP/SMF apps from pub.dev"
+          .github/scripts/each_app.sh "$apps" flutter analyze
+          .github/scripts/each_app.sh "$apps" flutter test
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
 
       # The tests of the packages that failed, as annotations that the page
       # of the run lists at the top rather than as lines in the long log of
@@ -529,7 +548,9 @@ jobs:
             flutter build ios --simulator --no-codesign
 
       # With the build phase for Crashlytics that flutterfire configure adds,
-      # fixed by the command that the README of the app gives.
+      # fixed by the command that the README of the app gives. The test
+      # skips an app that does not depend on firebase_crashlytics, to which
+      # flutterfire adds no such phase.
       - name: Archive the apps with every module
         if: ${{ !cancelled() && steps.ios_apps.outcome == 'success' }}
         working-directory: packages/smf_modules/smf_firebase_core
@@ -590,7 +611,8 @@ jobs:
       # Apps of their own rather than the apps with every module above,
       # whose Xcode projects have the build phase for Crashlytics of the
       # test of the archive: flutterfire configures them in the Firebase
-      # project of CI, with the names and ids of the apps on Linux.
+      # project of CI, with the names and ids of the apps on Linux, and
+      # registers them only in the runs of build.yml, as on Linux.
       - name: Generate the apps with every module to configure with Firebase
         id: firebase_apps
         if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
@@ -618,7 +640,8 @@ jobs:
       # A test of smf_firebase_core runs the command of the README of each
       # app for iOS, with the key of the service account in a file that only
       # this step has, and fixes the build phase for Crashlytics with the
-      # command of the README, as SMF does after it configures an app.
+      # command of the README, as SMF does after it configures an app. It
+      # skips an app that does not depend on firebase_core, as on Linux.
       - name: Configure the apps with every module with Firebase for iOS
         id: firebase_ios
         if: ${{ !cancelled() && steps.firebase_apps.outcome == 'success' }}
@@ -628,6 +651,7 @@ jobs:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: ios
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
@@ -759,8 +783,10 @@ jobs:
           $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
           if ($left) { throw "SMF left $left in $env:TEMP." }
 
-      # What smf create --explain says of the machine for the apps with every
-      # module, which have Firebase.
+      # What smf create --explain says of the machine for each app with
+      # every module, after the line "=== <app>: ..." that the matrix tool
+      # prints before it: an app whose modules check the FlutterFire CLI
+      # must find it, and one without them says nothing of it.
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() }}
         run: |
@@ -769,9 +795,19 @@ jobs:
           dart pub global run flutterfire_cli:flutterfire --version
           $explain = dart run packages/smf_flutter_cli/tool/matrix.dart --create "$env:RUNNER_TEMP\probe" probe --explain | Out-String
           $explain
-          if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
-            throw 'SMF does not find the FlutterFire CLI.'
+          $apps = @([regex]::Split($explain, '(?m)^=== ') | Select-Object -Skip 1)
+          if ($apps.Count -eq 0) { throw 'The matrix tool explained no app.' }
+          $found = 0
+          foreach ($app in $apps) {
+            $name = $app.Substring(0, $app.IndexOf(':'))
+            if ($app -match '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for \w+\)\r?$') {
+              $found++
+            } elseif ($app -match 'FlutterFire CLI') {
+              throw "SMF does not find the FlutterFire CLI for $name."
+            }
           }
+          if ($found -eq 0) { throw 'No app with every module checks the FlutterFire CLI.' }
+          "SMF finds the FlutterFire CLI for $found of the $($apps.Count) apps with every module."
 
       # As in the job on Linux.
       - name: Annotate the failed tests

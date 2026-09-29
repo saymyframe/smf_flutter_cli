@@ -155,19 +155,22 @@ final class _TypesProvider extends SmfModule {
 }
 
 /// An infrastructure module [id] with [steps] after generation, which
-/// depends on the modules [dependsOn] and requires the roles [requires].
+/// depends on the modules [dependsOn], requires the roles [requires] and
+/// provides the roles [provides].
 final class _WithSteps extends SmfModule {
   const _WithSteps(
     this.id, {
     this.steps = const [],
     this.dependsOn = const {},
     this.requires = const {},
+    this.provides = const {},
   });
 
   final ModuleId id;
   final List<PostGenStep> steps;
   final Set<ModuleId> dependsOn;
   final Set<Role> requires;
+  final Set<Role> provides;
 
   @override
   ModuleDescriptor get descriptor => ModuleDescriptor(
@@ -176,11 +179,29 @@ final class _WithSteps extends SmfModule {
         kind: ModuleKinds.infrastructure,
         dependsOn: dependsOn,
         requires: requires,
+        providers: [for (final role in provides) RoleProvider.plain(role)],
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => steps;
 }
+
+/// A role that an app can have any number of providers of, as the crash
+/// reporting role, whose providers give it nothing.
+final class _ManyRole extends Role<Object> {
+  const _ManyRole();
+
+  @override
+  String get id => 'many';
+
+  @override
+  String get description => 'Many';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.many;
+}
+
+const _many = _ManyRole();
 
 /// A step that needs nothing outside the app.
 const _build = PostGenStep(ToolRef('tool'), ['build']);
@@ -280,6 +301,41 @@ void main() {
     );
     // Any other app of the matrix is named as it is given.
     expect(const MatrixApp('bloc', []).packageName('app'), 'app');
+  });
+
+  test(
+      'an app with every module is named after the providers of the roles '
+      'that take one, not after those of a role that takes many, which every '
+      'app has, also when the apps without external steps leave its first '
+      'provider out', () async {
+    // The first provider of the role that takes many has a step that needs
+    // an external service, as Firebase Crashlytics among the crash
+    // reporters, so the apps without external steps have only the second.
+    const external = _WithSteps(
+      ModuleId('many_external'),
+      steps: [_configure],
+      provides: {_many},
+    );
+    const local = _WithSteps(ModuleId('many_local'), provides: {_many});
+    final modules = [...smfModules, external, local];
+
+    for (final withoutExternalSteps in [false, true]) {
+      final (:apps, :failed) = await everyModuleAppsOf(
+        modules,
+        withoutExternalSteps: withoutExternalSteps,
+      );
+
+      expect(failed, isEmpty);
+      expect(
+        [for (final app in apps) app.modules],
+        everyElement(contains(local.id)),
+      );
+      expect(
+        [for (final app in apps) app.packageName('start_app')],
+        ['start_app', 'start_app_riverpod'],
+        reason: 'withoutExternalSteps: $withoutExternalSteps',
+      );
+    }
   });
 
   test('the apps with every module have every module', () async {
@@ -1204,6 +1260,7 @@ Type type() => Types;
 
     Future<int> create({
       List<SmfModule> modules = smfModules,
+      String name = 'start_app',
       bool withoutExternalSteps = false,
       List<String> options = const [],
       int code = 0,
@@ -1214,7 +1271,7 @@ Type type() => Types;
         createEveryModuleApps(
           modules,
           directory: '/apps',
-          name: 'start_app',
+          name: name,
           withoutExternalSteps: withoutExternalSteps,
           options: options,
           commands: MatrixCommands(
@@ -1327,6 +1384,24 @@ Type type() => Types;
         log.last,
         endsWith('the step Configure: tool configure (it exited with 1).'),
       );
+    });
+
+    test(
+        'generates nothing with a name that smf create would take for an '
+        'option, as when the options come before it', () async {
+      expect(
+        await create(name: '--org', options: const ['com.example.ci', 'x']),
+        64,
+      );
+
+      expect(created, isEmpty);
+      expect(log, [
+        equals(
+          'The name of the apps, --org, starts with -, so smf create would '
+          'take it for an option: give the name right after the directory, '
+          'and the options of smf create after it.',
+        ),
+      ]);
     });
 
     test('with --explain, only checks that smf create succeeds', () async {
