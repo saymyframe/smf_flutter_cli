@@ -85,7 +85,10 @@ Future<List<MatrixAppTest>> _appTests() async {
       appliesTo: _has(FirebaseCoreModule.id),
       devDependencies: const ['firebase_core_platform_interface'],
     ),
-    // Uncaught errors and the crash reporter of the app reach Crashlytics.
+    // The crash reporter of the module reaches Crashlytics, and the errors
+    // that nothing catches reach it through the handlers that the start-up
+    // of the app installs. The tests look only at what reaches Crashlytics,
+    // not at the other crash reporters that the app may have.
     MatrixAppTest(
       '$crashlytics/firebase_crashlytics',
       appliesTo: _has(FirebaseCrashlyticsModule.id),
