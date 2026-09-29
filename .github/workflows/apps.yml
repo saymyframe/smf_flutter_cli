@@ -37,6 +37,10 @@ on:
         description: Whether the jobs on Linux keep their pub packages in the cache of the repository.
         type: boolean
         default: true
+      published_cli:
+        description: Whether the job of the real modules on Linux also checks the apps of smf_flutter_cli from pub.dev, which users install.
+        type: boolean
+        default: false
 
 jobs:
   flutter:
@@ -149,6 +153,44 @@ jobs:
           fi
         env:
           REGISTRY: ${{ matrix.registry }}
+
+      # What users install: smf_flutter_cli from pub.dev, with the versions
+      # of its dependencies that pub resolves there rather than the packages
+      # of the workspace. As a user does, outside the checkout, it generates
+      # an app with every module for each state manager, with the full dart
+      # fix, in a directory with a space in its name. A failure of these
+      # steps affects the users of the published version, and its fix needs
+      # a release of the packages.
+      - name: Activate the CLI from pub.dev
+        id: pub_dev_cli
+        if: ${{ !cancelled() && matrix.registry == 'real' && inputs.published_cli }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          dart pub global activate smf_flutter_cli
+          bin="${PUB_CACHE:-$HOME/.pub-cache}/bin"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/smf" --version
+
+      - name: Generate the apps with every module with the CLI from pub.dev
+        id: pub_dev_apps
+        if: ${{ !cancelled() && steps.pub_dev_cli.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          for state in bloc riverpod; do
+            smf create "${state}_app" \
+              -m "go_router,home,bottom_tabs,$state,get_it,event_bus,firebase_crashlytics,firebase_analytics" \
+              -o "$RUNNER_TEMP/SMF apps from pub.dev" --no-input --skip-external-setup --strict
+          done
+
+      - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
+        if: ${{ !cancelled() && steps.pub_dev_apps.outcome == 'success' }}
+        run: |
+          for app in bloc_app riverpod_app; do
+            cd "$RUNNER_TEMP/SMF apps from pub.dev/$app"
+            flutter analyze
+            flutter test
+            flutter build apk --debug
+          done
 
   macos:
     name: macOS
