@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/src/contribution.dart';
+import 'package:smf_contribution_engine/src/utils/statement_inserts.dart';
 
 /// Inserts statements into the body of a top-level function, next to the
 /// statements that contain an anchor text.
@@ -15,8 +16,9 @@ import 'package:smf_contribution_engine/src/contribution.dart';
 /// Throws an [Exception] when the function is missing or has an expression
 /// body, and a `FormatterException` when [insert] leaves invalid code.
 ///
-/// The body is rebuilt from the source of its statements, so the comments and
-/// blank lines in it are lost, and the whole file is reformatted. Nothing
+/// Only the new lines are added: the comments and blank lines of the body
+/// stay, and a comment above a statement stays with it. The whole file is
+/// then reformatted, or returned as it is when nothing is inserted. Nothing
 /// checks whether [insert] is already there: every run adds it again.
 class InsertIntoFunction extends Contribution {
   /// Creates a contribution that inserts [insert] into [function].
@@ -62,26 +64,13 @@ class InsertIntoFunction extends Contribution {
       throw Exception('Function body is not a block');
     }
 
-    final buffer = StringBuffer();
-    final statements = body.block.statements;
-    for (final stmt in statements) {
-      if (beforeStatement != null &&
-          stmt.toSource().contains(beforeStatement!)) {
-        buffer.writeln(insert);
-      }
-
-      buffer.writeln(stmt.toSource());
-
-      if (afterStatement != null && stmt.toSource().contains(afterStatement!)) {
-        buffer.writeln(insert);
-      }
-    }
-
-    final updatedBody = '{\n$buffer}';
-    final start = body.block.leftBracket.offset;
-    final end = body.block.rightBracket.offset;
-
-    final updated = original.replaceRange(start, end + 1, updatedBody);
-    return dartFormater.format(updated);
+    final updated = insertStatements(
+      original,
+      body.block,
+      insert: insert,
+      before: beforeStatement,
+      after: afterStatement,
+    );
+    return updated == null ? original : dartFormater.format(updated);
   }
 }

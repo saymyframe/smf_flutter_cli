@@ -135,20 +135,32 @@ class _SettingsPageState extends State<SettingsPage> {
           'run adds it again',
     );
 
-    test(
-      'preserves comments in the method body',
-      () async {
-        final source = homePageStateDart.replaceFirst(
-          '    super.initState();\n',
-          '    super.initState();\n    // Controllers are created below.\n',
-        );
+    test('preserves comments in the method body', () async {
+      final source = homePageStateDart.replaceFirst(
+        '    super.initState();\n',
+        '    super.initState();\n    // Controllers are created below.\n',
+      );
 
-        final result = await intoInitState().apply(source);
+      final result = await intoInitState().apply(source);
 
-        expect(result, contains('    // Controllers are created below.\n'));
-      },
-      skip: 'Bug: the body is rebuilt from Statement.toSource(), which drops '
-          'comments and blank lines',
-    );
+      expect(result, contains('    // Controllers are created below.\n'));
+    });
+
+    test('keeps a comment that trails the anchor on its line', () async {
+      final source = homePageStateDart.replaceFirst(
+        '    super.initState();\n',
+        '    super.initState(); // Must come first.\n',
+      );
+
+      final result = await intoInitState().apply(source);
+
+      expect(
+        result,
+        contains(
+          '    super.initState(); // Must come first.\n'
+          '    $createController\n',
+        ),
+      );
+    });
   });
 }

@@ -163,10 +163,8 @@ void main() {
           'run adds it again',
     );
 
-    test(
-      'preserves comments and blank lines in the function body',
-      () async {
-        const source = '''
+    test('preserves comments and blank lines in the function body', () async {
+      const source = '''
 import 'package:flutter/material.dart';
 
 Future<void> main() async {
@@ -177,13 +175,82 @@ Future<void> main() async {
 }
 ''';
 
-        final result = await afterEnsureInitialized(initFirebase).apply(source);
+      final result = await afterEnsureInitialized(initFirebase).apply(source);
 
-        expect(result, contains('  // Must run before any plugin is used.\n'));
-        expect(result, contains('\n\n  runApp(const MainApp()); // Keep this'));
-      },
-      skip: 'Bug: the body is rebuilt from Statement.toSource(), which drops '
-          'comments and blank lines',
-    );
+      expect(result, contains('  // Must run before any plugin is used.\n'));
+      expect(result, contains('\n\n  runApp(const MainApp()); // Keep this'));
+    });
+
+    test('indents an insert that starts with a comment', () async {
+      final result = await afterEnsureInitialized(
+        '// Plugins need Firebase.\n$initFirebase',
+      ).apply(monolithMainDart);
+
+      expect(
+        result,
+        contains(
+          '  $ensureInitialized\n'
+          '  // Plugins need Firebase.\n'
+          '  $initFirebase\n'
+          '\n'
+          '  $runApp\n',
+        ),
+      );
+    });
+
+    test('inserts above the comments that lead up to beforeStatement',
+        () async {
+      const source = '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Must come first.
+
+  // Keep this last.
+  runApp(const MainApp());
+}
+''';
+
+      final result = await const InsertIntoFunction(
+        file: 'lib/main.dart',
+        function: 'main',
+        beforeStatement: 'runApp',
+        insert: 'setUpCoreDI();',
+      ).apply(source);
+
+      expect(result, '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Must come first.
+
+  setUpCoreDI();
+  // Keep this last.
+  runApp(const MainApp());
+}
+''');
+    });
+
+    test('keeps the statement after the anchor on its line out of a comment',
+        () async {
+      const source = '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized(); runApp(const MainApp());
+}
+''';
+
+      final result = await afterEnsureInitialized(
+        '$initFirebase // Before any plugin.',
+      ).apply(source);
+
+      expect(
+        functionStatements(result, 'main'),
+        [ensureInitialized, initFirebase, runApp],
+      );
+    });
+
+    test('returns the file as it is when nothing is inserted', () async {
+      const source = 'void main() {   runApp(const MainApp());   }\n';
+
+      final result = await afterEnsureInitialized(initFirebase).apply(source);
+
+      expect(result, source);
+    });
   });
 }
