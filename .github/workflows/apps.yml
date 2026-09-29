@@ -771,8 +771,10 @@ jobs:
           $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
           if ($left) { throw "SMF left $left in $env:TEMP." }
 
-      # What smf create --explain says of the machine for the apps with every
-      # module, which have Firebase.
+      # What smf create --explain says of the machine for each app with
+      # every module, after the line "=== <app>: ..." that the matrix tool
+      # prints before it: an app whose modules check the FlutterFire CLI
+      # must find it, and one without them says nothing of it.
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() }}
         run: |
@@ -781,9 +783,19 @@ jobs:
           dart pub global run flutterfire_cli:flutterfire --version
           $explain = dart run packages/smf_flutter_cli/tool/matrix.dart --create "$env:RUNNER_TEMP\probe" probe --explain | Out-String
           $explain
-          if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
-            throw 'SMF does not find the FlutterFire CLI.'
+          $apps = @([regex]::Split($explain, '(?m)^=== ') | Select-Object -Skip 1)
+          if ($apps.Count -eq 0) { throw 'The matrix tool explained no app.' }
+          $found = 0
+          foreach ($app in $apps) {
+            $name = $app.Substring(0, $app.IndexOf(':'))
+            if ($app -match '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for \w+\)\r?$') {
+              $found++
+            } elseif ($app -match 'FlutterFire CLI') {
+              throw "SMF does not find the FlutterFire CLI for $name."
+            }
           }
+          if ($found -eq 0) { throw 'No app with every module checks the FlutterFire CLI.' }
+          "SMF finds the FlutterFire CLI for $found of the $($apps.Count) apps with every module."
 
       # As in the job on Linux.
       - name: Annotate the failed tests
