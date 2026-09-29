@@ -9,6 +9,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io' show Platform, Process, stdout;
+import 'dart:isolate' show Isolate;
 
 import 'package:file/file.dart';
 import 'package:file/local.dart';
@@ -324,6 +325,91 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
         module.descriptor.id,
   };
 }
+
+/// What the checks of the repository need to know of each of [tests], as
+/// JSON, which the matrix tools print with `--app-tests --json`
+/// (`tools/app_tests_test.dart`):
+/// - `directory`, the directory of its files;
+/// - `modules`, the ids of the modules of the matrix that the package whose
+///   `app_tests` holds the directory declares, by [packages], the package
+///   of each module of the matrix, such as `smf_home_flutter` for `home`;
+/// - `appliesWithout`, the names of the apps of the matrix that it applies
+///   to once those modules are taken out of their modules, with the same
+///   name, role options and hook.
+///
+/// The app tests that a package of modules keeps test its modules, so they
+/// apply only to the apps that have one of them, whichever other modules
+/// the matrix has: a check of the start of every app that the provider of
+/// the app entry kept would reach no app with another provider. [apps]
+/// gives the apps of the matrix, which it builds only when a test has
+/// modules.
+Future<List<Map<String, Object>>> appTestsReport(
+  List<MatrixAppTest> tests, {
+  required Map<ModuleId, String> packages,
+  required Future<List<MatrixApp>> Function() apps,
+}) async {
+  const fileSystem = LocalFileSystem();
+  final appTests = await _appTestsOf({...packages.values}, fileSystem);
+  List<MatrixApp>? all;
+  final report = <Map<String, Object>>[];
+  for (final test in tests) {
+    final ids = {
+      for (final MapEntry(key: id, value: package) in packages.entries)
+        if (fileSystem.path.isWithin(appTests[package]!, test.directory)) id,
+    };
+    report.add({
+      'directory': test.directory,
+      'modules': [for (final id in ids) id.value],
+      'appliesWithout': ids.isEmpty
+          ? const <String>[]
+          : _appliesWithout(test, ids, all ??= await apps()),
+    });
+  }
+  return report;
+}
+
+/// The directory `app_tests` of each of [packages], which are in the
+/// configuration of the packages that loaded their modules.
+Future<Map<String, String>> _appTestsOf(
+  Set<String> packages,
+  FileSystem fileSystem,
+) async {
+  final path = fileSystem.path;
+  return {
+    for (final package in packages)
+      package: path.join(
+        path.dirname(
+          path.fromUri(
+            await Isolate.resolvePackageUri(Uri.parse('package:$package/')),
+          ),
+        ),
+        'app_tests',
+      ),
+  };
+}
+
+/// The names of [apps] that [test] applies to once the modules [ids] are
+/// taken out of their modules, with the same name, role options and hook.
+List<String> _appliesWithout(
+  MatrixAppTest test,
+  Set<ModuleId> ids,
+  List<MatrixApp> apps,
+) =>
+    [
+      for (final app in apps)
+        if (test.appliesTo(
+          MatrixApp(
+            app.name,
+            [
+              for (final id in app.modules)
+                if (!ids.contains(id)) id,
+            ],
+            roleOptions: app.roleOptions,
+            hook: app.hook,
+          ),
+        ))
+          app.name,
+    ];
 
 /// Tests that the matrix adds to the apps it generates and runs with
 /// `flutter test`: the files of a [directory] for the apps that

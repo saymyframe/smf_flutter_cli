@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:mirrors';
 
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -19,14 +21,25 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// provider has apps that none of them applies to.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
-/// `MatrixAppTest`s on a line of its own instead, for the test of the
-/// repository that finds directories of app tests that no matrix tool
-/// lists (`tools/app_tests_test.dart`).
+/// `MatrixAppTest`s on a line of its own instead. With `--app-tests --json`,
+/// it prints what the tests of the repository check of them
+/// (`tools/app_tests_test.dart`), see `appTestsReport`: their directories,
+/// and the apps of the matrix that each test that a package of modules keeps
+/// applies to without the modules of that package.
 Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests']) {
     for (final test in await _appTests()) {
       stdout.writeln(test.directory);
     }
+    return;
+  }
+  if (arguments case ['--app-tests', '--json']) {
+    final report = await appTestsReport(
+      await _appTests(),
+      packages: _packagesOf(fixtureModules()),
+      apps: () async => (await matrixOf(fixtureModules())).apps,
+    );
+    stdout.writeln(jsonEncode(report));
     return;
   }
   final everyModule = arguments.firstOrNull == '--every-module';
@@ -37,7 +50,7 @@ Future<void> main(List<String> arguments) async {
     stderr
       ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
       ..writeln('       dart run tool/matrix.dart --every-module <directory>')
-      ..writeln('       dart run tool/matrix.dart --app-tests');
+      ..writeln('       dart run tool/matrix.dart --app-tests [--json]');
     exit(64);
   }
   final code = await runMatrix(
@@ -97,6 +110,17 @@ Future<List<MatrixAppTest>> _appTests() async {
     ),
   ];
 }
+
+/// The package that declares the class of each of [modules], such as
+/// fake_infra for fake_analytics.
+Map<ModuleId, String> _packagesOf(List<SmfModule> modules) => {
+      for (final module in modules)
+        module.descriptor.id:
+            (reflectClass(module.runtimeType).owner! as LibraryMirror)
+                .uri
+                .pathSegments
+                .first,
+    };
 
 /// Whether an app of the matrix has every module of [ids].
 bool Function(MatrixApp app) _hasAll(Set<String> ids) =>

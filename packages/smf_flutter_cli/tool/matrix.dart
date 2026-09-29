@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:mirrors';
 
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
@@ -35,9 +37,11 @@ import 'package:yaml/yaml.dart';
 /// role gets its own app there without a change of CI.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
-/// `MatrixAppTest`s on a line of its own instead, for the test of the
-/// repository that finds directories of app tests that no matrix tool
-/// lists (`tools/app_tests_test.dart`).
+/// `MatrixAppTest`s on a line of its own instead. With `--app-tests --json`,
+/// it prints what the tests of the repository check of them
+/// (`tools/app_tests_test.dart`), see `appTestsReport`: their directories,
+/// and the apps of the matrix that each test that a package of modules keeps
+/// applies to without the modules of that package.
 ///
 /// With `--add-app-tests`, the directory of an app that `smf create`
 /// generated outside the matrix and the directories of some of its
@@ -50,6 +54,15 @@ Future<void> main(List<String> arguments) async {
     for (final test in await _appTests()) {
       stdout.writeln(test.directory);
     }
+    return;
+  }
+  if (arguments case ['--app-tests', '--json']) {
+    final report = await appTestsReport(
+      await _appTests(),
+      packages: _packagesOf(smfModules),
+      apps: () async => (await matrixOf(smfModules)).apps,
+    );
+    stdout.writeln(jsonEncode(report));
     return;
   }
   if (arguments case ['--add-app-tests', final app, ...final directories]
@@ -88,7 +101,7 @@ Future<void> main(List<String> arguments) async {
         '[--without-external-steps] <directory> <name> '
         '[<option of smf create>...]',
       )
-      ..writeln('       dart run tool/matrix.dart --app-tests')
+      ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
       ..writeln(
         '       dart run tool/matrix.dart --add-app-tests <app> '
         '<app tests>...',
@@ -222,6 +235,17 @@ Future<int> _addAppTests(String app, List<String> directories) async {
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   return code;
 }
+
+/// The package that declares the class of each of [modules], such as
+/// smf_home_flutter for home.
+Map<ModuleId, String> _packagesOf(List<SmfModule> modules) => {
+      for (final module in modules)
+        module.descriptor.id:
+            (reflectClass(module.runtimeType).owner! as LibraryMirror)
+                .uri
+                .pathSegments
+                .first,
+    };
 
 /// Whether an app of the matrix has the module [id].
 bool Function(MatrixApp app) _has(ModuleId id) =>
