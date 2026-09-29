@@ -166,37 +166,69 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> everyModuleAppsOf(
   final names = ModuleRegistry(modules);
   var registry = names;
   while (true) {
-    final harness = ContractHarness(registry, roleOptions: roleOptions);
-    final apps = <MatrixApp>[];
-    final failed = <ContractResult>[];
-    final external = <ModuleId>{};
-    for (final contractCase in harness.casesOfAll()) {
-      final result = await harness.check(contractCase);
-      final app = _appOf(
-        result,
-        roleOptions,
-        everyModuleWith: [
-          ...{
-            for (final MapEntry(key: role, value: provider)
-                in contractCase.picks.entries)
-              if (provider != names.providersOf(role).first.descriptor.id)
-                provider,
-          },
-        ],
-      );
-      if (app == null) {
-        failed.add(result);
-        continue;
-      }
-      apps.add(app);
-      if (withoutExternalSteps) {
-        external.addAll(_withExternalSteps(result.collection!));
-      }
-    }
+    final (:apps, :failed, :external) = await _everyModuleOf(
+      ContractHarness(registry, roleOptions: roleOptions),
+      names,
+      roleOptions,
+      withoutExternalSteps: withoutExternalSteps,
+    );
     if (external.isEmpty) return (apps: apps, failed: failed);
     registry = ModuleRegistry(_without(registry.modules, external));
   }
 }
+
+/// The apps with every module of the registry of [harness], with their
+/// [MatrixApp.everyModuleWith] relative to the providers of [names], and
+/// the cases that failed. With [withoutExternalSteps], the modules of the
+/// apps whose steps need an external service, which [everyModuleAppsOf]
+/// then leaves out; otherwise none.
+Future<
+    ({
+      List<MatrixApp> apps,
+      List<ContractResult> failed,
+      Set<ModuleId> external,
+    })> _everyModuleOf(
+  ContractHarness harness,
+  ModuleRegistry names,
+  Map<String, String?> roleOptions, {
+  required bool withoutExternalSteps,
+}) async {
+  final apps = <MatrixApp>[];
+  final failed = <ContractResult>[];
+  final external = <ModuleId>{};
+  for (final contractCase in harness.casesOfAll()) {
+    final result = await harness.check(contractCase);
+    final app = _appOf(
+      result,
+      roleOptions,
+      everyModuleWith: _everyModuleWith(contractCase, names),
+    );
+    if (app == null) {
+      failed.add(result);
+      continue;
+    }
+    apps.add(app);
+    if (withoutExternalSteps) {
+      external.addAll(_withExternalSteps(result.collection!));
+    }
+  }
+  return (apps: apps, failed: failed, external: external);
+}
+
+/// The providers that [contractCase], a case of an app with every module,
+/// picks other than the first provider of their role in [names]; see
+/// [MatrixApp.everyModuleWith].
+List<ModuleId> _everyModuleWith(
+  ContractCase contractCase,
+  ModuleRegistry names,
+) =>
+    [
+      ...{
+        for (final MapEntry(key: role, value: provider)
+            in contractCase.picks.entries)
+          if (provider != names.providersOf(role).first.descriptor.id) provider,
+      },
+    ];
 
 /// The app of the matrix that [result] built with the values of role
 /// options [roleOptions], or `null` if the case has errors.
@@ -250,16 +282,22 @@ List<SmfModule> _without(List<SmfModule> modules, Set<ModuleId> removed) {
       for (final module in kept)
         if (!gone.contains(module.descriptor.id)) module,
     ];
-    final provided = {for (final module in kept) ...module.descriptor.provides};
-    final lost = {
-      for (final module in kept)
-        if (module.descriptor.dependsOn.any(gone.contains) ||
-            !provided.containsAll(module.descriptor.effectiveRequires))
-          module.descriptor.id,
-    };
+    final lost = _lostOf(kept, gone);
     if (lost.isEmpty) return kept;
     gone.addAll(lost);
   }
+}
+
+/// The modules of [kept] that depend on a module of [gone], or require a
+/// role that no module of [kept] provides.
+Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
+  final provided = {for (final module in kept) ...module.descriptor.provides};
+  return {
+    for (final module in kept)
+      if (module.descriptor.dependsOn.any(gone.contains) ||
+          !provided.containsAll(module.descriptor.effectiveRequires))
+        module.descriptor.id,
+  };
 }
 
 /// Tests that the matrix adds to the apps it generates and runs with
@@ -529,11 +567,15 @@ typedef MatrixTest = Future<(int, String)> Function(
   List<MatrixAppTest> tests,
 );
 
-/// The commands that [runMatrix] runs for each app, which tests of the
-/// matrix may replace; each left `null` is the real one.
+/// The commands that [runMatrix] and [createEveryModuleApps] run for each
+/// app, and where they write what happens, which tests of the matrix may
+/// replace; each left `null` is the real one.
 final class MatrixCommands {
   /// Creates the commands, with the real one for each left `null`.
-  const MatrixCommands({this.create, this.analyze, this.test});
+  const MatrixCommands({this.log, this.create, this.analyze, this.test});
+
+  /// Gets what happens, line by line: by default the standard output.
+  final void Function(String line)? log;
 
   /// Generates an app: by default `smf create` of this CLI with the modules
   /// of the matrix.
@@ -565,8 +607,8 @@ final class MatrixCommands {
 /// the name of such an app names the provider of every role that has
 /// several, so it changes when another role gets a second provider.
 ///
-/// [log] gets what happens, by default the standard output; the apps stay
-/// in [directory], with the tests. [commands] run for each app.
+/// The apps stay in [directory], with the tests. [commands] run for each
+/// app, and their log gets what happens.
 Future<int> runMatrix(
   List<SmfModule> modules, {
   required String directory,
@@ -574,7 +616,6 @@ Future<int> runMatrix(
   List<MatrixAppTest> appTests = const [],
   Set<String>? only,
   bool everyModule = false,
-  void Function(String line)? log,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   final run = _MatrixRun(
@@ -584,7 +625,7 @@ Future<int> runMatrix(
     // The defaults print to the terminal, create the apps with smf and
     // analyze them with Flutter, as the runs of the matrix in CI do; the
     // tests give their own.
-    say: log ?? _print,
+    say: commands.log ?? _print,
     create: commands.create ?? _smfCreate(modules),
     analyze:
         commands.analyze ?? (directory) => _flutter(['analyze'], directory),
@@ -632,8 +673,8 @@ Future<int> runMatrix(
 ///
 /// Returns the exit code: 0 if every app was generated with every module
 /// and every step that the options of CI do not leave for later, 1
-/// otherwise. [log] gets what happens, by default the standard output, and
-/// [create] generates each app, by default with `smf create` of this CLI.
+/// otherwise. The log of [commands] gets what happens, and their create
+/// generates each app; they analyze and test nothing here.
 Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
   required String directory,
@@ -641,14 +682,13 @@ Future<int> createEveryModuleApps(
   bool withoutExternalSteps = false,
   List<String> options = const [],
   Map<String, String?> roleOptions = const {},
-  void Function(String line)? log,
-  MatrixCreate? create,
+  MatrixCommands commands = const MatrixCommands(),
 }) async {
   // coverage:ignore-start
   // The defaults print to the terminal and create the apps with smf, as CI
   // does; the tests give their own.
-  final say = log ?? _print;
-  final generate = create ?? _smfCreate(modules);
+  final say = commands.log ?? _print;
+  final generate = commands.create ?? _smfCreate(modules);
   // coverage:ignore-end
   final (:apps, :failed) = await everyModuleAppsOf(
     modules,

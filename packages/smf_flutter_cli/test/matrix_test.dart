@@ -303,8 +303,8 @@ void main() {
           appTests: appTests,
           only: only,
           everyModule: everyModule,
-          log: log.add,
           commands: MatrixCommands(
+            log: log.add,
             create: (arguments, onCreated) async {
               created.add(arguments);
               if (createCode == 0) {
@@ -529,21 +529,23 @@ void main() {
           name: 'start_app',
           withoutExternalSteps: withoutExternalSteps,
           options: options,
-          log: log.add,
-          create: (arguments, onCreated) async {
-            created.add(arguments);
-            if (generates) {
-              onCreated(
-                GeneratedApp(
-                  name: arguments[1],
-                  path: '/apps/${arguments[1]}',
-                  leftOut: leftOut,
-                  skippedSteps: skippedSteps,
-                ),
-              );
-            }
-            return code;
-          },
+          commands: MatrixCommands(
+            log: log.add,
+            create: (arguments, onCreated) async {
+              created.add(arguments);
+              if (generates) {
+                onCreated(
+                  GeneratedApp(
+                    name: arguments[1],
+                    path: '/apps/${arguments[1]}',
+                    leftOut: leftOut,
+                    skippedSteps: skippedSteps,
+                  ),
+                );
+              }
+              return code;
+            },
+          ),
         );
 
     test(
