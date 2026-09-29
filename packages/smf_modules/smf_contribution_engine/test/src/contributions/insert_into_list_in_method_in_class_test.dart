@@ -209,10 +209,8 @@ class MainApp extends StatelessWidget {
           'so a list without a trailing comma becomes invalid Dart',
     );
 
-    test(
-      'only matches lists whose parent expression matches',
-      () async {
-        const source = '''
+    test('only matches lists whose parent expression matches', () async {
+      const source = '''
 class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -225,20 +223,32 @@ class HomePage extends StatelessWidget {
 }
 ''';
 
-        final result = await contribution(
-          className: 'HomePage',
-          listVariableMatch: 'children',
-          parentExpressionMatch: 'Row',
-          insert: "Text('b'),",
-        ).apply(source);
+      final result = await contribution(
+        className: 'HomePage',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Row',
+        insert: "Text('b'),",
+      ).apply(source);
 
-        final lists = namedListsOf(result, 'children');
-        expect(lists[1], ["Text('a')", "Text('b')"]);
-        expect(lists[0], hasLength(1));
-      },
-      skip: 'Bug: the parent check walks up to the compilation unit, so any '
-          'occurrence of parentExpressionMatch in the file matches',
-    );
+      final lists = namedListsOf(result, 'children');
+      expect(lists[1], ["Text('a')", "Text('b')"]);
+      expect(lists[0], hasLength(1));
+    });
+
+    test('matches the parent expression as the parser prints it', () async {
+      final source = _localizedApp.replaceFirst(
+        'return const MaterialApp(',
+        'return const   MaterialApp(',
+      );
+
+      final result = await contribution(
+        parentExpressionMatch: 'const MaterialApp',
+      ).apply(source);
+
+      expect(namedListsOf(result, 'supportedLocales'), [
+        ["Locale('en')", "Locale('uk')"],
+      ]);
+    });
 
     test('is idempotent', () async {
       final once = await contribution().apply(_localizedApp);

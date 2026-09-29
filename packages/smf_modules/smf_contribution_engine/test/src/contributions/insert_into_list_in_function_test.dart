@@ -211,9 +211,8 @@ Widget buildPage() {
       ]);
     });
 
-    test(
-      'only matches lists whose parent expression matches',
-      () async {
+    group('matches the parent expression', () {
+      test('only in the calls that take the list', () async {
         const source = '''
 List<Widget> buildRows() {
   return [
@@ -235,10 +234,51 @@ List<Widget> buildRows() {
           ["Text('a')"],
           ["Text('new')", "Text('b')"],
         ]);
-      },
-      skip: 'Bug: the parent check walks up to the compilation unit, so any '
-          'occurrence of parentExpressionMatch in the file matches',
-    );
+      });
+
+      test('in a call around the one that takes the list', () async {
+        final result = await intoProviders(parentExpressionMatch: 'runApp')
+            .apply(providerMainDart);
+
+        expect(namedListsOf(result, 'providers'), [
+          [analytics, logger],
+        ]);
+      });
+
+      test('not in the arguments next to the list', () {
+        const source = '''
+void main() {
+  runApp(MaterialApp(supportedLocales: [Locale('en')], home: HomePage()));
+}
+''';
+
+        expect(
+          const InsertIntoListInFunction(
+            file: 'lib/main.dart',
+            function: 'main',
+            listVariableMatch: 'supportedLocales',
+            parentExpressionMatch: 'HomePage',
+            insert: "Locale('uk'),",
+          ).apply(source),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('not outside the function', () {
+        const source = '''
+void main() {
+  runApp(ServiceScope(providers: [Provider(create: (_) => Logger())]));
+}
+
+Widget buildTestApp() => MultiProvider(providers: const []);
+''';
+
+        expect(
+          intoProviders().apply(source),
+          throwsA(isA<Exception>()),
+        );
+      });
+    });
 
     test('is idempotent', () async {
       final once = await intoProviders().apply(providerMainDart);

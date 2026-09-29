@@ -1,15 +1,15 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
+import 'package:smf_contribution_engine/src/utils/named_lists.dart';
 
 /// Adds an element at the start of a list literal passed as a named
 /// argument, such as the `providers` of a `MultiProvider` built in `main`.
 ///
 /// The target is the first top-level function named [function]. In its body,
 /// the candidates are the lists passed as a [listVariableMatch] argument,
-/// nested ones included, where an enclosing expression contains
+/// nested ones included, to a call or widget creation that matches
 /// [parentExpressionMatch]; [index] picks one of them in source order, and
 /// [insert] goes right after its `[`.
 ///
@@ -38,11 +38,12 @@ class InsertIntoListInFunction extends Contribution {
   /// trailing colon is ignored.
   final String listVariableMatch;
 
-  /// Text that an expression around the list must contain, such as
-  /// `MultiProvider`.
+  /// Text that the call or widget creation taking the list, or one around
+  /// it, has before its arguments, such as `MultiProvider`.
   ///
-  /// The check goes up to the whole file, so for now the text appearing
-  /// anywhere in the file is enough.
+  /// It is matched against the source as the parser prints it, such as
+  /// `const MaterialApp` or `MaterialApp.router`. The arguments don't count,
+  /// so neither do the elements of the list nor the arguments next to it.
   final String parentExpressionMatch;
 
   /// The element to add, with its trailing comma, such as
@@ -73,10 +74,10 @@ class InsertIntoListInFunction extends Contribution {
     final childrenMatches = <ListLiteral>[];
 
     body.visitChildren(
-      _Visitor(
-        listVariableMatch: listVariableMatch,
+      NamedListVisitor(
+        name: listVariableMatch.replaceAll(':', ''),
         parentMatch: parentExpressionMatch,
-        collector: childrenMatches.add,
+        onMatch: childrenMatches.add,
       ),
     );
 
@@ -91,38 +92,5 @@ class InsertIntoListInFunction extends Contribution {
     final updated = original.replaceRange(start, start, '\n  $insert');
 
     return dartFormater.format(updated);
-  }
-}
-
-class _Visitor extends RecursiveAstVisitor<void> {
-  _Visitor({
-    required this.listVariableMatch,
-    required this.parentMatch,
-    required this.collector,
-  });
-  final String listVariableMatch;
-  final String parentMatch;
-  final void Function(ListLiteral) collector;
-
-  @override
-  void visitNamedExpression(NamedExpression node) {
-    final expression = node.expression;
-    if (node.name.label.name == listVariableMatch.replaceAll(':', '') &&
-        expression is ListLiteral &&
-        _matchesParent(node)) {
-      collector(expression);
-    }
-    super.visitNamedExpression(node);
-  }
-
-  bool _matchesParent(AstNode node) {
-    AstNode? current = node;
-    while (current != null) {
-      if (current.toSource().contains(parentMatch)) {
-        return true;
-      }
-      current = current.parent;
-    }
-    return false;
   }
 }
