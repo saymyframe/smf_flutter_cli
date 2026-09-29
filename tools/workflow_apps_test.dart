@@ -24,7 +24,10 @@
 // - runs smf create itself, or names the modules of an app with -m, as in
 //   `-m go_router,home` or `-mgo_router,home`, which a second provider of a
 //   role that every app has turns into an error, and which leaves out the
-//   providers it does not name;
+//   providers it does not name; the check of the CLI from pub.dev runs smf
+//   with the arguments that the matrix of its release lists
+//   (packages/smf_flutter_cli/tool/every_module_apps.dart), which the check
+//   does not read;
 // - refers to the package of a module, but in a step that runs the tests of
 //   that module.
 // A step that must do one of these is an exception below, with the reason.
