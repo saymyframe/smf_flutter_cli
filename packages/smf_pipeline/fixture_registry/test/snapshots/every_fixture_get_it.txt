@@ -1156,6 +1156,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// The observers of the navigator of each branch that was selected.
   final Map<int, List<NavigatorObserver>> _branchObservers = {};
 
+  /// The key of the navigator of each branch that was selected.
+  final Map<int, GlobalKey<NavigatorState>> _branchNavigators = {};
+
   /// The branch of the main navigation that is selected.
   int _selected = 0;
 
@@ -1209,6 +1212,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       for (final (index, stack) in _branches.indexed)
         if (index == _selected || _branchObservers.containsKey(index))
           Navigator(
+            key: _branchNavigators.putIfAbsent(index, GlobalKey.new),
             observers: _branchObservers.putIfAbsent(index, _newObservers),
             pages: [for (final location in stack) _page(location)],
             onDidRemovePage: (page) => _removed(stack, page),
@@ -1299,18 +1303,29 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     );
   }
 
+  /// Closes the route on top when the user presses the back button of the
+  /// system, with [NavigatorState.maybePop] of the navigators that the user
+  /// sees, the innermost first. A navigator tells [_removed] about a page
+  /// that it closes.
   @override
   Future<bool> popRoute() async {
-    final branch = _onMainNavigation ? _branches[_selected] : null;
-    if (branch != null && branch.length > 1) {
-      _results.remove(branch.removeLast())?.complete();
-    } else if (_stack.length > 1) {
-      _results.remove(_stack.removeLast())?.complete();
-    } else {
-      return false;
+    for (final navigator in _shownNavigators()) {
+      if (await navigator.maybePop()) return true;
     }
-    notifyListeners();
-    return true;
+    return false;
+  }
+
+  /// The navigators that the user sees, the innermost first: that of the
+  /// selected branch of the main navigation, unless a route of the root
+  /// navigator, such as a dialog, covers the main navigation, and the root
+  /// navigator.
+  List<NavigatorState> _shownNavigators() {
+    final branch = _branchNavigators[_selected]?.currentState;
+    return [
+      if (branch != null && (ModalRoute.of(branch.context)?.isCurrent ?? false))
+        branch,
+      ?_navigatorKey.currentState,
+    ];
   }
 
   @override
