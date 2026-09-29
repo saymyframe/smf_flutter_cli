@@ -26,6 +26,24 @@ final class _Broken extends SmfModule {
       throw StateError('broken');
 }
 
+/// A provider of the analytics role whose contributions cannot be
+/// collected, so the matrix has no app with it.
+final class _BrokenAnalytics extends SmfModule {
+  const _BrokenAnalytics();
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: ModuleId('broken_analytics'),
+        description: 'Broken analytics',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(analyticsRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      throw StateError('broken');
+}
+
 /// An infrastructure module [id] with [steps] after generation, which
 /// depends on the modules [dependsOn] and requires the roles [requires].
 final class _WithSteps extends SmfModule {
@@ -325,6 +343,7 @@ void main() {
       List<SkippedStep> skippedSteps = const [],
       int analyzeCode = 0,
       List<MatrixAppTest> appTests = const [],
+      Set<Role> testedRoles = const {},
       int testCode = 0,
       Set<String>? only,
       bool everyModule = false,
@@ -332,7 +351,7 @@ void main() {
         runMatrix(
           modules,
           directory: '/apps',
-          appTests: appTests,
+          appTests: MatrixAppTests(appTests, testedRoles: testedRoles),
           only: only,
           everyModule: everyModule,
           commands: MatrixCommands(
@@ -521,6 +540,116 @@ void main() {
       expect(await run(appTests: [other]), 1);
       expect(tested, isEmpty);
       expect(log.last, 'The tests of /tests/other apply to no app.');
+    });
+
+    group('with tests of a role', () {
+      const modules = [FlutterCoreModule(), BlocModule(), RiverpodModule()];
+
+      /// The problems that the run logged.
+      List<String> problems() => log.contains('Problems:')
+          ? log.sublist(log.indexOf('Problems:') + 1)
+          : [];
+
+      /// Tests of the state management role in the apps that [appliesTo]
+      /// accepts.
+      MatrixAppTest stateTest(bool Function(MatrixApp app) appliesTo) =>
+          MatrixAppTest(
+            '/tests/state',
+            appliesTo: appliesTo,
+            roles: {stateManagementRole},
+          );
+
+      test('passes when they apply to an app of every provider of the role',
+          () async {
+        final byRole = stateTest(
+          (app) => app.modules.any(
+            (id) => modules.any(
+              (module) =>
+                  module.descriptor.id == id &&
+                  module.descriptor.provides.contains(stateManagementRole),
+            ),
+          ),
+        );
+
+        expect(
+          await run(
+            modules: modules,
+            appTests: [byRole],
+            testedRoles: {stateManagementRole},
+          ),
+          0,
+        );
+        expect(problems(), isEmpty);
+        expect(tested, isNotEmpty);
+      });
+
+      test(
+          'fails when they leave out a provider of the role, as they do when '
+          'they select the apps of another provider by its module', () async {
+        final byModule = stateTest(
+          (app) => app.modules.contains(BlocModule.id),
+        );
+
+        expect(await run(modules: modules, appTests: [byModule]), 1);
+        expect(problems(), [
+          equals(
+            'The tests of /tests/state check the state management role, but '
+            'apply to no app with riverpod, which provides it: a test of a '
+            'role applies to the apps of every provider of the role, which '
+            'it selects by the role.',
+          ),
+        ]);
+      });
+
+      test(
+          'fails when no test checks a role that the matrix tests, for each '
+          'provider of the role', () async {
+        // Tests of what only one provider does name no role.
+        final ofBloc = MatrixAppTest(
+          '/tests/bloc',
+          appliesTo: (app) => app.modules.contains(BlocModule.id),
+        );
+
+        expect(
+          await run(
+            modules: modules,
+            appTests: [ofBloc],
+            testedRoles: {stateManagementRole},
+          ),
+          1,
+        );
+        expect(problems(), [
+          for (final id in ['bloc', 'riverpod'])
+            equals(
+              'No test of the state management role applies to an app with '
+              '$id, which provides it: nothing checks at runtime that $id '
+              'keeps the contract of the role.',
+            ),
+        ]);
+
+        // A role that no module provides has nothing to check.
+        expect(
+          await run(modules: modules, testedRoles: {routerRole}),
+          0,
+        );
+      });
+
+      test(
+          'leaves out a provider that the matrix has no app of, whose cases '
+          'failed', () async {
+        expect(
+          await run(
+            modules: const [FlutterCoreModule(), _BrokenAnalytics()],
+            testedRoles: {analyticsRole},
+          ),
+          1,
+        );
+        // Only the cases that failed are problems.
+        expect(problems(), [
+          startsWith('broken_analytics: error [broken_analytics]'),
+          startsWith('every module: error [broken_analytics]'),
+        ]);
+      });
     });
 
     test('fails when the contract harness finds errors in a case', () async {

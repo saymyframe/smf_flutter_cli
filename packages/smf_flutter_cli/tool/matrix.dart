@@ -98,7 +98,12 @@ Future<void> main(List<String> arguments) async {
   final code = await runMatrix(
     smfModules,
     directory: rest.first,
-    appTests: await _appTests(),
+    appTests: MatrixAppTests(
+      await _appTests(),
+      // Each provider of the router role gets a test of the listeners of
+      // the screen; the fixture registry tests the rest of the role.
+      testedRoles: {routerRole},
+    ),
     only: rest.length > 1 ? rest.skip(1).toSet() : null,
     everyModule: everyModule,
   );
@@ -166,7 +171,9 @@ Future<List<MatrixAppTest>> _appTests() async {
       appliesTo: _has(FirebaseAnalyticsModule.id),
     ),
     // The first screen of an app with a router is logged once, under the
-    // name of the screen that the app starts on (see _startScreenOf).
+    // name of the screen that the app starts on (see _startScreenOf),
+    // whichever module provides the router, which calls the listener of the
+    // screen of Firebase Analytics: a test of the router role too.
     MatrixAppTest(
       '$analytics/screen_views',
       appliesTo: (app) =>
@@ -175,6 +182,7 @@ Future<List<MatrixAppTest>> _appTests() async {
             (id) => _moduleOf(id).descriptor.provides.contains(routerRole),
           ),
       values: (app) => {'start_screen': _startScreenOf(app)},
+      roles: {routerRole},
     ),
   ];
 }
