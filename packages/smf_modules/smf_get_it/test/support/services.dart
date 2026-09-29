@@ -42,8 +42,8 @@ const networkFile = 'core/network/network.dart';
 const storageFile = 'core/storage/storage.dart';
 
 /// Services that are ready once registered: singletons, lazy singletons
-/// and factories, one of them with a parameter, and services of one type
-/// told apart by name.
+/// and factories, services of one type told apart by name, and a service
+/// of a type of `dart:core`.
 ///
 /// Its file also has `events`, where every function of the services of the
 /// tests writes what it did, in order.
@@ -55,7 +55,8 @@ const storageFile = 'core/storage/storage.dart';
 /// - `Clock` named `utc` and `Clock`, lazy singletons;
 /// - `Token`, a factory that takes `ApiConfig`, and `Token` named
 ///   `refresh`, a factory that takes the `ApiConfig` named `staging`;
-/// - `Request`, a factory that takes `ApiClient` and a path.
+/// - `Uri` of `dart:core` named `api`, a lazy singleton that takes
+///   `ApiConfig`.
 final class NetworkModule extends SmfModule {
   /// Creates the module.
   const NetworkModule();
@@ -157,19 +158,18 @@ final class NetworkModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
-            type: TypeRef('Request', import: _file),
+            type: TypeRef('Uri'),
             create: FactoryRef(
-              'createRequest',
+              'createApiUri',
               import: _file,
-              deps: [ServiceRef(_client)],
+              deps: [ServiceRef(_config)],
             ),
-            lifetime: DiLifetime.factory,
-            params: [TypeRef('String')],
+            instanceName: 'api',
           ),
         ),
       ];
 
-  static const _code = r'''
+  static const _code = '''
 /// What the functions of the services did, in order.
 final List<String> events = [];
 
@@ -201,14 +201,6 @@ final class Token {
   const Token(this.config);
 
   final ApiConfig config;
-}
-
-final class Request {
-  const Request(this.client, this.path);
-
-  final ApiClient client;
-
-  final String path;
 }
 
 ApiConfig createApiConfig() {
@@ -255,24 +247,26 @@ Token createRefreshToken(ApiConfig config) {
   return Token(config);
 }
 
-Request createRequest(ApiClient client, String path) {
-  events.add('create Request $path');
-  return Request(client, path);
+Uri createApiUri(ApiConfig config) {
+  events.add('create api Uri');
+  return Uri.https(config.host);
 }
 ''';
 }
 
 /// Services that need what get_it can do beyond [NetworkModule]: services
-/// created asynchronously, singletons that wait for them, a factory with
-/// two parameters, a named service to wait for, and a type of `dart:math`.
+/// created asynchronously, singletons that wait for them, a named service
+/// to wait for, and a type of `dart:math`. Another service creates reports
+/// with the values of its callers.
 ///
 /// The singletons that wait come before what they take, so the order of
 /// the registrations is not the order of their declaration:
 /// - `Sync`, a singleton that takes the lazy singleton `Repository`, which
 ///   takes `Store`, so it waits for `Store`, with a function that disposes
 ///   of it;
-/// - `Report`, a factory that takes `Repository`, a title and a number of
-///   pages;
+/// - `ReportFactory`, a lazy singleton that takes `Repository` and creates
+///   a `Report` with the title and the number of pages that its caller
+///   passes;
 /// - `Repository`, a lazy singleton that takes `Store` and the `Clock`
 ///   named `utc`;
 /// - `Store`, a singleton that takes `Database`, so it waits for it;
@@ -327,14 +321,12 @@ final class StorageModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
-            type: TypeRef('Report', import: _file),
+            type: TypeRef('ReportFactory', import: _file),
             create: FactoryRef(
-              'createReport',
+              'createReportFactory',
               import: _file,
               deps: [ServiceRef(_repository)],
             ),
-            lifetime: DiLifetime.factory,
-            params: [TypeRef('String'), TypeRef('int')],
           ),
         ),
         diRole.data(
@@ -480,6 +472,17 @@ final class Report {
   final int pages;
 }
 
+final class ReportFactory {
+  const ReportFactory(this.repository);
+
+  final Repository repository;
+
+  Report call(String title, int pages) {
+    events.add('create Report $title');
+    return Report(repository, title, pages);
+  }
+}
+
 final class Session {
   const Session(this.name);
 
@@ -522,9 +525,9 @@ Sync startSync(Repository repository) {
 
 void stopSync(Sync sync) => events.add('stop Sync');
 
-Report createReport(Repository repository, String title, int pages) {
-  events.add('create Report $title');
-  return Report(repository, title, pages);
+ReportFactory createReportFactory(Repository repository) {
+  events.add('create ReportFactory');
+  return ReportFactory(repository);
 }
 
 Future<Session> openSession() async {

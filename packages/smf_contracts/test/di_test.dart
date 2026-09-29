@@ -1,3 +1,5 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
@@ -15,7 +17,6 @@ DiRegistration _registration(
   String name, {
   DiLifetime lifetime = DiLifetime.lazySingleton,
   List<ServiceRef> deps = const [],
-  List<TypeRef> params = const [],
   bool isAsync = false,
   List<ServiceRef> dependsOn = const [],
   FunctionRef? dispose,
@@ -25,7 +26,6 @@ DiRegistration _registration(
       type: _type(name),
       create: FactoryRef('create$name', import: _file, deps: deps),
       lifetime: lifetime,
-      params: params,
       isAsync: isAsync,
       dependsOn: dependsOn,
       dispose: dispose,
@@ -59,45 +59,22 @@ void main() {
     });
 
     test('rejects features that its lifetime does not allow', () {
-      expect(
-        _registration(
-          'A',
-          params: [const TypeRef('int'), const TypeRef('int')],
-          lifetime: DiLifetime.factory,
-        ).problems(),
-        isEmpty,
-      );
       final problems = [
-        ..._registration('B', params: [const TypeRef('int')]).problems(),
+        ..._registration('A', isAsync: true).problems(),
+        ..._registration('B', dependsOn: [_service('A')]).problems(),
         ..._registration(
           'C',
           lifetime: DiLifetime.factory,
-          params: const [TypeRef('int'), TypeRef('int'), TypeRef('int')],
+          dispose: const FunctionRef('disposeC', import: _file),
         ).problems(),
-        ..._registration('D', isAsync: true).problems(),
-        ..._registration('E', dependsOn: [_service('A')]).problems(),
-        ..._registration(
-          'F',
-          lifetime: DiLifetime.factory,
-          dispose: const FunctionRef('disposeF', import: _file),
-        ).problems(),
-        ..._registration('G', instanceName: '').problems(),
-        ..._registration(
-          'H',
-          lifetime: DiLifetime.factory,
-          params: [const TypeRef('String')],
-          instanceName: 'named',
-        ).problems(),
+        ..._registration('D', instanceName: '').problems(),
       ];
 
       expect(problems, [
-        contains('which only a factory can'),
-        contains('takes 3 parameters'),
         contains('which only a singleton can be'),
         contains('which only a singleton can do'),
         contains('does not keep to dispose of'),
         contains('empty instance name'),
-        contains('which resolveWith cannot ask for'),
       ]);
     });
 
@@ -163,20 +140,6 @@ void main() {
           contains('needs C, which no module registers'),
         ),
       ]);
-    });
-
-    test('rejects needing a factory that takes parameters', () {
-      final issue = _graph([
-        _registration(
-          'Report',
-          lifetime: DiLifetime.factory,
-          params: [const TypeRef('String')],
-        ),
-        _registration('Reader', deps: [_service('Report')]),
-      ]).issues.single;
-
-      expect(issue.message, contains('only resolveWith can pass'));
-      expect(issue.origin, const ModuleOrigin(ModuleId('module_1')));
     });
 
     test('knows a type by its file, whatever prefix imports it', () {
@@ -382,9 +345,8 @@ void main() {
           dispose: const FunctionRef('disposeAll', import: _file),
         ),
         _registration(
-          'Params',
+          'Factory',
           lifetime: DiLifetime.factory,
-          params: [const TypeRef('int')],
           deps: [_service('Basic', instanceName: 'x')],
         ),
         _registration('Basic', instanceName: 'x'),
@@ -398,11 +360,17 @@ void main() {
       expect(of('Basic'), isEmpty);
       expect(of('Async'), {DiCapability.asyncInit});
       expect(of('All'), {DiCapability.dependsOn, DiCapability.dispose});
-      expect(of('Params'), {
-        DiCapability.factoryWithParams,
-        DiCapability.instanceName,
-      });
+      expect(of('Factory'), {DiCapability.instanceName});
       expect(of('Basic', 'x'), {DiCapability.instanceName});
+    });
+  });
+
+  group('DiCapability', () {
+    test('has no factories that take values from their callers', () {
+      expect(
+        [for (final capability in DiCapability.values) capability.name],
+        ['asyncInit', 'dependsOn', 'dispose', 'instanceName'],
+      );
     });
   });
 
@@ -504,6 +472,31 @@ void main() {
         contains('T resolve<T extends Object>({String? instanceName})'),
       );
       expect(rendered.elsewhere.single.socket, AppEntryRole.bootstrapDi);
+    });
+
+    test('resolves services by type and name, with no other values', () async {
+      final rendered = await renderTemplate(diRole);
+      final unit =
+          parseString(content: rendered.files[DiRole.serviceLocatorFile]!).unit;
+      final locator = unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere((c) => c.name.lexeme == 'ServiceLocator');
+
+      expect(
+        [
+          for (final function
+              in unit.declarations.whereType<FunctionDeclaration>())
+            '${function.name.lexeme}${function.functionExpression.parameters}',
+        ],
+        ['resolve({String? instanceName})'],
+      );
+      expect(
+        [
+          for (final method in locator.members.whereType<MethodDeclaration>())
+            '${method.name.lexeme}${method.parameters}',
+        ],
+        ['resolve({String? instanceName})'],
+      );
     });
   });
 
@@ -625,7 +618,7 @@ void main() {
           screen: const DartFileIndex(
             path: screen,
             imports: [locator],
-            references: [IndexedReference('resolveWith')],
+            references: [IndexedReference('resolve')],
           ),
           infrastructure: const DartFileIndex(
             path: infrastructure,
@@ -725,11 +718,10 @@ void main() {
           ),
         );
 
-    test('accepts factories that take the dependencies and parameters', () {
+    test('accepts factories that take the dependencies', () {
       expect(
         check(
-          'AuthService createAuth(Client client, String name, [int? n]) => '
-          'AuthService();\n'
+          'AuthService createAuth(Client client, [int? n]) => AuthService();\n'
           'Client createClient() => Client();\n'
           'void close(AuthService service) {}\n',
           const [
@@ -745,7 +737,6 @@ void main() {
                 deps: [ServiceRef(client)],
               ),
               lifetime: DiLifetime.factory,
-              params: [TypeRef('String')],
             ),
             DiRegistration(
               type: TypeRef('Session', import: file),

@@ -53,7 +53,7 @@ Future<void> main() async {
   await (bootstrap());
   runApp(const App());
   final cubit = di.resolve<HomeCubit>();
-  final tearOff = di.resolveWith;
+  final tearOff = di.resolve;
   locator<A>()..reset()..clear();
   (() => 1)();
   handlers[0]();
@@ -307,12 +307,12 @@ class A {}
       containsAll([
         'context.nav',
         'context.nav.home',
-        'di.resolveWith',
+        'di.resolve',
         'cubit.state',
         'cubit.state.value',
       ]),
     );
-    expect(index.uses('resolveWith'), isTrue);
+    expect(index.uses('resolve'), isTrue);
     expect(index.uses('nav'), isTrue);
     expect(index.uses('missing'), isFalse);
     expect(index.importsUri('dart:async'), isTrue);
