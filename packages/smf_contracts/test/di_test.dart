@@ -500,6 +500,16 @@ void main() {
     });
   });
 
+  test('CompositionFile is a rule of the DI role with a file per module', () {
+    const rule = CompositionFile('lib/widgets/<id>/<id>_composition.dart');
+
+    expect(rule.role, same(diRole));
+    expect(
+      rule.pathOf(const ModuleId('card')),
+      'lib/widgets/card/card_composition.dart',
+    );
+  });
+
   group('the structural rule di.resolve_in_composition_files', () {
     const composition = 'lib/features/home/home_composition.dart';
     const screen = 'lib/features/home/home_screen.dart';
@@ -694,6 +704,78 @@ void main() {
       );
 
       expect(issues, isEmpty);
+    });
+
+    group('for a kind of its own', () {
+      const card = ModuleOrigin(ModuleId('card'));
+      const cardComposition = 'lib/widgets/card/card_composition.dart';
+      const cardWidget = 'lib/widgets/card/card.dart';
+      const featureComposition = 'lib/features/card/card_composition.dart';
+
+      List<SmfIssue> checkKind(ModuleKind kind) => diRole.checkStructure(
+            StructuralRuleRequest(
+              hook: const RoleHookRequest(
+                data: [],
+                presentRoles: {diRole},
+                context: testContext,
+              ),
+              files: {
+                for (final path in [
+                  cardComposition,
+                  cardWidget,
+                  featureComposition,
+                ])
+                  path: resolving(path),
+              },
+              owners: const {
+                cardComposition: card,
+                cardWidget: card,
+                featureComposition: card,
+              },
+              modules: [
+                ModuleDescriptor(
+                  id: card.module,
+                  description: 'Card',
+                  kind: kind,
+                  requires: const {diRole},
+                ),
+              ],
+            ),
+          );
+
+      test('lets a module resolve only in the file its kind names', () {
+        const widget = ModuleKind(
+          id: 'widget',
+          label: 'Widgets',
+          roleRules: [
+            CompositionFile('lib/widgets/<id>/<id>_composition.dart'),
+          ],
+        );
+
+        final issues = checkKind(widget);
+
+        expect(
+          issues.map((issue) => issue.path),
+          [cardWidget, featureComposition],
+        );
+        expect(
+          issues.map((issue) => issue.message),
+          everyElement(contains('only $cardComposition may')),
+        );
+      });
+
+      test('lets a module of a kind without the rule resolve nowhere', () {
+        final issues = checkKind(plainKind);
+
+        expect(
+          issues.map((issue) => issue.path),
+          [cardComposition, cardWidget, featureComposition],
+        );
+        expect(
+          issues.map((issue) => issue.message),
+          everyElement(contains('only the composition file of a feature may')),
+        );
+      });
     });
   });
 

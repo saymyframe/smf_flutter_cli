@@ -126,7 +126,10 @@ void main() {
         '--ios-bundle-id=com.example.contract-app',
         '--android-package-name=com.example.contract_app',
       ]);
-      expect(AppEntryRole.platforms, ['android', 'ios']);
+      expect(
+        ContractHarness.defaultContext.appIdentity.platforms,
+        ['android', 'ios'],
+      );
       expect(step.description, 'Configuring Firebase with flutterfire');
       // It asks for the Firebase project, reaches the account of the user,
       // and the app compiles without it.
@@ -206,6 +209,7 @@ void main() {
     List<String> idsFor({required String android, required String ios}) => [
           for (final argument in configureArguments(
             AppIdentity(
+              platforms: const ['android', 'ios'],
               androidApplicationId: android,
               iosBundleId: ios,
               androidNamespace: android,
@@ -245,6 +249,28 @@ void main() {
         '--android-package-name=com.$long',
       ]);
       expect(idsFor(android: 'com.a.b2_c', ios: 'com.a.b2-c'), hasLength(2));
+    });
+
+    test('only for the platforms of the identity, the ones it configures', () {
+      AppIdentity onlyOn(String platform) => AppIdentity(
+            platforms: [platform],
+            androidApplicationId: 'com.example.my_app',
+            iosBundleId: 'com.example.my-app',
+            androidNamespace: 'com.example.my_app',
+          );
+
+      expect(configureArguments(onlyOn('android')), [
+        'configure',
+        '--platforms=android',
+        '--overwrite-firebase-options',
+        '--android-package-name=com.example.my_app',
+      ]);
+      expect(configureArguments(onlyOn('ios')), [
+        'configure',
+        '--platforms=ios',
+        '--overwrite-firebase-options',
+        '--ios-bundle-id=com.example.my-app',
+      ]);
     });
   });
 

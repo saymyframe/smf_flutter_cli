@@ -21,7 +21,10 @@ void main() {
             "const route = '/main-tabs';\n"
             "const other = '/main-tabs-2';\n"
             'final locator = GetIt.instance;\n'
-            "import 'package:get_it/get_it.dart';\n",
+            "import 'package:get_it/get_it.dart';\n"
+            'final file = kind.compositionFile;\n'
+            'final path = kind.compositionFileOf(home);\n'
+            "const rule = CompositionFile('lib/a.dart');\n",
         'packages/a/pubspec.yaml': 'dependencies:\n  get_it: ^9.0.0\n',
         'packages/a/bricks/b/__brick__/lib/b.dart': '{{app_name_sc}}\n',
       }),
@@ -32,6 +35,8 @@ void main() {
         'packages/a/lib/a.dart:6: main-tabs',
         'packages/a/lib/a.dart:8: GetIt',
         'packages/a/lib/a.dart:9: package:get_it',
+        'packages/a/lib/a.dart:10: compositionFile',
+        'packages/a/lib/a.dart:11: compositionFileOf',
         'packages/a/pubspec.yaml:2: get_it:',
         'packages/a/bricks/b/__brick__/lib/b.dart:1: {{app_name_sc}}',
       ],

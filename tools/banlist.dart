@@ -85,6 +85,10 @@ final List<_Ban> _bans = [
     'DslContext',
     'DslAwareCodeGenerator',
     'FileMergeStrategy',
+    // The core knows no role: the file where a module may resolve services
+    // is the CompositionFile of the DI role, a rule in ModuleKind.roleRules.
+    'compositionFile',
+    'compositionFileOf',
     // Not in the model yet: DI scopes and route conditions come with a
     // module that needs them.
     'DiScopes',
@@ -132,6 +136,9 @@ final List<_Ban> _bans = [
   const _Ban('{{#modules}}', '{{#modules}}'),
   _Ban('/noModules', RegExp('/noModules(?![A-Za-z0-9_])')),
   _Ban('main-tabs', RegExp('(?<![A-Za-z0-9_-])main-tabs(?![A-Za-z0-9_-])')),
+  // Members of the contracts that moved: the platforms of the app are in its
+  // identity, AppIdentity.platforms.
+  const _Ban('AppEntryRole.platforms', 'AppEntryRole.platforms'),
 ];
 
 const _lasting = [

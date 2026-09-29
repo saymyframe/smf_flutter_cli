@@ -164,6 +164,46 @@ void main() {
     expect(index.declaration('Mode')!.constructors, isEmpty);
   });
 
+  test('indexes the members that a class declares', () {
+    final shell = DartFileIndexer.index('lib/shell.dart', '''
+class Shell {
+  Shell(this.index);
+
+  static const limit = 3;
+  final int index;
+  var first = 0, second = 1;
+  late final String _label;
+
+  int get count => 0;
+  set count(int value) {}
+  void select(int index) {}
+  static Shell create() => Shell(0);
+  bool operator ==(Object other) => false;
+  external int get raw;
+}
+''').declaration('Shell')!;
+
+    expect(
+      [
+        for (final m in shell.members)
+          '${m.name} ${m.kind.name}${m.isStatic ? ' static' : ''}',
+      ],
+      [
+        'limit field static',
+        'index field',
+        'first field',
+        'second field',
+        '_label field',
+        'count getter',
+        'count setter',
+        'select method',
+        'create method static',
+        '== method',
+        'raw getter',
+      ],
+    );
+  });
+
   test('an initializing formal of a field without a type has no type', () {
     final counter = DartFileIndexer.index('lib/counter.dart', '''
 class Counter {
@@ -319,7 +359,11 @@ class A {}
   });
 
   group('runs the structural rules of the roles on parsed code', () {
-    List<SmfIssue> appEntryIssues(Map<String, String> files) =>
+    List<SmfIssue> appEntryIssues(
+      Map<String, String> files, {
+      Map<String, ContributionOrigin> owners = const {},
+      List<ModuleDescriptor> modules = const [],
+    }) =>
         appEntryRole.checkStructure(
           StructuralRuleRequest(
             hook: const RoleHookRequest(
@@ -331,6 +375,8 @@ class A {}
               for (final MapEntry(key: path, value: text) in files.entries)
                 path: DartFileIndexer.index(path, text),
             },
+            owners: owners,
+            modules: modules,
           ),
         );
 
@@ -383,6 +429,44 @@ Future<void> bootstrap() async {}
       );
     });
 
+    test('app entry: the root is a MaterialApp, with or without const', () {
+      const provider = ModuleOrigin(ModuleId('scaffold'));
+      List<SmfIssue> issuesOf(String root) => appEntryIssues(
+            {
+              'lib/app.dart': '''
+import 'package:flutter/material.dart';
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => $root(title: 'My App');
+}
+''',
+            },
+            owners: const {'lib/app.dart': provider},
+            modules: [scaffold().descriptor],
+          );
+
+      for (final root in [
+        'MaterialApp',
+        'const MaterialApp',
+        'MaterialApp.router',
+        'const MaterialApp.router',
+      ]) {
+        expect(issuesOf(root), isEmpty, reason: root);
+      }
+      for (final root in ['CupertinoApp', 'CupertinoApp.router']) {
+        final issues = issuesOf(root);
+        expect(
+          issues.map((issue) => issue.message),
+          [contains('must be a MaterialApp')],
+          reason: root,
+        );
+        expect(issues.single.origin, provider, reason: root);
+      }
+    });
+
     test('app entry: the required symbols are checked', () {
       final files = {
         'lib/main.dart': DartFileIndexer.index(
@@ -403,6 +487,93 @@ Future<void> bootstrap() async {}
         [
           contains('must return Future<void>'),
           contains('is missing'),
+        ],
+      );
+    });
+
+    test('layout: the app shell keeps public what code of the role reads', () {
+      List<String> problemsOf(String shell) => [
+            for (final issue in LayoutRole.appShell.checkIn({
+              LayoutRole.appShellFile:
+                  DartFileIndexer.index(LayoutRole.appShellFile, shell),
+            }))
+              issue.message,
+          ];
+
+      // Public fields, as the shell of bottom_tabs has.
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required this.destinations,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.body,
+    super.key,
+  });
+
+  final List<Destination> destinations;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final Widget body;
+}
+'''),
+        isEmpty,
+      );
+      // Getters of private fields. The body, which the shell only shows,
+      // may stay private.
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required List<Destination> destinations,
+    required int currentIndex,
+    required ValueChanged<int> onSelect,
+    required Widget body,
+    super.key,
+  })  : _destinations = destinations,
+        _currentIndex = currentIndex,
+        _onSelect = onSelect,
+        _body = body;
+
+  final List<Destination> _destinations;
+  final int _currentIndex;
+  final ValueChanged<int> _onSelect;
+  final Widget _body;
+
+  List<Destination> get destinations => _destinations;
+  int get currentIndex => _currentIndex;
+  ValueChanged<int> get onSelect => _onSelect;
+}
+'''),
+        isEmpty,
+      );
+      // Private fields alone, which code outside the library cannot read,
+      // although the constructor takes what the router passes.
+      const prefix = 'class AppShell in lib/core/layout/app_shell.dart must';
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required List<Destination> destinations,
+    required int currentIndex,
+    required ValueChanged<int> onSelect,
+    required Widget body,
+    super.key,
+  })  : _destinations = destinations,
+        _currentIndex = currentIndex,
+        _onSelect = onSelect,
+        _body = body;
+
+  final List<Destination> _destinations;
+  final int _currentIndex;
+  final ValueChanged<int> _onSelect;
+  final Widget _body;
+}
+'''),
+        [
+          for (final getter in ['destinations', 'currentIndex', 'onSelect'])
+            '$prefix declare the public instance field or getter $getter.',
         ],
       );
     });

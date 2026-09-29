@@ -52,7 +52,7 @@ void main() {
       );
     });
 
-    test('have the projects of the platforms of the app entry role only', () {
+    test('have the projects of the platforms of the app only', () {
       // The directories of the platforms of flutter create.
       const flutterPlatforms = {
         'android',
@@ -69,8 +69,12 @@ void main() {
             top,
       };
 
-      // Modules such as firebase_core configure the app for these.
-      expect(platforms, AppEntryRole.platforms.toSet());
+      // Modules such as firebase_core configure the app for the platforms of
+      // its identity: those of the harness, as of every app of the pipeline.
+      expect(
+        platforms,
+        ContractHarness.defaultContext.appIdentity.platforms.toSet(),
+      );
     });
 
     test('hold nothing of the machine they were made on', () {
