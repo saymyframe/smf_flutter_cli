@@ -585,6 +585,15 @@ List<String> planProblemsOf(String workflow, {required String file}) {
           '$where takes its matrix from needs.$needed.outputs.$output, but '
           'the job $needed has no output $output.',
         );
+      } else if (_secretOf(jobs[needed] as YamlMap) case final secret?) {
+        problems.add(
+          '$where takes its matrix from needs.$needed.outputs.$output, but '
+          'the job $needed refers to the secret $secret. The runner hides the '
+          'lines of each secret that a job refers to in the outputs of the '
+          'job, and leaves out an output that has one of them, such as the { '
+          'of a key in JSON, so the matrix would have no value: refer to the '
+          'secret in a job of its own.',
+        );
       }
       planKeys.add(key);
     }
@@ -626,6 +635,12 @@ List<String> planProblemsOf(String workflow, {required String file}) {
   }
   return problems;
 }
+
+/// The first secret that the job [job] refers to, such as
+/// `FIREBASE_SERVICE_ACCOUNT` of `secrets.FIREBASE_SERVICE_ACCOUNT`, or
+/// `null` if it refers to none.
+String? _secretOf(YamlMap job) =>
+    RegExp(r'secrets\.([\w-]+)').firstMatch(job.span.text)?[1];
 
 /// The problem that [where] computes its timeout-minutes, [minutes].
 String _computedTimeout(String where, Object minutes) =>
@@ -1276,6 +1291,59 @@ jobs:
             '(without --shard).',
           ),
         ],
+      );
+    });
+
+    test(
+        'finds a matrix that takes an output of a job that refers to a '
+        'secret, whose lines the runner hides in the outputs of the job', () {
+      const matrix = r'''
+  android:
+    needs: [plan, firebase-key]
+    if: needs.firebase-key.outputs.key == 'true'
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - run: echo
+''';
+      const secret = r'''
+      - id: key
+        env:
+          HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: echo "key=$HAS_KEY" >> "$GITHUB_OUTPUT"
+''';
+      const plan = r'''
+jobs:
+  plan:
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - id: plan
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --plan
+''';
+      const key = r'''
+  firebase-key:
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+''';
+      expect(planProblemsOf('$plan$secret$key$matrix', file: 'apps.yml'), [
+        equals(
+          'apps.yml, job android takes its matrix from '
+          'needs.plan.outputs.apps, but the job plan refers to the secret '
+          'FIREBASE_SERVICE_ACCOUNT. '
+          'The runner hides the lines of each secret that a job refers to in '
+          'the outputs of the job, and leaves out an output that has one of '
+          'them, such as the { of a key in JSON, so the matrix would have no '
+          'value: refer to the secret in a job of its own.',
+        ),
+      ]);
+      // The secret in a job of its own, whose output only a condition reads.
+      expect(
+        planProblemsOf('$plan$key$secret$matrix', file: 'apps.yml'),
+        isEmpty,
       );
     });
 
