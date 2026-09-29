@@ -407,6 +407,93 @@ Future<void> bootstrap() async {}
       );
     });
 
+    test('layout: the app shell keeps public what code of the role reads', () {
+      List<String> problemsOf(String shell) => [
+            for (final issue in LayoutRole.appShell.checkIn({
+              LayoutRole.appShellFile:
+                  DartFileIndexer.index(LayoutRole.appShellFile, shell),
+            }))
+              issue.message,
+          ];
+
+      // Public fields, as the shell of bottom_tabs has.
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required this.destinations,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.body,
+    super.key,
+  });
+
+  final List<Destination> destinations;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final Widget body;
+}
+'''),
+        isEmpty,
+      );
+      // Getters of private fields. The body, which the shell only shows,
+      // may stay private.
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required List<Destination> destinations,
+    required int currentIndex,
+    required ValueChanged<int> onSelect,
+    required Widget body,
+    super.key,
+  })  : _destinations = destinations,
+        _currentIndex = currentIndex,
+        _onSelect = onSelect,
+        _body = body;
+
+  final List<Destination> _destinations;
+  final int _currentIndex;
+  final ValueChanged<int> _onSelect;
+  final Widget _body;
+
+  List<Destination> get destinations => _destinations;
+  int get currentIndex => _currentIndex;
+  ValueChanged<int> get onSelect => _onSelect;
+}
+'''),
+        isEmpty,
+      );
+      // Private fields alone, which code outside the library cannot read,
+      // although the constructor takes what the router passes.
+      const prefix = 'class AppShell in lib/core/layout/app_shell.dart must';
+      expect(
+        problemsOf('''
+class AppShell extends StatelessWidget {
+  const AppShell({
+    required List<Destination> destinations,
+    required int currentIndex,
+    required ValueChanged<int> onSelect,
+    required Widget body,
+    super.key,
+  })  : _destinations = destinations,
+        _currentIndex = currentIndex,
+        _onSelect = onSelect,
+        _body = body;
+
+  final List<Destination> _destinations;
+  final int _currentIndex;
+  final ValueChanged<int> _onSelect;
+  final Widget _body;
+}
+'''),
+        [
+          for (final getter in ['destinations', 'currentIndex', 'onSelect'])
+            '$prefix declare the public instance field or getter $getter.',
+        ],
+      );
+    });
+
     test('DI: only composition files resolve services', () {
       const home = ModuleOrigin(ModuleId('home'));
       const infra = ModuleOrigin(ModuleId('infra'));

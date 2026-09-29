@@ -77,6 +77,44 @@ void main() {
     );
   });
 
+  test('code that knows only the role reads the navigation from the shell', () {
+    // An AppShell that takes what the router passes, but keeps none of the
+    // destinations, the selected index and onSelect where code can read
+    // them.
+    const shell = IndexedDeclaration(
+      name: 'AppShell',
+      kind: DeclarationKind.classType,
+      constructors: [
+        IndexedConstructor(
+          isConst: true,
+          parameters: [
+            IndexedParameter('destinations', kind: ParameterKind.requiredNamed),
+            IndexedParameter('currentIndex', kind: ParameterKind.requiredNamed),
+            IndexedParameter('onSelect', kind: ParameterKind.requiredNamed),
+            IndexedParameter('body', kind: ParameterKind.requiredNamed),
+          ],
+        ),
+      ],
+    );
+
+    const prefix = 'class AppShell in lib/core/layout/app_shell.dart must';
+    expect(
+      [
+        for (final issue in LayoutRole.appShell.checkIn({
+          LayoutRole.appShellFile: const DartFileIndex(
+            path: LayoutRole.appShellFile,
+            declarations: [shell],
+          ),
+        }))
+          issue.message,
+      ],
+      [
+        for (final getter in ['destinations', 'currentIndex', 'onSelect'])
+          '$prefix declare the public instance field or getter $getter.',
+      ],
+    );
+  });
+
   group('LayoutProvider', () {
     RoleHookInput<NoDsl> input(int destinations) => inputOf(
           layoutRole,
