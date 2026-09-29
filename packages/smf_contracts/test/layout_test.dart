@@ -71,6 +71,13 @@ void main() {
       'onSelect',
       'body',
     ]);
+    // What code that knows only the role reads from the shell; the body is
+    // only shown.
+    expect(LayoutRole.appShell.getters, [
+      'destinations',
+      'currentIndex',
+      'onSelect',
+    ]);
     expect(
       layoutRole.interface.symbols,
       [LayoutRole.destination, LayoutRole.appShell],

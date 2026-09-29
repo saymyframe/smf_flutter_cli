@@ -164,6 +164,46 @@ void main() {
     expect(index.declaration('Mode')!.constructors, isEmpty);
   });
 
+  test('indexes the members that a class declares', () {
+    final shell = DartFileIndexer.index('lib/shell.dart', '''
+class Shell {
+  Shell(this.index);
+
+  static const limit = 3;
+  final int index;
+  var first = 0, second = 1;
+  late final String _label;
+
+  int get count => 0;
+  set count(int value) {}
+  void select(int index) {}
+  static Shell create() => Shell(0);
+  bool operator ==(Object other) => false;
+  external int get raw;
+}
+''').declaration('Shell')!;
+
+    expect(
+      [
+        for (final m in shell.members)
+          '${m.name} ${m.kind.name}${m.isStatic ? ' static' : ''}',
+      ],
+      [
+        'limit field static',
+        'index field',
+        'first field',
+        'second field',
+        '_label field',
+        'count getter',
+        'count setter',
+        'select method',
+        'create method static',
+        '== method',
+        'raw getter',
+      ],
+    );
+  });
+
   test('an initializing formal of a field without a type has no type', () {
     final counter = DartFileIndexer.index('lib/counter.dart', '''
 class Counter {

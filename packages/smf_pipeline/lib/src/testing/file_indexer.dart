@@ -89,6 +89,7 @@ Iterable<IndexedDeclaration> _declarations(
         name: member.name.lexeme,
         kind: DeclarationKind.classType,
         constructors: _constructors(member.members),
+        members: _members(member.members),
         annotations: annotations,
         offset: offset,
       );
@@ -206,6 +207,33 @@ List<IndexedConstructor> _constructors(NodeList<ClassMember> members) {
           isFactory: member.factoryKeyword != null,
         ),
   ];
+}
+
+/// The members among [members] other than the constructors: a member for
+/// each variable of a field declaration, and one for each method, getter,
+/// setter and operator.
+List<IndexedMember> _members(NodeList<ClassMember> members) => [
+      for (final member in members)
+        if (member is FieldDeclaration)
+          for (final variable in member.fields.variables)
+            IndexedMember(
+              variable.name.lexeme,
+              kind: MemberKind.field,
+              isStatic: member.isStatic,
+            )
+        else if (member is MethodDeclaration)
+          IndexedMember(
+            member.name.lexeme,
+            kind: _memberKind(member),
+            isStatic: member.isStatic,
+          ),
+    ];
+
+/// The kind of [method]: a getter, a setter or a method.
+MemberKind _memberKind(MethodDeclaration method) {
+  if (method.isGetter) return MemberKind.getter;
+  if (method.isSetter) return MemberKind.setter;
+  return MemberKind.method;
 }
 
 List<IndexedParameter> _parameters(

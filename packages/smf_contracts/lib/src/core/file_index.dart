@@ -141,6 +141,7 @@ final class IndexedDeclaration {
     this.type,
     this.parameters = const [],
     this.constructors = const [],
+    this.members = const [],
     this.annotations = const [],
     this.isAsync = false,
     this.offset = 0,
@@ -162,6 +163,12 @@ final class IndexedDeclaration {
   /// The constructors declared by a class, enum or extension type; empty if
   /// it declares none and so has only the implicit default constructor.
   final List<IndexedConstructor> constructors;
+
+  /// The members declared in the body of a class other than its
+  /// constructors, in source order: its fields, getters, setters and
+  /// methods, static or not. The members it inherits are not among them,
+  /// and the index records no members of other declarations.
+  final List<IndexedMember> members;
 
   /// The annotations, as written, such as `@RoutePage(name: 'HomeRoute')`.
   final List<String> annotations;
@@ -205,6 +212,37 @@ final class IndexedConstructor {
 
   /// Whether the constructor is a `factory`.
   final bool isFactory;
+}
+
+/// Kinds of members of a class.
+enum MemberKind {
+  /// A field; each variable of a field declaration is a member of its own.
+  field,
+
+  /// A getter.
+  getter,
+
+  /// A setter.
+  setter,
+
+  /// A method or an operator.
+  method,
+}
+
+/// A member of an indexed class other than a constructor.
+final class IndexedMember {
+  /// Creates the index of the member [name].
+  const IndexedMember(this.name, {required this.kind, this.isStatic = false});
+
+  /// The declared name; the name of an operator is its symbol, such as
+  /// `==`.
+  final String name;
+
+  /// What kind of member it is.
+  final MemberKind kind;
+
+  /// Whether the member is `static`.
+  final bool isStatic;
 }
 
 /// Kinds of parameters.
