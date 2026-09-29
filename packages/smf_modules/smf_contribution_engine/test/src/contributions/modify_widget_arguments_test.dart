@@ -194,6 +194,56 @@ const Text(
       ]);
     });
 
+    group('widgets created without const or new', () {
+      test('are modified', () async {
+        final source = classWithBuild("Text('Hi', maxLines: 1)");
+
+        final result = await modifyText(
+          removeArgs: ['maxLines'],
+          addArgs: {'softWrap': 'false'},
+        ).apply(source);
+
+        expect(methodStatements(result, 'HomePage', 'build'), [
+          "return Text('Hi', softWrap: false);",
+        ]);
+      });
+
+      test('lose the const of the widgets around them', () async {
+        final result = await modifyText(
+          addArgs: {'style': 'Theme.of(context).textTheme.titleLarge'},
+        ).apply(monolithMainDart);
+
+        const expected = 'return MaterialApp(home: Scaffold(body: '
+            "Center(child: Text('Hello World!', "
+            'style: Theme.of(context).textTheme.titleLarge))));';
+        expect(methodStatements(result, 'MainApp', 'build'), [expected]);
+      });
+
+      test('lose the const of the list around them', () async {
+        final source = classWithBuild("Column(children: const [Text('Hi')])");
+
+        final result = await modifyText(addArgs: {'style': 'style'}).apply(
+          source,
+        );
+
+        expect(methodStatements(result, 'HomePage', 'build'), [
+          "return Column(children: [Text('Hi', style: style)]);",
+        ]);
+      });
+
+      test('keep the new of the widgets around them', () async {
+        final source = classWithBuild("new Center(child: Text('Hi'))");
+
+        final result = await modifyText(addArgs: {'style': 'style'}).apply(
+          source,
+        );
+
+        expect(methodStatements(result, 'HomePage', 'build'), [
+          "return new Center(child: Text('Hi', style: style));",
+        ]);
+      });
+    });
+
     test('drops the edits inside a nested widget that the outer one replaces',
         () async {
       final result = await const ModifyWidgetArguments(

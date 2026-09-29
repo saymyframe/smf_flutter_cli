@@ -141,24 +141,42 @@ class HomePage {
       expect(await toRouter.apply(once), once);
     });
 
-    test(
-      'replaces widgets created without const or new',
-      () async {
-        final source = monolithMainDart.replaceFirst(
-          'return const MaterialApp(',
-          'return MaterialApp(',
-        );
+    group('widgets created without const or new', () {
+      final source = monolithMainDart.replaceFirst(
+        'return const MaterialApp(',
+        'return MaterialApp(',
+      );
 
+      test('are replaced', () async {
         final result = await toRouter.apply(source);
 
         expect(
           methodStatements(result, 'MainApp', 'build').single,
           startsWith('return MaterialApp.router('),
         );
-      },
-      skip: 'Bug: without resolution `MaterialApp(...)` parses as a '
-          'MethodInvocation, which MatchWidgetVisitor never visits',
-    );
+      });
+
+      test('are replaced once', () async {
+        final once = await toRouter.apply(source);
+
+        expect(await toRouter.apply(once), once);
+      });
+
+      test('keep their import prefix', () async {
+        const source = '''
+class HomePage {
+  Widget build() => m.Center(child: m.Text('Text'));
+}
+''';
+
+        final result = await textToSelectable().apply(source);
+
+        expect(
+          result,
+          contains("m.Center(child: m.SelectableText('Text'))"),
+        );
+      });
+    });
 
     test(
       'replaces widgets outside classes when no class is given',

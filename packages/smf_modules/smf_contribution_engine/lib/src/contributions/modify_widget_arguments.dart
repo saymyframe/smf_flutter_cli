@@ -14,7 +14,9 @@ typedef _Edit = ({int offset, int end, String text});
 /// in [removeArgs] go with their comma, those in [addArgs] that the widget
 /// already has get the new value, and the rest of [addArgs] are appended,
 /// keeping a trailing comma at the end of the list. Each matched widget loses
-/// its `const` (or `new`), since the new arguments need not be constant. An
+/// its `const` (or `new`), since the new arguments need not be constant, and
+/// so do the widget creations and collection literals around it whose
+/// `const` makes it constant; a `const` declaration around it stays. An
 /// edit inside an argument that an outer widget removes or overrides goes
 /// away with that argument.
 ///
@@ -35,9 +37,11 @@ class ModifyWidgetArguments extends Contribution {
   /// The name of the widget to change, such as `Text`.
   ///
   /// It is matched against the type name as parsed without resolution: an
-  /// import prefix doesn't count, and `const MaterialApp.router()` reads as
-  /// the type `router`. Only widgets created with `const` or `new` are found,
-  /// since `Text('a')` alone parses as a method call.
+  /// import prefix doesn't count, and `MaterialApp.router()` reads as the
+  /// type `router`. Widgets created without `const` or `new`, such as
+  /// `Text('a')`, parse as calls and are found by the same name when the
+  /// call names a class, going by its capital letter: `m.Text('a')` and
+  /// `MaterialApp.router()` count, `delegate.builder()` doesn't.
   final String widgetName;
 
   /// The names of the named arguments to remove, such as `home`.
@@ -66,7 +70,13 @@ class ModifyWidgetArguments extends Contribution {
 
     // An edit inside another one, such as in a nested widget passed as an
     // argument that is removed or replaced, goes away with that argument.
-    edits.sort((a, b) => a.offset.compareTo(b.offset));
+    // Of two edits that start together, the wider one comes first, so that
+    // the argument that starts with `const` goes rather than the `const`.
+    edits.sort(
+      (a, b) => a.offset != b.offset
+          ? a.offset.compareTo(b.offset)
+          : b.end.compareTo(a.end),
+    );
     final applied = <_Edit>[];
     for (final edit in edits) {
       if (applied.isEmpty || edit.offset >= applied.last.end) {
@@ -83,19 +93,23 @@ class ModifyWidgetArguments extends Contribution {
     return dartFormater.format(result);
   }
 
-  /// The edits to [node]'s source. Only the arguments that change are
-  /// touched, so the rest, comments included, stays as written.
-  List<_Edit> _editsFor(InstanceCreationExpression node) {
-    final argumentList = node.argumentList;
+  /// The edits to the source of [creation]. Only the arguments that change
+  /// are touched, so the rest, comments included, stays as written.
+  List<_Edit> _editsFor(WidgetCreation creation) {
+    final argumentList = creation.argumentList;
     final arguments = argumentList.arguments;
     bool isRemoved(Expression arg) =>
         arg is NamedExpression && removeArgs.contains(arg.name.label.name);
     final kept = arguments.where((arg) => !isRemoved(arg)).toList();
 
     final edits = <_Edit>[
-      // The new arguments need not be constant, so `const` (or `new`) goes.
-      if (node.keyword case final keyword?)
-        (offset: keyword.offset, end: node.constructorName.offset, text: ''),
+      // The new arguments need not be constant, so `const` (or `new`) goes,
+      // and so does each `const` around the widget that makes it constant.
+      for (final keyword in [
+        if (creation.keyword case final keyword?) keyword,
+        ..._constsAround(creation.expression),
+      ])
+        (offset: keyword.offset, end: keyword.next!.offset, text: ''),
     ];
 
     for (final arg in arguments.where(isRemoved)) {
@@ -136,5 +150,18 @@ class ModifyWidgetArguments extends Contribution {
     }
 
     return edits;
+  }
+}
+
+/// The `const` of each widget creation and collection literal around [node],
+/// each of which makes [node] constant.
+Iterable<Token> _constsAround(AstNode node) sync* {
+  for (var parent = node.parent; parent != null; parent = parent.parent) {
+    if (parent
+        case InstanceCreationExpression(keyword: final keyword?) ||
+            TypedLiteral(constKeyword: final keyword?)
+        when keyword.keyword == Keyword.CONST) {
+      yield keyword;
+    }
   }
 }

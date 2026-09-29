@@ -29,7 +29,7 @@ class ScopedWidgetVisitor extends GeneralizingAstVisitor<void> {
   final String? methodName;
 
   /// Called with each matching widget creation in scope.
-  final void Function(InstanceCreationExpression) onMatch;
+  final void Function(WidgetCreation) onMatch;
 
   MatchWidgetVisitor get _matcher =>
       MatchWidgetVisitor(targetWidget: fromWidget, onMatch: onMatch);
