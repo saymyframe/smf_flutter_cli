@@ -122,21 +122,28 @@ jobs:
       # no action for it, so it is set up here: KVM for the user of the
       # runner, the emulator and the image from the SDK manager of the
       # runner, and a virtual device without a window.
+      # The directory of the AVD is set for avdmanager and the emulator
+      # alike: avdmanager puts it under XDG_CONFIG_HOME, which the runners
+      # set, while the emulator looks in ~/.android/avd.
       - name: Start an Android emulator
         if: ${{ !cancelled() && matrix.registry == 'real' }}
         env:
           ANDROID_IMAGE: system-images;android-35;google_apis;x86_64
+          ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --name smf --package "$ANDROID_IMAGE" --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -list-avds
           nohup "$ANDROID_HOME/emulator/emulator" -avd smf -port 5554 -no-window \
             -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect \
             -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/emulator.pid"
 
       # With the versions of Gradle, the Android Gradle Plugin and Kotlin
       # that the brick of flutter_core sets, and the Android side of the
@@ -155,13 +162,23 @@ jobs:
         timeout-minutes: 15
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
-          if ! timeout 600 "$adb" -s emulator-5554 wait-for-device shell \
-            'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 2; done'; then
-            echo "::error::The Android emulator did not start in 10 minutes."
-            cat "$RUNNER_TEMP/emulator.log"
-            exit 1
-          fi
-          "$adb" devices
+          pid="$(cat "$RUNNER_TEMP/emulator.pid")"
+          # Up to 10 minutes, but no longer than the emulator lives.
+          for _ in $(seq 300); do
+            if [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ]; then
+              "$adb" devices
+              exit 0
+            fi
+            if ! kill -0 "$pid" 2> /dev/null; then
+              echo "::error::The Android emulator stopped before it started."
+              cat "$RUNNER_TEMP/emulator.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::The Android emulator did not start in 10 minutes."
+          cat "$RUNNER_TEMP/emulator.log"
+          exit 1
 
       # The test that the app starts is a test of flutter_core in
       # app_tests/start, which the matrix tool adds to the app as it adds it
