@@ -23,6 +23,11 @@ const appEntryRole = AppEntryRole._();
 ///   such as [androidManifestFile];
 /// - [readmeFile], the README of the app.
 ///
+/// The provider builds the root of the app, inside the [rootWrappers], as a
+/// `MaterialApp`, or a `MaterialApp.router` when the router role is present.
+/// So the screens of every module have the Material ancestors they rely
+/// on, such as the theme of the app and `MaterialLocalizations`.
+///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
 /// alone at the start of a line of their file, like the tags of
@@ -368,6 +373,12 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkMainSequence,
         ),
         StructuralRule(
+          id: 'app_entry.material_root',
+          description: 'The provider builds the root of the app as a '
+              'MaterialApp, or a MaterialApp.router with a router.',
+          check: _checkMaterialRoot,
+        ),
+        StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
               'the top-level dictionary of Info.plist, the permissions and '
@@ -502,5 +513,39 @@ List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   return [
     for (final problem in problems)
       SmfIssue(problem, origin: input.owners[path], path: path),
+  ];
+}
+
+/// Whether [invocation] creates a `MaterialApp`, with or without `const`;
+/// the index records `MaterialApp.router()` as `router()` on the target
+/// `MaterialApp`.
+bool _createsMaterialApp(IndexedInvocation invocation) =>
+    switch ((invocation.name, invocation.target)) {
+      ('MaterialApp', null) || ('router', 'MaterialApp') => true,
+      _ => false,
+    };
+
+List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
+  ModuleId? provider;
+  for (final MapEntry(key: path, value: file) in input.files.entries) {
+    final owner = input.owners[path];
+    // The root is in the code of the app, not in its tests.
+    if (owner is! ModuleOrigin || !path.startsWith('lib/')) continue;
+    final module = input.module(owner.module);
+    if (!(module?.provides.contains(appEntryRole) ?? false)) continue;
+    if (file.invocations.any(_createsMaterialApp)) return const [];
+    provider = owner.module;
+  }
+  // The required symbols report the files of a provider that are missing.
+  if (provider == null) return const [];
+  return [
+    SmfIssue(
+      'The root of the app must be a MaterialApp, but the module $provider '
+      'creates none in lib/.',
+      hint: 'Build the root widget as a MaterialApp, or a MaterialApp.router '
+          'when the router role is present: the screens of the modules need '
+          'its theme and MaterialLocalizations.',
+      origin: ModuleOrigin(provider),
+    ),
   ];
 }
