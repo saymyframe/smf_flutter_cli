@@ -25,8 +25,4 @@ final class _GetItServiceLocator implements ServiceLocator {
   @override
   T resolve<T extends Object>({String? instanceName}) =>
       _getIt<T>(instanceName: instanceName);
-
-  @override
-  T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
-      _getIt<T>(param1: param1, param2: param2);
 }

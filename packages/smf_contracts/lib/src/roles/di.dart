@@ -23,10 +23,9 @@ const diRole = DiRole._();
 ///
 /// The role's template generates `lib/core/di/service_locator.dart` with
 /// the `ServiceLocator` interface, the instance `serviceLocator` created by
-/// the provider's [createServiceLocator], and the top-level functions
-/// `resolve<T>({instanceName})` and `resolveWith<T>(param1, [param2])`. It
-/// also calls the provider's [registerDependencies] in the DI phase of
-/// `bootstrap()`.
+/// the provider's [createServiceLocator], and the top-level function
+/// `resolve<T>({instanceName})`. It also calls the provider's
+/// [registerDependencies] in the DI phase of `bootstrap()`.
 ///
 /// A provider extends [DiProvider], renders the registrations of
 /// [graphOf] in [DiGraph.ordered] order, makes each singleton wait for the
@@ -88,9 +87,8 @@ final class DiRole extends Role<DiRegistration> {
         StructuralRule(
           id: 'di.factories',
           description: 'The factory of every registration is a top-level '
-              'function in its file that takes the dependencies and then the '
-              'parameters of the registration, and its dispose function '
-              'takes the service.',
+              'function in its file that takes the dependencies of the '
+              'registration, and its dispose function takes the service.',
           check: _checkFactories,
         ),
       ];
@@ -157,11 +155,11 @@ abstract base class DiProvider extends RoleProvider<DiRegistration> {
   }
 }
 
-const _resolveNames = {'resolve', 'resolveWith', 'serviceLocator'};
+const _resolveNames = {'resolve', 'serviceLocator'};
 
-/// Whether [file] resolves services: it calls, tears off or reads `resolve`,
-/// `resolveWith` or `serviceLocator` of the service locator's file, which it
-/// imports with or without a prefix.
+/// Whether [file] resolves services: it calls, tears off or reads `resolve`
+/// or `serviceLocator` of the service locator's file, which it imports with
+/// or without a prefix.
 bool _resolves(DartFileIndex file) =>
     usesSymbols(file, _resolveNames, DiRole.serviceLocatorFile);
 
@@ -205,8 +203,8 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
 
 /// The problems with the functions that registrations name: a factory that
 /// is missing from its file of the app, or that cannot take its
-/// dependencies and parameters as positional arguments, and a dispose
-/// function that cannot take the service.
+/// dependencies as positional arguments, and a dispose function that cannot
+/// take the service.
 ///
 /// Functions from other packages are left to the compiler.
 List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
@@ -228,7 +226,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
         SmfIssue(
           issue.message,
           hint: 'The pipeline calls it with the dependencies of the '
-              'registration, then its parameters.',
+              'registration.',
           origin: origin,
           path: issue.path,
         ),
@@ -239,12 +237,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   for (final data in diRole.graphOf(input.roleInput).registrations) {
     final registration = data.value;
     final create = registration.create;
-    check(
-      create.name,
-      create.import,
-      create.deps.length + registration.params.length,
-      data.origin,
-    );
+    check(create.name, create.import, create.deps.length, data.origin);
     if (registration.dispose case final dispose?) {
       check(dispose.name, dispose.import, 1, data.origin);
     }

@@ -17,10 +17,6 @@ enum DiLifetime {
 /// factories whose factory functions take services; see
 /// [DiProvider.capabilities].
 enum DiCapability {
-  /// Factories that take up to two parameters from the caller, resolved
-  /// with `resolveWith`.
-  factoryWithParams,
-
   /// Singletons created asynchronously, which `registerDependencies()`
   /// waits for.
   asyncInit,
@@ -56,7 +52,16 @@ enum DiCapability {
 /// ```
 ///
 /// Only the composition file of a feature resolves services itself, with
-/// `resolve` and `resolveWith` of `lib/core/di/service_locator.dart`.
+/// `resolve` of `lib/core/di/service_locator.dart`.
+///
+/// Values known only at run time, such as the id of the product that a
+/// screen shows, are not part of a registration. The composition function
+/// of a feature takes them as parameters, as in
+/// `DetailsCubit createDetailsCubit(int id)`. Elsewhere, a factory class
+/// that takes its services in its constructor creates the objects with
+/// such values in a method such as `call(int id)`; it is registered like
+/// any other service, and other services take it in their
+/// [FactoryRef.deps].
 @immutable
 final class DiRegistration {
   /// Registers the service of [type] that [create] creates.
@@ -64,7 +69,6 @@ final class DiRegistration {
     required this.type,
     required this.create,
     this.lifetime = DiLifetime.lazySingleton,
-    this.params = const [],
     this.isAsync = false,
     this.dependsOn = const [],
     this.dispose,
@@ -74,17 +78,12 @@ final class DiRegistration {
   /// The type the service is registered as, usually an interface.
   final TypeRef type;
 
-  /// The function that creates the service: `create(deps..., params...)`.
+  /// The function that creates the service from the services in its
+  /// [FactoryRef.deps].
   final FactoryRef create;
 
   /// How long the service lives.
   final DiLifetime lifetime;
-
-  /// The types of up to two values that callers pass to a
-  /// [DiLifetime.factory] with `resolveWith`, after its [FactoryRef.deps].
-  ///
-  /// Needs [DiCapability.factoryWithParams].
-  final List<TypeRef> params;
 
   /// Whether [create] returns a `Future` of the service. Only a
   /// [DiLifetime.singleton] can be created asynchronously, and
@@ -123,24 +122,13 @@ final class DiRegistration {
     final problems = [
       ...type.problems(),
       ...create.problems(),
-      for (final param in params) ...param.problems(),
       for (final service in dependsOn) ...service.problems(),
       ...?dispose?.problems(),
       if (instanceName case final name? when name.isEmpty)
         '$label has an empty instance name.',
-      if (params.isNotEmpty && lifetime != DiLifetime.factory)
-        '$label takes parameters, which only a factory can.',
-      if (params.isNotEmpty && instanceName != null)
-        _namedFactoryProblem(label),
       if (isAsync && lifetime != DiLifetime.singleton)
         '$label is asynchronous, which only a singleton can be.',
     ];
-    if (params.length > 2) {
-      problems.add(
-        '$label takes ${params.length} parameters; a factory takes at most '
-        'two.',
-      );
-    }
     if (dependsOn.isNotEmpty && lifetime != DiLifetime.singleton) {
       problems.add(
         '$label waits for other services, which only a singleton can do.',
@@ -158,7 +146,3 @@ final class DiRegistration {
   @override
   String toString() => 'registration of $key';
 }
-
-String _namedFactoryProblem(String label) =>
-    '$label takes parameters and has an instance name, which resolveWith '
-    'cannot ask for.';
