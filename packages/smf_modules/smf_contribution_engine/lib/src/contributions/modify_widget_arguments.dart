@@ -96,36 +96,48 @@ class ModifyWidgetArguments extends Contribution {
   /// The edits to the source of [creation]. Only the arguments that change
   /// are touched, so the rest, comments included, stays as written.
   List<_Edit> _editsFor(WidgetCreation creation) {
-    final argumentList = creation.argumentList;
-    final arguments = argumentList.arguments;
-    bool isRemoved(Expression arg) =>
-        arg is NamedExpression && removeArgs.contains(arg.name.label.name);
-    final kept = arguments.where((arg) => !isRemoved(arg)).toList();
-
-    final edits = <_Edit>[
-      // The new arguments need not be constant, so `const` (or `new`) goes,
-      // and so does each `const` around the widget that makes it constant.
-      for (final keyword in [
-        if (creation.keyword case final keyword?) keyword,
-        ..._constsAround(creation.expression),
-      ])
-        (offset: keyword.offset, end: keyword.next!.offset, text: ''),
+    final arguments = creation.argumentList.arguments;
+    final kept = arguments.where((arg) => !_isRemoved(arg)).toList();
+    return [
+      ..._constEdits(creation),
+      for (final arg in arguments.where(_isRemoved)) _removal(arg, kept),
+      ..._additions(creation.argumentList, kept),
     ];
+  }
 
-    for (final arg in arguments.where(isRemoved)) {
-      // The argument goes with its comma. The last one may have none, and
-      // then takes the comma after the last kept argument instead.
-      final next = arg.endToken.next!;
-      final (start, end) = next.type == TokenType.COMMA
-          ? (arg.offset, next.end)
-          : (kept.lastOrNull?.end ?? arg.offset, arg.end);
-      edits.add((offset: start, end: end, text: ''));
-    }
+  bool _isRemoved(Expression arg) =>
+      arg is NamedExpression && removeArgs.contains(arg.name.label.name);
 
+  /// The edits that drop the `const` (or `new`) of [creation], and each
+  /// `const` around it that makes it constant: the new arguments need not
+  /// be constant.
+  static List<_Edit> _constEdits(WidgetCreation creation) => [
+        for (final keyword in [
+          if (creation.keyword case final keyword?) keyword,
+          ..._constsAround(creation.expression),
+        ])
+          (offset: keyword.offset, end: keyword.next!.offset, text: ''),
+      ];
+
+  /// The edit that removes [arg] with its comma. The last argument may have
+  /// none, and then takes the comma after the last of [kept] instead.
+  static _Edit _removal(Expression arg, List<Expression> kept) {
+    final next = arg.endToken.next!;
+    final (start, end) = next.type == TokenType.COMMA
+        ? (arg.offset, next.end)
+        : (kept.lastOrNull?.end ?? arg.offset, arg.end);
+    return (offset: start, end: end, text: '');
+  }
+
+  /// The edits of [addArgs] to [argumentList], whose arguments after the
+  /// removals are [kept]: a value replaces that of a kept argument of its
+  /// name, and the other arguments go at the end of the list.
+  List<_Edit> _additions(ArgumentList argumentList, List<Expression> kept) {
     final keptByName = {
       for (final arg in kept.whereType<NamedExpression>())
         arg.name.label.name: arg.expression,
     };
+    final edits = <_Edit>[];
     final appended = <String>[];
     addArgs.forEach((name, value) {
       final existing = keptByName[name];
@@ -135,21 +147,18 @@ class ModifyWidgetArguments extends Contribution {
         appended.add('$name: $value');
       }
     });
+    if (appended.isEmpty) return edits;
 
-    if (appended.isNotEmpty) {
-      var text = appended.join(', ');
-      final rightParenthesis = argumentList.rightParenthesis;
-      if (kept.isNotEmpty) {
-        // A trailing comma stays at the end of the list.
-        text = rightParenthesis.previous?.type == TokenType.COMMA
-            ? ' $text,'
-            : ', $text';
-      }
-      final offset = rightParenthesis.offset;
-      edits.add((offset: offset, end: offset, text: text));
+    var text = appended.join(', ');
+    final rightParenthesis = argumentList.rightParenthesis;
+    if (kept.isNotEmpty) {
+      // A trailing comma stays at the end of the list.
+      text = rightParenthesis.previous?.type == TokenType.COMMA
+          ? ' $text,'
+          : ', $text';
     }
-
-    return edits;
+    final offset = rightParenthesis.offset;
+    return edits..add((offset: offset, end: offset, text: text));
   }
 }
 
