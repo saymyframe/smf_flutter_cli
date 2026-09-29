@@ -46,26 +46,35 @@ Future<List<MatrixAppTest>> _appTests() async {
   final appTests =
       Directory.fromUri(library!).parent.uri.resolve('app_tests').toFilePath();
   return [
-    // The listeners of the screen under go_router, with a main navigation
-    // for the destinations of the two fixture features.
+    // The listeners of the screen, whichever module provides the router:
+    // the test starts the app with main() and navigates through the
+    // navigation facade of the router role.
+    MatrixAppTest(
+      '$appTests/router_screens',
+      appliesTo: (app) =>
+          _hasProviderOf(routerRole)(app) &&
+          _hasAll(const {'fake_feature', 'fake_analytics'})(app),
+    ),
+    // The listeners of the screen as the user switches between the
+    // destinations of the two fixture features, whichever modules provide
+    // the router and the layout: the test selects a destination through
+    // the AppShell of the layout role. The apps it applies to have the
+    // tests of router_screens, whose helpers it uses.
+    MatrixAppTest(
+      '$appTests/layout_screens',
+      appliesTo: (app) =>
+          _hasProviderOf(routerRole)(app) &&
+          _hasProviderOf(layoutRole)(app) &&
+          _hasAll(const {'fake_feature', 'fake_second', 'fake_analytics'})(
+            app,
+          ),
+    ),
+    // What only go_router does: a refresh of its routes, which the
+    // listeners of the screen do not hear of. The apps it applies to have
+    // the tests of router_screens, whose helpers it uses.
     MatrixAppTest(
       '$appTests/go_router_screens',
-      appliesTo: _hasAll(const {
-        'go_router',
-        'bottom_tabs',
-        'fake_feature',
-        'fake_second',
-        'fake_analytics',
-      }),
-    ),
-    // The listeners of the screen under the fixture router.
-    MatrixAppTest(
-      '$appTests/fake_router_screens',
-      appliesTo: _hasAll(const {
-        'fake_router',
-        'fake_feature',
-        'fake_analytics',
-      }),
+      appliesTo: _hasAll(const {'go_router', 'fake_feature', 'fake_analytics'}),
     ),
   ];
 }
@@ -73,3 +82,13 @@ Future<List<MatrixAppTest>> _appTests() async {
 /// Whether an app of the matrix has every module of [ids].
 bool Function(MatrixApp app) _hasAll(Set<String> ids) =>
     (app) => ids.every((id) => app.modules.contains(ModuleId(id)));
+
+/// Whether an app of the matrix has a module of the fixture registry that
+/// provides [role], whichever it is.
+bool Function(MatrixApp app) _hasProviderOf(Role role) {
+  final providers = {
+    for (final module in fixtureModules())
+      if (module.descriptor.provides.contains(role)) module.descriptor.id,
+  };
+  return (app) => app.modules.any(providers.contains);
+}
