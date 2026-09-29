@@ -1,3 +1,4 @@
+import 'package:dart_style/dart_style.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:test/test.dart';
 
@@ -190,9 +191,8 @@ class MainApp extends StatelessWidget {
       });
     });
 
-    test(
-      'appends to a list that has no trailing comma',
-      () async {
+    group('separates the insert from the last element', () {
+      test('in a list that has no trailing comma', () async {
         final source = _localizedApp.replaceFirst(
           "supportedLocales: [\n        Locale('en'),\n      ],",
           "supportedLocales: [Locale('en')],",
@@ -203,15 +203,61 @@ class MainApp extends StatelessWidget {
         expect(namedListsOf(result, 'supportedLocales'), [
           ["Locale('en')", "Locale('uk')"],
         ]);
-      },
-      skip: 'Bug: the insert is placed before `]` without adding a separator, '
-          'so a list without a trailing comma becomes invalid Dart',
-    );
+        // Without a trailing comma, the list stays on one line.
+        expect(
+          result,
+          contains("supportedLocales: [Locale('en'), Locale('uk')],"),
+        );
+      });
 
-    test(
-      'only matches lists whose parent expression matches',
-      () async {
-        const source = '''
+      test('keeping the trailing comma of the list', () async {
+        final result =
+            await contribution(insert: "Locale('uk')").apply(_localizedApp);
+
+        expect(
+          result,
+          _localizedApp.replaceFirst(
+            "        Locale('en'),\n",
+            "        Locale('en'),\n        Locale('uk'),\n",
+          ),
+        );
+      });
+
+      test('past a comment that trails the last element', () async {
+        final source = _localizedApp.replaceFirst(
+          "Locale('en'),\n",
+          "Locale('en'), // English\n",
+        );
+
+        final result = await contribution().apply(source);
+
+        expect(
+          result,
+          contains(
+            "        Locale('en'), // English\n"
+            "        Locale('uk'),\n",
+          ),
+        );
+      });
+
+      test('with the comma before a comment that trails the last element',
+          () async {
+        final source = _localizedApp.replaceFirst(
+          "Locale('en'),\n",
+          "Locale('en') // English\n",
+        );
+
+        final result = await contribution().apply(source);
+
+        expect(namedListsOf(result, 'supportedLocales'), [
+          ["Locale('en')", "Locale('uk')"],
+        ]);
+        expect(result, contains("Locale('en'), // English\n"));
+      });
+    });
+
+    test('only matches lists whose parent expression matches', () async {
+      const source = '''
 class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -224,30 +270,45 @@ class HomePage extends StatelessWidget {
 }
 ''';
 
-        final result = await contribution(
-          className: 'HomePage',
-          listVariableMatch: 'children',
-          parentExpressionMatch: 'Row',
-          insert: "Text('b'),",
-        ).apply(source);
+      final result = await contribution(
+        className: 'HomePage',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Row',
+        insert: "Text('b'),",
+      ).apply(source);
 
-        final lists = namedListsOf(result, 'children');
-        expect(lists[1], ["Text('a')", "Text('b')"]);
-        expect(lists[0], hasLength(1));
-      },
-      skip: 'Bug: the parent check walks up to the compilation unit, so any '
-          'occurrence of parentExpressionMatch in the file matches',
-    );
+      final lists = namedListsOf(result, 'children');
+      expect(lists[1], ["Text('a')", "Text('b')"]);
+      expect(lists[0], hasLength(1));
+    });
 
-    test(
-      'is idempotent',
-      () async {
-        final once = await contribution().apply(_localizedApp);
+    test('matches the parent expression as the parser prints it', () async {
+      final source = _localizedApp.replaceFirst(
+        'return const MaterialApp(',
+        'return const   MaterialApp(',
+      );
 
-        expect(await contribution().apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the element is already in the list, '
-          'so every run adds it again',
-    );
+      final result = await contribution(
+        parentExpressionMatch: 'const MaterialApp',
+      ).apply(source);
+
+      expect(namedListsOf(result, 'supportedLocales'), [
+        ["Locale('en')", "Locale('uk')"],
+      ]);
+    });
+
+    test('is idempotent', () async {
+      final once = await contribution().apply(_localizedApp);
+
+      expect(await contribution().apply(once), once);
+    });
+
+    test('throws instead of writing broken code when the insert is invalid',
+        () {
+      expect(
+        contribution(insert: "Locale('uk',").apply(_localizedApp),
+        throwsA(isA<FormatterException>()),
+      );
+    });
   });
 }

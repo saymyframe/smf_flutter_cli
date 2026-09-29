@@ -307,6 +307,35 @@ void main() {
       ]);
     });
 
+    test('changes nothing when the contributions run again', () async {
+      await writeFile(_mainFile, providerMainDart);
+      final contributions = [
+        const InsertImport(file: _mainFile, import: "import 'a.dart';"),
+        // Both land right after the anchor, ahead of each other in turn.
+        _afterEnsureInitialized('first();'),
+        _afterEnsureInitialized('second();'),
+        const InsertIntoFunction(
+          file: _mainFile,
+          function: 'main',
+          beforeStatement: 'runApp',
+          insert: 'setUp();',
+        ),
+        const InsertIntoListInFunction(
+          file: _mainFile,
+          function: 'main',
+          listVariableMatch: 'providers',
+          parentExpressionMatch: 'MultiProvider',
+          insert: 'Provider(create: (_) => Analytics()),',
+        ),
+      ];
+
+      await applyAll(contributions);
+      final once = await readMain();
+      await applyAll(contributions);
+
+      expect(await readMain(), once);
+    });
+
     test(
       'leaves mustache-like text in the existing code alone',
       () async {
