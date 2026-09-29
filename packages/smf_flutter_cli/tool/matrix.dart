@@ -8,7 +8,6 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
-import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:yaml/yaml.dart';
 
@@ -100,10 +99,8 @@ Future<List<MatrixAppTest>> _appTests() async {
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
     ),
-    // The first screen of an app with a router is logged once. Of the
-    // modules of the CLI, only home has a start screen, its route
-    // home.home; an app without it starts on the fallback start screen at
-    // `/`. A module of the CLI with another start screen goes here too.
+    // The first screen of an app with a router is logged once, under the
+    // name of the screen that the app starts on (see _startScreenOf).
     MatrixAppTest(
       '$analytics/screen_views',
       appliesTo: (app) =>
@@ -111,12 +108,17 @@ Future<List<MatrixAppTest>> _appTests() async {
           app.modules.any(
             (id) => _moduleOf(id).descriptor.provides.contains(routerRole),
           ),
-      values: (app) => {
-        'start_screen': app.modules.contains(HomeModule.id) ? 'home.home' : '/',
-      },
+      values: (app) => {'start_screen': _startScreenOf(app)},
     ),
   ];
 }
+
+/// The name under which the listener of Firebase Analytics logs the
+/// screen that [app] starts on: the full name of the route that the router
+/// role chose for it, such as `home.home`, or `/` for the fallback start
+/// screen of its app entry, when no route of its modules can start it.
+String _startScreenOf(MatrixApp app) =>
+    routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ?? '/';
 
 /// Adds the `MatrixAppTest`s of [directories] to the app of `smf create`
 /// in the directory [app]; returns the exit code.

@@ -4,7 +4,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 /// A module whose contributions cannot be collected.
@@ -94,6 +96,36 @@ void main() {
         reason: '$app',
       );
     }
+  });
+
+  test(
+      'an app of the matrix has the data and the roles of its case, and the '
+      'choices of the roles, such as the route it starts on', () async {
+    final (:apps, :failed) = await matrixOf(smfModules);
+    MatrixApp named(String name) => apps.singleWhere((app) => app.name == name);
+
+    expect(failed, isEmpty);
+    // Of the modules of the CLI, only home has a route that can start the
+    // app; an app with a router but without it starts on the fallback
+    // screen of its app entry, and an app without a router has no route.
+    for (final app in apps) {
+      final input = routerRole.hookInput(app.hook!);
+      expect(
+        routerRole.startIn(input)?.fullName,
+        app.modules.contains(HomeModule.id) ? 'home.home' : isNull,
+        reason: '$app',
+      );
+      expect(input.context, ContractHarness.defaultContext, reason: '$app');
+    }
+    expect(
+      named('flutter_core with router').hook!.presentRoles,
+      contains(routerRole),
+    );
+    expect(
+      named('flutter_core').hook!.presentRoles,
+      isNot(contains(routerRole)),
+    );
+    expect(const MatrixApp('home', [HomeModule.id]).hook, isNull);
   });
 
   test('an app of the matrix names every module and asks nothing', () {
