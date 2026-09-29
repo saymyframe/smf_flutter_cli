@@ -53,10 +53,12 @@ Future<void> main(List<String> arguments) async {
   final code = await runMatrix(
     smfModules,
     directory: arguments.first,
-    appTests: await _appTests(),
-    // Each provider of the router role gets a test of the listeners of the
-    // screen; the fixture registry tests the rest of the role.
-    testedRoles: {routerRole},
+    appTests: MatrixAppTests(
+      await _appTests(),
+      // Each provider of the router role gets a test of the listeners of
+      // the screen; the fixture registry tests the rest of the role.
+      testedRoles: {routerRole},
+    ),
     only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);

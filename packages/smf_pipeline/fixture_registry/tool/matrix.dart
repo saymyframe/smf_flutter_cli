@@ -36,8 +36,10 @@ Future<void> main(List<String> arguments) async {
     fixtureModules(),
     directory: arguments.first,
     only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
-    appTests: await _appTests(),
-    testedRoles: {routerRole, layoutRole},
+    appTests: MatrixAppTests(
+      await _appTests(),
+      testedRoles: {routerRole, layoutRole},
+    ),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);

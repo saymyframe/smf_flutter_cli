@@ -164,8 +164,7 @@ void main() {
         runMatrix(
           modules,
           directory: '/apps',
-          appTests: appTests,
-          testedRoles: testedRoles,
+          appTests: MatrixAppTests(appTests, testedRoles: testedRoles),
           only: only,
           log: log.add,
           commands: MatrixCommands(

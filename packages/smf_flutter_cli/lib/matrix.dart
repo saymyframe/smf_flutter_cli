@@ -163,8 +163,93 @@ final class MatrixAppTest {
   /// Such tests apply to the apps of every provider of each of the roles,
   /// which [appliesTo] selects by the role rather than by the modules that
   /// provide it; [runMatrix] fails when they apply to no app of one of
-  /// them. Tests of what only one provider does name no role.
+  /// them (see [MatrixAppTests]). Tests of what only one provider does name
+  /// no role.
   final Set<Role> roles;
+}
+
+/// The tests that a matrix adds to its apps, and the roles whose contract
+/// they must check with every provider.
+final class MatrixAppTests {
+  /// Creates the [tests] of the apps, which must check the contract of
+  /// each of [testedRoles].
+  const MatrixAppTests(this.tests, {this.testedRoles = const {}});
+
+  /// The tests of the apps.
+  final List<MatrixAppTest> tests;
+
+  /// The roles whose contract some of the [tests] must check with every
+  /// provider of each, such as the router role (see [MatrixAppTest.roles]).
+  final Set<Role> testedRoles;
+
+  /// The problems of the tests of roles in the matrix of [modules], whose
+  /// apps are [apps]: for each role of the [tests] and of [testedRoles],
+  /// and each module that provides it and is in [apps], a test of the role
+  /// that applies to none of the apps of the module, and no test of a role
+  /// of [testedRoles] at all.
+  ///
+  /// A provider of the role that the tests leave out, such as one that a
+  /// module adds later, is a problem, since its apps would be generated and
+  /// analyzed, but nothing would check at runtime that it keeps the
+  /// contract of the role.
+  List<String> roleProblems(List<SmfModule> modules, List<MatrixApp> apps) {
+    final roles = {...testedRoles, for (final test in tests) ...test.roles};
+    return [
+      for (final role in roles) ..._problemsOfRole(role, modules, apps),
+    ];
+  }
+
+  /// The problems of the tests of [role] with the modules of [modules] that
+  /// provide it, in the matrix whose apps are [apps].
+  List<String> _problemsOfRole(
+    Role role,
+    List<SmfModule> modules,
+    List<MatrixApp> apps,
+  ) {
+    final ofRole = [
+      for (final test in tests)
+        if (test.roles.contains(role)) test,
+    ];
+    return [
+      for (final module in modules)
+        if (module.descriptor.provides.contains(role))
+          ..._problemsOfProvider(role, module.descriptor.id, ofRole, apps),
+    ];
+  }
+
+  /// The problems of [ofRole], the tests of [role], with the module [id],
+  /// which provides it, in the matrix whose apps are [apps]: none if the
+  /// matrix has no app of the module, whose cases failed.
+  static List<String> _problemsOfProvider(
+    Role role,
+    ModuleId id,
+    List<MatrixAppTest> ofRole,
+    List<MatrixApp> apps,
+  ) {
+    final withModule = [
+      for (final app in apps)
+        if (app.modules.contains(id)) app,
+    ];
+    if (withModule.isEmpty) return const [];
+    if (ofRole.isEmpty) return [_untested(role, id)];
+    return [
+      for (final test in ofRole)
+        if (!withModule.any(test.appliesTo)) _leftOut(test, role, id),
+    ];
+  }
+
+  /// The problem that no test checks [role], which the module [id]
+  /// provides.
+  static String _untested(Role role, ModuleId id) =>
+      'No test of the $role applies to an app with $id, which provides it: '
+      'nothing checks at runtime that $id keeps the contract of the role.';
+
+  /// The problem that [test], a test of [role], leaves out the module
+  /// [id], which provides it.
+  static String _leftOut(MatrixAppTest test, Role role, ModuleId id) =>
+      'The tests of ${test.directory} check the $role, but apply to no app '
+      'with $id, which provides it: a test of a role applies to the apps of '
+      'every provider of the role, which it selects by the role.';
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
@@ -407,23 +492,17 @@ final class MatrixCommands {
 
 /// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
 /// [directory], with the options of CI, analyzes each with
-/// `flutter analyze`, and, in an app that some of the [appTests] apply to,
-/// adds them and runs every test of the app with `flutter test`. Returns
-/// the exit code: 0 if every app was generated with every module and every
-/// step that the options of CI do not leave for later, has no issue and
-/// passes its tests, and each of the [appTests] applies to some app; 1
-/// otherwise.
-///
-/// The tests of a role (see [MatrixAppTest.roles]) must apply to an app of
-/// each module of [modules] that provides the role and is in the matrix,
-/// and so must some test of each role of [testedRoles]: a provider of the
-/// role that the tests leave out, such as one that a module adds later,
-/// fails the run, since its apps would be generated and analyzed, but
-/// nothing would check at runtime that it keeps the contract of the role.
+/// `flutter analyze`, and, in an app that some of the tests of [appTests]
+/// apply to, adds them and runs every test of the app with `flutter test`.
+/// Returns the exit code: 0 if every app was generated with every module
+/// and every step that the options of CI do not leave for later, has no
+/// issue and passes its tests, each of the tests applies to some app, and
+/// they check the contract of their roles with every provider (see
+/// [MatrixAppTests.roleProblems]); 1 otherwise.
 ///
 /// With [only], it checks only the apps of the matrix with those names,
-/// such as `every module (bloc)`, and runs the [appTests] that apply to
-/// them; a name that no app of the matrix has is a problem too.
+/// such as `every module (bloc)`, and runs the tests that apply to them; a
+/// name that no app of the matrix has is a problem too.
 ///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory], with the tests. [commands] run for each app.
@@ -431,15 +510,14 @@ Future<int> runMatrix(
   List<SmfModule> modules, {
   required String directory,
   Map<String, String?> roleOptions = const {},
-  List<MatrixAppTest> appTests = const [],
-  Set<Role> testedRoles = const {},
+  MatrixAppTests appTests = const MatrixAppTests([]),
   Set<String>? only,
   void Function(String line)? log,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   final run = _MatrixRun(
     directory: directory,
-    appTests: appTests,
+    appTests: appTests.tests,
     // coverage:ignore-start
     // The defaults print to the terminal, create the apps with smf and
     // analyze them with Flutter, as the runs of the matrix in CI do; the
@@ -474,65 +552,17 @@ Future<int> runMatrix(
   }
   // Tests that apply to no app would leave CI without saying so. Those of
   // the apps that are not checked run where the whole matrix is.
-  for (final test in appTests) {
+  for (final test in appTests.tests) {
     if (!apps.any(test.appliesTo)) {
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }
-  problems.addAll(_roleTestProblems(modules, apps, appTests, testedRoles));
+  problems.addAll(appTests.roleProblems(modules, apps));
   run.say('\n${checked.length} apps generated in $directory.');
   if (problems.isEmpty) return 0;
   run.say('Problems:');
   problems.forEach(run.say);
   return 1;
-}
-
-/// The problems of the tests of roles among [appTests] in the matrix of
-/// [modules], whose apps are [apps]: for each role of the tests and of
-/// [testedRoles], and each module that provides it and is in [apps], a
-/// test of the role that applies to none of the apps of the module, and no
-/// test of a role of [testedRoles] at all.
-List<String> _roleTestProblems(
-  List<SmfModule> modules,
-  List<MatrixApp> apps,
-  List<MatrixAppTest> appTests,
-  Set<Role> testedRoles,
-) {
-  final problems = <String>[];
-  final roles = {...testedRoles, for (final test in appTests) ...test.roles};
-  for (final role in roles) {
-    final tests = [
-      for (final test in appTests)
-        if (test.roles.contains(role)) test,
-    ];
-    for (final module in modules) {
-      if (!module.descriptor.provides.contains(role)) continue;
-      final id = module.descriptor.id;
-      final withModule = [
-        for (final app in apps)
-          if (app.modules.contains(id)) app,
-      ];
-      if (withModule.isEmpty) continue;
-      if (tests.isEmpty) {
-        problems.add(
-          'No test of the $role applies to an app with $id, which provides '
-          'it: nothing checks at runtime that $id keeps the contract of the '
-          'role.',
-        );
-      }
-      for (final test in tests) {
-        if (!withModule.any(test.appliesTo)) {
-          problems.add(
-            'The tests of ${test.directory} check the $role, but apply to no '
-            'app with $id, which provides it: a test of a role applies to '
-            'the apps of every provider of the role, which it selects by the '
-            'role.',
-          );
-        }
-      }
-    }
-  }
-  return problems;
 }
 
 /// A run of [runMatrix], which checks one app after another.
