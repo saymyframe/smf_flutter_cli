@@ -14,9 +14,22 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 /// runs the tests that the modules keep for the apps they are in; see
 /// `runMatrix`. Any further argument names an app of the matrix, such as
 /// `every module (bloc)`, and only the apps named are checked.
+///
+/// With `--app-tests` alone, it prints the directory of each of its
+/// `MatrixAppTest`s on a line of its own instead, for the test of the
+/// repository that finds directories of app tests that no matrix tool
+/// lists (`tools/app_tests_test.dart`).
 Future<void> main(List<String> arguments) async {
-  if (arguments.isEmpty) {
-    stderr.writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]');
+  if (arguments case ['--app-tests']) {
+    for (final test in await _appTests()) {
+      stdout.writeln(test.directory);
+    }
+    return;
+  }
+  if (arguments.isEmpty || arguments.first.startsWith('-')) {
+    stderr
+      ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
+      ..writeln('       dart run tool/matrix.dart --app-tests');
     exit(64);
   }
   final code = await runMatrix(

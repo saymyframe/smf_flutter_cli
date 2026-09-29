@@ -1,0 +1,46 @@
+name: PR title
+on:
+  pull_request:
+    # On every new commit too, as branch protection requires the check for
+    # the head of the PR.
+    types: [ opened, edited, reopened, synchronize ]
+
+permissions: {}
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      # PRs are squash-merged, and the commit on main takes the title of the
+      # PR as its only line. melos version reads that line for the version
+      # bumps and CHANGELOGs, so the title must be a Conventional Commit:
+      # <type>(<scope>)!: <description>. The scope, which may be a list with
+      # commas, and the ! are optional. A breaking change needs the ! in the
+      # title, as a BREAKING CHANGE footer in a commit of the branch does not
+      # reach main.
+      #
+      # The types are the usual ones of Conventional Commits. melos version
+      # parses a title of any type, and bumps the version for docs, feat, fix,
+      # perf, refactor and revert, and for a breaking change of any type. It
+      # bumps it for bug too, which is left out here: fix does the same. A
+      # revert is titled revert: <the title it reverts>, as melos version
+      # takes the title that GitHub gives a revert, Revert "feat: ...", for a
+      # feat.
+      - name: Check the PR title
+        env:
+          # Through the environment, so that the title is never part of the
+          # script and cannot run as a command.
+          TITLE: ${{ github.event.pull_request.title }}
+          # [a-z] matches only the letters of ASCII.
+          LC_ALL: C
+        run: |
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          scope='[a-z0-9_-]+'
+          pattern="^($types)(\($scope(, ?$scope)*\))?!?: [^[:space:]]"
+          if [[ ! $TITLE =~ $pattern ]]; then
+            echo "::error::The PR title must be a Conventional Commit, <type>(<scope>)!: <description>, such as 'fix(cli): print the real version in smf --version', with a type of ${types//|/, }; the scope and the ! are optional. PRs are squash-merged, so the title becomes the only line of the commit on main, which melos version reads for version bumps and CHANGELOGs. A breaking change needs the ! in the title."
+            exit 1
+          fi
