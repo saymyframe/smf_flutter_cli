@@ -123,9 +123,10 @@ Future<List<MatrixAppTest>> _appTests() async {
     ),
     // What only go_router does: notifications of its delegate that leave
     // the page on top as it is, such as a refresh of its routes, which the
-    // listeners of the screen do not hear of. It checks no role, so it
-    // names its module. The apps it applies to have the tests of
-    // router_screens, whose helpers it uses.
+    // listeners of the screen do not hear of, and a push() that still
+    // completes with the value of its page after a refresh. It checks no
+    // role, so it names its module. The apps it applies to have the tests
+    // of router_screens, whose helpers it uses.
     MatrixAppTest(
       '$appTests/go_router_screens',
       appliesTo: _hasAll(const {'go_router', 'fake_feature', 'fake_analytics'}),
