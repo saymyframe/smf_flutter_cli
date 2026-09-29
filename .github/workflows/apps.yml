@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     # About 25 minutes for the row of the modules of the CLI, with the
     # Android emulator.
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -117,8 +117,8 @@ jobs:
       # runner that downloads too much, as when the nightly run builds on
       # every version of Flutter at once. So the job of the real modules
       # keeps what Gradle downloaded, and Gradle itself, in one cache for
-      # every version of Flutter, by the Gradle files of the brick of
-      # flutter_core and the week, so that a new version of a plugin gets
+      # every version of Flutter, by the Android files of the bricks of the
+      # modules and the week, so that a new version of a plugin gets
       # into it within a week. Each job restores the newest one; the runs of
       # pushes and pull requests save it, and of the nightly run only the
       # job with the latest Flutter, rather than each of its jobs. A cache
@@ -136,9 +136,9 @@ jobs:
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
           restore-keys: |
-            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}-
+            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-
             ${{ runner.os }}-gradle-
 
       - name: Restore the cache of Gradle
@@ -148,9 +148,9 @@ jobs:
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
           restore-keys: |
-            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/smf_flutter_core/bricks/flutter_core/__brick__/android/**') }}-
+            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-
             ${{ runner.os }}-gradle-
 
       - name: Get the packages of the workspace
@@ -195,8 +195,8 @@ jobs:
           echo $! > "$RUNNER_TEMP/emulator.pid"
 
       # With the versions of Gradle, the Android Gradle Plugin and Kotlin
-      # that the brick of flutter_core sets, and the Android side of the
-      # plugins of Firebase.
+      # that the app entry sets, and the Android side of the plugins of
+      # Firebase.
       - name: Build an app with every module for Android
         if: ${{ !cancelled() && matrix.registry == 'real' }}
         run: |
@@ -229,20 +229,23 @@ jobs:
           cat "$RUNNER_TEMP/emulator.log"
           exit 1
 
-      # The test that the app starts is a test of flutter_core in
-      # app_tests/start, which the matrix tool adds to the app as it adds it
-      # to the apps of the matrix, where it is only analyzed.
+      # The check that the app starts is an entry of the app that the CLI
+      # keeps in app_tests/start, knowing no module; the matrix tool adds it
+      # to the app as it adds it to the apps of the matrix, where it is only
+      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # starts the app with adb and reads the result that the check writes,
+      # in one try: unlike flutter test, it does not connect to the app.
       - name: Start an app without Firebase on the Android emulator
         if: ${{ !cancelled() && matrix.registry == 'real' }}
-        timeout-minutes: 20
+        timeout-minutes: 12
         run: |
           dart run packages/smf_flutter_cli/bin/smf_flutter.dart create plain_app \
             -m go_router,home,bottom_tabs,riverpod,get_it,event_bus \
             -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$RUNNER_TEMP/SMF apps/plain_app" packages/smf_modules/smf_flutter_core/app_tests/start
+            "$RUNNER_TEMP/SMF apps/plain_app" packages/smf_flutter_cli/app_tests/start
           cd "$RUNNER_TEMP/SMF apps/plain_app"
-          flutter test integration_test -d emulator-5554
+          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
 
       # An app with Firebase starts only once flutterfire configured it: the
       # placeholder of its options throws at start-up. flutterfire writes
@@ -264,7 +267,7 @@ jobs:
             --org com.saymyframe.ci -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup \
             --no-dart-fix --strict
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$RUNNER_TEMP/SMF apps/firebase_start_app" packages/smf_modules/smf_flutter_core/app_tests/start
+            "$RUNNER_TEMP/SMF apps/firebase_start_app" packages/smf_flutter_cli/app_tests/start
 
       - name: Install the Firebase CLI and the FlutterFire CLI
         if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
@@ -298,9 +301,9 @@ jobs:
 
       - name: Start the app with every module on the Android emulator
         if: ${{ !cancelled() && steps.firebase_android.outcome == 'success' }}
-        timeout-minutes: 20
+        timeout-minutes: 10
         working-directory: ${{ runner.temp }}/SMF apps/firebase_start_app
-        run: flutter test integration_test -d emulator-5554
+        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480'
 
       - name: Leave out the app with Firebase without the key
         if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY != 'true' }}
@@ -378,7 +381,7 @@ jobs:
     name: macOS
     if: inputs.macos_and_windows
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
     env:
       FLUTTER_VERSION: ${{ inputs.flutter_version }}
       FLUTTER_SHA256: ${{ inputs.macos_sha256 }}
@@ -482,18 +485,22 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
 
-      # The test that the app starts is a test of flutter_core in
-      # app_tests/start, which the matrix tool adds to the app as it adds it
-      # to the apps of the matrix, where it is only analyzed.
+      # The check that the app starts is an entry of the app that the CLI
+      # keeps in app_tests/start, knowing no module; the matrix tool adds it
+      # to the app as it adds it to the apps of the matrix, where it is only
+      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # starts the app with simctl and reads the result that the check
+      # writes, in one try: unlike flutter test, it does not connect to the
+      # app.
       - name: Start the app without Firebase on the iOS simulator
         if: ${{ !cancelled() && env.SIMULATOR != '' }}
-        timeout-minutes: 20
+        timeout-minutes: 15
         run: |
           app="$RUNNER_TEMP/SMF apps застосунки é/plain_app"
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$app" packages/smf_modules/smf_flutter_core/app_tests/start
+            "$app" packages/smf_flutter_cli/app_tests/start
           cd "$app"
-          flutter test integration_test -d "$SIMULATOR"
+          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
       # An app of its own rather than firebase_app, whose Xcode project has
       # the build phase for Crashlytics of the test of the archive:
@@ -507,7 +514,7 @@ jobs:
             -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
             --org com.saymyframe.ci -o "$apps" --no-input --skip-external-setup --no-dart-fix --strict
           dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$apps/firebase_start_app" packages/smf_modules/smf_flutter_core/app_tests/start
+            "$apps/firebase_start_app" packages/smf_flutter_cli/app_tests/start
 
       # The build phase for Crashlytics that flutterfire adds runs flutterfire
       # from ~/.pub-cache/bin in each build for iOS.
@@ -544,9 +551,9 @@ jobs:
 
       - name: Start the app with every module on the iOS simulator
         if: ${{ !cancelled() && env.SIMULATOR != '' && steps.firebase_ios.outcome == 'success' }}
-        timeout-minutes: 20
+        timeout-minutes: 13
         working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
-        run: flutter test integration_test -d "$SIMULATOR"
+        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600'
 
       - name: Leave out the app with Firebase without the key
         if: ${{ !cancelled() && env.HAS_FIREBASE_KEY != 'true' }}
