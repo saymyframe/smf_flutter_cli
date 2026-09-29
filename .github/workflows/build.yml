@@ -130,3 +130,34 @@ jobs:
         env:
           SMF_INSTALL_FIREBASE_CLI: "1"
         run: dart test test/install_script_windows_test.dart
+
+  # One check for the ruleset of main to require, whose name stays the same
+  # when jobs come and go. It needs every other job of this workflow, which
+  # tools/build_workflow_test.dart checks, and fails when one of them failed
+  # or was cancelled; a skipped job counts as passed. It runs after a failed
+  # job too, but not in a run that was cancelled, as when a newer commit of
+  # the branch replaces it, so that the older commit gets no failed check.
+  ci:
+    name: CI
+    needs:
+      - checks
+      - apps
+      - windows-install
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+
+    steps:
+      - name: Check the results of the jobs
+        env:
+          # Each job by its id, with its result: success, failure, cancelled
+          # or skipped.
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          failed="$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")"
+          if [ -n "$failed" ]; then
+            echo "::error::These jobs failed or were cancelled: ${failed//$'\n'/, }."
+            exit 1
+          fi

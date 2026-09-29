@@ -66,6 +66,8 @@ flutter test integration_test -d <device>
 
 An app with Firebase starts only once `flutterfire configure` configured it, as its README says.
 
+The job `CI` sums up the jobs of `.github/workflows/build.yml`: it fails when any of them failed or was cancelled. The ruleset of main requires the checks `CI` and `PR title` before a pull request can be merged. A new job in `build.yml` goes into the `needs` of `CI`, and a test in `tools/` fails when it does not.
+
 The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
 
 ## Code style
