@@ -15,6 +15,27 @@ Packages with breaking changes:
 
 Packages with other changes:
 
+ - [`smf_contribution_engine` - `v0.2.2`](#smf_contribution_engine---v022)
+
+---
+
+#### `smf_contribution_engine` - `v0.2.2`
+
+ - **FIX**(contribution_engine): fix the known bugs of the inserts, the widget matching and the formatter ([#46](https://github.com/saymyframe/smf_flutter_cli/issues/46)). ([2b86c053](https://github.com/saymyframe/smf_flutter_cli/commit/2b86c05392a677a4f0539fcb5a0970600e424819))
+
+
+## 2026-09-29
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
  - [`smf_contribution_engine` - `v0.2.1`](#smf_contribution_engine---v021)
 
 ---

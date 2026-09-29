@@ -1,3 +1,7 @@
+## 0.2.2
+
+ - **FIX**(contribution_engine): fix the known bugs of the inserts, the widget matching and the formatter ([#46](https://github.com/saymyframe/smf_flutter_cli/issues/46)). ([2b86c053](https://github.com/saymyframe/smf_flutter_cli/commit/2b86c05392a677a4f0539fcb5a0970600e424819))
+
 ## 0.2.1
 
  - **DOCS**: say that the modules of the SMF CLI do not use the engine, and add an example.
