@@ -159,49 +159,68 @@ Future<List<Map<String, Object>>> appTestsReport(
   required Map<ModuleId, String> packages,
   required Future<List<MatrixApp>> Function() apps,
 }) async {
-  final context = const LocalFileSystem().path;
-  final appTests = <String, String>{};
-  for (final package in {...packages.values}) {
-    // The package of a module of the matrix is in the configuration of the
-    // packages that loaded the module.
-    final library = await Isolate.resolvePackageUri(
-      Uri.parse('package:$package/'),
-    );
-    appTests[package] = context.join(
-      context.dirname(context.fromUri(library)),
-      'app_tests',
-    );
-  }
+  const fileSystem = LocalFileSystem();
+  final appTests = await _appTestsOf({...packages.values}, fileSystem);
   List<MatrixApp>? all;
   final report = <Map<String, Object>>[];
   for (final test in tests) {
     final ids = {
       for (final MapEntry(key: id, value: package) in packages.entries)
-        if (context.isWithin(appTests[package]!, test.directory)) id,
+        if (fileSystem.path.isWithin(appTests[package]!, test.directory)) id,
     };
-    final names = <String>[];
-    if (ids.isNotEmpty) {
-      for (final app in all ??= await apps()) {
-        final without = MatrixApp(
-          app.name,
-          [
-            for (final id in app.modules)
-              if (!ids.contains(id)) id,
-          ],
-          roleOptions: app.roleOptions,
-          hook: app.hook,
-        );
-        if (test.appliesTo(without)) names.add(app.name);
-      }
-    }
     report.add({
       'directory': test.directory,
       'modules': [for (final id in ids) id.value],
-      'appliesWithout': names,
+      'appliesWithout': ids.isEmpty
+          ? const <String>[]
+          : _appliesWithout(test, ids, all ??= await apps()),
     });
   }
   return report;
 }
+
+/// The directory `app_tests` of each of [packages], which are in the
+/// configuration of the packages that loaded their modules.
+Future<Map<String, String>> _appTestsOf(
+  Set<String> packages,
+  FileSystem fileSystem,
+) async {
+  final path = fileSystem.path;
+  return {
+    for (final package in packages)
+      package: path.join(
+        path.dirname(
+          path.fromUri(
+            await Isolate.resolvePackageUri(Uri.parse('package:$package/')),
+          ),
+        ),
+        'app_tests',
+      ),
+  };
+}
+
+/// The names of [apps] that [test] applies to once the modules [ids] are
+/// taken out of their modules, with the same name, role options and hook.
+List<String> _appliesWithout(
+  MatrixAppTest test,
+  Set<ModuleId> ids,
+  List<MatrixApp> apps,
+) =>
+    [
+      for (final app in apps)
+        if (test.appliesTo(
+          MatrixApp(
+            app.name,
+            [
+              for (final id in app.modules)
+                if (!ids.contains(id)) id,
+            ],
+            roleOptions: app.roleOptions,
+            hook: app.hook,
+          ),
+        ))
+          app.name,
+    ];
 
 /// Tests that the matrix adds to the apps it generates and runs with
 /// `flutter test`: the files of a [directory] for the apps that
