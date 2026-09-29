@@ -235,6 +235,7 @@ void main() {
   test('ModuleContext describes the app', () {
     expect(testContext.appName, 'my_app');
     expect(testContext.orgName, 'com.example');
+    expect(testContext.appIdentity.platforms, ['android', 'ios']);
     expect(testContext.appIdentity.androidApplicationId, 'com.example.my_app');
     expect(testContext.appIdentity.iosBundleId, 'com.example.my-app');
     expect(testContext.appIdentity.androidNamespace, 'com.example.my_app');

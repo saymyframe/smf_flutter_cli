@@ -146,18 +146,21 @@ void main() {
       expect(appEntryRole.openToAllModules, isTrue);
     });
 
-    test('has the projects of Android and iOS', () {
-      expect(AppEntryRole.platforms, ['android', 'ios']);
-      // Each native file is in the project of one of the platforms.
-      for (final file in const [
-        AppEntryRole.androidManifestFile,
-        AppEntryRole.gradleSettingsFile,
-        AppEntryRole.gradleAppFile,
-        AppEntryRole.infoPlistFile,
-        AppEntryRole.xcodeProjectFile,
-      ]) {
-        expect(AppEntryRole.platforms, contains(file.split('/').first));
-      }
+    test('has its native files in the projects of Android and iOS', () {
+      // The directory of each project has the name of its platform in
+      // AppIdentity.platforms, which is that of flutter create --platforms.
+      final projects = {
+        for (final file in const [
+          AppEntryRole.androidManifestFile,
+          AppEntryRole.gradleSettingsFile,
+          AppEntryRole.gradleAppFile,
+          AppEntryRole.infoPlistFile,
+          AppEntryRole.xcodeProjectFile,
+        ])
+          file.split('/').first,
+      };
+
+      expect(projects, {'android', 'ios'});
     });
 
     test('owns all its sockets, with valid and distinct tags', () {

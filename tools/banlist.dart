@@ -131,6 +131,9 @@ final List<_Ban> _bans = [
   const _Ban('{{#modules}}', '{{#modules}}'),
   _Ban('/noModules', RegExp('/noModules(?![A-Za-z0-9_])')),
   _Ban('main-tabs', RegExp('(?<![A-Za-z0-9_-])main-tabs(?![A-Za-z0-9_-])')),
+  // Members of the contracts that moved: the platforms of the app are in its
+  // identity, AppIdentity.platforms.
+  const _Ban('AppEntryRole.platforms', 'AppEntryRole.platforms'),
 ];
 
 const _lasting = [

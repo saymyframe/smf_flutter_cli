@@ -6,6 +6,7 @@ import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/host.dart';
+import 'package:smf_pipeline/src/identity.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/render.dart';
@@ -164,11 +165,13 @@ final class ContractHarness {
     this.roleOptions = const {},
   });
 
-  /// The context of the apps the harness builds.
+  /// The context of the apps the harness builds, with the platforms that the
+  /// pipeline gives every app.
   static const defaultContext = ModuleContext(
     appName: 'contract_app',
     orgName: 'com.example',
     appIdentity: AppIdentity(
+      platforms: AppNames.platforms,
       androidApplicationId: 'com.example.contract_app',
       iosBundleId: 'com.example.contract-app',
       androidNamespace: 'com.example.contract_app',

@@ -1,6 +1,7 @@
 import 'package:smf_contracts/core.dart';
 
-/// Stage 2 of the pipeline: the names and platform identifiers of the app.
+/// Stage 2 of the pipeline: the names, the platforms and the platform
+/// identifiers of the app.
 ///
 /// These are pure functions of what the user typed; they throw an
 /// [SmfUsageException] for names that cannot become valid identifiers.
@@ -255,9 +256,15 @@ abstract final class AppNames {
   static String _ios(String segment) =>
       segment.replaceAll(RegExp('[_ ]+'), '-');
 
+  /// The platforms of every app, by the names of
+  /// `flutter create --platforms`, which [contextOf] puts into the identity
+  /// of the app.
+  static const platforms = ['android', 'ios'];
+
   /// The context of the app named [name] by the organization [org]:
   /// - the package name in snake_case;
   /// - the organization as the Android application id starts;
+  /// - the [platforms];
   /// - the Android application id and namespace, `<org>.<package name>`,
   ///   with underscores for other separators;
   /// - the iOS bundle id, with hyphens instead, since bundle ids allow no
@@ -274,6 +281,7 @@ abstract final class AppNames {
       appName: package,
       orgName: androidOrg,
       appIdentity: AppIdentity(
+        platforms: platforms,
         androidApplicationId: androidId,
         iosBundleId: [...segments.map(_ios), _ios(package)].join('.'),
         androidNamespace: androidId,
