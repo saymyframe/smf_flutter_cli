@@ -45,12 +45,18 @@ on:
         description: Whether the job of the real modules on Linux also checks the apps of smf_flutter_cli from pub.dev, which users install.
         type: boolean
         default: false
+    secrets:
+      FIREBASE_SERVICE_ACCOUNT:
+        description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the app without Firebase.
+        required: false
 
 jobs:
   flutter:
     name: Generated apps (${{ matrix.registry }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # About 25 minutes for the row of the modules of the CLI, with the
+    # Android emulator.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +68,9 @@ jobs:
       FLUTTER_SHA256: ${{ inputs.linux_sha256 }}
       DART_SDK: ${{ inputs.dart_version }}
       PUB_ENVIRONMENT: ci
+      # Whether the key of the service account is there; the key itself goes
+      # only into the step that needs it.
+      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -157,6 +166,34 @@ jobs:
         if: matrix.registry == 'real'
         run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
 
+      # Android 15 (API level 35) with the Google APIs, which boots in the
+      # background while the next step builds an app. The repository allows
+      # no action for it, so it is set up here: KVM for the user of the
+      # runner, the emulator and the image from the SDK manager of the
+      # runner, and a virtual device without a window.
+      # The directory of the AVD is set for avdmanager and the emulator
+      # alike: avdmanager puts it under XDG_CONFIG_HOME, which the runners
+      # set, while the emulator looks in ~/.android/avd.
+      - name: Start an Android emulator
+        if: ${{ !cancelled() && matrix.registry == 'real' }}
+        env:
+          ANDROID_IMAGE: system-images;android-35;google_apis;x86_64
+          ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+            --name smf --package "$ANDROID_IMAGE" --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          nohup "$ANDROID_HOME/emulator/emulator" -avd smf -port 5554 -no-window \
+            -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect \
+            -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/emulator.pid"
+
       # With the versions of Gradle, the Android Gradle Plugin and Kotlin
       # that the brick of flutter_core sets, and the Android side of the
       # plugins of Firebase.
@@ -168,6 +205,106 @@ jobs:
             -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
           cd "$RUNNER_TEMP/SMF apps/android_app"
           flutter build apk --debug
+
+      - name: Wait for the Android emulator
+        if: ${{ !cancelled() && matrix.registry == 'real' }}
+        timeout-minutes: 15
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          pid="$(cat "$RUNNER_TEMP/emulator.pid")"
+          # Up to 10 minutes, but no longer than the emulator lives.
+          for _ in $(seq 300); do
+            if [ "$("$adb" -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ]; then
+              "$adb" devices
+              exit 0
+            fi
+            if ! kill -0 "$pid" 2> /dev/null; then
+              echo "::error::The Android emulator stopped before it started."
+              cat "$RUNNER_TEMP/emulator.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::The Android emulator did not start in 10 minutes."
+          cat "$RUNNER_TEMP/emulator.log"
+          exit 1
+
+      # The test that the app starts is a test of flutter_core in
+      # app_tests/start, which the matrix tool adds to the app as it adds it
+      # to the apps of the matrix, where it is only analyzed.
+      - name: Start an app without Firebase on the Android emulator
+        if: ${{ !cancelled() && matrix.registry == 'real' }}
+        timeout-minutes: 20
+        run: |
+          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create plain_app \
+            -m go_router,home,bottom_tabs,riverpod,get_it,event_bus \
+            -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
+          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            "$RUNNER_TEMP/SMF apps/plain_app" packages/smf_modules/smf_flutter_core/app_tests/start
+          cd "$RUNNER_TEMP/SMF apps/plain_app"
+          flutter test integration_test -d emulator-5554
+
+      # An app with Firebase starts only once flutterfire configured it: the
+      # placeholder of its options throws at start-up. flutterfire writes
+      # the options of the Android and iOS apps with the ids of the app in
+      # the Firebase project of CI, saymyframe-app-cli, and on Android adds
+      # the Gradle plugins of Google services and Crashlytics. It registers
+      # the Firebase apps when the project has none with those ids, and
+      # finds them in later runs: the ids come from the organization of the
+      # apps of CI, com.saymyframe.ci, and the name of the app. The first
+      # run registers them, the Android one on Linux and the iOS one on
+      # macOS, one job each. Were they deleted, jobs that run at the same
+      # time, such as those of the nightly, could register one each, and the
+      # test of the configuration fails on a project with several.
+      - name: Generate an app with every module to configure with Firebase
+        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
+        run: |
+          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create firebase_start_app \
+            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
+            --org com.saymyframe.ci -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup \
+            --no-dart-fix --strict
+          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            "$RUNNER_TEMP/SMF apps/firebase_start_app" packages/smf_modules/smf_flutter_core/app_tests/start
+
+      - name: Install the Firebase CLI and the FlutterFire CLI
+        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
+        run: |
+          npm install --global firebase-tools
+          firebase --version
+          dart pub global activate flutterfire_cli 1.4.1
+
+      # A test of smf_firebase_core runs the command of the README of the app
+      # for Android, with the key of the service account in a file that only
+      # this step has.
+      - name: Configure the app with every module with Firebase for Android
+        id: firebase_android
+        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
+        working-directory: packages/smf_modules/smf_firebase_core
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SMF_FIREBASE_APP: ${{ runner.temp }}/SMF apps/firebase_start_app
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+          SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
+          SMF_FIREBASE_PLATFORM: android
+        run: |
+          trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
+          (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
+          unset FIREBASE_SERVICE_ACCOUNT
+          dart test test/flutterfire_configure_test.dart
+
+      - name: Delete the key of the service account
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
+
+      - name: Start the app with every module on the Android emulator
+        if: ${{ !cancelled() && steps.firebase_android.outcome == 'success' }}
+        timeout-minutes: 20
+        working-directory: ${{ runner.temp }}/SMF apps/firebase_start_app
+        run: flutter test integration_test -d emulator-5554
+
+      - name: Leave out the app with Firebase without the key
+        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY != 'true' }}
+        run: echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the app with Firebase does not start on the Android emulator."
 
       # The brick follows the template of the pinned Flutter, and another
       # one may differ from it without breaking the apps.
@@ -249,6 +386,9 @@ jobs:
       PUB_ENVIRONMENT: ci
       # The Xcode of the image that builds the apps.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Whether the key of the service account is there; the key itself goes
+      # only into the step that needs it.
+      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -319,6 +459,98 @@ jobs:
         env:
           SMF_CRASHLYTICS_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
         run: dart test test/crashlytics_archive_test.dart
+
+      # A new iPhone of the newest iOS runtime of the image that the SDK of
+      # the Xcode of the job runs apps on; the image has several of each.
+      - name: Boot an iOS simulator
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          runtime="$(xcrun simctl list runtimes available --json | jq -c --arg sdk "$sdk" '
+            def version: split(".") | map(tonumber);
+            [.runtimes[] | select(.platform == "iOS" and (.version | version) <= ($sdk | version))]
+            | sort_by(.version | version) | last // empty')"
+          if [ -z "$runtime" ]; then
+            echo "::error::The image has no iOS runtime for the iOS $sdk SDK of Xcode."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+          device_type="$(jq -r '[.supportedDeviceTypes[] | select(.productFamily == "iPhone")] | first | .identifier' <<< "$runtime")"
+          udid="$(xcrun simctl create 'SMF start' "$device_type" "$(jq -r .identifier <<< "$runtime")")"
+          echo "iOS $(jq -r .version <<< "$runtime"), $device_type: $udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
+
+      # The test that the app starts is a test of flutter_core in
+      # app_tests/start, which the matrix tool adds to the app as it adds it
+      # to the apps of the matrix, where it is only analyzed.
+      - name: Start the app without Firebase on the iOS simulator
+        if: ${{ !cancelled() && env.SIMULATOR != '' }}
+        timeout-minutes: 20
+        run: |
+          app="$RUNNER_TEMP/SMF apps застосунки é/plain_app"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            "$app" packages/smf_modules/smf_flutter_core/app_tests/start
+          cd "$app"
+          flutter test integration_test -d "$SIMULATOR"
+
+      # An app of its own rather than firebase_app, whose Xcode project has
+      # the build phase for Crashlytics of the test of the archive:
+      # flutterfire configures it in the Firebase project of CI, as on
+      # Linux.
+      - name: Generate an app with every module to configure with Firebase
+        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
+        run: |
+          apps="$RUNNER_TEMP/SMF apps застосунки é"
+          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create firebase_start_app \
+            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
+            --org com.saymyframe.ci -o "$apps" --no-input --skip-external-setup --no-dart-fix --strict
+          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            "$apps/firebase_start_app" packages/smf_modules/smf_flutter_core/app_tests/start
+
+      # The build phase for Crashlytics that flutterfire adds runs flutterfire
+      # from ~/.pub-cache/bin in each build for iOS.
+      - name: Install the Firebase CLI and the FlutterFire CLI
+        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
+        run: |
+          npm install --global firebase-tools
+          firebase --version
+          dart pub global activate flutterfire_cli 1.4.1
+
+      # A test of smf_firebase_core runs the command of the README of the app
+      # for iOS, with the key of the service account in a file that only
+      # this step has, and fixes the build phase for Crashlytics with the
+      # command of the README, as SMF does after it configures an app.
+      - name: Configure the app with every module with Firebase for iOS
+        id: firebase_ios
+        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
+        working-directory: packages/smf_modules/smf_firebase_core
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SMF_FIREBASE_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+          SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
+          SMF_FIREBASE_PLATFORM: ios
+        run: |
+          trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
+          (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
+          unset FIREBASE_SERVICE_ACCOUNT
+          dart test test/flutterfire_configure_test.dart
+
+      - name: Delete the key of the service account
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
+
+      - name: Start the app with every module on the iOS simulator
+        if: ${{ !cancelled() && env.SIMULATOR != '' && steps.firebase_ios.outcome == 'success' }}
+        timeout-minutes: 20
+        working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
+        run: flutter test integration_test -d "$SIMULATOR"
+
+      - name: Leave out the app with Firebase without the key
+        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY != 'true' }}
+        run: echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the app with Firebase does not start on the iOS simulator."
 
   windows:
     name: Windows

@@ -56,6 +56,16 @@ To check only some apps of the matrix, name them after the directory, such as `'
 
 CI also runs the tests on macOS and Windows, and on all three systems it generates apps in directories whose names have a space and letters beyond ASCII. The macOS job builds apps for the iOS simulator and archives one with Crashlytics, and a Windows job runs the install script of the Firebase CLI. On Linux it also builds an app with every module for Android. Every night, CI runs the jobs with Flutter on each stable release that the generated apps allow instead of the pinned one: the jobs on Linux on all of them, and those on macOS and Windows on the oldest and on the latest patch of each minor version. So a release of Flutter that breaks the generated apps shows up before users run into it. The nightly run also installs `smf_flutter_cli` from pub.dev, as a user does, and on each of those releases generates with it the apps with every module, analyzes and tests them and builds them for Android. A failure there affects the users of the published version, and its fix needs a release.
 
+CI also starts apps on an Android emulator and on an iOS simulator, with a test of `smf_flutter_core` that the app starts and shows its first screen: an app without Firebase, and an app with every module that it configures with `flutterfire configure` in a Firebase project of its own. To run the test in an app of yours, with an emulator, a simulator or a device running:
+
+```bash
+dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests <app> packages/smf_modules/smf_flutter_core/app_tests/start
+cd <app>
+flutter test integration_test -d <device>
+```
+
+An app with Firebase starts only once `flutterfire configure` configured it, as its README says.
+
 The job `CI` sums up the jobs of `.github/workflows/build.yml`: it fails when any of them failed or was cancelled. The ruleset of main requires the checks `CI` and `PR title` before a pull request can be merged. A new job in `build.yml` goes into the `needs` of `CI`, and a test in `tools/` fails when it does not.
 
 The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
