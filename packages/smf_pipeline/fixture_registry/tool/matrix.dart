@@ -10,6 +10,9 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// feature of the module model compiles, and runs the tests of the apps in
 /// `app_tests`; see `runMatrix`. Any further argument names an app of the
 /// matrix, such as `fake_codegen`, and only the apps named are checked.
+/// With `--every-module` before the directory, it checks only the apps with
+/// every module, one for each combination of the providers of the roles
+/// that take one; see `everyModuleAppsOf`.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
 /// `MatrixAppTest`s on a line of its own instead, for the test of the
@@ -22,16 +25,22 @@ Future<void> main(List<String> arguments) async {
     }
     return;
   }
-  if (arguments.isEmpty || arguments.first.startsWith('-')) {
+  final everyModule = arguments.firstOrNull == '--every-module';
+  final rest = everyModule ? arguments.skip(1).toList() : arguments;
+  if (rest.isEmpty ||
+      rest.first.startsWith('-') ||
+      (everyModule && rest.length > 1)) {
     stderr
       ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
+      ..writeln('       dart run tool/matrix.dart --every-module <directory>')
       ..writeln('       dart run tool/matrix.dart --app-tests');
     exit(64);
   }
   final code = await runMatrix(
     fixtureModules(),
-    directory: arguments.first,
-    only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
+    directory: rest.first,
+    only: rest.length > 1 ? rest.skip(1).toSet() : null,
+    everyModule: everyModule,
     appTests: await _appTests(),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);

@@ -318,9 +318,27 @@ void main() {
       expect(failed, isEmpty);
       final every = [
         for (final app in apps)
-          if (app.name.startsWith('every module')) app,
+          if (app.everyModuleWith != null) app,
       ];
-      expect(every, hasLength(8));
+      // Each combination of a router, a DI container and a state manager,
+      // named after the providers other than the first of their roles:
+      // fake_router, fake_di and fake_bloc.
+      expect(every.map((app) => app.name), [
+        for (final router in ['fake_router', 'go_router'])
+          for (final container in ['fake_di', 'get_it'])
+            for (final stateManager in ['fake_bloc', 'fake_riverpod'])
+              'every module ($router, $container, $stateManager)',
+      ]);
+      expect(every.map((app) => app.packageName('app')), [
+        'app',
+        'app_fake_riverpod',
+        'app_get_it',
+        'app_get_it_fake_riverpod',
+        'app_go_router',
+        'app_go_router_fake_riverpod',
+        'app_go_router_get_it',
+        'app_go_router_get_it_fake_riverpod',
+      ]);
       for (final app in every) {
         expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
