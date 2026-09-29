@@ -530,4 +530,112 @@ void main() {
       expect(commands, isEmpty);
     });
   });
+
+  group('addAppTestsTo', () {
+    late MemoryFileSystem fileSystem;
+    late List<String> commands;
+    const generated = GeneratedApp(name: 'start_app', path: '/apps/start_app');
+
+    setUp(() {
+      fileSystem = MemoryFileSystem();
+      fileSystem.file('/tests/start/integration_test/start_test.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync("import 'package:{{app_name}}/main.dart';\n");
+      commands = [];
+    });
+
+    Future<(int, String)> add(
+      List<MatrixAppTest> tests, {
+      Map<String, int> codes = const {},
+    }) =>
+        addAppTestsTo(
+          generated,
+          tests,
+          fileSystem: fileSystem,
+          flutter: (arguments, directory) async {
+            final command = arguments.join(' ');
+            commands.add('$directory: $command');
+            return (codes[command] ?? 0, '[$command]');
+          },
+        );
+
+    test(
+        'adds the tests to an app outside the matrix, with their dev '
+        'dependencies, a package of the Flutter SDK among them, and runs '
+        'nothing else', () async {
+      final (code, output) = await add([
+        MatrixAppTest(
+          '/tests/start',
+          appliesTo: (app) => true,
+          devDependencies: const ['integration_test@{sdk: flutter}', 'mocks'],
+        ),
+      ]);
+
+      expect(code, 0);
+      const pubAdd = 'pub add dev:integration_test@{sdk: flutter} dev:mocks';
+      expect(commands, ['/apps/start_app: $pubAdd']);
+      expect(
+        output,
+        'Added the tests integration_test/start_test.dart.\n[$pubAdd]',
+      );
+      expect(
+        fileSystem
+            .file('/apps/start_app/integration_test/start_test.dart')
+            .readAsStringSync(),
+        "import 'package:start_app/main.dart';\n",
+      );
+    });
+
+    test('runs no command for tests without dev dependencies', () async {
+      final (code, output) = await add([
+        MatrixAppTest('/tests/start', appliesTo: (app) => true),
+      ]);
+
+      expect(code, 0);
+      expect(commands, isEmpty);
+      expect(output, 'Added the tests integration_test/start_test.dart.\n');
+    });
+
+    test('fails when flutter pub add fails, and names it', () async {
+      final (code, output) = await add(
+        [
+          MatrixAppTest(
+            '/tests/start',
+            appliesTo: (app) => true,
+            devDependencies: const ['mocks'],
+          ),
+        ],
+        codes: {'pub add dev:mocks': 69},
+      );
+
+      expect(code, 69);
+      expect(output, endsWith('\nflutter pub add dev:mocks exited with 69.'));
+    });
+
+    test(
+        'fails with a placeholder that only an app of the matrix fills, '
+        'before it adds anything', () async {
+      fileSystem
+          .file('/tests/start/integration_test/start_test.dart')
+          .writeAsStringSync('// {{app_name}} {{screen}}\n');
+
+      final (code, output) = await add([
+        MatrixAppTest(
+          '/tests/start',
+          appliesTo: (app) => true,
+          values: (app) => {'screen': 'home.home'},
+          devDependencies: const ['mocks'],
+        ),
+      ]);
+
+      expect(code, 1);
+      expect(
+        output,
+        'The tests of /tests/start keep {{screen}} in '
+        'integration_test/start_test.dart: no value fills it.',
+      );
+      expect(commands, isEmpty);
+      expect(fileSystem.directory('/apps/start_app').existsSync(), isFalse);
+    });
+  });
 }
