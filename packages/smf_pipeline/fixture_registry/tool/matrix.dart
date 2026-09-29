@@ -12,6 +12,13 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// feature of the module model compiles, and runs the tests of the apps in
 /// `app_tests`; see `runMatrix`. Any further argument names an app of the
 /// matrix, such as `fake_codegen`, and only the apps named are checked.
+/// With `--every-module` before the directory, it checks only the apps with
+/// every module, one for each combination of the providers of the roles
+/// that take one; see `everyModuleAppsOf`.
+///
+/// The tests of the router role and of the layout role apply to the apps
+/// of every module that provides the role, and the run fails when a
+/// provider has apps that none of them applies to.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
 /// `MatrixAppTest`s on a line of its own instead. With `--app-tests --json`,
@@ -35,17 +42,26 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln(jsonEncode(report));
     return;
   }
-  if (arguments.isEmpty || arguments.first.startsWith('-')) {
+  final everyModule = arguments.firstOrNull == '--every-module';
+  final rest = everyModule ? arguments.skip(1).toList() : arguments;
+  if (rest.isEmpty ||
+      rest.first.startsWith('-') ||
+      (everyModule && rest.length > 1)) {
     stderr
       ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
+      ..writeln('       dart run tool/matrix.dart --every-module <directory>')
       ..writeln('       dart run tool/matrix.dart --app-tests [--json]');
     exit(64);
   }
   final code = await runMatrix(
     fixtureModules(),
-    directory: arguments.first,
-    only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
-    appTests: await _appTests(),
+    directory: rest.first,
+    only: rest.length > 1 ? rest.skip(1).toSet() : null,
+    everyModule: everyModule,
+    appTests: MatrixAppTests(
+      await _appTests(),
+      testedRoles: {routerRole, layoutRole},
+    ),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
@@ -59,26 +75,38 @@ Future<List<MatrixAppTest>> _appTests() async {
   final appTests =
       Directory.fromUri(library!).parent.uri.resolve('app_tests').toFilePath();
   return [
-    // The listeners of the screen under go_router, with a main navigation
-    // for the destinations of the two fixture features.
+    // The listeners of the screen, whichever module provides the router:
+    // the test starts the app with main() and navigates through the
+    // navigation facade of the router role.
+    MatrixAppTest(
+      '$appTests/router_screens',
+      appliesTo: (app) =>
+          _hasProviderOf(routerRole)(app) &&
+          _hasAll(const {'fake_feature', 'fake_analytics'})(app),
+      roles: {routerRole},
+    ),
+    // The listeners of the screen as the user switches between the
+    // destinations of the two fixture features, whichever modules provide
+    // the router and the layout: the test selects a destination through
+    // the AppShell of the layout role. The apps it applies to have the
+    // tests of router_screens, whose helpers it uses.
+    MatrixAppTest(
+      '$appTests/layout_screens',
+      appliesTo: (app) =>
+          _hasProviderOf(routerRole)(app) &&
+          _hasProviderOf(layoutRole)(app) &&
+          _hasAll(const {'fake_feature', 'fake_second', 'fake_analytics'})(
+            app,
+          ),
+      roles: {routerRole, layoutRole},
+    ),
+    // What only go_router does: a refresh of its routes, which the
+    // listeners of the screen do not hear of. It checks no role, so it
+    // names its module. The apps it applies to have the tests of
+    // router_screens, whose helpers it uses.
     MatrixAppTest(
       '$appTests/go_router_screens',
-      appliesTo: _hasAll(const {
-        'go_router',
-        'bottom_tabs',
-        'fake_feature',
-        'fake_second',
-        'fake_analytics',
-      }),
-    ),
-    // The listeners of the screen under the fixture router.
-    MatrixAppTest(
-      '$appTests/fake_router_screens',
-      appliesTo: _hasAll(const {
-        'fake_router',
-        'fake_feature',
-        'fake_analytics',
-      }),
+      appliesTo: _hasAll(const {'go_router', 'fake_feature', 'fake_analytics'}),
     ),
   ];
 }
@@ -97,3 +125,13 @@ Map<ModuleId, String> _packagesOf(List<SmfModule> modules) => {
 /// Whether an app of the matrix has every module of [ids].
 bool Function(MatrixApp app) _hasAll(Set<String> ids) =>
     (app) => ids.every((id) => app.modules.contains(ModuleId(id)));
+
+/// Whether an app of the matrix has a module of the fixture registry that
+/// provides [role], whichever it is.
+bool Function(MatrixApp app) _hasProviderOf(Role role) {
+  final providers = {
+    for (final module in fixtureModules())
+      if (module.descriptor.provides.contains(role)) module.descriptor.id,
+  };
+  return (app) => app.modules.any(providers.contains);
+}

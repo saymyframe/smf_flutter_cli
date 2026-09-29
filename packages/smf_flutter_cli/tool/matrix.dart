@@ -17,7 +17,24 @@ import 'package:yaml/yaml.dart';
 /// directory given as the first argument, analyzes each with Flutter and
 /// runs the tests that the modules keep for the apps they are in; see
 /// `runMatrix`. Any further argument names an app of the matrix, such as
-/// `every module (bloc)`, and only the apps named are checked.
+/// `flutter_core (flutter_core)`, and only the apps named are checked.
+///
+/// With `--every-module` before the directory, it checks only the apps with
+/// every module, one for each combination of the providers of the roles
+/// that take one, such as one for each state manager; see
+/// `everyModuleAppsOf`. CI checks these apps so, rather than by names that
+/// change when a role gets another provider.
+///
+/// With `--create`, a directory and a name, it generates the apps with
+/// every module in the directory instead, without checking them, each as
+/// the name followed by the providers that set it apart, such as
+/// `start_app` and `start_app_riverpod`; see `createEveryModuleApps`. With
+/// `--without-external-steps` after `--create`, it leaves out the modules
+/// whose steps need an external service, such as a network account, so the
+/// apps start without it. Any further argument is an option of
+/// `smf create`, such as `--org com.example`. CI builds these apps for
+/// Android and iOS and starts them on devices, and a second provider of a
+/// role gets its own app there without a change of CI.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
 /// `MatrixAppTest`s on a line of its own instead. With `--app-tests --json`,
@@ -52,9 +69,38 @@ Future<void> main(List<String> arguments) async {
       when directories.isNotEmpty) {
     exit(await _addAppTests(app, directories));
   }
-  if (arguments.isEmpty || arguments.first.startsWith('-')) {
+  if (arguments
+      case [
+        '--create',
+        '--without-external-steps',
+        final directory,
+        final name,
+        ...final options,
+      ]) {
+    exit(await _create(directory, name, options, withoutExternalSteps: true));
+  }
+  if (arguments
+      case [
+        '--create',
+        final directory,
+        final name,
+        ...final options,
+      ] when !directory.startsWith('-')) {
+    exit(await _create(directory, name, options));
+  }
+  final everyModule = arguments.firstOrNull == '--every-module';
+  final rest = everyModule ? arguments.skip(1).toList() : arguments;
+  if (rest.isEmpty ||
+      rest.first.startsWith('-') ||
+      (everyModule && rest.length > 1)) {
     stderr
       ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
+      ..writeln('       dart run tool/matrix.dart --every-module <directory>')
+      ..writeln(
+        '       dart run tool/matrix.dart --create '
+        '[--without-external-steps] <directory> <name> '
+        '[<option of smf create>...]',
+      )
       ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
       ..writeln(
         '       dart run tool/matrix.dart --add-app-tests <app> '
@@ -64,12 +110,37 @@ Future<void> main(List<String> arguments) async {
   }
   final code = await runMatrix(
     smfModules,
-    directory: arguments.first,
-    appTests: await _appTests(),
-    only: arguments.length > 1 ? arguments.skip(1).toSet() : null,
+    directory: rest.first,
+    appTests: MatrixAppTests(
+      await _appTests(),
+      // Each provider of the router role gets a test of the listeners of
+      // the screen; the fixture registry tests the rest of the role.
+      testedRoles: {routerRole},
+    ),
+    only: rest.length > 1 ? rest.skip(1).toSet() : null,
+    everyModule: everyModule,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
+}
+
+/// Generates the apps with every module in [directory] as [name], with the
+/// [options] of `smf create`; returns the exit code.
+Future<int> _create(
+  String directory,
+  String name,
+  List<String> options, {
+  bool withoutExternalSteps = false,
+}) async {
+  final code = await createEveryModuleApps(
+    smfModules,
+    directory: directory,
+    name: name,
+    withoutExternalSteps: withoutExternalSteps,
+    options: options,
+  );
+  await Future.wait<void>([stdout.flush(), stderr.flush()]);
+  return code;
 }
 
 /// The tests of the apps that the modules keep in the directory
@@ -97,19 +168,25 @@ Future<List<MatrixAppTest>> _appTests() async {
       appliesTo: _has(FirebaseCoreModule.id),
       devDependencies: const ['firebase_core_platform_interface'],
     ),
-    // Uncaught errors and the crash reporter of the app reach Crashlytics.
+    // The crash reporter of the module reaches Crashlytics, and the errors
+    // that nothing catches reach it through the handlers that the start-up
+    // of the app installs. The tests look only at what reaches Crashlytics,
+    // not at the other crash reporters that the app may have.
     MatrixAppTest(
       '$crashlytics/firebase_crashlytics',
       appliesTo: _has(FirebaseCrashlyticsModule.id),
       devDependencies: const ['firebase_crashlytics_platform_interface'],
     ),
-    // The analytics service of the app reaches Firebase Analytics.
+    // The analytics service of the module reaches Firebase Analytics. The
+    // test leaves out the other analytics services that the app may have.
     MatrixAppTest(
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
     ),
     // The first screen of an app with a router is logged once, under the
-    // name of the screen that the app starts on (see _startScreenOf).
+    // name of the screen that the app starts on (see _startScreenOf),
+    // whichever module provides the router, which calls the listener of the
+    // screen of Firebase Analytics: a test of the router role too.
     MatrixAppTest(
       '$analytics/screen_views',
       appliesTo: (app) =>
@@ -118,6 +195,7 @@ Future<List<MatrixAppTest>> _appTests() async {
             (id) => _moduleOf(id).descriptor.provides.contains(routerRole),
           ),
       values: (app) => {'start_screen': _startScreenOf(app)},
+      roles: {routerRole},
     ),
   ];
 }
