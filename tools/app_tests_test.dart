@@ -39,6 +39,18 @@
 // which declare no module (_needed). It may use the modules of the matrix
 // only through the roles they declare, as the tool of the CLI finds the
 // apps with a router among the modules of `smf create`.
+//
+// An app test runs in every app with its module, whatever else the app
+// has. A role that an app can have several providers of, such as crash
+// reporting, generates functions that reach all of them, such as
+// createCrashReporter(), whose reporter reports to every provider, and
+// what the other providers do is known only to their own tests. So an app
+// test calls no such function: a test of a provider uses the
+// implementation of its own module instead, such as
+// createCrashlyticsCrashReporter(). Each tool reports the calls of such
+// functions in each of its app tests, with the functions of the roles of
+// the modules of its matrix, so the app tests of every registry are
+// checked with the providers that their apps can have.
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -259,6 +271,38 @@ List<String> moduleProblemsOf(
           'so they apply only to the apps that have one of them: make its '
           'appliesTo require them, or keep tests for every app in a package '
           'of no module, as the CLI keeps its start check.',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/// The problems of the MatrixAppTests of the matrix tools, [listed] by the
+/// path of each tool: one line for each use, in the files of a test, of a
+/// function of a role that an app can have several providers of, which the
+/// tool reports, and for each test whose uses the tool does not report.
+List<String> roleFunctionProblemsOf(
+  Map<String, List<ListedAppTest>> listed,
+) {
+  final problems = <String>[];
+  for (final MapEntry(key: tool, value: tests) in listed.entries) {
+    for (final test in tests) {
+      final uses = test.roleFunctionUses;
+      if (uses == null) {
+        problems.add(
+          '$tool reports no uses of the functions of roles in the app tests '
+          'of ${test.directory}, so nothing checks that they call none of a '
+          'role that an app can have several providers of.',
+        );
+        continue;
+      }
+      for (final use in uses) {
+        problems.add(
+          '${test.directory}/$use: the function reaches every provider of '
+          'its role, and only the tests of each provider know what it does. '
+          'A test of a provider uses the implementation of its own module '
+          'instead, such as createCrashlyticsCrashReporter().',
         );
       }
     }
@@ -506,6 +550,30 @@ void main() {
   });
 
   test(
+      'finds the uses of the functions of roles that a tool reports in its '
+      'app tests, and the app tests whose uses it does not report', () {
+    const use = 'test/a_test.dart: createCrashReporter() of '
+        'lib/core/crash_reporting/crash_reporter.dart';
+    final listed = {
+      'tool/matrix.dart': [
+        const ListedAppTest('/a/app_tests/clean', roleFunctionUses: []),
+        const ListedAppTest('/a/app_tests/calls', roleFunctionUses: [use]),
+        const ListedAppTest('/a/app_tests/unknown'),
+      ],
+    };
+    const calls = '/a/app_tests/calls/$use: the function reaches every '
+        'provider of its role, and only the tests of each provider know what '
+        'it does. A test of a provider uses the implementation of its own '
+        'module instead, such as createCrashlyticsCrashReporter().';
+    const unknown = 'tool/matrix.dart reports no uses of the functions of '
+        'roles in the app tests of /a/app_tests/unknown, so nothing checks '
+        'that they call none of a role that an app can have several providers '
+        'of.';
+
+    expect(roleFunctionProblemsOf(listed), [calls, unknown]);
+  });
+
+  test(
     'every directory of app tests in the packages of the workspace is the '
     'directory of a MatrixAppTest of a matrix tool, and every directory '
     'that a tool lists is one',
@@ -560,6 +628,15 @@ void main() {
         moduleProblemsOf(root, workspacePackages(root), await _listed),
         isEmpty,
       );
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+
+  test(
+    'the app tests of every matrix tool call no function of a role that an '
+    'app can have several providers of',
+    () async {
+      expect(roleFunctionProblemsOf(await _listed), isEmpty);
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );

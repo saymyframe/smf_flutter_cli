@@ -17,11 +17,14 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -135,6 +138,86 @@ Future<Map<String, String>> _appTestFiles() async {
   return files;
 }
 
+/// Checks that [functions], the functions of the roles of a registry by
+/// the path of the file of the role that declares them, are what the guard
+/// can look for.
+void _expectRoleFunctions(Map<String, Set<String>> functions) {
+  expect(functions, isNotEmpty);
+  for (final MapEntry(key: path, value: names) in functions.entries) {
+    expect(names, isNotEmpty, reason: path);
+  }
+}
+
+/// A role that an app can have several providers of, whose file declares
+/// only types, so none of its functions reaches every provider.
+final class _TypesRole extends Role<String> {
+  const _TypesRole();
+
+  /// The file of the role in the app.
+  static const file = 'lib/core/types/types.dart';
+
+  @override
+  String get id => 'types';
+
+  @override
+  String get description => 'Types';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.many;
+
+  @override
+  RoleInterface get interface => const RoleInterface(files: [file]);
+
+  @override
+  RoleTemplate<String> get template => const _TypesTemplate();
+}
+
+const _typesRole = _TypesRole();
+
+/// The template of [_typesRole], which generates its file.
+final class _TypesTemplate extends RoleTemplate<String> {
+  const _TypesTemplate();
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: 'types_role',
+            description: 'The types of the role',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                _TypesRole.file,
+                base64.encode(
+                  utf8.encode(
+                    '/// A type of the role.\n'
+                    'abstract interface class Types {}\n',
+                  ),
+                ),
+                'text',
+              ),
+            ],
+          ),
+        ),
+      ];
+}
+
+/// A provider of [_typesRole].
+final class _TypesProvider extends SmfModule {
+  const _TypesProvider();
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: ModuleId('types_provider'),
+        description: 'Types',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(_typesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => const [];
+}
+
 void main() {
   test(
       'no app test calls a function of a role that an app can have several '
@@ -142,10 +225,7 @@ void main() {
     final functions = await _roleFunctionsOf(smfModules);
     final files = await _appTestFiles();
 
-    expect(functions, isNotEmpty);
-    for (final MapEntry(key: path, value: names) in functions.entries) {
-      expect(names, isNotEmpty, reason: path);
-    }
+    _expectRoleFunctions(functions);
     expect(files, isNotEmpty);
     expect(
       [
@@ -195,14 +275,34 @@ import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
 import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
     as role;
 import 'package:{{app_name}}/core/crash_reporting/other_crash_reporter.dart';
+import 'package:{{app_name}}/core/crash_reporting/other_crash_reporter.dart'
+    as other;
 
 void main() {
   createCrashReporter();
   other.installCrashReporting();
+  final create = other.createCrashReporter;
 }
 """);
 
+      expect(file.imports.map((import) => import.prefix), [
+        'role',
+        null,
+        'other',
+      ]);
       expect(_usesIn(file, functions), isEmpty);
     });
+  });
+
+  test(
+      'a role that an app can have several providers of, whose file declares '
+      'only types, leaves the guard nothing to look for, and no problem',
+      () async {
+    final functions = await _roleFunctionsOf(
+      const [FlutterCoreModule(), _TypesProvider()],
+    );
+
+    expect(functions, {_TypesRole.file: isEmpty});
+    _expectRoleFunctions(functions);
   });
 }

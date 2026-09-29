@@ -28,6 +28,7 @@ final class ListedAppTest {
     this.directory, {
     this.modules = const [],
     this.appliesWithout = const [],
+    this.roleFunctionUses,
   });
 
   /// Reads the report of a MatrixAppTest.
@@ -37,6 +38,10 @@ final class ListedAppTest {
         appliesWithout: [
           ...(json['appliesWithout']! as List<Object?>).cast<String>(),
         ],
+        roleFunctionUses: switch (json['roleFunctionUses']) {
+          final List<Object?> uses => [...uses.cast<String>()],
+          _ => null,
+        },
       );
 
   /// The directory of its files, as the tool prints it.
@@ -49,6 +54,13 @@ final class ListedAppTest {
   /// The names of the apps of the matrix that it applies to once [modules]
   /// are taken out of their modules.
   final List<String> appliesWithout;
+
+  /// The uses, in its files, of the functions of the roles of the modules
+  /// of the matrix that an app can have several providers of, such as
+  /// `test/a_test.dart: createCrashReporter() of
+  /// lib/core/crash_reporting/crash_reporter.dart`, or `null` if the tool
+  /// does not report them.
+  final List<String>? roleFunctionUses;
 }
 
 /// The MatrixAppTests of the matrix [tool] of the repository at [root],
