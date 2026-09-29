@@ -636,6 +636,58 @@ List<String> planProblemsOf(String workflow, {required String file}) {
   return problems;
 }
 
+/// The problems of the caches of the native builds in [workflow], the text
+/// of the workflow [file] of GitHub Actions: a job on Linux or macOS that
+/// generates an app with --create, to build, archive or start it, and
+/// restores no cache of what the package manager of its platform downloads
+/// for the native build: Gradle on Linux, and Swift Package Manager on
+/// macOS, whose cache of the repositories of packages xcodebuild keeps in
+/// ~/Library/Caches/org.swift.swiftpm. Without it each such job downloads
+/// the same plugins again, such as the Firebase SDK, and Maven Central
+/// answers 403 to a runner that downloads too much.
+List<String> nativeCacheProblemsOf(String workflow, {required String file}) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  return [
+    for (final MapEntry(key: job, :value) in jobs.entries)
+      if (_nativeCacheOf('${(value as YamlMap)['runs-on']}')
+          case (final manager, final path)
+          when _generatesApps(value) && !_restoresCache(value, path))
+        _uncached(file, job, manager, path),
+  ];
+}
+
+/// The problem that the job [job] of the workflow [file] generates an app
+/// to build and restores no cache of [manager], whose path has [path].
+String _uncached(String file, Object? job, String manager, String path) =>
+    '$file, job $job generates an app with --create to build it for its '
+    'platform, but restores no cache of $manager ($path): each job would '
+    'download the same packages again.';
+
+/// The package manager of the native builds on the runner [runsOn], and a
+/// part of the path of its cache, or `null` for a runner that builds none.
+(String, String)? _nativeCacheOf(String runsOn) => switch (runsOn) {
+      final label when label.startsWith('ubuntu') => ('Gradle', '.gradle/'),
+      final label when label.startsWith('macos') => (
+          'Swift Package Manager',
+          'org.swift.swiftpm'
+        ),
+      _ => null,
+    };
+
+/// Whether a step of [job] generates apps with --create.
+bool _generatesApps(YamlMap job) => [
+      for (final step in job['steps'] as YamlList? ?? YamlList())
+        '${(step as YamlMap)['run'] ?? ''}',
+    ].any((run) => run.contains('--create'));
+
+/// Whether a step of [job] restores a cache whose path has [path].
+bool _restoresCache(YamlMap job, String path) =>
+    (job['steps'] as YamlList? ?? YamlList()).any(
+      (step) =>
+          '${(step as YamlMap)['uses'] ?? ''}'.startsWith('actions/cache') &&
+          '${(step['with'] as YamlMap?)?['path'] ?? ''}'.contains(path),
+    );
+
 /// The first secret that the job [job] refers to, such as
 /// `FIREBASE_SERVICE_ACCOUNT` of `secrets.FIREBASE_SERVICE_ACCOUNT`, or
 /// `null` if it refers to none.
@@ -1584,6 +1636,52 @@ dart run "$tool" --every-module --shard "$3" "$1"
   });
 
   test(
+      'finds a job on Linux or macOS that generates an app to build and '
+      'restores no cache of the package manager of its platform', () {
+    const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: gradle
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
+  ios:
+    runs-on: macos-26
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
+  ios-cached:
+    runs-on: macos-26
+    steps:
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
+  macos:
+    runs-on: macos-26
+    steps:
+      - run: dart test
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" windows_app
+''';
+    expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
+      equals(
+        'apps.yml, job ios generates an app with --create to build it for its '
+        'platform, but restores no cache of Swift Package Manager '
+        '(org.swift.swiftpm): each job would download the same packages '
+        'again.',
+      ),
+    ]);
+  });
+
+  test(
       'the workflows and the scripts of the repository choose their apps by '
       'role and take them from the plan, and each exception applies to one '
       'of their steps', () {
@@ -1609,6 +1707,7 @@ dart run "$tool" --every-module --shard "$3" "$1"
         [
           ...problemsOf(file.readAsStringSync(), file: name, used: used),
           ...planProblemsOf(file.readAsStringSync(), file: name),
+          ...nativeCacheProblemsOf(file.readAsStringSync(), file: name),
         ],
         isEmpty,
         reason: name,
