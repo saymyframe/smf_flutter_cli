@@ -39,6 +39,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests', '--json']) {
     final report = await appTestsReport(
       await _appTests(),
+      modules: severalProvidersModules(),
       packages: _packagesOf(severalProvidersModules()),
       apps: () async => (await matrixOf(severalProvidersModules())).apps,
     );
@@ -49,8 +50,9 @@ Future<void> main(List<String> arguments) async {
     final code = await runMatrix(
       severalProvidersModules(),
       directory: directory,
-      // Its app with every module; the matrix of the fixtures and that of
-      // the CLI check the others.
+      // Only its app with every module, which has each of its modules next
+      // to the others; the matrices of the CLI and of the fixtures check
+      // their modules in the other combinations.
       everyModule: true,
       appTests: MatrixAppTests(await _appTests()),
     );

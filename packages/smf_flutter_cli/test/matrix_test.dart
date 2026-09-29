@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:file/memory.dart';
+import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -45,6 +47,91 @@ final class _BrokenAnalytics extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) =>
       throw StateError('broken');
+}
+
+/// A role that an app can have several providers of, whose file declares
+/// only types, so that none of its functions reaches every provider; with
+/// [generates] false, a role whose template leaves out its file.
+final class _TypesRole extends Role<String> {
+  const _TypesRole(this.id, {required this.generates});
+
+  /// The file of the role in the app.
+  static const file = 'lib/core/types/types.dart';
+
+  @override
+  final String id;
+
+  /// Whether the template of the role generates [file].
+  final bool generates;
+
+  @override
+  String get description => 'Types';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.many;
+
+  @override
+  RoleInterface get interface => const RoleInterface(files: [file]);
+
+  @override
+  RoleTemplate<String> get template => _TypesTemplate(generates: generates);
+}
+
+const _typesRole = _TypesRole('types', generates: true);
+
+const _typesRoleWithoutFile = _TypesRole('types_without', generates: false);
+
+/// The template of a [_TypesRole], which generates its file if [generates].
+final class _TypesTemplate extends RoleTemplate<String> {
+  const _TypesTemplate({required this.generates});
+
+  final bool generates;
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        if (generates)
+          BrickContribution(
+            MasonBundle(
+              name: 'types_role',
+              description: 'The types of the role',
+              version: '0.1.0',
+              files: [
+                MasonBundledFile(
+                  _TypesRole.file,
+                  base64.encode(
+                    utf8.encode(
+                      '/// A type of the role.\n'
+                      'abstract interface class Types {}\n',
+                    ),
+                  ),
+                  'text',
+                ),
+              ],
+            ),
+          ),
+      ];
+}
+
+/// A provider of [_typesRole], or of [_typesRoleWithoutFile] without
+/// [file].
+final class _TypesProvider extends SmfModule {
+  const _TypesProvider({this.file = true});
+
+  /// Whether the template of the role generates its file.
+  final bool file;
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: const ModuleId('types_provider'),
+        description: 'Types',
+        kind: ModuleKinds.infrastructure,
+        providers: [
+          RoleProvider.plain(file ? _typesRole : _typesRoleWithoutFile),
+        ],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => const [];
 }
 
 /// An infrastructure module [id] with [steps] after generation, which
@@ -373,6 +460,7 @@ void main() {
         // A test of a package of no module of the matrix.
         MatrixAppTest('$cli/start', appliesTo: (_) => true),
       ],
+      modules: const [FlutterCoreModule(), HomeModule()],
       packages: packages,
       apps: apps,
     );
@@ -382,31 +470,191 @@ void main() {
         'directory': '$home/everywhere',
         'modules': ['home'],
         'appliesWithout': ['with home', 'without home'],
+        'roleFunctionUses': <String>[],
       },
       {
         'directory': '$home/with_home',
         'modules': ['home'],
         'appliesWithout': <String>[],
+        'roleFunctionUses': <String>[],
       },
       {
         'directory': '$home/start',
         'modules': ['home'],
         'appliesWithout': ['with home'],
+        'roleFunctionUses': <String>[],
       },
       {
         'directory': '$cli/start',
         'modules': <String>[],
         'appliesWithout': <String>[],
+        'roleFunctionUses': <String>[],
       },
     ]);
     expect(built, 1);
     // Without a test of a package of modules, it builds no app.
     await appTestsReport(
       [MatrixAppTest('$cli/start', appliesTo: (_) => true)],
+      modules: const [FlutterCoreModule(), HomeModule()],
       packages: packages,
       apps: apps,
     );
     expect(built, 1);
+  });
+
+  group(
+      'the report of the app tests names the uses, in the Dart files of each '
+      'test, of the functions of the roles that an app can have several '
+      'providers of', () {
+    const path = 'lib/core/crash_reporting/crash_reporter.dart';
+
+    /// The uses of the functions of the roles of [modules] that the report
+    /// names in the tests of the [files] by path.
+    Future<Object?> usesIn(
+      Map<String, String> files, {
+      List<SmfModule> modules = smfModules,
+    }) async {
+      final fileSystem = MemoryFileSystem();
+      for (final MapEntry(key: path, value: text) in files.entries) {
+        fileSystem.file('/tests/a/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(text);
+      }
+      final report = await appTestsReport(
+        [MatrixAppTest('/tests/a', appliesTo: (_) => true)],
+        modules: modules,
+        packages: const {},
+        apps: () async => const [],
+        fileSystem: fileSystem,
+      );
+      return report.single['roleFunctionUses'];
+    }
+
+    const imports = """
+import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart';
+import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
+    as role;
+""";
+
+    for (final (use, code) in [
+      ('a call of it', 'createCrashReporter();'),
+      ('a call of it with a prefix', 'role.createCrashReporter();'),
+      ('a tear-off of it', 'final create = createCrashReporter;'),
+      (
+        'a tear-off of it with a prefix',
+        'final create = role.createCrashReporter;'
+      ),
+    ]) {
+      test('such as $use, through an import of its file', () async {
+        expect(
+          await usesIn({
+            'test/a_test.dart': '$imports\nvoid main() {\n  $code\n}\n',
+          }),
+          ['test/a_test.dart: createCrashReporter() of $path'],
+        );
+      });
+    }
+
+    test('but no use of a function of the same name from another file',
+        () async {
+      expect(
+        await usesIn({
+          'test/a_test.dart': """
+import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
+    as role;
+import 'package:{{app_name}}/core/crash_reporting/other_crash_reporter.dart';
+import 'package:{{app_name}}/core/crash_reporting/other_crash_reporter.dart'
+    as other;
+
+void main() {
+  createCrashReporter();
+  other.installCrashReporting();
+  final create = other.createCrashReporter;
+}
+""",
+        }),
+        isEmpty,
+      );
+    });
+
+    test(
+        'in the files of the test by their path, of every such role, but '
+        'the hidden files and those that are not Dart', () async {
+      const call = """
+import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart';
+
+void main() => installCrashReporting();
+""";
+      const analytics = 'lib/analytics.dart: createAnalyticsService() of '
+          'lib/core/analytics/analytics_service.dart';
+
+      expect(
+        await usesIn({
+          'test/a_test.dart': call,
+          'test/.dart_tool/b.dart': call,
+          '.hidden/c.dart': call,
+          'test/notes.txt': call,
+          'lib/analytics.dart': """
+import 'package:{{app_name}}/core/analytics/analytics_service.dart';
+
+final analytics = createAnalyticsService();
+""",
+        }),
+        [analytics, 'test/a_test.dart: installCrashReporting() of $path'],
+      );
+    });
+
+    test('and has none to look for of a role whose file declares only types',
+        () async {
+      expect(
+        await usesIn(
+          {
+            'test/a_test.dart': """
+import 'package:{{app_name}}/core/types/types.dart';
+
+Type type() => Types;
+""",
+          },
+          modules: const [FlutterCoreModule(), _TypesProvider()],
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'and fails when the contract harness renders no app of a provider of '
+        'such a role, or one without the file of the role', () async {
+      await expectLater(
+        usesIn(
+          const {},
+          modules: const [FlutterCoreModule(), _BrokenAnalytics()],
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            startsWith(
+              'The contract harness renders no app of broken_analytics, '
+              'which provides the analytics role: error [broken_analytics]',
+            ),
+          ),
+        ),
+      );
+      await expectLater(
+        usesIn(
+          const {},
+          modules: const [FlutterCoreModule(), _TypesProvider(file: false)],
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The app of types_provider that the contract harness renders has '
+                'no ${_TypesRole.file} of the types role.',
+          ),
+        ),
+      );
+    });
   });
 
   group('runMatrix', () {

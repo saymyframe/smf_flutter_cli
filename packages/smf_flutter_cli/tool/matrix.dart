@@ -63,6 +63,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests', '--json']) {
     final report = await appTestsReport(
       await _appTests(),
+      modules: smfModules,
       packages: _packagesOf(smfModules),
       apps: () async => (await matrixOf(smfModules)).apps,
     );

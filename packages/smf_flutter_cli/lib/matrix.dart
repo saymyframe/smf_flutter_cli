@@ -335,7 +335,12 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   of each module of the matrix, such as `smf_home_flutter` for `home`;
 /// - `appliesWithout`, the names of the apps of the matrix that it applies
 ///   to once those modules are taken out of their modules, with the same
-///   name, role options and hook.
+///   name, role options and hook;
+/// - `roleFunctionUses`, the uses, in its Dart files, of the functions of
+///   the roles of [modules], the modules of the matrix, that an app can
+///   have several providers of, each as the path of the file from the
+///   directory and the function, such as `test/a_test.dart:
+///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -343,13 +348,27 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 /// the app entry kept would reach no app with another provider. [apps]
 /// gives the apps of the matrix, which it builds only when a test has
 /// modules.
+///
+/// An app test runs in every app with its module, whatever else the app
+/// has, so it uses no function of a role that reaches every provider of
+/// the role, such as `createCrashReporter()`, whose reporter reports to all
+/// of them: what another provider does, only the tests of its own module
+/// know. Such functions are the public top-level functions of the files of
+/// the interface of each role that an app can have several providers of,
+/// in the app of each of its providers that the contract harness renders
+/// first, and a use is a call or a tear-off through an import of their
+/// file as `package:{{app_name}}/...`, with a prefix or without. Throws a
+/// [StateError] if the harness renders no such app, or one without a file
+/// of the interface of the role.
 Future<List<Map<String, Object>>> appTestsReport(
   List<MatrixAppTest> tests, {
+  required List<SmfModule> modules,
   required Map<ModuleId, String> packages,
   required Future<List<MatrixApp>> Function() apps,
+  FileSystem fileSystem = const LocalFileSystem(),
 }) async {
-  const fileSystem = LocalFileSystem();
   final appTests = await _appTestsOf({...packages.values}, fileSystem);
+  final functions = await _roleFunctionsOf(modules);
   List<MatrixApp>? all;
   final report = <Map<String, Object>>[];
   for (final test in tests) {
@@ -363,9 +382,123 @@ Future<List<Map<String, Object>>> appTestsReport(
       'appliesWithout': ids.isEmpty
           ? const <String>[]
           : _appliesWithout(test, ids, all ??= await apps()),
+      'roleFunctionUses': _roleFunctionUses(
+        test.directory,
+        functions,
+        fileSystem,
+      ),
     });
   }
   return report;
+}
+
+/// The uses of [functions], the functions of roles by the path of their
+/// file in the app, in the Dart files of the tests in [directory], each as
+/// the path of the file from [directory] and the use; none if [directory]
+/// does not exist, which the checks of the repository find otherwise.
+List<String> _roleFunctionUses(
+  String directory,
+  Map<String, Set<String>> functions,
+  FileSystem fileSystem,
+) {
+  if (!fileSystem.directory(directory).existsSync()) return const [];
+  final context = fileSystem.path;
+  return [
+    for (final (relative, file) in _filesOf(directory, fileSystem))
+      if (context.split(relative).join('/') case final path
+          when path.endsWith('.dart'))
+        for (final use in _roleFunctionUsesIn(
+          DartFileIndexer.index(path, file.readAsStringSync()),
+          functions,
+        ))
+          '$path: $use',
+  ];
+}
+
+/// The functions of the roles of [modules] that an app can have several
+/// providers of, by the path in the app of the file of the role that
+/// declares them, such as `lib/core/crash_reporting/crash_reporter.dart`:
+/// the public top-level functions of the files of the interface of each
+/// such role, in the app of each of its providers that the contract harness
+/// renders first; see [appTestsReport].
+Future<Map<String, Set<String>>> _roleFunctionsOf(
+  List<SmfModule> modules,
+) async {
+  final harness = ContractHarness(ModuleRegistry(modules));
+  final functions = <String, Set<String>>{};
+  for (final module in modules) {
+    final roles = [
+      for (final role in module.descriptor.provides)
+        if (role.cardinality.allowsMany) role,
+    ];
+    if (roles.isEmpty) continue;
+    final id = module.descriptor.id;
+    final result = await harness.check(harness.casesOfModule(id).first);
+    final app = result.app;
+    if (app == null) {
+      throw StateError(
+        'The contract harness renders no app of $id, which provides the '
+        '${roles.join(', the ')}: ${result.errors.join('; ')}',
+      );
+    }
+    for (final role in roles) {
+      for (final path in role.interface.files) {
+        final file = app.files[path];
+        if (file == null) {
+          throw StateError(
+            'The app of $id that the contract harness renders has no $path '
+            'of the $role.',
+          );
+        }
+        (functions[path] ??= {}).addAll([
+          for (final declaration
+              in DartFileIndexer.index(path, file.text).declarations)
+            if (declaration.kind == DeclarationKind.function &&
+                !declaration.name.startsWith('_'))
+              declaration.name,
+        ]);
+      }
+    }
+  }
+  return functions;
+}
+
+/// The uses in [file], a Dart file of app tests, of the [functions] of
+/// roles by the path of their file in the app: calls and tear-offs through
+/// an import of that file as `package:{{app_name}}/...`, with a prefix or
+/// without, each as `<function>() of <path>`.
+List<String> _roleFunctionUsesIn(
+  DartFileIndex file,
+  Map<String, Set<String>> functions,
+) {
+  final uses = <String>[];
+  for (final MapEntry(key: path, value: names) in functions.entries) {
+    final uri = 'package:{{app_name}}/${path.substring('lib/'.length)}';
+    final imports = [
+      for (final import in file.imports)
+        if (import.uri == uri) import,
+    ];
+    if (imports.isEmpty) continue;
+    final unprefixed = imports.any((import) => import.prefix == null);
+    final prefixes = {
+      for (final import in imports)
+        if (import.prefix case final prefix?) prefix,
+    };
+    bool through(String? target) =>
+        target == null ? unprefixed : prefixes.contains(target);
+    final used = {
+      for (final call in file.invocations)
+        if (names.contains(call.name) && through(call.target)) call.name,
+      if (unprefixed)
+        for (final reference in file.references)
+          if (names.contains(reference.name)) reference.name,
+      for (final access in file.memberAccesses)
+        if (names.contains(access.name) && prefixes.contains(access.target))
+          access.name,
+    };
+    uses.addAll([for (final name in used) '$name() of $path']);
+  }
+  return uses;
 }
 
 /// The directory `app_tests` of each of [packages], which are in the
@@ -629,17 +762,7 @@ List<String> addAppTests(
       'app_name': packageName,
       if (app != null) ...?test.values?.call(app),
     };
-    final root = fileSystem.directory(test.directory);
-    final files = [
-      for (final entity in root.listSync(recursive: true))
-        if (entity is File &&
-            !context
-                .split(context.relative(entity.path, from: root.path))
-                .any((part) => part.startsWith('.')))
-          entity,
-    ]..sort((a, b) => a.path.compareTo(b.path));
-    for (final file in files) {
-      final path = context.relative(file.path, from: root.path);
+    for (final (path, file) in _filesOf(test.directory, fileSystem)) {
       if (owners[path] case final other?) {
         throw MatrixAppTestException(
           'The tests of $other and ${test.directory} both have $path.',
@@ -678,6 +801,21 @@ List<String> addAppTests(
       ..writeAsStringSync(text);
   }
   return [...texts.keys];
+}
+
+/// The files in the directory [directory] and in its directories, each
+/// with its path from [directory], sorted by it, but the hidden ones: those
+/// whose path from [directory] has a name that starts with `.`.
+List<(String, File)> _filesOf(String directory, FileSystem fileSystem) {
+  final context = fileSystem.path;
+  final root = fileSystem.directory(directory);
+  return [
+    for (final entity in root.listSync(recursive: true))
+      if (entity is File)
+        if (context.relative(entity.path, from: root.path) case final path
+            when !context.split(path).any((part) => part.startsWith('.')))
+          (path, entity),
+  ]..sort((a, b) => a.$1.compareTo(b.$1));
 }
 
 /// The path in an app of the configuration of its tests, which

@@ -40,6 +40,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests', '--json']) {
     final report = await appTestsReport(
       await _appTests(),
+      modules: fixtureModules(),
       packages: _packagesOf(fixtureModules()),
       apps: () async => (await matrixOf(fixtureModules())).apps,
     );
