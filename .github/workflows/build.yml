@@ -5,31 +5,21 @@ on:
       - main
   pull_request:
     types: [ opened, synchronize, reopened ]
-  # Every Monday, and when started by hand, the jobs with Flutter run with
-  # its latest stable release instead of the pinned one, so that a release
-  # of Flutter that breaks SMF shows up without waiting for a push.
-  schedule:
-    - cron: "0 6 * * 1"
-  workflow_dispatch:
 
 concurrency:
-  # A push to main does not cancel a run of the schedule on main.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   # Formatter output depends on the SDK version; keep in sync with the Dart
-  # that ships with the Flutter stable used for development.
-  DART_SDK: "3.12.2"
-  # "true" on the runs with the latest stable Flutter.
-  LATEST_STABLE_FLUTTER: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+  # that ships with the Flutter stable used for development. The jobs with
+  # Flutter below take it through the YAML anchor, and check that the
+  # pinned Flutter comes with it.
+  DART_SDK: &dart_sdk "3.12.2"
 
 jobs:
   checks:
     name: Format, analyze, test
-    # With the pinned Dart, which the runs with the latest stable Flutter
-    # do not change.
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -90,351 +80,28 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  flutter:
-    name: Generated apps (${{ matrix.registry }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        # real: the modules of the CLI; fixtures: the fake modules that use
-        # the features of the module model that no real module uses yet.
-        registry: [real, fixtures]
-    env:
-      FLUTTER_VERSION: "3.44.2"
-      # The SHA-256 of the release archive of FLUTTER_VERSION for Linux, from
-      # https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json
-      FLUTTER_SHA256: "b0de1d19754688ec6769c9a067db3b0594479d3d767f971bfecfc132904c8d5e"
-      PUB_ENVIRONMENT: ci
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # On a run with the latest stable Flutter, that release and its Dart
-      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
-      - name: Take the latest stable Flutter
-        if: env.LATEST_STABLE_FLUTTER == 'true'
-        run: |
-          release="$(curl -fsSL --retry 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json |
-            jq -er '.current_release.stable as $hash
-              | first(.releases[] | select(.hash == $hash and .dart_sdk_arch == "x64"))
-              | "FLUTTER_VERSION=\(.version)", "FLUTTER_SHA256=\(.sha256)", "DART_SDK=\(.dart_sdk_version)"')"
-          echo "$release"
-          echo "$release" >> "$GITHUB_ENV"
-
-      # The repository allows only the actions of GitHub, of verified
-      # creators and a few others by name, so Flutter comes from its release
-      # archive rather than from a setup action.
-      - name: Setup Flutter
-        run: |
-          archive="$RUNNER_TEMP/flutter.tar.xz"
-          curl -fsSL --retry 3 -o "$archive" \
-            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
-          echo "$FLUTTER_SHA256  $archive" | sha256sum -c -
-          tar -xJf "$archive" -C "$RUNNER_TEMP"
-          rm "$archive"
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-          # The first run of flutter prints a notice about analytics, even
-          # after the output of --machine.
-          "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
-
-      # The Flutter the apps are checked with, and its Dart, which formats
-      # them, must be the pinned ones, or those of the latest stable release
-      # that the step above took.
-      - name: Check the versions of Flutter and Dart
-        run: |
-          flutter --version --machine > "$RUNNER_TEMP/flutter.json"
-          cat "$RUNNER_TEMP/flutter.json"
-          jq -e --arg flutter "$FLUTTER_VERSION" --arg dart "$DART_SDK" \
-            '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
-            "$RUNNER_TEMP/flutter.json"
-
-      # One cache per row: the apps of each row get their own packages.
-      - name: Cache pub packages
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-
-
-      - name: Get the packages of the workspace
-        run: dart pub get
-
-      # Every app is generated with `smf create --no-input
-      # --skip-external-setup --no-dart-fix --strict` and must pass
-      # `flutter analyze`, and then the tests that the packages keep for it
-      # in `app_tests/`, with `flutter test`. The matrices run in a directory
-      # with a space in its name, and the last step checks one app in a
-      # directory whose name has letters beyond ASCII too.
-      - name: Generate, analyze and test the apps of the CLI's modules
-        if: matrix.registry == 'real'
-        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
-
-      # With the versions of Gradle, the Android Gradle Plugin and Kotlin
-      # that the brick of flutter_core sets, and the Android side of the
-      # plugins of Firebase.
-      - name: Build an app with every module for Android
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
-        run: |
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create android_app \
-            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
-            -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
-          cd "$RUNNER_TEMP/SMF apps/android_app"
-          flutter build apk --debug
-
-      # The brick follows the template of the pinned Flutter, and a later
-      # one may differ from it without breaking the apps.
-      - name: Compare the brick of flutter_core with flutter create
-        if: ${{ !cancelled() && matrix.registry == 'real' && env.LATEST_STABLE_FLUTTER != 'true' }}
-        run: |
-          (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example --no-pub my_app)
-          cd packages/smf_modules/smf_flutter_core
-          SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
-
-      - name: Generate, analyze and test the apps of the fixture modules
-        if: matrix.registry == 'fixtures'
-        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
-
-      # flutter analyze of Flutter 3.44 and 3.47 fails in a directory whose
-      # path has letters beyond ASCII, on every system
-      # (https://github.com/flutter/flutter/pull/191377), so the matrix
-      # analyzes the app there with dart analyze.
-      - name: Generate, analyze and test an app in a directory with letters beyond ASCII
-        if: ${{ !cancelled() }}
-        run: |
-          apps="$RUNNER_TEMP/SMF apps застосунки é"
-          if [ "$REGISTRY" = real ]; then
-            dart run packages/smf_flutter_cli/tool/matrix.dart "$apps" 'every module (riverpod)'
-          else
-            # With the fixture module that generates code with build_runner.
-            dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$apps" 'every module (go_router, get_it, fake_riverpod)'
-          fi
-        env:
-          REGISTRY: ${{ matrix.registry }}
-
-  macos:
-    name: macOS
-    runs-on: macos-26
-    timeout-minutes: 60
-    env:
-      FLUTTER_VERSION: "3.44.2"
-      # The SHA-256 of the release archive of FLUTTER_VERSION for macOS on
-      # Apple silicon, from
-      # https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json
-      FLUTTER_SHA256: "57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23"
-      PUB_ENVIRONMENT: ci
-      # The Xcode of the image that builds the apps.
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # On a run with the latest stable Flutter, that release and its Dart
-      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
-      - name: Take the latest stable Flutter
-        if: env.LATEST_STABLE_FLUTTER == 'true'
-        run: |
-          release="$(curl -fsSL --retry 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json |
-            jq -er '.current_release.stable as $hash
-              | first(.releases[] | select(.hash == $hash and .dart_sdk_arch == "arm64"))
-              | "FLUTTER_VERSION=\(.version)", "FLUTTER_SHA256=\(.sha256)", "DART_SDK=\(.dart_sdk_version)"')"
-          echo "$release"
-          echo "$release" >> "$GITHUB_ENV"
-
-      - name: Setup Flutter
-        run: |
-          archive="$RUNNER_TEMP/flutter.zip"
-          curl -fsSL --retry 3 -o "$archive" \
-            "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
-          echo "$FLUTTER_SHA256  $archive" | shasum -a 256 -c -
-          unzip -q "$archive" -d "$RUNNER_TEMP"
-          rm "$archive"
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
-
-      - name: Check the versions of the tools
-        run: |
-          flutter --version --machine > "$RUNNER_TEMP/flutter.json"
-          cat "$RUNNER_TEMP/flutter.json"
-          jq -e --arg flutter "$FLUTTER_VERSION" --arg dart "$DART_SDK" \
-            '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
-            "$RUNNER_TEMP/flutter.json"
-          xcodebuild -version
-          which -a ruby
-          ruby --version
-          ruby -e "require 'xcodeproj'; puts \"xcodeproj #{Xcodeproj::VERSION}\""
-          /usr/bin/ruby --version
-
-      # Without a cache of pub packages: restoring it takes longer than
-      # getting them.
-      - name: Get the packages of the workspace
-        run: dart pub get
-
-      - name: Test the packages
-        run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded
-
-      - name: Test the tools
-        if: ${{ !cancelled() }}
-        run: dart test tools
-
-      # In a directory whose name has a space and letters beyond ASCII.
-      - name: Generate an app without Firebase and one with every module
-        if: ${{ !cancelled() }}
-        run: |
-          smf() {
-            dart run packages/smf_flutter_cli/bin/smf_flutter.dart create "$@" \
-              -o "$RUNNER_TEMP/SMF apps застосунки é" --no-input \
-              --skip-external-setup --no-dart-fix --strict
-          }
-          smf plain_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus
-          smf firebase_app -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics
-
-      - name: Build the app without Firebase for the iOS simulator
-        if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/SMF apps застосунки é/plain_app
-        run: flutter build ios --simulator --no-codesign
-
-      - name: Build the app with every module for the iOS simulator
-        if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
-        run: flutter build ios --simulator --no-codesign
-
-      # With the build phase for Crashlytics that flutterfire configure adds,
-      # fixed by the command that the README of the app gives.
-      - name: Archive the app with every module
-        if: ${{ !cancelled() }}
-        working-directory: packages/smf_modules/smf_firebase_core
-        env:
-          SMF_CRASHLYTICS_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
-        run: dart test test/crashlytics_archive_test.dart
-
-  windows:
-    name: Windows
-    runs-on: windows-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: pwsh
-    env:
-      FLUTTER_VERSION: "3.44.2"
-      # The SHA-256 of the release archive of FLUTTER_VERSION for Windows,
-      # from
-      # https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
-      FLUTTER_SHA256: "d79ae99807ba744b843e54f048308c629061456fdc7b0753251fb96eb5346a0e"
-      PUB_ENVIRONMENT: ci
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # SMF generates an app in %TEMP% and moves it into place, which the
-      # job puts on another drive, as moving between drives copies the app.
-      - name: Check that the temporary directories are on two drives
-        run: |
-          "TEMP: $env:TEMP"
-          "RUNNER_TEMP: $env:RUNNER_TEMP"
-          if ((Split-Path -Qualifier $env:TEMP) -eq (Split-Path -Qualifier $env:RUNNER_TEMP)) {
-            throw 'TEMP and RUNNER_TEMP are on one drive.'
-          }
-
-      # On a run with the latest stable Flutter, that release and its Dart
-      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
-      - name: Take the latest stable Flutter
-        if: env.LATEST_STABLE_FLUTTER == 'true'
-        run: |
-          $releases = Invoke-RestMethod -MaximumRetryCount 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
-          $release = $releases.releases |
-            Where-Object { $_.hash -eq $releases.current_release.stable -and $_.dart_sdk_arch -eq 'x64' } |
-            Select-Object -First 1
-          if (-not $release) { throw 'No latest stable Flutter for Windows.' }
-          $environment = "FLUTTER_VERSION=$($release.version)", "FLUTTER_SHA256=$($release.sha256)", "DART_SDK=$($release.dart_sdk_version)"
-          $environment
-          $environment >> $env:GITHUB_ENV
-
-      - name: Setup Flutter
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'flutter.zip'
-          curl.exe -fsSL --retry 3 -o $archive "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_$env:FLUTTER_VERSION-stable.zip"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash
-          if ($hash -ne $env:FLUTTER_SHA256) { throw "The SHA-256 of the archive is $hash." }
-          # The tar of Windows, which reads a ZIP archive; that of Git does not.
-          & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $env:RUNNER_TEMP
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Remove-Item $archive
-          Join-Path $env:RUNNER_TEMP 'flutter\bin' >> $env:GITHUB_PATH
-          & (Join-Path $env:RUNNER_TEMP 'flutter\bin\flutter.bat') --disable-analytics
-
-      - name: Check the versions of Flutter and Dart
-        run: |
-          $machine = flutter --version --machine | Out-String
-          $machine
-          $versions = $machine | ConvertFrom-Json
-          if ($versions.frameworkVersion -ne $env:FLUTTER_VERSION -or -not $versions.dartSdkVersion.StartsWith($env:DART_SDK)) {
-            throw "Flutter or Dart is not $env:FLUTTER_VERSION with Dart $env:DART_SDK."
-          }
-
-      # Without a cache of pub packages: restoring it takes longer than
-      # getting them.
-      - name: Get the packages of the workspace
-        run: dart pub get
-
-      - name: Test the packages
-        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded
-
-      - name: Test the tools
-        if: ${{ !cancelled() }}
-        run: dart test tools
-
-      # In a directory with a space in its name, and then in one whose name
-      # has letters beyond ASCII too, where the matrix analyzes the app with
-      # dart analyze, as flutter analyze of Flutter 3.44 and 3.47 fails there
-      # on every system (https://github.com/flutter/flutter/pull/191377).
-      - name: Generate, analyze and test the apps with every module
-        if: ${{ !cancelled() }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)'
-          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps застосунки é" 'every module (riverpod)'
-
-      # As a user runs it, with the full dart fix of the app.
-      - name: Generate an app in a directory with letters beyond ASCII
-        if: ${{ !cancelled() }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          # smf writes UTF-8.
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é'
-          $output = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create my_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus,firebase_crashlytics,firebase_analytics -o $apps --no-input --skip-external-setup --strict | Out-String
-          $output
-          $app = Join-Path $apps 'my_app'
-          if (-not $output.Contains("cd `"$app`"")) { throw 'SMF does not say how to go to the app.' }
-          Set-Location $app
-          dart analyze --fatal-infos
-          flutter test
-          # SMF generates the apps in %TEMP% and moves them to another drive.
-          $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
-          if ($left) { throw "SMF left $left in $env:TEMP." }
-
-      - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
-        if: ${{ !cancelled() }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          dart pub global activate flutterfire_cli 1.4.1
-          dart pub global run flutterfire_cli:flutterfire --version
-          $explain = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create probe -m firebase_core --explain | Out-String
-          $explain
-          if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
-            throw 'SMF does not find the FlutterFire CLI.'
-          }
+  # The jobs with Flutter, with the pinned one.
+  apps:
+    name: Pinned Flutter
+    uses: ./.github/workflows/apps.yml
+    with:
+      flutter_version: "3.44.2"
+      dart_version: *dart_sdk
+      # The SHA-256 of the release archive of the pinned Flutter for Linux,
+      # for macOS on Apple silicon and for Windows, from releases_linux.json,
+      # releases_macos.json and releases_windows.json in
+      # https://storage.googleapis.com/flutter_infra_release/releases/
+      linux_sha256: "b0de1d19754688ec6769c9a067db3b0594479d3d767f971bfecfc132904c8d5e"
+      macos_sha256: "57fbfdc7032678ab30ad577872bbfc4114a25d3cba94fbfa14a050ec61381a23"
+      windows_sha256: "d79ae99807ba744b843e54f048308c629061456fdc7b0753251fb96eb5346a0e"
+      compare_brick: true
+    secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it
-  # takes minutes, so it runs next to the job above rather than in it.
+  # takes minutes, so it runs next to the job on Windows of apps.yml rather
+  # than in it.
   windows-install:
     name: Firebase CLI install (Windows)
-    # Without Flutter, so the runs with the latest stable Flutter skip it.
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 30
 
