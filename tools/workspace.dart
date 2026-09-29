@@ -1,11 +1,42 @@
 // The packages of the workspace as the tests of the repository read them:
 // their pubspecs, whether they declare modules, and the URIs that their
-// Dart files use. Paths join their names with `/`, on Windows too.
+// Dart files use; and the matrix tools, with the directories of their app
+// tests. Paths join their names with `/`, on Windows too.
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:yaml/yaml.dart';
+
+/// The matrix tools, by path from the root of the repository. Each prints
+/// the directories of its MatrixAppTests with `--app-tests`.
+const matrixTools = [
+  'packages/smf_flutter_cli/tool/matrix.dart',
+  'packages/smf_pipeline/fixture_registry/tool/matrix.dart',
+];
+
+/// The directories of the MatrixAppTests of the matrix [tool] of the
+/// repository at [root], which it prints with `--app-tests`.
+Future<List<String>> appTestsListedBy(String root, String tool) async {
+  final packageConfig = await Isolate.packageConfig;
+  final result = await Process.run(
+    Platform.resolvedExecutable,
+    ['--packages=${packageConfig!.toFilePath()}', tool, '--app-tests'],
+    workingDirectory: root,
+    // The tools write UTF-8, on Windows too.
+    stdoutEncoding: utf8,
+    stderrEncoding: utf8,
+  );
+  if (result.exitCode != 0) {
+    throw StateError('$tool --app-tests: ${result.stdout}${result.stderr}');
+  }
+  return [
+    for (final line in const LineSplitter().convert('${result.stdout}'))
+      if (line.isNotEmpty) line,
+  ];
+}
 
 /// A package of the workspace.
 final class WorkspacePackage {
