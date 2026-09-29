@@ -15,6 +15,13 @@
 # The script runs the command for every app even when it fails for one,
 # and fails at the end when it failed for any, naming them, or when the
 # directory has no app.
+#
+# A report of tests that the command writes, as dart test does with
+# --file-reporter json:<path>, gets the name of the app once the command
+# ran for it, <path without .json>.<app>.json, so that the command for the
+# next app does not replace it, and tools/test_annotations.dart annotates
+# the tests that failed for each app. tools/each_app_test.dart tests the
+# script.
 set -euo pipefail
 
 variable=
@@ -40,17 +47,59 @@ if [ ${#apps[@]} -eq 0 ]; then
   exit 1
 fi
 
+# The reports of tests that the command writes, from the directory it runs
+# in: the path of each --file-reporter <reporter>:<path> and
+# --file-reporter=<reporter>:<path> of its arguments, as dart test takes
+# them.
+reports=()
+previous=
+for argument in "$@"; do
+  if [ "$previous" = --file-reporter ]; then
+    reports+=("${argument#*:}")
+  fi
+  case "$argument" in
+    --file-reporter=*)
+      reporter="${argument#--file-reporter=}"
+      reports+=("${reporter#*:}")
+      ;;
+  esac
+  previous="$argument"
+done
+
+# Gives the reports that the command wrote in the directory $1 the name of
+# the app $2.
+keep_reports() {
+  local report path base
+  if [ ${#reports[@]} -eq 0 ]; then
+    return 0
+  fi
+  for report in "${reports[@]}"; do
+    case "$report" in
+      /*) path="$report" ;;
+      *) path="$1/$report" ;;
+    esac
+    if [ -f "$path" ]; then
+      base="$(basename "$path")"
+      case "$base" in
+        *.*) mv "$path" "$(dirname "$path")/${base%.*}.$2.${base##*.}" ;;
+        *) mv "$path" "$path.$2" ;;
+      esac
+    fi
+  done
+}
+
 command="${1##*/}"
 failed=()
 for app in "${apps[@]}"; do
   name="${app##*/}"
   echo "=== $name: $*"
+  code=0
   if [ -n "$variable" ]; then
-    code=0
     env "$variable=$app" "$@" || code=$?
+    keep_reports . "$name"
   else
-    code=0
     (cd "$app" && "$@") || code=$?
+    keep_reports "$app" "$name"
   fi
   if [ "$code" -ne 0 ]; then
     failed+=("$name")
