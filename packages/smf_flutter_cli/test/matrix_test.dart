@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:mirrors';
 
 import 'package:file/memory.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
@@ -14,6 +15,25 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
+
+/// The package that declares the class of each of [modules], as the
+/// matrix tools give them to [appTestsReport].
+Map<ModuleId, String> _packagesOf(List<SmfModule> modules) => {
+      for (final module in modules)
+        module.descriptor.id:
+            (reflectClass(module.runtimeType).owner! as LibraryMirror)
+                .uri
+                .pathSegments
+                .first,
+    };
+
+/// The directory `app_tests` of the package [package], next to its `lib/`.
+Future<String> _appTestsOf(String package) async {
+  final library = await Isolate.resolvePackageUri(
+    Uri.parse('package:$package/'),
+  );
+  return '${Directory.fromUri(library!).parent.path}/app_tests';
+}
 
 /// A module whose contributions cannot be collected.
 final class _Broken extends SmfModule {
@@ -418,15 +438,8 @@ void main() {
   test(
       'the report of the app tests names the modules of the package that '
       'keeps each, and the apps it applies to without them', () async {
-    Future<String> appTestsOf(String package) async {
-      final library = await Isolate.resolvePackageUri(
-        Uri.parse('package:$package/'),
-      );
-      return '${Directory.fromUri(library!).parent.path}/app_tests';
-    }
-
-    final home = await appTestsOf('smf_home_flutter');
-    final cli = await appTestsOf('smf_flutter_cli');
+    final home = await _appTestsOf('smf_home_flutter');
+    final cli = await _appTestsOf('smf_flutter_cli');
     const packages = {
       FlutterCoreModule.id: 'smf_flutter_core',
       HomeModule.id: 'smf_home_flutter',
@@ -437,17 +450,25 @@ void main() {
       roleOptions: {'start': '/home'},
     );
     const withoutHome = MatrixApp('without home', [FlutterCoreModule.id]);
+    // An app with every module, with home in place of the first provider of
+    // a role.
+    const everyModule = MatrixApp(
+      'every module',
+      [FlutterCoreModule.id, HomeModule.id],
+      everyModuleWith: [HomeModule.id],
+    );
     var built = 0;
     Future<List<MatrixApp>> apps() async {
       built++;
-      return const [withHome, withoutHome];
+      return const [withHome, withoutHome, everyModule];
     }
 
     final report = await appTestsReport(
       [
-        // Tests of home that apply to every app, to the apps with home, and
-        // to the apps with the option of home, which the apps keep without
-        // it.
+        // Tests of home that apply to every app, to the apps with home, to
+        // the apps with the option of home, and to the apps with every
+        // module, which the apps keep without it, and to the app with every
+        // module and home, which it does not.
         MatrixAppTest('$home/everywhere', appliesTo: (_) => true),
         MatrixAppTest(
           '$home/with_home',
@@ -456,6 +477,15 @@ void main() {
         MatrixAppTest(
           '$home/start',
           appliesTo: (app) => app.roleOptions['start'] == '/home',
+        ),
+        MatrixAppTest(
+          '$home/every_module',
+          appliesTo: (app) => app.everyModuleWith != null,
+        ),
+        MatrixAppTest(
+          '$home/every_module_with_home',
+          appliesTo: (app) =>
+              app.everyModuleWith?.contains(HomeModule.id) ?? false,
         ),
         // A test of a package of no module of the matrix.
         MatrixAppTest('$cli/start', appliesTo: (_) => true),
@@ -469,35 +499,68 @@ void main() {
       {
         'directory': '$home/everywhere',
         'modules': ['home'],
-        'appliesWithout': ['with home', 'without home'],
+        'appliesWithout': ['with home', 'without home', 'every module'],
+        'uses': <Object>[],
         'roleFunctionUses': <String>[],
       },
       {
         'directory': '$home/with_home',
         'modules': ['home'],
         'appliesWithout': <String>[],
+        'uses': [
+          {
+            'module': 'home',
+            'package': 'smf_home_flutter',
+            'apps': ['with home', 'every module'],
+          },
+        ],
         'roleFunctionUses': <String>[],
       },
       {
         'directory': '$home/start',
         'modules': ['home'],
         'appliesWithout': ['with home'],
+        'uses': <Object>[],
+        'roleFunctionUses': <String>[],
+      },
+      {
+        'directory': '$home/every_module',
+        'modules': ['home'],
+        'appliesWithout': ['every module'],
+        'uses': <Object>[],
+        'roleFunctionUses': <String>[],
+      },
+      {
+        'directory': '$home/every_module_with_home',
+        'modules': ['home'],
+        'appliesWithout': <String>[],
+        'uses': [
+          {
+            'module': 'home',
+            'package': 'smf_home_flutter',
+            'apps': ['every module'],
+          },
+        ],
         'roleFunctionUses': <String>[],
       },
       {
         'directory': '$cli/start',
         'modules': <String>[],
         'appliesWithout': <String>[],
+        'uses': <Object>[],
         'roleFunctionUses': <String>[],
       },
     ]);
+    // It builds the apps once for all the tests, and not without tests.
     expect(built, 1);
-    // Without a test of a package of modules, it builds no app.
-    await appTestsReport(
-      [MatrixAppTest('$cli/start', appliesTo: (_) => true)],
-      modules: const [FlutterCoreModule(), HomeModule()],
-      packages: packages,
-      apps: apps,
+    expect(
+      await appTestsReport(
+        const [],
+        modules: const [FlutterCoreModule(), HomeModule()],
+        packages: packages,
+        apps: apps,
+      ),
+      isEmpty,
     );
     expect(built, 1);
   });
@@ -655,6 +718,86 @@ Type type() => Types;
         ),
       );
     });
+  });
+
+  test(
+      'the report of the app tests names the modules whose ids each uses: '
+      'those that, with another module in their place, change whether it '
+      'applies to an app or the values of its files there', () async {
+    final (:apps, :failed) = await matrixOf(smfModules);
+    final withHome = [
+      for (final app in apps)
+        if (app.modules.contains(HomeModule.id)) app.name,
+    ];
+    final cli = await _appTestsOf('smf_flutter_cli');
+    bool hasRouter(MatrixApp app) =>
+        app.hook!.presentRoles.contains(routerRole);
+
+    final report = await appTestsReport(
+      [
+        // The start screen that the router role chose for the app, by the
+        // routes of its modules.
+        MatrixAppTest(
+          '$cli/by_role',
+          appliesTo: hasRouter,
+          values: (app) => {
+            'start_screen':
+                routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ??
+                    '/',
+          },
+        ),
+        // The start screen by whether the app has home, which a second
+        // feature that can start the app would make wrong.
+        MatrixAppTest(
+          '$cli/start_by_id',
+          appliesTo: hasRouter,
+          values: (app) => {
+            'start_screen':
+                app.modules.contains(HomeModule.id) ? 'home.home' : '/',
+          },
+        ),
+        // The apps whose case is named after home.
+        MatrixAppTest(
+          '$cli/by_name',
+          appliesTo: (app) => app.name.startsWith('home'),
+        ),
+        // The apps with a router, found by looking every module of the app
+        // up by its id, which fails with another module in its place.
+        MatrixAppTest(
+          '$cli/by_lookup',
+          appliesTo: (app) => [
+            for (final id in app.modules)
+              smfModules.singleWhere((module) => module.descriptor.id == id),
+          ].any((module) => module.descriptor.provides.contains(routerRole)),
+        ),
+      ],
+      modules: smfModules,
+      packages: _packagesOf(smfModules),
+      apps: () async => apps,
+    );
+
+    expect(failed, isEmpty);
+    expect(withHome, isNotEmpty);
+    // The apps of each module that a test uses, by the id of the module.
+    Map<String, Object?> usesOf(Map<String, Object> test) => {
+          for (final use in test['uses']! as List<Object>)
+            if (use case {'module': final String id, 'apps': final apps})
+              id: apps,
+        };
+    expect(report.map((test) => test['modules']), everyElement(isEmpty));
+    expect(usesOf(report[0]), isEmpty);
+    expect(report[1]['uses'], [
+      {'module': 'home', 'package': 'smf_home_flutter', 'apps': withHome},
+    ]);
+    expect(usesOf(report[2]), {
+      'home': ['home'],
+    });
+    expect(
+      usesOf(report[3]).keys,
+      unorderedEquals([
+        for (final module in smfModules) module.descriptor.id.value,
+      ]),
+    );
   });
 
   group('runMatrix', () {
@@ -891,16 +1034,23 @@ Type type() => Types;
             roles: {stateManagementRole},
           );
 
-      test('passes when they apply to an app of every provider of the role',
-          () async {
+      /// The problem that the tests of the state management role tell its
+      /// provider [id] apart by its id in the apps [names].
+      String byId(String id, String names) =>
+          'The tests of /tests/state check the state management role, but '
+          'select their apps, or take the values of their files, by the id of '
+          '$id, which provides it: with another module in its place, they '
+          'would apply otherwise, or get other values, in these apps of the '
+          'matrix: $names. A test of a role takes what it needs of the '
+          'providers of the role from the roles of the app (MatrixApp.hook), '
+          'such as whether the app has the role (presentRoles), so that a new '
+          'provider of the role gets the test as it is.';
+
+      test(
+          'passes when they apply to an app of every provider of the role, '
+          'which they select by the roles of the app', () async {
         final byRole = stateTest(
-          (app) => app.modules.any(
-            (id) => modules.any(
-              (module) =>
-                  module.descriptor.id == id &&
-                  module.descriptor.provides.contains(stateManagementRole),
-            ),
-          ),
+          (app) => app.hook!.presentRoles.contains(stateManagementRole),
         );
 
         expect(
@@ -917,13 +1067,14 @@ Type type() => Types;
 
       test(
           'fails when they leave out a provider of the role, as they do when '
-          'they select the apps of another provider by its module', () async {
+          'they select the apps of another provider by its id', () async {
         final byModule = stateTest(
           (app) => app.modules.contains(BlocModule.id),
         );
 
         expect(await run(modules: modules, appTests: [byModule]), 1);
         expect(problems(), [
+          equals(byId('bloc', 'bloc')),
           equals(
             'The tests of /tests/state check the state management role, but '
             'apply to no app with riverpod, which provides it: a test of a '
@@ -931,6 +1082,50 @@ Type type() => Types;
             'it selects by the role.',
           ),
         ]);
+      });
+
+      test(
+          'fails when they tell the providers of the role apart by their ids, '
+          'also when they apply to the apps of each', () async {
+        // The apps of each provider by its id, and the apps of the modules
+        // that provide the role, looked up by their ids, which finds no
+        // module with another id.
+        final byIds = stateTest(
+          (app) =>
+              app.modules.contains(BlocModule.id) ||
+              app.modules.contains(RiverpodModule.id),
+        );
+        final byLookup = stateTest(
+          (app) => app.modules.any(
+            (id) => modules.any(
+              (module) =>
+                  module.descriptor.id == id &&
+                  module.descriptor.provides.contains(stateManagementRole),
+            ),
+          ),
+        );
+
+        for (final test in [byIds, byLookup]) {
+          expect(await run(modules: modules, appTests: [test]), 1);
+          expect(problems(), [
+            equals(byId('bloc', 'bloc')),
+            equals(byId('riverpod', 'riverpod')),
+          ]);
+          log.clear();
+        }
+
+        // A value of the files by the id of a provider.
+        final values = MatrixAppTest(
+          '/tests/state',
+          appliesTo: (app) =>
+              app.hook!.presentRoles.contains(stateManagementRole),
+          values: (app) => {
+            'manager': app.modules.contains(BlocModule.id) ? 'bloc' : 'other',
+          },
+          roles: {stateManagementRole},
+        );
+        expect(await run(modules: modules, appTests: [values]), 1);
+        expect(problems(), [equals(byId('bloc', 'bloc'))]);
       });
 
       test(

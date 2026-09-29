@@ -2,22 +2,25 @@
 // modules with a router and a layout, whichever modules provide them, and
 // with both fixture features: the router puts their destinations into the
 // AppShell of the layout role, each with a branch that keeps its stack,
-// and calls the listeners of the screen (RouterRole.screenListeners) once
-// for each switch to another destination too. It finds a destination by
-// the Destination that its feature declares, and selects it as the layout
-// does when the user selects it, with onSelect of AppShell, so it depends
-// neither on the router nor on how the layout shows the destinations. It
-// uses what the tests of router_screens share, which every app that it
-// applies to has.
+// calls every listener of the screen (RouterRole.screenListeners), here
+// those of the fixture analytics and of the fixture screen log, once for
+// each switch to another destination too, and gives the navigator of each
+// branch observers of its own (RouterRole.observers). It finds a
+// destination by the Destination that its feature declares, and selects it
+// as the layout does when the user selects it, with onSelect of AppShell,
+// so it depends neither on the router nor on how the layout shows the
+// destinations. It uses what the tests of router_screens share, which
+// every app that it applies to has.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/fixture_analytics/fixture_analytics.dart';
+import 'package:{{app_name}}/core/fixture_screen_log/fixture_screen_log.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_second_screen.dart';
-import 'package:{{app_name}}/main.dart' as app;
 
 import 'screens.dart';
 
@@ -48,9 +51,12 @@ void main() {
   // fails sooner.
   testWidgets('each switch to another destination is heard of once',
       (tester) async {
+    // Each call of the listener of the fixture analytics comes with one of
+    // the listener of the fixture screen log.
+    otherListeners.add(fixtureScreenLog);
+
     // The app starts on the branch of its start screen.
-    await app.main();
-    await tester.pumpAndSettle();
+    await startApp(tester);
     expect(heard(), [('fake_feature.home', '/fake_feature')]);
     final fixture = _destination(tester, 'Fixture', Icons.star);
     final second = _destination(tester, 'Second', Icons.looks_two);
@@ -97,6 +103,27 @@ void main() {
     // or shows another.
     final shown = tester.element(find.byType(FixtureSecondScreen));
     await _select(tester, second);
-    expectHeardAtMostOnce(tester, shown);
+    expectHeardAtMostOnce(
+        tester, shown, ('fake_second.second', '/fake_second'));
+
+    // The router called the factory of observers once for each navigator,
+    // the navigators of both branches included, and the observers of the
+    // root navigator see the main navigation, not the pages of its
+    // branches.
+    final navigators = tester.stateList<NavigatorState>(
+      find.byType(Navigator, skipOffstage: false),
+    );
+    expectObserverOfEachNavigator(tester);
+    expect(fixtureObservers, hasLength(navigators.length));
+    final root = Navigator.of(
+      tester.element(find.byType(FixtureSecondScreen)),
+      rootNavigator: true,
+    );
+    const branchPages = [
+      'fake_feature.home',
+      'fake_feature.details',
+      'fake_second.second',
+    ];
+    expect(observerOf(root).pushed, isNot(anyElement(isIn(branchPages))));
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
