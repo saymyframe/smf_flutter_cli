@@ -45,6 +45,16 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// navigator observers of its own from the factories of the router role
 /// once.
 ///
+/// The future of `push()` completes with the value that the page returns
+/// when it closes, even after go_router shows its pages anew from their
+/// encoded form, as on `refresh()`, such as when its `refreshListenable`
+/// notifies. go_router gives each pushed page a new completer there, which
+/// the page completes instead of that of the push
+/// (https://github.com/flutter/flutter/issues/128122), so the router passes
+/// on the value of the new completer to that of the push, which it finds by
+/// the key and the location of the page. Once go_router keeps the
+/// completers of its pages, the router can leave this out.
+///
 /// The router tells the listeners of the screen of the router role about
 /// the page on top of the app: the delegate of go_router hears of every
 /// change of its stacks, a switch of branches included, and the router
