@@ -17,10 +17,10 @@ import 'package:smf_flutter_cli/src/io/interruption.dart';
 /// A command that runs past the timeout of [run] is stopped with the
 /// processes that it started, such as the `node` that `cmd.exe` starts for
 /// the `firebase.cmd` of npm: on Windows with `taskkill /t /f`, elsewhere
-/// with `SIGTERM` to it and to the processes that `ps` lists under it, and
-/// with `SIGKILL` to them all if the command is still there after
-/// [stopGrace]. A process that escaped them and keeps the output of the
-/// command open is not waited for longer than [stopGrace].
+/// with `SIGTERM` to it and then to the processes that `ps` lists under it,
+/// and with `SIGKILL` to them all, in the same order, if the command is
+/// still there after [stopGrace]. A process that escaped them and keeps the
+/// output of the command open is not waited for longer than [stopGrace].
 final class IoProcessRunner implements SmfProcessRunner {
   /// Creates the runner of a run, which stops its commands when the run is
   /// interrupted.
@@ -92,10 +92,14 @@ final class IoProcessRunner implements SmfProcessRunner {
   /// it started, and returns its exit code.
   ///
   /// On Windows, `taskkill /t /f` ends the tree of the process, or else the
-  /// process is ended alone. Elsewhere, the process and the processes that
-  /// [_descendantsOf] finds get `SIGTERM`. Whatever is still there after
-  /// [stopGrace] gets `SIGKILL`; on Windows, which has no signals, that
-  /// ends the process.
+  /// process is ended alone. Elsewhere, the process gets `SIGTERM`, and then
+  /// the processes that [_descendantsOf] found under it. Whatever is still
+  /// there after [stopGrace] gets `SIGKILL`, the process first again; on
+  /// Windows, which has no signals, that ends the process.
+  ///
+  /// The process gets each signal before the processes that it started, so
+  /// that it cannot go on once they end: a shell that waits for them would
+  /// end on its own, with the code 0 of `wait`, or run its next command.
   Future<int> _stop(io.Process process) async {
     var started = const <int>[];
     if (_isWindows) {
@@ -108,17 +112,19 @@ final class IoProcessRunner implements SmfProcessRunner {
         process.kill();
       }
     } else {
-      started = await _descendantsOf(process.pid)
-        ..forEach(io.Process.killPid);
+      // Listed before the process gets the signal: once it ends, `ps` lists
+      // what it started under another process.
+      started = await _descendantsOf(process.pid);
       process.kill();
+      started.forEach(io.Process.killPid);
     }
     return process.exitCode.timeout(
       stopGrace,
       onTimeout: () {
+        process.kill(io.ProcessSignal.sigkill);
         for (final pid in started) {
           io.Process.killPid(pid, io.ProcessSignal.sigkill);
         }
-        process.kill(io.ProcessSignal.sigkill);
         return process.exitCode;
       },
     );
