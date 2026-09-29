@@ -1,7 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/token.dart';
 import 'package:smf_contribution_engine/src/contribution.dart';
+import 'package:smf_contribution_engine/src/utils/source_edits.dart';
 
 /// Adds an import directive to [file], unless the file already has it.
 ///
@@ -39,7 +39,7 @@ class InsertImport extends Contribution {
     final anchor = imports.lastOrNull ??
         unit.directives.whereType<LibraryDirective>().firstOrNull;
     if (anchor != null) {
-      final offset = _endOfTrailingComments(original, anchor);
+      final offset = endOfTrailingComments(original, anchor.endToken);
       return original.replaceRange(offset, offset, '\n$import');
     }
 
@@ -68,17 +68,3 @@ ImportDirective _parseImport(String source) {
       directive.prefix?.name,
       directive.combinators.map((c) => c.toSource()).join(' '),
     );
-
-/// The end of [node], or of the last comment that starts on the line it ends.
-int _endOfTrailingComments(String source, AstNode node) {
-  var lineEnd = source.indexOf('\n', node.end);
-  if (lineEnd == -1) lineEnd = source.length;
-
-  var end = node.end;
-  Token? comment = node.endToken.next?.precedingComments;
-  while (comment != null && comment.offset < lineEnd) {
-    end = comment.end;
-    comment = comment.next;
-  }
-  return end;
-}

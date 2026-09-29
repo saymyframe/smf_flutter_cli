@@ -1,3 +1,4 @@
+import 'package:dart_style/dart_style.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:test/test.dart';
 
@@ -42,7 +43,8 @@ void main() {
       ]);
     });
 
-    test('keeps existing comments', () async {
+    test('inserts above the comments that lead up to the first element',
+        () async {
       final source = providerMainDart.replaceFirst(
         '        Provider(create: (_) => Logger()),\n',
         '        // Logging comes first.\n'
@@ -51,7 +53,29 @@ void main() {
 
       final result = await intoProviders().apply(source);
 
-      expect(result, contains('// Logging comes first.'));
+      expect(
+        result,
+        contains(
+          '        $analytics,\n'
+          '        // Logging comes first.\n'
+          '        $logger,\n',
+        ),
+      );
+    });
+
+    test('adds the comma after an insert that has none', () async {
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/main.dart',
+        function: 'main',
+        listVariableMatch: 'providers',
+        parentExpressionMatch: 'MultiProvider',
+        insert: '$analytics // Analytics goes first.',
+      ).apply(providerMainDart);
+
+      expect(namedListsOf(result, 'providers'), [
+        [analytics, logger],
+      ]);
+      expect(result, contains('$analytics, // Analytics goes first.\n'));
     });
 
     test('inserts into an empty list', () async {
@@ -140,10 +164,8 @@ List<Widget> buildColumns() {
       });
     });
 
-    test(
-      'only looks for the list inside the named function',
-      () async {
-        const source = '''
+    test('only looks for the list inside the named function', () async {
+      const source = '''
 void main() {
   runApp(MultiProvider(providers: [Provider(create: (_) => Logger())]));
 }
@@ -153,22 +175,17 @@ Widget buildTestApp() {
 }
 ''';
 
-        final result =
-            await intoProviders(function: 'buildTestApp').apply(source);
+      final result =
+          await intoProviders(function: 'buildTestApp').apply(source);
 
-        expect(namedListsOf(result, 'providers'), [
-          [logger],
-          [analytics, logger],
-        ]);
-      },
-      skip: 'Bug: the list is searched for in the whole file, not in the '
-          'function body',
-    );
+      expect(namedListsOf(result, 'providers'), [
+        [logger],
+        [analytics, logger],
+      ]);
+    });
 
-    test(
-      'finds lists nested under other named arguments',
-      () async {
-        const source = '''
+    test('finds lists nested under other named arguments', () async {
+      const source = '''
 void main() {
   runApp(
     MaterialApp(
@@ -178,25 +195,47 @@ void main() {
 }
 ''';
 
-        final result = await const InsertIntoListInFunction(
-          file: 'lib/main.dart',
-          function: 'main',
-          listVariableMatch: 'children',
-          parentExpressionMatch: 'Column',
-          insert: "Text('new'),",
-        ).apply(source);
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/main.dart',
+        function: 'main',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Column',
+        insert: "Text('new'),",
+      ).apply(source);
 
-        expect(namedListsOf(result, 'children'), [
-          ["Text('new')", "Text('a')"],
-        ]);
-      },
-      skip: 'Bug: the visitor does not recurse into named arguments, so '
-          'nested lists are never found',
-    );
+      expect(namedListsOf(result, 'children'), [
+        ["Text('new')", "Text('a')"],
+      ]);
+    });
 
-    test(
-      'only matches lists whose parent expression matches',
-      () async {
+    test('counts nested lists in index after the list around them', () async {
+      const source = '''
+Widget buildPage() {
+  return Column(
+    children: [
+      Column(children: [Text('inner')]),
+    ],
+  );
+}
+''';
+
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/page.dart',
+        function: 'buildPage',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Column',
+        insert: "Text('new'),",
+        index: 1,
+      ).apply(source);
+
+      expect(namedListsOf(result, 'children'), [
+        ["Column(children: [Text('new'), Text('inner')])"],
+        ["Text('new')", "Text('inner')"],
+      ]);
+    });
+
+    group('matches the parent expression', () {
+      test('only in the calls that take the list', () async {
         const source = '''
 List<Widget> buildRows() {
   return [
@@ -218,20 +257,70 @@ List<Widget> buildRows() {
           ["Text('a')"],
           ["Text('new')", "Text('b')"],
         ]);
-      },
-      skip: 'Bug: the parent check walks up to the compilation unit, so any '
-          'occurrence of parentExpressionMatch in the file matches',
-    );
+      });
 
-    test(
-      'is idempotent',
-      () async {
-        final once = await intoProviders().apply(providerMainDart);
+      test('in a call around the one that takes the list', () async {
+        final result = await intoProviders(parentExpressionMatch: 'runApp')
+            .apply(providerMainDart);
 
-        expect(await intoProviders().apply(once), once);
-      },
-      skip: 'Bug: nothing checks whether the element is already in the list, '
-          'so every run adds it again',
-    );
+        expect(namedListsOf(result, 'providers'), [
+          [analytics, logger],
+        ]);
+      });
+
+      test('not in the arguments next to the list', () {
+        const source = '''
+void main() {
+  runApp(MaterialApp(supportedLocales: [Locale('en')], home: HomePage()));
+}
+''';
+
+        expect(
+          const InsertIntoListInFunction(
+            file: 'lib/main.dart',
+            function: 'main',
+            listVariableMatch: 'supportedLocales',
+            parentExpressionMatch: 'HomePage',
+            insert: "Locale('uk'),",
+          ).apply(source),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('not outside the function', () {
+        const source = '''
+void main() {
+  runApp(ServiceScope(providers: [Provider(create: (_) => Logger())]));
+}
+
+Widget buildTestApp() => MultiProvider(providers: const []);
+''';
+
+        expect(
+          intoProviders().apply(source),
+          throwsA(isA<Exception>()),
+        );
+      });
+    });
+
+    test('is idempotent', () async {
+      final once = await intoProviders().apply(providerMainDart);
+
+      expect(await intoProviders().apply(once), once);
+    });
+
+    test('throws instead of writing broken code when the insert is invalid',
+        () {
+      expect(
+        const InsertIntoListInFunction(
+          file: 'lib/main.dart',
+          function: 'main',
+          listVariableMatch: 'providers',
+          parentExpressionMatch: 'MultiProvider',
+          insert: 'Provider(create: (_) => Analytics(),',
+        ).apply(providerMainDart),
+        throwsA(isA<FormatterException>()),
+      );
+    });
   });
 }

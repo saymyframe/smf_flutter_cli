@@ -10,7 +10,7 @@ List<String> matchesOf(String source, String widget) {
   parseValid(source).visitChildren(
     MatchWidgetVisitor(
       targetWidget: widget,
-      onMatch: (node) => matches.add(node.toSource()),
+      onMatch: (creation) => matches.add(creation.expression.toSource()),
     ),
   );
   return matches;
@@ -18,14 +18,17 @@ List<String> matchesOf(String source, String widget) {
 
 void main() {
   group('MatchWidgetVisitor', () {
-    test('reports const and new instances of the widget only', () {
+    test('reports instances of the widget with or without const or new', () {
       const source = '''
 final a = const Center(child: Text('a'));
 final b = const Text('b');
 final c = new Text('c');
 ''';
 
-      expect(matchesOf(source, 'Text'), ["const Text('b')", "new Text('c')"]);
+      expect(
+        matchesOf(source, 'Text'),
+        ["Text('a')", "const Text('b')", "new Text('c')"],
+      );
     });
 
     test('reports outer widgets before the ones nested in them', () {
@@ -60,13 +63,61 @@ final w = const Padding(
       );
     });
 
-    test(
-      'matches widgets created without const or new',
-      () {
-        expect(matchesOf("final w = Text('a');", 'Text'), ["Text('a')"]);
-      },
-      skip: 'Bug: without resolution `Text(...)` parses as a MethodInvocation, '
-          'which the visitor never looks at',
-    );
+    test('matches widgets created without const or new', () {
+      expect(matchesOf("final w = Text('a');", 'Text'), ["Text('a')"]);
+    });
+
+    test('matches import-prefixed widgets created without const or new', () {
+      expect(matchesOf("final w = m.Text('a');", 'Text'), ["m.Text('a')"]);
+    });
+
+    test('matches a named constructor called without const or new', () {
+      const source = '''
+final a = MaterialApp.router();
+final b = m.MaterialApp.router();
+''';
+
+      expect(
+        matchesOf(source, 'router'),
+        ['MaterialApp.router()', 'm.MaterialApp.router()'],
+      );
+    });
+
+    test('matches private widgets created without const or new', () {
+      expect(matchesOf("final w = _Title('a');", '_Title'), ["_Title('a')"]);
+    });
+
+    test('ignores calls that create no widget', () {
+      const source = '''
+final a = text?.Text('a');
+final b = text..Text('b');
+final c = buildText().Text('c');
+''';
+
+      expect(matchesOf(source, 'Text'), isEmpty);
+    });
+
+    test('ignores functions and methods named like the widget', () {
+      const source = '''
+final a = builder();
+final b = delegate.builder();
+final c = m.delegate.builder();
+''';
+
+      expect(matchesOf(source, 'builder'), isEmpty);
+    });
+
+    test('reports what the replacements and argument edits need', () {
+      final creations = <WidgetCreation>[];
+      parseValid("final w = const Center(child: m.Text('a', maxLines: 1));")
+          .visitChildren(
+        MatchWidgetVisitor(targetWidget: 'Text', onMatch: creations.add),
+      );
+
+      final creation = creations.single;
+      expect(creation.name.lexeme, 'Text');
+      expect(creation.keyword, isNull);
+      expect(creation.argumentList.toSource(), "('a', maxLines: 1)");
+    });
   });
 }

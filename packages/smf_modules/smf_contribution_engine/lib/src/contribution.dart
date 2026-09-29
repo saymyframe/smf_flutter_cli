@@ -23,9 +23,15 @@ abstract class Contribution {
   /// The formatter contributions run over the code they produce.
   ///
   /// It throws a [FormatterException] on invalid code, so a broken insert
-  /// fails the contribution instead of reaching the file. It uses the short
-  /// style of Dart 3.6, and so rejects newer syntax such as dot shorthands.
+  /// fails the contribution instead of reaching the file.
+  ///
+  /// It reads the code at the latest language version that the resolved
+  /// `dart_style` supports, so newer syntax such as dot shorthands passes,
+  /// and formats it in the tall style of Dart 3.7 and later, unless a
+  /// `// @dart=` comment in the file picks an older version. It keeps
+  /// trailing commas, so a list or argument list that has one stays split.
   DartFormatter get dartFormater => DartFormatter(
-        languageVersion: DartFormatter.latestShortStyleLanguageVersion,
+        languageVersion: DartFormatter.latestLanguageVersion,
+        trailingCommas: TrailingCommas.preserve,
       );
 }
