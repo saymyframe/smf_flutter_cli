@@ -1,7 +1,7 @@
 // Checks that the repository no longer uses what the module model replaced:
 // the names of the old contracts API, the constants and hooks of the old
-// modules, the old way to render bricks, the old template markers, and
-// dependencies that only some packages may have.
+// modules and their direct use of get_it, the old way to render bricks, the
+// old template markers, and dependencies that only some packages may have.
 //
 // Run it anywhere in the repository: `dart tools/banlist.dart`. It reads the
 // files that git tracks, and the new ones it does not ignore.
@@ -109,12 +109,8 @@ final List<_Ban> _bans = [
     // Dependencies that only their owners may have.
     'mustachex',
     'smf_contribution_engine',
-    'getIt',
-    'GetIt',
   ])
     _Ban.word(name),
-  const _Ban('package:get_it', 'package:get_it/'),
-  _Ban('get_it:', RegExp(r'^\s+get_it\s*:')),
   _Ban('kFirebase…', RegExp('(?<![A-Za-z0-9_])kFirebase[A-Za-z0-9_]*')),
   _Ban(
     'k…Module',
@@ -122,6 +118,13 @@ final List<_Ban> _bans = [
   ),
   const _Ban('analyze:hooks', 'analyze:hooks'),
   const _Ban('MasonGenerator.fromBundle', 'MasonGenerator.fromBundle'),
+  // get_it, which the old modules called directly. The pipeline, the
+  // contract harness and the architecture tests check who may add or import
+  // the package of any provider, get_it included.
+  _Ban.word('getIt'),
+  _Ban.word('GetIt'),
+  const _Ban('package:get_it', 'package:get_it/'),
+  _Ban('get_it:', RegExp(r'^\s+get_it\s*:')),
   // Template markers of the old modules.
   const _Ban('{{app_name_sc}}', '{{app_name_sc}}'),
   const _Ban('{{#modules}}', '{{#modules}}'),
