@@ -32,6 +32,7 @@ jobs:
 
       # Setup Dart tools (Dart SDK, Melos, Mason)
       - name: Setup Dart tools
+        id: dart
         uses: saymyframe/.github/.github/actions/setup-dart-tools@main
         with:
           sdk: ${{ env.DART_SDK }}
@@ -76,6 +77,14 @@ jobs:
         id: test
         run: melos run test:coverage
 
+      # The tests that failed, as annotations that the page of the run lists
+      # at the top rather than as lines in the long log of the tests; see
+      # tools/test_annotations.dart. Also after a failed step and in a
+      # cancelled job, whenever Dart is there.
+      - name: Annotate the failed tests
+        if: ${{ always() && steps.dart.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8
         env:
@@ -118,6 +127,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: dart-lang/setup-dart@v1
+        id: dart
         with:
           sdk: ${{ env.DART_SDK }}
 
@@ -129,7 +139,12 @@ jobs:
         working-directory: packages/smf_modules/smf_firebase_core
         env:
           SMF_INSTALL_FIREBASE_CLI: "1"
-        run: dart test test/install_script_windows_test.dart
+        run: dart test test/install_script_windows_test.dart --file-reporter json:build/test-results/install_script_windows_test.json
+
+      # As in the job checks.
+      - name: Annotate the failed tests
+        if: ${{ always() && steps.dart.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
 
   # One check for the ruleset of main to require, whose name stays the same
   # when jobs come and go. It needs every other job of this workflow, which
