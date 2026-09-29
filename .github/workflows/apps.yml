@@ -90,7 +90,6 @@ jobs:
       apps: ${{ steps.plan.outputs.apps }}
       start: ${{ steps.plan.outputs.start }}
       entries: ${{ steps.plan.outputs.entries }}
-      firebase: ${{ steps.firebase.outputs.key }}
 
     steps:
       - uses: actions/checkout@v7
@@ -139,9 +138,20 @@ jobs:
             echo "entries=$(jq -c .entries <<< "$real")"
           } >> "$GITHUB_OUTPUT"
 
-      # Whether the key of the service account is there, for the jobs that
-      # configure the apps with Firebase; the key itself goes only into the
-      # steps that need it.
+  # Whether the key of the service account is there, for the jobs that
+  # configure the apps with Firebase; the key itself goes only into the
+  # steps that need it. A job of its own: the runner hides the lines of each
+  # secret that a job refers to in the outputs of the job, and leaves out an
+  # output that has one of them, such as the { of the key, which is JSON, so
+  # the plan, whose outputs are JSON, refers to no secret.
+  firebase-key:
+    name: Firebase key
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      key: ${{ steps.firebase.outputs.key }}
+
+    steps:
       - name: Find the key of the service account
         id: firebase
         env:
@@ -496,8 +506,8 @@ jobs:
   # a pull request from a fork, the jobs with Firebase do not run.
   android-firebase:
     name: Android with Firebase (${{ matrix.app }})
-    needs: plan
-    if: needs.plan.outputs.firebase == 'true'
+    needs: [plan, firebase-key]
+    if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
     # About 13 minutes: the app, its configuration, and its start, for
     # which start_app.sh gives the build and the start 480 s.
@@ -883,8 +893,8 @@ jobs:
   # for Crashlytics of the test of the archive.
   ios-firebase:
     name: iOS with Firebase (${{ matrix.app }})
-    needs: plan
-    if: inputs.macos_and_windows && needs.plan.outputs.firebase == 'true'
+    needs: [plan, firebase-key]
+    if: inputs.macos_and_windows && needs.firebase-key.outputs.key == 'true'
     runs-on: macos-26
     # About 17 minutes: the app, its configuration, the simulator, and the
     # 600 s that start_app.sh gives the build and the start.
