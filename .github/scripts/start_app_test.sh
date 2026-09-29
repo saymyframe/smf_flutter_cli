@@ -5,8 +5,12 @@
 #
 # On the emulators and simulators of CI, flutter test sometimes never
 # reaches the app it installed: it waits for its VM service until the step
-# times out, or fails to start the Dart Development Service. Such a try is
-# made once more. A test that fails, as when the app does not start, fails
+# times out, or fails to start the Dart Development Service. On an iOS
+# simulator this is a race of flutter_tools, which can miss the line of the
+# VM service in the log of the simulator
+# (https://github.com/flutter/flutter/issues/181771, fixed by
+# https://github.com/flutter/flutter/pull/193142 once it lands in a stable
+# release). Such a try is made once more. A test that fails, as when the app does not start, fails
 # at once, since a second try would fail the same way.
 set -u
 
