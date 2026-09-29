@@ -4,9 +4,14 @@
 // once, with the name of its route only, `{{start_screen}}`. The mocks of
 // Firebase Core come with the tests of firebase_core, which every app with
 // Firebase Analytics has.
+//
+// It starts the app through what every app has, whichever module provides
+// its entry: main() in lib/main.dart (AppEntryRole.mainFile), which runs
+// bootstrap() and then runApp() with what the modules put around the root
+// widget, such as the scope of the providers of Riverpod.
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:{{app_name}}/app.dart';
-import 'package:{{app_name}}/bootstrap.dart';
+import 'package:{{app_name}}/main.dart' as app;
 
 import 'firebase_analytics_mocks.dart';
 import 'firebase_core_mocks.dart';
@@ -14,23 +19,25 @@ import 'firebase_core_mocks.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // The start-up of the app runs outside the widget test, whose fake time
-  // the answers of the mocks of Firebase would wait for: main() in the
-  // test, even through runAsync, never finishes.
-  setUpAll(() async {
-    mockFirebaseCore();
-    mockFirebaseAnalytics();
-    await bootstrap();
-  });
-
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets('the first screen is logged once, with the name of its route',
       (tester) async {
-    // The root widget of the app, without what main() may put around it,
-    // such as the scope of the providers of Riverpod, which the start
-    // screens do not need.
-    await tester.pumpWidget(const App());
+    mockFirebaseCore();
+    mockFirebaseAnalytics();
+    // bootstrap() of an app that reports crashes sends the errors of
+    // Flutter and those that nothing catches to its crash reporter, which
+    // this test does not mock. The test takes them back once main()
+    // returns, so that flutter_test reports the errors of the frames that
+    // follow, and an expectation that fails, as in any test.
+    final onError = FlutterError.onError;
+    final onPlatformError = PlatformDispatcher.instance.onError;
+    try {
+      await app.main();
+    } finally {
+      FlutterError.onError = onError;
+      PlatformDispatcher.instance.onError = onPlatformError;
+    }
     await tester.pumpAndSettle();
     // Building every widget of the app again shows the same screen, which
     // is not logged again.
