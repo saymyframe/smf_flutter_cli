@@ -62,4 +62,7 @@ jobs:
       # Only the job with the latest Flutter saves the cache of Gradle; the
       # others restore it.
       save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # The CLI on pub.dev does not change with a pull request, so only this
+      # workflow checks it.
+      published_cli: true
     secrets: inherit
