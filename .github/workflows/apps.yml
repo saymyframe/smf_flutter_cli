@@ -380,24 +380,11 @@ jobs:
       # What users install: smf_flutter_cli from pub.dev, with the versions
       # of its dependencies that pub resolves there rather than the packages
       # of the workspace. As a user does, outside the checkout, it generates
-      # an app with every module for each state manager, with the full dart
-      # fix, in a directory with a space in its name. A failure of these
-      # steps affects the users of the published version, and its fix needs
-      # a release of the packages.
-      #
-      # Unlike the steps above, these name the modules by hand: the CLI on
-      # pub.dev has the modules of its release, which may differ from those
-      # of the workspace, and it has no tool that lists them. The matrix of
-      # the workspace checked every combination of their providers before
-      # the release, so what these steps check besides is what only an
-      # install from pub.dev has, the dependencies that pub resolves today
-      # and the full dart fix, with a selection of modules as a user makes
-      # it: every module, with each state manager, whose packages the other
-      # modules do not bring. A release that changes the modules of the CLI
-      # changes this selection too; one that adds a second provider of a
-      # role that every app has, such as the app entry, fails here until it
-      # names one. tools/workflow_apps_test.dart allows this step, and no
-      # other, to name modules.
+      # the apps with every module of that release, with the full dart fix,
+      # in a directory with a space in its name, and analyzes, tests and
+      # builds each for Android. A failure of these steps affects the users
+      # of the published version, and its fix needs a release of the
+      # packages.
       - name: Activate the CLI from pub.dev
         id: pub_dev_cli
         if: ${{ !cancelled() && matrix.registry == 'real' && inputs.published_cli }}
@@ -408,26 +395,49 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
           "$bin/smf" --version
 
+      # The CLI on pub.dev has the modules of its release, which may differ
+      # from those of the workspace, so the apps come from the matrix of
+      # that release: packages/smf_flutter_cli/tool/every_module_apps.dart,
+      # in a package of its own that depends on the version of
+      # smf_flutter_cli that is active, prints the arguments of smf create
+      # of each app with every module of the release, one for each
+      # combination of the providers of the roles that take one, as the
+      # matrix generates them but with the full dart fix. So a release with
+      # another provider of a role gets its apps here without a change of
+      # the workflow.
       - name: Generate the apps with every module with the CLI from pub.dev
         id: pub_dev_apps
         if: ${{ !cancelled() && steps.pub_dev_cli.outcome == 'success' }}
         working-directory: ${{ runner.temp }}
         run: |
-          for state in bloc riverpod; do
-            smf create "${state}_app" \
-              -m "go_router,home,bottom_tabs,$state,get_it,event_bus,firebase_crashlytics,firebase_analytics" \
-              -o "$RUNNER_TEMP/SMF apps from pub.dev" --no-input --skip-external-setup --strict
+          version="$(dart pub global list | awk '$1 == "smf_flutter_cli" { print $2 }')"
+          if [ -z "$version" ]; then
+            echo "::error::dart pub global list shows no smf_flutter_cli."
+            exit 1
+          fi
+          lister="$RUNNER_TEMP/every_module_apps"
+          mkdir -p "$lister/bin"
+          cp "$GITHUB_WORKSPACE/packages/smf_flutter_cli/tool/every_module_apps.dart" "$lister/bin/"
+          printf 'name: every_module_apps\npublish_to: none\nenvironment:\n  sdk: ^3.6.0\ndependencies:\n  smf_flutter_cli: %s\n' \
+            "$version" > "$lister/pubspec.yaml"
+          (cd "$lister" && dart pub get)
+          dart --packages="$lister/.dart_tool/package_config.json" "$lister/bin/every_module_apps.dart" \
+            "$RUNNER_TEMP/SMF apps from pub.dev" > "$lister/apps.json"
+          jq . "$lister/apps.json"
+          count="$(jq length "$lister/apps.json")"
+          for index in $(seq 0 $((count - 1))); do
+            mapfile -t arguments < <(jq -r ".[$index].arguments[]" "$lister/apps.json")
+            echo "=== ${arguments[1]}: $(jq -r ".[$index].name" "$lister/apps.json")"
+            smf "${arguments[@]}"
           done
 
       - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
         if: ${{ !cancelled() && steps.pub_dev_apps.outcome == 'success' }}
         run: |
-          for app in bloc_app riverpod_app; do
-            cd "$RUNNER_TEMP/SMF apps from pub.dev/$app"
-            flutter analyze
-            flutter test
-            flutter build apk --debug
-          done
+          apps="$RUNNER_TEMP/SMF apps from pub.dev"
+          .github/scripts/each_app.sh "$apps" flutter analyze
+          .github/scripts/each_app.sh "$apps" flutter test
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
 
       # The tests of the packages that failed, as annotations that the page
       # of the run lists at the top rather than as lines in the long log of
