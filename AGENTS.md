@@ -73,6 +73,8 @@ The matrix tools take the names of apps after the directory, such as `'every mod
 
 Two more jobs run on the macOS and Windows runners of GitHub, with Flutter 3.44.2 from its release archive. Both run the tests of every package and of `tools/`; a test of something that only one system does is marked `@TestOn('mac-os')` or `testOn: 'windows'`. The macOS job generates an app without Firebase and one with every module in a directory whose name has a space and letters beyond ASCII, and builds both for the iOS simulator. A test of `smf_firebase_core` then archives the second app with `flutter build ipa --no-codesign`: it adds the build phase for Crashlytics with the Ruby gem xcodeproj, as `flutterfire configure` does on macOS, and fixes the phase with the command from the README of the app. The Windows job runs the matrix of the CLI for the apps with every module, and generates one more app as a user does, with the full `dart fix`, in a directory whose name has letters beyond ASCII. SMF generates the apps in `%TEMP%` and moves them to another drive. The job also finds the FlutterFire CLI through `dart.bat`. A job of its own runs the install script of the Firebase CLI on Windows for real.
 
+CI also runs every Monday, and when someone starts it by hand. These runs use the latest stable release of Flutter, with its Dart, in the jobs with Flutter instead of the pinned versions. They skip the jobs without Flutter, and the comparison of the brick of `flutter_core` with `flutter create`, since the brick follows the template of the pinned Flutter.
+
 Run the CLI from source. It finds the Flutter SDK through `flutter` on the `PATH` before it generates anything, and runs `flutter pub get`, `dart fix` and `dart format` in the new app:
 
 ```bash

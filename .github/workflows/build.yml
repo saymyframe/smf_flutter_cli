@@ -5,19 +5,31 @@ on:
       - main
   pull_request:
     types: [ opened, synchronize, reopened ]
+  # Every Monday, and when started by hand, the jobs with Flutter run with
+  # its latest stable release instead of the pinned one, so that a release
+  # of Flutter that breaks SMF shows up without waiting for a push.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A push to main does not cancel a run of the schedule on main.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   # Formatter output depends on the SDK version; keep in sync with the Dart
   # that ships with the Flutter stable used for development.
   DART_SDK: "3.12.2"
+  # "true" on the runs with the latest stable Flutter.
+  LATEST_STABLE_FLUTTER: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
 jobs:
   checks:
     name: Format, analyze, test
+    # With the pinned Dart, which the runs with the latest stable Flutter
+    # do not change.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -98,6 +110,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # On a run with the latest stable Flutter, that release and its Dart
+      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
+      - name: Take the latest stable Flutter
+        if: env.LATEST_STABLE_FLUTTER == 'true'
+        run: |
+          release="$(curl -fsSL --retry 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json |
+            jq -er '.current_release.stable as $hash
+              | first(.releases[] | select(.hash == $hash and .dart_sdk_arch == "x64"))
+              | "FLUTTER_VERSION=\(.version)", "FLUTTER_SHA256=\(.sha256)", "DART_SDK=\(.dart_sdk_version)"')"
+          echo "$release"
+          echo "$release" >> "$GITHUB_ENV"
+
       # The repository allows only the actions of GitHub, of verified
       # creators and a few others by name, so Flutter comes from its release
       # archive rather than from a setup action.
@@ -115,7 +139,8 @@ jobs:
           "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
 
       # The Flutter the apps are checked with, and its Dart, which formats
-      # them, must be the pinned ones.
+      # them, must be the pinned ones, or those of the latest stable release
+      # that the step above took.
       - name: Check the versions of Flutter and Dart
         run: |
           flutter --version --machine > "$RUNNER_TEMP/flutter.json"
@@ -147,8 +172,10 @@ jobs:
         if: matrix.registry == 'real'
         run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
 
+      # The brick follows the template of the pinned Flutter, and a later
+      # one may differ from it without breaking the apps.
       - name: Compare the brick of flutter_core with flutter create
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
+        if: ${{ !cancelled() && matrix.registry == 'real' && env.LATEST_STABLE_FLUTTER != 'true' }}
         run: |
           (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example --no-pub my_app)
           cd packages/smf_modules/smf_flutter_core
@@ -191,6 +218,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      # On a run with the latest stable Flutter, that release and its Dart
+      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
+      - name: Take the latest stable Flutter
+        if: env.LATEST_STABLE_FLUTTER == 'true'
+        run: |
+          release="$(curl -fsSL --retry 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json |
+            jq -er '.current_release.stable as $hash
+              | first(.releases[] | select(.hash == $hash and .dart_sdk_arch == "arm64"))
+              | "FLUTTER_VERSION=\(.version)", "FLUTTER_SHA256=\(.sha256)", "DART_SDK=\(.dart_sdk_version)"')"
+          echo "$release"
+          echo "$release" >> "$GITHUB_ENV"
 
       - name: Setup Flutter
         run: |
@@ -287,6 +326,20 @@ jobs:
             throw 'TEMP and RUNNER_TEMP are on one drive.'
           }
 
+      # On a run with the latest stable Flutter, that release and its Dart
+      # replace FLUTTER_VERSION, FLUTTER_SHA256 and DART_SDK.
+      - name: Take the latest stable Flutter
+        if: env.LATEST_STABLE_FLUTTER == 'true'
+        run: |
+          $releases = Invoke-RestMethod -MaximumRetryCount 3 https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
+          $release = $releases.releases |
+            Where-Object { $_.hash -eq $releases.current_release.stable -and $_.dart_sdk_arch -eq 'x64' } |
+            Select-Object -First 1
+          if (-not $release) { throw 'No latest stable Flutter for Windows.' }
+          $environment = "FLUTTER_VERSION=$($release.version)", "FLUTTER_SHA256=$($release.sha256)", "DART_SDK=$($release.dart_sdk_version)"
+          $environment
+          $environment >> $env:GITHUB_ENV
+
       - name: Setup Flutter
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'flutter.zip'
@@ -307,7 +360,7 @@ jobs:
           $machine
           $versions = $machine | ConvertFrom-Json
           if ($versions.frameworkVersion -ne $env:FLUTTER_VERSION -or -not $versions.dartSdkVersion.StartsWith($env:DART_SDK)) {
-            throw 'Flutter or Dart is not the pinned version.'
+            throw "Flutter or Dart is not $env:FLUTTER_VERSION with Dart $env:DART_SDK."
           }
 
       # Without a cache of pub packages: restoring it takes longer than
@@ -368,6 +421,8 @@ jobs:
   # takes minutes, so it runs next to the job above rather than in it.
   windows-install:
     name: Firebase CLI install (Windows)
+    # Without Flutter, so the runs with the latest stable Flutter skip it.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 30
 
