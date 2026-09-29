@@ -73,12 +73,21 @@ jobs:
         run: dart pub global activate coverage
 
       - name: Test
+        id: test
         run: melos run test:coverage
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Every line and branch of lib/ must be covered. After the scan, so
+      # that SonarCloud gets the coverage when this check fails, and whether
+      # the scan passes or not: a pull request from a fork has no token for
+      # SonarCloud.
+      - name: Coverage
+        if: ${{ !cancelled() && steps.test.outcome == 'success' }}
+        run: melos run coverage:check
 
   # The jobs with Flutter, with the pinned one.
   apps:
