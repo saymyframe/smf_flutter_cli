@@ -11,6 +11,29 @@ See [Conventional Commits](https://conventionalcommits.org) for commit guideline
 
 Packages with breaking changes:
 
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_contribution_engine` - `v0.2.1`](#smf_contribution_engine---v021)
+
+---
+
+#### `smf_contribution_engine` - `v0.2.1`
+
+ - **DOCS**: say that the modules of the SMF CLI do not use the engine, and add an example.
+
+ - **FIX**(contribution_engine): imports, widget edits and mustache rendering ([#27](https://github.com/saymyframe/smf_flutter_cli/issues/27)). ([daa02e56](https://github.com/saymyframe/smf_flutter_cli/commit/daa02e5625f433fdd7a6ed55f1850390102f7748))
+
+
+## 2026-09-29
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
  - [`smf_firebase_crashlytics` - `v0.3.0`](#smf_firebase_crashlytics---v030)
  - [`smf_bloc` - `v0.3.0`](#smf_bloc---v030)
  - [`smf_bottom_tabs` - `v0.3.0`](#smf_bottom_tabs---v030)

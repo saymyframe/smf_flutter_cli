@@ -1,3 +1,9 @@
+## 0.2.1
+
+ - **DOCS**: say that the modules of the SMF CLI do not use the engine, and add an example.
+
+ - **FIX**(contribution_engine): imports, widget edits and mustache rendering ([#27](https://github.com/saymyframe/smf_flutter_cli/issues/27)). ([daa02e56](https://github.com/saymyframe/smf_flutter_cli/commit/daa02e5625f433fdd7a6ed55f1850390102f7748))
+
 ## 0.2.0
 
 > Note: This release has breaking changes.
