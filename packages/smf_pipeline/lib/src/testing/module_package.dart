@@ -49,9 +49,9 @@ const _machineLibraries = {
 /// So the code of a module knows only the module model and the modules it
 /// depends on.
 ///
-/// The module packages, which the problems call the SMF packages, are
-/// `smf_contracts`, `smf_pipeline` and every package that depends on
-/// `smf_contracts`, as the package of a module does, whatever its name.
+/// The module packages are `smf_contracts`, `smf_pipeline` and every
+/// package that depends on `smf_contracts`, as the package of a module
+/// does, whatever its name.
 ///
 /// ```dart
 /// test('follows the rules of the package of a module', () {
@@ -195,8 +195,8 @@ final class ModulePackage {
     final problems = <String>[];
     for (final package in _sorted(modules)) {
       problems.add(
-        '$name has a dev dependency on $package, but of the SMF packages the '
-        'tests of a module use only ${_list(tests)}.',
+        '$name has a dev dependency on $package, but of the module packages '
+        'the tests of a module use only ${_list(tests)}.',
       );
     }
     for (final package in _sorted(tests.difference(devDependencies))) {
@@ -250,9 +250,10 @@ final class ModulePackage {
     for (final (path, uri) in _directives(directory, 'test')) {
       if (!_isAllowed(uri, path, 'test', testable, isModule: isModule)) {
         problems.add(
-          '$path uses $uri, but of the SMF packages the tests of a module use '
-          'only the module model of smf_contracts and the public libraries of '
-          '${_list(testable)}, and no file outside test/ by a relative path.',
+          '$path uses $uri, but of the module packages the tests of a module '
+          'use only the module model of smf_contracts and the public '
+          'libraries of ${_list(testable)}, and no file outside test/ by a '
+          'relative path.',
         );
       }
     }

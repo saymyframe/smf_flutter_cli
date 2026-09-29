@@ -239,7 +239,7 @@ void main() {
     );
   });
 
-  test('of the SMF packages, the tests use smf_pipeline and test modules', () {
+  test('of the module packages, tests use smf_pipeline and test modules', () {
     expect(
       _problemsOf(
         _package(
@@ -252,15 +252,15 @@ void main() {
       [
         equals(
           'smf_router has a dev dependency on smf_home, but of '
-          'the SMF packages the tests of a module use only smf_flutter_core '
-          'and smf_pipeline.',
+          'the module packages the tests of a module use only '
+          'smf_flutter_core and smf_pipeline.',
         ),
         'smf_router has no dev dependency on smf_pipeline.',
       ],
     );
   });
 
-  test('smf_contracts counts as an SMF package by its name', () {
+  test('smf_contracts counts as a module package by its name', () {
     expect(
       _problemsOf(
         _package(
@@ -277,9 +277,9 @@ void main() {
       ),
       [
         equals(
-          'smf_router has a dev dependency on smf_contracts, but of the SMF '
-          'packages the tests of a module use only smf_flutter_core and '
-          'smf_pipeline.',
+          'smf_router has a dev dependency on smf_contracts, but of the '
+          'module packages the tests of a module use only smf_flutter_core '
+          'and smf_pipeline.',
         ),
       ],
     );
@@ -362,9 +362,9 @@ void main() {
           '../../other/test/support.dart',
         ])
           equals(
-            'test/bad_test.dart uses $uri, but of the SMF packages the tests '
-            'of a module use only the module model of smf_contracts and the '
-            'public libraries of smf_flutter_core, smf_pipeline and '
+            'test/bad_test.dart uses $uri, but of the module packages the '
+            'tests of a module use only the module model of smf_contracts and '
+            'the public libraries of smf_flutter_core, smf_pipeline and '
             'smf_router, and no file outside test/ by a relative path.',
           ),
       ],
@@ -389,7 +389,7 @@ void main() {
     expect(_problemsOf(fileSystem, package: withCore), [
       equals(
         'test/core_test.dart uses package:smf_core/src/core.dart, but of the '
-        'SMF packages the tests of a module use only the module model of '
+        'module packages the tests of a module use only the module model of '
         'smf_contracts and the public libraries of smf_core, '
         'smf_flutter_core, smf_pipeline and smf_router, and no file outside '
         'test/ by a relative path.',
@@ -469,7 +469,7 @@ void main() {
       expect(_acmeProblemsOf(_acme(files)), [
         equals(
           'test/theme_test.dart uses package:acme_theme/acme_theme.dart, but '
-          'of the SMF packages the tests of a module use only the module '
+          'of the module packages the tests of a module use only the module '
           'model of smf_contracts and the public libraries of acme_feature '
           'and smf_pipeline, and no file outside test/ by a relative path.',
         ),
@@ -493,8 +493,8 @@ void main() {
         ),
         [
           equals(
-            'acme_feature has a dev dependency on acme_theme, but of the SMF '
-            'packages the tests of a module use only smf_pipeline.',
+            'acme_feature has a dev dependency on acme_theme, but of the '
+            'module packages the tests of a module use only smf_pipeline.',
           ),
         ],
       );
