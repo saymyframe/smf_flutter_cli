@@ -37,7 +37,7 @@ packages/
     smf_contribution_engine/  # a standalone engine that patches Dart files; no module uses it
     smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, home, flutter_core, bloc, riverpod, bottom_tabs
   smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
-tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart, coverage_check.dart and test_annotations.dart with their tests, package_graph_test.dart, build_workflow_test.dart, workflow_apps_test.dart, app_tests_test.dart, app_test_imports_test.dart and workspace.dart, which the last two share
+tools/                        # bundle_bricks.dart, sync_cli_version.dart, banlist.dart, coverage_check.dart, test_annotations.dart and workspace_members.dart with their tests, package_graph_test.dart, build_workflow_test.dart, workflow_apps_test.dart, app_tests_test.dart, app_test_imports_test.dart and workspace.dart, which the last two share; the tools read the members of the workspace with workspace_members.dart
 ```
 
 Dependencies point one way only: `smf_contracts` ← `smf_pipeline` and modules ← `smf_flutter_cli`. Contracts never depend on modules, the pipeline or the CLI; the pipeline never depends on a module. Modules use `smf_pipeline` only in their tests, for the contract harness.

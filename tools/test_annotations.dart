@@ -10,12 +10,14 @@
 // `dart tools/test_annotations.dart`. It reads the reports in
 // build/test-results/ of the root of the repository, where the tests of
 // tools/ run, and of each member of the workspace in the root pubspec.yaml.
+// It reads the pubspec with package:yaml, so it needs the packages of the
+// workspace, which each job gets before its tests.
 // tools/test_annotations_test.dart checks that the workflows write the
 // reports and run the tool.
 import 'dart:convert';
 import 'dart:io';
 
-import 'coverage_check.dart' show workspaceMembers;
+import 'workspace_members.dart';
 
 /// The reports of tests in build/test-results/ of the repository at [root]
 /// and of each member of its workspace, by the directory they are in from
