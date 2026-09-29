@@ -1,6 +1,7 @@
 /// The matrix of apps that the continuous integration of SMF generates
 /// with `smf create` and analyzes with Flutter: every app that the contract
-/// harness builds for a set of modules, and the apps with every module.
+/// harness builds for a set of modules, and the apps with every module; and
+/// the versions of Flutter that its nightly run checks them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
 library;
@@ -14,6 +15,8 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+
+export 'src/flutter_versions.dart';
 
 /// An app of the matrix: the modules to ask for, which name every module of
 /// the app so that no question is left, and the options of its roles.
@@ -141,6 +144,11 @@ final class MatrixAppTest {
   /// The packages that the tests use besides those of the app, which the
   /// matrix adds to the app as dev dependencies, such as the mocks of the
   /// platform side of a plugin.
+  ///
+  /// Each is a package as `flutter pub add` takes it after `dev:`: a
+  /// hosted package by its name, or a package with its descriptor after
+  /// `@`, such as `integration_test@{sdk: flutter}` for a package of the
+  /// Flutter SDK.
   final List<String> devDependencies;
 
   /// The values of the placeholders of the files in an app of the matrix,
@@ -153,21 +161,28 @@ final class MatrixAppTest {
 /// of the files filled, and returns the paths of the files in the app; see
 /// [MatrixAppTest.directory].
 ///
+/// Without [app], for an app that `smf create` generated outside the
+/// matrix, only `{{app_name}}` is filled: the [MatrixAppTest.values] come
+/// from an app of the matrix.
+///
 /// Throws a [MatrixAppTestException], before it copies anything, if a file
 /// keeps a placeholder that no value fills, or if two of the [tests] have
 /// a file at the same path.
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
-  required MatrixApp app,
   required String directory,
   required String packageName,
+  MatrixApp? app,
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
   final texts = <String, String>{};
   final owners = <String, String>{};
   for (final test in tests) {
-    final values = {'app_name': packageName, ...?test.values?.call(app)};
+    final values = {
+      'app_name': packageName,
+      if (app != null) ...?test.values?.call(app),
+    };
     final root = fileSystem.directory(test.directory);
     final files = [
       for (final entity in root.listSync(recursive: true))
@@ -237,13 +252,18 @@ final _placeholder = RegExp(r'\{\{\s*[A-Za-z_]\w*\s*\}\}');
 /// in it: `flutter pub add` of their dev dependencies, if they have any;
 /// `flutter analyze`, since the tests follow the rules of the analysis of
 /// the app too; and `flutter test`, which runs every test of the app.
-List<List<String>> appTestCommands(List<MatrixAppTest> tests) {
+List<List<String>> appTestCommands(List<MatrixAppTest> tests) => [
+      ..._pubAdd(tests),
+      const ['analyze'],
+      const ['test'],
+    ];
+
+/// `flutter pub add` of the dev dependencies of [tests], if they have any.
+List<List<String>> _pubAdd(List<MatrixAppTest> tests) {
   final devDependencies = {for (final test in tests) ...test.devDependencies};
   return [
     if (devDependencies.isNotEmpty)
       ['pub', 'add', for (final package in devDependencies) 'dev:$package'],
-    const ['analyze'],
-    const ['test'],
   ];
 }
 
@@ -265,6 +285,52 @@ Future<(int, String)> runAppTests(
   List<MatrixAppTest> tests, {
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
+}) =>
+    _addAndRun(
+      generated,
+      app,
+      tests,
+      appTestCommands(tests),
+      flutter: flutter,
+      fileSystem: fileSystem,
+    );
+
+/// Adds [tests] to [generated], an app that `smf create` generated outside
+/// the matrix, such as one that CI starts on a device: copies their files
+/// with [addAppTests], which fills only `{{app_name}}` in them, and adds
+/// their dev dependencies with `flutter pub add` through [flutter], if they
+/// have any. It runs neither the analysis nor the tests, which the caller
+/// runs where it needs them.
+///
+/// Returns 0 and the output, or the exit code of `flutter pub add` and the
+/// output if it fails. A problem of the files of the tests is a failure
+/// too, with the exit code 1, such as a placeholder that only an app of the
+/// matrix fills.
+Future<(int, String)> addAppTestsTo(
+  GeneratedApp generated,
+  List<MatrixAppTest> tests, {
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) =>
+    _addAndRun(
+      generated,
+      null,
+      tests,
+      _pubAdd(tests),
+      flutter: flutter,
+      fileSystem: fileSystem,
+    );
+
+/// Adds [tests] to [generated], for the app of the matrix [app] if it is
+/// one, and runs [commands] with [flutter] until one fails; returns its
+/// exit code and the output up to it, or 0 and the output of all.
+Future<(int, String)> _addAndRun(
+  GeneratedApp generated,
+  MatrixApp? app,
+  List<MatrixAppTest> tests,
+  List<List<String>> commands, {
+  required MatrixFlutter flutter,
+  required FileSystem fileSystem,
 }) async {
   final List<String> added;
   try {
@@ -279,7 +345,7 @@ Future<(int, String)> runAppTests(
     return (1, error.message);
   }
   final output = StringBuffer('Added the tests ${added.join(', ')}.\n');
-  for (final arguments in appTestCommands(tests)) {
+  for (final arguments in commands) {
     final (code, text) = await flutter(arguments, generated.path);
     output.write(text);
     if (code != 0) {

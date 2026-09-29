@@ -41,6 +41,7 @@ dev_dependencies:
   lints: ^6.0.0
   melos: ^7.1.0
   test: ^1.24.0
+  yaml: ^3.1.2
 
 melos:
   ignore:
@@ -86,6 +87,11 @@ melos:
       run: |
         melos exec -c 1 --fail-fast --dir-exists=test -- dart pub global run coverage:test_with_coverage --branch-coverage && \
         dart test tools
+    # A script of its own rather than the end of test:coverage, so that CI
+    # sends the coverage to SonarCloud before the check can fail.
+    coverage:check:
+      description: After test:coverage, fail on any line or branch of lib/ that the tests do not cover; see tools/coverage_check.dart.
+      run: dart tools/coverage_check.dart
     check:
       run: |
         melos run format:check && \

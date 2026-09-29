@@ -1,0 +1,68 @@
+name: Nightly
+# The jobs with Flutter, with every stable release of Flutter that the
+# generated apps allow, so that a release that breaks them shows up before
+# users run into it.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  versions:
+    name: Versions of Flutter
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PUB_ENVIRONMENT: ci
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+      # The latest release, the last of the matrix.
+      latest: ${{ steps.versions.outputs.latest }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Any Dart runs the tool, so this job has no version to keep up to
+      # date.
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Get the packages of the workspace
+        run: dart pub get
+
+      # Every stable release that the Flutter and Dart constraints of the
+      # apps of the matrix of the CLI allow; the jobs on macOS and Windows
+      # run with the oldest and with the latest patch of each minor version.
+      - name: Find the versions of Flutter
+        id: versions
+        run: |
+          matrix="$(dart run packages/smf_flutter_cli/tool/flutter_versions.dart)"
+          jq . <<< "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "latest=$(jq -er '.include[-1].flutter' <<< "$matrix")" >> "$GITHUB_OUTPUT"
+
+  apps:
+    name: Flutter ${{ matrix.flutter }}
+    needs: versions
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    uses: ./.github/workflows/apps.yml
+    with:
+      flutter_version: ${{ matrix.flutter }}
+      dart_version: ${{ matrix.dart }}
+      linux_sha256: ${{ matrix.linux_sha256 }}
+      macos_sha256: ${{ matrix.macos_sha256 }}
+      windows_sha256: ${{ matrix.windows_sha256 }}
+      macos_and_windows: ${{ matrix.macos_and_windows }}
+      # A cache for each version and row would crowd the caches of the pull
+      # requests out of the 10 GB of the repository.
+      pub_cache: false
+      # Only the job with the latest Flutter saves the cache of Gradle; the
+      # others restore it.
+      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # The CLI on pub.dev does not change with a pull request, so only this
+      # workflow checks it.
+      published_cli: true
+    secrets: inherit
