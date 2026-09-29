@@ -6,8 +6,6 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
-  # Temporary, to run this workflow in its pull request; reverted before merge.
-  pull_request:
 
 jobs:
   versions:
