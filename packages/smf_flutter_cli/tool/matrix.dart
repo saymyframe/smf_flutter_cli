@@ -69,15 +69,15 @@ Future<List<MatrixAppTest>> _appTests() async {
   final crashlytics = await _appTestsOf('smf_firebase_crashlytics');
   final analytics = await _appTestsOf('smf_firebase_analytics');
   return [
-    // The app starts and shows its first screen. CI runs it on an Android
-    // emulator and on an iOS simulator in the apps that it adds it to with
-    // --add-app-tests; in the apps of the matrix, which all have the app
-    // entry of flutter_core, it is only analyzed, and flutter test runs the
-    // tests that the modules put into each app.
+    // The app starts and shows its first screen: a check that CI builds as
+    // the entry of the app and starts on an Android emulator and on an iOS
+    // simulator with .github/scripts/start_app.sh, in the apps that it adds
+    // it to with --add-app-tests. In the apps of the matrix, which all have
+    // the app entry of flutter_core, it is only analyzed, and flutter test
+    // runs the tests that the modules put into each app.
     MatrixAppTest(
       '$flutterCore/start',
       appliesTo: _has(FlutterCoreModule.id),
-      devDependencies: const ['integration_test@{sdk: flutter}'],
     ),
     // The start-up of the app initializes Firebase, with the options that
     // `flutterfire configure` would write, and the mocks of Firebase Core
