@@ -1361,6 +1361,26 @@ jobs:
     });
 
     test(
+        'passes a tool that checks one app of its own, in a job without a '
+        'plan: it takes no selection of the apps with every module, so it '
+        'needs no shard', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  several:
+    timeout-minutes: 15
+    steps:
+      - name: The app with several providers
+        run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
+''',
+          file: 'apps.yml',
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
         'finds an app or a shard that does not come from the matrix of the '
         'plan, and a matrix of an output that the job does not need or that '
         'is not there', () {
