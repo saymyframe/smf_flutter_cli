@@ -25,6 +25,16 @@ import 'package:yaml/yaml.dart';
 /// `everyModuleAppsOf`. CI checks these apps so, rather than by names that
 /// change when a role gets another provider.
 ///
+/// Of the apps with every module, a run takes a pairwise covering of the
+/// combinations of the providers, or those of `--combinations 3-wise` or
+/// `--combinations all`, or only one, by the name of its case, with
+/// `--app`; and with `--shard <index>/<count>`, only its share of the apps
+/// that it checks. These options come before the directory; see
+/// `MatrixToolOptions`. With `--plan [--every-combination]` alone, it
+/// prints the plan of the jobs of CI that check the matrix and build,
+/// archive and start its apps, one app or shard for each job; see
+/// `matrixPlanOf`.
+///
 /// With `--create`, a directory and a name, it generates the apps with
 /// every module in the directory instead, without checking them, each as
 /// the name followed by the providers that set it apart, such as
@@ -49,7 +59,13 @@ import 'package:yaml/yaml.dart';
 /// working directory, it adds those tests to the app instead, with their
 /// dev dependencies, and runs nothing else; see `addAppTestsTo`. So CI
 /// runs tests of the matrix in apps of its own, such as on a device.
-Future<void> main(List<String> arguments) async {
+Future<void> main(List<String> given) async {
+  if (given case ['--plan', ...final options]) {
+    exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
+  }
+  final choice = MatrixToolOptions.parse(given);
+  if (choice.problem case final problem?) _usage(problem);
+  final arguments = choice.arguments;
   if (arguments case ['--app-tests']) {
     for (final test in await _appTests()) {
       stdout.writeln(test.directory);
@@ -77,7 +93,15 @@ Future<void> main(List<String> arguments) async {
         final name,
         ...final options,
       ]) {
-    exit(await _create(directory, name, options, withoutExternalSteps: true));
+    exit(
+      await _create(
+        directory,
+        name,
+        options,
+        choice.selection,
+        withoutExternalSteps: true,
+      ),
+    );
   }
   if (arguments
       case [
@@ -86,27 +110,14 @@ Future<void> main(List<String> arguments) async {
         final name,
         ...final options,
       ] when !directory.startsWith('-')) {
-    exit(await _create(directory, name, options));
+    exit(await _create(directory, name, options, choice.selection));
   }
   final everyModule = arguments.firstOrNull == '--every-module';
   final rest = everyModule ? arguments.skip(1).toList() : arguments;
   if (rest.isEmpty ||
       rest.first.startsWith('-') ||
       (everyModule && rest.length > 1)) {
-    stderr
-      ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
-      ..writeln('       dart run tool/matrix.dart --every-module <directory>')
-      ..writeln(
-        '       dart run tool/matrix.dart --create '
-        '[--without-external-steps] <directory> <name> '
-        '[<option of smf create>...]',
-      )
-      ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
-      ..writeln(
-        '       dart run tool/matrix.dart --add-app-tests <app> '
-        '<app tests>...',
-      );
-    exit(64);
+    _usage();
   }
   final code = await runMatrix(
     smfModules,
@@ -119,17 +130,50 @@ Future<void> main(List<String> arguments) async {
     ),
     only: rest.length > 1 ? rest.skip(1).toSet() : null,
     everyModule: everyModule,
+    everyModuleApps: choice.selection,
+    shard: choice.shard,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
 }
 
-/// Generates the apps with every module in [directory] as [name], with the
-/// [options] of `smf create`; returns the exit code.
+/// Prints the usage, after [problem] if there is one, and exits with 64.
+Never _usage([String? problem]) {
+  if (problem != null) stderr.writeln(problem);
+  stderr
+    ..writeln(
+      'Usage: dart run tool/matrix.dart [--combinations <c>] '
+      '[--shard <i>/<n>] <directory> [<app>...]',
+    )
+    ..writeln(
+      '       dart run tool/matrix.dart --every-module '
+      '[--combinations <c> | --app <name>] [--shard <i>/<n>] <directory>',
+    )
+    ..writeln(
+      '       dart run tool/matrix.dart --create '
+      '[--without-external-steps] [--combinations <c> | --app <name>] '
+      '<directory> <name> [<option of smf create>...]',
+    )
+    ..writeln('       dart run tool/matrix.dart --plan [--every-combination]')
+    ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
+    ..writeln(
+      '       dart run tool/matrix.dart --add-app-tests <app> '
+      '<app tests>...',
+    )
+    ..writeln(
+      '<c>: pairwise (by default), 3-wise or all, the combinations of the '
+      'providers that the apps with every module cover.',
+    );
+  exit(64);
+}
+
+/// Generates the apps with every module of [selection] in [directory] as
+/// [name], with the [options] of `smf create`; returns the exit code.
 Future<int> _create(
   String directory,
   String name,
-  List<String> options, {
+  List<String> options,
+  EveryModuleSelection selection, {
   bool withoutExternalSteps = false,
 }) async {
   final code = await createEveryModuleApps(
@@ -138,6 +182,7 @@ Future<int> _create(
     name: name,
     withoutExternalSteps: withoutExternalSteps,
     options: options,
+    selection: selection,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   return code;
