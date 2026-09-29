@@ -11,10 +11,8 @@ class _FormatOnly extends Contribution {
 
 void main() {
   group('Contribution.dartFormater', () {
-    test(
-      'accepts syntax from current language versions',
-      () async {
-        const source = '''
+    test('accepts syntax from current language versions', () async {
+      const source = '''
 import 'package:flutter/material.dart';
 
 Widget buildBody(Widget? banner) {
@@ -25,10 +23,29 @@ Widget buildBody(Widget? banner) {
 }
 ''';
 
-        expect(await const _FormatOnly().apply(source), contains('.center'));
-      },
-      skip: 'Bug: the formatter is pinned to the Dart 3.6 short style, so it '
-          'rejects dot shorthands (3.10) and null-aware elements (3.8)',
-    );
+      expect(await const _FormatOnly().apply(source), contains('.center'));
+    });
+
+    test('keeps trailing commas', () async {
+      const source = '''
+final locales = [
+  Locale('en'),
+];
+''';
+
+      expect(await const _FormatOnly().apply(source), source);
+    });
+
+    test('formats code in the tall style', () async {
+      const source = '''
+final title = condition ? 'A long title that fills the line' : 'Another long title';
+''';
+
+      expect(await const _FormatOnly().apply(source), '''
+final title = condition
+    ? 'A long title that fills the line'
+    : 'Another long title';
+''');
+    });
   });
 }
