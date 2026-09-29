@@ -1,7 +1,7 @@
 // Checks the tests that packages keep for the apps of the matrix in
 // `app_tests/`, and the matrix tools that register them. Each tool runs
-// once, with `--app-tests`, which prints the directories of its
-// MatrixAppTests, for all the checks.
+// once, with `--app-tests --json`, which reports its MatrixAppTests, for
+// all the checks.
 //
 // The tests of each directory of app tests run in CI. The matrix tools
 // copy the files of a directory of app tests into the apps they generate
@@ -11,6 +11,19 @@
 // in the `app_tests` of a package of the workspace; each is the directory
 // of one MatrixAppTest. Hidden files and directories, whose names start
 // with `.`, stay out, as they stay out of the apps.
+//
+// The app tests that a package of modules keeps apply only to the apps
+// that have one of its modules. They test those modules, and the apps of
+// the matrix of today may all have them, as every app has the app entry of
+// flutter_core: a check of the start of every app that flutter_core kept
+// and that applied to every app would reach no app with another provider
+// of the app entry, and one that imports what only flutter_core generates
+// would not even compile there. So each tool reports, for each of its
+// tests that a package of modules keeps, the modules of that package in
+// its matrix and the apps of the matrix that the test applies to once they
+// are taken out of their modules; there must be such modules, and no such
+// app. The app tests of a package of no module, such as the start check of
+// the CLI, may apply to every app.
 //
 // A matrix tool knows only the modules whose app tests it registers. A
 // value or a selection of the app tests of a module, such as the screen
@@ -184,22 +197,73 @@ Set<String> _packagesOf(
   String root,
   List<WorkspacePackage> packages,
   List<String> directories,
+) =>
+    {
+      for (final directory in directories)
+        if (_keeperOf(root, packages, directory) case final package?)
+          package.name,
+    };
+
+/// The package among the [packages] of the workspace at [root] whose
+/// `app_tests` holds [directory], or `null` if none does or [directory]
+/// does not exist, which [problemsOf] finds.
+WorkspacePackage? _keeperOf(
+  String root,
+  List<WorkspacePackage> packages,
+  String directory,
 ) {
   String real(String path) =>
       Directory(path).resolveSymbolicLinksSync().replaceAll(r'\', '/');
-  final appTests = {
-    for (final package in packages)
-      if (Directory('$root/${package.path}/app_tests').existsSync())
-        '${real('$root/${package.path}/app_tests')}/': package.name,
-  };
-  return {
-    for (final directory in directories)
-      // A directory that does not exist is a problem of
-      // tools/app_tests_test.dart.
-      if (Directory(directory).existsSync())
-        for (final MapEntry(key: path, value: name) in appTests.entries)
-          if (real(directory).startsWith(path)) name,
-  };
+  if (!Directory(directory).existsSync()) return null;
+  final path = real(directory);
+  for (final package in packages) {
+    final appTests = Directory('$root/${package.path}/app_tests');
+    if (appTests.existsSync() && path.startsWith('${real(appTests.path)}/')) {
+      return package;
+    }
+  }
+  return null;
+}
+
+/// The problems of the MatrixAppTests of the matrix tools, [listed] by the
+/// path of each tool, that a package of modules among the [packages] of the
+/// workspace at [root] keeps: one line for each such test that applies to
+/// apps of the matrix without the modules of its package, and for each
+/// such test whose tool has none of the modules of its package.
+List<String> moduleProblemsOf(
+  String root,
+  List<WorkspacePackage> packages,
+  Map<String, List<ListedAppTest>> listed,
+) {
+  final problems = <String>[];
+  for (final MapEntry(key: tool, value: tests) in listed.entries) {
+    for (final test in tests) {
+      final package = _keeperOf(root, packages, test.directory);
+      if (package == null || !package.declaresModules) continue;
+      final name = test.directory.replaceAll(r'\', '/').split('/').last;
+      final directory = '${package.path}/app_tests/$name';
+      if (test.modules.isEmpty) {
+        problems.add(
+          '$tool registers $directory, which ${package.name} keeps, but the '
+          'matrix of the tool has no module of ${package.name}, so its tests '
+          'run in apps without the modules they test. Register it in the '
+          'matrix tool of a registry of those modules.',
+        );
+      } else if (test.appliesWithout.isNotEmpty) {
+        problems.add(
+          '$tool registers $directory, which ${package.name} keeps, for apps '
+          'without the modules of ${package.name} '
+          '(${test.modules.join(', ')}): with other modules in their place, '
+          'it would apply to these apps of the matrix: '
+          '${test.appliesWithout.join(', ')}. Its tests test those modules, '
+          'so they apply only to the apps that have one of them: make its '
+          'appliesTo require them, or keep tests for every app in a package '
+          'of no module, as the CLI keeps its start check.',
+        );
+      }
+    }
+  }
+  return problems;
 }
 
 /// The paths of the packages of the workspace at [root] from it.
@@ -216,10 +280,9 @@ List<String> _workspacePackages(String root) {
   return packages;
 }
 
-/// The directories of the MatrixAppTests of each matrix tool of the
-/// repository, by the path of the tool. Each tool runs once for all the
-/// tests of this file.
-final Future<Map<String, List<String>>> _listed = () async {
+/// The MatrixAppTests of each matrix tool of the repository, by the path of
+/// the tool. Each tool runs once for all the tests of this file.
+final Future<Map<String, List<ListedAppTest>>> _listed = () async {
   final root = repositoryRoot();
   final listed = await Future.wait(
     [for (final tool in matrixTools) appTestsListedBy(root, tool)],
@@ -228,6 +291,15 @@ final Future<Map<String, List<String>>> _listed = () async {
     for (final (index, tool) in matrixTools.indexed) tool: listed[index],
   };
 }();
+
+/// The directories of the MatrixAppTests of each tool of [listed].
+Map<String, List<String>> _directoriesOf(
+  Map<String, List<ListedAppTest>> listed,
+) =>
+    {
+      for (final MapEntry(key: tool, value: tests) in listed.entries)
+        tool: [for (final test in tests) test.directory],
+    };
 
 void main() {
   test(
@@ -375,6 +447,65 @@ void main() {
   });
 
   test(
+      'finds the app tests of packages of modules that apply to apps without '
+      'their modules, or whose tool has none of them', () {
+    final temp = Directory.systemTemp.createTempSync('smf_app_test_modules_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final root = temp.path;
+    for (final path in [
+      'modules/app_tests/with_them',
+      'modules/app_tests/everywhere',
+      'modules/app_tests/elsewhere',
+      'registry/app_tests/start',
+    ]) {
+      Directory('$root/$path').createSync(recursive: true);
+    }
+    const packages = [
+      WorkspacePackage(
+        'modules',
+        name: 'modules',
+        dependencies: {},
+        published: true,
+        declaresModules: true,
+      ),
+      WorkspacePackage(
+        'registry',
+        name: 'registry',
+        dependencies: {'modules'},
+        published: true,
+        declaresModules: false,
+      ),
+    ];
+    final listed = {
+      'tool/matrix.dart': [
+        ListedAppTest('$root/modules/app_tests/with_them', modules: ['a']),
+        ListedAppTest(
+          '$root/modules/app_tests/everywhere',
+          modules: ['a', 'b'],
+          appliesWithout: ['every module', 'a without b'],
+        ),
+        ListedAppTest('$root/modules/app_tests/elsewhere'),
+        ListedAppTest('$root/registry/app_tests/start'),
+      ],
+    };
+    const everywhere = 'tool/matrix.dart registers '
+        'modules/app_tests/everywhere, which modules keeps, for apps without '
+        'the modules of modules (a, b): with other modules in their place, it '
+        'would apply to these apps of the matrix: every module, a without b. '
+        'Its tests test those modules, so they apply only to the apps that '
+        'have one of them: make its appliesTo require them, or keep tests for '
+        'every app in a package of no module, as the CLI keeps its start '
+        'check.';
+    const elsewhere = 'tool/matrix.dart registers '
+        'modules/app_tests/elsewhere, which modules keeps, but the matrix of '
+        'the tool has no module of modules, so its tests run in apps without '
+        'the modules they test. Register it in the matrix tool of a registry '
+        'of those modules.';
+
+    expect(moduleProblemsOf(root, packages, listed), [everywhere, elsewhere]);
+  });
+
+  test(
     'every directory of app tests in the packages of the workspace is the '
     'directory of a MatrixAppTest of a matrix tool, and every directory '
     'that a tool lists is one',
@@ -382,7 +513,11 @@ void main() {
       final root = repositoryRoot();
 
       expect(
-        problemsOf(root, _workspacePackages(root), await _listed),
+        problemsOf(
+          root,
+          _workspacePackages(root),
+          _directoriesOf(await _listed),
+        ),
         isEmpty,
       );
     },
@@ -397,7 +532,7 @@ void main() {
     () async {
       final root = repositoryRoot();
       final packages = workspacePackages(root);
-      final listed = await _listed;
+      final listed = _directoriesOf(await _listed);
 
       expect(
         [
@@ -409,6 +544,20 @@ void main() {
               packages,
             ),
         ],
+        isEmpty,
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+
+  test(
+    'the app tests that packages of modules keep apply only to the apps '
+    'with their modules',
+    () async {
+      final root = repositoryRoot();
+
+      expect(
+        moduleProblemsOf(root, workspacePackages(root), await _listed),
         isEmpty,
       );
     },

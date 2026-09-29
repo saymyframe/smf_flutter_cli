@@ -10,31 +10,69 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:yaml/yaml.dart';
 
-/// The matrix tools, by path from the root of the repository. Each prints
-/// the directories of its MatrixAppTests with `--app-tests`.
+/// The matrix tools, by path from the root of the repository. Each reports
+/// its MatrixAppTests with `--app-tests --json`.
 const matrixTools = [
   'packages/smf_flutter_cli/tool/matrix.dart',
   'packages/smf_pipeline/fixture_registry/tool/matrix.dart',
 ];
 
-/// The directories of the MatrixAppTests of the matrix [tool] of the
-/// repository at [root], which it prints with `--app-tests`.
-Future<List<String>> appTestsListedBy(String root, String tool) async {
+/// A MatrixAppTest of a matrix tool, as the tool reports it with
+/// `--app-tests --json` (`appTestsReport` of smf_flutter_cli).
+final class ListedAppTest {
+  /// Describes the MatrixAppTest of the files in [directory].
+  const ListedAppTest(
+    this.directory, {
+    this.modules = const [],
+    this.appliesWithout = const [],
+  });
+
+  /// Reads the report of a MatrixAppTest.
+  factory ListedAppTest.fromJson(Map<String, Object?> json) => ListedAppTest(
+        json['directory']! as String,
+        modules: [...(json['modules']! as List<Object?>).cast<String>()],
+        appliesWithout: [
+          ...(json['appliesWithout']! as List<Object?>).cast<String>(),
+        ],
+      );
+
+  /// The directory of its files, as the tool prints it.
+  final String directory;
+
+  /// The ids of the modules of the matrix of the tool that the package
+  /// whose `app_tests` holds [directory] declares.
+  final List<String> modules;
+
+  /// The names of the apps of the matrix that it applies to once [modules]
+  /// are taken out of their modules.
+  final List<String> appliesWithout;
+}
+
+/// The MatrixAppTests of the matrix [tool] of the repository at [root],
+/// which it reports with `--app-tests --json`.
+Future<List<ListedAppTest>> appTestsListedBy(String root, String tool) async {
   final packageConfig = await Isolate.packageConfig;
   final result = await Process.run(
     Platform.resolvedExecutable,
-    ['--packages=${packageConfig!.toFilePath()}', tool, '--app-tests'],
+    [
+      '--packages=${packageConfig!.toFilePath()}',
+      tool,
+      '--app-tests',
+      '--json',
+    ],
     workingDirectory: root,
     // The tools write UTF-8, on Windows too.
     stdoutEncoding: utf8,
     stderrEncoding: utf8,
   );
   if (result.exitCode != 0) {
-    throw StateError('$tool --app-tests: ${result.stdout}${result.stderr}');
+    throw StateError(
+      '$tool --app-tests --json: ${result.stdout}${result.stderr}',
+    );
   }
   return [
-    for (final line in const LineSplitter().convert('${result.stdout}'))
-      if (line.isNotEmpty) line,
+    for (final test in jsonDecode('${result.stdout}') as List<Object?>)
+      ListedAppTest.fromJson(test! as Map<String, Object?>),
   ];
 }
 

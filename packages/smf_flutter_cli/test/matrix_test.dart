@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:isolate';
+
 import 'package:file/memory.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -150,6 +153,87 @@ void main() {
       '--no-dart-fix',
       '--strict',
     ]);
+  });
+
+  test(
+      'the report of the app tests names the modules of the package that '
+      'keeps each, and the apps it applies to without them', () async {
+    Future<String> appTestsOf(String package) async {
+      final library = await Isolate.resolvePackageUri(
+        Uri.parse('package:$package/'),
+      );
+      return '${Directory.fromUri(library!).parent.path}/app_tests';
+    }
+
+    final home = await appTestsOf('smf_home_flutter');
+    final cli = await appTestsOf('smf_flutter_cli');
+    const packages = {
+      FlutterCoreModule.id: 'smf_flutter_core',
+      HomeModule.id: 'smf_home_flutter',
+    };
+    const withHome = MatrixApp(
+      'with home',
+      [FlutterCoreModule.id, HomeModule.id],
+      roleOptions: {'start': '/home'},
+    );
+    const withoutHome = MatrixApp('without home', [FlutterCoreModule.id]);
+    var built = 0;
+    Future<List<MatrixApp>> apps() async {
+      built++;
+      return const [withHome, withoutHome];
+    }
+
+    final report = await appTestsReport(
+      [
+        // Tests of home that apply to every app, to the apps with home, and
+        // to the apps with the option of home, which the apps keep without
+        // it.
+        MatrixAppTest('$home/everywhere', appliesTo: (_) => true),
+        MatrixAppTest(
+          '$home/with_home',
+          appliesTo: (app) => app.modules.contains(HomeModule.id),
+        ),
+        MatrixAppTest(
+          '$home/start',
+          appliesTo: (app) => app.roleOptions['start'] == '/home',
+        ),
+        // A test of a package of no module of the matrix.
+        MatrixAppTest('$cli/start', appliesTo: (_) => true),
+      ],
+      packages: packages,
+      apps: apps,
+    );
+
+    expect(report, [
+      {
+        'directory': '$home/everywhere',
+        'modules': ['home'],
+        'appliesWithout': ['with home', 'without home'],
+      },
+      {
+        'directory': '$home/with_home',
+        'modules': ['home'],
+        'appliesWithout': <String>[],
+      },
+      {
+        'directory': '$home/start',
+        'modules': ['home'],
+        'appliesWithout': ['with home'],
+      },
+      {
+        'directory': '$cli/start',
+        'modules': <String>[],
+        'appliesWithout': <String>[],
+      },
+    ]);
+    expect(built, 1);
+    // Without a test of a package of modules, it builds no app.
+    await appTestsReport(
+      [MatrixAppTest('$cli/start', appliesTo: (_) => true)],
+      packages: packages,
+      apps: apps,
+    );
+    expect(built, 1);
   });
 
   group('runMatrix', () {
