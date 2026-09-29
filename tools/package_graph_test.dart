@@ -139,6 +139,53 @@ void main() {
     expect(package.uses, {'smf_contracts', 'flutter', 'smf_pipeline'});
   });
 
+  test('reads a pubspec as YAML, with quotes, comments and flow maps', () {
+    final package = _Package.parse(
+      'name: "smf_router" # The router.\n'
+      "publish_to: 'none'\n"
+      'dependencies: {smf_contracts: ^0.2.0}\n'
+      'dev_dependencies: # For its tests.\n'
+      '  smf_pipeline: any\n',
+    );
+
+    expect(package.name, 'smf_router');
+    expect(package.published, isFalse);
+    expect(package.uses, {'smf_contracts', 'smf_pipeline'});
+  });
+
+  test(
+      'reads the members that the root pubspec lists, with comments and '
+      'quotes, into the graph of the published ones', () {
+    final root = Directory.systemTemp.createTempSync('package_graph_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n'
+      '  - packages/c\n',
+    );
+    void write(String path, String text) => File('${root.path}/$path')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+    write(
+      'packages/a/pubspec.yaml',
+      'name: a\ndependencies:\n  b: any\n  c: any\n',
+    );
+    write('packages/b/pubspec.yaml', 'name: b\ndev_dependencies:\n  a: any\n');
+    write('packages/c/pubspec.yaml', 'name: c\npublish_to: none\n');
+
+    final graph = _workspaceGraph(root.path);
+
+    expect(graph, {
+      'a': {'b'},
+      'b': {'a'},
+    });
+    expect(cyclesOf(graph), [
+      ['a', 'b', 'a'],
+    ]);
+  });
+
   test(
       'the published packages of the workspace depend on each other without '
       'a cycle, dev dependencies included', () {
