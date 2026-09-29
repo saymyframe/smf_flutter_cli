@@ -239,7 +239,9 @@ void main() {
 
         clock.stop();
         expect(result.timedOut, isTrue);
-        // SIGTERM at once, not SIGKILL after stopGrace.
+        // SIGTERM at once, not SIGKILL after stopGrace, and before the shell
+        // that the script waits for, or the script would end on its own with
+        // the code 0 of wait.
         expect(result.exitCode, -ProcessSignal.sigterm.signalNumber);
         expect(result.succeeded, isFalse);
         expect(result.stdout, 'started\n');
@@ -266,6 +268,8 @@ void main() {
 
         clock.stop();
         expect(result.timedOut, isTrue);
+        // SIGKILL before sleep, or the script would end on its own with the
+        // code 0 of wait.
         expect(result.exitCode, -ProcessSignal.sigkill.signalNumber);
         expect(result.stdout, 'started\n');
         expect(clock.elapsed, greaterThan(IoProcessRunner.stopGrace));
