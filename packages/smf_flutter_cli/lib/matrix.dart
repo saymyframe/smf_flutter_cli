@@ -1,7 +1,8 @@
 /// The matrix of apps that the continuous integration of SMF generates
 /// with `smf create` and analyzes with Flutter: every app that the contract
-/// harness builds for a set of modules, and the apps with every module; and
-/// the versions of Flutter that its nightly run checks them with.
+/// harness builds for a set of modules, and the apps with every module,
+/// which CI also builds for Android and iOS and starts on devices; and the
+/// versions of Flutter that its nightly run checks them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
 library;
@@ -22,7 +23,12 @@ export 'src/flutter_versions.dart';
 /// the app so that no question is left, and the options of its roles.
 final class MatrixApp {
   /// Creates the app that the contract harness built for [name].
-  const MatrixApp(this.name, this.modules, {this.roleOptions = const {}});
+  const MatrixApp(
+    this.name,
+    this.modules, {
+    this.roleOptions = const {},
+    this.everyModuleWith,
+  });
 
   /// The case of the contract harness that the app comes from.
   final String name;
@@ -32,6 +38,26 @@ final class MatrixApp {
 
   /// The values of role options by name.
   final Map<String, String?> roleOptions;
+
+  /// For an app with every module, one of those that the contract harness
+  /// builds for each combination of the providers of the roles that take
+  /// one (see [ContractHarness.casesOfAll]): the providers of its roles
+  /// other than the first registered provider of each, in the order of the
+  /// roles, such as `[riverpod]` for the app with riverpod rather than
+  /// bloc, and none for the app with the first provider of every role.
+  /// `null` for any other app of the matrix.
+  ///
+  /// Unlike the [name] of the case, which names the provider of every role
+  /// that has several, they stay the same when another role gets a second
+  /// provider.
+  final List<ModuleId>? everyModuleWith;
+
+  /// The name of the package of this app with every module among the apps
+  /// generated as [base]: [base] and the ids of [everyModuleWith] after it,
+  /// such as `start_app` and `start_app_riverpod`. So the app keeps its
+  /// name when another role gets a second provider, and so do the ids that
+  /// come from it, by which an external service may know the app.
+  String packageName(String base) => [base, ...?everyModuleWith].join('_');
 
   /// The arguments of `smf create` that generate the app as [appName] in
   /// [directory], as CI does: without questions, external setup or the
@@ -61,7 +87,7 @@ final class MatrixApp {
 /// builds for them, which covers every module and every provider with each
 /// subset of the roles it uses, and the apps with every module, one for each
 /// combination of the providers of roles that take one
-/// (see [ContractHarness.casesOfAll]).
+/// (see [everyModuleAppsOf]).
 ///
 /// Each app gets [roleOptions], the values of role options for every app,
 /// the options of its case, and the answers of the harness to the
@@ -71,6 +97,10 @@ final class MatrixApp {
 /// choices without a terminal. The harness renders each app in memory
 /// first, so a case that it finds errors in is among the `failed` ones,
 /// since its app could not be generated.
+///
+/// An app with every module that another case built already is that app,
+/// which then has the [MatrixApp.everyModuleWith] of the app with every
+/// module.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   List<SmfModule> modules, {
   Map<String, String?> roleOptions = const {},
@@ -79,34 +109,157 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
     ModuleRegistry(modules),
     roleOptions: roleOptions,
   );
-  final results = [
-    ...await harness.checkAll(),
-    for (final contractCase in harness.casesOfAll())
-      await harness.check(contractCase),
-  ];
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
-  final keys = <String>{};
-  for (final result in results) {
-    final resolution = result.resolution;
-    if (result.errors.isNotEmpty || resolution == null) {
-      failed.add(result);
-      continue;
+  for (final result in await harness.checkAll()) {
+    switch (_appOf(result, roleOptions)) {
+      case final app?:
+        apps.add(app);
+      case null:
+        failed.add(result);
     }
-    if (!keys.add(result.appKey!)) continue;
-    apps.add(
-      MatrixApp(
-        '${result.contractCase}',
-        [for (final module in resolution.modules) module.id],
-        roleOptions: {
-          ...roleOptions,
-          ...result.contractCase.roleOptions,
-          ...result.answers,
-        },
-      ),
-    );
+  }
+  final everyModule = await everyModuleAppsOf(
+    modules,
+    roleOptions: roleOptions,
+  );
+  failed.addAll(everyModule.failed);
+  for (final app in everyModule.apps) {
+    final index = apps.indexWhere((other) => _keyOf(other) == _keyOf(app));
+    if (index < 0) {
+      apps.add(app);
+    } else {
+      final other = apps[index];
+      apps[index] = MatrixApp(
+        other.name,
+        other.modules,
+        roleOptions: other.roleOptions,
+        everyModuleWith: app.everyModuleWith,
+      );
+    }
   }
   return (apps: apps, failed: failed);
+}
+
+/// The apps with every module of [modules]: those that the contract
+/// harness builds for each combination of the providers of the roles that
+/// take one, each with as many modules as one app can have (see
+/// [ContractHarness.casesOfAll]), with their [MatrixApp.everyModuleWith].
+/// The apps and the options of their roles are those of [matrixOf].
+///
+/// With [withoutExternalSteps], they are the apps with every module that
+/// needs nothing outside the app: without the modules whose steps after
+/// generation need an external service, such as a network account
+/// ([PostGenStep.external]), which a run that skips external setup leaves
+/// for later, so that the app is complete once it is generated, and it
+/// starts. The modules that depend on them, directly or not, and those
+/// that are then left without a provider of a role they require, stay out
+/// too, and each of the other roles gets one app for each of its
+/// providers that are left.
+Future<({List<MatrixApp> apps, List<ContractResult> failed})> everyModuleAppsOf(
+  List<SmfModule> modules, {
+  Map<String, String?> roleOptions = const {},
+  bool withoutExternalSteps = false,
+}) async {
+  // The providers of each role in the order of all modules, which the
+  // everyModuleWith of each app is relative to.
+  final names = ModuleRegistry(modules);
+  var registry = names;
+  while (true) {
+    final harness = ContractHarness(registry, roleOptions: roleOptions);
+    final apps = <MatrixApp>[];
+    final failed = <ContractResult>[];
+    final external = <ModuleId>{};
+    for (final contractCase in harness.casesOfAll()) {
+      final result = await harness.check(contractCase);
+      final app = _appOf(
+        result,
+        roleOptions,
+        everyModuleWith: [
+          ...{
+            for (final MapEntry(key: role, value: provider)
+                in contractCase.picks.entries)
+              if (provider != names.providersOf(role).first.descriptor.id)
+                provider,
+          },
+        ],
+      );
+      if (app == null) {
+        failed.add(result);
+        continue;
+      }
+      apps.add(app);
+      if (withoutExternalSteps) {
+        external.addAll(_withExternalSteps(result.collection!));
+      }
+    }
+    if (external.isEmpty) return (apps: apps, failed: failed);
+    registry = ModuleRegistry(_without(registry.modules, external));
+  }
+}
+
+/// The app of the matrix that [result] built with the values of role
+/// options [roleOptions], or `null` if the case has errors.
+MatrixApp? _appOf(
+  ContractResult result,
+  Map<String, String?> roleOptions, {
+  List<ModuleId>? everyModuleWith,
+}) {
+  final resolution = result.resolution;
+  if (result.errors.isNotEmpty || resolution == null) return null;
+  return MatrixApp(
+    '${result.contractCase}',
+    [for (final module in resolution.modules) module.id],
+    roleOptions: {
+      ...roleOptions,
+      ...result.contractCase.roleOptions,
+      ...result.answers,
+    },
+    everyModuleWith: everyModuleWith,
+  );
+}
+
+/// The modules of [app], which tell it apart from the other apps of the
+/// matrix: the variants of the modules follow from them.
+String _keyOf(MatrixApp app) =>
+    ([for (final module in app.modules) module.value]..sort()).join(',');
+
+/// The modules whose steps after generation in the app of [collection]
+/// need an external service, or have a follow-up that does.
+Set<ModuleId> _withExternalSteps(Collection collection) => {
+      for (final collected in collection.applying)
+        if (collected
+            case Collected(
+              contribution: final PostGenStep step,
+              origin: ModuleOrigin(:final module),
+            ) when _isExternal(step))
+          module,
+    };
+
+bool _isExternal(PostGenStep step) =>
+    step.external || step.followUps.any(_isExternal);
+
+/// [modules] without those of [removed], without those that depend on one
+/// of them, directly or not, and without those that are then left without a
+/// provider of a role they require.
+List<SmfModule> _without(List<SmfModule> modules, Set<ModuleId> removed) {
+  final gone = {...removed};
+  var kept = modules;
+  while (true) {
+    kept = [
+      for (final module in kept)
+        if (!gone.contains(module.descriptor.id)) module,
+    ];
+    final provided = {for (final module in kept) ...module.descriptor.provides};
+    final lost = {
+      for (final module in kept)
+        if (module.descriptor.dependsOn.any(gone.contains) ||
+            !provided.containsAll(module.descriptor.effectiveRequires))
+          module.descriptor.id,
+    };
+    if (lost.isEmpty) return kept;
+    gone.addAll(lost);
+  }
 }
 
 /// Tests that the matrix adds to the apps it generates and runs with
@@ -404,8 +557,13 @@ final class MatrixCommands {
 /// otherwise.
 ///
 /// With [only], it checks only the apps of the matrix with those names,
-/// such as `every module (bloc)`, and runs the [appTests] that apply to
-/// them; a name that no app of the matrix has is a problem too.
+/// such as `flutter_core (flutter_core)`, and runs the [appTests] that
+/// apply to them; a name that no app of the matrix has is a problem too.
+/// With [everyModule], it checks only the apps with every module, one for
+/// each combination of the providers of the roles that take one (see
+/// [everyModuleAppsOf]), which CI selects so rather than by their names:
+/// the name of such an app names the provider of every role that has
+/// several, so it changes when another role gets a second provider.
 ///
 /// [log] gets what happens, by default the standard output; the apps stay
 /// in [directory], with the tests. [commands] run for each app.
@@ -415,6 +573,7 @@ Future<int> runMatrix(
   Map<String, String?> roleOptions = const {},
   List<MatrixAppTest> appTests = const [],
   Set<String>? only,
+  bool everyModule = false,
   void Function(String line)? log,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
@@ -425,14 +584,8 @@ Future<int> runMatrix(
     // The defaults print to the terminal, create the apps with smf and
     // analyze them with Flutter, as the runs of the matrix in CI do; the
     // tests give their own.
-    say: log ?? (String line) => stdout.writeln(line),
-    create: commands.create ??
-        (arguments, onCreated) => runCli(
-              arguments,
-              modules: modules,
-              banner: false,
-              onCreated: onCreated,
-            ),
+    say: log ?? _print,
+    create: commands.create ?? _smfCreate(modules),
     analyze:
         commands.analyze ?? (directory) => _flutter(['analyze'], directory),
     // coverage:ignore-end
@@ -449,6 +602,7 @@ Future<int> runMatrix(
   final checked = <MatrixApp>[];
   for (final (index, app) in apps.indexed) {
     if (only != null && !only.contains(app.name)) continue;
+    if (everyModule && app.everyModuleWith == null) continue;
     checked.add(app);
     // An app keeps its number in the matrix when only some are checked.
     problems.addAll(await run.check(app, 'app_${index + 1}'));
@@ -461,10 +615,112 @@ Future<int> runMatrix(
     }
   }
   run.say('\n${checked.length} apps generated in $directory.');
+  return _exitCode(problems, run.say);
+}
+
+/// Generates in [directory] the apps with every module of [modules] with
+/// [roleOptions], or those without the modules whose steps need an
+/// external service with [withoutExternalSteps] (see [everyModuleAppsOf]),
+/// for CI to build them for Android and iOS and to start them on devices:
+/// each as the [MatrixApp.packageName] of [name], such as `start_app` and
+/// `start_app_riverpod`, with the options of CI and then [options], such as
+/// `--org com.example`. It analyzes and tests none of them, which
+/// [runMatrix] does.
+///
+/// With `--explain` among the [options], `smf create` only prints for each
+/// app what it would generate and whether the machine is ready.
+///
+/// Returns the exit code: 0 if every app was generated with every module
+/// and every step that the options of CI do not leave for later, 1
+/// otherwise. [log] gets what happens, by default the standard output, and
+/// [create] generates each app, by default with `smf create` of this CLI.
+Future<int> createEveryModuleApps(
+  List<SmfModule> modules, {
+  required String directory,
+  required String name,
+  bool withoutExternalSteps = false,
+  List<String> options = const [],
+  Map<String, String?> roleOptions = const {},
+  void Function(String line)? log,
+  MatrixCreate? create,
+}) async {
+  // coverage:ignore-start
+  // The defaults print to the terminal and create the apps with smf, as CI
+  // does; the tests give their own.
+  final say = log ?? _print;
+  final generate = create ?? _smfCreate(modules);
+  // coverage:ignore-end
+  final (:apps, :failed) = await everyModuleAppsOf(
+    modules,
+    roleOptions: roleOptions,
+    withoutExternalSteps: withoutExternalSteps,
+  );
+  final problems = [
+    for (final result in failed)
+      '${result.contractCase}: ${result.errors.join('; ')}',
+  ];
+  for (final app in apps) {
+    final packageName = app.packageName(name);
+    say('\n=== $packageName: $app');
+    final (_, appProblems) = await _generate(
+      generate,
+      app,
+      packageName,
+      directory,
+      options,
+    );
+    problems.addAll(appProblems);
+  }
+  return _exitCode(problems, say);
+}
+
+/// 0 without [problems]; otherwise 1, once [say] got them.
+int _exitCode(List<String> problems, void Function(String line) say) {
   if (problems.isEmpty) return 0;
-  run.say('Problems:');
-  problems.forEach(run.say);
+  say('Problems:');
+  problems.forEach(say);
   return 1;
+}
+
+/// Generates [app] as [name] in [directory] with [create], with the
+/// options of CI and then [options]. Returns the app and the problems
+/// found, or `null` and the problem when the app cannot be checked:
+/// `smf create` failed or left out a module. With `--explain` among the
+/// [options], `smf create` generates nothing, so a run that succeeds
+/// returns `null` and no problem.
+Future<(GeneratedApp?, List<String>)> _generate(
+  MatrixCreate create,
+  MatrixApp app,
+  String name,
+  String directory, [
+  List<String> options = const [],
+]) async {
+  GeneratedApp? created;
+  final code = await create(
+    [...app.createArguments(name, directory), ...options],
+    (generated) => created = generated,
+  );
+  final generated = created;
+  if (code == SmfExitCodes.success && options.contains('--explain')) {
+    return (null, const <String>[]);
+  }
+  if (code != SmfExitCodes.success || generated == null) {
+    return (null, ['$name ($app): smf create exited with $code.']);
+  }
+  if (generated.leftOut.isNotEmpty) {
+    final leftOut = generated.leftOut.map((leftOut) => leftOut.module);
+    return (
+      null,
+      ['$name ($app): smf create left out ${leftOut.join(', ')}.'],
+    );
+  }
+  return (
+    generated,
+    [
+      for (final step in generated.skippedSteps)
+        if (step.failed) '$name ($app): the step $step.',
+    ],
+  );
 }
 
 /// A run of [runMatrix], which checks one app after another.
@@ -489,23 +745,13 @@ final class _MatrixRun {
   /// tests, and returns the problems found.
   Future<List<String>> check(MatrixApp app, String name) async {
     say('\n=== $name: $app');
-    GeneratedApp? created;
-    final code = await create(
-      app.createArguments(name, directory),
-      (generated) => created = generated,
+    final (generated, problems) = await _generate(
+      create,
+      app,
+      name,
+      directory,
     );
-    final generated = created;
-    if (code != SmfExitCodes.success || generated == null) {
-      return ['$name ($app): smf create exited with $code.'];
-    }
-    if (generated.leftOut.isNotEmpty) {
-      final leftOut = generated.leftOut.map((leftOut) => leftOut.module);
-      return ['$name ($app): smf create left out ${leftOut.join(', ')}.'];
-    }
-    final problems = [
-      for (final step in generated.skippedSteps)
-        if (step.failed) '$name ($app): the step $step.',
-    ];
+    if (generated == null) return problems;
     final (analyzed, output) = await analyze(generated.path);
     say(output.trim());
     if (analyzed != 0) {
@@ -540,8 +786,19 @@ List<String> matrixCommand(List<String> arguments, String directory) =>
         ? const ['dart', 'analyze', '--fatal-infos']
         : ['flutter', ...arguments];
 
-// Tests have no Flutter SDK.
+// Tests have no Flutter SDK, and they give their own log.
 // coverage:ignore-start
+void _print(String line) => stdout.writeln(line);
+
+/// Generates an app with `smf create` of this CLI with [modules].
+MatrixCreate _smfCreate(List<SmfModule> modules) =>
+    (arguments, onCreated) => runCli(
+          arguments,
+          modules: modules,
+          banner: false,
+          onCreated: onCreated,
+        );
+
 Future<(int, String)> _flutter(List<String> arguments, String directory) async {
   final [executable, ...rest] = matrixCommand(arguments, directory);
   final result = await Process.run(

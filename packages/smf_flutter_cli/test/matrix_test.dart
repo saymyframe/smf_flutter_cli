@@ -5,6 +5,7 @@ import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
 /// A module whose contributions cannot be collected.
@@ -22,6 +23,45 @@ final class _Broken extends SmfModule {
   List<Contribution> contribute(ModuleContext context) =>
       throw StateError('broken');
 }
+
+/// An infrastructure module [id] with [steps] after generation, which
+/// depends on the modules [dependsOn] and requires the roles [requires].
+final class _WithSteps extends SmfModule {
+  const _WithSteps(
+    this.id, {
+    this.steps = const [],
+    this.dependsOn = const {},
+    this.requires = const {},
+  });
+
+  final ModuleId id;
+  final List<PostGenStep> steps;
+  final Set<ModuleId> dependsOn;
+  final Set<Role> requires;
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'With steps',
+        kind: ModuleKinds.infrastructure,
+        dependsOn: dependsOn,
+        requires: requires,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => steps;
+}
+
+/// A step that needs nothing outside the app.
+const _build = PostGenStep(ToolRef('tool'), ['build']);
+
+/// A step that needs an external service.
+const _configure = PostGenStep(
+  ToolRef('tool'),
+  ['configure'],
+  external: true,
+  skippable: true,
+);
 
 void main() {
   test(
@@ -76,6 +116,121 @@ void main() {
       everyModule('bloc'),
       everyModule('riverpod'),
     ]);
+    // The apps with every module tell apart by the providers other than
+    // the first of their roles, bloc of the state managers.
+    expect(
+      [for (final app in apps) app.everyModuleWith],
+      [
+        for (final _ in apps.skip(2)) isNull,
+        isEmpty,
+        [RiverpodModule.id],
+      ],
+    );
+  });
+
+  test(
+      'an app with every module is named after the providers other than '
+      'the first of their roles, so its name stays when another role gets '
+      'a second provider', () async {
+    Future<List<String>> packageNames(List<SmfModule> modules) async {
+      final (:apps, :failed) = await everyModuleAppsOf(modules);
+      expect(failed, isEmpty);
+      return [for (final app in apps) '${app.name}: ${app.packageName('app')}'];
+    }
+
+    expect(
+      await packageNames(const [FlutterCoreModule(), BlocModule()]),
+      ['every module: app'],
+    );
+    expect(
+      await packageNames(
+        const [FlutterCoreModule(), BlocModule(), RiverpodModule()],
+      ),
+      ['every module (bloc): app', 'every module (riverpod): app_riverpod'],
+    );
+    // Any other app of the matrix is named as it is given.
+    expect(const MatrixApp('bloc', []).packageName('app'), 'app');
+  });
+
+  test('the apps with every module have every module', () async {
+    final (:apps, :failed) = await everyModuleAppsOf(smfModules);
+
+    expect(failed, isEmpty);
+    expect(apps.map((app) => app.modules.length), [
+      smfModules.length - 1,
+      smfModules.length - 1,
+    ]);
+    expect(apps.map((app) => app.modules), [
+      isNot(contains(RiverpodModule.id)),
+      isNot(contains(BlocModule.id)),
+    ]);
+  });
+
+  test(
+      'the apps with every module without external steps leave out the '
+      'modules whose steps or their follow-ups need an external service, '
+      'those that depend on them, and those that are then left without a '
+      'provider of a role they require', () async {
+    const local = _WithSteps(ModuleId('local'), steps: [_build]);
+    const external = _WithSteps(ModuleId('external'), steps: [_configure]);
+    const followUp = _WithSteps(
+      ModuleId('follow_up'),
+      steps: [
+        PostGenStep(ToolRef('tool'), ['check'], followUps: [_configure]),
+      ],
+    );
+    const dependent = _WithSteps(
+      ModuleId('dependent'),
+      dependsOn: {ModuleId('external')},
+    );
+    // Crash reports come only from Firebase Crashlytics, which depends on
+    // Firebase Core, whose step configures an app in a Firebase project.
+    const reporter = _WithSteps(
+      ModuleId('reporter'),
+      requires: {crashReportingRole},
+    );
+    final modules = [
+      ...smfModules,
+      local,
+      external,
+      followUp,
+      dependent,
+      reporter,
+    ];
+
+    final (:apps, :failed) = await everyModuleAppsOf(
+      modules,
+      withoutExternalSteps: true,
+    );
+
+    expect(failed, isEmpty);
+    String without(String stateManager) => 'every module ($stateManager) '
+        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
+        'event_bus, local)';
+    expect(apps.map((app) => '$app'), [
+      without('bloc'),
+      without('riverpod'),
+    ]);
+    expect(apps.map((app) => app.everyModuleWith), [
+      isEmpty,
+      [RiverpodModule.id],
+    ]);
+
+    // Without the option, the apps have them all.
+    final every = await everyModuleAppsOf(modules);
+    expect(every.failed, isEmpty);
+    for (final app in every.apps) {
+      expect(
+        app.modules,
+        containsAll(const [
+          ModuleId('local'),
+          ModuleId('external'),
+          ModuleId('follow_up'),
+          ModuleId('dependent'),
+          ModuleId('reporter'),
+        ]),
+      );
+    }
   });
 
   test('the options of roles reach every app', () async {
@@ -140,12 +295,14 @@ void main() {
       List<MatrixAppTest> appTests = const [],
       int testCode = 0,
       Set<String>? only,
+      bool everyModule = false,
     }) =>
         runMatrix(
           modules,
           directory: '/apps',
           appTests: appTests,
           only: only,
+          everyModule: everyModule,
           log: log.add,
           commands: MatrixCommands(
             create: (arguments, onCreated) async {
@@ -294,6 +451,25 @@ void main() {
       expect(tested, hasLength(1));
     });
 
+    test(
+        'checks only the apps with every module when it is asked to, also '
+        'those that other cases built already', () async {
+      const modules = [FlutterCoreModule(), BlocModule(), RiverpodModule()];
+
+      expect(await run(modules: modules, everyModule: true), 0);
+
+      // The app of bloc is the app with every module and bloc, and that of
+      // riverpod the one with riverpod.
+      expect(
+        created.map((arguments) => arguments.take(4).join(' ')),
+        [
+          'create app_2 -m bloc,flutter_core',
+          'create app_3 -m riverpod,flutter_core',
+        ],
+      );
+      expect(log.last, '\n2 apps generated in /apps.');
+    });
+
     test('fails when it is given an app that the matrix does not have',
         () async {
       expect(await run(only: {'flutter_core', 'bloc'}), 1);
@@ -325,6 +501,169 @@ void main() {
       expect(problems, [
         startsWith('broken: error [broken]: broken failed to contribute'),
         startsWith('every module: error [broken]'),
+      ]);
+    });
+  });
+
+  group('createEveryModuleApps', () {
+    late List<String> log;
+    late List<List<String>> created;
+
+    setUp(() {
+      log = [];
+      created = [];
+    });
+
+    Future<int> create({
+      List<SmfModule> modules = smfModules,
+      bool withoutExternalSteps = false,
+      List<String> options = const [],
+      int code = 0,
+      bool generates = true,
+      List<LeftOut> leftOut = const [],
+      List<SkippedStep> skippedSteps = const [],
+    }) =>
+        createEveryModuleApps(
+          modules,
+          directory: '/apps',
+          name: 'start_app',
+          withoutExternalSteps: withoutExternalSteps,
+          options: options,
+          log: log.add,
+          create: (arguments, onCreated) async {
+            created.add(arguments);
+            if (generates) {
+              onCreated(
+                GeneratedApp(
+                  name: arguments[1],
+                  path: '/apps/${arguments[1]}',
+                  leftOut: leftOut,
+                  skippedSteps: skippedSteps,
+                ),
+              );
+            }
+            return code;
+          },
+        );
+
+    test(
+        'generates each app with every module under a name of its own, '
+        'with the options of CI and the options given', () async {
+      expect(
+        await create(
+          withoutExternalSteps: true,
+          options: const ['--org', 'com.example.ci'],
+        ),
+        0,
+      );
+
+      List<String> arguments(String name, String stateManager) => [
+            'create',
+            name,
+            '-m',
+            [
+              'flutter_core',
+              'go_router',
+              stateManager,
+              'home',
+              'bottom_tabs',
+              'get_it',
+              'event_bus',
+            ].join(','),
+            '-o',
+            '/apps',
+            '--on-conflict',
+            'replace',
+            '--no-input',
+            '--skip-external-setup',
+            '--no-dart-fix',
+            '--strict',
+            '--org',
+            'com.example.ci',
+          ];
+      expect(created, [
+        arguments('start_app', 'bloc'),
+        arguments('start_app_riverpod', 'riverpod'),
+      ]);
+      expect(log, [
+        startsWith('\n=== start_app: every module (bloc) (flutter_core, '),
+        startsWith('\n=== start_app_riverpod: every module (riverpod) '),
+      ]);
+
+      // With every module, Firebase among them.
+      expect(await create(), 0);
+      expect(created.last, contains(startsWith('flutter_core,')));
+      expect(
+        created.last[created.last.indexOf('-m') + 1].split(','),
+        contains('firebase_core'),
+      );
+    });
+
+    test(
+        'fails when an app is not generated, is left without a module or '
+        'a step failed', () async {
+      expect(await create(code: 1), 1);
+      expect(log.sublist(log.indexOf('Problems:') + 1), [
+        startsWith('start_app (every module (bloc) '),
+        allOf(
+          startsWith('start_app_riverpod (every module (riverpod) '),
+          endsWith('smf create exited with 1.'),
+        ),
+      ]);
+
+      expect(await create(generates: false), 1);
+      expect(log.last, endsWith('smf create exited with 0.'));
+
+      expect(
+        await create(leftOut: const [LeftOut(ModuleId('x'), 'broken')]),
+        1,
+      );
+      expect(log.last, endsWith('smf create left out x.'));
+
+      expect(
+        await create(
+          skippedSteps: const [
+            SkippedStep(
+              'Configure',
+              'tool configure',
+              'it exited with 1',
+              failed: true,
+            ),
+          ],
+        ),
+        1,
+      );
+      expect(
+        log.last,
+        endsWith('the step Configure: tool configure (it exited with 1).'),
+      );
+    });
+
+    test('with --explain, only checks that smf create succeeds', () async {
+      expect(
+        await create(options: const ['--explain'], generates: false),
+        0,
+      );
+      expect(created, everyElement(contains('--explain')));
+      expect(log, isNot(contains('Problems:')));
+
+      expect(
+        await create(options: const ['--explain'], generates: false, code: 64),
+        1,
+      );
+      expect(log.last, endsWith('smf create exited with 64.'));
+    });
+
+    test('fails when the contract harness finds errors in an app', () async {
+      expect(
+        await create(modules: const [FlutterCoreModule(), _Broken()]),
+        1,
+      );
+
+      expect(created, isEmpty);
+      expect(log, [
+        'Problems:',
+        startsWith('every module: error [broken]: broken failed to contribute'),
       ]);
     });
   });
