@@ -79,6 +79,7 @@ jobs:
       # creators and a few others by name, so Flutter comes from its release
       # archive rather than from a setup action.
       - name: Setup Flutter
+        id: flutter
         run: |
           archive="$RUNNER_TEMP/flutter.tar.xz"
           curl -fsSL --retry 3 -o "$archive" \
@@ -293,7 +294,7 @@ jobs:
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
           unset FIREBASE_SERVICE_ACCOUNT
-          dart test test/flutterfire_configure_test.dart
+          dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
       - name: Delete the key of the service account
         if: always()
@@ -316,7 +317,7 @@ jobs:
         run: |
           (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example --no-pub my_app)
           cd packages/smf_modules/smf_flutter_core
-          SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
+          SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart --file-reporter json:build/test-results/flutter_create_test.json
 
       - name: Generate, analyze and test the apps of the fixture modules
         if: matrix.registry == 'fixtures'
@@ -377,6 +378,14 @@ jobs:
             flutter build apk --debug
           done
 
+      # The tests of the packages that failed, as annotations that the page
+      # of the run lists at the top rather than as lines in the long log of
+      # a step; see tools/test_annotations.dart. Also after a failed step and
+      # in a cancelled job, whenever Flutter is there.
+      - name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
+
   macos:
     name: macOS
     if: inputs.macos_and_windows
@@ -397,6 +406,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Flutter
+        id: flutter
         run: |
           archive="$RUNNER_TEMP/flutter.zip"
           curl -fsSL --retry 3 -o "$archive" \
@@ -426,11 +436,11 @@ jobs:
         run: dart pub get
 
       - name: Test the packages
-        run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded
+        run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
 
       - name: Test the tools
         if: ${{ !cancelled() }}
-        run: dart test tools
+        run: dart test tools --file-reporter json:build/test-results/tools.json
 
       # In a directory whose name has a space and letters beyond ASCII.
       - name: Generate an app without Firebase and one with every module
@@ -461,7 +471,7 @@ jobs:
         working-directory: packages/smf_modules/smf_firebase_core
         env:
           SMF_CRASHLYTICS_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
-        run: dart test test/crashlytics_archive_test.dart
+        run: dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
 
       # A new iPhone of the newest iOS runtime of the image that the SDK of
       # the Xcode of the job runs apps on; the image has several of each.
@@ -543,7 +553,7 @@ jobs:
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
           unset FIREBASE_SERVICE_ACCOUNT
-          dart test test/flutterfire_configure_test.dart
+          dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
       - name: Delete the key of the service account
         if: always()
@@ -558,6 +568,11 @@ jobs:
       - name: Leave out the app with Firebase without the key
         if: ${{ !cancelled() && env.HAS_FIREBASE_KEY != 'true' }}
         run: echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the app with Firebase does not start on the iOS simulator."
+
+      # As in the job on Linux.
+      - name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
 
   windows:
     name: Windows
@@ -587,6 +602,7 @@ jobs:
           }
 
       - name: Setup Flutter
+        id: flutter
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'flutter.zip'
           curl.exe -fsSL --retry 3 -o $archive "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_$env:FLUTTER_VERSION-stable.zip"
@@ -615,11 +631,11 @@ jobs:
         run: dart pub get
 
       - name: Test the packages
-        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded
+        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
 
       - name: Test the tools
         if: ${{ !cancelled() }}
-        run: dart test tools
+        run: dart test tools --file-reporter json:build/test-results/tools.json
 
       # In a directory with a space in its name, and then in one whose name
       # has letters beyond ASCII too, where the matrix analyzes the app with
@@ -662,3 +678,8 @@ jobs:
           if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
             throw 'SMF does not find the FlutterFire CLI.'
           }
+
+      # As in the job on Linux.
+      - name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
