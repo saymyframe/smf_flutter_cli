@@ -121,21 +121,31 @@ final class RequiredFunction extends RequiredSymbol {
 }
 
 /// A top-level class that a provider must generate; the parameters are those
-/// of its unnamed constructor.
+/// of its unnamed constructor, and the [getters] are what other code reads
+/// from its instances.
 final class RequiredClass extends RequiredSymbol {
   /// Requires the class [name] in [path], whose unnamed constructor is
-  /// `const` if [constConstructor] is set.
+  /// `const` if [constConstructor] is set, and which declares [getters].
   const RequiredClass(
     super.name, {
     required super.path,
     super.namedParameters = const [],
     super.positionalArguments = 0,
     this.constConstructor = false,
+    this.getters = const [],
   });
 
   /// Whether the unnamed constructor must be `const`, so other code can
   /// create constant instances.
   final bool constConstructor;
+
+  /// The names that other code reads from an instance of the class, such
+  /// as `destinations` in `shell.destinations`.
+  ///
+  /// The class must declare each of them as a public instance field or
+  /// getter. It must declare them itself: the check sees only the members
+  /// that the class declares, not those it inherits.
+  final List<String> getters;
 
   @override
   List<String> _problemsOf(IndexedDeclaration declaration) {
@@ -143,16 +153,29 @@ final class RequiredClass extends RequiredSymbol {
       return ['must be a class, not a ${declaration.kind.name}'];
     }
     final constructor = declaration.unnamedConstructor;
-    if (constructor == null) return ['must have an unnamed constructor'];
     return [
-      if (constConstructor && !constructor.isConst)
-        'must have a const unnamed constructor',
-      ..._parameterProblems(constructor.parameters),
+      if (constructor == null)
+        'must have an unnamed constructor'
+      else ...[
+        if (constConstructor && !constructor.isConst)
+          'must have a const unnamed constructor',
+        ..._parameterProblems(constructor.parameters),
+      ],
+      for (final getter in getters)
+        if (!declaration.members.any((member) => _reads(member, getter)))
+          'must declare the public instance field or getter $getter',
     ];
   }
 
   @override
   String toString() => 'class $name';
 }
+
+/// Whether other code reads [name] from an instance as [member]: an
+/// instance field or getter of that name.
+bool _reads(IndexedMember member, String name) =>
+    member.name == name &&
+    !member.isStatic &&
+    (member.kind == MemberKind.field || member.kind == MemberKind.getter);
 
 String _normalized(String type) => type.replaceAll(RegExp(r'\s+'), '');

@@ -427,6 +427,84 @@ void main() {
         '$prefix accept the named parameter body.',
       ]);
     });
+
+    group('with getters', () {
+      const shell = RequiredClass(
+        'AppShell',
+        path: 'lib/shell.dart',
+        getters: ['destinations', 'onSelect'],
+      );
+
+      List<String> problemsOf(IndexedDeclaration declaration) => [
+            for (final issue in shell.checkIn(declaring(declaration)))
+              issue.message,
+          ];
+
+      List<String> problemsOfMembers(List<IndexedMember> members) => problemsOf(
+            IndexedDeclaration(
+              name: 'AppShell',
+              kind: DeclarationKind.classType,
+              members: members,
+            ),
+          );
+
+      const prefix = 'class AppShell in lib/shell.dart must';
+      String missing(String getter) =>
+          '$prefix declare the public instance field or getter $getter.';
+
+      test('is satisfied by a field and a getter', () {
+        expect(
+          problemsOfMembers(const [
+            IndexedMember('destinations', kind: MemberKind.field),
+            IndexedMember('onSelect', kind: MemberKind.getter),
+          ]),
+          isEmpty,
+        );
+      });
+
+      test('reports a getter that is missing or kept in a private field', () {
+        expect(
+          problemsOfMembers(const [
+            IndexedMember('_destinations', kind: MemberKind.field),
+          ]),
+          [missing('destinations'), missing('onSelect')],
+        );
+      });
+
+      test('takes neither a static member nor a setter or a method', () {
+        expect(
+          problemsOfMembers(const [
+            IndexedMember(
+              'destinations',
+              kind: MemberKind.field,
+              isStatic: true,
+            ),
+            IndexedMember('destinations', kind: MemberKind.setter),
+            IndexedMember('onSelect', kind: MemberKind.method),
+            IndexedMember(
+              'onSelect',
+              kind: MemberKind.getter,
+              isStatic: true,
+            ),
+          ]),
+          [missing('destinations'), missing('onSelect')],
+        );
+      });
+
+      test('reports the getters along with the unnamed constructor', () {
+        expect(
+          problemsOf(
+            const IndexedDeclaration(
+              name: 'AppShell',
+              kind: DeclarationKind.classType,
+              constructors: [IndexedConstructor(name: 'create')],
+              members: [IndexedMember('onSelect', kind: MemberKind.field)],
+            ),
+          ),
+          ['$prefix have an unnamed constructor.', missing('destinations')],
+        );
+      });
+    });
   });
 
   group('Role.checkStructure', () {
