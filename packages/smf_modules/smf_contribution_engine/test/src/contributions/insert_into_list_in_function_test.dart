@@ -141,10 +141,8 @@ List<Widget> buildColumns() {
       });
     });
 
-    test(
-      'only looks for the list inside the named function',
-      () async {
-        const source = '''
+    test('only looks for the list inside the named function', () async {
+      const source = '''
 void main() {
   runApp(MultiProvider(providers: [Provider(create: (_) => Logger())]));
 }
@@ -154,22 +152,17 @@ Widget buildTestApp() {
 }
 ''';
 
-        final result =
-            await intoProviders(function: 'buildTestApp').apply(source);
+      final result =
+          await intoProviders(function: 'buildTestApp').apply(source);
 
-        expect(namedListsOf(result, 'providers'), [
-          [logger],
-          [analytics, logger],
-        ]);
-      },
-      skip: 'Bug: the list is searched for in the whole file, not in the '
-          'function body',
-    );
+      expect(namedListsOf(result, 'providers'), [
+        [logger],
+        [analytics, logger],
+      ]);
+    });
 
-    test(
-      'finds lists nested under other named arguments',
-      () async {
-        const source = '''
+    test('finds lists nested under other named arguments', () async {
+      const source = '''
 void main() {
   runApp(
     MaterialApp(
@@ -179,21 +172,44 @@ void main() {
 }
 ''';
 
-        final result = await const InsertIntoListInFunction(
-          file: 'lib/main.dart',
-          function: 'main',
-          listVariableMatch: 'children',
-          parentExpressionMatch: 'Column',
-          insert: "Text('new'),",
-        ).apply(source);
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/main.dart',
+        function: 'main',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Column',
+        insert: "Text('new'),",
+      ).apply(source);
 
-        expect(namedListsOf(result, 'children'), [
-          ["Text('new')", "Text('a')"],
-        ]);
-      },
-      skip: 'Bug: the visitor does not recurse into named arguments, so '
-          'nested lists are never found',
-    );
+      expect(namedListsOf(result, 'children'), [
+        ["Text('new')", "Text('a')"],
+      ]);
+    });
+
+    test('counts nested lists in index after the list around them', () async {
+      const source = '''
+Widget buildPage() {
+  return Column(
+    children: [
+      Column(children: [Text('inner')]),
+    ],
+  );
+}
+''';
+
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/page.dart',
+        function: 'buildPage',
+        listVariableMatch: 'children',
+        parentExpressionMatch: 'Column',
+        insert: "Text('new'),",
+        index: 1,
+      ).apply(source);
+
+      expect(namedListsOf(result, 'children'), [
+        ["Column(children: [Text('new'), Text('inner')])"],
+        ["Text('new')", "Text('inner')"],
+      ]);
+    });
 
     test(
       'only matches lists whose parent expression matches',

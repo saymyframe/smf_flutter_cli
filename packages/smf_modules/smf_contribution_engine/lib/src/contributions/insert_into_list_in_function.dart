@@ -7,16 +7,14 @@ import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 /// Adds an element at the start of a list literal passed as a named
 /// argument, such as the `providers` of a `MultiProvider` built in `main`.
 ///
-/// The candidates are the lists passed as a [listVariableMatch] argument
-/// where an enclosing expression contains [parentExpressionMatch]; [index]
-/// picks one of them in source order, and [insert] goes right after its `[`.
-/// A list passed inside another named argument, such as in a `child`, is
-/// never a candidate.
+/// The target is the first top-level function named [function]. In its body,
+/// the candidates are the lists passed as a [listVariableMatch] argument,
+/// nested ones included, where an enclosing expression contains
+/// [parentExpressionMatch]; [index] picks one of them in source order, and
+/// [insert] goes right after its `[`.
 ///
 /// Throws an [Exception] when no top-level function is named [function],
 /// when its body is an expression, or when there is no candidate at [index].
-/// Although the function has to exist, the candidates are currently looked
-/// for in the whole file, not just in its body.
 ///
 /// When the list already has every element of [insert], as the parser prints
 /// them, the file is returned as it is, so running it again changes nothing.
@@ -72,10 +70,9 @@ class InsertIntoListInFunction extends Contribution {
       throw Exception('Function body is not a block');
     }
 
-    final fullContent = original;
     final childrenMatches = <ListLiteral>[];
 
-    unit.visitChildren(
+    body.visitChildren(
       _Visitor(
         listVariableMatch: listVariableMatch,
         parentMatch: parentExpressionMatch,
@@ -91,7 +88,7 @@ class InsertIntoListInFunction extends Contribution {
     if (ListInsert.parse(insert)?.isIn(targetList) ?? false) return original;
 
     final start = targetList.leftBracket.end;
-    final updated = fullContent.replaceRange(start, start, '\n  $insert');
+    final updated = original.replaceRange(start, start, '\n  $insert');
 
     return dartFormater.format(updated);
   }
@@ -109,11 +106,13 @@ class _Visitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitNamedExpression(NamedExpression node) {
-    if (node.name.label.name != listVariableMatch.replaceAll(':', '')) return;
     final expression = node.expression;
-    if (expression is ListLiteral && _matchesParent(node)) {
+    if (node.name.label.name == listVariableMatch.replaceAll(':', '') &&
+        expression is ListLiteral &&
+        _matchesParent(node)) {
       collector(expression);
     }
+    super.visitNamedExpression(node);
   }
 
   bool _matchesParent(AstNode node) {
