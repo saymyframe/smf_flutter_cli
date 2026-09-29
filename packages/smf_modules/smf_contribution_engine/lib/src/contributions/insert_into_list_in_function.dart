@@ -3,6 +3,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 import 'package:smf_contribution_engine/src/utils/named_lists.dart';
+import 'package:smf_contribution_engine/src/utils/source_edits.dart';
 
 /// Adds an element at the start of a list literal passed as a named
 /// argument, such as the `providers` of a `MultiProvider` built in `main`.
@@ -11,7 +12,8 @@ import 'package:smf_contribution_engine/src/utils/named_lists.dart';
 /// the candidates are the lists passed as a [listVariableMatch] argument,
 /// nested ones included, to a call or widget creation that matches
 /// [parentExpressionMatch]; [index] picks one of them in source order, and
-/// [insert] goes right after its `[`.
+/// [insert] goes first in it, above the comments that lead up to its first
+/// element, with a comma after it.
 ///
 /// Throws an [Exception] when no top-level function is named [function],
 /// when its body is an expression, or when there is no candidate at [index].
@@ -46,8 +48,8 @@ class InsertIntoListInFunction extends Contribution {
   /// so neither do the elements of the list nor the arguments next to it.
   final String parentExpressionMatch;
 
-  /// The element to add, with its trailing comma, such as
-  /// `Provider(create: (_) => Logger()),`. [PatchEngine] renders its
+  /// The element to add, such as `Provider(create: (_) => Logger()),`; the
+  /// comma after it is added when it has none. [PatchEngine] renders its
   /// placeholders.
   final String insert;
 
@@ -86,11 +88,19 @@ class InsertIntoListInFunction extends Contribution {
     }
 
     final targetList = childrenMatches[index];
-    if (ListInsert.parse(insert)?.isIn(targetList) ?? false) return original;
+    final elements = ListInsert.parse(insert);
+    if (elements?.isIn(targetList) ?? false) return original;
 
-    final start = targetList.leftBracket.end;
-    final updated = original.replaceRange(start, start, '\n  $insert');
+    final first = targetList.elements.firstOrNull;
+    final insertion = first == null
+        ? insertionAfter(original, targetList.leftBracket, insert)
+        // A comma separates the insert from the element that follows it.
+        : insertionBefore(
+            original,
+            first.beginToken,
+            elements?.withTrailingComma(comma: true) ?? insert,
+          );
 
-    return dartFormater.format(updated);
+    return dartFormater.format(applyInsertions(original, [insertion]));
   }
 }

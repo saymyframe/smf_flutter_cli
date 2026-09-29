@@ -1,8 +1,10 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/token.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
 import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 import 'package:smf_contribution_engine/src/utils/named_lists.dart';
+import 'package:smf_contribution_engine/src/utils/source_edits.dart';
 
 /// Adds an element at the end of a list literal passed as a named argument
 /// in a method, such as the `supportedLocales` of the `MaterialApp` built in
@@ -12,7 +14,8 @@ import 'package:smf_contribution_engine/src/utils/named_lists.dart';
 /// [className]. In its body, the candidates are the lists passed as a
 /// [listVariableMatch] argument, nested ones included, to a call or widget
 /// creation that matches [parentExpressionMatch]; [index] picks one of them
-/// in source order, and [insert] goes right before its `]`.
+/// in source order, and [insert] goes last in it, past a comment that trails
+/// its last element on its line.
 ///
 /// Throws an [Exception] when the class or the method is missing, when the
 /// method body is an expression, or when there is no candidate at [index].
@@ -58,8 +61,9 @@ class InsertIntoListInMethodInClass extends Contribution {
   /// The element to add, such as `Locale('uk'),`. [PatchEngine] renders its
   /// placeholders.
   ///
-  /// Nothing separates it from the last element, so a list without a
-  /// trailing comma makes [apply] throw a `FormatterException`.
+  /// A comma separates it from the last element, and the list keeps its
+  /// trailing comma, or its lack of one, whether [insert] ends with a comma
+  /// or not.
   final String insert;
 
   @override
@@ -101,14 +105,34 @@ class InsertIntoListInMethodInClass extends Contribution {
     }
 
     final targetList = matches[index];
-    if (ListInsert.parse(insert)?.isIn(targetList) ?? false) return original;
+    final elements = ListInsert.parse(insert);
+    if (elements?.isIn(targetList) ?? false) return original;
 
-    final updated = original.replaceRange(
-      targetList.rightBracket.offset,
-      targetList.rightBracket.offset,
-      '\n$insert',
+    return dartFormater.format(
+      applyInsertions(original, _append(original, targetList, elements)),
     );
+  }
 
-    return dartFormater.format(updated);
+  /// Puts [insert] after the last element of [list], and its trailing comma
+  /// if it has one, with a comma between them. The list keeps its trailing
+  /// comma, or its lack of one.
+  List<Insertion> _append(
+    String source,
+    ListLiteral list,
+    ListInsert? elements,
+  ) {
+    final last = list.elements.lastOrNull;
+    if (last == null) return [insertionAfter(source, list.leftBracket, insert)];
+
+    final next = last.endToken.next!;
+    final hasComma = next.type == TokenType.COMMA;
+    return [
+      if (!hasComma) (offset: last.end, text: ','),
+      insertionAfter(
+        source,
+        hasComma ? next : last.endToken,
+        elements?.withTrailingComma(comma: hasComma) ?? insert,
+      ),
+    ];
   }
 }

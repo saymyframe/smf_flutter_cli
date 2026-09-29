@@ -43,7 +43,8 @@ void main() {
       ]);
     });
 
-    test('keeps existing comments', () async {
+    test('inserts above the comments that lead up to the first element',
+        () async {
       final source = providerMainDart.replaceFirst(
         '        Provider(create: (_) => Logger()),\n',
         '        // Logging comes first.\n'
@@ -52,7 +53,29 @@ void main() {
 
       final result = await intoProviders().apply(source);
 
-      expect(result, contains('// Logging comes first.'));
+      expect(
+        result,
+        contains(
+          '        $analytics,\n'
+          '        // Logging comes first.\n'
+          '        $logger,\n',
+        ),
+      );
+    });
+
+    test('adds the comma after an insert that has none', () async {
+      final result = await const InsertIntoListInFunction(
+        file: 'lib/main.dart',
+        function: 'main',
+        listVariableMatch: 'providers',
+        parentExpressionMatch: 'MultiProvider',
+        insert: '$analytics // Analytics goes first.',
+      ).apply(providerMainDart);
+
+      expect(namedListsOf(result, 'providers'), [
+        [analytics, logger],
+      ]);
+      expect(result, contains('$analytics, // Analytics goes first.\n'));
     });
 
     test('inserts into an empty list', () async {
