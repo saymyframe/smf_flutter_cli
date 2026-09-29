@@ -2,6 +2,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -336,6 +337,87 @@ void main() {
             .roleOptions,
         isEmpty,
       );
+    });
+  });
+
+  group('the fixture router', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+
+    /// The top-level declarations of the router of the app of [modules],
+    /// by name.
+    Future<Map<String, Declaration>> routerOf(List<ModuleId> modules) async {
+      final result = await harness.check(
+        ContractCase('fixture router', requested: modules),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      final unit = parseString(
+        content: result.app!.files[RouterRole.appRouterFactoryFile]!.text,
+      ).unit;
+      return {
+        for (final declaration in unit.declarations)
+          if (declaration case FunctionDeclaration(:final name))
+            name.lexeme: declaration
+          else if (declaration
+              case TopLevelVariableDeclaration(:final variables))
+            for (final variable in variables.variables)
+              variable.name.lexeme: declaration,
+      };
+    }
+
+    /// The locations that the branches of the main navigation of [router]
+    /// start on, and the code of its layout around the navigator of the
+    /// selected branch.
+    (List<String>, String) mainNavigationOf(Map<String, Declaration> router) {
+      final destinations =
+          router['_destinations']! as TopLevelVariableDeclaration;
+      final shell = router['_shell']! as FunctionDeclaration;
+      return (
+        [
+          for (final element in (destinations
+                  .variables.variables.single.initializer! as ListLiteral)
+              .elements)
+            element.toSource(),
+        ],
+        (shell.functionExpression.body as ExpressionFunctionBody)
+            .expression
+            .toSource(),
+      );
+    }
+
+    test(
+        'with bottom tabs, builds the main navigation of the layout, with the '
+        'destinations of the features in their order', () async {
+      final router = await routerOf([
+        ...everyFixture(),
+        const ModuleId('bottom_tabs'),
+      ]);
+
+      final (locations, shell) = mainNavigationOf(router);
+      expect(locations, [
+        'FakeFeatureHomeLocation()',
+        'FakeSecondSecondLocation()',
+      ]);
+      expect(
+        shell,
+        [
+          'AppShell(destinations: const [',
+          "Destination(label: 'Fixture', icon: Icons.star), ",
+          "Destination(label: 'Second', icon: Icons.looks_two)], ",
+          'currentIndex: index, onSelect: onSelect, body: body)',
+        ].join(),
+      );
+    });
+
+    test('without a layout or without destinations, has no main navigation',
+        () async {
+      for (final modules in [
+        everyFixture(),
+        const [FakeRouterModule.id, ModuleId('bottom_tabs')],
+      ]) {
+        final (locations, shell) = mainNavigationOf(await routerOf(modules));
+        expect(locations, isEmpty, reason: '$modules');
+        expect(shell, 'body', reason: '$modules');
+      }
     });
   });
 

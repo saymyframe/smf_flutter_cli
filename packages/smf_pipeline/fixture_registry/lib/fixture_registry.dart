@@ -7,9 +7,8 @@
 /// - flutter_core creates the app;
 /// - go_router routes the fake features too, so their routes compile with a
 ///   real router, and bottom tabs provide the layout, so an app with the two
-///   fake features and go_router has a main navigation, which the fake
-///   router does not have; with either router, the app has two screens that
-///   can start it;
+///   fake features has a main navigation with either router, and two
+///   screens that can start it;
 /// - get_it registers the services of the fixtures too, so their
 ///   registrations compile with a real container.
 library;
