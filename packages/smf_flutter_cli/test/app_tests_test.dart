@@ -1,12 +1,12 @@
 // The tests that packages keep for the apps of the matrix in `app_tests/`
-// (see tool/matrix.dart) run in every app that has their module, whatever
-// else the app has. A role that an app can have several providers of, such
-// as crash reporting, generates functions that reach all of them, such as
-// createCrashReporter(), whose reporter reports to every provider. The
-// platform side of a provider is answered only by the tests of its own
-// module, so an app test that calls such a function fails in an app with
-// another provider, although the app works. A test of a provider uses the
-// implementation of its own module instead, such as
+// (see lib/src/matrix_app_tests.dart) run in every app that has their
+// module, whatever else the app has. A role that an app can have several
+// providers of, such as crash reporting, generates functions that reach all
+// of them, such as createCrashReporter(), whose reporter reports to every
+// provider. The platform side of a provider is answered only by the tests
+// of its own module, so an app test that calls such a function fails in an
+// app with another provider, although the app works. A test of a provider
+// uses the implementation of its own module instead, such as
 // createCrashlyticsCrashReporter().
 //
 // This test finds those calls in the app tests of the CLI and of the

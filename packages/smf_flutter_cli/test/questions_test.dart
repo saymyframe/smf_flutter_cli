@@ -712,7 +712,8 @@ void main() {
       allOf(
         contains('show logFirebaseScreenView;'),
         contains('\nlogFirebaseScreenView,\n'),
-        contains('..routerDelegate.addListener(_showScreen);'),
+        contains('..routerDelegate.addListener(_pagesChanged);'),
+        contains('_showScreen();'),
         contains('StatefulShellBranch('),
         isNot(contains('FirebaseAnalyticsObserver')),
       ),

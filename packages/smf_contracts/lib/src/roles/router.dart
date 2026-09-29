@@ -44,6 +44,13 @@ const routerRole = RouterRole._();
 /// - refuses to push a location in the main navigation from a page shown
 ///   over the main navigation, or to replace such a page with one, with a
 ///   `StateError` that leaves the stack as it is;
+/// - closes the route on top when the user presses the back button of the
+///   system, with `NavigatorState.maybePop` of the navigators that the user
+///   sees, the innermost first: a dialog before the page below it, and a
+///   page of the selected branch of the main navigation before the main
+///   navigation, unless a route of the root navigator, such as a dialog,
+///   covers the main navigation; with no route to close, it leaves the
+///   button to the system, which closes the app;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - calls the listeners of [screenListeners] each time the screen the user
 ///   sees changes;
@@ -110,7 +117,11 @@ final class RouterRole extends Role<RoutesData> {
   /// It does not call them for the pages that a navigation puts below the
   /// one on top, such as the parents of a route that `go()` shows, and
   /// never twice in a row for the same page at the same location, such as
-  /// for a navigation that leaves the page on top as it is.
+  /// for a navigation that leaves the page on top as it is. So the
+  /// listeners hear of the back button of the system, which closes the
+  /// route on top of the innermost navigator, only when it closes a page of
+  /// the router: when it closes a dialog, the page below it stays the
+  /// screen the user sees.
   ///
   /// A listener gets the full name of the route of the screen among the
   /// routes of the modules, such as `home.details` (see

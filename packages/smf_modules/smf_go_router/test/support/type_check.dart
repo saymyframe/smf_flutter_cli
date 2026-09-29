@@ -177,12 +177,21 @@ class RouteMatch extends RouteMatchBase {
 }
 
 class ImperativeRouteMatch extends RouteMatch {
-  ImperativeRouteMatch(super.route, super.pageKey, this.matches);
+  ImperativeRouteMatch(
+    super.route,
+    super.pageKey,
+    this.matches,
+    this.completer,
+  );
 
   final RouteMatchList matches;
+
+  final Completer<Object?> completer;
 }
 
-class ShellRouteMatch extends RouteMatchBase {}
+class ShellRouteMatch extends RouteMatchBase {
+  final List<RouteMatchBase> matches = const [];
+}
 
 class RouteMatchList {
   final List<RouteMatchBase> matches = const [];
