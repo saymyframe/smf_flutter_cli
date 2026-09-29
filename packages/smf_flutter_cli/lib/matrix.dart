@@ -28,6 +28,7 @@ final class MatrixApp {
     this.modules, {
     this.roleOptions = const {},
     this.everyModuleWith,
+    this.hook,
   });
 
   /// The case of the contract harness that the app comes from.
@@ -58,6 +59,17 @@ final class MatrixApp {
   /// name when another role gets a second provider, and so do the ids that
   /// come from it, by which an external service may know the app.
   String packageName(String base) => [base, ...?everyModuleWith].join('_');
+
+  /// The data and roles of the app, as for the hooks of its roles, with
+  /// the choices that the roles made when the contract harness rendered
+  /// it, which `smf create` makes the same with the [roleOptions]; `null`
+  /// for an app that the harness did not build.
+  ///
+  /// A role reads what it chose for the app from the input that
+  /// [Role.hookInput] builds of it, such as the route the app starts on,
+  /// so a [MatrixAppTest] can expect what the app does without knowing
+  /// its modules.
+  final RoleHookRequest? hook;
 
   /// The arguments of `smf create` that generate the app as [appName] in
   /// [directory], as CI does: without questions, external setup or the
@@ -94,9 +106,10 @@ final class MatrixApp {
 /// questions of the roles that they leave open (see
 /// [ContractResult.answers]), such as `--start` with the first of several
 /// screens that can start the app: `smf create` then makes the same
-/// choices without a terminal. The harness renders each app in memory
-/// first, so a case that it finds errors in is among the `failed` ones,
-/// since its app could not be generated.
+/// choices without a terminal. It gets the choices too, with the data and
+/// roles of its case ([MatrixApp.hook]). The harness renders each app in
+/// memory first, so a case that it finds errors in is among the `failed`
+/// ones, since its app could not be generated.
 ///
 /// An app with every module that another case built already is that app,
 /// which then has the [MatrixApp.everyModuleWith] of the app with every
@@ -112,7 +125,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
   for (final result in await harness.checkAll()) {
-    switch (_appOf(result, roleOptions)) {
+    switch (_appOf(result, roleOptions, harness.context)) {
       case final app?:
         apps.add(app);
       case null:
@@ -135,6 +148,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
         other.modules,
         roleOptions: other.roleOptions,
         everyModuleWith: app.everyModuleWith,
+        hook: other.hook,
       );
     }
   }
@@ -201,6 +215,7 @@ Future<
     final app = _appOf(
       result,
       roleOptions,
+      harness.context,
       everyModuleWith: _everyModuleWith(contractCase, names),
     );
     if (app == null) {
@@ -234,7 +249,8 @@ List<ModuleId> _everyModuleWith(
 /// options [roleOptions], or `null` if the case has errors.
 MatrixApp? _appOf(
   ContractResult result,
-  Map<String, String?> roleOptions, {
+  Map<String, String?> roleOptions,
+  ModuleContext context, {
   List<ModuleId>? everyModuleWith,
 }) {
   final resolution = result.resolution;
@@ -248,6 +264,15 @@ MatrixApp? _appOf(
       ...result.answers,
     },
     everyModuleWith: everyModuleWith,
+    // In a case without errors, all data of the roles is of the type they
+    // take and comes from modules that may give it, so it is the data that
+    // the hooks of the roles got when the harness rendered the app.
+    hook: RoleHookRequest(
+      data: result.collection!.roleData,
+      presentRoles: resolution.presentRoles,
+      context: context,
+      choices: result.choices!,
+    ),
   );
 }
 
