@@ -94,7 +94,8 @@ Future<List<MatrixAppTest>> _appTests() async {
       appliesTo: _has(FirebaseCrashlyticsModule.id),
       devDependencies: const ['firebase_crashlytics_platform_interface'],
     ),
-    // The analytics service of the app reaches Firebase Analytics.
+    // The analytics service of the module reaches Firebase Analytics. The
+    // test leaves out the other analytics services that the app may have.
     MatrixAppTest(
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
