@@ -1,11 +1,14 @@
 // The platform side of Firebase Analytics for the tests that continuous
 // integration runs in the apps with Firebase Analytics: it records what
-// reaches it. firebase_analytics_platform_interface 6 has no mocks for
-// tests, as those of Firebase Core and Crashlytics, so this answers its
-// messages to the platform: each method of FirebaseAnalyticsHostApi on a
-// channel of its own, with the arguments as a list in the standard codec,
-// and logEvent with a map of the name and the parameters of the event. A
-// version of the package that changes them breaks these tests.
+// reaches it. The matrix sets it up before the tests of every module of
+// such an app (MatrixAppTest.mocks), so that any of them may run the
+// start-up of the app, which logs the screens that the user sees.
+// firebase_analytics_platform_interface 6 has no mocks for tests, as those
+// of Firebase Core and Crashlytics, so this answers its messages to the
+// platform: each method of FirebaseAnalyticsHostApi on a channel of its
+// own, with the arguments as a list in the standard codec, and logEvent
+// with a map of the name and the parameters of the event. A version of the
+// package that changes them breaks these tests.
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -47,8 +47,12 @@ import 'package:yaml/yaml.dart';
 /// generated outside the matrix and the directories of some of its
 /// `MatrixAppTest`s, as `--app-tests` prints them or relative to the
 /// working directory, it adds those tests to the app instead, with their
-/// dev dependencies, and runs nothing else; see `addAppTestsTo`. So CI
-/// runs tests of the matrix in apps of its own, such as on a device.
+/// dev dependencies and the configuration that sets up their mocks, and
+/// runs nothing else; see `addAppTestsTo`. So CI runs tests of the matrix
+/// in apps of its own, such as on a device. Tests that run the start-up of
+/// the app with `flutter test` need the mocks of every module of the app,
+/// which the tests of each module declare, so those tests go into the app
+/// too.
 Future<void> main(List<String> arguments) async {
   if (arguments case ['--app-tests']) {
     for (final test in await _appTests()) {
@@ -161,12 +165,16 @@ Future<List<MatrixAppTest>> _appTests() async {
     // the tests that the modules put into each app.
     MatrixAppTest('$cli/start', appliesTo: (_) => true),
     // The start-up of the app initializes Firebase, with the options that
-    // `flutterfire configure` would write, and the mocks of Firebase Core
-    // for the tests of the other Firebase modules.
+    // `flutterfire configure` would write, and the mocks of Firebase Core,
+    // which the matrix sets up for the tests of every module of the app.
     MatrixAppTest(
       '$firebaseCore/firebase_core',
       appliesTo: _has(FirebaseCoreModule.id),
       devDependencies: const ['firebase_core_platform_interface'],
+      mocks: const MatrixMocks(
+        'test/firebase_core_mocks.dart',
+        'mockFirebaseCore',
+      ),
     ),
     // The crash reporter of the module reaches Crashlytics, and the errors
     // that nothing catches reach it through the handlers that the start-up
@@ -176,12 +184,20 @@ Future<List<MatrixAppTest>> _appTests() async {
       '$crashlytics/firebase_crashlytics',
       appliesTo: _has(FirebaseCrashlyticsModule.id),
       devDependencies: const ['firebase_crashlytics_platform_interface'],
+      mocks: const MatrixMocks(
+        'test/firebase_crashlytics_mocks.dart',
+        'mockFirebaseCrashlytics',
+      ),
     ),
     // The analytics service of the module reaches Firebase Analytics. The
     // test leaves out the other analytics services that the app may have.
     MatrixAppTest(
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
+      mocks: const MatrixMocks(
+        'test/firebase_analytics_mocks.dart',
+        'mockFirebaseAnalytics',
+      ),
     ),
     // The first screen of an app with a router is logged once, under the
     // name of the screen that the app starts on (see _startScreenOf),

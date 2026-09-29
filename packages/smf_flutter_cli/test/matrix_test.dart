@@ -1036,6 +1036,171 @@ void main() {
     expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
   });
 
+  group('the mocks of the tests of an app', () {
+    late MemoryFileSystem fileSystem;
+    const app = MatrixApp('home', [ModuleId('home')]);
+
+    setUp(() {
+      fileSystem = MemoryFileSystem();
+      for (final path in [
+        '/tests/core/test/core_mocks.dart',
+        '/tests/core/test/core_test.dart',
+        '/tests/core/lib/options.dart',
+        '/tests/crash/test/mocks/crash_mocks.dart',
+        '/tests/start/integration_test/start_check.dart',
+      ]) {
+        fileSystem.file(path)
+          ..createSync(recursive: true)
+          ..writeAsStringSync('// {{app_name}}\n');
+      }
+    });
+
+    List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          tests,
+          app: app,
+          directory: '/apps/app_1',
+          packageName: 'my_app',
+          fileSystem: fileSystem,
+        );
+
+    const core = MatrixMocks('test/core_mocks.dart', 'mockCore');
+    const crash = MatrixMocks('test/mocks/crash_mocks.dart', 'mockCrash');
+
+    test(
+        'go into the app with the configuration of its tests, which sets up '
+        'the mocks of each test that declares them, in the order of the '
+        'tests, before the tests of each test file', () {
+      final added = add([
+        MatrixAppTest('/tests/core', appliesTo: (_) => true, mocks: core),
+        MatrixAppTest('/tests/start', appliesTo: (_) => true),
+        MatrixAppTest('/tests/crash', appliesTo: (_) => true, mocks: crash),
+      ]);
+
+      expect(added, [
+        'lib/options.dart',
+        'test/core_mocks.dart',
+        'test/core_test.dart',
+        'integration_test/start_check.dart',
+        'test/mocks/crash_mocks.dart',
+        'test/flutter_test_config.dart',
+      ]);
+      final config = fileSystem
+          .file('/apps/app_1/test/flutter_test_config.dart')
+          .readAsStringSync();
+      expect(
+        config,
+        endsWith('''
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'core_mocks.dart' as mocks0;
+import 'mocks/crash_mocks.dart' as mocks1;
+
+Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    mocks0.mockCore();
+    mocks1.mockCrash();
+  });
+  await testMain();
+}
+'''),
+      );
+      // flutter test calls testExecutable of the configuration with the
+      // main() of each test file in test/.
+      final index =
+          DartFileIndexer.index('test/flutter_test_config.dart', config);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['testExecutable'],
+      );
+      expect(
+        [
+          for (final import in index.imports)
+            if (import.prefix case final prefix?) '$prefix: ${import.uri}',
+        ],
+        ['mocks0: core_mocks.dart', 'mocks1: mocks/crash_mocks.dart'],
+      );
+      expect(
+        [
+          for (final call in index.invocations)
+            if (call.target case final target?) '$target.${call.name}',
+        ],
+        [
+          'TestWidgetsFlutterBinding.ensureInitialized',
+          'mocks0.mockCore',
+          'mocks1.mockCrash',
+        ],
+      );
+    });
+
+    test('leave the tests of an app without mocks as they are', () {
+      final added = add([
+        MatrixAppTest('/tests/core', appliesTo: (_) => true),
+        MatrixAppTest('/tests/start', appliesTo: (_) => true),
+      ]);
+
+      expect(added, isNot(contains('test/flutter_test_config.dart')));
+      expect(
+        fileSystem
+            .file('/apps/app_1/test/flutter_test_config.dart')
+            .existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+        'are in a file of their tests in test/, and the configuration is no '
+        'file of a test', () {
+      // A problem reads as its message.
+      Matcher throwsProblem(String message) => throwsA(
+            isA<MatrixAppTestException>()
+                .having((error) => error.message, 'message', message),
+          );
+      String declared(String directory, String path) =>
+          'The tests of $directory declare their mocks in $path, which is no '
+          'file of theirs in test/.';
+
+      for (final path in [
+        // No file of the tests.
+        'test/gone_mocks.dart',
+        // A file of the tests out of test/.
+        'lib/options.dart',
+        // A file of other tests.
+        'test/mocks/crash_mocks.dart',
+      ]) {
+        expect(
+          () => add([
+            MatrixAppTest(
+              '/tests/core',
+              appliesTo: (_) => true,
+              mocks: MatrixMocks(path, 'mock'),
+            ),
+            MatrixAppTest('/tests/crash', appliesTo: (_) => true),
+          ]),
+          throwsProblem(declared('/tests/core', path)),
+          reason: path,
+        );
+      }
+
+      fileSystem.file('/tests/start/test/flutter_test_config.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// Of the tests.\n');
+      expect(
+        () => add([
+          MatrixAppTest('/tests/core', appliesTo: (_) => true, mocks: core),
+          MatrixAppTest('/tests/start', appliesTo: (_) => true),
+        ]),
+        throwsProblem(
+          'The tests of /tests/start have test/flutter_test_config.dart, '
+          'which the matrix writes for the mocks of the tests.',
+        ),
+      );
+      expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+  });
+
   group('runAppTests', () {
     late MemoryFileSystem fileSystem;
     late List<String> commands;
@@ -1169,6 +1334,36 @@ void main() {
             .file('/apps/start_app/integration_test/start_test.dart')
             .readAsStringSync(),
         "import 'package:start_app/main.dart';\n",
+      );
+    });
+
+    test(
+        'adds the configuration that sets up the mocks of the tests, as in '
+        'an app of the matrix', () async {
+      fileSystem.file('/tests/core/test/core_mocks.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('void mockCore() {}\n');
+
+      final (code, output) = await add([
+        MatrixAppTest('/tests/start', appliesTo: (app) => true),
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          mocks: const MatrixMocks('test/core_mocks.dart', 'mockCore'),
+        ),
+      ]);
+
+      expect(code, 0);
+      expect(
+        output,
+        'Added the tests integration_test/start_test.dart, '
+        'test/core_mocks.dart, test/flutter_test_config.dart.\n',
+      );
+      expect(
+        fileSystem
+            .file('/apps/start_app/test/flutter_test_config.dart')
+            .readAsStringSync(),
+        contains('    mocks0.mockCore();\n'),
       );
     });
 

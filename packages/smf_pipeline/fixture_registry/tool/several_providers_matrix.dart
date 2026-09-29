@@ -10,6 +10,8 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 
+import 'fixture_mocks.dart';
+
 /// Generates the app with every module of the registry of several
 /// providers (`severalProvidersModules`) in the directory given as the only
 /// argument, analyzes it with Flutter and runs there the tests that the
@@ -65,19 +67,24 @@ Future<void> main(List<String> arguments) async {
 }
 
 /// The tests of the apps that the modules keep in the directory
-/// `app_tests` of their packages, as the matrix of the CLI registers them.
+/// `app_tests` of their packages, as the matrix of the CLI registers them,
+/// and the mocks of the fixture providers.
 Future<List<MatrixAppTest>> _appTests() async {
   final firebaseCore = await _appTestsOf('smf_firebase_core');
   final crashlytics = await _appTestsOf('smf_firebase_crashlytics');
   final analytics = await _appTestsOf('smf_firebase_analytics');
   return [
     // The start-up of the app initializes Firebase, with the options that
-    // `flutterfire configure` would write, and the mocks of Firebase Core
-    // for the tests of the other Firebase modules.
+    // `flutterfire configure` would write, and the mocks of Firebase Core,
+    // which the matrix sets up for the tests of every module of the app.
     MatrixAppTest(
       '$firebaseCore/firebase_core',
       appliesTo: _has(FirebaseCoreModule.id),
       devDependencies: const ['firebase_core_platform_interface'],
+      mocks: const MatrixMocks(
+        'test/firebase_core_mocks.dart',
+        'mockFirebaseCore',
+      ),
     ),
     // The crash reporter of the module reaches Crashlytics, and the errors
     // that nothing catches reach it through the handlers that the start-up
@@ -86,11 +93,19 @@ Future<List<MatrixAppTest>> _appTests() async {
       '$crashlytics/firebase_crashlytics',
       appliesTo: _has(FirebaseCrashlyticsModule.id),
       devDependencies: const ['firebase_crashlytics_platform_interface'],
+      mocks: const MatrixMocks(
+        'test/firebase_crashlytics_mocks.dart',
+        'mockFirebaseCrashlytics',
+      ),
     ),
     // The analytics service of the module reaches Firebase Analytics.
     MatrixAppTest(
       '$analytics/firebase_analytics',
       appliesTo: _has(FirebaseAnalyticsModule.id),
+      mocks: const MatrixMocks(
+        'test/firebase_analytics_mocks.dart',
+        'mockFirebaseAnalytics',
+      ),
     ),
     // The first screen of an app with a router is logged once, under the
     // name of the screen that the app starts on, whichever module provides
@@ -103,6 +118,9 @@ Future<List<MatrixAppTest>> _appTests() async {
       values: (app) => {'start_screen': _startScreenOf(app)},
       roles: {routerRole},
     ),
+    // The platform side of the fixture providers of crash reporting and
+    // analytics, which no test of the modules of the CLI knows.
+    ...await fixtureMocks(),
   ];
 }
 

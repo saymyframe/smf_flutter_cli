@@ -7,11 +7,15 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 
+import 'fixture_mocks.dart';
+
 /// Generates the apps of the matrix of the fixture modules in the directory
 /// given as the first argument, analyzes each with Flutter, so that every
 /// feature of the module model compiles, and runs the tests of the apps in
-/// `app_tests`; see `runMatrix`. Any further argument names an app of the
-/// matrix, such as `fake_codegen`, and only the apps named are checked.
+/// its `app_tests`, with the mocks of their platform side that the fixture
+/// modules keep in theirs; see `runMatrix`. Any further argument names an
+/// app of the matrix, such as `fake_codegen`, and only the apps named are
+/// checked.
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
 /// that take one; see `everyModuleAppsOf`.
@@ -67,7 +71,8 @@ Future<void> main(List<String> arguments) async {
   exit(code);
 }
 
-/// The tests of the apps in the directory `app_tests` of this package.
+/// The tests of the apps in the directory `app_tests` of this package, and
+/// the mocks that the fixture modules keep in theirs.
 Future<List<MatrixAppTest>> _appTests() async {
   final library = await Isolate.resolvePackageUri(
     Uri.parse('package:fixture_registry/'),
@@ -75,6 +80,10 @@ Future<List<MatrixAppTest>> _appTests() async {
   final appTests =
       Directory.fromUri(library!).parent.uri.resolve('app_tests').toFilePath();
   return [
+    // The platform side of the fixture providers of crash reporting and
+    // analytics, which their start-up and services reach, for the tests
+    // of every module of the apps with them.
+    ...await fixtureMocks(),
     // The listeners of the screen, whichever module provides the router:
     // the test starts the app with main() and navigates through the
     // navigation facade of the router role.

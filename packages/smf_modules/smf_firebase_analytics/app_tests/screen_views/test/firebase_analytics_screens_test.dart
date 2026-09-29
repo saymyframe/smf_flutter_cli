@@ -1,9 +1,10 @@
 // A test that continuous integration runs in the apps with Firebase
 // Analytics and a router, on the real Firebase packages, whose platform
 // side answers without a Firebase project: the app logs its first screen
-// once, with the name of its route only, `{{start_screen}}`. The mocks of
-// Firebase Core come with the tests of firebase_core, which every app with
-// Firebase Analytics has.
+// once, with the name of its route only, `{{start_screen}}`. The matrix
+// sets up the mocks of the platform side of every module of the app before
+// the tests, those of Firebase among them, so the start-up runs whatever
+// other modules the app has.
 //
 // It starts the app through what every app has, whichever module provides
 // its entry: main() in lib/main.dart (AppEntryRole.mainFile), which runs
@@ -14,7 +15,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
 import 'firebase_analytics_mocks.dart';
-import 'firebase_core_mocks.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +23,9 @@ void main() {
   // fails sooner.
   testWidgets('the first screen is logged once, with the name of its route',
       (tester) async {
-    mockFirebaseCore();
-    mockFirebaseAnalytics();
     // bootstrap() of an app that reports crashes sends the errors of
-    // Flutter and those that nothing catches to its crash reporter, which
-    // this test does not mock. The test takes them back once main()
+    // Flutter and those that nothing catches to its crash reporters, which
+    // this test does not look at. The test takes them back once main()
     // returns, so that flutter_test reports the errors of the frames that
     // follow, and an expectation that fails, as in any test.
     final onError = FlutterError.onError;

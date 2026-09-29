@@ -428,6 +428,7 @@ final class MatrixAppTest {
     this.devDependencies = const [],
     this.values,
     this.roles = const {},
+    this.mocks,
   });
 
   /// The directory of the files that go into an app, each at its path
@@ -468,6 +469,42 @@ final class MatrixAppTest {
   /// them (see [MatrixAppTests]). Tests of what only one provider does name
   /// no role.
   final Set<Role> roles;
+
+  /// The mocks of the platform side of what the module of the tests runs in
+  /// an app, such as its part of the start-up of the app and its services,
+  /// or `null` if it needs none.
+  ///
+  /// An app runs the start-up and the services of all of its modules, and
+  /// a test of any of them may run them, as a test that starts the app with
+  /// `main()` does, while only the tests of each module know its platform
+  /// side. So the matrix sets up the mocks of all the tests that apply to
+  /// an app before the tests of each test file of the app, whichever module
+  /// the file tests (see [addAppTests]), and the tests that apply to every
+  /// app with a module declare the mocks of the module. A test file may set
+  /// up mocks of its own after them, in its `setUpAll`, its `setUp` or its
+  /// tests rather than while its `main()` declares them, such as mocks that
+  /// record what reaches the platform side of its module.
+  final MatrixMocks? mocks;
+}
+
+/// A function among the files of a [MatrixAppTest] that sets up the mocks of
+/// the platform side of what the module of the tests runs in an app (see
+/// [MatrixAppTest.mocks]).
+final class MatrixMocks {
+  /// Creates the mocks that the function [function] of the file at [path]
+  /// sets up.
+  const MatrixMocks(this.path, this.function);
+
+  /// The path of the Dart file with the function among the files of the
+  /// tests, in their directory `test/`, such as
+  /// `test/firebase_core_mocks.dart`.
+  final String path;
+
+  /// The name of the top-level function of the file that sets up the
+  /// mocks, such as `mockFirebaseCore`. The matrix calls it without
+  /// arguments once the binding of the tests is initialized, and leaves
+  /// out what it returns, so it sets up the mocks before it returns.
+  final String function;
 }
 
 /// The tests that a matrix adds to its apps, and the roles whose contract
@@ -563,9 +600,20 @@ final class MatrixAppTests {
 /// matrix, only `{{app_name}}` is filled: the [MatrixAppTest.values] come
 /// from an app of the matrix.
 ///
+/// If some of the [tests] declare [MatrixAppTest.mocks], it also writes the
+/// configuration of the tests of the app, `test/flutter_test_config.dart`,
+/// with which `flutter test` runs each test file in `test/`: in a
+/// `setUpAll` that runs before those of the file, it initializes the
+/// binding of the tests and calls the function of the mocks of each of
+/// those tests, in the order of the [tests]. So the mocks of every module
+/// of an app are set up for the tests of each module, which the tests of
+/// the matrix and the tests added to an app outside it get alike.
+///
 /// Throws a [MatrixAppTestException], before it copies anything, if a file
-/// keeps a placeholder that no value fills, or if two of the [tests] have
-/// a file at the same path.
+/// keeps a placeholder that no value fills, if two of the [tests] have a
+/// file at the same path, if the mocks of a test are in no file of it in
+/// `test/`, or if a test has a file at the path of the configuration that
+/// the matrix writes for the mocks.
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
   required String directory,
@@ -601,12 +649,75 @@ List<String> addAppTests(
       texts[path] = _filled(file.readAsStringSync(), values, test, path);
     }
   }
+  final mocks = <MatrixMocks>[];
+  for (final test in tests) {
+    final declared = test.mocks;
+    if (declared == null) continue;
+    final path = context.joinAll(declared.path.split('/'));
+    if (!declared.path.startsWith('test/') || owners[path] != test.directory) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} declare their mocks in '
+        '${declared.path}, which is no file of theirs in test/.',
+      );
+    }
+    mocks.add(declared);
+  }
+  if (mocks.isNotEmpty) {
+    final config = context.joinAll(_testConfig.split('/'));
+    if (owners[config] case final other?) {
+      throw MatrixAppTestException(
+        'The tests of $other have $_testConfig, which the matrix writes for '
+        'the mocks of the tests.',
+      );
+    }
+    texts[config] = _testConfigOf(mocks);
+  }
   for (final MapEntry(key: path, value: text) in texts.entries) {
     fileSystem.file(context.join(directory, path))
       ..createSync(recursive: true)
       ..writeAsStringSync(text);
   }
   return [...texts.keys];
+}
+
+/// The path in an app of the configuration of its tests, which
+/// [addAppTests] writes for the [MatrixAppTest.mocks] of the tests.
+const _testConfig = 'test/flutter_test_config.dart';
+
+/// The configuration of the tests of an app that sets up [mocks] before
+/// the tests of each test file; see [addAppTests].
+String _testConfigOf(List<MatrixMocks> mocks) {
+  final text = StringBuffer()
+    ..writeln('// The configuration of the tests of the app, which the matrix')
+    ..writeln('// of SMF writes for the mocks that the tests of its modules')
+    ..writeln('// declare (MatrixAppTest.mocks): flutter test runs each test')
+    ..writeln('// file in test/ with it, and it sets up the mocks of every')
+    ..writeln('// module of the app before the tests of the file.')
+    ..writeln("import 'dart:async';")
+    ..writeln()
+    ..writeln("import 'package:flutter_test/flutter_test.dart';")
+    ..writeln();
+  for (final (index, mock) in mocks.indexed) {
+    text.writeln(
+      "import '${mock.path.substring('test/'.length)}' as mocks$index;",
+    );
+  }
+  text
+    ..writeln()
+    ..writeln(
+      'Future<void> testExecutable(FutureOr<void> Function() testMain) '
+      'async {',
+    )
+    ..writeln('  setUpAll(() {')
+    ..writeln('    TestWidgetsFlutterBinding.ensureInitialized();');
+  for (final (index, mock) in mocks.indexed) {
+    text.writeln('    mocks$index.${mock.function}();');
+  }
+  text
+    ..writeln('  });')
+    ..writeln('  await testMain();')
+    ..writeln('}');
+  return '$text';
 }
 
 /// [text], the file at [path] of [test], with the placeholders of [values]
