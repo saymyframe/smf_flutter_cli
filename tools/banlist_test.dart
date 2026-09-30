@@ -43,6 +43,22 @@ void main() {
     );
   });
 
+  test('finds "by itself" in a line that does not say "only"', () {
+    expect(
+      _names({
+        'packages/a/README.md':
+            'When a feature needs a router, `smf create` adds it by itself.\n'
+                '`smf create` adds it by itself if it is the only module that '
+                'provides the router, and asks otherwise.\n'
+                'It commonly adds it by itself.\n',
+      }),
+      [
+        'packages/a/README.md:1: "by itself" without "only"',
+        'packages/a/README.md:3: "by itself" without "only"',
+      ],
+    );
+  });
+
   test('reads Dart code, pubspecs, templates, workflows and Markdown only', () {
     expect(
       _names({

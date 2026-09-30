@@ -30,7 +30,6 @@ Describe tests performed (commands, scenarios, platforms). Attach screenshots/lo
 - [ ] If bricks changed, ran `melos bootstrap` and committed the bundles
 - [ ] Modules stay independent: no module refers to another it does not depend on
 - [ ] Avoided module-level installation instructions; modules are integrated via the CLI
-- [ ] For Firebase-related flows, project generation occurs before running `flutterfire configure`
 
 ## Related Issues
 
