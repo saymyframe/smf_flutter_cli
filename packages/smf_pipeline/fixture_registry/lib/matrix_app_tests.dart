@@ -12,7 +12,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
-/// role, whose providers call the listeners of the screen.
+/// role, whose providers call the listeners of the screen, and the DI role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -89,8 +89,13 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(const ModuleId('fake_second')) &&
             app.modules.contains(const ModuleId('bottom_tabs')),
       ),
+      // The services of the apps with the DI role, whichever module provides
+      // it, the test that the CLI keeps: only in the apps whose services
+      // have every lifetime, those of the fixture services, so that it runs
+      // flutter test in a few apps.
+      await diRoleAppTest(lifetimes: DiLifetime.values.toSet()),
     ],
-    testedRoles: {routerRole, layoutRole},
+    testedRoles: {routerRole, layoutRole, diRole},
   );
 }
 

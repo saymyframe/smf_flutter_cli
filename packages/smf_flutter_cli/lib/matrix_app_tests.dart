@@ -83,12 +83,122 @@ Future<MatrixAppTests> smfAppTests() async {
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
       ),
+      // The services of the apps whose modules register some in the DI
+      // container, whichever module provides it.
+      await diRoleAppTest(),
     ],
     // Each provider of the router role gets a test of the listeners of the
-    // screen; the fixture registry tests the rest of the role.
-    testedRoles: {routerRole},
+    // screen, the fixture registry tests the rest of the role, and each
+    // provider of the DI role gets the test of its services.
+    testedRoles: {routerRole, diRole},
   );
 }
+
+/// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
+/// for the apps with the role, whichever module provides it, whose modules
+/// register services, at least one of each of [lifetimes]: once the
+/// start-up of the app ran, every service resolves, a singleton and a lazy
+/// singleton to one instance; `resetDependencies()` removes them all, and
+/// `registerDependencies()` registers them again.
+///
+/// The test knows only the role. The matrix writes the services of each
+/// app for it, from the registrations of its DI role, into
+/// [registeredServicesFile]. The matrix of the fixtures runs it too, in the
+/// apps whose services have every lifetime.
+Future<MatrixAppTest> diRoleAppTest({
+  Set<DiLifetime> lifetimes = const {},
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/di_role',
+      appliesTo: (app) {
+        if (!app.hook!.presentRoles.contains(diRole)) return false;
+        final registered = {
+          for (final registration in _servicesOf(app)) registration.lifetime,
+        };
+        return registered.isNotEmpty && registered.containsAll(lifetimes);
+      },
+      generatedFiles: _registeredServicesOf,
+      roles: {diRole},
+    );
+
+/// The path in an app of the services that its modules register, which the
+/// matrix writes for the test of the DI role: `registeredServices`, the
+/// services in the order of their registration ([DiGraph.ordered]), each
+/// with its name, such as `FixtureZone "utc"`, its lifetime, such as
+/// `lazySingleton`, and a function that resolves it with `resolve()` of the
+/// service locator of the role, by its type and its instance name.
+const registeredServicesFile = 'test/di_role/registered_services.dart';
+
+/// The file at [registeredServicesFile] of [app], an app of the matrix with
+/// the DI role, whose package is [packageName].
+///
+/// It imports the service locator with the prefix `locator`, and the file
+/// of every type of a service once, with a prefix of its own, `di0`, `di1`,
+/// ..., so that no name clashes.
+Map<String, String> _registeredServicesOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final locator = ImportRef.app(
+    DiRole.serviceLocatorFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  final prefixes = <String, String>{locator: 'locator'};
+  String typeOf(TypeRef type) => switch (type.import) {
+        null => type.name,
+        final import => type.codeWith(
+            prefixes.putIfAbsent(
+              import.resolveUri(packageName),
+              () => 'di${prefixes.length - 1}',
+            ),
+          ),
+      };
+  final services = StringBuffer();
+  for (final registration in _servicesOf(app)) {
+    final name = switch (registration.instanceName) {
+      null => '',
+      final name => 'instanceName: ${SmfNames.dartString(name)}',
+    };
+    services
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString('${registration.key}')},')
+      ..writeln("    lifetime: '${registration.lifetime.name}',")
+      ..writeln(
+        '    resolve: () => '
+        'locator.resolve<${typeOf(registration.type)}>($name),',
+      )
+      ..writeln('  ),');
+  }
+  final imports = [
+    for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  return {
+    registeredServicesFile: '''
+// The services that the modules of the app register in its DI container,
+// which the matrix of SMF writes from the data of the DI role of the app
+// for the test of the role, di_role_test.dart.
+${imports.join('\n')}
+
+/// A service that the modules of the app register: its name, its lifetime,
+/// and a function that resolves it with resolve() of the service locator.
+typedef RegisteredService = ({
+  String name,
+  String lifetime,
+  Object Function() resolve,
+});
+
+/// The services that the modules of the app register, in the order of
+/// their registration.
+final List<RegisteredService> registeredServices = [
+$services];
+''',
+  };
+}
+
+/// The registrations of the DI role of [app], in the order of their
+/// registration.
+List<DiRegistration> _servicesOf(MatrixApp app) =>
+    diRole.graphOf(diRole.hookInput(app.hook!)).ordered;
 
 /// The name under which the listener of Firebase Analytics logs the
 /// screen that [app] starts on: the full name of the route that the router

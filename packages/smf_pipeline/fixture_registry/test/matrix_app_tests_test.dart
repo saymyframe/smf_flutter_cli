@@ -45,15 +45,49 @@ void main() {
   });
 
   test(
-      'the app tests check the contract of the router role and of the layout '
-      'role with every provider of each, which they tell apart by the roles '
-      'of the app only', () {
-    expect(appTests.testedRoles, containsAll([routerRole, layoutRole]));
+      'the app tests check the contract of the router role, of the layout '
+      'role and of the DI role with every provider of each, which they tell '
+      'apart by the roles of the app only', () {
+    expect(
+      appTests.testedRoles,
+      containsAll([routerRole, layoutRole, diRole]),
+    );
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
+    expect(named('di_role').roles, {diRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
+  });
+
+  test(
+      'the test of the DI role applies only to the apps with the role whose '
+      'services have every lifetime, of each DI container', () {
+    final diRoleTest = named('di_role');
+
+    for (final app in apps) {
+      final hook = app.hook!;
+      final lifetimes = hook.presentRoles.contains(diRole)
+          ? {
+              for (final registration
+                  in diRole.graphOf(diRole.hookInput(hook)).ordered)
+                registration.lifetime,
+            }
+          : const <DiLifetime>{};
+      expect(
+        diRoleTest.appliesTo(app),
+        lifetimes.containsAll(DiLifetime.values),
+        reason: app.name,
+      );
+    }
+    // Those of the fixture services, with each container.
+    expect(
+      appsOf(diRoleTest),
+      containsAll([
+        'fake_registrations (fake_di)',
+        'fake_registrations (get_it)',
+      ]),
+    );
   });
 
   test(
@@ -89,9 +123,9 @@ void main() {
         severalProviders.tests.singleWhere((test) => nameOf(test) == name);
 
     test(
-        'gets the app tests of the modules of the CLI, the mocks of the '
-        'fixture providers and the tests of the roles, which all apply to it',
-        () {
+        'gets the app tests of the modules of the CLI, the test of the DI '
+        'role, the mocks of the fixture providers and the tests of the roles '
+        'of several providers, which all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -99,6 +133,7 @@ void main() {
           'firebase_crashlytics',
           'firebase_analytics',
           'screen_views',
+          'di_role',
           'fake_crash',
           'fake_analytics',
           'analytics_role',
