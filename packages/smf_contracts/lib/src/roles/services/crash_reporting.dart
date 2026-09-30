@@ -29,6 +29,15 @@ const crashReportingRole = CrashReportingRole._();
 /// the app reports the errors of an isolate it spawns itself through the
 /// error listener of that isolate. With a DI container, the reporter is
 /// registered as a lazy singleton.
+///
+/// The reporter of the app calls each implementation on its own, and never
+/// fails: an implementation that throws, or whose future fails, keeps no
+/// other from a report, and its failure reaches neither the code that
+/// called nor the handlers. The handlers do not await their reports, so the
+/// failure would come back to them as an error that nothing catches, and
+/// they would report it to the same implementation again, without end. In
+/// debug mode the reporter prints the failure, so that an implementation
+/// that does not work shows in the console.
 final class CrashReportingRole extends Role<RoleImplementation> {
   const CrashReportingRole._();
 

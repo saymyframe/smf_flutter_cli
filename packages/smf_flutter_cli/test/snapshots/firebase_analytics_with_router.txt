@@ -243,6 +243,7 @@ Future<void> bootstrap() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
+import 'package:flutter/foundation.dart';
 import 'package:my_app/core/analytics/firebase_analytics_service.dart' as impl0;
 
 /// Records what users do in the app.
@@ -271,6 +272,14 @@ abstract interface class AnalyticsService {
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. An analytics service that throws, or whose future fails,
+/// keeps no other from the call, and its failure does not reach the code
+/// that called: that code may not await the call, and then nothing would
+/// catch the failure. In debug mode the failure is printed, so that an
+/// analytics service that does not work, such as one that is not set up,
+/// shows in the console.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -318,10 +327,32 @@ final class _AnalyticsServices implements AnalyticsService {
     required String? value,
   }) => _forAll((service) => service.setUserProperty(name: name, value: value));
 
+  /// Calls [call] with each analytics service on its own, and completes
+  /// once all of them are done, whatever each does; see
+  /// [createAnalyticsService].
   Future<void> _forAll(
     Future<void> Function(AnalyticsService service) call,
   ) async {
-    await Future.wait(_services.map(call));
+    await Future.wait([
+      for (final service in _services) _callAlone(service, call),
+    ]);
+  }
+
+  /// Calls [call] with [service], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    AnalyticsService service,
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    try {
+      await call(service);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The analytics service ${service.runtimeType} failed: $error',
+        );
+      }
+    }
   }
 }
 === lib/core/analytics/firebase_analytics_service.dart (firebase_analytics) ===

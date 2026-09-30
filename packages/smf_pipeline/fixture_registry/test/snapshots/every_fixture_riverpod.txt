@@ -292,6 +292,7 @@ Future<void> bootstrap() async {
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
     as impl0;
+import 'package:flutter/foundation.dart';
 
 /// Records what users do in the app.
 abstract interface class AnalyticsService {
@@ -319,6 +320,14 @@ abstract interface class AnalyticsService {
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. An analytics service that throws, or whose future fails,
+/// keeps no other from the call, and its failure does not reach the code
+/// that called: that code may not await the call, and then nothing would
+/// catch the failure. In debug mode the failure is printed, so that an
+/// analytics service that does not work, such as one that is not set up,
+/// shows in the console.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -372,10 +381,32 @@ final class _AnalyticsServices implements AnalyticsService {
     required String? value,
   }) => _forAll((service) => service.setUserProperty(name: name, value: value));
 
+  /// Calls [call] with each analytics service on its own, and completes
+  /// once all of them are done, whatever each does; see
+  /// [createAnalyticsService].
   Future<void> _forAll(
     Future<void> Function(AnalyticsService service) call,
   ) async {
-    await Future.wait(_services.map(call));
+    await Future.wait([
+      for (final service in _services) _callAlone(service, call),
+    ]);
+  }
+
+  /// Calls [call] with [service], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    AnalyticsService service,
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    try {
+      await call(service);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The analytics service ${service.runtimeType} failed: $error',
+        );
+      }
+    }
   }
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
@@ -479,6 +510,14 @@ abstract interface class CrashReporter {
 
 /// Returns the crash reporter of the app, which forwards every call to the
 /// crash reporters of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. A crash reporter that throws, or whose future fails,
+/// keeps no other from the call, and its failure reaches neither the code
+/// that called nor the handlers of [installCrashReporting], which would
+/// report it to the same crash reporter again, without end. In debug mode
+/// the failure is printed, so that a crash reporter that does not work,
+/// such as one that is not set up, shows in the console.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -492,6 +531,9 @@ CrashReporter createCrashReporter() => _crashReporter;
 ///   such as in a `Future`, a `Timer` or the handler of a port, with its
 ///   type. In debug mode it leaves the error unhandled, so the engine prints
 ///   it.
+///
+/// Each report reaches every crash reporter, and the failure of a crash
+/// reporter comes back to neither handler; see [createCrashReporter].
 ///
 /// `compute()` and `Isolate.run()` throw the error of their isolate to the
 /// code that awaits them, so it reaches the platform dispatcher unless that
@@ -555,10 +597,29 @@ final class _CrashReporters implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _forAll((reporter) => reporter.setUserId(userId));
 
+  /// Calls [call] with each crash reporter on its own, and completes once
+  /// all of them are done, whatever each does; see [createCrashReporter].
   Future<void> _forAll(
     Future<void> Function(CrashReporter reporter) call,
   ) async {
-    await Future.wait(_reporters.map(call));
+    await Future.wait([
+      for (final reporter in _reporters) _callAlone(reporter, call),
+    ]);
+  }
+
+  /// Calls [call] with [reporter], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    CrashReporter reporter,
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    try {
+      await call(reporter);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('The crash reporter ${reporter.runtimeType} failed: $error');
+      }
+    }
   }
 }
 === lib/core/di/dependencies.dart (fake_di) ===

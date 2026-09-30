@@ -334,9 +334,6 @@ void main() {
         reason: 'In debug mode, the crash reporter of the app prints each '
             'failure of a crash reporter, once.',
       );
-    },
-        skip: 'Bug: the crash reporter of the app stops at a crash reporter '
-            'that throws, and the handlers of the errors report the failure '
-            'of a report again, without end.');
+    });
   }
 }

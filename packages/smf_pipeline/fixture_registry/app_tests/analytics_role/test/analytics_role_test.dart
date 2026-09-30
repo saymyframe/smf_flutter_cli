@@ -204,8 +204,6 @@ void main() {
         reason: 'In debug mode, the analytics service of the app prints each '
             'failure of an analytics service, once.',
       );
-    },
-        skip: 'Bug: the analytics service of the app stops at an analytics '
-            'service that throws, and fails when one of them fails.');
+    });
   }
 }
