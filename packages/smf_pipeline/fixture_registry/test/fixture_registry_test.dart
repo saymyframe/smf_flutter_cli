@@ -44,6 +44,34 @@ void main() {
     }
   });
 
+  test(
+      'the fixture of the registrations registers a service in each form '
+      'that the DI role allows and a DI container renders, and with each '
+      'capability of the role', () {
+    final data = [
+      for (final contribution in const FakeRegistrationsModule().contribute(
+        ContractHarness.defaultContext,
+      ))
+        if (contribution case final RoleData<DiRegistration> data) data,
+    ];
+    final graph = DiGraph(data);
+    final registrations = [for (final RoleData(:value) in data) value];
+
+    expect(
+      _allowedForms().difference({
+        for (final registration in registrations)
+          ..._formsOf(registration, graph),
+      }),
+      isEmpty,
+      reason: 'fake_registrations renders every form of a registration: '
+          'register a service of each form it misses.',
+    );
+    expect(
+      registrations.expand(graph.capabilitiesOf).toSet(),
+      containsAll(DiCapability.values),
+    );
+  });
+
   group('the registry of several providers', () {
     test('is a valid registry', () {
       expect(ModuleRegistry.problemsOf(severalProvidersModules()), isEmpty);
@@ -652,6 +680,69 @@ void main() {
 /// The one of the two modules [both] that is not [one].
 String _other(List<String> both, String one) =>
     both.singleWhere((module) => module != one);
+
+/// The forms in which a DI container renders [registration] of [graph]: its
+/// kind with or without a name, how it waits for other services, and
+/// whether a function disposes of it. The kind is the lifetime, and for a
+/// singleton also whether it is created asynchronously or waits for other
+/// services.
+Set<String> _formsOf(DiRegistration registration, DiGraph graph) {
+  final lifetime = registration.lifetime.name;
+  final waits = graph.dependsOnOf(registration);
+  final kind = registration.isAsync
+      ? 'asynchronous $lifetime'
+      : waits.isEmpty
+          ? lifetime
+          : '$lifetime that waits';
+  return {
+    '$kind ${registration.instanceName == null ? 'without' : 'with'} a name',
+    if (registration.dependsOn.isNotEmpty) '$lifetime that waits by saying so',
+    if (waits.any(registration.create.deps.contains))
+      '$lifetime that waits for a service it takes',
+    if (registration.dispose != null) '$kind with a dispose function',
+  };
+}
+
+/// The forms of [_formsOf] that the DI role allows: each kind that
+/// [DiRegistration.problems] accepts, with and without a name, both ways
+/// of waiting for a kind that waits, and a function that disposes of a
+/// kind that accepts one.
+Set<String> _allowedForms() {
+  const file = ImportRef.app('probe.dart');
+  bool allows(
+    DiLifetime lifetime, {
+    required bool isAsync,
+    required bool waits,
+    bool disposes = false,
+  }) =>
+      DiRegistration(
+        type: const TypeRef('Probe', import: file),
+        create: const FactoryRef('createProbe', import: file),
+        lifetime: lifetime,
+        isAsync: isAsync,
+        dependsOn: [
+          if (waits) const ServiceRef(TypeRef('Other', import: file)),
+        ],
+        dispose:
+            disposes ? const FunctionRef('closeProbe', import: file) : null,
+      ).problems().isEmpty;
+
+  return {
+    for (final lifetime in DiLifetime.values)
+      for (final (kind, isAsync, waits) in [
+        (lifetime.name, false, false),
+        ('asynchronous ${lifetime.name}', true, false),
+        ('${lifetime.name} that waits', false, true),
+      ])
+        if (allows(lifetime, isAsync: isAsync, waits: waits)) ...{
+          '$kind with a name',
+          '$kind without a name',
+          if (waits) ...{'$kind by saying so', '$kind for a service it takes'},
+          if (allows(lifetime, isAsync: isAsync, waits: waits, disposes: true))
+            '$kind with a dispose function',
+        },
+  };
+}
 
 /// The codes of the diagnostics that the import cleanup fixes.
 const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
