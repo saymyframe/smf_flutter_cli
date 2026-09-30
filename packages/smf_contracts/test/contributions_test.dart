@@ -248,22 +248,23 @@ void main() {
   });
 
   test('PostGenStep runs a tool with arguments', () {
+    const configure = PostGenStepId(ModuleId('firebase'), 'configure');
     const step = PostGenStep(
       ToolRef('dart', prefixArgs: ['pub', 'global', 'run', 'x:x']),
       ['configure'],
+      id: configure,
       description: 'Configure',
       interactive: true,
       skippable: true,
       external: true,
       needs: ['tool'],
-      followUps: [
-        PostGenStep(
-          ToolRef('ruby'),
-          ['fix.rb'],
-          skippable: true,
-          hosts: {HostOperatingSystem.macos},
-        ),
-      ],
+    );
+    const followUp = PostGenStep(
+      ToolRef('ruby'),
+      ['fix.rb'],
+      followUpOf: configure,
+      skippable: true,
+      hosts: {HostOperatingSystem.macos},
     );
 
     expect(step.tool.argumentsFor(step.arguments), [
@@ -273,26 +274,56 @@ void main() {
       'x:x',
       'configure',
     ]);
+    expect(step.id, configure);
+    expect(step.followUpOf, isNull);
     expect(step.description, 'Configure');
     expect(step.interactive, isTrue);
     expect(step.skippable, isTrue);
     expect(step.external, isTrue);
     expect(step.needs, ['tool']);
-    final followUp = step.followUps.single;
+    expect(step.hosts, isEmpty);
     expect(followUp.tool.executable, 'ruby');
     expect(followUp.arguments, ['fix.rb']);
+    expect(followUp.id, isNull);
+    expect(followUp.followUpOf, configure);
     expect(followUp.skippable, isTrue);
-    expect(followUp.followUps, isEmpty);
     expect(followUp.hosts, {HostOperatingSystem.macos});
-    expect(step.hosts, isEmpty);
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
+    expect(plain.id, isNull);
+    expect(plain.followUpOf, isNull);
     expect(plain.interactive, isFalse);
     expect(plain.skippable, isFalse);
     expect(plain.external, isFalse);
     expect(plain.needs, isEmpty);
-    expect(plain.followUps, isEmpty);
     expect(plain.hosts, isEmpty);
+  });
+
+  test('PostGenStepId names a step of a module and compares by value', () {
+    const id = PostGenStepId(ModuleId('firebase_core'), 'configure');
+
+    expect(id.module, const ModuleId('firebase_core'));
+    expect(id.name, 'configure');
+    expect('$id', 'firebase_core.configure');
+    // Another object with the same values, rather than the same constant.
+    final same = PostGenStepId(
+      const ModuleId('firebase_core'),
+      ['con', 'figure'].join(),
+    );
+    expect(identical(same, id), isFalse);
+    expect(same, id);
+    expect(same.hashCode, id.hashCode);
+    expect({id, same}, hasLength(1));
+    // Another module may name a step of its own the same.
+    expect(
+      const PostGenStepId(ModuleId('firebase_analytics'), 'configure'),
+      isNot(id),
+    );
+    expect(
+      const PostGenStepId(ModuleId('firebase_core'), 'deploy'),
+      isNot(id),
+    );
+    expect(id, isNot(equals('firebase_core.configure')));
   });
 }
 

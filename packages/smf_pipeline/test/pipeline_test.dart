@@ -758,6 +758,8 @@ void main() {
 
   group('--explain', () {
     test('prints what would happen and stops without asking', () async {
+      const coreStep = PostGenStepId(ModuleId('core'), 'a');
+      const fixStep = PostGenStepId(ModuleId('analytics'), 'fix');
       final host = FakeHost(terminal: true);
       host.fileSystem
           .file('/work/my_app/pubspec.yaml')
@@ -788,24 +790,7 @@ void main() {
               AppEntryRole.bootstrapPlatform,
               Fragment('core();'),
             ),
-            const PostGenStep(
-              ToolRef('a'),
-              ['--flag'],
-              followUps: [
-                PostGenStep(
-                  ToolRef('fix'),
-                  ['it', 'in "a b"'],
-                  skippable: true,
-                  followUps: [
-                    PostGenStep(
-                      ToolRef('check'),
-                      [],
-                      hosts: {HostOperatingSystem.macos},
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            const PostGenStep(ToolRef('a'), ['--flag'], id: coreStep),
             const PubspecContribution.hosted('core_lib', '^1.2.0'),
             const PubspecContribution.sdk('flutter_test', dev: true),
             const CodegenRequest(),
@@ -821,6 +806,20 @@ void main() {
               Fragment('analytics();'),
             ),
             const PostGenStep(ToolRef('b'), []),
+            // It continues the step of core, which knows nothing of it.
+            const PostGenStep(
+              ToolRef('fix'),
+              ['it', 'in "a b"'],
+              id: fixStep,
+              followUpOf: coreStep,
+              skippable: true,
+            ),
+            const PostGenStep(
+              ToolRef('check'),
+              [],
+              followUpOf: fixStep,
+              hosts: {HostOperatingSystem.macos},
+            ),
             Preflight([install]),
           ],
         ),
@@ -886,10 +885,11 @@ void main() {
           'After generation\n'
           '  dart run build_runner build --force-jit (core)\n'
           '  a --flag (core)\n'
-          // Follow-ups run once the step above them succeeded.
-          // Quoted for the shell of the host, as the commands for later.
-          '    then fix it \'in "a b"\' (core)\n'
-          '      then check (core, on macOS)\n'
+          // The steps that continue a step run once the step above them
+          // succeeded, each named with its own module. Quoted for the shell
+          // of the host, as the commands for later.
+          '    then fix it \'in "a b"\' (analytics)\n'
+          '      then check (analytics, on macOS)\n'
           '  b (analytics)',
         ),
       );
@@ -918,13 +918,13 @@ void main() {
             PostGenStep(
               ToolRef('tool'),
               ['--platforms=android,ios'],
-              followUps: [
-                PostGenStep(
-                  ToolRef('ruby'),
-                  ['-e', r'puts "$HOME"', 'a b'],
-                  hosts: {HostOperatingSystem.macos},
-                ),
-              ],
+              id: PostGenStepId(ModuleId('core'), 'tool'),
+            ),
+            PostGenStep(
+              ToolRef('ruby'),
+              ['-e', r'puts "$HOME"', 'a b'],
+              followUpOf: PostGenStepId(ModuleId('core'), 'tool'),
+              hosts: {HostOperatingSystem.macos},
             ),
           ],
         ),
@@ -1037,12 +1037,12 @@ void main() {
       const order = ContributionOrder(
         contributions: [
           Collected(
-            CodegenRequest(),
+            PostGenStep(ToolRef('a'), []),
             ModuleOrigin(ModuleId('a')),
             applies: true,
           ),
           Collected(
-            CodegenRequest(),
+            PostGenStep(ToolRef('b'), []),
             ModuleOrigin(ModuleId('b')),
             applies: true,
           ),

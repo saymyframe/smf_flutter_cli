@@ -233,7 +233,7 @@ Future<
     }
     apps.add(app);
     if (withoutExternalSteps) {
-      external.addAll(_withExternalSteps(result.collection!));
+      external.addAll(_withExternalSteps(result.validation!));
     }
   }
   return (apps: apps, failed: failed, external: external);
@@ -295,20 +295,19 @@ MatrixApp? _appOf(
 String _keyOf(MatrixApp app) =>
     ([for (final module in app.modules) module.value]..sort()).join(',');
 
-/// The modules whose steps after generation in the app of [collection]
-/// need an external service, or have a follow-up that does.
-Set<ModuleId> _withExternalSteps(Collection collection) => {
-      for (final collected in collection.applying)
+/// The modules whose steps after generation in the app that [validation]
+/// checked need an external service ([PostGenStep.external]). A step that
+/// continues a step of another module (see [PostGenStep.followUpOf]) is a
+/// step of the module that contributes it.
+Set<ModuleId> _withExternalSteps(ValidationResult validation) => {
+      for (final collected in validation.postGenOrder.contributions)
         if (collected
             case Collected(
-              contribution: final PostGenStep step,
+              contribution: PostGenStep(external: true),
               origin: ModuleOrigin(:final module),
-            ) when _isExternal(step))
+            ))
           module,
     };
-
-bool _isExternal(PostGenStep step) =>
-    step.external || step.followUps.any(_isExternal);
 
 /// [modules] without those of [removed], without those that depend on one
 /// of them, directly or not, and without those that are then left without a

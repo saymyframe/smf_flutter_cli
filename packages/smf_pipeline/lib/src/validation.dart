@@ -8,6 +8,7 @@ import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
+import 'package:smf_pipeline/src/steps.dart';
 import 'package:smf_pipeline/src/templates.dart';
 
 /// What stage 5 found and computed.
@@ -26,7 +27,8 @@ final class ValidationResult {
   /// The contributions of each socket that apply, in their final order.
   final Map<SocketRef, ContributionOrder> socketOrders;
 
-  /// The post-generation steps that apply, in the order they run.
+  /// The post-generation steps that apply, in the order of their
+  /// contributors; see [bindSteps] for the order they run in.
   final ContributionOrder postGenOrder;
 
   /// The merged `pubspec.yaml`.
@@ -147,9 +149,10 @@ List<String> strippedVars(Map<String, Object?> vars) {
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
 ///   generated;
-/// - that every post-generation step, and each of its follow-ups, can run
-///   in this run, [interactive] and with [skipExternalSetup] as given, or
-///   may be skipped.
+/// - that every post-generation step that applies can run in this run,
+///   [interactive] and with [skipExternalSetup] as given, or may be
+///   skipped; a step that continues a step which does not apply does not
+///   apply either (see [PostGenStep.followUpOf]).
 ValidationResult validate({
   required ModuleRegistry registry,
   required Resolution resolution,
@@ -173,7 +176,8 @@ ValidationResult validate({
   issues
     ..addAll(_ownerIssues(collection))
     ..addAll(_preflightIssues(collection))
-    ..addAll(_needsIssues(collection));
+    ..addAll(_needsIssues(collection))
+    ..addAll(_stepIdIssues(collection, resolution));
   for (final module in resolution.modules) {
     issues.addAll(_kindIssues(module, collection));
   }
@@ -202,24 +206,34 @@ ValidationResult validate({
     ..addAll(_requiredValueIssues(resolution, collection));
 
   final bySocket = <SocketRef, List<Collected>>{};
-  final postGen = <Collected>[];
+  final steps = <Collected>[];
   for (final collected in collection.applying) {
     switch (collected.contribution) {
       case final SocketContribution socket:
         bySocket.putIfAbsent(socket.socket, () => []).add(collected);
-      case final PostGenStep step:
-        postGen.add(collected);
-        issues.addAll(
-          _runIssues(
-            step,
-            collected.origin,
-            interactive: interactive,
-            skipExternalSetup: skipExternalSetup,
-          ),
-        );
+      case PostGenStep():
+        steps.add(collected);
       default:
         break;
     }
+  }
+  // A step that continues a step which does not apply does not apply.
+  final bound = {
+    for (final step in bindSteps(steps)) ...step.all,
+  };
+  final postGen = [
+    for (final collected in steps)
+      if (bound.contains(collected)) collected,
+  ];
+  for (final collected in postGen) {
+    issues.addAll(
+      _runIssues(
+        collected.contribution as PostGenStep,
+        collected.origin,
+        interactive: interactive,
+        skipExternalSetup: skipExternalSetup,
+      ),
+    );
   }
 
   issues.addAll(
@@ -288,30 +302,30 @@ List<SmfIssue> _appPubspecIssues(
   return issues;
 }
 
-/// The parts of [step] of [origin], the step and its follow-ups, that
-/// cannot run in a run that is not [interactive] or that has
-/// [skipExternalSetup], and without which the app is not complete.
+/// The problem of [step] of [origin] if it cannot run in a run that is not
+/// [interactive] or that has [skipExternalSetup], and the app is not
+/// complete without it.
 Iterable<SmfIssue> _runIssues(
   PostGenStep step,
   ContributionOrigin origin, {
   required bool interactive,
   required bool skipExternalSetup,
 }) sync* {
-  for (final part in withFollowUps(step)) {
-    final needsTerminal = part.interactive && !interactive;
-    final needsSetup = part.external && skipExternalSetup;
-    if ((needsTerminal || needsSetup) && !part.skippable) {
-      final why =
-          needsTerminal ? 'without a terminal' : 'with --skip-external-setup';
-      yield SmfIssue(
-        'The step ${part.description ?? part.tool.executable} of '
-        '$origin cannot run $why, and the app is not '
-        'complete without it.',
-        origin: origin,
-      );
-    }
+  final needsTerminal = step.interactive && !interactive;
+  final needsSetup = step.external && skipExternalSetup;
+  if ((needsTerminal || needsSetup) && !step.skippable) {
+    final why =
+        needsTerminal ? 'without a terminal' : 'with --skip-external-setup';
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin cannot run $why, and the app '
+      'is not complete without it.',
+      origin: origin,
+    );
   }
 }
+
+/// How messages name [step]: by its description, or by its tool.
+String _stepName(PostGenStep step) => step.description ?? step.tool.executable;
 
 /// The problems of rendering the contributions of [order] to [socket] when
 /// every one is valid, so that a merge conflict names its contributors
@@ -351,8 +365,8 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
 
 /// The problems of [collected] with the rules of the pipeline: the roles in
 /// its [Contribution.when], who may use which role and socket, for a brick,
-/// its hooks, variables and files, and for a post-generation step, that its
-/// follow-ups have no conditions of their own.
+/// its hooks, variables and files, and for a post-generation step, its id
+/// and the step it continues; see [_stepIssues].
 ///
 /// Stage 8 checks the fragments of the render hooks with it too.
 Iterable<SmfIssue> contributionIssues(
@@ -394,7 +408,7 @@ Iterable<SmfIssue> contributionIssues(
         }
       }
     case final PostGenStep step:
-      yield* _followUpIssues(step, origin);
+      yield* _stepIssues(step, origin, resolution);
     case Preflight() || PubspecContribution():
       break;
   }
@@ -512,22 +526,64 @@ Iterable<SmfIssue> _brickFileIssues(
   }
 }
 
-/// The follow-ups of [step] of [origin] that have conditions of their own.
-Iterable<SmfIssue> _followUpIssues(
+/// The problems of the id of [step] of [origin] and of the step that it
+/// continues (see [PostGenStep.followUpOf]): its id must be one of the
+/// module of [origin], which may continue only its own steps and those of
+/// the modules that it depends on directly, as [resolution] tells; a step
+/// that continues another has no conditions of its own.
+Iterable<SmfIssue> _stepIssues(
   PostGenStep step,
   ContributionOrigin origin,
+  Resolution resolution,
 ) sync* {
-  for (final followUp in withFollowUps(step).skip(1)) {
-    if (followUp.when.isNotEmpty) {
-      yield SmfIssue(
-        'The step ${followUp.description ?? followUp.tool.executable} '
-        'of $origin follows another step, but has conditions of its own.',
-        hint: 'A follow-up applies when the step it follows does, so put '
-            'the conditions on that step.',
-        origin: origin,
-      );
-    }
+  final id = step.id;
+  if (id != null && id.module != _moduleOf(origin)) {
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin has the id $id, but only '
+      '${id.module} gives its steps the ids of ${id.module}.',
+      hint: 'Give the step an id of its own module.',
+      origin: origin,
+    );
   }
+  final followed = step.followUpOf;
+  if (followed == null) return;
+  if (!_mayContinue(origin, followed, resolution)) {
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin continues the step $followed, '
+      'but only ${followed.module} and the modules that depend on it '
+      'directly may.',
+      origin: origin,
+    );
+  }
+  if (step.when.isNotEmpty) {
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin continues another step, but '
+      'has conditions of its own.',
+      hint: 'A step that continues another applies whenever that step does.',
+      origin: origin,
+    );
+  }
+}
+
+/// The module of [origin], or `null` if a module did not contribute.
+ModuleId? _moduleOf(ContributionOrigin origin) => switch (origin) {
+      ModuleOrigin(:final module) => module,
+      _ => null,
+    };
+
+/// Whether a step of [origin] may continue the step [followed]: a step of
+/// the module of [origin], or of a module that it depends on directly, as
+/// [resolution] tells.
+bool _mayContinue(
+  ContributionOrigin origin,
+  PostGenStepId followed,
+  Resolution resolution,
+) {
+  final module = _moduleOf(origin);
+  if (module == null) return false;
+  return followed.module == module ||
+      (resolution.module(module)?.descriptor.dependsOn ?? const {})
+          .contains(followed.module);
 }
 
 Iterable<SmfIssue> _socketIssues(
@@ -645,19 +701,92 @@ Iterable<SmfIssue> _preflightIssues(Collection collection) sync* {
   }
 }
 
-/// [step] and its follow-ups (see [PostGenStep.followUps]), each before its
-/// own, in the order they run.
-Iterable<PostGenStep> withFollowUps(PostGenStep step) sync* {
-  yield step;
-  for (final next in step.followUps) {
-    yield* withFollowUps(next);
+/// The problems of the ids of the post-generation steps of [collection],
+/// whether they apply or not (see [PostGenStep.followUpOf]): two steps with
+/// one id, a step that continues a step which the app does not have, and
+/// steps that continue each other in a cycle, which would never run.
+///
+/// [_stepIssues] reports a step that continues a step which its module may
+/// not continue, as [resolution] tells, rather than this.
+Iterable<SmfIssue> _stepIdIssues(
+  Collection collection,
+  Resolution resolution,
+) sync* {
+  final steps = [
+    for (final collected in collection.all)
+      if (collected.contribution is PostGenStep) collected,
+  ];
+  final byId = <PostGenStepId, Collected>{};
+  for (final collected in steps) {
+    final id = (collected.contribution as PostGenStep).id;
+    if (id == null) continue;
+    final existing = byId.putIfAbsent(id, () => collected);
+    if (identical(existing, collected)) continue;
+    final who = existing.origin == collected.origin
+        ? 'Two steps of ${collected.origin} have'
+        : 'Both ${existing.origin} and ${collected.origin} have a step with';
+    yield SmfIssue(
+      '$who the id $id; a step continues the one step with its id.',
+      origin: collected.origin,
+    );
+  }
+  // The steps of the cycles reported so far.
+  final inCycles = <Collected>{};
+  for (final collected in steps) {
+    final step = collected.contribution as PostGenStep;
+    final followed = step.followUpOf;
+    if (followed == null ||
+        !_mayContinue(collected.origin, followed, resolution)) {
+      continue;
+    }
+    if (!byId.containsKey(followed)) {
+      yield SmfIssue(
+        'The step ${_stepName(step)} of ${collected.origin} continues the '
+        'step $followed, but ${followed.module} has no step with that id.',
+        origin: collected.origin,
+      );
+      continue;
+    }
+    final cycle = _cycleFrom(collected, byId);
+    if (cycle.isEmpty || cycle.any(inCycles.contains)) continue;
+    inCycles.addAll(cycle);
+    final ids = [
+      for (final member in cycle) '${(member.contribution as PostGenStep).id}',
+    ];
+    yield SmfIssue(
+      ids.length == 1
+          ? 'The step ${ids.single} of ${collected.origin} continues itself, '
+              'so it would never run.'
+          : 'The steps ${_and(ids)} of ${collected.origin} continue '
+              'each other in a cycle, so none of them would run.',
+      origin: collected.origin,
+    );
   }
 }
 
-/// Post-generation steps, follow-ups included, that need a preflight check
-/// that their contributor does not have; see [PostGenStep.needs]. A check
-/// of a [Preflight] that does not apply to the app is still one of the
-/// contributor.
+/// The steps of the cycle that [start] is on when each step continues the
+/// step of [byId] with the id that it follows, starting with [start], or
+/// none if the steps that [start] continues, directly or not, end in a
+/// step that continues none, or one that the app does not have.
+List<Collected> _cycleFrom(
+  Collected start,
+  Map<PostGenStepId, Collected> byId,
+) {
+  final path = <Collected>[];
+  Collected? current = start;
+  while (current != null) {
+    final index = path.indexOf(current);
+    if (index != -1) return index == 0 ? path : const [];
+    path.add(current);
+    final followed = (current.contribution as PostGenStep).followUpOf;
+    current = followed == null ? null : byId[followed];
+  }
+  return const [];
+}
+
+/// Post-generation steps that need a preflight check that their contributor
+/// does not have; see [PostGenStep.needs]. A check of a [Preflight] that
+/// does not apply to the app is still one of the contributor.
 Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
   final checks = <String, Set<String>>{};
   for (final collected in collection.all) {
@@ -679,26 +808,22 @@ Iterable<SmfIssue> _needsIssues(Collection collection) sync* {
   }
 }
 
-/// The checks that [step] of [origin], or one of its follow-ups, needs but
-/// that are not among [own], the ids of the checks of its contributor.
+/// The checks that [step] of [origin] needs but that are not among [own],
+/// the ids of the checks of its contributor.
 Iterable<SmfIssue> _unknownNeedIssues(
   PostGenStep step,
   ContributionOrigin origin,
   Set<String> own,
 ) sync* {
   final contributor = contributorName(origin);
-  for (final part in withFollowUps(step)) {
-    for (final id in part.needs) {
-      if (own.contains(id)) continue;
-      yield SmfIssue(
-        'The step ${part.description ?? part.tool.executable} of '
-        '$origin needs the preflight check "$id", which '
-        '$contributor does not have.',
-        hint: 'A step needs only checks of the Preflight of its own '
-            'module.',
-        origin: origin,
-      );
-    }
+  for (final id in step.needs) {
+    if (own.contains(id)) continue;
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin needs the preflight check '
+      '"$id", which $contributor does not have.',
+      hint: 'A step needs only checks of the Preflight of its own module.',
+      origin: origin,
+    );
   }
 }
 
@@ -1050,12 +1175,13 @@ bool _allowsAny(String constraint) {
 }
 
 /// The roles that [descriptor] provides, as `the a role and the b role`.
-String _rolesText(ModuleDescriptor descriptor) {
-  final names = [for (final role in descriptor.provides) 'the $role'];
-  return names.length == 1
-      ? names.single
-      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
-}
+String _rolesText(ModuleDescriptor descriptor) =>
+    _and([for (final role in descriptor.provides) 'the $role']);
+
+/// [names] as a message lists them: `a`, `a and b`, `a, b and c`.
+String _and(List<String> names) => names.length == 1
+    ? names.single
+    : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 
 /// Runs the `validate` hooks of the present roles' templates and providers
 /// and the module rules of the roles.

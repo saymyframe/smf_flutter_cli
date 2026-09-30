@@ -203,9 +203,6 @@ final class _ManyRole extends Role<Object> {
 
 const _many = _ManyRole();
 
-/// A step that needs nothing outside the app.
-const _build = PostGenStep(ToolRef('tool'), ['build']);
-
 /// A step that needs an external service.
 const _configure = PostGenStep(
   ToolRef('tool'),
@@ -354,15 +351,31 @@ void main() {
 
   test(
       'the apps with every module without external steps leave out the '
-      'modules whose steps or their follow-ups need an external service, '
-      'those that depend on them, and those that are then left without a '
-      'provider of a role they require', () async {
-    const local = _WithSteps(ModuleId('local'), steps: [_build]);
+      'modules whose steps need an external service, those among them that '
+      'continue a step of another module included, those that depend on '
+      'them, and those that are then left without a provider of a role they '
+      'require', () async {
+    const build = PostGenStepId(ModuleId('local'), 'build');
+    const local = _WithSteps(
+      ModuleId('local'),
+      steps: [
+        PostGenStep(ToolRef('tool'), ['build'], id: build),
+      ],
+    );
     const external = _WithSteps(ModuleId('external'), steps: [_configure]);
+    // It continues the step of local, which needs nothing outside the app,
+    // with a step that does, so the app keeps local without it.
     const followUp = _WithSteps(
       ModuleId('follow_up'),
+      dependsOn: {ModuleId('local')},
       steps: [
-        PostGenStep(ToolRef('tool'), ['check'], followUps: [_configure]),
+        PostGenStep(
+          ToolRef('tool'),
+          ['configure'],
+          followUpOf: build,
+          external: true,
+          skippable: true,
+        ),
       ],
     );
     const dependent = _WithSteps(
