@@ -107,11 +107,50 @@ bool _hearsScreens(MatrixApp app) =>
 /// providers (`severalProvidersModules`): those that the modules of the CLI
 /// keep for the apps they are in (`smfAppTests`), which must pass next to
 /// the fixture providers of their roles and whatever else the start-up of
-/// the app does, with the mocks of the platform side of those fixtures.
-Future<MatrixAppTests> severalProvidersAppTests() async => MatrixAppTests([
+/// the app does, with the mocks of the platform side of those fixtures; and
+/// the tests of the roles that an app can have several providers of, the
+/// analytics role and the crash reporting role, whose contract they check
+/// with every provider.
+///
+/// A test of such a role checks that each call of the service of the role
+/// reaches every provider once, whatever the other providers do with it. So
+/// it runs only in the app with every module of the registry, whichever
+/// modules provide the role there, and looks only at the fixture providers
+/// of the role: the service log of the fixtures, which notes each call and
+/// which that app has (`test/fixture_registry_test.dart` makes sure), and
+/// the platform side of the other fixture providers.
+Future<MatrixAppTests> severalProvidersAppTests() async {
+  final appTests = await appTestsDirectoryOf('fixture_registry');
+  return MatrixAppTests(
+    [
       ...(await smfAppTests()).tests,
       ...await _fixtureMocks(),
-    ]);
+      // Each call of the analytics service of the app reaches every
+      // analytics service once, and a service that fails keeps no other
+      // from it.
+      MatrixAppTest(
+        '$appTests/analytics_role',
+        appliesTo: (app) => _withEveryModule(app, analyticsRole),
+        roles: {analyticsRole},
+      ),
+      // Each call of the crash reporter of the app, and each error that
+      // nothing catches, reaches every crash reporter once, and a crash
+      // reporter that fails keeps no other from it and is not reported to
+      // again.
+      MatrixAppTest(
+        '$appTests/crash_reporting_role',
+        appliesTo: (app) => _withEveryModule(app, crashReportingRole),
+        roles: {crashReportingRole},
+      ),
+    ],
+    testedRoles: {analyticsRole, crashReportingRole},
+  );
+}
+
+/// Whether [app] is an app with every module of its registry, as the app
+/// of several providers is, and has [role], whichever modules provide it.
+bool _withEveryModule(MatrixApp app, Role role) =>
+    app.everyModuleWith != null && app.hook!.presentRoles.contains(role);
 
 /// The mocks of the platform side of the fixture providers of crash
 /// reporting and analytics, which their start-up and services reach, in the

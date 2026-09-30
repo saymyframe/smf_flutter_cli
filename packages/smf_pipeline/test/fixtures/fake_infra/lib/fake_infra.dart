@@ -9,6 +9,7 @@ import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -346,6 +347,55 @@ final class FakeCrashModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureCrashReporter', import: _file),
             init: FactoryRef('initFixtureCrashReporter', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the analytics role and of the crash reporting role whose
+/// services, created synchronously, note each call in lists that the tests
+/// of those roles read, and fail when a test says so: they throw as they
+/// are called, or return a future that fails.
+///
+/// The tests of a role that an app can have several providers of look at
+/// what reaches it, next to the other providers of the role, whose own
+/// tests check what they do with a call.
+final class FakeServiceLogModule extends SmfModule {
+  /// Creates the module.
+  const FakeServiceLogModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_service_log');
+
+  static const _file = ImportRef.app(
+    'core/fixture_service_log/fixture_service_log.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Analytics and crash reporting that note every call '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [
+          RoleProvider.plain(analyticsRole),
+          RoleProvider.plain(crashReportingRole),
+        ],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeServiceLogBundle),
+        analyticsRole.data(
+          const RoleImplementation(
+            type: TypeRef('ServiceLogAnalytics', import: _file),
+            create: FactoryRef('createServiceLogAnalytics', import: _file),
+          ),
+        ),
+        crashReportingRole.data(
+          const RoleImplementation(
+            type: TypeRef('ServiceLogCrashReporter', import: _file),
+            create: FactoryRef('createServiceLogCrashReporter', import: _file),
           ),
         ),
       ];

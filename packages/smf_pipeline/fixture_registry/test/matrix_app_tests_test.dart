@@ -70,40 +70,73 @@ void main() {
     }
   });
 
-  test(
-      'the app of several providers gets the app tests of the modules of the '
-      'CLI and the mocks of the fixture providers, which all apply to it',
-      () async {
-    final severalProviders = await severalProvidersAppTests();
-    final (apps: matrix, :failed) = await matrixOf(severalProvidersModules());
-    expect(failed, isEmpty);
-    final everyModule = [
-      for (final app in matrix)
-        if (app.everyModuleWith != null) app,
-    ];
-    expect(everyModule, hasLength(1));
+  group('the app of several providers', () {
+    late MatrixAppTests severalProviders;
+    late List<MatrixApp> matrix;
+    late MatrixApp everyModule;
 
-    expect(
-      [for (final test in severalProviders.tests) nameOf(test)],
-      containsAll([
-        'firebase_core',
-        'firebase_crashlytics',
-        'firebase_analytics',
-        'screen_views',
-        'fake_crash',
-        'fake_analytics',
-      ]),
-    );
-    for (final test in severalProviders.tests) {
+    setUpAll(() async {
+      severalProviders = await severalProvidersAppTests();
+      final (apps: all, :failed) = await matrixOf(severalProvidersModules());
+      expect(failed, isEmpty);
+      matrix = all;
+      everyModule = matrix.singleWhere((app) => app.everyModuleWith != null);
+    });
+
+    /// The app test of the app of several providers whose files are in the
+    /// directory [name].
+    MatrixAppTest ofSeveral(String name) =>
+        severalProviders.tests.singleWhere((test) => nameOf(test) == name);
+
+    test(
+        'gets the app tests of the modules of the CLI, the mocks of the '
+        'fixture providers and the tests of the roles, which all apply to it',
+        () {
       expect(
-        test.appliesTo(everyModule.single),
-        isTrue,
-        reason: test.directory,
+        [for (final test in severalProviders.tests) nameOf(test)],
+        containsAll([
+          'firebase_core',
+          'firebase_crashlytics',
+          'firebase_analytics',
+          'screen_views',
+          'fake_crash',
+          'fake_analytics',
+          'analytics_role',
+          'crash_reporting_role',
+        ]),
       );
-    }
-    expect(
-      severalProviders.roleProblems(severalProvidersModules(), matrix),
-      isEmpty,
-    );
+      for (final test in severalProviders.tests) {
+        expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
+      }
+    });
+
+    test(
+        'checks the contract of the analytics role and of the crash reporting '
+        'role with every provider of each, which it tells apart by the roles '
+        'of the app only, in the app with every module only', () {
+      expect(severalProviders.testedRoles, {analyticsRole, crashReportingRole});
+      for (final (name, role) in [
+        ('analytics_role', analyticsRole),
+        ('crash_reporting_role', crashReportingRole),
+      ]) {
+        final test = ofSeveral(name);
+        expect(test.roles, {role}, reason: name);
+        // The tests look at the service log of the fixtures, which only the
+        // app with every module of the registry is sure to have.
+        expect(
+          [
+            for (final app in matrix)
+              if (test.appliesTo(app)) app,
+          ],
+          [everyModule],
+          reason: name,
+        );
+      }
+
+      expect(
+        severalProviders.roleProblems(severalProvidersModules(), matrix),
+        isEmpty,
+      );
+    });
   });
 }
