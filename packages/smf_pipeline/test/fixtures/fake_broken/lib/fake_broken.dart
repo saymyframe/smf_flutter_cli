@@ -13,6 +13,7 @@ library;
 import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
+import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:mason/mason.dart';
@@ -277,4 +278,92 @@ final class BrokenLayoutModule extends SmfModule {
 /// Provides the layout role, with any number of destinations.
 final class _BrokenLayoutProvider extends LayoutProvider {
   const _BrokenLayoutProvider();
+}
+
+/// A DI container with one known bug: the fake DI container of the
+/// fixtures, which renders the registration of every service, but that of
+/// one service in a condition that is false when the app runs, so the
+/// service does not resolve. It is the last service in the order of the
+/// registrations ([DiGraph.ordered]) that has no function to dispose of it,
+/// so resetting the container disposes of the same services as before.
+///
+/// The file of the container still calls the factory of every
+/// registration, as the rule `di.registrations_rendered` of the role wants,
+/// and the app analyzes: only a running app shows the bug.
+final class BrokenDiModule extends SmfModule {
+  /// Creates the module.
+  const BrokenDiModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_di_leaves_out_a_service');
+
+  /// The fake DI container, whose bricks this module contributes.
+  static const _fixture = FakeDiModule();
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'DI with a map of factories that leaves out a service '
+            '(fixture)',
+        kind: _fixture.descriptor.kind,
+        providers: [_BrokenDiProvider(FakeDiProvider(_fixture.capabilities))],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      _fixture.contribute(context);
+}
+
+/// Renders the registrations as [_fixture] does, but that of the last
+/// service without a function to dispose of it in a condition that is
+/// false when the app runs.
+final class _BrokenDiProvider extends DiProvider {
+  const _BrokenDiProvider(this._fixture);
+
+  /// The provider of the fake DI container.
+  final FakeDiProvider _fixture;
+
+  /// The condition, false when the app runs, of the registration that the
+  /// container leaves out, which the analyzer cannot tell.
+  static const _never = 'DateTime.now().year < 2000';
+
+  @override
+  Set<DiCapability> get capabilities => _fixture.capabilities;
+
+  /// The output of [_fixture], with the registration that the container
+  /// leaves out in [_never]. [_fixture] renders the registrations as a line
+  /// that takes the service locator and then a line for each registration,
+  /// in their order. The output stays as it is when every service has a
+  /// function to dispose of it. Throws a [StateError] when [_fixture]
+  /// renders the registrations otherwise, so the app would not have the
+  /// bug.
+  @override
+  RoleOutput render(RoleHookInput<DiRegistration> input) {
+    final output = _fixture.render(input);
+    final ordered = diRole.graphOf(input).ordered;
+    final index = ordered.lastIndexWhere(
+      (registration) => registration.dispose == null,
+    );
+    if (index < 0) return output;
+    final registrations = output.vars['registrations']! as Fragment;
+    final lines = registrations.code.split('\n');
+    if (lines.length != ordered.length + 1) {
+      throw StateError(
+        'fake_di renders ${lines.length} lines for ${ordered.length} '
+        'registrations rather than one more, so the app of '
+        '${BrokenDiModule.id} would not have its bug.',
+      );
+    }
+    lines[index + 1] = '  if ($_never) {\n  ${lines[index + 1]}\n  }';
+    return RoleOutput(
+      fragments: output.fragments,
+      vars: {
+        ...output.vars,
+        'registrations': Fragment(
+          lines.join('\n'),
+          imports: registrations.imports,
+        ),
+      },
+    );
+  }
 }

@@ -10,7 +10,8 @@ resolution: workspace
 
 dependencies:
   # The fixtures whose code the broken modules render with their bugs: the
-  # fake events and the fake router.
+  # fake DI container, the fake events and the fake router.
+  fake_di: any
   fake_infra: any
   fake_router: any
   mason: ^0.1.1

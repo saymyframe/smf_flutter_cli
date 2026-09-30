@@ -267,6 +267,23 @@ List<BrokenProvider> brokenProviders() => const [
           ),
         ],
       ),
+      BrokenProvider(
+        BrokenDiModule(),
+        role: diRole,
+        bug: 'It registers every service but one, the last in the order of '
+            'the registrations without a function to dispose of it, which it '
+            'registers only in a condition that is false when the app runs.',
+        app: [FakeRegistrationsModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/di_role/di_role_test.dart',
+            'the services resolve once the app started, none once the '
+                'container is reset, and all once they are registered again',
+            'FixtureReplica does not resolve: Bad state: FixtureReplica is '
+                'not registered.',
+          ),
+        ],
+      ),
     ];
 
 /// The app tests that the apps of the broken providers get: those of the
@@ -294,5 +311,4 @@ Future<List<MatrixAppTest>> brokenProviderAppTests() async {
 const Map<Role, String> brokenProviderExemptions = {
   analyticsRole: 'Its broken provider comes in a following change.',
   crashReportingRole: 'Its broken provider comes in a following change.',
-  diRole: 'Its broken provider comes in a following change.',
 };
