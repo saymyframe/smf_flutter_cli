@@ -13,7 +13,8 @@ environment:
 resolution: workspace
 
 dependencies:
-  analyzer: ">=7.5.9 <9.0.0"
+  # 13.0 is the oldest analyzer with the AST that the contributions read.
+  analyzer: ">=13.0.0 <15.0.0"
   dart_style: ^3.1.0
   mason_logger: ^0.3.3
   mustachex: ^1.0.0

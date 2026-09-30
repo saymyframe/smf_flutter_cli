@@ -31,8 +31,8 @@ List<String> methodStatements(
   final classDeclaration = parseValid(source)
       .declarations
       .whereType<ClassDeclaration>()
-      .singleWhere((c) => c.name.lexeme == className);
-  final methodDeclaration = classDeclaration.members
+      .singleWhere((c) => c.namePart.typeName.lexeme == className);
+  final methodDeclaration = classDeclaration.body.members
       .whereType<MethodDeclaration>()
       .singleWhere((m) => m.name.lexeme == method);
   return _statements(methodDeclaration.body);
@@ -58,11 +58,11 @@ class _NamedListCollector extends RecursiveAstVisitor<void> {
   final List<List<String>> lists;
 
   @override
-  void visitNamedExpression(NamedExpression node) {
-    final expression = node.expression;
-    if (node.name.label.name == name && expression is ListLiteral) {
+  void visitNamedArgument(NamedArgument node) {
+    final expression = node.argumentExpression;
+    if (node.name.lexeme == name && expression is ListLiteral) {
       lists.add(expression.elements.map((e) => e.toSource()).toList());
     }
-    super.visitNamedExpression(node);
+    super.visitNamedArgument(node);
   }
 }
