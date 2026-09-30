@@ -9,7 +9,9 @@ environment:
 resolution: workspace
 
 dependencies:
-  # The fake router, whose code the broken routers render with their bugs.
+  # The fixtures whose code the broken modules render with their bugs: the
+  # fake events and the fake router.
+  fake_infra: any
   fake_router: any
   mason: ^0.1.1
   smf_contracts: ^0.3.0

@@ -134,28 +134,54 @@ void main() {
   });
 
   test(
-      'the registry of the app of a broken provider has the fixture modules, '
-      'with the broken provider in place of the other providers of its role',
-      () {
+      'the registry of a broken provider has the fixture modules, with the '
+      'broken provider in place of the other providers of its role, and its '
+      'app the app entry, the broken provider and the modules it names', () {
     for (final provider in providers) {
-      final ids = {for (final module in provider.modules) module.descriptor.id};
+      final id = provider.module.descriptor.id;
+      final ids = {
+        for (final module in provider.registry) module.descriptor.id,
+      };
 
-      expect(ModuleRegistry.problemsOf(provider.modules), isEmpty);
+      expect(ModuleRegistry.problemsOf(provider.registry), isEmpty);
       expect(
         [
-          for (final module in provider.modules)
+          for (final module in provider.registry)
             if (module.descriptor.provides.contains(provider.role))
               module.descriptor.id,
         ],
-        [provider.module.descriptor.id],
+        [id],
       );
       for (final module in fixtureModules()) {
         if (module.descriptor.provides.contains(provider.role)) continue;
         expect(ids, contains(module.descriptor.id));
       }
+      final modules = [
+        for (final module in provider.modules) module.descriptor.id,
+      ];
+      expect(ModuleRegistry.problemsOf(provider.modules), isEmpty);
+      expect(modules.take(2 + provider.app.length), [
+        const ModuleId('flutter_core'),
+        id,
+        ...provider.app,
+      ]);
+      // The other modules of the registry are the providers that the
+      // modules of the app have variants for.
+      for (final other in modules.skip(2 + provider.app.length)) {
+        expect(
+          provider.modules.any(
+            (module) =>
+                module.descriptor.variants?.byProvider.containsKey(other) ??
+                false,
+          ),
+          isTrue,
+          reason: '$other',
+        );
+      }
       final app = provider.failingApp;
-      expect(app.name, '${provider.module.descriptor.id}');
-      expect(app.requested, [provider.module.descriptor.id, ...provider.app]);
+      expect(app.name, '$id');
+      expect(app.modules, provider.modules);
+      expect(app.providers, provider.app);
       expect(app.failures, provider.failures);
     }
   });
@@ -167,7 +193,7 @@ void main() {
       test(
           'the module keeps the rules of its role that the contract harness '
           'checks, so that only a running app shows its bug', () async {
-        final harness = ContractHarness(ModuleRegistry(provider.modules));
+        final harness = ContractHarness(ModuleRegistry(provider.registry));
         final cases = harness.casesOfModule(id);
 
         expect(cases, isNotEmpty);
@@ -181,19 +207,21 @@ void main() {
         }
       });
 
-      test('its app has no errors, and the contract harness renders it',
-          () async {
-        final (:result, :app) = await provider.failingApp.check();
+      test(
+          'its app is an app with every module of its registry, which the '
+          'contract harness renders without errors', () async {
+        final (:app, :problems) = await provider.failingApp.check();
 
-        expect(result.errors.map((issue) => '$issue'), isEmpty);
-        expect(result.app, isNotNull);
+        expect(problems, isEmpty);
         expect(app!.modules, containsAll([id, ...provider.app]));
+        expect(app.everyModuleWith, isNotNull);
+        expect(app.hook, isNotNull);
       });
 
       test(
           'the tests that must fail are among the tests of its app, as they '
           'are named, with their reasons', () async {
-        final (result: _, :app) = await provider.failingApp.check();
+        final (:app, problems: _) = await provider.failingApp.check();
         final tests = [
           for (final test in (await fixtureAppTests()).tests)
             if (test.appliesTo(app!)) test,

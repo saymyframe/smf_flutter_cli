@@ -45,8 +45,9 @@ final class BrokenProvider {
   /// What the bug is.
   final String bug;
 
-  /// The other modules of the app, in order: the fixture modules that the
-  /// tests of [failures] need, and no more, so that the app is small.
+  /// The other modules of the app but its app entry, in order: the fixture
+  /// modules that the tests of [failures] need, and no more, so that the
+  /// app is small.
   final List<ModuleId> app;
 
   /// The tests of the role that must fail on the bug in the app, each with
@@ -54,19 +55,45 @@ final class BrokenProvider {
   /// pass.
   final List<MatrixExpectedFailure> failures;
 
-  /// The registry of the app: the fixture modules, with [module] in place
-  /// of the other providers of [role].
-  List<SmfModule> get modules => [
+  /// The fixture modules, with [module] in place of the other providers of
+  /// [role]: the registry in which the contract harness checks [module]
+  /// with every provider of each role that it requires or uses.
+  List<SmfModule> get registry => [
         for (final other in fixtureModules())
           if (!other.descriptor.provides.contains(role)) other,
         module,
       ];
 
-  /// The app, named after [module], whose tests of [failures] must fail.
+  /// The registry of the app: its app entry, [module] and the fixture
+  /// modules of [app], and then the other fixture providers that these have
+  /// variants for, which a registry must have.
+  List<SmfModule> get modules {
+    final fixtures = {
+      for (final other in fixtureModules()) other.descriptor.id: other,
+    };
+    final ofApp = [
+      for (final other in fixtureModules())
+        if (other.descriptor.provides.contains(appEntryRole)) other,
+      module,
+      for (final id in app) fixtures[id]!,
+    ];
+    final ids = {for (final other in ofApp) other.descriptor.id};
+    return [
+      ...ofApp,
+      for (final id in {
+        for (final other in ofApp)
+          ...?other.descriptor.variants?.byProvider.keys,
+      })
+        if (!ids.contains(id)) fixtures[id]!,
+    ];
+  }
+
+  /// The app, named after [module]: of the apps with every module of
+  /// [modules], the one with the modules of [app].
   MatrixFailingApp get failingApp => MatrixFailingApp(
         '${module.descriptor.id}',
         modules: modules,
-        requested: [module.descriptor.id, ...app],
+        providers: app,
         failures: failures,
       );
 }
@@ -75,7 +102,7 @@ final class BrokenProvider {
 /// providers that break it, each with one bug.
 List<BrokenProvider> brokenProviders() => const [
       BrokenProvider(
-        BrokenRouterModule.repeatsScreens,
+        BrokenModule.routerRepeatingScreens,
         role: routerRole,
         bug: 'It tells the listeners of the screen of the page on top each '
             'time it builds its navigator, though the page on top did not '
@@ -95,7 +122,7 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenRouterModule.stopsAtThrowingListener,
+        BrokenModule.routerStoppingAtThrowingListener,
         role: routerRole,
         bug: 'It calls the listeners of the screen one after another, so a '
             'listener that throws keeps the ones after it from hearing the '
@@ -118,7 +145,7 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenRouterModule.pushesOverMainNavigation,
+        BrokenModule.routerPushingOverMainNavigation,
         role: routerRole,
         bug: 'It pushes a location in the main navigation over a page shown '
             'over the main navigation, rather than refusing it with a '
@@ -143,7 +170,7 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenRouterModule.createsConfigAgain,
+        BrokenModule.routerCreatingConfigAgain,
         role: routerRole,
         bug: 'It creates a new configuration each time appRouter.config is '
             'read.',
@@ -180,6 +207,21 @@ List<BrokenProvider> brokenProviders() => const [
             'test/layout_screens_test.dart',
             'each switch to another destination is heard of once',
             'The AppShell has the destination of each feature.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.eventsOfEveryType,
+        role: eventsRole,
+        bug: 'Its on<T>() gives a listener the events of every type, cast to '
+            'its type, rather than only the events of its type.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/events_role_test.dart',
+            'a listener of another type gets none of the events, and no error',
+            'An event of another type does not reach the listener, not even '
+                'as an error.',
           ),
         ],
       ),
