@@ -274,10 +274,7 @@ final class FakeAnalyticsModule extends SmfModule {
         ),
         const SocketContribution.item(
           RouterRole.screenListeners,
-          Fragment(
-            '(route, location) => fixtureScreens.add((route, location))',
-            imports: [_file],
-          ),
+          Fragment('noteFixtureScreen', imports: [_file]),
           when: {routerRole},
         ),
       ];
@@ -312,10 +309,7 @@ final class FakeScreenLogModule extends SmfModule {
         BrickContribution(fakeScreenLogBundle),
         const SocketContribution.item(
           RouterRole.screenListeners,
-          Fragment(
-            '(route, location) => fixtureScreenLog.add((route, location))',
-            imports: [_file],
-          ),
+          Fragment('noteFixtureScreenLog', imports: [_file]),
         ),
       ];
 }

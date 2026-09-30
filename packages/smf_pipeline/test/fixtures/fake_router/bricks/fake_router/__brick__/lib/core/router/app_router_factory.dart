@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
@@ -155,13 +156,21 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// Tells the listeners of the screen about the page on top when it is
   /// another than they last heard of: a location of the root navigator or
   /// of the selected branch, or the fallback screen at `/`.
+  ///
+  /// It calls each listener on its own: what one throws keeps no other
+  /// from hearing the screen, and reaches neither the router nor the
+  /// handlers of the errors of the app. In debug mode it is printed.
   void _showScreen() {
     final top = _top;
     if (top == _shown) return;
     _shown = top;
     final (_, location) = top;
     for (final listener in _screenListeners) {
-      listener(location?.routeName, location?.path ?? '/');
+      try {
+        listener(location?.routeName, location?.path ?? '/');
+      } on Object catch (error) {
+        if (kDebugMode) debugPrint('A listener of the screen failed: $error');
+      }
     }
   }
 

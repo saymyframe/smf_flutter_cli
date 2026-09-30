@@ -54,6 +54,7 @@ void main() {
       containsAll([routerRole, layoutRole, diRole, eventsRole]),
     );
     expect(named('router_screens').roles, {routerRole});
+    expect(named('router_listeners').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
     expect(named('di_role').roles, {diRole});
@@ -144,6 +145,7 @@ void main() {
     final routerScreens = appsOf(named('router_screens'));
 
     for (final name in [
+      'router_listeners',
       'layout_screens',
       'go_router_screens',
       'bottom_tabs_screens',

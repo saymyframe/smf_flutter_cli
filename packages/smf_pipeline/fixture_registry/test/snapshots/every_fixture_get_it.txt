@@ -863,6 +863,21 @@ final List<FixtureObserver> fixtureObservers = [];
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
 
+/// Whether the screen listener of the fixture throws once it noted a
+/// screen, as a test that a listener of the screen that throws keeps no
+/// other from hearing it sets it.
+bool fixtureScreensThrow = false;
+
+/// The screen listener of the fixture: notes the screen of [route] at
+/// [location] in [fixtureScreens], and then throws if
+/// [fixtureScreensThrow].
+void noteFixtureScreen(String? route, String location) {
+  fixtureScreens.add((route, location));
+  if (fixtureScreensThrow) {
+    throw StateError('The screen listener of the fixture analytics throws.');
+  }
+}
+
 /// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
   /// Creates the service.
@@ -1011,6 +1026,21 @@ void _openNews() {}
 /// log heard of them: the full name of the route of each, or `null`, and
 /// its location.
 final List<(String?, String)> fixtureScreenLog = [];
+
+/// Whether the screen listener of the fixture screen log throws once it
+/// noted a screen, as a test that a listener of the screen that throws
+/// keeps no other from hearing it sets it.
+bool fixtureScreenLogThrows = false;
+
+/// The screen listener of the fixture screen log: notes the screen of
+/// [route] at [location] in [fixtureScreenLog], and then throws if
+/// [fixtureScreenLogThrows].
+void noteFixtureScreenLog(String? route, String location) {
+  fixtureScreenLog.add((route, location));
+  if (fixtureScreenLogThrows) {
+    throw StateError('The screen listener of the fixture screen log throws.');
+  }
+}
 === lib/core/fixture_services/fixture_services.dart (fake_registrations) ===
 /// The calls of the functions that dispose of the fixture's services, and
 /// of the one that creates the counter, a lazy singleton, in order, such as
@@ -1221,6 +1251,7 @@ import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen3;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
     as screen2;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
@@ -1273,8 +1304,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   final List<NavigatorObserver> _observers = _newObservers();
 
   final _screenListeners = <void Function(String? route, String location)>[
-    (route, location) => fixtureScreens.add((route, location)),
-    (route, location) => fixtureScreenLog.add((route, location)),
+    noteFixtureScreen,
+    noteFixtureScreenLog,
   ];
 
   /// The stack of the root navigator: locations, and the main navigation.
@@ -1377,13 +1408,21 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// Tells the listeners of the screen about the page on top when it is
   /// another than they last heard of: a location of the root navigator or
   /// of the selected branch, or the fallback screen at `/`.
+  ///
+  /// It calls each listener on its own: what one throws keeps no other
+  /// from hearing the screen, and reaches neither the router nor the
+  /// handlers of the errors of the app. In debug mode it is printed.
   void _showScreen() {
     final top = _top;
     if (top == _shown) return;
     _shown = top;
     final (_, location) = top;
     for (final listener in _screenListeners) {
-      listener(location?.routeName, location?.path ?? '/');
+      try {
+        listener(location?.routeName, location?.path ?? '/');
+      } on Object catch (error) {
+        if (kDebugMode) debugPrint('A listener of the screen failed: $error');
+      }
     }
   }
 

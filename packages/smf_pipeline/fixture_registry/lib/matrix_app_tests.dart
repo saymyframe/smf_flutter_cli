@@ -40,6 +40,18 @@ Future<MatrixAppTests> fixtureAppTests() async {
         appliesTo: _hearsScreens,
         roles: {routerRole},
       ),
+      // The listeners of the screen, which the router calls each on its
+      // own, whichever module provides it: a listener that throws keeps no
+      // other from hearing the screen. The apps it applies to have two
+      // listeners, those of the fixture analytics and of the fixture screen
+      // log, and the tests of router_screens, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/router_listeners',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_screen_log')),
+        roles: {routerRole},
+      ),
       // The fallback screen of the app entry, which the router shows when
       // no route starts the app, as the router role chose it, whichever
       // module provides the router, and which the listener of the fixture

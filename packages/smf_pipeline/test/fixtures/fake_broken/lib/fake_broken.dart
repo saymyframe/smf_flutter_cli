@@ -41,6 +41,33 @@ final class BrokenRouterModule extends SmfModule {
     ],
   );
 
+  /// The fake router that calls the listeners of the screen one after
+  /// another, rather than each on its own: a listener that throws keeps the
+  /// listeners after it from hearing the screen, and what it throws reaches
+  /// the handlers of the errors of the app.
+  static const stopsAtThrowingListener = BrokenRouterModule._(
+    ModuleId('broken_router_stops_at_throwing_listener'),
+    'A plain navigator whose listeners of the screen fail together (fixture)',
+    [
+      ("import 'package:flutter/foundation.dart';\n", ''),
+      (_callsListenerAlone, _callsListener),
+    ],
+  );
+
+  /// How the fake router calls a listener of the screen on its own.
+  static const _callsListenerAlone = '      try {\n'
+      '  $_callsListener'
+      '      } on Object catch (error) {\n'
+      '        if (kDebugMode) '
+      "debugPrint('A listener of the screen failed: "
+      r"$error');"
+      '\n'
+      '      }\n';
+
+  /// How a router calls a listener of the screen.
+  static const _callsListener =
+      "      listener(location?.routeName, location?.path ?? '/');\n";
+
   /// The fake router that pushes a location in the main navigation over a
   /// page shown over the main navigation, rather than refusing it with a
   /// `StateError`.

@@ -928,6 +928,21 @@ final List<FixtureObserver> fixtureObservers = [];
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
 
+/// Whether the screen listener of the fixture throws once it noted a
+/// screen, as a test that a listener of the screen that throws keeps no
+/// other from hearing it sets it.
+bool fixtureScreensThrow = false;
+
+/// The screen listener of the fixture: notes the screen of [route] at
+/// [location] in [fixtureScreens], and then throws if
+/// [fixtureScreensThrow].
+void noteFixtureScreen(String? route, String location) {
+  fixtureScreens.add((route, location));
+  if (fixtureScreensThrow) {
+    throw StateError('The screen listener of the fixture analytics throws.');
+  }
+}
+
 /// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
   /// Creates the service.
@@ -1255,6 +1270,7 @@ import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
     show logFirebaseScreenView;
 import 'package:fixture_app/core/app/fallback_start_screen.dart';
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -1393,7 +1409,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (screen == _screen) return;
     _screen = screen;
     for (final listener in _screenListeners) {
-      listener(top?.route.name, location);
+      _callAlone(listener, top?.route.name, location);
     }
   }
 }
@@ -1409,9 +1425,28 @@ List<NavigatorObserver> _observers() => [
 /// the route of the screen, or `null` for a screen that is not a route of a
 /// module, and its location.
 final List<void Function(String? route, String location)> _screenListeners = [
-  (route, location) => fixtureScreens.add((route, location)),
+  noteFixtureScreen,
   logFirebaseScreenView,
 ];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 

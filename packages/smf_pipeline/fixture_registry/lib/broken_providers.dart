@@ -95,6 +95,29 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenRouterModule.stopsAtThrowingListener,
+        role: routerRole,
+        bug: 'It calls the listeners of the screen one after another, so a '
+            'listener that throws keeps the ones after it from hearing the '
+            'screen.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeScreenLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_listeners_test.dart',
+            'a listener of the screen that throws keeps no other from hearing '
+                'it',
+            'A listener of the screen that throws keeps no other from hearing '
+                'it.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenRouterModule.pushesOverMainNavigation,
         role: routerRole,
         bug: 'It pushes a location in the main navigation over a page shown '

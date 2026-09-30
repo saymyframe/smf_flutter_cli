@@ -450,10 +450,7 @@ void main() {
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
       expect(router, contains('() => FixtureObserver(),'));
-      expect(
-        router,
-        contains('(route, location) => fixtureScreens.add((route, location)),'),
-      );
+      expect(router, contains('noteFixtureScreen,'));
     });
 
     test('starts on the second tab that --start names', () async {
