@@ -140,8 +140,9 @@ final class ContractResult {
 /// provider of a role whose package it contributes. For a role it builds an
 /// app for each of its providers, with every provider of each role the
 /// provider requires, and each subset of the roles the role uses with every
-/// provider of each of them. It leaves out the providers that would give
-/// an app two providers of a role that takes one. [uncheckedProviders]
+/// provider of each of them. It leaves out a combination of providers that
+/// would give an app two providers of a role that takes one, unless every
+/// combination would, so that the cases report why. [uncheckedProviders]
 /// lists each provider of a role of a module that none of the apps of the
 /// module has.
 /// Each app goes through the stages 3 to 5 of the pipeline, in a run
@@ -211,9 +212,12 @@ final class ContractHarness {
   ///   left out when two of its providers, or one of them and the module,
   ///   with the modules they depend on, provide a role that takes one
   ///   provider, as another router does for a module that depends on
-  ///   go_router: they cannot be in one app. When the module and the
-  ///   modules it depends on provide such a role twice by themselves, no
-  ///   combination is left out, and the cases report it;
+  ///   go_router: they cannot be in one app. When no combination of the
+  ///   subset can be in an app with the module, none is left out, so that
+  ///   its cases report why, such as when the module and the modules it
+  ///   depends on provide such a role twice by themselves, or when every
+  ///   provider of a role it requires brings another provider of a role
+  ///   that the module has through a module it depends on;
   /// - every provider of a role in the registry whose package the module
   ///   contributes, itself or in a variant, and that can be in an app with
   ///   the module, as `<module> with <provider>`, such as `banner with
@@ -252,18 +256,20 @@ final class ContractHarness {
     final withDependencies = _withDependencies(module);
     return [
       for (final subset in _subsets(used))
-        for (final picks in _picksOf([
-          if (descriptor.variants case final variants?) variants.role,
-          ...descriptor.effectiveRequires,
-          ...subset,
-        ]))
-          if (_picksFit(withDependencies, picks))
-            _case(
-              _caseName(id.value, picks, subset),
-              [id],
-              picks: picks,
-              present: subset,
-            ),
+        for (final picks in _fittingPicks(
+          withDependencies,
+          _picksOf([
+            if (descriptor.variants case final variants?) variants.role,
+            ...descriptor.effectiveRequires,
+            ...subset,
+          ]),
+        ))
+          _case(
+            _caseName(id.value, picks, subset),
+            [id],
+            picks: picks,
+            present: subset,
+          ),
       ..._casesWithOwners(module),
     ];
   }
@@ -334,20 +340,29 @@ final class ContractHarness {
     return providers;
   }
 
-  /// Whether the providers that [picks] names can be in one app with
+  /// Those of the [combinations] of providers that can be in one app with
   /// [modules], a module or the provider of a role with the modules it
   /// depends on: no role that takes one provider has two among [modules]
-  /// and the picked providers with the modules they depend on. When
-  /// [modules] have two by themselves, any picks fit, and the cases report
-  /// that. The variants of the modules do not count, so a provider of the
-  /// role of the variants of a module that the module has no variant for
-  /// fits still.
-  bool _picksFit(List<SmfModule> modules, Map<Role, ModuleId> picks) {
-    if (_singleProviders(modules) == null) return true;
-    final picked = [
-      for (final id in picks.values) ..._withDependencies(registry[id]!),
-    ];
-    return _singleProviders([...modules, ...picked]) != null;
+  /// and the picked providers with the modules they depend on. The variants
+  /// of the modules do not count, so a provider of the role of the variants
+  /// of a module that the module has no variant for fits still.
+  ///
+  /// When none fits, such as when [modules] have two providers of such a
+  /// role by themselves, it keeps all of the [combinations], so that the
+  /// cases report why none can be in an app.
+  List<Map<Role, ModuleId>> _fittingPicks(
+    List<SmfModule> modules,
+    List<Map<Role, ModuleId>> combinations,
+  ) {
+    bool fits(Map<Role, ModuleId> picks) {
+      final picked = [
+        for (final id in picks.values) ..._withDependencies(registry[id]!),
+      ];
+      return _singleProviders([...modules, ...picked]) != null;
+    }
+
+    final fitting = combinations.where(fits).toList();
+    return fitting.isEmpty ? combinations : fitting;
   }
 
   /// The provider of the role of the variants of [module] for each case of
@@ -450,9 +465,10 @@ final class ContractHarness {
   /// roles the role uses, the largest first, one case for each combination
   /// of a provider of each role the provider requires and of each role of
   /// the subset, named as the cases of [casesOfModule] are, such as
-  /// `analytics by firebase_analytics (get_it) with di`, and left out as
-  /// they are when its providers cannot be in one app with the provider,
-  /// such as another provider of a role that the provider provides too.
+  /// `analytics by firebase_analytics (get_it) with di`. As for a module, a
+  /// combination whose providers cannot be in one app with the provider is
+  /// left out, such as another provider of a role that the provider
+  /// provides too, unless no combination of the subset can.
   List<ContractCase> casesOfRole(Role role) {
     final used = [
       for (final other in role.uses)
@@ -461,21 +477,20 @@ final class ContractHarness {
     return [
       for (final provider in registry.providersOf(role))
         for (final subset in _subsets(used))
-          for (final picks in _picksOf([
-            ...provider.descriptor.effectiveRequires,
-            ...subset,
-          ]))
-            if (_picksFit(_withDependencies(provider), picks))
-              _case(
-                _caseName(
-                  '${role.id} by ${provider.descriptor.id}',
-                  picks,
-                  subset,
-                ),
-                [provider.descriptor.id],
-                picks: {...picks, role: provider.descriptor.id},
-                present: subset,
+          for (final picks in _fittingPicks(
+            _withDependencies(provider),
+            _picksOf([...provider.descriptor.effectiveRequires, ...subset]),
+          ))
+            _case(
+              _caseName(
+                '${role.id} by ${provider.descriptor.id}',
+                picks,
+                subset,
               ),
+              [provider.descriptor.id],
+              picks: {...picks, role: provider.descriptor.id},
+              present: subset,
+            ),
     ];
   }
 
