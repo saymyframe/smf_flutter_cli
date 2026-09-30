@@ -72,16 +72,30 @@ final class RenderedFile {
 
 /// The app that stage 8 rendered, in memory.
 final class RenderedApp {
-  /// Creates the app of [files].
-  RenderedApp(Iterable<RenderedFile> files)
-      : files = Map.unmodifiable({
+  /// Creates the app of [files], whose sockets got [socketOrders].
+  RenderedApp(
+    Iterable<RenderedFile> files, {
+    Map<SocketRef, ContributionOrder> socketOrders = const {},
+  })  : files = Map.unmodifiable({
           for (final file
               in files.toList()..sort((a, b) => a.path.compareTo(b.path)))
             file.path: file,
-        });
+        }),
+        socketOrders = Map.unmodifiable(socketOrders);
 
   /// The files by path, relative to the root of the app, sorted by path.
   final Map<String, RenderedFile> files;
+
+  /// The contributions of every socket that got any, in the order that the
+  /// pipeline rendered them into the tags of the socket: those of the
+  /// modules and of the templates of the roles, and the fragments of their
+  /// render hooks, which the socket orders of stage 5 do not have yet.
+  ///
+  /// So a test reads what the provider of a role renders into the tags of
+  /// a socket of the role, whichever module it is, without reading its
+  /// files. The sockets of the pipeline, which render the merged pubspec,
+  /// are not among them.
+  final Map<SocketRef, ContributionOrder> socketOrders;
 
   /// The text of every text file, by path.
   Map<String, String> get texts => {
@@ -225,7 +239,7 @@ RenderedApp renderApp({
     }
   }
   _stopOnErrors(issues);
-  return RenderedApp(files.values);
+  return RenderedApp(files.values, socketOrders: texts.orders);
 }
 
 /// Throws a [GenerationFailedException] with the errors among [issues], if
@@ -542,6 +556,10 @@ final class _SocketTexts {
   /// The text of each tag.
   final Map<String, String> texts = {};
 
+  /// The contributions of each socket that got any, in the order of its
+  /// text.
+  final Map<SocketRef, ContributionOrder> orders = {};
+
   /// The imports for each template file, by owner and template path.
   final Map<(ContributionOrigin, String), List<AddedImport>> imports = {};
 
@@ -603,6 +621,7 @@ _SocketTexts _renderSockets({
     final rendered = _renderSocket(socket, order, issues);
     if (rendered == null) continue;
     result.texts.addAll(rendered);
+    result.orders[socket] = order;
     if (socket.kind.carriesImports) result.addImports(socket, place, order);
   }
   return result;

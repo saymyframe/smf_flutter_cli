@@ -376,6 +376,27 @@ flutter:
     final input = (rendering.role.template! as _Template).inputs.single;
     expect(input.choice, 'chosen');
     expect(input.data.single.value, 'user data');
+
+    // The app keeps the contributions of each socket that got any, the
+    // fragments of the render hooks among them, in the order they were
+    // rendered in.
+    List<String> contributionsTo(SocketRef socket) => [
+          for (final collected in app.socketOrders[socket]!.contributions)
+            [
+              '${collected.origin}:',
+              (collected.contribution as SocketContribution).fragment!.code,
+            ].join(' '),
+        ];
+    expect(contributionsTo(rendering.items), [
+      'store: fromProvider();',
+      'user: fromUser();',
+    ]);
+    expect(contributionsTo(AppEntryRole.bootstrapLate), [
+      'role:shelf: fromTemplate();',
+      'user: fromUser();',
+    ]);
+    // A socket that got nothing has no order.
+    expect(app.socketOrders, isNot(contains(AppEntryRole.bootstrapEarly)));
   });
 
   test('render hooks follow the rules of their owners', () {
