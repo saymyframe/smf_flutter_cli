@@ -1419,44 +1419,78 @@ Future<int> createEveryModuleApps(
   return _exitCode(problems, say);
 }
 
-/// An app whose tests must fail, and how: the app of the case [name] of
-/// the contract harness that asks for the modules [requested] of the
-/// registry [modules], such as one with a provider of a role that has a
-/// known bug, whose tests of the role must fail as [failures] expect, and
-/// whose other tests must pass; see [runFailingApps].
+/// An app whose tests must fail, and how: of the apps with every module of
+/// the registry [modules], one for each combination of the providers of the
+/// roles that take one, the one with the [providers], such as an app with a
+/// provider of a role that has a known bug and the modules that the tests
+/// of the role need, whose tests of the role must fail as [failures]
+/// expect, and whose other tests must pass; see [runFailingApps].
+///
+/// Being an app with every module of its registry, it gets the tests that a
+/// matrix runs only in such apps too ([MatrixApp.everyModuleWith]).
 final class MatrixFailingApp {
-  /// Creates the app of the case [name] with the modules [requested] of
-  /// [modules], whose tests must fail as [failures] expect.
+  /// Creates the app [name] with every module of [modules] and [providers],
+  /// whose tests must fail as [failures] expect.
   const MatrixFailingApp(
     this.name, {
     required this.modules,
-    required this.requested,
     required this.failures,
+    this.providers = const [],
   });
 
-  /// The name of the case of the app, such as the provider with a bug.
+  /// The name of the app, such as that of the provider with a bug.
   final String name;
 
-  /// The registry of the app, which `smf create` generates it from.
+  /// The registry of the app, which `smf create` generates it from: the
+  /// modules of the app, and the other providers of its roles that its
+  /// modules need in a registry, such as those that a module has variants
+  /// for.
   final List<SmfModule> modules;
 
-  /// The modules to ask for, which name the providers of the roles that
-  /// have several in [modules].
-  final List<ModuleId> requested;
+  /// The providers that the app has of the roles that take one and have
+  /// several in [modules], such as the state manager of the variant of a
+  /// feature; among other modules, as any module of the app may be named.
+  final List<ModuleId> providers;
 
   /// The tests of the app that must fail, each with the reason of its first
   /// failure.
   final List<MatrixExpectedFailure> failures;
 
-  /// Checks the case of the app with the contract harness, which renders
-  /// it, and returns the result and the app of the matrix, with the data
-  /// and roles of the case ([MatrixApp.hook]), or `null` for a case with
-  /// errors, whose app could not be generated.
-  Future<({ContractResult result, MatrixApp? app})> check() async {
-    final result = await ContractHarness(ModuleRegistry(modules)).check(
-      ContractCase(name, requested: requested),
+  /// The app of the matrix, the app with every module of [modules] that has
+  /// the [providers], as the contract harness builds and renders it, with
+  /// the data and roles of its case ([MatrixApp.hook]), under [name]; or
+  /// `null` and the problems when not one app with every module has them:
+  /// the errors of the cases of the apps that the harness found errors in,
+  /// and the number of the apps that have them.
+  Future<({MatrixApp? app, List<String> problems})> check() async {
+    final (:apps, :failed) = await everyModuleAppsOf(modules);
+    final withProviders = [
+      for (final app in apps)
+        if (providers.every(app.modules.contains)) app,
+    ];
+    if (withProviders case [final app]) {
+      return (
+        app: MatrixApp(
+          name,
+          app.modules,
+          roleOptions: app.roleOptions,
+          everyModuleWith: app.everyModuleWith,
+          hook: app.hook,
+        ),
+        problems: const <String>[],
+      );
+    }
+    final named = providers.isEmpty ? 'its modules' : providers.join(', ');
+    final count = '${withProviders.length} apps with every module of the '
+        'registry of $name have $named, rather than one.';
+    return (
+      app: null,
+      problems: [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+        count,
+      ],
     );
-    return (result: result, app: _appOf(result, const {}));
   }
 }
 
@@ -1505,10 +1539,10 @@ Future<(List<String>, String)> runFailingAppTests(
 /// to it the tests of [appTests] that apply to it, and runs them: its
 /// expected failures must fail as they expect, and its other tests must
 /// pass; see [runFailingAppTests]. Returns the exit code: 0 if the contract
-/// harness finds no error in the case of each app, `smf create` generates
-/// it with every module and every step that the options of CI do not leave
-/// for later, the app with its tests has no issue, and its tests fail as
-/// expected; 1 otherwise.
+/// harness builds each app without errors ([MatrixFailingApp.check]),
+/// `smf create` generates it with every module and every step that the
+/// options of CI do not leave for later, the app with its tests has no
+/// issue, and its tests fail as expected; 1 otherwise.
 ///
 /// So the tests of the apps of the matrix show that they can fail: the app
 /// of a provider of a role that has a known bug must fail the tests of the
@@ -1535,9 +1569,11 @@ Future<int> runFailingApps(
   final problems = <String>[];
   var count = 0;
   for (final (index, failing) in apps.indexed) {
-    final (:result, :app) = await failing.check();
+    final (:app, problems: checked) = await failing.check();
     if (app == null) {
-      problems.add('${failing.name}: ${result.errors.join('; ')}');
+      problems.addAll([
+        for (final problem in checked) '${failing.name}: $problem',
+      ]);
       continue;
     }
     final name = 'app_${index + 1}';

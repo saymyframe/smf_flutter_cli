@@ -6,10 +6,12 @@
 import 'dart:convert';
 
 import 'package:file/memory.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
 /// The directory of the app whose tests the reports report.
@@ -795,7 +797,6 @@ void main() {
       const failing = MatrixFailingApp(
         'core with a bug',
         modules: [FlutterCoreModule()],
-        requested: [FlutterCoreModule.id],
         failures: [expected],
       );
 
@@ -831,7 +832,6 @@ void main() {
         const broken = MatrixFailingApp(
           'broken',
           modules: [FlutterCoreModule(), _Broken()],
-          requested: [_Broken.id],
           failures: [expected],
         );
 
@@ -839,8 +839,13 @@ void main() {
 
         expect(commands, ['create app_2 -m flutter_core']);
         final problems = log.sublist(log.indexOf('Problems:') + 1);
-        expect(problems, hasLength(2));
-        expect(problems.first, startsWith('broken: '));
+        expect(problems, hasLength(3));
+        expect(problems.first, startsWith('broken: every module: '));
+        expect(
+          problems[1],
+          'broken: 0 apps with every module of the registry of broken have '
+          'its modules, rather than one.',
+        );
         expect(
           problems.last,
           'app_2 (core with a bug (flutter_core)): smf create exited with 1.',
@@ -849,35 +854,78 @@ void main() {
     });
 
     test(
-        'the app of a case whose tests must fail is the app of the matrix that '
-        'the contract harness builds for it, with the data and roles of its '
-        'case', () async {
-      const failing = MatrixFailingApp(
+        'the app whose tests must fail is the app with every module of its '
+        'registry that has its providers, as the contract harness builds it, '
+        'so that the tests that apply only to such apps apply to it too',
+        () async {
+      const modules = [FlutterCoreModule(), BlocModule(), RiverpodModule()];
+
+      final (:app, :problems) = await const MatrixFailingApp(
+        'riverpod with a bug',
+        modules: modules,
+        providers: [RiverpodModule.id],
+        failures: [expected],
+      ).check();
+
+      expect(problems, isEmpty);
+      expect(app!.name, 'riverpod with a bug');
+      expect(
+        app.modules,
+        unorderedEquals([FlutterCoreModule.id, RiverpodModule.id]),
+      );
+      expect(app.everyModuleWith, [RiverpodModule.id]);
+      expect(app.hook, isNotNull);
+
+      // Its providers name one app with every module, and no module is
+      // left.
+      final (app: one, problems: none) = await const MatrixFailingApp(
         'core with a bug',
         modules: [FlutterCoreModule()],
-        requested: [FlutterCoreModule.id],
         failures: [expected],
-      );
+      ).check();
 
-      final (:result, app: built) = await failing.check();
-
-      expect(result.errors, isEmpty);
-      expect('$built', 'core with a bug (flutter_core)');
-      expect(built!.hook, isNotNull);
+      expect(none, isEmpty);
+      expect(one!.modules, [FlutterCoreModule.id]);
+      expect(one.everyModuleWith, isEmpty);
       expect(
-        built.createArguments('app_1', '/apps').take(4),
+        one.createArguments('app_1', '/apps').take(4),
         ['create', 'app_1', '-m', 'flutter_core'],
       );
+    });
 
-      final (result: broken, app: none) = await const MatrixFailingApp(
-        'broken',
-        modules: [_Broken()],
-        requested: [_Broken.id],
+    test(
+        'the app whose tests must fail is none when not one app with every '
+        'module of its registry has its providers', () async {
+      final (app: several, problems: ofSeveral) = await const MatrixFailingApp(
+        'state with a bug',
+        modules: [FlutterCoreModule(), BlocModule(), RiverpodModule()],
         failures: [],
       ).check();
 
-      expect(broken.errors, isNotEmpty);
-      expect(none, isNull);
+      expect(several, isNull);
+      expect(ofSeveral, [
+        equals(
+          '2 apps with every module of the registry of state with a bug have '
+          'its modules, rather than one.',
+        ),
+      ]);
+
+      // The case of the app has errors, so no app has the provider.
+      final (app: broken, problems: ofBroken) = await const MatrixFailingApp(
+        'broken',
+        modules: [FlutterCoreModule(), _Broken()],
+        providers: [_Broken.id],
+        failures: [],
+      ).check();
+
+      expect(broken, isNull);
+      expect(ofBroken, hasLength(2));
+      expect(ofBroken.first, startsWith('every module: '));
+      expect(
+        ofBroken.last,
+        '0 apps with every module of the registry of broken have broken, '
+        'rather than one.',
+      );
     });
   });
 }
