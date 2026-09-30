@@ -86,13 +86,41 @@ Future<MatrixAppTests> smfAppTests() async {
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
+      // The events of the apps with the events role, whichever module
+      // provides it.
+      await eventsRoleAppTest(),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
-    // provider of the DI role gets the test of its services.
-    testedRoles: {routerRole, diRole},
+    // provider of the DI role and of the events role gets the test of its
+    // role.
+    testedRoles: {routerRole, diRole, eventsRole},
   );
 }
+
+/// The test of the events role that the CLI keeps in its
+/// `app_tests/events_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them: once the start-up of
+/// the app ran, every listener of a type gets each event of that type once,
+/// in the order the events were fired; a listener of another type gets none
+/// of them, and no error; an event fired before `on<T>()` is not in the
+/// stream that it returns; and a cancelled subscription gets no more
+/// events.
+///
+/// The test knows only the role and fires events of its own through
+/// `createCommunicationService()` of the role. The matrix of the fixtures
+/// runs it too, only in the apps with every module, which run other tests
+/// already.
+Future<MatrixAppTest> eventsRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/events_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(eventsRole) &&
+          (among?.call(app) ?? true),
+      roles: {eventsRole},
+    );
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
 /// for the apps with the role, whichever module provides it, whose modules

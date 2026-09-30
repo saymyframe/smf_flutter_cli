@@ -98,9 +98,10 @@ List<ModuleId> everyFixture({
 /// notes each call that reaches it, which the tests of the roles look at;
 /// a fixture module whose start-up waits for a timer; flutter_core and
 /// go_router, the app entry and a router, for the screens that Firebase
-/// Analytics logs; and get_it, a DI container, in which those roles
-/// register their services, for the test of the DI role that the CLI
-/// keeps.
+/// Analytics logs; get_it, a DI container, in which those roles register
+/// their services, for the test of the DI role that the CLI keeps; and the
+/// fixture events, whose channel opens in the start-up, for the test of the
+/// events role that the CLI keeps.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -118,5 +119,6 @@ List<SmfModule> severalProvidersModules() => const [
       FakeCrashModule(),
       FakeAnalyticsModule(),
       FakeServiceLogModule(),
+      FakeEventsModule(),
       FakeSlowStartModule(),
     ];

@@ -47,17 +47,18 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the layout '
-      'role and of the DI role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'role, of the DI role and of the events role with every provider of '
+      'each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
-      containsAll([routerRole, layoutRole, diRole]),
+      containsAll([routerRole, layoutRole, diRole, eventsRole]),
     );
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
     expect(named('di_role').roles, {diRole});
     expect(named('di_disposal').roles, {diRole});
+    expect(named('events_role').roles, {eventsRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -114,6 +115,30 @@ void main() {
   });
 
   test(
+      'the test of the events role applies only to the apps with every '
+      'module, which have the role and run flutter test for other tests '
+      'already', () {
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    expect(appsOf(named('events_role')), [
+      for (final app in everyModule) app.name,
+    ]);
+    // One for each combination of the providers of the roles that take one.
+    expect(everyModule, hasLength(8));
+    for (final app in everyModule) {
+      expect(
+        app.hook!.presentRoles,
+        contains(eventsRole),
+        reason: app.name,
+      );
+      expect(appsOf(named('router_screens')), contains(app.name));
+    }
+  });
+
+  test(
       'the tests that use the helpers of router_screens apply only to the '
       'apps that have them', () {
     final routerScreens = appsOf(named('router_screens'));
@@ -157,6 +182,7 @@ void main() {
           'firebase_analytics',
           'screen_views',
           'di_role',
+          'events_role',
           'fake_crash',
           'fake_analytics',
           'analytics_role',

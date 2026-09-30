@@ -12,7 +12,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
-/// role, whose providers call the listeners of the screen, and the DI role.
+/// role, whose providers call the listeners of the screen, the DI role and
+/// the events role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -106,8 +107,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeRegistrationsModule.id),
         roles: {diRole},
       ),
+      // The events of the apps with the events role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already.
+      await eventsRoleAppTest(among: (app) => app.everyModuleWith != null),
     ],
-    testedRoles: {routerRole, layoutRole, diRole},
+    testedRoles: {routerRole, layoutRole, diRole, eventsRole},
   );
 }
 

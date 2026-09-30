@@ -34,14 +34,60 @@ void main() {
   });
 
   test(
-      'the app tests check the contract of the router role and of the DI '
-      'role with every provider of each, which they tell apart by the roles '
-      'of the app only', () {
-    expect(appTests.testedRoles, containsAll([routerRole, diRole]));
+      'the app tests check the contract of the router role, of the DI role '
+      'and of the events role with every provider of each, which they tell '
+      'apart by the roles of the app only', () {
+    expect(
+      appTests.testedRoles,
+      containsAll([routerRole, diRole, eventsRole]),
+    );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('di_role').roles, {diRole});
+    expect(named('events_role').roles, {eventsRole});
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
+  });
+
+  test(
+      'the test of the events role applies to the apps with the role, or to '
+      'those of them that it is given', () async {
+    bool hasEvents(MatrixApp app) =>
+        app.hook!.presentRoles.contains(eventsRole);
+
+    expect(
+      [
+        for (final app in apps)
+          if (named('events_role').appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (hasEvents(app)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (named('events_role').appliesTo(app)) app.name,
+      ],
+      [
+        'event_bus with di',
+        'event_bus',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await eventsRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (everyModule.appliesTo(app)) app.name,
+      ],
+      ['every module (bloc)', 'every module (riverpod)'],
+    );
   });
 
   test(

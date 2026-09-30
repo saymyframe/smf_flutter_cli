@@ -9,7 +9,7 @@ The real SMF modules do not yet use every feature of the module model in `packag
 - `bottom_tabs`, around which both routers build the tabs of their destinations;
 - `get_it`, which registers their services as well as `fake_di` does.
 
-`fixture_registry` keeps snapshots of the apps they render in `fixture_registry/test/snapshots/`, and a CI job generates these apps and analyzes them with Flutter. Its registry of several providers puts the fixture providers of crash reporting and analytics next to the modules of the CLI that provide the same roles, with a fixture whose start-up waits for a timer and `get_it`, in which those roles register their services, and the job runs the app tests of those modules, and the test of the DI role, in its app. There the tests of the two roles check, through a fixture that provides both and notes every call, that each call reaches every provider once, whatever the other providers do with it.
+`fixture_registry` keeps snapshots of the apps they render in `fixture_registry/test/snapshots/`, and a CI job generates these apps and analyzes them with Flutter. Its registry of several providers puts the fixture providers of crash reporting and analytics next to the modules of the CLI that provide the same roles, with a fixture whose start-up waits for a timer, `get_it`, in which those roles register their services, and the fixture events, and the job runs the app tests of those modules, and the tests of the DI role and of the events role, in its app. There the tests of the two roles check, through a fixture that provides both and notes every call, that each call reaches every provider once, whatever the other providers do with it.
 
 | Package | What it has |
 | --- | --- |
