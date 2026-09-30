@@ -8,11 +8,29 @@ import 'package:smf_contracts/core.dart';
 /// without a prefix, and with a target only if the target is the prefix of
 /// an import of the library, so a member of another object or a
 /// declaration of the file with the same name does not count.
-bool usesSymbols(DartFileIndex file, Set<String> names, String libraryPath) {
+bool usesSymbols(DartFileIndex file, Set<String> names, String libraryPath) =>
+    _uses(file, names, (uri) => _pathOf(uri, file.path) == libraryPath);
+
+/// Whether [file] uses [name] from the library that [import] imports, as
+/// [usesSymbols] tells: a file of the app, which [file] may import by a
+/// relative or a `package:` URI, or a library of a package or of Dart,
+/// which [file] imports by the URI of [import].
+bool usesImported(DartFileIndex file, String name, ImportRef import) =>
+    import.isAppFile
+        ? usesSymbols(file, {name}, 'lib/${import.uri}')
+        : _uses(file, {name}, (uri) => uri == import.uri);
+
+/// Whether [file] uses one of [names] from the libraries whose URIs
+/// [isLibrary] accepts; see [usesSymbols].
+bool _uses(
+  DartFileIndex file,
+  Set<String> names,
+  bool Function(String uri) isLibrary,
+) {
   var unprefixed = false;
   final prefixes = <String>{};
   for (final import in file.imports) {
-    if (_pathOf(import.uri, file.path) != libraryPath) continue;
+    if (!isLibrary(import.uri)) continue;
     if (import.prefix case final prefix?) {
       prefixes.add(prefix);
     } else {
