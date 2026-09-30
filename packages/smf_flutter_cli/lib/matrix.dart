@@ -706,10 +706,10 @@ final class MatrixAppTest {
   /// The files that the matrix generates for the tests in an app of the
   /// matrix, next to the files of [directory], or `null` if they need none:
   /// the text of each by its path in the app, such as
-  /// `test/di_role/registered_services.dart`, for the app and the name of
-  /// its package, which the imports of the files of the app take, as
-  /// `package:<name>/...`. The matrix writes them as they are, with no
-  /// placeholder filled.
+  /// `integration_test/di_role/registered_services.dart`, for the app and
+  /// the name of its package, which the imports of the files of the app
+  /// take, as `package:<name>/...`. The matrix writes them as they are, with
+  /// no placeholder filled.
   ///
   /// A test of a role needs to know what the modules of an app give the
   /// role, such as the services that they register in the DI container,
