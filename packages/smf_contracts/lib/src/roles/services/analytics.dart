@@ -23,7 +23,9 @@ const analyticsRole = AnalyticsRole._();
 /// does not work shows in the console. Each implementation gets a copy of
 /// its own of the map of parameters of a call, so that one that changes the
 /// map, such as to add a parameter of its own, changes nothing that the
-/// caller or another implementation has.
+/// caller or another implementation has. An implementation whose factory
+/// throws, or whose asynchronous start fails, is left out, and the app
+/// starts and works with the others (see [RoleImplementation]).
 ///
 /// A provider contributes its implementation as a [RoleImplementation]. It
 /// may also follow the router, with `when: {routerRole}`: log the screens

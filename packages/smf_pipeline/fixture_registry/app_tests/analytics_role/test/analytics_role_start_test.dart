@@ -15,9 +15,6 @@ import 'package:{{app_name}}/core/fixture_service_log/fixture_service_log.dart';
 
 import 'analytics_role.dart';
 
-const _bug = 'Bug: an analytics service that fails to start keeps the app '
-    'from starting.';
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // What reached the platform side of the fixture analytics after its
@@ -49,7 +46,7 @@ void main() {
       reason: 'In debug mode, the start-up prints the error of the start '
           'once, with the name of the function that starts the service.',
     );
-  }, skip: _bug);
+  });
 
   test('the other analytics services get each call', () async {
     final failed = await failureOf(
@@ -70,5 +67,5 @@ void main() {
       reason: 'The fixture analytics, which the start-up left out, gets '
           'nothing.',
     );
-  }, skip: _bug);
+  });
 }

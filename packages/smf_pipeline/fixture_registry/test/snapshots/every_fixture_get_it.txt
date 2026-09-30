@@ -329,7 +329,9 @@ abstract interface class AnalyticsService {
 /// analytics service that does not work, such as one that is not set up,
 /// shows in the console. Each analytics service gets a copy of its own of
 /// the map of parameters, so that one that changes the map changes nothing
-/// that the caller or another analytics service has.
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -341,9 +343,27 @@ final List<AnalyticsService> _analyticsServices = [];
 /// Creates the implementations of AnalyticsService that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initAnalytics() async {
-  _analyticsServices.addAll(
-    await Future.wait<AnalyticsService>([impl0.initFixtureAnalytics()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureAnalytics', impl0.initFixtureAnalytics),
+  ]);
+  _analyticsServices.addAll(started.nonNulls);
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<AnalyticsService?> _startAlone(
+  String name,
+  Future<AnalyticsService> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _AnalyticsServices implements AnalyticsService {
@@ -528,7 +548,9 @@ abstract interface class CrashReporter {
 /// that called nor the handlers of [installCrashReporting], which would
 /// report it to the same crash reporter again, without end. In debug mode
 /// the failure is printed, so that a crash reporter that does not work,
-/// such as one that is not set up, shows in the console.
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -572,9 +594,27 @@ final List<CrashReporter> _crashReporters = [];
 /// Creates the implementations of CrashReporter that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initCrashReporting() async {
-  _crashReporters.addAll(
-    await Future.wait<CrashReporter>([impl0.initFixtureCrashReporter()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureCrashReporter', impl0.initFixtureCrashReporter),
+  ]);
+  _crashReporters.addAll(started.nonNulls);
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<CrashReporter?> _startAlone(
+  String name,
+  Future<CrashReporter> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _CrashReporters implements CrashReporter {

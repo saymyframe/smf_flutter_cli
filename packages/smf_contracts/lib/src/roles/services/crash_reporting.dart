@@ -37,7 +37,10 @@ const crashReportingRole = CrashReportingRole._();
 /// failure would come back to them as an error that nothing catches, and
 /// they would report it to the same implementation again, without end. In
 /// debug mode the reporter prints the failure, so that an implementation
-/// that does not work shows in the console.
+/// that does not work shows in the console. An implementation whose
+/// factory throws, or whose asynchronous start fails, is left out, and the
+/// app starts, installs the handlers and reports to the others (see
+/// [RoleImplementation]).
 final class CrashReportingRole extends Role<RoleImplementation> {
   const CrashReportingRole._();
 

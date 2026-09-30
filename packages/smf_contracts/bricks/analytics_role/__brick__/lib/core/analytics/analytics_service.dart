@@ -35,7 +35,9 @@ abstract interface class AnalyticsService {
 /// analytics service that does not work, such as one that is not set up,
 /// shows in the console. Each analytics service gets a copy of its own of
 /// the map of parameters, so that one that changes the map changes nothing
-/// that the caller or another analytics service has.
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService =

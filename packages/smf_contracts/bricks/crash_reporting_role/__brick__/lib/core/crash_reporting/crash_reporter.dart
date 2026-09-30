@@ -35,7 +35,9 @@ abstract interface class CrashReporter {
 /// that called nor the handlers of [installCrashReporting], which would
 /// report it to the same crash reporter again, without end. In debug mode
 /// the failure is printed, so that a crash reporter that does not work,
-/// such as one that is not set up, shows in the console.
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.

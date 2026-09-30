@@ -281,7 +281,9 @@ abstract interface class AnalyticsService {
 /// analytics service that does not work, such as one that is not set up,
 /// shows in the console. Each analytics service gets a copy of its own of
 /// the map of parameters, so that one that changes the map changes nothing
-/// that the caller or another analytics service has.
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -289,8 +291,28 @@ final AnalyticsService _analyticsService = _AnalyticsServices(
 );
 
 final List<AnalyticsService> _analyticsServices = [
-  impl0.createFirebaseAnalyticsService(),
+  ?_createAlone(
+    'createFirebaseAnalyticsService',
+    impl0.createFirebaseAnalyticsService,
+  ),
 ];
+
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+AnalyticsService? _createAlone(
+  String name,
+  AnalyticsService Function() create,
+) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
 
 final class _AnalyticsServices implements AnalyticsService {
   const _AnalyticsServices(this._services);

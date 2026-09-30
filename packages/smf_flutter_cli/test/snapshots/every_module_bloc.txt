@@ -295,7 +295,9 @@ abstract interface class AnalyticsService {
 /// analytics service that does not work, such as one that is not set up,
 /// shows in the console. Each analytics service gets a copy of its own of
 /// the map of parameters, so that one that changes the map changes nothing
-/// that the caller or another analytics service has.
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -303,8 +305,28 @@ final AnalyticsService _analyticsService = _AnalyticsServices(
 );
 
 final List<AnalyticsService> _analyticsServices = [
-  impl0.createFirebaseAnalyticsService(),
+  ?_createAlone(
+    'createFirebaseAnalyticsService',
+    impl0.createFirebaseAnalyticsService,
+  ),
 ];
+
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+AnalyticsService? _createAlone(
+  String name,
+  AnalyticsService Function() create,
+) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
 
 final class _AnalyticsServices implements AnalyticsService {
   const _AnalyticsServices(this._services);
@@ -507,7 +529,9 @@ abstract interface class CrashReporter {
 /// that called nor the handlers of [installCrashReporting], which would
 /// report it to the same crash reporter again, without end. In debug mode
 /// the failure is printed, so that a crash reporter that does not work,
-/// such as one that is not set up, shows in the console.
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -547,8 +571,25 @@ void installCrashReporting() {
 final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
 
 final List<CrashReporter> _crashReporters = [
-  impl0.createCrashlyticsCrashReporter(),
+  ?_createAlone(
+    'createCrashlyticsCrashReporter',
+    impl0.createCrashlyticsCrashReporter,
+  ),
 ];
+
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+CrashReporter? _createAlone(String name, CrashReporter Function() create) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
 
 final class _CrashReporters implements CrashReporter {
   const _CrashReporters(this._reporters);

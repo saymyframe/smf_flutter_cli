@@ -16,9 +16,6 @@ import 'package:{{app_name}}/core/fixture_service_log/fixture_service_log.dart';
 
 import 'crash_reporting_role.dart';
 
-const _bug = 'Bug: a crash reporter whose factory throws keeps the app from '
-    'starting and from installing the handlers of the errors.';
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   putBackTheHandlersAfterAll();
@@ -55,7 +52,7 @@ void main() {
       reason: 'In debug mode, the start-up prints the error of the factory '
           'once, with the name of the factory.',
     );
-  }, skip: _bug);
+  });
 
   test(
       'the other crash reporters get each error that nothing catches, and '
@@ -90,5 +87,5 @@ void main() {
     );
     expect(uncaught, isEmpty);
     expect(failed, isNull, reason: 'The call does not fail.');
-  }, skip: _bug);
+  });
 }

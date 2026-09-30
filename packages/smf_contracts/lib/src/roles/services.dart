@@ -31,6 +31,12 @@ part 'services/events.dart';
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
 /// is present.
+///
+/// A role that an app can have several providers of creates each
+/// implementation on its own: one whose factory throws, or whose
+/// asynchronous start fails, is left out, so that the app starts and the
+/// other implementations work without it, and in debug mode its error is
+/// printed with the name of its factory.
 @immutable
 final class RoleImplementation {
   /// An implementation of [type] that [create] returns.
@@ -262,6 +268,7 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
             imports: [
               for (final entry in all)
                 entry.implementation.factory.import.withPrefix(entry.prefix),
+              if (!single) _foundation,
             ],
           ),
         ),
@@ -296,37 +303,106 @@ Future<void> $initFunction() async {
 }''';
   }
 
+  /// The code of the implementations in [all], for a role that an app can
+  /// have several providers of; see [render].
+  ///
+  /// Each implementation is created on its own: one whose factory throws,
+  /// or whose asynchronous start fails, is left out, so that the app starts
+  /// and the others work without it, and in debug mode its error is
+  /// printed with the name of its factory. The functions that do so,
+  /// `_createAlone` and `_startAlone`, come with the implementations that
+  /// need them.
   String _many(List<_Prefixed> all) {
-    final buffer = StringBuffer('final List<$service> $variable = [\n');
-    for (final (:implementation, :prefix) in all) {
-      if (!implementation.isAsync) {
-        buffer.writeln('  ${implementation.factory.codeWith(prefix)}(),');
-      }
-    }
-    buffer.write('];');
+    final synchronous = [
+      for (final entry in all)
+        if (!entry.implementation.isAsync) entry,
+    ];
     final asynchronous = [
       for (final entry in all)
         if (entry.implementation.isAsync) entry,
     ];
-    if (asynchronous.isEmpty) return buffer.toString();
-    buffer
-      ..writeln()
-      ..writeln()
-      ..writeln('/// Creates the implementations of $service that start')
-      ..writeln('/// asynchronously; `bootstrap()` awaits it.')
-      ..writeln('Future<void> $initFunction() async {')
-      ..writeln('  $variable.addAll(')
-      ..writeln('    await Future.wait<$service>([');
-    for (final (:implementation, :prefix) in asynchronous) {
-      buffer.writeln('      ${implementation.factory.codeWith(prefix)}(),');
+    final buffer = StringBuffer('final List<$service> $variable = [\n');
+    for (final (:implementation, :prefix) in synchronous) {
+      final factory = implementation.factory;
+      buffer.writeln(
+        "  ?_createAlone('${factory.name}', ${factory.codeWith(prefix)}),",
+      );
     }
-    buffer
-      ..writeln('    ]),')
-      ..writeln('  );')
-      ..write('}');
-    return buffer.toString();
+    buffer.write('];');
+    if (asynchronous.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln()
+        ..writeln('/// Creates the implementations of $service that start')
+        ..writeln('/// asynchronously; `bootstrap()` awaits it.')
+        ..writeln('Future<void> $initFunction() async {')
+        ..writeln('  final started = await Future.wait([');
+      for (final (:implementation, :prefix) in asynchronous) {
+        final factory = implementation.factory;
+        buffer.writeln(
+          "    _startAlone('${factory.name}', ${factory.codeWith(prefix)}),",
+        );
+      }
+      buffer
+        ..writeln('  ]);')
+        ..writeln('  $variable.addAll(started.nonNulls);')
+        ..write('}');
+    }
+    if (synchronous.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln()
+        ..write(_createAlone);
+    }
+    if (asynchronous.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln()
+        ..write(_startAlone);
+    }
+    return '$buffer';
   }
+
+  /// The function of [_many] that creates an implementation on its own.
+  String get _createAlone => '''
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+$service? _createAlone(String name, $service Function() create) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('\$name() failed, so the app works without it: \$error');
+    }
+    return null;
+  }
+}''';
+
+  /// The function of [_many] that starts an implementation on its own.
+  String get _startAlone => '''
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<$service?> _startAlone(
+  String name,
+  Future<$service> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('\$name() failed, so the app works without it: \$error');
+    }
+    return null;
+  }
+}''';
 }
 
 /// An implementation and the prefix of the import of its file.
 typedef _Prefixed = ({RoleImplementation implementation, String prefix});
+
+/// The library of `kDebugMode` and `debugPrint`, which the code of the
+/// implementations of a role that an app can have several providers of
+/// uses; see `_ServiceTemplate._many`.
+const _foundation = ImportRef('package:flutter/foundation.dart');

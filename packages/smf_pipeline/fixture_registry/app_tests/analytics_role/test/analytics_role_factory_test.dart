@@ -15,10 +15,6 @@ import 'package:{{app_name}}/core/fixture_service_log/fixture_service_log.dart';
 
 import 'analytics_role.dart';
 
-const _bug = 'Bug: an analytics service whose factory throws keeps the app '
-    'from starting, and every call of the analytics service of the app '
-    'throws.';
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // What reached the platform side of the fixture analytics: each call as
@@ -51,7 +47,7 @@ void main() {
       reason: 'In debug mode, the start-up prints the error of the factory '
           'once, with the name of the factory.',
     );
-  }, skip: _bug);
+  });
 
   test('the other analytics services get each call', () async {
     final failed = await failureOf(
@@ -74,5 +70,5 @@ void main() {
       isEmpty,
       reason: 'The service log, which the start-up left out, gets nothing.',
     );
-  }, skip: _bug);
+  });
 }
