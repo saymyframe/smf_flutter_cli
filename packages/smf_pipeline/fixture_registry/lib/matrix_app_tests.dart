@@ -30,10 +30,11 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // analytics, which their start-up and services reach, for the tests
       // of every module of the apps with them.
       ...await _fixtureMocks(),
-      // The listeners of the screen, the navigator observers and the back
-      // button of the system, whichever module provides the router: the
-      // test starts the app with main() and navigates through the
-      // navigation facade of the router role.
+      // The listeners of the screen, the navigator observers, the back
+      // button of the system and the configuration of the router, which it
+      // creates once, whichever module provides the router: the tests start
+      // the app with main() and navigate through the navigation facade of
+      // the router role.
       MatrixAppTest(
         '$appTests/router_screens',
         appliesTo: _hearsScreens,
@@ -57,8 +58,10 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the AppShell of the layout role. Every listener of the app hears of
       // each switch, those of the fixture analytics and of the fixture
       // screen log, and each navigator of a branch has observers of its
-      // own. The apps it applies to have the tests of router_screens, whose
-      // helpers it uses.
+      // own. And the router refuses to push a location in the main
+      // navigation from the page outside it of the second fixture feature,
+      // shown over it, or to replace that page with one. The apps they apply
+      // to have the tests of router_screens, whose helpers they use.
       MatrixAppTest(
         '$appTests/layout_screens',
         appliesTo: (app) =>

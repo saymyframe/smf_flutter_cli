@@ -29,6 +29,31 @@ List<String> _testNamesIn(String text) {
   return names.names;
 }
 
+/// The values of the string literals of the Dart file with [text], adjacent
+/// strings as one, such as the reasons of its expectations.
+List<String> _stringsIn(String text) {
+  final strings = _Strings();
+  parseString(content: text, throwIfDiagnostics: false).unit.accept(strings);
+  return strings.values;
+}
+
+/// Finds the values of the string literals of a file; see [_stringsIn].
+final class _Strings extends RecursiveAstVisitor<void> {
+  final values = <String>[];
+
+  @override
+  void visitAdjacentStrings(AdjacentStrings node) {
+    if (node.stringValue case final value?) values.add(value);
+    super.visitAdjacentStrings(node);
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    values.add(node.value);
+    super.visitSimpleStringLiteral(node);
+  }
+}
+
 /// Finds the full names of the tests of a file; see [_testNamesIn].
 final class _TestNames extends RecursiveAstVisitor<void> {
   final names = <String>[];
@@ -58,6 +83,18 @@ final class _TestNames extends RecursiveAstVisitor<void> {
 
 void main() {
   final providers = brokenProviders();
+
+  test('reads the texts of a file, adjacent strings as one', () {
+    expect(
+      _stringsIn('''
+void main() {
+  expect(1, 2, reason: 'A reason '
+      'on two lines.');
+}
+'''),
+      contains('A reason on two lines.'),
+    );
+  });
 
   test('reads the names of the tests of a file', () {
     expect(
@@ -180,7 +217,11 @@ void main() {
             contains(failure.test),
             reason: '$failure',
           );
-          expect(text, contains(failure.reason), reason: '$failure');
+          expect(
+            _stringsIn(text),
+            anyElement(contains(failure.reason)),
+            reason: 'The reason of $failure is a text of its file.',
+          );
         }
       });
     });

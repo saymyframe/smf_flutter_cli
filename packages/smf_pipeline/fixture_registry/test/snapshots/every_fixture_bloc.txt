@@ -1240,6 +1240,8 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
+import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
+    as screen3;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
     as screen2;
 import 'package:flutter/material.dart';
@@ -1564,6 +1566,7 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeFeatureDetailsLocation(:final id, :final tab) =>
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
+  FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -1684,6 +1687,18 @@ final class FakeSecondSecondLocation extends AppLocation {
   String get path => '/fake_second';
 }
 
+/// The location of `fake_second.outside`: `/fake_second/outside`.
+final class FakeSecondOutsideLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondOutsideLocation();
+
+  @override
+  String get routeName => 'fake_second.outside';
+
+  @override
+  String get path => '/fake_second/outside';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -1730,6 +1745,9 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.second`: `/fake_second`.
   NavLink second() => NavLink(_context, const FakeSecondSecondLocation());
+
+  /// The route `fake_second.outside`: `/fake_second/outside`.
+  NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
 }
 === lib/features/fake_feature/fake_feature_composition.dart (fake_feature (fake_bloc)) ===
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1820,6 +1838,20 @@ class FixtureHomeScreen extends StatelessWidget {
       ],
     ),
   );
+}
+=== lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// A screen of the second fixture feature outside the main navigation,
+/// whose page a router shows over the main navigation.
+@FixtureScreen('fake_second.outside')
+class FixtureOutsideScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureOutsideScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';

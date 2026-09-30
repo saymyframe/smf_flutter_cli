@@ -41,6 +41,28 @@ final class BrokenRouterModule extends SmfModule {
     ],
   );
 
+  /// The fake router that pushes a location in the main navigation over a
+  /// page shown over the main navigation, rather than refusing it with a
+  /// `StateError`.
+  static const pushesOverMainNavigation = BrokenRouterModule._(
+    ModuleId('broken_router_pushes_over_main_navigation'),
+    'A plain navigator that pushes under a page over its tabs (fixture)',
+    [("    _checkMainNavigation(location, branch, 'push');\n", '')],
+  );
+
+  /// The fake router that creates its configuration anew each time the
+  /// configuration is read, rather than once.
+  static const createsConfigAgain = BrokenRouterModule._(
+    ModuleId('broken_router_creates_config_again'),
+    'A plain navigator with a new configuration each time (fixture)',
+    [
+      (
+        '  late final RouterConfig<Object> config = RouterConfig(',
+        '  RouterConfig<Object> get config => RouterConfig(',
+      ),
+    ],
+  );
+
   /// The id of the module.
   final ModuleId id;
 

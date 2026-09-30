@@ -6,7 +6,8 @@
 /// it uses the navigation facade, the annotation sockets of the router, and
 /// the rules for resolving services. The second has another start route
 /// with a destination, so an app with both has two screens that can start
-/// it and two destinations.
+/// it and two destinations, and a route outside the main navigation, whose
+/// page a router shows over it.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
@@ -90,7 +91,8 @@ final class FakeFeatureModule extends SmfModule {
 }
 
 /// A second feature with a start screen that is a destination of the main
-/// navigation.
+/// navigation, and a screen outside the main navigation, which a router
+/// shows over it.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -129,6 +131,14 @@ final class FakeSecondModule extends SmfModule {
                 ),
               ),
               startCandidate: true,
+            ),
+            Route(
+              '/outside',
+              name: 'outside',
+              screen: ScreenRef(
+                'FixtureOutsideScreen',
+                import: ImportRef.app('$_folder/fixture_outside_screen.dart'),
+              ),
             ),
           ]),
         ),

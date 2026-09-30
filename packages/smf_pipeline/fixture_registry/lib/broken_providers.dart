@@ -19,6 +19,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
+import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 
@@ -90,6 +91,50 @@ List<BrokenProvider> brokenProviders() => const [
             'test/router_screens_test.dart',
             'each screen the user sees is heard of once',
             'go() to the location on top is heard of at most once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenRouterModule.pushesOverMainNavigation,
+        role: routerRole,
+        bug: 'It pushes a location in the main navigation over a page shown '
+            'over the main navigation, rather than refusing it with a '
+            'StateError.',
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeScreenLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/main_navigation_test.dart',
+            'push() and replace() refuse a location in the main navigation '
+                'over it',
+            'push() of a location in the main navigation from a page over it '
+                'throws a StateError.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenRouterModule.createsConfigAgain,
+        role: routerRole,
+        bug: 'It creates a new configuration each time appRouter.config is '
+            'read.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_config_test.dart',
+            'the router creates its configuration once',
+            'The router creates its config once.',
           ),
         ],
       ),
