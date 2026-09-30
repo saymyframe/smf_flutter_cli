@@ -26,9 +26,10 @@ jobs:
       # they are, and the ! goes into the title of the PR that breaks.
       #
       # The types are the usual ones of Conventional Commits. melos version
-      # parses a title of any type, and bumps the version for docs, feat, fix,
-      # perf, refactor and revert, and for a breaking change of any type. It
-      # bumps it for bug too, which is left out here: fix does the same. A
+      # parses a title of any type, and bumps the version for feat, fix, perf,
+      # refactor and revert, and for a breaking change of any type; docs goes
+      # into the changelog of a package that one of those bumps. It bumps it
+      # for bug too, which is left out here: fix does the same. A
       # revert is titled revert: <the title it reverts>, as melos version
       # takes the title that GitHub gives a revert, Revert "feat: ...", for a
       # feat.

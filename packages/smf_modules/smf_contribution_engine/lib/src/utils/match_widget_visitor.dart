@@ -51,8 +51,7 @@ class MatchWidgetVisitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitInstanceCreationExpression(InstanceCreationExpression node) {
-    // ignore: deprecated_member_use, name2's replacement isn't in analyzer 7.x, which this package still supports.
-    final name = node.constructorName.type.name2;
+    final name = node.constructorName.type.name;
     if (name.lexeme == targetWidget) {
       onMatch(
         WidgetCreation._(node, name, node.argumentList, keyword: node.keyword),

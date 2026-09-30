@@ -164,6 +164,12 @@ final List<_Ban> _bans = [
     'workspace: read by hand',
     RegExp(r'''['"]\^?workspace:?(?:\\s[*+])?\$?['"]'''),
   ),
+  // A comment that leaves a whole file out of the coverage: the file drops
+  // out of lcov.info, so tools/coverage_check.dart does not see it and
+  // SonarCloud counts all of it as uncovered. Code that no test can run
+  // goes between the comments that start and end what the coverage
+  // ignores, with the reason.
+  _Ban('coverage:ignore-file', RegExp(r'(?://|/\*)\s*coverage:ignore-file')),
   // A module never learns which module provides a role, so its tests check
   // what it gives the role through the data and the sockets of the role,
   // not in the files that the provider of the role renders: the file of

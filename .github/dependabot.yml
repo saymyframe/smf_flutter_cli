@@ -11,6 +11,12 @@ updates:
       # The snapshot tests pin the formatter to the latest version that
       # works with the analyzer of smf_pipeline; it moves with the analyzer.
       - dependency-name: "dart_style"
+      # very_good_analysis 11 needs Dart 3.13. The generated apps support
+      # Flutter 3.44, whose Dart is 3.12, and CI resolves the workspace with
+      # the Dart of every Flutter that the apps support, so the lints stay at
+      # 10 until the oldest of them comes with Dart 3.13.
+      - dependency-name: "very_good_analysis"
+        versions: [">=11.0.0"]
     groups:
       dart-deps:
         patterns:

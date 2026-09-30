@@ -30,19 +30,19 @@ class NamedListVisitor extends RecursiveAstVisitor<void> {
   final void Function(ListLiteral) onMatch;
 
   @override
-  void visitNamedExpression(NamedExpression node) {
-    final expression = node.expression;
-    if (node.name.label.name == name &&
+  void visitNamedArgument(NamedArgument node) {
+    final expression = node.argumentExpression;
+    if (node.name.lexeme == name &&
         expression is ListLiteral &&
         _isTakenByParentMatch(node)) {
       onMatch(expression);
     }
-    super.visitNamedExpression(node);
+    super.visitNamedArgument(node);
   }
 
   /// Whether one of the argument lists that hold [argument] belongs to a
   /// call or widget creation with [parentMatch] before it.
-  bool _isTakenByParentMatch(NamedExpression argument) {
+  bool _isTakenByParentMatch(NamedArgument argument) {
     for (var node = argument.parent; node != null; node = node.parent) {
       if (node is ArgumentList) {
         // The argument list comes last in the source of its call.

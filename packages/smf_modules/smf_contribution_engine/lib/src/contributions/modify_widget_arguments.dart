@@ -105,8 +105,8 @@ class ModifyWidgetArguments extends Contribution {
     ];
   }
 
-  bool _isRemoved(Expression arg) =>
-      arg is NamedExpression && removeArgs.contains(arg.name.label.name);
+  bool _isRemoved(Argument arg) =>
+      arg is NamedArgument && removeArgs.contains(arg.name.lexeme);
 
   /// The edits that drop the `const` (or `new`) of [creation], and each
   /// `const` around it that makes it constant: the new arguments need not
@@ -121,7 +121,7 @@ class ModifyWidgetArguments extends Contribution {
 
   /// The edit that removes [arg] with its comma. The last argument may have
   /// none, and then takes the comma after the last of [kept] instead.
-  static _Edit _removal(Expression arg, List<Expression> kept) {
+  static _Edit _removal(Argument arg, List<Argument> kept) {
     final next = arg.endToken.next!;
     final (start, end) = next.type == TokenType.COMMA
         ? (arg.offset, next.end)
@@ -132,10 +132,10 @@ class ModifyWidgetArguments extends Contribution {
   /// The edits of [addArgs] to [argumentList], whose arguments after the
   /// removals are [kept]: a value replaces that of a kept argument of its
   /// name, and the other arguments go at the end of the list.
-  List<_Edit> _additions(ArgumentList argumentList, List<Expression> kept) {
+  List<_Edit> _additions(ArgumentList argumentList, List<Argument> kept) {
     final keptByName = {
-      for (final arg in kept.whereType<NamedExpression>())
-        arg.name.label.name: arg.expression,
+      for (final arg in kept.whereType<NamedArgument>())
+        arg.name.lexeme: arg.argumentExpression,
     };
     final edits = <_Edit>[];
     final appended = <String>[];
