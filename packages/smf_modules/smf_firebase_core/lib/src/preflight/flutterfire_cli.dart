@@ -4,9 +4,10 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// The version of flutterfire_cli that [FlutterfireCliCheck] activates.
 ///
 /// The tests of the module repeat the edits that this version makes to the
-/// Gradle files of the app. It is exact, rather than a range such as
-/// `^1.4.1`: `cmd.exe`, which runs `dart.bat` on Windows, would read `^`,
-/// `<` and `>` in the argument as its own.
+/// Gradle files of the app, and CI activates it too, as
+/// `tool/flutterfire_version.dart` prints it. It is exact, rather than a
+/// range such as `^1.4.1`: `cmd.exe`, which runs `dart.bat` on Windows,
+/// would read `^`, `<` and `>` in the argument as its own.
 const flutterfireVersion = '1.4.1';
 
 /// The lowest version of flutterfire_cli that the check accepts.
