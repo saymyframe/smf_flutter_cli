@@ -66,6 +66,16 @@ import 'package:yaml/yaml.dart';
 /// the app with `flutter test` need the mocks of every module of the app,
 /// which the tests of each module declare, so those tests go into the app
 /// too.
+///
+/// With `--app` and the name of an app with every module, it adds the
+/// tests to the app that `--create --app` generated as that app, with
+/// `--without-external-steps` after `--add-app-tests` when `--create` had
+/// it: the values of the tests and the files that they generate come from
+/// that app of the matrix. With the start check, which runs the probes of
+/// the tests of the app on a device, it adds the tests of this tool with a
+/// probe that apply to the app too, such as the walk of its routes; see
+/// `appTestsFor`. Without `--app`, a test that needs an app of the matrix,
+/// such as one that generates files, fails.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -89,9 +99,29 @@ Future<void> main(List<String> given) async {
     stdout.writeln(jsonEncode(report));
     return;
   }
-  if (arguments case ['--add-app-tests', final app, ...final directories]
-      when directories.isNotEmpty) {
-    exit(await _addAppTests(app, directories));
+  if (arguments case ['--add-app-tests', ...final rest]) {
+    final withoutExternalSteps = rest.firstOrNull == '--without-external-steps';
+    final named = switch (choice.selection) {
+      final NamedEveryModuleApp named => named,
+      _ => null,
+    };
+    final given = withoutExternalSteps ? rest.skip(1).toList() : rest;
+    // --without-external-steps tells which app with every module --app
+    // names, so it goes only with --app.
+    if (given case [final app, ...final directories]
+        when directories.isNotEmpty &&
+            !app.startsWith('-') &&
+            (named != null || !withoutExternalSteps)) {
+      exit(
+        await _addAppTests(
+          app,
+          directories,
+          named,
+          withoutExternalSteps: withoutExternalSteps,
+        ),
+      );
+    }
+    _usage();
   }
   if (arguments
       case [
@@ -160,7 +190,8 @@ Never _usage([String? problem]) {
     ..writeln('       dart run tool/matrix.dart --plan [--every-combination]')
     ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
     ..writeln(
-      '       dart run tool/matrix.dart --add-app-tests <app> '
+      '       dart run tool/matrix.dart --add-app-tests '
+      '[--without-external-steps --app <name> | --app <name>] <app> '
       '<app tests>...',
     )
     ..writeln(
@@ -192,10 +223,19 @@ Future<int> _create(
 }
 
 /// Adds the `MatrixAppTest`s of [directories] to the app of `smf create`
-/// in the directory [app]; returns the exit code.
-Future<int> _addAppTests(String app, List<String> directories) async {
+/// in the directory [app], or, with [named], to the app with every module
+/// of that name that it was generated as, one of those without the modules
+/// whose steps need an external service with [withoutExternalSteps], with
+/// the tests of the probes of the roles of the app when the tests of
+/// [directories] run them; returns the exit code.
+Future<int> _addAppTests(
+  String app,
+  List<String> directories,
+  NamedEveryModuleApp? named, {
+  required bool withoutExternalSteps,
+}) async {
   final appTests = (await smfAppTests()).tests;
-  final tests = <MatrixAppTest>[];
+  var tests = <MatrixAppTest>[];
   for (final directory in directories) {
     final test = appTests
         .where((test) => p.equals(test.directory, directory))
@@ -209,11 +249,31 @@ Future<int> _addAppTests(String app, List<String> directories) async {
     }
     tests.add(test);
   }
+  MatrixApp? matrixApp;
+  if (named != null) {
+    final (:apps, failed: _) = await everyModuleAppsOf(
+      smfModules,
+      withoutExternalSteps: withoutExternalSteps,
+    );
+    final selected = named.select(apps, smfModules);
+    if (selected.isEmpty) {
+      stderr.writeln(named.problemsOf(selected).join('\n'));
+      return 64;
+    }
+    matrixApp = selected.single;
+    try {
+      tests = appTestsFor(matrixApp, tests, appTests);
+    } on MatrixAppTestException catch (error) {
+      stderr.writeln(error.message);
+      return 1;
+    }
+  }
   final pubspec = File(p.join(app, 'pubspec.yaml')).readAsStringSync();
   final name = (loadYaml(pubspec) as YamlMap)['name'] as String;
   final (code, output) = await addAppTestsTo(
     GeneratedApp(name: name, path: p.absolute(app)),
     tests,
+    app: matrixApp,
   );
   stdout.writeln(output.trim());
   await Future.wait<void>([stdout.flush(), stderr.flush()]);

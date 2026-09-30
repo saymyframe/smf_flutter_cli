@@ -342,8 +342,9 @@ final class MatrixShard {
 /// before its directory: `--combinations <pairwise|3-wise|all>`, the apps
 /// with every module that a run checks or generates, a pairwise covering
 /// by default; `--app <name>`, only the app with every module of that name,
-/// with `--every-module` or `--create`; and `--shard <index>/<count>`, a
-/// share of the apps that a run checks.
+/// with `--every-module` or `--create`, or the app that `--add-app-tests`
+/// adds tests to, which was generated as that app; and
+/// `--shard <index>/<count>`, a share of the apps that a run checks.
 final class MatrixToolOptions {
   const MatrixToolOptions._(
     this.arguments,
@@ -401,10 +402,12 @@ final class MatrixToolOptions {
     }
     final app = values['--app'];
     if (app != null) {
-      if (!flags.contains('--every-module') && !flags.contains('--create')) {
+      if (!flags.contains('--every-module') &&
+          !flags.contains('--create') &&
+          !flags.contains('--add-app-tests')) {
         problems.add(
-          '--app takes an app with every module, with --every-module or '
-          '--create.',
+          '--app takes an app with every module, with --every-module, '
+          '--create or --add-app-tests.',
         );
       }
       if (values.containsKey('--combinations')) {
