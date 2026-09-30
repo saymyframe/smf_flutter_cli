@@ -5,10 +5,11 @@
 // A module is independent of the others, and a role may get another
 // provider at any time, such as a second app entry, which owns the Android
 // and Xcode projects. So the workflows take the apps they generate, build
-// and start from the matrix tools, which give one app with every module for
-// each combination of the providers of the roles that take one, and a new
-// provider gets its app without a change of the workflows. The check fails
-// when a step of a workflow, or a script of .github/scripts:
+// and start from the matrix tools, whose plan gives the apps with every
+// module of a covering of the combinations of the providers of the roles
+// that take one, and a new provider gets its apps without a change of the
+// workflows. The check fails when a step of a workflow, or a script of
+// .github/scripts:
 // - selects an app of a matrix tool by its name, such as
 //   'every module (bloc)', which names the provider of each role that has
 //   several and changes when another role gets a second provider, also
@@ -33,6 +34,22 @@
 // A step that must do one of these is an exception below, with the reason.
 // The words of a command are read as its shell reads them: bash, or
 // PowerShell, where `\` is a character of a path rather than an escape.
+//
+// The apps with every module are many: one for each combination of the
+// providers of the roles that take one, the product of their numbers. So a
+// job of the plan, which runs the matrix tools with --plan, chooses the
+// apps that CI builds, archives and starts, and the shards of the matrices,
+// and every other job takes one app or one shard of it from the matrix of
+// the job, `${{ fromJSON(needs.<plan>.outputs.<list>) }}`. No job then
+// takes longer as the apps get more, only the number of jobs grows. The
+// check also fails when a step of a workflow, or a script of
+// .github/scripts, runs a matrix tool that generates or checks apps in one
+// job for a whole selection of them: --create without --app, --every-module
+// without --app or --shard, or the matrix without --shard, as a job that
+// generates every app into a directory and then builds or starts each; when
+// the --app or the --shard of a step does not come from the matrix of its
+// job that the plan gives; and when a job or a step computes its
+// timeout-minutes, as from the number of apps that it takes.
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -45,18 +62,18 @@ const modulePaths = {
       'The test of flutter_core that compares its brick with the app of '
           'flutter create of the pinned Flutter.',
   (
-    'Configure the apps with every module with Firebase for Android',
+    'Configure the app with every module with Firebase for Android',
     'smf_firebase_core',
-  ): 'The test of firebase_core that configures each app with Firebase '
-      'with the command of its README, before CI starts it.',
+  ): 'The test of firebase_core that configures the app of the job with '
+      'Firebase with the command of its README, before CI starts it.',
   (
-    'Configure the apps with every module with Firebase for iOS',
+    'Configure the app with every module with Firebase for iOS',
     'smf_firebase_core',
-  ): 'The test of firebase_core that configures each app with Firebase '
-      'with the command of its README, before CI starts it.',
-  ('Archive the apps with every module', 'smf_firebase_core'):
-      'The test of firebase_core that archives each app with the build '
-          'phase for Crashlytics fixed by the command of its README.',
+  ): 'The test of firebase_core that configures the app of the job with '
+      'Firebase with the command of its README, before CI starts it.',
+  ('Archive the app with every module', 'smf_firebase_core'):
+      'The test of firebase_core that archives the app of the job with the '
+          'build phase for Crashlytics fixed by the command of its README.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',
@@ -245,8 +262,9 @@ String _selected(String where, List<String> names) =>
 String _byHand(String where, String what) =>
     '$where $what. Generate the apps with the --create of '
     'packages/smf_flutter_cli/tool/matrix.dart, which names a provider of '
-    'every role, and one app for each combination of the providers of the '
-    'roles that take one.';
+    'every role: the app of the plan of the job with --app, or the apps of '
+    'a covering of the combinations of the providers of the roles that take '
+    'one.';
 
 /// The problem that [where] refers to an app of --create by its name, in
 /// [word].
@@ -398,7 +416,7 @@ List<String>? _argumentsOfTool(
 /// runs one, which [isTool] finds: the arguments after its directory, or
 /// after the directory of --every-module.
 List<String> _namesOfApps(List<String> words, bool Function(String) isTool) =>
-    switch (_argumentsOfTool(words, isTool)) {
+    switch (_choiceOf(_argumentsOfTool(words, isTool)).arguments) {
       ['--every-module', _, ...final names] => names,
       [final directory, ...final names] when !directory.startsWith('-') =>
         names,
@@ -410,11 +428,292 @@ List<String> _namesOfApps(List<String> words, bool Function(String) isTool) =>
 /// the app with the first provider of each role, such as start_app, which
 /// the name of each of the others starts with, such as start_app_riverpod.
 String? _createdName(List<String> words, bool Function(String) isTool) =>
-    switch (_argumentsOfTool(words, isTool)) {
+    switch (_choiceOf(_argumentsOfTool(words, isTool)).arguments) {
       ['--create', '--without-external-steps', _, final name, ...] => name,
       ['--create', _, final name, ...] => name,
       _ => null,
     };
+
+/// The options of the matrix tools that choose the apps of a run, each with
+/// a value: the combinations of the providers that its apps with every
+/// module cover, one of them by its name, or a shard of them.
+const _choiceOptions = {'--combinations', '--app', '--shard'};
+
+/// [arguments], the arguments of a matrix tool, without the options of
+/// [_choiceOptions] among the options before its directory, and those
+/// options with their values; no arguments for `null`.
+({List<String> arguments, Map<String, String> choice}) _choiceOf(
+  List<String>? arguments,
+) {
+  final rest = <String>[];
+  final choice = <String, String>{};
+  final given = arguments ?? const <String>[];
+  var index = 0;
+  while (index < given.length && given[index].startsWith('-')) {
+    final option = given[index];
+    if (_choiceOptions.contains(option) && index + 1 < given.length) {
+      choice[option] = given[index + 1];
+      index += 2;
+    } else {
+      rest.add(option);
+      index++;
+    }
+  }
+  return (arguments: [...rest, ...given.skip(index)], choice: choice);
+}
+
+/// What the command [words] does with a matrix tool, which [isTool] finds,
+/// when it generates or checks, in the one job that runs it, a whole
+/// selection of apps rather than one app of the plan or a shard of it:
+/// --create without --app, --every-module without --app or --shard, or the
+/// matrix without --shard. `null` for any other command, as for one that
+/// lists the tests of the apps or adds them to an app, prints the plan, or
+/// only explains what smf create would generate.
+String? _wholeSelection(List<String> words, bool Function(String) isTool) {
+  final (:arguments, :choice) = _choiceOf(_argumentsOfTool(words, isTool));
+  return switch (arguments) {
+    ['--create', ...final rest]
+        when !rest.contains('--explain') && !choice.containsKey('--app') =>
+      'generates every app with every module of a selection (--create '
+          'without --app)',
+    ['--every-module', ...]
+        when !choice.containsKey('--app') && !choice.containsKey('--shard') =>
+      'checks every app with every module of a selection (--every-module '
+          'without --app or --shard)',
+    [final directory, ...]
+        when !directory.startsWith('-') && !choice.containsKey('--shard') =>
+      'checks every app of a matrix (without --shard)',
+    _ => null,
+  };
+}
+
+/// The problem that [where] does [what], as [_wholeSelection] finds it.
+String _whole(String where, String what) =>
+    '$where $what. A job that builds, archives or starts apps with every '
+    'module takes one app of the plan with --app, and a job that checks the '
+    'apps of a matrix takes a shard of it with --shard, from the matrix of '
+    'the job, which the plan gives with '
+    r'${{ fromJSON(needs.<plan>.outputs.<list>) }}: so no job takes longer '
+    'as the apps get more, only the number of jobs grows.';
+
+/// The problems of the matrix tools that [script] runs: a run of
+/// [_wholeSelection], and, in a job whose matrix has the keys [planKeys]
+/// from the plan, all of them for `*`, an --app or a --shard of a run that
+/// generates or checks apps that does not come from the matrix of the plan,
+/// directly or through a variable of the environment of the step. A run
+/// that only explains what smf create would generate may take an app of the
+/// plan as it likes. A script of .github/scripts, which has no matrix, has
+/// no [planKeys] and takes them as it is given them.
+List<String> _planProblemsOfScript(_Script script, Set<String>? planKeys) {
+  final problems = <String>[];
+  for (final words in script.commands) {
+    if (_wholeSelection(words, script._isTool) case final what?) {
+      problems.add(_whole(script.where, what));
+    }
+    final (:arguments, :choice) = _choiceOf(
+      _argumentsOfTool(words, script._isTool),
+    );
+    if (planKeys == null || arguments.contains('--explain')) continue;
+    for (final option in ['--app', '--shard']) {
+      final value = choice[option];
+      if (value == null) continue;
+      final key = _matrixKeyOf(value) ??
+          switch (_variableOf(value)) {
+            final variable? => _matrixKeyOf(script._environment[variable]),
+            null => null,
+          };
+      if (key == null || !(planKeys.contains(key) || planKeys.contains('*'))) {
+        problems.add(
+          '${script.where} takes $option $value, which is no value of a '
+          'matrix of its job that the plan gives: take it from '
+          r'${{ matrix.<key> }} of a matrix of '
+          r'${{ fromJSON(needs.<plan>.outputs.<list>) }}, directly or through '
+          'a variable of the environment of the step.',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/// The key of the value of the matrix that [text] is, `${{ matrix.<key> }}`,
+/// if it is one.
+String? _matrixKeyOf(String? text) => text == null
+    ? null
+    : RegExp(r'^\$\{\{\s*matrix\.([\w-]+)\s*\}\}$').firstMatch(text)?[1];
+
+/// A matrix, or a value of one, from the output of a job:
+/// `${{ fromJSON(needs.<job>.outputs.<output>) }}`, with the job and the
+/// output.
+final _fromPlan = RegExp(
+  r'^\$\{\{\s*fromJSON\(\s*needs\.([\w-]+)\.outputs\.([\w-]+)\s*\)\s*\}\}$',
+);
+
+/// The problems of the plan in [workflow], the text of the workflow [file]
+/// of GitHub Actions: a step that runs a matrix tool for a whole selection
+/// of apps in one job, or takes an --app or a --shard that does not come
+/// from the matrix of its job that the plan gives, a matrix that takes an
+/// output of a job that the job of the matrix does not need or that has no
+/// such output, and a job or a step that computes its timeout-minutes.
+List<String> planProblemsOf(String workflow, {required String file}) {
+  final problems = <String>[];
+  final root = loadYaml(workflow) as YamlMap;
+  final jobs = root['jobs'] as YamlMap;
+  for (final MapEntry(key: job, :value) in jobs.entries) {
+    final definition = value as YamlMap;
+    final where = '$file, job $job';
+    final needs = switch (definition['needs']) {
+      final String job => {job},
+      final YamlList list => {for (final job in list) '$job'},
+      _ => const <String>{},
+    };
+    // The keys of the matrix of the job that the plan gives, or * for all.
+    final planKeys = <String>{};
+    void fromPlan(Object? text, String key) {
+      final match = _fromPlan.firstMatch('${text ?? ''}');
+      if (match == null) return;
+      final [needed, output] = [match[1]!, match[2]!];
+      if (!needs.contains(needed)) {
+        problems.add(
+          '$where takes its matrix from needs.$needed.outputs.$output, but '
+          '$needed is not among the needs of the job.',
+        );
+      } else if (!(((jobs[needed] as YamlMap?)?['outputs'] as YamlMap?)
+              ?.containsKey(output) ??
+          false)) {
+        problems.add(
+          '$where takes its matrix from needs.$needed.outputs.$output, but '
+          'the job $needed has no output $output.',
+        );
+      } else if (_secretOf(jobs[needed] as YamlMap) case final secret?) {
+        problems.add(
+          '$where takes its matrix from needs.$needed.outputs.$output, but '
+          'the job $needed refers to the secret $secret. The runner hides the '
+          'lines of each secret that a job refers to in the outputs of the '
+          'job, and leaves out an output that has one of them, such as the { '
+          'of a key in JSON, so the matrix would have no value: refer to the '
+          'secret in a job of its own.',
+        );
+      }
+      planKeys.add(key);
+    }
+
+    switch ((definition['strategy'] as YamlMap?)?['matrix']) {
+      case final YamlMap matrix:
+        for (final MapEntry(:key, :value) in matrix.entries) {
+          fromPlan(value, key == 'include' ? '*' : '$key');
+        }
+      case final Object matrix:
+        fromPlan(matrix, '*');
+    }
+    if (definition['timeout-minutes'] case final Object minutes
+        when minutes is! int) {
+      problems.add(_computedTimeout(where, minutes));
+    }
+    for (final step in definition['steps'] as YamlList? ?? YamlList()) {
+      final map = step as YamlMap;
+      final script = _Script(
+        '$where, step "${_nameOf(map)}"',
+        '${map['run'] ?? ''}',
+        powerShell: _isPowerShell(
+          map['shell'] ??
+              _default(definition, 'shell') ??
+              _default(root, 'shell'),
+        ),
+        environment: {
+          ..._map(root['env']),
+          ..._map(definition['env']),
+          ..._map(map['env']),
+        },
+      );
+      if (map['timeout-minutes'] case final Object minutes
+          when minutes is! int) {
+        problems.add(_computedTimeout(script.where, minutes));
+      }
+      problems.addAll(_planProblemsOfScript(script, planKeys));
+    }
+  }
+  return problems;
+}
+
+/// The problems of the caches of the native builds in [workflow], the text
+/// of the workflow [file] of GitHub Actions: a job on Linux or macOS that
+/// generates an app with --create, to build, archive or start it, and
+/// restores no cache of what the package manager of its platform downloads
+/// for the native build: Gradle on Linux, and Swift Package Manager on
+/// macOS, whose cache of the repositories of packages xcodebuild keeps in
+/// ~/Library/Caches/org.swift.swiftpm. Without it each such job downloads
+/// the same plugins again, such as the Firebase SDK, and Maven Central
+/// answers 403 to a runner that downloads too much.
+List<String> nativeCacheProblemsOf(String workflow, {required String file}) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  return [
+    for (final MapEntry(key: job, :value) in jobs.entries)
+      if (_nativeCacheOf('${(value as YamlMap)['runs-on']}')
+          case (final manager, final path)
+          when _generatesApps(value) && !_restoresCache(value, path))
+        _uncached(file, job, manager, path),
+  ];
+}
+
+/// The problem that the job [job] of the workflow [file] generates an app
+/// to build and restores no cache of [manager], whose path has [path].
+String _uncached(String file, Object? job, String manager, String path) =>
+    '$file, job $job generates an app with --create to build it for its '
+    'platform, but restores no cache of $manager ($path): each job would '
+    'download the same packages again.';
+
+/// The package manager of the native builds on the runner [runsOn], and a
+/// part of the path of its cache, or `null` for a runner that builds none.
+(String, String)? _nativeCacheOf(String runsOn) => switch (runsOn) {
+      final label when label.startsWith('ubuntu') => ('Gradle', '.gradle/'),
+      final label when label.startsWith('macos') => (
+          'Swift Package Manager',
+          'org.swift.swiftpm'
+        ),
+      _ => null,
+    };
+
+/// Whether a step of [job] generates apps with --create.
+bool _generatesApps(YamlMap job) => [
+      for (final step in job['steps'] as YamlList? ?? YamlList())
+        '${(step as YamlMap)['run'] ?? ''}',
+    ].any((run) => run.contains('--create'));
+
+/// Whether a step of [job] restores a cache whose path has [path].
+bool _restoresCache(YamlMap job, String path) =>
+    (job['steps'] as YamlList? ?? YamlList()).any(
+      (step) =>
+          '${(step as YamlMap)['uses'] ?? ''}'.startsWith('actions/cache') &&
+          '${(step['with'] as YamlMap?)?['path'] ?? ''}'.contains(path),
+    );
+
+/// The first secret that the job [job] refers to, such as
+/// `FIREBASE_SERVICE_ACCOUNT` of `secrets.FIREBASE_SERVICE_ACCOUNT`, or
+/// `null` if it refers to none.
+String? _secretOf(YamlMap job) =>
+    RegExp(r'secrets\.([\w-]+)').firstMatch(job.span.text)?[1];
+
+/// The problem that [where] computes its timeout-minutes, [minutes].
+String _computedTimeout(String where, Object minutes) =>
+    '$where computes its timeout-minutes, $minutes. A job takes a fixed '
+    'number of apps of the plan, one or a shard, so its time does not grow '
+    'with the number of apps: give it a fixed number of minutes.';
+
+/// The problems of the plan in [script], the text of the script [file] of
+/// .github/scripts, of bash, or of PowerShell with [powerShell]: a run of a
+/// matrix tool for a whole selection of apps, as in a step of a workflow
+/// (see [planProblemsOf]). A script has no matrix to take the app or the
+/// shard from, so it takes them as it is given them.
+List<String> scriptPlanProblemsOf(
+  String script, {
+  required String file,
+  bool powerShell = false,
+}) =>
+    _planProblemsOfScript(
+      _Script(file, script, powerShell: powerShell),
+      null,
+    );
 
 /// The words of [words] that refer to an app of [names], the names of the
 /// apps of --create, by a part of their path: the name, or the name with
@@ -864,7 +1163,7 @@ jobs:
         run: |
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
-      - name: Archive the apps with every module
+      - name: Archive the app with every module
         working-directory: packages/smf_modules/smf_firebase_core
         run: dart run tool/archive.dart
       - name: Start the app with every module
@@ -878,7 +1177,7 @@ jobs:
       ),
       [
         equals(
-          'apps.yml, job a, step "Archive the apps with every module" refers '
+          'apps.yml, job a, step "Archive the app with every module" refers '
           'to the package smf_firebase_core of a module, but runs no test of '
           'it with dart test.',
         ),
@@ -955,8 +1254,437 @@ dart run $tool "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)'
   });
 
   test(
+      'reads the options that choose the apps of a matrix tool as no names '
+      'of apps', () {
+    expect(
+      problemsOf(
+        workflow(r'''
+      - name: Choose
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app "$APP" --shard "$SHARD" "$apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --combinations all --shard 1/2 "$apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+'''),
+        file: 'apps.yml',
+      ),
+      isEmpty,
+    );
+    expect(
+      problemsOf(
+        workflow(r'''
+      - name: Choose
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
+          cd "$apps/start_app"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --shard 1/2 "$apps" 'every module (bloc)'
+'''),
+        file: 'apps.yml',
+      ),
+      [
+        startsWith(
+          'apps.yml, job a, step "Choose" refers to an app of the --create '
+          r'of a matrix tool by its name: $apps/start_app.',
+        ),
+        startsWith(
+          'apps.yml, job a, step "Choose" selects apps of a matrix tool by '
+          'name: every module (bloc).',
+        ),
+      ],
+    );
+  });
+
+  group('the plan', () {
+    test(
+        'finds a step that generates or checks a whole selection of apps in '
+        'one job', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  linux:
+    steps:
+      - name: Build
+        run: |
+          apps="$RUNNER_TEMP/SMF apps/android"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create "$apps" android_app
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+      - name: Start
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --combinations all "$RUNNER_TEMP/SMF apps/start" start_app
+      - name: Every module
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --combinations 3-wise "$RUNNER_TEMP/SMF apps"
+      - name: Matrix
+        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
+''',
+          file: 'apps.yml',
+        ),
+        [
+          equals(
+            'apps.yml, job linux, step "Build" generates every app with every '
+            'module of a selection (--create without --app). A job that '
+            'builds, archives or starts apps with every module takes one app '
+            'of the plan with --app, and a job that checks the apps of a '
+            'matrix takes a shard of it with --shard, from the matrix of the '
+            'job, which the plan gives with '
+            r'${{ fromJSON(needs.<plan>.outputs.<list>) }}: so no job takes '
+            'longer as the apps get more, only the number of jobs grows.',
+          ),
+          startsWith(
+            'apps.yml, job linux, step "Start" generates every app with every '
+            'module of a selection (--create without --app).',
+          ),
+          startsWith(
+            'apps.yml, job linux, step "Every module" checks every app with '
+            'every module of a selection (--every-module without --app or '
+            '--shard).',
+          ),
+          startsWith(
+            'apps.yml, job linux, step "Matrix" checks every app of a matrix '
+            '(without --shard).',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a matrix that takes an output of a job that refers to a '
+        'secret, whose lines the runner hides in the outputs of the job', () {
+      const matrix = r'''
+  android:
+    needs: [plan, firebase-key]
+    if: needs.firebase-key.outputs.key == 'true'
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - run: echo
+''';
+      const secret = r'''
+      - id: key
+        env:
+          HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: echo "key=$HAS_KEY" >> "$GITHUB_OUTPUT"
+''';
+      const plan = r'''
+jobs:
+  plan:
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - id: plan
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --plan
+''';
+      const key = r'''
+  firebase-key:
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+''';
+      expect(planProblemsOf('$plan$secret$key$matrix', file: 'apps.yml'), [
+        equals(
+          'apps.yml, job android takes its matrix from '
+          'needs.plan.outputs.apps, but the job plan refers to the secret '
+          'FIREBASE_SERVICE_ACCOUNT. '
+          'The runner hides the lines of each secret that a job refers to in '
+          'the outputs of the job, and leaves out an output that has one of '
+          'them, such as the { of a key in JSON, so the matrix would have no '
+          'value: refer to the secret in a job of its own.',
+        ),
+      ]);
+      // The secret in a job of its own, whose output only a condition reads.
+      expect(
+        planProblemsOf('$plan$key$secret$matrix', file: 'apps.yml'),
+        isEmpty,
+      );
+    });
+
+    test(
+        'passes the jobs that take one app or a shard from the matrix of the '
+        'plan, and the runs that generate nothing', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  plan:
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+      shards: ${{ steps.plan.outputs.shards }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --plan --every-combination
+  android:
+    needs: plan
+    timeout-minutes: 25
+    strategy:
+      max-parallel: 2
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - name: Build
+        timeout-minutes: 20
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          apps="$RUNNER_TEMP/SMF apps/android"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
+          dart run packages/smf_flutter_cli/tool/matrix.dart --app-tests
+  windows:
+    needs: [plan]
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    env:
+      APP: ${{ matrix.app }}
+    steps:
+      - name: Every module
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app $env:APP "$env:RUNNER_TEMP\SMF apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app "${{ matrix.app }}" "$env:RUNNER_TEMP\SMF apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create "$env:RUNNER_TEMP\probe" probe --explain
+          foreach ($app in @($env:ENTRIES | ConvertFrom-Json)) {
+            dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $app "$env:RUNNER_TEMP\probe" probe --explain
+          }
+  shards:
+    needs: plan
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - name: Matrix
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart --combinations "$COMBINATIONS" --shard "$SHARD" "$RUNNER_TEMP/SMF apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --shard "${{ matrix.shard }}" "$RUNNER_TEMP/SMF apps"
+  whole:
+    needs: plan
+    strategy:
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --shard "${{ matrix.shard }}" "$RUNNER_TEMP/SMF apps"
+  caller:
+    uses: ./.github/workflows/apps.yml
+''',
+          file: 'apps.yml',
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'passes a tool that checks one app of its own, in a job without a '
+        'plan: it takes no selection of the apps with every module, so it '
+        'needs no shard', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  several:
+    timeout-minutes: 15
+    steps:
+      - name: The app with several providers
+        run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
+''',
+          file: 'apps.yml',
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'finds an app or a shard that does not come from the matrix of the '
+        'plan, and a matrix of an output that the job does not need or that '
+        'is not there', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  plan:
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - id: plan
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --plan
+  literal:
+    steps:
+      - name: Named
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app 'every module (bloc)' "$apps" android_app
+  listed:
+    strategy:
+      matrix:
+        shard: [1/2, 2/2]
+    steps:
+      - name: Listed
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --shard "${{ matrix.shard }}" "$apps"
+  unplanned:
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "${{ matrix.app }}" "$apps" android_app
+  missing:
+    needs: plan
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.devices) }}
+    steps:
+      - name: Other key
+        env:
+          APP: ${{ matrix.other }}
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
+''',
+          file: 'apps.yml',
+        ),
+        [
+          equals(
+            'apps.yml, job literal, step "Named" takes --app every module '
+            '(bloc), which is no value of a matrix of its job that the plan '
+            r'gives: take it from ${{ matrix.<key> }} of a matrix of '
+            r'${{ fromJSON(needs.<plan>.outputs.<list>) }}, directly or '
+            'through a variable of the environment of the step.',
+          ),
+          startsWith(
+            'apps.yml, job listed, step "Listed" takes --shard '
+            r'${{ matrix.shard }}, which is no value of a matrix of its job '
+            'that the plan gives:',
+          ),
+          equals(
+            'apps.yml, job unplanned takes its matrix from '
+            'needs.plan.outputs.apps, but plan is not among the needs of the '
+            'job.',
+          ),
+          equals(
+            'apps.yml, job missing takes its matrix from '
+            'needs.plan.outputs.devices, but the job plan has no output '
+            'devices.',
+          ),
+          startsWith(
+            r'apps.yml, job missing, step "Other key" takes --app $APP, which '
+            'is no value of a matrix of its job that the plan gives:',
+          ),
+        ],
+      );
+    });
+
+    test('finds a job or a step that computes its timeout-minutes', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  a:
+    timeout-minutes: ${{ inputs.minutes }}
+    steps:
+      - name: Start
+        timeout-minutes: ${{ fromJSON(steps.start_apps.outputs.minutes || '10') }}
+        run: echo start
+      - name: Fixed
+        timeout-minutes: 10
+        run: echo fixed
+  b:
+    timeout-minutes: 25
+    steps:
+      - run: echo b
+''',
+          file: 'apps.yml',
+        ),
+        [
+          equals(
+            r'apps.yml, job a computes its timeout-minutes, ${{ '
+            'inputs.minutes }}. A job takes a fixed number of apps of the '
+            'plan, one or a shard, so its time does not grow with the number '
+            'of apps: give it a fixed number of minutes.',
+          ),
+          startsWith(
+            'apps.yml, job a, step "Start" computes its timeout-minutes, '
+            r"${{ fromJSON(steps.start_apps.outputs.minutes || '10') }}.",
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a script of .github/scripts that generates or checks a whole '
+        'selection of apps', () {
+      expect(
+        scriptPlanProblemsOf(
+          r'''
+#!/usr/bin/env bash
+tool=packages/smf_flutter_cli/tool/matrix.dart
+dart run "$tool" --create "$1" android_app
+dart run "$tool" --create --app "$2" "$1" android_app
+dart run "$tool" --every-module --shard "$3" "$1"
+''',
+          file: '.github/scripts/build.sh',
+        ),
+        [
+          startsWith(
+            '.github/scripts/build.sh generates every app with every module '
+            'of a selection (--create without --app).',
+          ),
+        ],
+      );
+    });
+  });
+
+  test(
+      'finds a job on Linux or macOS that generates an app to build and '
+      'restores no cache of the package manager of its platform', () {
+    const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: gradle
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
+  ios:
+    runs-on: macos-26
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
+  ios-cached:
+    runs-on: macos-26
+    steps:
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
+  macos:
+    runs-on: macos-26
+    steps:
+      - run: dart test
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" windows_app
+''';
+    expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
+      equals(
+        'apps.yml, job ios generates an app with --create to build it for its '
+        'platform, but restores no cache of Swift Package Manager '
+        '(org.swift.swiftpm): each job would download the same packages '
+        'again.',
+      ),
+    ]);
+  });
+
+  test(
       'the workflows and the scripts of the repository choose their apps by '
-      'role, and each exception applies to one of their steps', () {
+      'role and take them from the plan, and each exception applies to one '
+      'of their steps', () {
     final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
     expect(top.exitCode, 0, reason: '${top.stderr}');
     final root = '${top.stdout}'.trim();
@@ -976,19 +1704,31 @@ dart run $tool "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)'
     for (final file in workflows) {
       final name = file.uri.pathSegments.last;
       expect(
-        problemsOf(file.readAsStringSync(), file: name, used: used),
+        [
+          ...problemsOf(file.readAsStringSync(), file: name, used: used),
+          ...planProblemsOf(file.readAsStringSync(), file: name),
+          ...nativeCacheProblemsOf(file.readAsStringSync(), file: name),
+        ],
         isEmpty,
         reason: name,
       );
     }
     for (final file in scripts) {
       final name = '.github/scripts/${file.uri.pathSegments.last}';
+      final powerShell = name.endsWith('.ps1');
       expect(
-        scriptProblemsOf(
-          file.readAsStringSync(),
-          file: name,
-          powerShell: name.endsWith('.ps1'),
-        ),
+        [
+          ...scriptProblemsOf(
+            file.readAsStringSync(),
+            file: name,
+            powerShell: powerShell,
+          ),
+          ...scriptPlanProblemsOf(
+            file.readAsStringSync(),
+            file: name,
+            powerShell: powerShell,
+          ),
+        ],
         isEmpty,
         reason: name,
       );

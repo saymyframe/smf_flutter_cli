@@ -62,6 +62,14 @@ jobs:
       # Only the job with the latest Flutter saves the cache of Gradle; the
       # others restore it.
       save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # And so does it with the cache of Swift packages.
+      save_swiftpm_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # The jobs of the matrices with the latest Flutter check the apps with
+      # every module of every combination of the providers of the roles that
+      # take one, or of a 3-wise covering of more than 100, rather than of a
+      # pairwise covering, in more shards; those of each version build and
+      # start the apps of the pairwise coverings.
+      every_combination: ${{ matrix.flutter == needs.versions.outputs.latest }}
       # The CLI on pub.dev does not change with a pull request, so only this
       # workflow checks it.
       published_cli: true

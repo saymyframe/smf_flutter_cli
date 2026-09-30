@@ -1,6 +1,6 @@
 // Tests .github/scripts/each_app.sh, which runs a command for each app of a
-// directory in the jobs of CI, such as for each app with every module that
-// the --create of a matrix tool generates there.
+// directory in the jobs of CI, such as for the app with every module of a
+// job that the --create of a matrix tool generates there.
 @TestOn('!windows')
 library;
 

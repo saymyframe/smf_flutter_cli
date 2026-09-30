@@ -16,7 +16,14 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// matrix, such as `fake_codegen`, and only the apps named are checked.
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
-/// that take one; see `everyModuleAppsOf`.
+/// that take one; see `everyModuleAppsOf`. Of those, a run takes a pairwise
+/// covering of the combinations, or those of `--combinations 3-wise` or
+/// `--combinations all`, or only one, by the name of its case, with `--app`
+/// after `--every-module`; and with `--shard <index>/<count>`, only its
+/// share of the apps that it checks. These options come before the
+/// directory; see `MatrixToolOptions`. With `--plan [--every-combination]`
+/// alone, it prints the plan of the jobs of CI that check the matrix, one
+/// shard for each job; see `matrixPlanOf`.
 ///
 /// The tests of the router role and of the layout role apply to the apps
 /// of every module that provides the role, and the run fails when a
@@ -29,7 +36,13 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// the apps of the matrix that each test that a package of modules keeps
 /// applies to without the modules of that package, and the modules whose
 /// ids each test uses.
-Future<void> main(List<String> arguments) async {
+Future<void> main(List<String> given) async {
+  if (given case ['--plan', ...final options]) {
+    exit(await printMatrixPlan(fixtureModules(), options));
+  }
+  final choice = MatrixToolOptions.parse(given);
+  if (choice.problem case final problem?) _usage(problem);
+  final arguments = choice.arguments;
   if (arguments case ['--app-tests']) {
     for (final test in (await fixtureAppTests()).tests) {
       stdout.writeln(test.directory);
@@ -51,21 +64,40 @@ Future<void> main(List<String> arguments) async {
   if (rest.isEmpty ||
       rest.first.startsWith('-') ||
       (everyModule && rest.length > 1)) {
-    stderr
-      ..writeln('Usage: dart run tool/matrix.dart <directory> [<app>...]')
-      ..writeln('       dart run tool/matrix.dart --every-module <directory>')
-      ..writeln('       dart run tool/matrix.dart --app-tests [--json]');
-    exit(64);
+    _usage();
   }
   final code = await runMatrix(
     fixtureModules(),
     directory: rest.first,
     only: rest.length > 1 ? rest.skip(1).toSet() : null,
     everyModule: everyModule,
+    everyModuleApps: choice.selection,
+    shard: choice.shard,
     appTests: await fixtureAppTests(),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
+}
+
+/// Prints the usage, after [problem] if there is one, and exits with 64.
+Never _usage([String? problem]) {
+  if (problem != null) stderr.writeln(problem);
+  stderr
+    ..writeln(
+      'Usage: dart run tool/matrix.dart [--combinations <c>] '
+      '[--shard <i>/<n>] <directory> [<app>...]',
+    )
+    ..writeln(
+      '       dart run tool/matrix.dart --every-module '
+      '[--combinations <c> | --app <name>] [--shard <i>/<n>] <directory>',
+    )
+    ..writeln('       dart run tool/matrix.dart --plan [--every-combination]')
+    ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
+    ..writeln(
+      '<c>: pairwise (by default), 3-wise or all, the combinations of the '
+      'providers that the apps with every module cover.',
+    );
+  exit(64);
 }
 
 /// The package that declares the class of each of [modules], such as

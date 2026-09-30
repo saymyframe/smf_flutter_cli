@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Runs a command for each app in a directory, one after another: the apps
-# are the directories right in it, such as the apps with every module that
-# the --create of packages/smf_flutter_cli/tool/matrix.dart generates
-# there, one for each combination of the providers of the roles that take
-# one. So a new provider of such a role gets the command too.
+# are the directories right in it, such as the app with every module of a
+# job of the plan of CI that the --create of
+# packages/smf_flutter_cli/tool/matrix.dart generates there with --app,
+# named after the providers other than the first of their roles. So a step
+# needs no name of an app, and the app of a new provider gets the command
+# too.
 #
 #   each_app.sh <directory of apps> <command>...
 #     runs the command in the directory of each app;
