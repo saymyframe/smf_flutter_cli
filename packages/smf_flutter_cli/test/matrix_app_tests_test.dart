@@ -477,9 +477,17 @@ void main() {
       packageName: 'my_app',
       app: app,
     );
+    // The paths in the app, as the file system of the machine writes them.
     expect(
       added,
-      containsAll([startProbesFile, registeredServicesFile, routerWalkFile]),
+      containsAll([
+        for (final file in [
+          startProbesFile,
+          registeredServicesFile,
+          routerWalkFile,
+        ])
+          p.joinAll(file.split('/')),
+      ]),
     );
     final list = File(
       p.joinAll([directory.path, ...startProbesFile.split('/')]),
