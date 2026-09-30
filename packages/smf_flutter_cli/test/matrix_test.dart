@@ -506,7 +506,8 @@ void main() {
 
   test(
       'the report of the app tests names the modules of the package that '
-      'keeps each, and the apps it applies to without them', () async {
+      'keeps each, the apps it applies to without them, and the roles whose '
+      'contract it checks', () async {
     final home = await _appTestsOf('smf_home_flutter');
     final cli = await _appTestsOf('smf_flutter_cli');
     const packages = {
@@ -558,6 +559,14 @@ void main() {
         ),
         // A test of a package of no module of the matrix.
         MatrixAppTest('$cli/start', appliesTo: (_) => true),
+        // A test of the contract of roles, which the report names by their
+        // ids.
+        MatrixAppTest(
+          '$cli/of_roles',
+          appliesTo: (app) =>
+              app.hook?.presentRoles.contains(routerRole) ?? false,
+          roles: {routerRole, layoutRole},
+        ),
       ],
       modules: const [FlutterCoreModule(), HomeModule()],
       packages: packages,
@@ -570,7 +579,8 @@ void main() {
         'modules': ['home'],
         'appliesWithout': ['with home', 'without home', 'every module'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/with_home',
@@ -583,21 +593,24 @@ void main() {
             'apps': ['with home', 'every module'],
           },
         ],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/start',
         'modules': ['home'],
         'appliesWithout': ['with home'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/every_module',
         'modules': ['home'],
         'appliesWithout': ['every module'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/every_module_with_home',
@@ -610,14 +623,24 @@ void main() {
             'apps': ['every module'],
           },
         ],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$cli/start',
         'modules': <String>[],
         'appliesWithout': <String>[],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
+      },
+      {
+        'directory': '$cli/of_roles',
+        'modules': <String>[],
+        'appliesWithout': <String>[],
+        'uses': <Object>[],
+        'roles': ['router', 'layout'],
+        'roleFunctionUses': <Object>[],
       },
     ]);
     // It builds the apps once for all the tests, and not without tests.
@@ -677,12 +700,18 @@ import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
         'final create = role.createCrashReporter;'
       ),
     ]) {
-      test('such as $use, through an import of its file', () async {
+      test('such as $use, through an import of its file, with its role',
+          () async {
         expect(
           await usesIn({
             'test/a_test.dart': '$imports\nvoid main() {\n  $code\n}\n',
           }),
-          ['test/a_test.dart: createCrashReporter() of $path'],
+          [
+            {
+              'use': 'test/a_test.dart: createCrashReporter() of $path',
+              'role': 'crash_reporting',
+            },
+          ],
         );
       });
     }
@@ -732,7 +761,13 @@ import 'package:{{app_name}}/core/analytics/analytics_service.dart';
 final analytics = createAnalyticsService();
 """,
         }),
-        [analytics, 'test/a_test.dart: installCrashReporting() of $path'],
+        [
+          {'use': analytics, 'role': 'analytics'},
+          {
+            'use': 'test/a_test.dart: installCrashReporting() of $path',
+            'role': 'crash_reporting',
+          },
+        ],
       );
     });
 

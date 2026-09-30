@@ -346,11 +346,15 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   applies to the app or the values of its files there. Each has the id
 ///   of the module (`module`), its package (`package`) and the names of
 ///   those apps (`apps`), in the order of the apps;
+/// - `roles`, the ids of the roles whose contract it checks
+///   ([MatrixAppTest.roles]), such as `router`;
 /// - `roleFunctionUses`, the uses, in its Dart files, of the functions of
 ///   the roles of [modules], the modules of the matrix, that an app can
-///   have several providers of, each as the path of the file from the
-///   directory and the function, such as `test/a_test.dart:
-///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`.
+///   have several providers of. Each has the path of the file from the
+///   directory and the function (`use`), such as `test/a_test.dart:
+///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`,
+///   and the id of the role of the function (`role`), such as
+///   `crash_reporting`.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -363,11 +367,15 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 /// modules it had. [apps] gives the apps of the matrix, which it builds
 /// once, if there are [tests].
 ///
-/// An app test runs in every app with its module, whatever else the app
-/// has, so it uses no function of a role that reaches every provider of
-/// the role, such as `createCrashReporter()`, whose reporter reports to all
-/// of them: what another provider does, only the tests of its own module
-/// know. Such functions are the public top-level functions of the files of
+/// An app test of a module runs in every app with its module, whatever else
+/// the app has, so it uses no function of a role that reaches every
+/// provider of the role, such as `createCrashReporter()`, whose reporter
+/// reports to all of them: what another provider does, only the tests of
+/// its own module know. A test of the contract of such a role calls them,
+/// since what the role does with every provider is its contract, and looks
+/// only at what reaches the providers that it knows; the checks of the
+/// repository tell it from the others by its `roles` and the role of each
+/// use. Such functions are the public top-level functions of the files of
 /// the interface of each role that an app can have several providers of,
 /// in the app of each of its providers that the contract harness renders
 /// first, and a use is a call or a tear-off through an import of their
@@ -405,6 +413,7 @@ Future<List<Map<String, Object>>> appTestsReport(
             in _usesOf(test, matrix).entries)
           {'module': id.value, 'package': packages[id]!, 'apps': names},
       ],
+      'roles': [for (final role in test.roles) role.id],
       'roleFunctionUses': _roleFunctionUses(
         test.directory,
         functions,
@@ -416,12 +425,13 @@ Future<List<Map<String, Object>>> appTestsReport(
 }
 
 /// The uses of [functions], the functions of roles by the path of their
-/// file in the app, in the Dart files of the tests in [directory], each as
-/// the path of the file from [directory] and the use; none if [directory]
-/// does not exist, which the checks of the repository find otherwise.
-List<String> _roleFunctionUses(
+/// file in the app, in the Dart files of the tests in [directory], each
+/// with the path of the file from [directory] and the use, and the id of
+/// the role; none if [directory] does not exist, which the checks of the
+/// repository find otherwise.
+List<Map<String, String>> _roleFunctionUses(
   String directory,
-  Map<String, Set<String>> functions,
+  Map<String, _RoleFunctions> functions,
   FileSystem fileSystem,
 ) {
   if (!fileSystem.directory(directory).existsSync()) return const [];
@@ -430,13 +440,16 @@ List<String> _roleFunctionUses(
     for (final (relative, file) in _filesOf(directory, fileSystem))
       if (context.split(relative).join('/') case final path
           when path.endsWith('.dart'))
-        for (final use in _roleFunctionUsesIn(
+        for (final (:use, :role) in _roleFunctionUsesIn(
           DartFileIndexer.index(path, file.readAsStringSync()),
           functions,
         ))
-          '$path: $use',
+          {'use': '$path: $use', 'role': role.id},
   ];
 }
+
+/// A role and the names of its functions in one file of its interface.
+typedef _RoleFunctions = ({Role role, Set<String> names});
 
 /// The functions of the roles of [modules] that an app can have several
 /// providers of, by the path in the app of the file of the role that
@@ -444,11 +457,11 @@ List<String> _roleFunctionUses(
 /// the public top-level functions of the files of the interface of each
 /// such role, in the app of each of its providers that the contract harness
 /// renders first; see [appTestsReport].
-Future<Map<String, Set<String>>> _roleFunctionsOf(
+Future<Map<String, _RoleFunctions>> _roleFunctionsOf(
   List<SmfModule> modules,
 ) async {
   final harness = ContractHarness(ModuleRegistry(modules));
-  final functions = <String, Set<String>>{};
+  final functions = <String, _RoleFunctions>{};
   for (final module in modules) {
     final roles = [
       for (final role in module.descriptor.provides)
@@ -473,7 +486,7 @@ Future<Map<String, Set<String>>> _roleFunctionsOf(
             'of the $role.',
           );
         }
-        (functions[path] ??= {}).addAll([
+        (functions[path] ??= (role: role, names: {})).names.addAll([
           for (final declaration
               in DartFileIndexer.index(path, file.text).declarations)
             if (declaration.kind == DeclarationKind.function &&
@@ -489,13 +502,14 @@ Future<Map<String, Set<String>>> _roleFunctionsOf(
 /// The uses in [file], a Dart file of app tests, of the [functions] of
 /// roles by the path of their file in the app: calls and tear-offs through
 /// an import of that file as `package:{{app_name}}/...`, with a prefix or
-/// without, each as `<function>() of <path>`.
-List<String> _roleFunctionUsesIn(
+/// without, each as `<function>() of <path>`, with the role of the
+/// function.
+List<({String use, Role role})> _roleFunctionUsesIn(
   DartFileIndex file,
-  Map<String, Set<String>> functions,
+  Map<String, _RoleFunctions> functions,
 ) {
-  final uses = <String>[];
-  for (final MapEntry(key: path, value: names) in functions.entries) {
+  final uses = <({String use, Role role})>[];
+  for (final MapEntry(key: path, value: (:role, :names)) in functions.entries) {
     final uri = 'package:{{app_name}}/${path.substring('lib/'.length)}';
     final imports = [
       for (final import in file.imports)
@@ -519,7 +533,9 @@ List<String> _roleFunctionUsesIn(
         if (names.contains(access.name) && prefixes.contains(access.target))
           access.name,
     };
-    uses.addAll([for (final name in used) '$name() of $path']);
+    uses.addAll([
+      for (final name in used) (use: '$name() of $path', role: role),
+    ]);
   }
   return uses;
 }
