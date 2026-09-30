@@ -15,6 +15,7 @@ workspace:
   - packages/smf_contracts
   - packages/smf_pipeline
   - packages/smf_pipeline/fixture_registry
+  - packages/smf_pipeline/test/fixtures/fake_broken
   - packages/smf_pipeline/test/fixtures/fake_di
   - packages/smf_pipeline/test/fixtures/fake_feature
   - packages/smf_pipeline/test/fixtures/fake_infra

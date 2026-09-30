@@ -19,6 +19,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// whichever module provides it, and name the fixture modules whose files
 /// they use: the fixture features, and the fixture analytics and the
 /// fixture screen log, whose listeners of the screen note what they hear.
+/// The tests of each role must fail on the providers of the role with a
+/// known bug of `brokenProviders`, with the reason of the expectation that
+/// the bug breaks, which each expectation of those tests gives.
 Future<MatrixAppTests> fixtureAppTests() async {
   final appTests = await appTestsDirectoryOf('fixture_registry');
   return MatrixAppTests(

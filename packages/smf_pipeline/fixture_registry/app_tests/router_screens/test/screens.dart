@@ -77,7 +77,9 @@ Element details(WidgetTester tester, int id) => tester.element(
 /// Checks what the listeners heard of after a navigation that may leave
 /// the page on top as it is, whose screen was [before]: nothing if the page
 /// stays, and [screen], the name of the route and the location of the page
-/// on top, once if another page is on top, even at the same location.
+/// on top, once if another page is on top, even at the same location. A
+/// failure gives [reason], the step of the test, and which of the two it
+/// expected.
 ///
 /// Whether a navigation keeps the page on top, such as `go()` to its
 /// location, is up to the router. A page that stays keeps the element of
@@ -85,17 +87,28 @@ Element details(WidgetTester tester, int id) => tester.element(
 void expectHeardAtMostOnce(
   WidgetTester tester,
   Element before,
-  (String?, String) screen,
-) {
+  (String?, String) screen, {
+  required String reason,
+}) {
   final screens = heard();
   final stays = before.mounted &&
       tester
           .elementList(find.byType(before.widget.runtimeType))
           .contains(before);
   if (stays) {
-    expect(screens, isEmpty, reason: 'The page on top stayed.');
+    expect(
+      screens,
+      isEmpty,
+      reason: '$reason The page on top stayed, so the listeners hear of '
+          'nothing.',
+    );
   } else {
-    expect(screens, [screen], reason: 'Another page is on top.');
+    expect(
+      screens,
+      [screen],
+      reason: '$reason Another page is on top, so the listeners hear of it '
+          'once.',
+    );
   }
 }
 
@@ -109,7 +122,11 @@ FixtureObserver observerOf(NavigatorState navigator) {
     hasLength(1),
     reason: 'The router calls each factory of observers for each navigator.',
   );
-  expect(observers.single.navigator, same(navigator));
+  expect(
+    observers.single.navigator,
+    same(navigator),
+    reason: 'The observer of a navigator watches that navigator.',
+  );
   return observers.single;
 }
 
@@ -120,6 +137,6 @@ void expectObserverOfEachNavigator(WidgetTester tester) {
   final navigators = tester.stateList<NavigatorState>(
     find.byType(Navigator, skipOffstage: false),
   );
-  expect(navigators, isNotEmpty);
+  expect(navigators, isNotEmpty, reason: 'The router shows a navigator.');
   navigators.forEach(observerOf);
 }

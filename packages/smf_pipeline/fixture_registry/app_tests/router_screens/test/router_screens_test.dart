@@ -9,7 +9,9 @@
 // navigation facade of the router role and the navigators of Flutter, so
 // it applies to a new provider of the role as it is. What only one router
 // does is tested in the app tests about that router, such as
-// go_router_screens.
+// go_router_screens. Each expectation gives its reason, which a provider of
+// the role with a known bug fails the test with (brokenProviders of the
+// fixture registry).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,14 +30,23 @@ void main() {
     // The app starts as on a device, on the start screen, whose location is
     // its path.
     await startApp(tester);
-    expect(heard(), [('fake_feature.home', '/fake_feature')]);
+    expect(
+      heard(),
+      [('fake_feature.home', '/fake_feature')],
+      reason: 'The first screen is heard of once.',
+    );
 
     // go() to the location on top: the router keeps the page, or shows a
     // new page at the same location.
     final home = tester.element(find.byType(FixtureHomeScreen));
     home.nav.fakeFeature.home().go();
     await tester.pumpAndSettle();
-    expectHeardAtMostOnce(tester, home, ('fake_feature.home', '/fake_feature'));
+    expectHeardAtMostOnce(
+      tester,
+      home,
+      ('fake_feature.home', '/fake_feature'),
+      reason: 'go() to the location on top is heard of at most once.',
+    );
 
     // go() to a child shows only the child: its parent goes below it.
     tester
@@ -45,19 +56,29 @@ void main() {
         .details(id: 1)
         .go();
     await tester.pumpAndSettle();
-    expect(heard(), [('fake_feature.details', '/fake_feature/details/1')]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/1')],
+      reason: 'go() to a child is heard of once, and its parent below it not.',
+    );
 
     // The page on top shows another location: the same route with another
     // value of its query parameter, then of its path parameter, whether
     // the router keeps the page or shows a new one.
     details(tester, 1).nav.fakeFeature.details(id: 1, tab: 'b').go();
     await tester.pumpAndSettle();
-    expect(heard(), [
-      ('fake_feature.details', '/fake_feature/details/1?tab=b'),
-    ]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/1?tab=b')],
+      reason: 'Another location of the page on top is heard of once.',
+    );
     details(tester, 1).nav.fakeFeature.details(id: 4).go();
     await tester.pumpAndSettle();
-    expect(heard(), [('fake_feature.details', '/fake_feature/details/4')]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/4')],
+      reason: 'Another location of the page on top is heard of once.',
+    );
 
     // push() and the page below again when the pushed one closes, with the
     // value that push() completes with. The test does not wait for push(),
@@ -74,28 +95,48 @@ void main() {
           .then((value) => result = value),
     );
     await tester.pumpAndSettle();
-    expect(heard(), [('fake_feature.details', '/fake_feature/details/2')]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/2')],
+      reason: 'The page that push() shows is heard of once.',
+    );
     expect(
       observerOf(Navigator.of(details(tester, 2))).pushed.last,
       'fake_feature.details',
+      reason: 'The observer of the navigator sees the pushed page come, '
+          'under the full name of its route.',
     );
     expectObserverOfEachNavigator(tester);
     Navigator.of(details(tester, 2)).pop('closed');
     await tester.pumpAndSettle();
-    expect(result, 'closed');
-    expect(heard(), [('fake_feature.details', '/fake_feature/details/4')]);
+    expect(
+      result,
+      'closed',
+      reason: 'push() completes with the value that its page closes with.',
+    );
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/4')],
+      reason: 'The page below is heard of once when the pushed page closes.',
+    );
 
     // replace() puts another page on top.
     details(tester, 4).nav.fakeFeature.details(id: 3).replace();
     await tester.pumpAndSettle();
-    expect(heard(), [('fake_feature.details', '/fake_feature/details/3')]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/3')],
+      reason: 'The page that replace() shows is heard of once.',
+    );
 
     // go() to another location from the page that replace() put on top.
     details(tester, 3).nav.fakeFeature.details(id: 3, tab: 'b').go();
     await tester.pumpAndSettle();
-    expect(heard(), [
-      ('fake_feature.details', '/fake_feature/details/3?tab=b'),
-    ]);
+    expect(
+      heard(),
+      [('fake_feature.details', '/fake_feature/details/3?tab=b')],
+      reason: 'Another location of the page on top is heard of once.',
+    );
 
     // go() to the location on top: the router keeps the page, or shows a
     // new page at the same location.
@@ -103,7 +144,12 @@ void main() {
     final shown = details(tester, 3);
     shown.nav.fakeFeature.details(id: 3, tab: 'b').go();
     await tester.pumpAndSettle();
-    expectHeardAtMostOnce(tester, shown, onTop);
+    expectHeardAtMostOnce(
+      tester,
+      shown,
+      onTop,
+      reason: 'go() to the location on top is heard of at most once.',
+    );
 
     // A page shown past the router and a dialog are not pages of the
     // router: the page below stays the screen of the router.
@@ -114,18 +160,32 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(heard(), isEmpty);
+    expect(
+      heard(),
+      isEmpty,
+      reason: 'A page shown past the router is no screen of the router.',
+    );
     Navigator.of(tester.element(find.text('past'))).pop();
     await tester.pumpAndSettle();
-    expectHeardAtMostOnce(tester, below, onTop);
+    expectHeardAtMostOnce(
+      tester,
+      below,
+      onTop,
+      reason: 'The page below a page shown past the router stayed its screen.',
+    );
     unawaited(
       showDialog<void>(context: below, builder: (_) => const Text('dialog')),
     );
     await tester.pumpAndSettle();
-    expect(heard(), isEmpty);
+    expect(heard(), isEmpty, reason: 'A dialog is no screen of the router.');
     Navigator.of(tester.element(find.text('dialog'))).pop();
     await tester.pumpAndSettle();
-    expectHeardAtMostOnce(tester, below, onTop);
+    expectHeardAtMostOnce(
+      tester,
+      below,
+      onTop,
+      reason: 'The page below a dialog stayed the screen of the router.',
+    );
 
     // The back button of the system closes the route on top of the
     // innermost navigator that the user sees: a dialog before the page
@@ -136,29 +196,48 @@ void main() {
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(heard(), isEmpty);
-    expect(find.text('dialog'), findsNothing);
+    expect(
+      heard(),
+      isEmpty,
+      reason: 'The back button of the system closes a dialog, and the page '
+          'below it stays the screen of the router.',
+    );
+    expect(
+      find.text('dialog'),
+      findsNothing,
+      reason: 'The back button of the system closes the dialog on top.',
+    );
     expect(below.mounted, isTrue, reason: 'The page below the dialog stays.');
 
     // The back button of the system closes the child. Whether the location
     // of the parent keeps the query of the child is up to the router.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(heard(), [
-      isA<(String?, String)>()
-          .having((screen) => screen.$1, 'route', 'fake_feature.home')
-          .having(
-            (screen) => Uri.parse(screen.$2).path,
-            'path of the location',
-            '/fake_feature',
-          ),
-    ]);
+    expect(
+      heard(),
+      [
+        isA<(String?, String)>()
+            .having((screen) => screen.$1, 'route', 'fake_feature.home')
+            .having(
+              (screen) => Uri.parse(screen.$2).path,
+              'path of the location',
+              '/fake_feature',
+            ),
+      ],
+      reason: 'The back button of the system closes the child, and its parent '
+          'is heard of once.',
+    );
 
     // A location from the platform that no route matches: the router shows
     // its error screen at that location, or takes no locations from the
     // platform and stays where it is.
     await tester.binding.handlePushRoute('/no/such/screen?x=1');
     await tester.pumpAndSettle();
-    expect(heard(), anyOf(isEmpty, [(null, '/no/such/screen?x=1')]));
+    expect(
+      heard(),
+      anyOf(isEmpty, [(null, '/no/such/screen?x=1')]),
+      reason: 'The error screen is heard of once, at the location that no '
+          'route matches.',
+    );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

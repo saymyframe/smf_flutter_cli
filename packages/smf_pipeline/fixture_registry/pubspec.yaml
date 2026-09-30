@@ -9,6 +9,9 @@ environment:
 resolution: workspace
 
 dependencies:
+  # The providers of roles with one known bug each, whose apps the tests of
+  # their roles must fail; never in a registry of apps that must work.
+  fake_broken: any
   fake_di: any
   fake_feature: any
   fake_infra: any
