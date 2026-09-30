@@ -999,6 +999,7 @@ void main() {
       );
       expect(unchosen.errors.single.message, 'Give --pick.');
       expect(unchosen.app, isNull);
+      expect(unchosen.hook, isNull);
       expect(unchosen.collection, isNotNull);
 
       // The options of the harness apply to every case, unless the case
@@ -1019,6 +1020,58 @@ void main() {
         ),
       );
       expect(overridden.choices, {pick: 'blue'});
+    });
+
+    test(
+        'gives the result the data and the roles of its app, with the context '
+        'of the harness and the choices of the roles', () async {
+      final pick = TestRole<String>(
+        'pick',
+        options: const [RoleOption(name: 'pick', help: 'What to pick.')],
+        template: _PickTemplate(),
+      );
+      const context = ModuleContext(
+        appName: 'bird_watch',
+        orgName: 'org.example',
+        appIdentity: AppIdentity(
+          platforms: ['android'],
+          androidApplicationId: 'org.example.bird_watch',
+          iosBundleId: 'org.example.bird-watch',
+          androidNamespace: 'org.example.bird_watch',
+        ),
+      );
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(),
+          TestModule(
+            'picker',
+            providers: [RoleProvider.plain(pick)],
+            contributions: [pick.data('seeds')],
+          ),
+        ]),
+        context: context,
+      );
+
+      final result = await harness.check(
+        const ContractCase(
+          'picker',
+          requested: [ModuleId('picker')],
+          roleOptions: {'pick': 'blue'},
+        ),
+      );
+
+      expect(result.errors, isEmpty);
+      final hook = result.hook!;
+      expect(hook.presentRoles, result.resolution!.presentRoles);
+      expect(hook.presentRoles, containsAll([appEntryRole, pick]));
+      expect(hook.context, same(context));
+      expect(hook.choices, {pick: 'blue'});
+      // A role reads from it what its hooks got when the app was rendered.
+      final input = pick.hookInput(hook);
+      expect([for (final data in input.data) data.value], ['seeds']);
+      expect(input.data.single.origin, const ModuleOrigin(ModuleId('picker')));
+      expect(input.choice, 'blue');
+      expect(input.context.appName, 'bird_watch');
     });
 
     group('a question of a role', () {
@@ -1072,6 +1125,7 @@ void main() {
         Future<String> errorOf(RoleTemplate<String> template) async {
           final result = await harnessOf(colors(template)).check(asker);
           expect(result.app, isNull);
+          expect(result.hook, isNull);
           return result.errors.single.message;
         }
 
@@ -1202,6 +1256,7 @@ void main() {
       expect(result.errors, isEmpty);
       expect(result.app, isNull);
       expect(result.choices, isNull);
+      expect(result.hook, isNull);
     });
 
     test('problems of rendering become issues', () async {
@@ -1320,6 +1375,9 @@ void main() {
             ),
           ],
         );
+        // The app with its problems, and what its roles got.
+        expect(result.app, isNotNull);
+        expect(result.hook!.presentRoles, result.resolution!.presentRoles);
       });
 
       test(

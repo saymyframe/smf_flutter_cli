@@ -57,6 +57,7 @@ final class ContractResult {
     this.choices,
     this.answers = const {},
     this.app,
+    this.hook,
   });
 
   /// The case.
@@ -93,13 +94,25 @@ final class ContractResult {
   /// the stages before found no error.
   final RenderedApp? app;
 
+  /// The data and the roles of the [app], as the hooks of its roles got
+  /// them when the harness rendered it: the data of the roles that
+  /// applies, the present roles, the context of the harness and the
+  /// [choices] of the roles; `null` without an [app].
+  ///
+  /// A role builds the input of its hooks from it with [Role.hookInput],
+  /// so a test reads what the modules gave a role, and what the role
+  /// chose, as every provider of the role gets it, whichever module
+  /// provides it.
+  final RoleHookRequest? hook;
+
   /// This result with [more] issues, and with the [choices], the
-  /// [answers] and the [app] if they are given.
+  /// [answers], the [app] and the [hook] if they are given.
   ContractResult _with(
     List<SmfIssue> more, {
     Map<Role, Object?>? choices,
     Map<String, String>? answers,
     RenderedApp? app,
+    RoleHookRequest? hook,
   }) =>
       ContractResult(
         contractCase,
@@ -110,6 +123,7 @@ final class ContractResult {
         choices: choices ?? this.choices,
         answers: answers ?? this.answers,
         app: app ?? this.app,
+        hook: hook ?? this.hook,
       );
 
   /// The errors among [issues].
@@ -722,6 +736,13 @@ final class ContractHarness {
       choices: choices,
       answers: answers,
       app: app,
+      hook: hookRequest(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+        context: context,
+        choices: choices,
+      ),
     );
     return rendered._with(checkRendered(rendered, app));
   }
