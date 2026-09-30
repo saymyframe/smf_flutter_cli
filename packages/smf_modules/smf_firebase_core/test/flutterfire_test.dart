@@ -226,7 +226,7 @@ void main() {
       final step = const FirebaseCoreModule()
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
-          .single;
+          .singleWhere((step) => step.id == FirebaseCoreModule.configureStep);
       expect(
         step.arguments,
         containsAll([

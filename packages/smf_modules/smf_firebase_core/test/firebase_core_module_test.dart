@@ -106,12 +106,16 @@ void main() {
 
     test(
         'configures Firebase with flutterfire after generation, for the '
-        'platforms of the app', () {
+        'platforms of the app, in a step that the modules which depend on it '
+        'may continue', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
+          .where((step) => step.followUpOf == null)
           .single;
 
+      expect(step.id, FirebaseCoreModule.configureStep);
+      expect(FirebaseCoreModule.configureStep.module, FirebaseCoreModule.id);
       expect(step.tool, same(flutterfireTool));
       expect(step.tool.executable, 'dart');
       expect(
@@ -151,12 +155,13 @@ void main() {
     test(
         'then points the phase for Crashlytics of flutterfire at the upload '
         'script in the build directory of the app', () {
-      final step = module
+      final fix = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
+          .where((step) => step.followUpOf != null)
           .single;
 
-      final fix = step.followUps.single;
+      expect(fix.followUpOf, FirebaseCoreModule.configureStep);
       expect(fix.tool.executable, 'ruby');
       expect(fix.tool.prefixArgs, isEmpty);
       expect(fix.arguments, hasLength(3));
@@ -192,7 +197,7 @@ void main() {
       expect(fix.hosts, {HostOperatingSystem.macos});
       expect(fix.needs, isEmpty);
       expect(fix.when, isEmpty);
-      expect(fix.followUps, isEmpty);
+      expect(fix.id, isNull);
       // The README of the app gives it as the pipeline prints it, in single
       // quotes, which the program has none of.
       expect(fix.arguments[1], isNot(contains("'")));
