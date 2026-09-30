@@ -339,8 +339,9 @@ final class AppEntryRole extends Role<NoDsl> {
   List<ModuleRule<NoDsl>> get moduleRules => const [
         ModuleRule(
           id: 'app_entry.bootstrap_phases',
-          description: 'The tags of the phases of start-up are in '
-              'lib/bootstrap.dart in the order early, platform, di, late.',
+          description: 'The tags of the phases of start-up are in the body '
+              'of bootstrap() in lib/bootstrap.dart, in the order early, '
+              'platform, di, late.',
           check: _checkBootstrapPhases,
         ),
         ModuleRule(
@@ -430,6 +431,22 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
     for (final tag in tags)
       if (text.indexOf(tag) case final offset when offset >= 0) offset,
   ];
+  final body = _bodyOf(text, AppEntryRole.bootstrap.name);
+  for (final tag in tags) {
+    final offset = text.indexOf(tag);
+    if (offset < 0 ||
+        (body != null && offset > body.start && offset < body.end)) {
+      continue;
+    }
+    issues.add(
+      SmfIssue(
+        'The tag $tag is in $path, but not in the body of bootstrap(), which '
+        'runs the phases of start-up.',
+        origin: origin,
+        path: path,
+      ),
+    );
+  }
   for (var i = 1; i < offsets.length; i++) {
     if (offsets[i - 1] > offsets[i]) {
       issues.add(
@@ -445,6 +462,45 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
   }
   return issues;
 }
+
+/// The offsets from the opening brace to the closing brace of the body of
+/// the function [name] in [template], the template of a Dart file, or
+/// `null` if it declares no such function with a body in braces.
+///
+/// The tags of the template, and the comments and strings of its code, do
+/// not count, so a brace in them does not end the body.
+({int start, int end})? _bodyOf(String template, String name) {
+  final code = template.replaceAllMapped(
+    _notCode,
+    (match) => ' ' * match[0]!.length,
+  );
+  final declaration = RegExp(
+    '\\b${RegExp.escape(name)}\\s*\\([^)]*\\)\\s*(?:async\\s*)?\\{',
+  ).firstMatch(code);
+  if (declaration == null) return null;
+  final start = declaration.end - 1;
+  var depth = 0;
+  for (var i = start; i < code.length; i++) {
+    switch (code[i]) {
+      case '{':
+        depth++;
+      case '}' when --depth == 0:
+        return (start: start, end: i);
+    }
+  }
+  return null;
+}
+
+/// The parts of the template of a Dart file that are not code: the tags of
+/// the template, comments and strings, raw or not, on one line or on
+/// several.
+final _notCode = RegExp(
+  r'\{\{\{[\s\S]*?\}\}\}|\{\{[\s\S]*?\}\}|//[^\n]*|/\*[\s\S]*?\*/|'
+  r"r?'''[\s\S]*?'''|"
+  r'r?"""[\s\S]*?"""|'
+  r"r?'(?:\\.|[^'\\\n])*'|"
+  r'r?"(?:\\.|[^"\\\n])*"',
+);
 
 const _designLibraries = {
   'package:flutter/material.dart',
