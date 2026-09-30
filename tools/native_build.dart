@@ -15,7 +15,9 @@
 //   versions that pub resolved for them in pubspec.lock. The plugins of the
 //   Flutter SDK, such as integration_test, come with the SDK, and the caches
 //   are for every version of Flutter, so they are left out, as the version
-//   of Flutter is.
+//   of Flutter is. Flutter writes no .flutter-plugins-dependencies for an
+//   app without plugins of its own, such as the app of the start check
+//   without Firebase, which then has none.
 // - For Android, the Gradle files of the Android project, which name the
 //   versions of Gradle, of its plugins and of the dependencies of the app,
 //   without the lines that set the ids of the app, namespace and
@@ -32,9 +34,10 @@
 // nothing for the platform, as an app without plugins with iOS code, the
 // tool writes no file and removes the one there, so hashFiles of it is
 // empty and the job has no cache to restore or save. It fails when the
-// directory has no app, or an app has no packages or no project for the
-// platform. tools/workflow_apps_test.dart checks that the jobs of the
-// workflows key the caches of their native builds with it.
+// directory has no app, when pub did not resolve an app, which then has no
+// pubspec.lock or no .dart_tool/package_config.json, and when an app has
+// no project for the platform. tools/workflow_apps_test.dart checks that
+// the jobs of the workflows key the caches of their native builds with it.
 import 'dart:convert';
 import 'dart:io';
 
@@ -94,10 +97,15 @@ Map<String, String> nativeBuildsOf(Directory directory, String platform) {
 ///   XCRemoteSwiftPackageReference section, trimmed and indented by two
 ///   spaces.
 ///
-/// Throws a [NativeBuildException] when the app has no
-/// .flutter-plugins-dependencies or pubspec.lock, or no version of one of
-/// its plugins, or no project for [platform], and an [ArgumentError] for a
-/// platform other than those of [platforms].
+/// An app that pub resolved without a .flutter-plugins-dependencies, which
+/// Flutter writes only for an app with plugins of its own, has no plugins:
+/// such as the app of the start check without Firebase, whose only plugin,
+/// integration_test, is a dev dependency from the Flutter SDK.
+///
+/// Throws a [NativeBuildException] when pub did not resolve the app, which
+/// then has no pubspec.lock or no .dart_tool/package_config.json, when the
+/// app has no version of one of its plugins, or no project for [platform],
+/// and an [ArgumentError] for a platform other than those of [platforms].
 String nativeBuildOf(Directory app, String platform) {
   final project = switch (platform) {
     'android' => _gradleFilesOf,
@@ -118,27 +126,30 @@ String nativeBuildFileOf(Iterable<String> builds) =>
 String _nameOf(FileSystemEntity entity) =>
     entity.uri.pathSegments.lastWhere((part) => part.isNotEmpty);
 
-/// The text of the file [name] of [app], which `flutter pub get` writes.
-String _packagesFile(Directory app, String name) {
+/// The file [name] of [app], which `flutter pub get` writes when it resolves
+/// the app.
+File _resolvedFile(Directory app, String name) {
   final file = File('${app.path}/$name');
   if (!file.existsSync()) {
     throw NativeBuildException(
       '${app.path} has no $name: run flutter pub get in it.',
     );
   }
-  return file.readAsStringSync();
+  return file;
 }
 
 /// The lines of the plugins of [app] with native code for [platform], but
 /// those of the Flutter SDK (see [nativeBuildOf]).
 List<String> _pluginsOf(Directory app, String platform) {
-  final plugins = switch (jsonDecode(
-    _packagesFile(app, '.flutter-plugins-dependencies'),
-  )) {
+  final lock = _resolvedFile(app, 'pubspec.lock');
+  _resolvedFile(app, '.dart_tool/package_config.json');
+  final dependencies = File('${app.path}/.flutter-plugins-dependencies');
+  if (!dependencies.existsSync()) return const [];
+  final plugins = switch (jsonDecode(dependencies.readAsStringSync())) {
     {'plugins': final Map<String, Object?> plugins} => plugins[platform],
     _ => null,
   };
-  final packages = switch (loadYaml(_packagesFile(app, 'pubspec.lock'))) {
+  final packages = switch (loadYaml(lock.readAsStringSync())) {
     {'packages': final YamlMap packages} => packages,
     _ => YamlMap(),
   };

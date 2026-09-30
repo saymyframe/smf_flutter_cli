@@ -88,15 +88,21 @@ void main() {
     ..writeAsStringSync(text);
 
   /// Writes the files of packages of the app in [directory], a directory
-  /// of the temporary directory: .flutter-plugins-dependencies, with the
-  /// plugins by platform in [plugins], and pubspec.lock, with the versions
-  /// of [versions] from pub.dev and the packages [others] as they are.
+  /// of the temporary directory, as `flutter pub get` writes them:
+  /// .flutter-plugins-dependencies, with the plugins by platform in
+  /// [plugins], pubspec.lock, with the versions of [versions] from pub.dev
+  /// and the packages [others] as they are, and
+  /// .dart_tool/package_config.json.
   void packages(
     String directory, {
     required Map<String, List<Map<String, Object?>>> plugins,
     Map<String, String> versions = const {},
     String others = '',
   }) {
+    write(
+      '$directory/.dart_tool/package_config.json',
+      jsonEncode({'configVersion': 2, 'packages': <Object?>[]}),
+    );
     write(
       '$directory/.flutter-plugins-dependencies',
       jsonEncode({
@@ -166,6 +172,39 @@ ${[
   }
 
   group('what an app builds its native side with', () {
+    test(
+        'has no plugins for an app without .flutter-plugins-dependencies, '
+        'which Flutter does not write for an app without plugins of its own, '
+        'once pub resolved the app', () {
+      // As the app of the start check without Firebase: its only plugin,
+      // integration_test, is a dev dependency from the Flutter SDK.
+      packages(
+        'app',
+        plugins: {},
+        others: '''
+  integration_test:
+    dependency: "direct dev"
+    description: flutter
+    source: sdk
+    version: "0.0.0"
+''',
+      );
+      File('${temp.path}/app/.flutter-plugins-dependencies').deleteSync();
+      write('app/android/settings.gradle.kts', 'plugins {}\n');
+      write(
+        'app/ios/Runner.xcodeproj/project.pbxproj',
+        _project('com.example.app'),
+      );
+      final app = Directory('${temp.path}/app');
+
+      expect(
+        nativeBuildOf(app, 'android'),
+        'file android/settings.gradle.kts\n'
+        '  plugins {}',
+      );
+      expect(nativeBuildOf(app, 'ios'), isEmpty);
+    });
+
     test(
         'has the plugins with native code for the platform, with their '
         'versions, but those of the Flutter SDK', () {
@@ -325,8 +364,8 @@ sdks:
     });
 
     test(
-        'fails for an app without the files of its packages, without the '
-        'version of a plugin, or without a project for the platform', () {
+        'fails for an app that pub did not resolve, without the version of a '
+        'plugin, or without a project for the platform', () {
       Matcher fails(String message) => throwsA(
             isA<NativeBuildException>()
                 .having((error) => error.message, 'message', message),
@@ -335,9 +374,14 @@ sdks:
       write('app/pubspec.yaml', 'name: app\n');
       expect(
         () => nativeBuildOf(app, 'android'),
+        fails('${app.path} has no pubspec.lock: run flutter pub get in it.'),
+      );
+      write('app/pubspec.lock', 'packages: {}\n');
+      expect(
+        () => nativeBuildOf(app, 'android'),
         fails(
-          '${app.path} has no .flutter-plugins-dependencies: run flutter pub '
-          'get in it.',
+          '${app.path} has no .dart_tool/package_config.json: run flutter '
+          'pub get in it.',
         ),
       );
 
@@ -499,6 +543,27 @@ sdks:
         'What start_app builds with for ios:\n'
             '  no plugin with native code, and nothing else to download\n'
             'The apps download nothing for ios: no file at $file.\n',
+      );
+    });
+
+    test(
+        'writes the Gradle files of an app without '
+        '.flutter-plugins-dependencies, such as the app of the start check '
+        'for Android, which Flutter writes for no plugins of the SDK',
+        () async {
+      packages('apps/start_app', plugins: {});
+      File('${temp.path}/apps/start_app/.flutter-plugins-dependencies')
+          .deleteSync();
+      write('apps/start_app/android/settings.gradle.kts', 'plugins {}\n');
+      final file = '${temp.path}/build/native_build/android.txt';
+
+      final result = await run(['android', '${temp.path}/apps', file]);
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      expect(
+        File(file).readAsStringSync(),
+        'file android/settings.gradle.kts\n'
+        '  plugins {}\n',
       );
     });
 
