@@ -43,6 +43,28 @@ void main() {
     );
   });
 
+  test(
+      'finds a comment that leaves a whole file out of the coverage, but not '
+      'a text that names it', () {
+    expect(
+      _names({
+        'packages/a/lib/a.dart': '// coverage:ignore-file\n'
+            'void a() {}\n'
+            '/* coverage:ignore-file */\n'
+            '//coverage:ignore-file\n'
+            '// coverage:ignore-start\n'
+            'void b() {}\n'
+            '// coverage:ignore-end\n',
+        'packages/a/README.md': "Don't use `coverage:ignore-file`.\n",
+      }),
+      [
+        'packages/a/lib/a.dart:1: coverage:ignore-file',
+        'packages/a/lib/a.dart:3: coverage:ignore-file',
+        'packages/a/lib/a.dart:4: coverage:ignore-file',
+      ],
+    );
+  });
+
   test('finds "by itself" in a line that does not say "only"', () {
     expect(
       _names({
