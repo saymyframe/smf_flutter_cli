@@ -2,7 +2,8 @@
 /// with `smf create` and analyzes with Flutter: every app that the contract
 /// harness builds for a set of modules, and the apps with every module, of
 /// which CI also builds a covering for Android and iOS and starts it on
-/// devices, one app for each job of the plan of CI; and the versions of
+/// devices, one app for each job of the plan of CI; the apps whose tests
+/// must fail, which show that the tests can fail; and the versions of
 /// Flutter that its nightly run checks them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
@@ -16,10 +17,12 @@ import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
+import 'package:smf_flutter_cli/src/expected_failures.dart';
 import 'package:smf_flutter_cli/src/matrix_plan.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
+export 'src/expected_failures.dart';
 export 'src/flutter_versions.dart';
 export 'src/matrix_plan.dart';
 
@@ -1413,6 +1416,162 @@ Future<int> createEveryModuleApps(
     );
     problems.addAll(appProblems);
   }
+  return _exitCode(problems, say);
+}
+
+/// An app whose tests must fail, and how: the app of the case [name] of
+/// the contract harness that asks for the modules [requested] of the
+/// registry [modules], such as one with a provider of a role that has a
+/// known bug, whose tests of the role must fail as [failures] expect, and
+/// whose other tests must pass; see [runFailingApps].
+final class MatrixFailingApp {
+  /// Creates the app of the case [name] with the modules [requested] of
+  /// [modules], whose tests must fail as [failures] expect.
+  const MatrixFailingApp(
+    this.name, {
+    required this.modules,
+    required this.requested,
+    required this.failures,
+  });
+
+  /// The name of the case of the app, such as the provider with a bug.
+  final String name;
+
+  /// The registry of the app, which `smf create` generates it from.
+  final List<SmfModule> modules;
+
+  /// The modules to ask for, which name the providers of the roles that
+  /// have several in [modules].
+  final List<ModuleId> requested;
+
+  /// The tests of the app that must fail, each with the reason of its first
+  /// failure.
+  final List<MatrixExpectedFailure> failures;
+
+  /// Checks the case of the app with the contract harness, which renders
+  /// it, and returns the result and the app of the matrix, with the data
+  /// and roles of the case ([MatrixApp.hook]), or `null` for a case with
+  /// errors, whose app could not be generated.
+  Future<({ContractResult result, MatrixApp? app})> check() async {
+    final result = await ContractHarness(ModuleRegistry(modules)).check(
+      ContractCase(name, requested: requested),
+    );
+    return (result: result, app: _appOf(result, const {}));
+  }
+}
+
+/// Adds [tests] to [generated], the app of the matrix [app], with their dev
+/// dependencies, and runs them with `flutter test --reporter json` through
+/// [flutter] once the app with the tests passes `flutter analyze`: the tests
+/// of [failures] must fail as they expect, and the other tests of the app
+/// must pass (see [expectedFailureProblems]).
+///
+/// Returns the problems, and the output with a line for each test that ran
+/// (see [testRunSummary]). When a command before the tests fails, or the
+/// files of the tests have a problem, the problem is the last line of the
+/// output, and no test runs.
+Future<(List<String>, String)> runFailingAppTests(
+  GeneratedApp generated,
+  MatrixApp app,
+  List<MatrixAppTest> tests,
+  List<MatrixExpectedFailure> failures, {
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) async {
+  final (code, output) = await _addAndRun(
+    generated,
+    app,
+    tests,
+    [
+      ..._pubAdd(tests),
+      const ['analyze'],
+    ],
+    flutter: flutter,
+    fileSystem: fileSystem,
+  );
+  if (code != 0) return ([output.trim().split('\n').last], output);
+  final (_, report) = await flutter(
+    const ['test', '--reporter', 'json'],
+    generated.path,
+  );
+  final summary = testRunSummary(report, directory: generated.path);
+  return (
+    expectedFailureProblems(report, failures, directory: generated.path),
+    [output, ...summary].join('\n'),
+  );
+}
+
+/// Generates each of [apps] in [directory], with the options of CI, adds
+/// to it the tests of [appTests] that apply to it, and runs them: its
+/// expected failures must fail as they expect, and its other tests must
+/// pass; see [runFailingAppTests]. Returns the exit code: 0 if the contract
+/// harness finds no error in the case of each app, `smf create` generates
+/// it with every module and every step that the options of CI do not leave
+/// for later, the app with its tests has no issue, and its tests fail as
+/// expected; 1 otherwise.
+///
+/// So the tests of the apps of the matrix show that they can fail: the app
+/// of a provider of a role that has a known bug must fail the tests of the
+/// role on that bug, and on nothing else.
+///
+/// The apps stay in [directory], with the tests. The log of [commands] gets
+/// what happens, and their create generates each app, by default from the
+/// registry of the app; [flutter] runs the commands of the tests on the
+/// files of [fileSystem]. The analyze and the test of [commands] do not
+/// run.
+Future<int> runFailingApps(
+  List<MatrixFailingApp> apps, {
+  required String directory,
+  MatrixAppTests appTests = const MatrixAppTests([]),
+  MatrixCommands commands = const MatrixCommands(),
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) async {
+  // coverage:ignore-start
+  // The default prints to the terminal, as the runs in CI do; the tests
+  // give their own.
+  final say = commands.log ?? _print;
+  // coverage:ignore-end
+  final problems = <String>[];
+  var count = 0;
+  for (final (index, failing) in apps.indexed) {
+    final (:result, :app) = await failing.check();
+    if (app == null) {
+      problems.add('${failing.name}: ${result.errors.join('; ')}');
+      continue;
+    }
+    final name = 'app_${index + 1}';
+    say('\n=== $name: $app');
+    final (generated, appProblems) = await _generate(
+      // coverage:ignore-start
+      // The default creates the app with smf, as CI does; the tests give
+      // their own.
+      commands.create ?? _smfCreate(failing.modules),
+      // coverage:ignore-end
+      app,
+      name,
+      directory,
+    );
+    problems.addAll(appProblems);
+    if (generated == null) continue;
+    count++;
+    final (testProblems, output) = await runFailingAppTests(
+      generated,
+      app,
+      [
+        for (final test in appTests.tests)
+          if (test.appliesTo(app)) test,
+      ],
+      failing.failures,
+      flutter: flutter,
+      fileSystem: fileSystem,
+    );
+    say(output.trim());
+    problems.addAll([
+      for (final problem in testProblems) '$name ($app): $problem',
+    ]);
+  }
+  say('\n$count apps generated in $directory.');
   return _exitCode(problems, say);
 }
 
