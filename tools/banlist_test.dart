@@ -131,6 +131,48 @@ void main() {
     );
   });
 
+  test(
+      'finds the files of the providers of roles in the tests of modules, '
+      'but as the keys of maps and in the tests of the provider', () {
+    const home = 'packages/smf_modules/smf_home_flutter/test/home_test.dart';
+    const router = 'packages/smf_modules/smf_go_router/test/support/app.dart';
+    const tabs = 'packages/smf_modules/smf_bottom_tabs/test/tabs_test.dart';
+    expect(
+      _names({
+        home: 'const factory = RouterRole.appRouterFactoryFile;\n'
+            'final di = app.files[DiRole.dependenciesFile]!;\n'
+            "final path = 'lib/core/layout/app_shell.dart';\n"
+            "import 'package:contract_app/core/di/dependencies.dart';\n"
+            "  RouterRole.appRouterFactoryFile: '''\n"
+            '  LayoutRole.appShellFile : [\n'
+            "  'lib/core/router/app_router_factory.dart': '',\n"
+            'final other = RouterRole.appRouterFactoryFileOf(app);\n'
+            'final named = MyDiRole.dependenciesFile;\n',
+        router: 'const factory = RouterRole.appRouterFactoryFile;\n'
+            'final shell = app.files[LayoutRole.appShellFile]!;\n',
+        'packages/smf_modules/smf_get_it/test/get_it_test.dart':
+            'const file = DiRole.dependenciesFile;\n',
+        tabs: 'const file = LayoutRole.appShellFile;\n'
+            'const router = RouterRole.appRouterFactoryFile;\n',
+        // Code of modules, and the tests of other packages.
+        'packages/smf_modules/smf_home_flutter/lib/home.dart':
+            'const factory = RouterRole.appRouterFactoryFile;\n',
+        'packages/smf_pipeline/fixture_registry/test/registry_test.dart':
+            'final router = app.files[RouterRole.appRouterFactoryFile]!;\n',
+        'packages/smf_contracts/test/di_test.dart':
+            'expect(issue.path, DiRole.dependenciesFile);\n',
+      }),
+      [
+        '$home:1: RouterRole.appRouterFactoryFile',
+        '$home:2: DiRole.dependenciesFile',
+        '$home:3: LayoutRole.appShellFile',
+        '$home:4: DiRole.dependenciesFile',
+        '$router:2: LayoutRole.appShellFile',
+        '$tabs:2: RouterRole.appRouterFactoryFile',
+      ],
+    );
+  });
+
   test('reports every path of an exception that matches nothing', () {
     // Both exceptions are lasting ones.
     final problems = problemsOf({

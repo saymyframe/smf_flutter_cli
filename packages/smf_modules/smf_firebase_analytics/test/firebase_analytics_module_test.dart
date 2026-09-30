@@ -3,7 +3,6 @@ library;
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
@@ -48,11 +47,6 @@ const _implementation = 'lib/core/analytics/firebase_analytics_service.dart';
 /// The listener of the screen the user sees that the module gives the
 /// router: a function of the file of the module.
 const _listener = 'logFirebaseScreenView';
-
-/// The import of [_listener] in the file of the router.
-const _listenerImport =
-    "import 'package:contract_app/core/analytics/firebase_analytics_service.dart' "
-    'show logFirebaseScreenView;';
 
 /// The function [_listener] as the analyzer prints its declaration.
 final String _expectedListener = parseString(
@@ -187,13 +181,25 @@ Map<String, Object?> _pubspecWithoutAnalytics(RenderedApp app) {
   return {...pubspec, 'dependencies': dependencies};
 }
 
+/// The modules that provide [role] in the app of [result], whichever they
+/// are.
+Set<ModuleId> _providersOf(ContractResult result, Role role) => {
+      for (final module in result.resolution!.providersOf(role)) module.id,
+    };
+
+/// The registrations of the DI role in the app of [result], as the provider
+/// of the role gets them to render.
+List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
+    diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
+
 /// Checks that [app] is [without] but for the files of the analytics, the
-/// dependency on firebase_analytics and the files at [changed]; its
-/// `bootstrap()` included, since the service starts without waiting.
+/// dependency on firebase_analytics and the files that the modules
+/// [changedBy] generate; its `bootstrap()` included, since the service
+/// starts without waiting.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
-  Set<String> changed = const {},
+  Set<ModuleId> changedBy = const {},
 }) {
   expect(
     app.files.keys.toSet(),
@@ -208,7 +214,11 @@ void _expectTheAppWithout(
     const ModuleOrigin(FirebaseAnalyticsModule.id),
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml' || changed.contains(path)) continue;
+    if (path == 'pubspec.yaml') continue;
+    if (file.owner case ModuleOrigin(:final module)
+        when changedBy.contains(module)) {
+      continue;
+    }
     expect(app.files[path]!.bytes, file.bytes, reason: path);
     expect(app.files[path]!.owner, file.owner, reason: path);
   }
@@ -218,23 +228,43 @@ void _expectTheAppWithout(
   );
 }
 
-/// Checks that the file of the router of [app] is that of [without] but for
-/// the import of firebase_analytics and the listener of the screen, each on
-/// a line of its own.
-void _expectTheRouterWithout(RenderedApp app, RenderedApp without) {
-  List<String> linesOf(RenderedApp app) =>
-      app.files[RouterRole.appRouterFactoryFile]!.text.split('\n');
-  final lines = linesOf(app);
+/// The contributions to [socket] in the app of [result], in their order,
+/// each as its contributor and its code: what the provider of the role of
+/// the socket renders, whichever module it is.
+List<String> _contributionsTo(ContractResult result, SocketRef socket) => [
+      for (final collected
+          in result.validation!.socketOrders[socket]?.contributions ??
+              const <Collected>[])
+        _described(collected),
+    ];
 
-  expect(lines.where((line) => line == _listenerImport), hasLength(1));
-  expect(lines.where((line) => line == '$_listener,'), hasLength(1));
-  expect(
-    [
-      for (final line in lines)
-        if (line != _listenerImport && line != '$_listener,') line,
-    ],
-    linesOf(without),
-  );
+/// The contribution [collected] to a socket as its contributor and its code.
+String _described(Collected collected) {
+  final contribution = collected.contribution as SocketContribution;
+  return '${collected.origin}: ${contribution.fragment!.code}';
+}
+
+/// The listener of the screen of this module among [_contributionsTo] the
+/// listeners of the router.
+const String _listenerOfModule = 'firebase_analytics: $_listener';
+
+/// Checks that the router of the app of [result] gets what it gets in the
+/// app of [without], but for the listener of the screen of this module: the
+/// same contributions to every socket of the router role, and the listener
+/// after those of the other modules.
+void _expectTheRouterWithout(ContractResult result, ContractResult without) {
+  Map<SocketRef, List<String>> routerSocketsOf(ContractResult result) => {
+        for (final socket in result.validation!.socketOrders.keys)
+          if (identical(socket.role, routerRole))
+            socket: _contributionsTo(result, socket),
+      };
+  final expected = routerSocketsOf(without);
+  expected[RouterRole.screenListeners] = [
+    ...?expected[RouterRole.screenListeners],
+    _listenerOfModule,
+  ];
+
+  expect(routerSocketsOf(result), expected);
 }
 
 /// The parsed file at [path] of [app].
@@ -274,78 +304,19 @@ Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
   };
 }
 
-/// The named argument [label] of [call], or `null`.
-Expression? _argument(MethodInvocation call, String label) => [
-      for (final argument in call.argumentList.arguments)
-        if (argument case NamedExpression(:final name, :final expression)
-            when name.label.name == label)
-          expression,
-    ].firstOrNull;
-
-/// Collects the invocations of a unit whose method is [name], with the
-/// target [target], or none.
-final class _Calls extends RecursiveAstVisitor<void> {
-  _Calls(this.name, {this.target});
-
-  final String name;
-  final String? target;
-  final List<MethodInvocation> found = [];
-
-  @override
-  void visitMethodInvocation(MethodInvocation node) {
-    if (node.methodName.name == name && node.target?.toSource() == target) {
-      found.add(node);
-    }
-    super.visitMethodInvocation(node);
-  }
-}
-
-/// The invocations in [unit] of the method [name] of [target], or of the
-/// function [name].
-List<MethodInvocation> _callsOf(
-  CompilationUnit unit,
-  String name, {
-  String? target,
-}) {
-  final calls = _Calls(name, target: target);
-  unit.accept(calls);
-  return calls.found;
-}
-
-/// The listeners of the screen in the list `_screenListeners` of the file
-/// of the router in [unit], as written.
-List<String> _listenersOf(CompilationUnit unit) {
-  final variable = unit.declarations
-      .whereType<TopLevelVariableDeclaration>()
-      .expand((declaration) => declaration.variables.variables)
-      .singleWhere((variable) => variable.name.lexeme == '_screenListeners');
-  return [
-    for (final element in (variable.initializer! as ListLiteral).elements)
-      '$element',
-  ];
-}
-
-/// The factories of the observers that the function `_observers()` of the
-/// file of the router in [unit] calls for a navigator, as written.
-List<String> _observerFactoriesOf(CompilationUnit unit) {
-  final function = unit.declarations
-      .whereType<FunctionDeclaration>()
-      .singleWhere((function) => function.name.lexeme == '_observers');
-  final list = (function.functionExpression.body as ExpressionFunctionBody)
-      .expression as ListLiteral;
-  final loop = list.elements.single as ForElement;
-  final parts = loop.forLoopParts as ForEachPartsWithDeclaration;
-  return [
-    for (final element in (parts.iterable as ListLiteral).elements) '$element',
-  ];
-}
-
-/// The imports that the fragments of this module add to the file at [path]
-/// of [app].
-List<ImportRef> _importsOfModuleIn(RenderedApp app, String path) => [
-      for (final added in app.files[path]!.addedImports)
-        if (added.contributor == const ModuleOrigin(FirebaseAnalyticsModule.id))
-          added.import,
+/// The imports that the pipeline adds for the fragments of this module to
+/// the files of [app], each as the owner of its file and the import.
+List<String> _importsOfModuleIn(RenderedApp app) => [
+      for (final file in app.files.values)
+        for (final added in file.addedImports)
+          if (added.contributor ==
+              const ModuleOrigin(FirebaseAnalyticsModule.id))
+            [
+              '${file.owner}:',
+              added.import.uri,
+              'as ${added.import.prefix}',
+              'show ${added.import.show.join(', ')}',
+            ].join(' '),
     ];
 
 void main() {
@@ -656,7 +627,7 @@ void main() {
       _expectTheAppWithout(
         withAnalytics,
         without,
-        changed: const {DiRole.dependenciesFile},
+        changedBy: _providersOf(result, diRole),
       );
       expect(_bootstrapOf(withAnalytics), [
         _initializeFirebase,
@@ -665,11 +636,12 @@ void main() {
     });
 
     test('registers the service in the container, which creates it', () {
+      // The contract harness, which found no errors in the app, checks that
+      // the provider of the role creates it with its factory.
       final registrations = [
-        for (final data in result.collection!.roleData)
-          if (identical(data.role, diRole) &&
-              data.origin == const RoleTemplateOrigin(analyticsRole))
-            data.value as DiRegistration,
+        for (final data in _registrationsOf(result))
+          if (data.origin == const RoleTemplateOrigin(analyticsRole))
+            data.value,
       ];
       expect(registrations, hasLength(1));
       final registration = registrations.single;
@@ -677,34 +649,24 @@ void main() {
       expect(registration.create.name, 'createAnalyticsService');
       expect(registration.create.deps, isEmpty);
       expect(registration.lifetime, DiLifetime.lazySingleton);
-
-      final container = withAnalytics.files[DiRole.dependenciesFile]!;
-      final calls = DartFileIndexer.index(container.path, container.text)
-          .invocations
-          .where((call) => call.name == 'createAnalyticsService');
-      expect(calls, hasLength(1));
-      expect(
-        calls.single.enclosingDeclaration,
-        DiRole.registerDependencies.name,
-      );
     });
   });
 
   group('an app with a router', () {
+    late ContractResult result;
+    late ContractResult resultWithout;
     late RenderedApp withAnalytics;
     late RenderedApp without;
-    late CompilationUnit router;
 
     setUpAll(() async {
-      withAnalytics = (await _resultOf(
+      result = await _resultOf(
         const [FirebaseAnalyticsModule.id, GoRouterModule.id],
-      ))
-          .app!;
-      without = (await _resultOf(
+      );
+      withAnalytics = result.app!;
+      resultWithout = await _resultOf(
         const [FirebaseCoreModule.id, GoRouterModule.id],
-      ))
-          .app!;
-      router = _unitOf(withAnalytics, RouterRole.appRouterFactoryFile);
+      );
+      without = resultWithout.app!;
     });
 
     test(
@@ -713,11 +675,11 @@ void main() {
       _expectTheAppWithout(
         withAnalytics,
         without,
-        changed: const {RouterRole.appRouterFactoryFile},
+        changedBy: _providersOf(result, routerRole),
       );
-      _expectTheRouterWithout(withAnalytics, without);
+      _expectTheRouterWithout(result, resultWithout);
       expect(
-        _listenersOf(_unitOf(without, RouterRole.appRouterFactoryFile)),
+        _contributionsTo(resultWithout, RouterRole.screenListeners),
         isEmpty,
       );
     });
@@ -725,34 +687,22 @@ void main() {
     test(
         'gives the router a listener that logs each screen the user sees with '
         'Firebase Analytics, and its navigator no observer', () {
-      expect(_listenersOf(router), [_listener]);
-      expect(_observerFactoriesOf(router), isEmpty);
+      expect(
+        _contributionsTo(result, RouterRole.screenListeners),
+        [_listenerOfModule],
+      );
+      expect(_contributionsTo(result, RouterRole.observers), isEmpty);
       // Only the name of the listener, so that no name of the file of the
-      // module meets another in the file of the router.
-      expect(
+      // module meets another in the file of the router that renders it,
+      // whichever module provides the router.
+      final router = _providersOf(result, routerRole).single;
+      expect(_importsOfModuleIn(withAnalytics), [
         [
-          for (final import in _importsOfModuleIn(
-            withAnalytics,
-            RouterRole.appRouterFactoryFile,
-          ))
-            '${import.uri} as ${import.prefix} show ${import.show.join(', ')}',
-        ],
-        [
-          [
-            'package:contract_app/core/analytics/firebase_analytics_service.dart',
-            'as null show logFirebaseScreenView',
-          ].join(' '),
-        ],
-      );
-      expect(
-        [
-          for (final directive
-              in router.directives.whereType<ImportDirective>())
-            if (directive.uri.stringValue!.contains('/core/analytics/'))
-              '$directive',
-        ],
-        [_listenerImport],
-      );
+          '$router:',
+          'package:contract_app/core/analytics/firebase_analytics_service.dart',
+          'as null show logFirebaseScreenView',
+        ].join(' '),
+      ]);
     });
 
     test(
@@ -811,12 +761,11 @@ void main() {
   });
 
   group('an app with a main navigation', () {
-    late RenderedApp withAnalytics;
-    late RenderedApp without;
-    late CompilationUnit router;
+    late ContractResult result;
+    late ContractResult resultWithout;
 
     setUpAll(() async {
-      Future<RenderedApp> appWith(ModuleId module) async => (await _resultOf(
+      Future<ContractResult> appWith(ModuleId module) => _resultOf(
             [
               module,
               const ModuleId('inbox'),
@@ -825,37 +774,41 @@ void main() {
               TestLayout.id,
             ],
             registry: _navigation,
-          ))
-              .app!;
-      withAnalytics = await appWith(FirebaseAnalyticsModule.id);
-      without = await appWith(FirebaseCoreModule.id);
-      router = _unitOf(withAnalytics, RouterRole.appRouterFactoryFile);
+          );
+      result = await appWith(FirebaseAnalyticsModule.id);
+      resultWithout = await appWith(FirebaseCoreModule.id);
     });
 
     test(
         'is the app of Firebase and the main navigation but for the analytics '
         'and the listener of the screen', () {
       _expectTheAppWithout(
-        withAnalytics,
-        without,
-        changed: const {RouterRole.appRouterFactoryFile},
+        result.app!,
+        resultWithout.app!,
+        changedBy: _providersOf(result, routerRole),
       );
-      _expectTheRouterWithout(withAnalytics, without);
+      _expectTheRouterWithout(result, resultWithout);
     });
 
     test(
         'gives the router one listener of the screen for the whole app, the '
         'branches of the main navigation included, and no navigator an '
         'observer', () {
-      expect(_listenersOf(router), [_listener]);
-      expect(_observerFactoriesOf(router), isEmpty);
-      final branches = _callsOf(router, 'StatefulShellBranch');
+      // A router tells the listeners about the screens of every branch of
+      // the main navigation too, which the tests of each router and those
+      // of the layout role in the apps of the matrix check.
+      expect(
+        _contributionsTo(result, RouterRole.screenListeners),
+        [_listenerOfModule],
+      );
+      expect(_contributionsTo(result, RouterRole.observers), isEmpty);
       expect(
         [
-          for (final branch in branches)
-            '${_argument(branch, 'initialLocation')}',
+          for (final route
+              in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
+            route.fullPath,
         ],
-        ["'/inbox'", "'/search'"],
+        ['/inbox', '/search'],
       );
     });
   });
@@ -890,12 +843,13 @@ void main() {
           ],
         ),
       ]) {
-        final app = (await _resultOf(modules, registry: registry)).app!;
+        final result = await _resultOf(modules, registry: registry);
+        final app = result.app!;
 
         expect(_servicesOf(app), services, reason: '$modules');
         expect(
-          _listenersOf(_unitOf(app, RouterRole.appRouterFactoryFile)),
-          [_listener],
+          _contributionsTo(result, RouterRole.screenListeners),
+          [_listenerOfModule],
           reason: '$modules',
         );
         expect(_bootstrapOf(app), [_initializeFirebase], reason: '$modules');

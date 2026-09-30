@@ -637,15 +637,7 @@ void main() {
     test(
         'has a route for every route of the facade, named by its full name, '
         'with its children below it', () {
-      final facade = routerRole.facadeOf(
-        routerRole.hookInput(
-          RoleHookRequest(
-            data: result.collection!.roleData,
-            presentRoles: result.resolution!.presentRoles,
-            context: ContractHarness.defaultContext,
-          ),
-        ),
-      );
+      final facade = routerRole.facadeOf(routerRole.hookInput(result.hook!));
       final parents = {
         for (final (route, parent) in _allOf(_routesOf(unit)))
           if (route.name case final name?) name: parent,
@@ -1085,6 +1077,25 @@ void main() {
       expect(branches[2].initialLocation, '/profile');
       expect(branches[2].routes.single.name, 'profile.profile');
       expect(await analysisProblems(result.app!), isEmpty);
+    });
+
+    test('shows the shell with one destination too', () async {
+      final result = await renderedApp(
+        const [CatalogFeature.id, TabsLayout.id],
+      );
+      final shell = _shellOf(_factoryOf(result.app!))!;
+
+      expect(
+        [for (final branch in _branchesOf(shell)) branch.initialLocation],
+        ['/catalog'],
+      );
+      expect(
+        _argument(shell, 'builder')!.toSource(),
+        contains(
+          "destinations: const [Destination(label: 'Catalog', icon: "
+          'Icons.list)]',
+        ),
+      );
     });
 
     test('has no shell without destinations', () async {
