@@ -5,6 +5,7 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'package:fake_infra/fake_infra.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -56,6 +57,7 @@ void main() {
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
     expect(named('di_role').roles, {diRole});
+    expect(named('di_disposal').roles, {diRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -88,6 +90,27 @@ void main() {
         'fake_registrations (get_it)',
       ]),
     );
+  });
+
+  test(
+      'the test of the disposal of the fixture services applies to the apps '
+      'with them, of each DI container, which have the test of the DI role '
+      'too', () {
+    final disposal = appsOf(named('di_disposal'));
+
+    expect(disposal, [
+      for (final app in apps)
+        if (app.modules.contains(FakeRegistrationsModule.id)) app.name,
+    ]);
+    expect(
+      disposal,
+      containsAll([
+        'fake_registrations (fake_di)',
+        'fake_registrations (get_it)',
+      ]),
+    );
+    // So it adds no app to those that run flutter test for the DI role.
+    expect(appsOf(named('di_role')), containsAll(disposal));
   });
 
   test(

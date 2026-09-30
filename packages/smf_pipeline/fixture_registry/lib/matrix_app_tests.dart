@@ -94,6 +94,18 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // have every lifetime, those of the fixture services, so that it runs
       // flutter test in a few apps.
       await diRoleAppTest(lifetimes: DiLifetime.values.toSet()),
+      // The fixture services, whichever module provides the DI role:
+      // resetDependencies() disposes of those that the container created,
+      // in the reverse order of their registration, and creates no lazy
+      // singleton only to dispose of it. The functions of the fixture
+      // services note what they do.
+      MatrixAppTest(
+        '$appTests/di_disposal',
+        appliesTo: (app) =>
+            app.hook!.presentRoles.contains(diRole) &&
+            app.modules.contains(FakeRegistrationsModule.id),
+        roles: {diRole},
+      ),
     ],
     testedRoles: {routerRole, layoutRole, diRole},
   );
