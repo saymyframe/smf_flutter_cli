@@ -24,7 +24,9 @@ import 'package:smf_get_it/src/registrations.dart';
 /// Each factory function gets its services from get_it, by type and by
 /// name. A function that disposes of a service goes to get_it with it, and
 /// `registerDependencies()` waits until every service is ready when some
-/// are created asynchronously.
+/// are created asynchronously. `resetDependencies()` resets get_it, which
+/// disposes of the services it created with those functions, in the
+/// reverse order of their registration, and removes every service.
 ///
 /// The file imports the file of every type and function it names with a
 /// prefix of its own, so their names never clash.

@@ -623,6 +623,8 @@ final class _CrashReporters implements CrashReporter {
   }
 }
 === lib/core/di/dependencies.dart (fake_di) ===
+import 'dart:async';
+
 import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:fixture_app/core/events/communication_service.dart' as di2;
@@ -643,9 +645,7 @@ Future<void> registerDependencies() async {
   locator.singleton<di0.FixtureSession>(await di0.openFixtureSession());
   locator.singleton<di0.FixtureCache>(
     di0.createFixtureCache(locator.resolve<di0.FixtureApi>()),
-  );
-  locator.onDispose(
-    () => di0.closeFixtureCache(locator.resolve<di0.FixtureCache>()),
+    dispose: di0.closeFixtureCache,
   );
   locator.lazy<di0.FixtureZone>(() => di0.createUtcZone(), name: 'utc');
   locator.factoryOf<di0.FixtureStamp>(
@@ -657,11 +657,10 @@ Future<void> registerDependencies() async {
     () => di0.createLocalStamp(),
     name: 'local',
   );
-  locator.singleton<di0.FixtureLog>(di0.createAuditLog(), name: 'audit');
-  locator.onDispose(
-    () => di0.closeFixtureLog(
-      locator.resolve<di0.FixtureLog>(instanceName: 'audit'),
-    ),
+  locator.singleton<di0.FixtureLog>(
+    di0.createAuditLog(),
+    name: 'audit',
+    dispose: di0.closeFixtureLog,
   );
   locator.singleton<di0.FixtureIndex>(
     di0.createFixtureIndex(locator.resolve<di0.FixtureSession>()),
@@ -670,16 +669,12 @@ Future<void> registerDependencies() async {
   locator.singleton<di0.FixtureSession>(
     await di0.openBackupSession(),
     name: 'backup',
-  );
-  locator.onDispose(
-    () => di0.closeFixtureSession(
-      locator.resolve<di0.FixtureSession>(instanceName: 'backup'),
-    ),
+    dispose: di0.closeFixtureSession,
   );
   locator.singleton<di0.FixtureReplica>(await di0.openFixtureReplica());
-  locator.lazy<di0.FixtureCounter>(() => di0.createFixtureCounter());
-  locator.onDispose(
-    () => di0.closeFixtureCounter(locator.resolve<di0.FixtureCounter>()),
+  locator.lazy<di0.FixtureCounter>(
+    () => di0.createFixtureCounter(),
+    dispose: di0.closeFixtureCounter,
   );
   locator.lazy<di1.CrashReporter>(() => di1.createCrashReporter());
   locator.lazy<di2.CommunicationService>(
@@ -688,9 +683,18 @@ Future<void> registerDependencies() async {
   locator.lazy<di3.AnalyticsService>(() => di3.createAnalyticsService());
 }
 
+/// Disposes of the services that the map created, with the functions that
+/// dispose of them, in the reverse order of their registration, and
+/// removes every service, so that [registerDependencies] can register them
+/// again.
+Future<void> resetDependencies() => (serviceLocator as _MapLocator).reset();
+
 final class _MapLocator implements ServiceLocator {
   final Map<(Type, String?), Object Function()> _getters = {};
-  final List<void Function()> _disposers = [];
+
+  /// What disposes of each service that has a function to dispose of it,
+  /// in the order of the registrations.
+  final List<FutureOr<void> Function()> _disposers = [];
 
   @override
   T resolve<T extends Object>({String? instanceName}) {
@@ -699,18 +703,41 @@ final class _MapLocator implements ServiceLocator {
     return getter() as T;
   }
 
-  void singleton<T extends Object>(T instance, {String? name}) =>
-      _getters[(T, name)] = () => instance;
+  void singleton<T extends Object>(
+    T instance, {
+    String? name,
+    FutureOr<void> Function(T service)? dispose,
+  }) {
+    _getters[(T, name)] = () => instance;
+    if (dispose != null) _disposers.add(() => dispose(instance));
+  }
 
-  void lazy<T extends Object>(T Function() create, {String? name}) {
+  void lazy<T extends Object>(
+    T Function() create, {
+    String? name,
+    FutureOr<void> Function(T service)? dispose,
+  }) {
     T? instance;
     _getters[(T, name)] = () => instance ??= create();
+    if (dispose != null) {
+      // A lazy singleton that nothing resolved is not created only to be
+      // disposed of.
+      _disposers.add(() {
+        if (instance case final created?) return dispose(created);
+      });
+    }
   }
 
   void factoryOf<T extends Object>(T Function() create, {String? name}) =>
       _getters[(T, name)] = create;
 
-  void onDispose(void Function() dispose) => _disposers.add(dispose);
+  Future<void> reset() async {
+    for (final dispose in _disposers.reversed) {
+      await dispose();
+    }
+    _disposers.clear();
+    _getters.clear();
+  }
 }
 === lib/core/di/service_locator.dart (role:di) ===
 import 'dependencies.dart';

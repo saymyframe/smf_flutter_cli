@@ -18,7 +18,7 @@ Future<void> registerDependencies() async {
 }
 ```
 
-`bootstrap()` awaits `registerDependencies()` before the first frame. Only the composition file of a feature takes services, with `resolve<T>()` of the `ServiceLocator` of the dependency injection role, which does not name get_it. The rest of the app gets its services as parameters.
+`bootstrap()` awaits `registerDependencies()` before the first frame, and `resetDependencies()` resets get_it for a test that registers the services again. Only the composition file of a feature takes services, with `resolve<T>()` of the `ServiceLocator` of the dependency injection role, which does not name get_it. The rest of the app gets its services as parameters.
 
 Without `-m`, `smf create` asks which module provides dependency injection. When a module you chose needs it and `get_it` is the only module that provides it, `smf create` adds `get_it` by itself.
 

@@ -157,8 +157,10 @@ Future<void> registerDependencies() async {
 /// Runs `registerDependencies()` of the app of the services of both
 /// modules, resolves services of each kind, by name too, creates a report
 /// with the values of its caller through the service that creates reports,
-/// resets get_it, and sends what the functions of the services did at each
-/// stage and what the services were.
+/// resets the container with `resetDependencies()`, tries to resolve
+/// services of each kind, registers the services again and resolves them,
+/// and sends what the functions of the services did at each stage and what
+/// the services were.
 ///
 /// It imports the files of the DI role and of the services only, not those
 /// of the app entry, which may need Flutter.
@@ -170,7 +172,21 @@ import 'package:contract_app/core/di/dependencies.dart';
 import 'package:contract_app/core/di/service_locator.dart';
 import 'package:contract_app/core/network/network.dart';
 import 'package:contract_app/core/storage/storage.dart';
-import 'package:get_it/get_it.dart';
+
+/// The names of [resolvers] that resolve a service.
+List<String> resolving(Map<String, Object Function()> resolvers) => [
+      for (final MapEntry(key: name, value: resolve) in resolvers.entries)
+        if (resolves(resolve)) name,
+    ];
+
+bool resolves(Object Function() resolve) {
+  try {
+    resolve();
+    return true;
+  } on Object {
+    return false;
+  }
+}
 
 Future<void> main(List<String> arguments, SendPort port) async {
   await registerDependencies();
@@ -213,13 +229,51 @@ Future<void> main(List<String> arguments, SendPort port) async {
   };
   final resolved = [...events];
   events.clear();
-  await GetIt.instance.reset();
+  await resetDependencies();
+  final disposed = [...events];
+  events.clear();
+  final resolvers = <String, Object Function()>{
+    'singleton': () => resolve<Sync>(),
+    'singleton created asynchronously': () => resolve<Session>(),
+    'lazy singleton': () => resolve<Repository>(),
+    'factory': () => resolve<Token>(),
+    'named service': () => resolve<Clock>(instanceName: 'utc'),
+  };
+  final afterReset = resolving(resolvers);
+  await registerDependencies();
   port.send({
     'ready': ready,
     'resolved': resolved,
     'services': services,
-    'disposed': [...events],
+    'disposed': disposed,
+    'after reset': afterReset,
+    'ready again': [...events],
+    'after registering again': resolving(resolvers),
   });
+}
+''';
+
+/// Runs `registerDependencies()` of the app of the services that are ready
+/// once registered, resets the container, registers the services again,
+/// resolves the lazy singleton with a function that disposes of it and
+/// resets the container again, and sends what the functions of the services
+/// did in each round.
+const _resetScript = '''
+import 'dart:isolate';
+
+import 'package:contract_app/core/di/dependencies.dart';
+import 'package:contract_app/core/di/service_locator.dart';
+import 'package:contract_app/core/network/network.dart';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  await registerDependencies();
+  await resetDependencies();
+  final first = [...events];
+  events.clear();
+  await registerDependencies();
+  resolve<ApiClient>();
+  await resetDependencies();
+  port.send({'first': first, 'second': [...events]});
 }
 ''';
 
@@ -403,6 +457,16 @@ void main() {
       );
     });
 
+    test(
+        'resets get_it, which disposes of the services it created and '
+        'removes them all', () {
+      expect(
+        _function(_dependenciesOf(withContainer), 'resetDependencies')
+            .toSource(),
+        'Future<void> resetDependencies() => GetIt.instance.reset();',
+      );
+    });
+
     test('awaits the registration of the services in bootstrap()', () {
       // The DI role puts it into the DI phase of start-up, which the provider
       // of the app entry runs in bootstrap(), whichever module it is.
@@ -530,7 +594,9 @@ void main() {
     test(
         'runs in the order of its graph with get_it: the services that '
         'singletons wait for are ready first, registerDependencies() waits '
-        'for all, and reset disposes of them in the reverse order', () async {
+        'for all, and resetDependencies() disposes of them in the reverse '
+        'order and removes them, so that they can be registered again',
+        () async {
       final dart = await DartApp.write(app);
       final Map<Object?, Object?> result;
       try {
@@ -608,6 +674,53 @@ void main() {
         'close backup Session',
         'close main Session',
         'stop Sync',
+      ]);
+      // Nothing resolves once the container is reset, and everything once
+      // registerDependencies() registered the services again, which
+      // creates the services that it waits for again.
+      expect(result['after reset'], isEmpty);
+      expect(
+        {...result['ready again']! as List<Object?>},
+        ready.toSet(),
+      );
+      expect(result['after registering again'], [
+        'singleton',
+        'singleton created asynchronously',
+        'lazy singleton',
+        'factory',
+        'named service',
+      ]);
+    });
+
+    test(
+        'resets the container without creating a lazy singleton that was '
+        'never resolved, and disposes of one that was', () async {
+      final network = await DartApp.write(
+        (await renderedApp(const [NetworkModule.id])).app!,
+      );
+      final Map<Object?, Object?> result;
+      try {
+        result = (await network.run(_resetScript))! as Map<Object?, Object?>;
+      } finally {
+        network.delete();
+      }
+      const created = [
+        'create ApiConfig',
+        'create Endpoint',
+        'create staging ApiConfig',
+      ];
+
+      // The singletons, created as they are registered, and the singleton
+      // with a function that disposes of it; the lazy singleton ApiClient,
+      // which has one too, is never created.
+      expect(result['first'], [...created, 'close Endpoint']);
+      // Resolved, it is disposed of first: it was registered after the
+      // singleton.
+      expect(result['second'], [
+        ...created,
+        'create ApiClient',
+        'close ApiClient',
+        'close Endpoint',
       ]);
     });
   });

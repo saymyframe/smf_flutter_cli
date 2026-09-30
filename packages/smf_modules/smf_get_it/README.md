@@ -2,7 +2,7 @@
 
 The SMF module of dependency injection with [get_it](https://pub.dev/packages/get_it) 9. It provides the dependency injection role of SMF: the other modules of the app declare the services they generate, and this module registers them in get_it.
 
-It adds `get_it` to the app and generates `registerDependencies()`, which the app runs before its first frame, in the form of get_it for what each service needs: singletons, lazy singletons, factories, services created asynchronously, and the services each waits for. The code that creates what the screens of a feature need takes its services with `resolve` in the composition file of the feature.
+It adds `get_it` to the app and generates `registerDependencies()`, which the app runs before its first frame, in the form of get_it for what each service needs: singletons, lazy singletons, factories, services created asynchronously, and the services each waits for. The code that creates what the screens of a feature need takes its services with `resolve` in the composition file of the feature. It also generates `resetDependencies()`, which resets get_it: get_it disposes of the services it created, with the functions that dispose of them, in the reverse order of their registration, and removes every service, so that a test of the app can register them again.
 
 ## Use with the SMF CLI
 

@@ -251,14 +251,19 @@ ServiceLocator createServiceLocator() => _GetItServiceLocator(GetIt.instance);
 /// the services it takes or waits for, and completes when all of them are
 /// ready.
 ///
-/// `GetIt.instance.reset()` removes them again and disposes of those that
-/// were created, in the reverse order of their registration.
+/// [resetDependencies] removes them again.
 Future<void> registerDependencies() async {
   final getIt = GetIt.instance;
   getIt.registerLazySingleton<di0.CommunicationService>(
     () => di0.createCommunicationService(),
   );
 }
+
+/// Disposes of the services that get_it created, with the functions that
+/// dispose of them, in the reverse order of their registration, and removes
+/// every service from get_it, so that [registerDependencies] can register
+/// them again.
+Future<void> resetDependencies() => GetIt.instance.reset();
 
 /// Finds the services of the app in get_it.
 final class _GetItServiceLocator implements ServiceLocator {
