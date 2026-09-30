@@ -24,9 +24,9 @@ Map<String, List<String>> _directives() {
 
 void main() {
   // The pipeline knows no concrete role and no module, and reaches the
-  // machine only through the seams of SmfHost; only the check of the
-  // package of a module, which the tests of the package run, reads the
-  // local file system itself.
+  // machine only through the seams of SmfHost; only the checks of the
+  // packages of modules, which tests run, read the local file system
+  // themselves.
   final directives = _directives();
 
   test('finds the files of the pipeline', () {
@@ -53,15 +53,18 @@ void main() {
   });
 
   test(
-      'reads the local file system only to check the package of a module, '
-      'in its tests', () {
+      'reads the local file system only to check the packages of modules, '
+      'in tests', () {
     expect(
       [
         for (final MapEntry(key: file, value: uris) in directives.entries)
           if (uris.contains('package:file/local.dart'))
             file.replaceAll(Platform.pathSeparator, '/'),
+      ]..sort(),
+      [
+        'lib/src/testing/module_package.dart',
+        'lib/src/testing/role_class_names.dart',
       ],
-      ['lib/src/testing/module_package.dart'],
     );
   });
 
