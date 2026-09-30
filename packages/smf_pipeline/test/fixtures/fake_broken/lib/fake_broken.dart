@@ -151,6 +151,47 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The service log of the fixtures whose analytics service notes each
+  /// call twice, as a service does that sends each event twice: to the
+  /// tests of the analytics role, each call of the analytics service of the
+  /// app reaches it twice. Its crash reporter notes each call once.
+  static const serviceLogNotingAnalyticsTwice = BrokenModule._(
+    FakeServiceLogModule(),
+    ModuleId('broken_service_log_notes_analytics_twice'),
+    'Analytics that notes every call twice, and crash reporting (fixture)',
+    'lib/core/fixture_service_log/fixture_service_log.dart',
+    [
+      (
+        '  calls.add(call);\n',
+        '  calls.add(call);\n'
+            '  if (identical(calls, loggedAnalyticsCalls)) calls.add(call);\n',
+      ),
+    ],
+  );
+
+  /// The fixture crash reporting whose start sets the handler of the errors
+  /// of Flutter to a report of its own, as the guide of a crash reporting
+  /// SDK may tell an app to do, rather than leaving the handlers to the
+  /// role: the handler of the role then calls it in place of the handler
+  /// that presented the errors of Flutter, so none is presented, and the
+  /// fixture reports each of them twice.
+  static const crashReportingTakingFlutterErrors = BrokenModule._(
+    FakeCrashModule(),
+    ModuleId('broken_crash_takes_flutter_errors'),
+    'Crash reporting that takes the errors of Flutter for itself (fixture)',
+    'lib/core/fixture_crash/fixture_crash.dart',
+    [
+      (
+        '  return const FixtureCrashReporter();\n',
+        '  const reporter = FixtureCrashReporter();\n'
+            '  FlutterError.onError = (details) {\n'
+            '    reporter.recordFlutterError(details, fatal: true);\n'
+            '  };\n'
+            '  return reporter;\n',
+      ),
+    ],
+  );
+
   /// The fixture module with the bug.
   final SmfModule of;
 

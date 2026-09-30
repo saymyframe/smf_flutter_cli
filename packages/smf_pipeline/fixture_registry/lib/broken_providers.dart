@@ -284,6 +284,82 @@ List<BrokenProvider> brokenProviders() => const [
           ),
         ],
       ),
+      BrokenProvider(
+        BrokenModule.serviceLogNotingAnalyticsTwice,
+        role: analyticsRole,
+        bug: 'Its analytics service notes each call twice, as a service does '
+            'that sends each event twice.',
+        app: [FakeAnalyticsModule.id, FakeCrashModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'the analytics service of the app forwards each call to every '
+                'analytics service once',
+            'Each call reaches every analytics service once, in the order of '
+                'the calls.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'an analytics service that throws as it is called keeps no other '
+                'from the call, and its failure does not reach the code that '
+                'called',
+            'The service log gets the call once.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'an analytics service that returns a future that fails keeps no '
+                'other from the call, and its failure does not reach the code '
+                'that called',
+            'The service log gets the call once.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_role_start_test.dart',
+            'the other analytics services get each call',
+            'The service log gets the call.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.crashReportingTakingFlutterErrors,
+        role: crashReportingRole,
+        bug: 'Its start sets the handler of the errors of Flutter to a report '
+            'of its own, so the handler of the role calls it in place of the '
+            'handler that presented the errors: none is presented, and it '
+            'reports each of them twice.',
+        app: [FakeAnalyticsModule.id, FakeServiceLogModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/crash_reporting_role_test.dart',
+            'an error of Flutter reaches every crash reporter once, as fatal, '
+                'once the handler that the start-up found presents it',
+            'The handler of the errors of Flutter that the start-up found '
+                'presents each of them once.',
+          ),
+          MatrixExpectedFailure(
+            'test/crash_reporting_role_test.dart',
+            'a crash reporter that throws as it is called keeps no other from '
+                'a call, and its failure reaches neither the code that called '
+                'nor the handlers of the errors',
+            'Every other crash reporter gets each call once, and no report of '
+                'the failure of the service log.',
+          ),
+          MatrixExpectedFailure(
+            'test/crash_reporting_role_test.dart',
+            'a crash reporter that returns a future that fails keeps no other '
+                'from a call, and its failure reaches neither the code that '
+                'called nor the handlers of the errors',
+            'Every other crash reporter gets each call once, and no report of '
+                'the failure of the service log.',
+          ),
+          MatrixExpectedFailure(
+            'test/crash_reporting_role_factory_test.dart',
+            'the other crash reporters get each error that nothing catches, '
+                'and each call',
+            'The handlers of the errors that the start-up installed, and the '
+                'crash reporter of the app, reach the fixture crash reporting.',
+          ),
+        ],
+      ),
     ];
 
 /// The app tests that the apps of the broken providers get: those of the
@@ -308,7 +384,4 @@ Future<List<MatrixAppTest>> brokenProviderAppTests() async {
 
 /// The roles whose contract the app tests check but no broken provider
 /// breaks, each with the reason.
-const Map<Role, String> brokenProviderExemptions = {
-  analyticsRole: 'Its broken provider comes in a following change.',
-  crashReportingRole: 'Its broken provider comes in a following change.',
-};
+const Map<Role, String> brokenProviderExemptions = {};
