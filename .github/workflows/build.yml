@@ -45,16 +45,10 @@ jobs:
         with:
           sdk: ${{ env.DART_SDK }}
 
-      - name: Cache pub packages
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-
-
-      # Resolves the workspace and re-bundles every brick
+      # Resolves the workspace and re-bundles every brick. pub downloads the
+      # packages fast, so no job keeps a cache of them, which would take a
+      # large part of the 10 GB of caches of the repository, and a copy for
+      # each change of a pubspec.
       - name: Bootstrap workspace
         run: melos bootstrap
 

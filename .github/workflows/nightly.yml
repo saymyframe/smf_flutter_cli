@@ -57,9 +57,6 @@ jobs:
       macos_sha256: ${{ matrix.macos_sha256 }}
       windows_sha256: ${{ matrix.windows_sha256 }}
       macos_and_windows: ${{ matrix.macos_and_windows }}
-      # A cache for each version and row would crowd the caches of the pull
-      # requests out of the 10 GB of the repository.
-      pub_cache: false
       # Only the job with the latest Flutter saves the caches of Gradle and
       # of Swift packages, and only in a run on main, whose caches the runs
       # of every branch find, not in a run by hand on another branch; the

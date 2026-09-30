@@ -53,10 +53,6 @@ on:
         description: Whether to compare the brick of flutter_core with the app of flutter create, which follows the template of the pinned Flutter.
         type: boolean
         default: false
-      pub_cache:
-        description: Whether the jobs on Linux keep their pub packages in the cache of the repository.
-        type: boolean
-        default: true
       save_gradle_cache:
         description: Whether the jobs that build an app for Android save what Gradle downloaded to the cache of the repository, under the key of what their app builds with and the week, when the cache has nothing under that key yet and their build added more than NATIVE_CACHE_SAVE_ABOVE_MB to what they restored, rather than only restoring it. The workflows pass it only for the runs on main, whose caches the runs of every branch find; tools/workflow_apps_test.dart checks this.
         type: boolean
@@ -117,6 +113,9 @@ jobs:
         with:
           sdk: ${{ inputs.dart_version }}
 
+      # pub downloads the packages fast, so no job keeps a cache of them,
+      # which would take a large part of the 10 GB of caches of the
+      # repository, and a copy for each change of a pubspec.
       - &pub_get
         name: Get the packages of the workspace
         run: dart pub get
@@ -237,24 +236,6 @@ jobs:
             '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
             "$RUNNER_TEMP/flutter.json"
 
-      # One cache per registry, which the first shard of each saves and the
-      # other jobs restore: the apps of each registry get their own
-      # packages.
-      - name: Cache pub packages
-        if: inputs.pub_cache && startsWith(matrix.shard, '1/')
-        uses: actions/cache@v6
-        with: &pub_cache
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-
-
-      - name: Restore the cache of pub packages
-        if: inputs.pub_cache && !startsWith(matrix.shard, '1/')
-        uses: actions/cache/restore@v6
-        with: *pub_cache
-
       - *pub_get
 
       - name: Generate, analyze and test the apps of the shard
@@ -337,17 +318,6 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_linux
       - *check_flutter_linux
-
-      - &restore_pub_cache
-        name: Restore the cache of pub packages
-        if: inputs.pub_cache
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-real-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-real-
 
       - &gradle_week
         name: Find the week of the cache of Gradle
@@ -473,7 +443,6 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_linux
       - *check_flutter_linux
-      - *restore_pub_cache
       - *gradle_week
       - *pub_get
 
@@ -614,7 +583,6 @@ jobs:
       - uses: actions/checkout@v7
       - *setup_flutter_linux
       - *check_flutter_linux
-      - *restore_pub_cache
       - *gradle_week
       - *pub_get
       - *start_emulator
@@ -850,8 +818,6 @@ jobs:
           ruby -e "require 'xcodeproj'; puts \"xcodeproj #{Xcodeproj::VERSION}\""
           /usr/bin/ruby --version
 
-      # Without a cache of pub packages: restoring it takes longer than
-      # getting them.
       - *pub_get
 
       - name: Test the packages
@@ -1256,8 +1222,6 @@ jobs:
             throw "Flutter or Dart is not $env:FLUTTER_VERSION with Dart $env:DART_SDK."
           }
 
-      # Without a cache of pub packages: restoring it takes longer than
-      # getting them.
       - *pub_get
 
       - name: Test the packages

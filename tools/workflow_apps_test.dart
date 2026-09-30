@@ -2649,12 +2649,12 @@ jobs:
   shards:
     runs-on: ubuntu-latest
     steps:
-      - name: Cache pub packages
-        if: inputs.pub_cache && startsWith(matrix.shard, '1/')
+      - name: Cache the files of a tool
+        if: startsWith(matrix.shard, '1/')
         uses: actions/cache@v6
         with:
-          path: ~/.pub-cache
-          key: pub-${{ hashFiles('**/pubspec.yaml') }}
+          path: ~/.cache/tool
+          key: tool-${{ hashFiles('tool.lock') }}
   windows:
     runs-on: windows-latest
     steps:
