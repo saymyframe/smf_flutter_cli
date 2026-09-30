@@ -134,7 +134,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
   for (final result in await harness.checkAll()) {
-    switch (_appOf(result, roleOptions, harness.context)) {
+    switch (_appOf(result, roleOptions)) {
       case final app?:
         apps.add(app);
       case null:
@@ -224,7 +224,6 @@ Future<
     final app = _appOf(
       result,
       roleOptions,
-      harness.context,
       everyModuleWith: _everyModuleWith(contractCase, names),
     );
     if (app == null) {
@@ -260,11 +259,12 @@ List<ModuleId> _everyModuleWith(
     ];
 
 /// The app of the matrix that [result] built with the values of role
-/// options [roleOptions], or `null` if the case has errors.
+/// options [roleOptions], or `null` if the case has errors. The harness of
+/// the matrix renders every app, so a case without errors has the request
+/// that the hooks of the roles got ([ContractResult.hook]).
 MatrixApp? _appOf(
   ContractResult result,
-  Map<String, String?> roleOptions,
-  ModuleContext context, {
+  Map<String, String?> roleOptions, {
   List<ModuleId>? everyModuleWith,
 }) {
   final resolution = result.resolution;
@@ -278,15 +278,7 @@ MatrixApp? _appOf(
       ...result.answers,
     },
     everyModuleWith: everyModuleWith,
-    // In a case without errors, all data of the roles is of the type they
-    // take and comes from modules that may give it, so it is the data that
-    // the hooks of the roles got when the harness rendered the app.
-    hook: RoleHookRequest(
-      data: result.collection!.roleData,
-      presentRoles: resolution.presentRoles,
-      context: context,
-      choices: result.choices!,
-    ),
+    hook: result.hook,
   );
 }
 
