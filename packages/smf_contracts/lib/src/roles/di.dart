@@ -226,20 +226,21 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
   return issues;
 }
 
-/// The problems with the functions that registrations name: a factory that
-/// is missing from its file of the app, or that cannot take its
-/// dependencies as positional arguments, and a dispose function that cannot
-/// take the service.
+/// The problems with the functions that registrations name: a factory or a
+/// dispose function that is missing from its file of the app, a factory
+/// that cannot take its dependencies as positional arguments, and a dispose
+/// function that cannot take the service.
 ///
 /// Functions from other packages are left to the compiler.
 List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   final issues = <SmfIssue>[];
   void check(
     String name,
-    ImportRef import,
-    int arguments,
-    ContributionOrigin? origin,
-  ) {
+    ImportRef import, {
+    required int arguments,
+    required String hint,
+    required ContributionOrigin? origin,
+  }) {
     if (!import.isAppFile) return;
     final symbol = RequiredFunction(
       name,
@@ -248,13 +249,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
     );
     for (final issue in symbol.checkIn(input.files)) {
       issues.add(
-        SmfIssue(
-          issue.message,
-          hint: 'The pipeline calls it with the dependencies of the '
-              'registration.',
-          origin: origin,
-          path: issue.path,
-        ),
+        SmfIssue(issue.message, hint: hint, origin: origin, path: issue.path),
       );
     }
   }
@@ -262,9 +257,22 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   for (final data in diRole.graphOf(input.roleInput).registrations) {
     final registration = data.value;
     final create = registration.create;
-    check(create.name, create.import, create.deps.length, data.origin);
+    check(
+      create.name,
+      create.import,
+      arguments: create.deps.length,
+      hint: 'The pipeline calls it with the dependencies of the registration.',
+      origin: data.origin,
+    );
     if (registration.dispose case final dispose?) {
-      check(dispose.name, dispose.import, 1, data.origin);
+      check(
+        dispose.name,
+        dispose.import,
+        arguments: 1,
+        hint: 'The container calls it with the service of the registration '
+            'when it disposes of the service.',
+        origin: data.origin,
+      );
     }
   }
   return issues;
