@@ -28,6 +28,16 @@ abstract interface class CrashReporter {
 
 /// Returns the crash reporter of the app, which forwards every call to the
 /// crash reporters of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. A crash reporter that throws, or whose future fails,
+/// keeps no other from the call, and its failure reaches neither the code
+/// that called nor the handlers of [installCrashReporting], which would
+/// report it to the same crash reporter again, without end. In debug mode
+/// the failure is printed, so that a crash reporter that does not work,
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -41,6 +51,9 @@ CrashReporter createCrashReporter() => _crashReporter;
 ///   such as in a `Future`, a `Timer` or the handler of a port, with its
 ///   type. In debug mode it leaves the error unhandled, so the engine prints
 ///   it.
+///
+/// Each report reaches every crash reporter, and the failure of a crash
+/// reporter comes back to neither handler; see [createCrashReporter].
 ///
 /// `compute()` and `Isolate.run()` throw the error of their isolate to the
 /// code that awaits them, so it reaches the platform dispatcher unless that
@@ -103,9 +116,28 @@ final class _CrashReporters implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _forAll((reporter) => reporter.setUserId(userId));
 
+  /// Calls [call] with each crash reporter on its own, and completes once
+  /// all of them are done, whatever each does; see [createCrashReporter].
   Future<void> _forAll(
     Future<void> Function(CrashReporter reporter) call,
   ) async {
-    await Future.wait(_reporters.map(call));
+    await Future.wait([
+      for (final reporter in _reporters) _callAlone(reporter, call),
+    ]);
+  }
+
+  /// Calls [call] with [reporter], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    CrashReporter reporter,
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    try {
+      await call(reporter);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('The crash reporter ${reporter.runtimeType} failed: $error');
+      }
+    }
   }
 }

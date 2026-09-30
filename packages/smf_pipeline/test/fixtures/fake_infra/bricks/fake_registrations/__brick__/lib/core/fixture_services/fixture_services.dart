@@ -1,3 +1,9 @@
+/// The calls of the functions that dispose of the fixture's services, and
+/// of the one that creates the counter, a lazy singleton, in order, such as
+/// `close FixtureCache` and `create FixtureCounter`: the tests of the apps
+/// with the fixture read them.
+final List<String> fixtureServiceEvents = [];
+
 /// The configuration of the fixture's services.
 final class FixtureConfig {
   /// Creates the configuration.
@@ -56,7 +62,10 @@ Future<FixtureSession> openFixtureSession() async => const FixtureSession();
 FixtureCache createFixtureCache(FixtureApi api) => FixtureCache(api);
 
 /// Closes the cache.
-void closeFixtureCache(FixtureCache cache) => cache.closed = true;
+void closeFixtureCache(FixtureCache cache) {
+  cache.closed = true;
+  fixtureServiceEvents.add('close FixtureCache');
+}
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');
@@ -107,7 +116,10 @@ FixtureStamp createLocalStamp() => const FixtureStamp(FixtureZone('local'));
 FixtureLog createAuditLog() => FixtureLog();
 
 /// Closes the log.
-void closeFixtureLog(FixtureLog log) => log.closed = true;
+void closeFixtureLog(FixtureLog log) {
+  log.closed = true;
+  fixtureServiceEvents.add('close FixtureLog');
+}
 
 /// Creates the index of [session].
 FixtureIndex createFixtureIndex(FixtureSession session) =>
@@ -117,13 +129,20 @@ FixtureIndex createFixtureIndex(FixtureSession session) =>
 Future<FixtureSession> openBackupSession() async => const FixtureSession();
 
 /// Closes [session].
-void closeFixtureSession(FixtureSession session) {}
+void closeFixtureSession(FixtureSession session) =>
+    fixtureServiceEvents.add('close FixtureSession');
 
 /// Opens the replica.
 Future<FixtureReplica> openFixtureReplica() async => const FixtureReplica();
 
 /// Creates the counter.
-FixtureCounter createFixtureCounter() => FixtureCounter();
+FixtureCounter createFixtureCounter() {
+  fixtureServiceEvents.add('create FixtureCounter');
+  return FixtureCounter();
+}
 
 /// Resets the counter.
-void closeFixtureCounter(FixtureCounter counter) => counter.count = 0;
+void closeFixtureCounter(FixtureCounter counter) {
+  counter.count = 0;
+  fixtureServiceEvents.add('close FixtureCounter');
+}

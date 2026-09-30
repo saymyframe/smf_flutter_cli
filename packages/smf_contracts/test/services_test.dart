@@ -61,6 +61,15 @@ List<SmfIssue> _moduleIssues(
       ),
     );
 
+/// The top-level functions of the Dart [code], by name.
+Map<String, FunctionDeclaration> _functionsOf(String code) => {
+      for (final function in parseString(content: code)
+          .unit
+          .declarations
+          .whereType<FunctionDeclaration>())
+        function.name.lexeme: function,
+    };
+
 final class _Container extends DiProvider {
   const _Container();
 
@@ -244,14 +253,75 @@ void main() {
         code,
         contains(
           'final List<AnalyticsService> _analyticsServices = [\n'
-          '  impl0.createConsoleAnalytics(),\n'
-          '  impl1.createOtherAnalytics(),\n'
+          "  ?_createAlone('createConsoleAnalytics', "
+          'impl0.createConsoleAnalytics),\n'
+          "  ?_createAlone('createOtherAnalytics', "
+          'impl1.createOtherAnalytics),\n'
           '];',
         ),
       );
       expect(code, contains('final class _AnalyticsServices'));
       expect(code, isNot(contains('initAnalytics')));
+      expect(_functionsOf(code), isNot(contains('_startAlone')));
       expect(rendered.elsewhere, isEmpty);
+    });
+
+    test(
+        'creates each implementation on its own, and leaves out one whose '
+        'factory throws or whose start fails, printing its error in debug '
+        'mode', () async {
+      final rendered = await renderTemplate(
+        analyticsRole,
+        data: [
+          _data(analyticsRole, 'ConsoleAnalytics'),
+          _data(analyticsRole, 'DelayedAnalytics', async: true),
+        ],
+      );
+      final code = rendered.files[AnalyticsRole.file]!;
+
+      expectParses(code);
+      final functions = _functionsOf(code);
+      for (final (name, signature, call) in [
+        (
+          '_createAlone',
+          'AnalyticsService? _createAlone(String name, '
+              'AnalyticsService Function() create)',
+          'return create();',
+        ),
+        (
+          '_startAlone',
+          'Future<AnalyticsService?> _startAlone(String name, '
+              'Future<AnalyticsService> Function() start) async',
+          'return await start();',
+        ),
+      ]) {
+        final function = functions[name]!;
+        final body = function.functionExpression.body as BlockFunctionBody;
+        final attempt = body.block.statements.single as TryStatement;
+        final expression = function.functionExpression;
+        final head = '${function.returnType} ${function.name.lexeme}';
+        expect(
+          [
+            '$head${expression.parameters}',
+            if (expression.body.keyword case final keyword?) '$keyword',
+          ].join(' '),
+          signature,
+        );
+        expect('${attempt.body.statements.single}', call, reason: name);
+        final handler = attempt.catchClauses.single;
+        expect('${handler.exceptionType}', 'Object', reason: name);
+        const printed = r"if (kDebugMode) {debugPrint('$name() failed, so "
+            r"the app works without it: $error');}";
+        expect(
+          handler.body.statements.map((statement) => '$statement'),
+          [printed, 'return null;'],
+          reason: name,
+        );
+      }
+      expect(
+        code,
+        contains("import 'package:flutter/foundation.dart';"),
+      );
     });
 
     test('adds the asynchronous implementations in bootstrap', () async {
@@ -265,8 +335,18 @@ void main() {
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
-      expect(code, contains('Future<void> initAnalytics() async {'));
-      expect(code, contains('impl1.initDelayedAnalytics(),'));
+      expect(
+        code,
+        contains(
+          'Future<void> initAnalytics() async {\n'
+          '  final started = await Future.wait([\n'
+          "    _startAlone('initDelayedAnalytics', "
+          'impl1.initDelayedAnalytics),\n'
+          '  ]);\n'
+          '  _analyticsServices.addAll(started.nonNulls);\n'
+          '}',
+        ),
+      );
       expect(
         code,
         contains(
@@ -298,7 +378,10 @@ void main() {
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
-      expect(code, contains('impl0.createVendor(),'));
+      expect(
+        code,
+        contains("?_createAlone('createVendor', impl0.createVendor),"),
+      );
       expect(code, contains("import 'package:my_app/vendor.dart' as impl0;"));
       expect(code, isNot(contains('vendor.createVendor')));
     });
@@ -362,6 +445,10 @@ void main() {
         code,
         contains('final List<CrashReporter> _crashReporters = [\n];'),
       );
+      // Without an implementation created with the app, the file has no
+      // function that creates one on its own, which would be unused.
+      expect(_functionsOf(code), isNot(contains('_createAlone')));
+      expect(_functionsOf(code), contains('_startAlone'));
       expect(
         rendered.elsewhere.single.fragment!.code,
         'await initCrashReporting();\ninstallCrashReporting();',

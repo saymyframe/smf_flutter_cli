@@ -292,6 +292,7 @@ Future<void> bootstrap() async {
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
     as impl0;
+import 'package:flutter/foundation.dart';
 
 /// Records what users do in the app.
 abstract interface class AnalyticsService {
@@ -319,6 +320,18 @@ abstract interface class AnalyticsService {
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. An analytics service that throws, or whose future fails,
+/// keeps no other from the call, and its failure does not reach the code
+/// that called: that code may not await the call, and then nothing would
+/// catch the failure. In debug mode the failure is printed, so that an
+/// analytics service that does not work, such as one that is not set up,
+/// shows in the console. Each analytics service gets a copy of its own of
+/// the map of parameters, so that one that changes the map changes nothing
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -330,9 +343,27 @@ final List<AnalyticsService> _analyticsServices = [];
 /// Creates the implementations of AnalyticsService that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initAnalytics() async {
-  _analyticsServices.addAll(
-    await Future.wait<AnalyticsService>([impl0.initFixtureAnalytics()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureAnalytics', impl0.initFixtureAnalytics),
+  ]);
+  _analyticsServices.addAll(started.nonNulls);
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<AnalyticsService?> _startAlone(
+  String name,
+  Future<AnalyticsService> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _AnalyticsServices implements AnalyticsService {
@@ -342,12 +373,15 @@ final class _AnalyticsServices implements AnalyticsService {
 
   @override
   Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
-      _forAll((service) => service.logEvent(name, parameters: parameters));
+      _forAll(
+        (service) => service.logEvent(name, parameters: _copyOf(parameters)),
+      );
 
   @override
   Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
       _forAll(
-        (service) => service.logSignIn(method: method, parameters: parameters),
+        (service) =>
+            service.logSignIn(method: method, parameters: _copyOf(parameters)),
       );
 
   @override
@@ -355,7 +389,8 @@ final class _AnalyticsServices implements AnalyticsService {
     required String method,
     Map<String, Object>? parameters,
   }) => _forAll(
-    (service) => service.logSignUp(method: method, parameters: parameters),
+    (service) =>
+        service.logSignUp(method: method, parameters: _copyOf(parameters)),
   );
 
   @override
@@ -372,10 +407,37 @@ final class _AnalyticsServices implements AnalyticsService {
     required String? value,
   }) => _forAll((service) => service.setUserProperty(name: name, value: value));
 
+  /// Calls [call] with each analytics service on its own, and completes
+  /// once all of them are done, whatever each does; see
+  /// [createAnalyticsService].
   Future<void> _forAll(
     Future<void> Function(AnalyticsService service) call,
   ) async {
-    await Future.wait(_services.map(call));
+    await Future.wait([
+      for (final service in _services) _callAlone(service, call),
+    ]);
+  }
+
+  /// A copy of [parameters] for one analytics service; see
+  /// [createAnalyticsService].
+  static Map<String, Object>? _copyOf(Map<String, Object>? parameters) =>
+      parameters == null ? null : Map.of(parameters);
+
+  /// Calls [call] with [service], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    AnalyticsService service,
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    try {
+      await call(service);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The analytics service ${service.runtimeType} failed: $error',
+        );
+      }
+    }
   }
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
@@ -479,6 +541,16 @@ abstract interface class CrashReporter {
 
 /// Returns the crash reporter of the app, which forwards every call to the
 /// crash reporters of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. A crash reporter that throws, or whose future fails,
+/// keeps no other from the call, and its failure reaches neither the code
+/// that called nor the handlers of [installCrashReporting], which would
+/// report it to the same crash reporter again, without end. In debug mode
+/// the failure is printed, so that a crash reporter that does not work,
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -492,6 +564,9 @@ CrashReporter createCrashReporter() => _crashReporter;
 ///   such as in a `Future`, a `Timer` or the handler of a port, with its
 ///   type. In debug mode it leaves the error unhandled, so the engine prints
 ///   it.
+///
+/// Each report reaches every crash reporter, and the failure of a crash
+/// reporter comes back to neither handler; see [createCrashReporter].
 ///
 /// `compute()` and `Isolate.run()` throw the error of their isolate to the
 /// code that awaits them, so it reaches the platform dispatcher unless that
@@ -519,9 +594,27 @@ final List<CrashReporter> _crashReporters = [];
 /// Creates the implementations of CrashReporter that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initCrashReporting() async {
-  _crashReporters.addAll(
-    await Future.wait<CrashReporter>([impl0.initFixtureCrashReporter()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureCrashReporter', impl0.initFixtureCrashReporter),
+  ]);
+  _crashReporters.addAll(started.nonNulls);
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<CrashReporter?> _startAlone(
+  String name,
+  Future<CrashReporter> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _CrashReporters implements CrashReporter {
@@ -555,13 +648,34 @@ final class _CrashReporters implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _forAll((reporter) => reporter.setUserId(userId));
 
+  /// Calls [call] with each crash reporter on its own, and completes once
+  /// all of them are done, whatever each does; see [createCrashReporter].
   Future<void> _forAll(
     Future<void> Function(CrashReporter reporter) call,
   ) async {
-    await Future.wait(_reporters.map(call));
+    await Future.wait([
+      for (final reporter in _reporters) _callAlone(reporter, call),
+    ]);
+  }
+
+  /// Calls [call] with [reporter], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    CrashReporter reporter,
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    try {
+      await call(reporter);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('The crash reporter ${reporter.runtimeType} failed: $error');
+      }
+    }
   }
 }
 === lib/core/di/dependencies.dart (fake_di) ===
+import 'dart:async';
+
 import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:fixture_app/core/events/communication_service.dart' as di2;
@@ -582,9 +696,7 @@ Future<void> registerDependencies() async {
   locator.singleton<di0.FixtureSession>(await di0.openFixtureSession());
   locator.singleton<di0.FixtureCache>(
     di0.createFixtureCache(locator.resolve<di0.FixtureApi>()),
-  );
-  locator.onDispose(
-    () => di0.closeFixtureCache(locator.resolve<di0.FixtureCache>()),
+    dispose: di0.closeFixtureCache,
   );
   locator.lazy<di0.FixtureZone>(() => di0.createUtcZone(), name: 'utc');
   locator.factoryOf<di0.FixtureStamp>(
@@ -596,11 +708,10 @@ Future<void> registerDependencies() async {
     () => di0.createLocalStamp(),
     name: 'local',
   );
-  locator.singleton<di0.FixtureLog>(di0.createAuditLog(), name: 'audit');
-  locator.onDispose(
-    () => di0.closeFixtureLog(
-      locator.resolve<di0.FixtureLog>(instanceName: 'audit'),
-    ),
+  locator.singleton<di0.FixtureLog>(
+    di0.createAuditLog(),
+    name: 'audit',
+    dispose: di0.closeFixtureLog,
   );
   locator.singleton<di0.FixtureIndex>(
     di0.createFixtureIndex(locator.resolve<di0.FixtureSession>()),
@@ -609,16 +720,12 @@ Future<void> registerDependencies() async {
   locator.singleton<di0.FixtureSession>(
     await di0.openBackupSession(),
     name: 'backup',
-  );
-  locator.onDispose(
-    () => di0.closeFixtureSession(
-      locator.resolve<di0.FixtureSession>(instanceName: 'backup'),
-    ),
+    dispose: di0.closeFixtureSession,
   );
   locator.singleton<di0.FixtureReplica>(await di0.openFixtureReplica());
-  locator.lazy<di0.FixtureCounter>(() => di0.createFixtureCounter());
-  locator.onDispose(
-    () => di0.closeFixtureCounter(locator.resolve<di0.FixtureCounter>()),
+  locator.lazy<di0.FixtureCounter>(
+    () => di0.createFixtureCounter(),
+    dispose: di0.closeFixtureCounter,
   );
   locator.lazy<di1.CrashReporter>(() => di1.createCrashReporter());
   locator.lazy<di2.CommunicationService>(
@@ -627,9 +734,18 @@ Future<void> registerDependencies() async {
   locator.lazy<di3.AnalyticsService>(() => di3.createAnalyticsService());
 }
 
+/// Disposes of the services that the map created, with the functions that
+/// dispose of them, in the reverse order of their registration, and
+/// removes every service, so that [registerDependencies] can register them
+/// again.
+Future<void> resetDependencies() => (serviceLocator as _MapLocator).reset();
+
 final class _MapLocator implements ServiceLocator {
   final Map<(Type, String?), Object Function()> _getters = {};
-  final List<void Function()> _disposers = [];
+
+  /// What disposes of each service that has a function to dispose of it,
+  /// in the order of the registrations.
+  final List<FutureOr<void> Function()> _disposers = [];
 
   @override
   T resolve<T extends Object>({String? instanceName}) {
@@ -638,18 +754,41 @@ final class _MapLocator implements ServiceLocator {
     return getter() as T;
   }
 
-  void singleton<T extends Object>(T instance, {String? name}) =>
-      _getters[(T, name)] = () => instance;
+  void singleton<T extends Object>(
+    T instance, {
+    String? name,
+    FutureOr<void> Function(T service)? dispose,
+  }) {
+    _getters[(T, name)] = () => instance;
+    if (dispose != null) _disposers.add(() => dispose(instance));
+  }
 
-  void lazy<T extends Object>(T Function() create, {String? name}) {
+  void lazy<T extends Object>(
+    T Function() create, {
+    String? name,
+    FutureOr<void> Function(T service)? dispose,
+  }) {
     T? instance;
     _getters[(T, name)] = () => instance ??= create();
+    if (dispose != null) {
+      // A lazy singleton that nothing resolved is not created only to be
+      // disposed of.
+      _disposers.add(() {
+        if (instance case final created?) return dispose(created);
+      });
+    }
   }
 
   void factoryOf<T extends Object>(T Function() create, {String? name}) =>
       _getters[(T, name)] = create;
 
-  void onDispose(void Function() dispose) => _disposers.add(dispose);
+  Future<void> reset() async {
+    for (final dispose in _disposers.reversed) {
+      await dispose();
+    }
+    _disposers.clear();
+    _getters.clear();
+  }
 }
 === lib/core/di/service_locator.dart (role:di) ===
 import 'dependencies.dart';
@@ -681,11 +820,16 @@ abstract class AppEvent {
 
 /// Delivers [AppEvent]s between parts of the app that do not know each
 /// other.
+///
+/// Whether a listener of a type that an event extends or implements, such
+/// as a listener of `on<AppEvent>()`, gets the event is up to the provider
+/// of the service.
 abstract interface class CommunicationService {
-  /// Sends [event] to everyone listening to its type.
+  /// Sends [event] to everyone listening to its type when it is fired.
   void fire(AppEvent event);
 
-  /// The events of type [T] sent from now on.
+  /// The events of type [T] fired after the stream is listened to. An event
+  /// fired before, even after this call returned the stream, is not in it.
   Stream<T> on<T extends AppEvent>();
 }
 
@@ -741,6 +885,21 @@ final List<FixtureObserver> fixtureObservers = [];
 /// The screens the user saw, as the screen listener of the fixture heard of
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
+
+/// Whether the screen listener of the fixture throws once it noted a
+/// screen, as a test that a listener of the screen that throws keeps no
+/// other from hearing it sets it.
+bool fixtureScreensThrow = false;
+
+/// The screen listener of the fixture: notes the screen of [route] at
+/// [location] in [fixtureScreens], and then throws if
+/// [fixtureScreensThrow].
+void noteFixtureScreen(String? route, String location) {
+  fixtureScreens.add((route, location));
+  if (fixtureScreensThrow) {
+    throw StateError('The screen listener of the fixture analytics throws.');
+  }
+}
 
 /// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
@@ -890,7 +1049,28 @@ void _openNews() {}
 /// log heard of them: the full name of the route of each, or `null`, and
 /// its location.
 final List<(String?, String)> fixtureScreenLog = [];
+
+/// Whether the screen listener of the fixture screen log throws once it
+/// noted a screen, as a test that a listener of the screen that throws
+/// keeps no other from hearing it sets it.
+bool fixtureScreenLogThrows = false;
+
+/// The screen listener of the fixture screen log: notes the screen of
+/// [route] at [location] in [fixtureScreenLog], and then throws if
+/// [fixtureScreenLogThrows].
+void noteFixtureScreenLog(String? route, String location) {
+  fixtureScreenLog.add((route, location));
+  if (fixtureScreenLogThrows) {
+    throw StateError('The screen listener of the fixture screen log throws.');
+  }
+}
 === lib/core/fixture_services/fixture_services.dart (fake_registrations) ===
+/// The calls of the functions that dispose of the fixture's services, and
+/// of the one that creates the counter, a lazy singleton, in order, such as
+/// `close FixtureCache` and `create FixtureCounter`: the tests of the apps
+/// with the fixture read them.
+final List<String> fixtureServiceEvents = [];
+
 /// The configuration of the fixture's services.
 final class FixtureConfig {
   /// Creates the configuration.
@@ -949,7 +1129,10 @@ Future<FixtureSession> openFixtureSession() async => const FixtureSession();
 FixtureCache createFixtureCache(FixtureApi api) => FixtureCache(api);
 
 /// Closes the cache.
-void closeFixtureCache(FixtureCache cache) => cache.closed = true;
+void closeFixtureCache(FixtureCache cache) {
+  cache.closed = true;
+  fixtureServiceEvents.add('close FixtureCache');
+}
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');
@@ -1000,7 +1183,10 @@ FixtureStamp createLocalStamp() => const FixtureStamp(FixtureZone('local'));
 FixtureLog createAuditLog() => FixtureLog();
 
 /// Closes the log.
-void closeFixtureLog(FixtureLog log) => log.closed = true;
+void closeFixtureLog(FixtureLog log) {
+  log.closed = true;
+  fixtureServiceEvents.add('close FixtureLog');
+}
 
 /// Creates the index of [session].
 FixtureIndex createFixtureIndex(FixtureSession session) =>
@@ -1010,16 +1196,23 @@ FixtureIndex createFixtureIndex(FixtureSession session) =>
 Future<FixtureSession> openBackupSession() async => const FixtureSession();
 
 /// Closes [session].
-void closeFixtureSession(FixtureSession session) {}
+void closeFixtureSession(FixtureSession session) =>
+    fixtureServiceEvents.add('close FixtureSession');
 
 /// Opens the replica.
 Future<FixtureReplica> openFixtureReplica() async => const FixtureReplica();
 
 /// Creates the counter.
-FixtureCounter createFixtureCounter() => FixtureCounter();
+FixtureCounter createFixtureCounter() {
+  fixtureServiceEvents.add('create FixtureCounter');
+  return FixtureCounter();
+}
 
 /// Resets the counter.
-void closeFixtureCounter(FixtureCounter counter) => counter.count = 0;
+void closeFixtureCounter(FixtureCounter counter) {
+  counter.count = 0;
+  fixtureServiceEvents.add('close FixtureCounter');
+}
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 
@@ -1077,8 +1270,11 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
+import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
+    as screen3;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
     as screen2;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app/fallback_start_screen.dart';
@@ -1131,8 +1327,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   final List<NavigatorObserver> _observers = _newObservers();
 
   final _screenListeners = <void Function(String? route, String location)>[
-    (route, location) => fixtureScreens.add((route, location)),
-    (route, location) => fixtureScreenLog.add((route, location)),
+    noteFixtureScreen,
+    noteFixtureScreenLog,
   ];
 
   /// The stack of the root navigator: locations, and the main navigation.
@@ -1235,13 +1431,21 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// Tells the listeners of the screen about the page on top when it is
   /// another than they last heard of: a location of the root navigator or
   /// of the selected branch, or the fallback screen at `/`.
+  ///
+  /// It calls each listener on its own: what one throws keeps no other
+  /// from hearing the screen, and reaches neither the router nor the
+  /// handlers of the errors of the app. In debug mode it is printed.
   void _showScreen() {
     final top = _top;
     if (top == _shown) return;
     _shown = top;
     final (_, location) = top;
     for (final listener in _screenListeners) {
-      listener(location?.routeName, location?.path ?? '/');
+      try {
+        listener(location?.routeName, location?.path ?? '/');
+      } on Object catch (error) {
+        if (kDebugMode) debugPrint('A listener of the screen failed: $error');
+      }
     }
   }
 
@@ -1401,6 +1605,7 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeFeatureDetailsLocation(:final id, :final tab) =>
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
+  FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -1521,6 +1726,18 @@ final class FakeSecondSecondLocation extends AppLocation {
   String get path => '/fake_second';
 }
 
+/// The location of `fake_second.outside`: `/fake_second/outside`.
+final class FakeSecondOutsideLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondOutsideLocation();
+
+  @override
+  String get routeName => 'fake_second.outside';
+
+  @override
+  String get path => '/fake_second/outside';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -1567,6 +1784,9 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.second`: `/fake_second`.
   NavLink second() => NavLink(_context, const FakeSecondSecondLocation());
+
+  /// The route `fake_second.outside`: `/fake_second/outside`.
+  NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
 }
 === lib/features/fake_feature/fake_feature_composition.dart (fake_feature (fake_riverpod)) ===
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1656,6 +1876,20 @@ class FixtureHomeScreen extends StatelessWidget {
       ],
     ),
   );
+}
+=== lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// A screen of the second fixture feature outside the main navigation,
+/// whose page a router shows over the main navigation.
+@FixtureScreen('fake_second.outside')
+class FixtureOutsideScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureOutsideScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';

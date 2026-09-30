@@ -535,13 +535,15 @@ String _whole(String where, String what) =>
     'as the apps get more, only the number of jobs grows.';
 
 /// The problems of the matrix tools that [script] runs: a run of
-/// [_wholeSelection], and, in a job whose matrix has the keys [planKeys]
-/// from the plan, all of them for `*`, an --app or a --shard of a run that
-/// generates or checks apps that does not come from the matrix of the plan,
-/// directly or through a variable of the environment of the step. A run
-/// that only explains what smf create would generate may take an app of the
-/// plan as it likes. A script of .github/scripts, which has no matrix, has
-/// no [planKeys] and takes them as it is given them.
+/// [_wholeSelection], one that adds the tests of a matrix tool to an app
+/// without --app, and, in a job whose matrix has the keys [planKeys] from
+/// the plan, all of them for `*`, an --app or a --shard of a run that
+/// generates or checks apps, or adds tests to one, that does not come from
+/// the matrix of the plan, directly or through a variable of the
+/// environment of the step. A run that only explains what smf create would
+/// generate may take an app of the plan as it likes. A script of
+/// .github/scripts, which has no matrix, has no [planKeys] and takes them
+/// as it is given them.
 List<String> _planProblemsOfScript(_Script script, Set<String>? planKeys) {
   final problems = <String>[];
   for (final words in script.commands) {
@@ -551,6 +553,18 @@ List<String> _planProblemsOfScript(_Script script, Set<String>? planKeys) {
     final (:arguments, :choice) = _choiceOf(
       _argumentsOfTool(words, script._isTool),
     );
+    if (arguments.firstOrNull == '--add-app-tests' &&
+        !choice.containsKey('--app')) {
+      problems.add(
+        '${script.where} adds the tests of a matrix tool to an app without '
+        '--app. With --app, the name of the app with every module of the plan '
+        'that --create --app generated, the tool fills the values of the '
+        'tests and the files that they generate for that app, and adds to the '
+        'start check the probes of the tests of the roles of the app, such as '
+        'the walk of its routes: take --app from the matrix of the job, as '
+        '--create --app does.',
+      );
+    }
     if (planKeys == null || arguments.contains('--explain')) continue;
     for (final option in ['--app', '--shard']) {
       final value = choice[option];
@@ -1333,6 +1347,7 @@ jobs:
           dart run "$tool" --create --without-external-steps "$apps" start_app > out
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              --without-external-steps --app "$APP" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
           matrix="$(dart run packages/smf_flutter_cli/tool/matrix.dart --app-tests)"
@@ -1883,7 +1898,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
           .github/scripts/each_app.sh "$apps" flutter build apk --debug
           for app in "$apps"/*/; do
-            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests "${app%/}" packages/smf_flutter_cli/app_tests/start
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "$APP" "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
           dart run packages/smf_flutter_cli/tool/matrix.dart --app-tests
   windows:
@@ -2024,6 +2039,85 @@ jobs:
             'is no value of a matrix of its job that the plan gives:',
           ),
         ],
+      );
+    });
+
+    test(
+        'finds a step that adds the tests of a matrix tool to an app without '
+        '--app, or with an --app that does not come from the matrix of the '
+        'plan', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  plan:
+    outputs:
+      start: ${{ steps.plan.outputs.start }}
+    steps:
+      - id: plan
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --plan
+  start:
+    needs: plan
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.start) }}
+    steps:
+      - name: Without app
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              --without-external-steps "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
+      - name: Named
+        run: |
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app 'every module (bloc)' "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
+      - name: From the matrix
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --without-external-steps --app "$APP" \
+              "${app%/}" packages/smf_flutter_cli/app_tests/start
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "${{ matrix.app }}" "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
+''',
+          file: 'apps.yml',
+        ),
+        [
+          equals(
+            'apps.yml, job start, step "Without app" adds the tests of a '
+            'matrix tool to an app without --app. With --app, the name of the '
+            'app with every module of the plan that --create --app generated, '
+            'the tool fills the values of the tests and the files that they '
+            'generate for that app, and adds to the start check the probes of '
+            'the tests of the roles of the app, such as the walk of its '
+            'routes: take --app from the matrix of the job, as --create --app '
+            'does.',
+          ),
+          startsWith(
+            'apps.yml, job start, step "Named" takes --app every module '
+            '(bloc), which is no value of a matrix of its job that the plan '
+            'gives:',
+          ),
+        ],
+      );
+      // A script of .github/scripts has no matrix, but takes the app it is
+      // given.
+      expect(
+        scriptPlanProblemsOf(
+          r'''
+#!/usr/bin/env bash
+dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests "$1" packages/smf_flutter_cli/app_tests/start
+dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "$2" "$1" packages/smf_flutter_cli/app_tests/start
+''',
+          file: '.github/scripts/add.sh',
+        ),
+        [startsWith('.github/scripts/add.sh adds the tests of a matrix tool')],
       );
     });
 

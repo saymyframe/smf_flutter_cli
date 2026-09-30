@@ -3,7 +3,11 @@
 // on an Android emulator and on an iOS simulator: the app starts. It runs
 // main() of the app, with what its modules put into bootstrap(), waits for
 // the first screen to settle and looks at the widgets on it: the app shows
-// its first screen without an error.
+// its first screen without an error. Then it runs the probes of the tests
+// of the app, which go through the roles of the app, such as the walk of
+// its routes, within a minute together. The matrix of SMF lists them in
+// start_probes.dart next to it, the probes of the tests that go into the
+// app with the check (MatrixAppTest.startProbe).
 //
 // It knows no module, only what every app has: main() in lib/main.dart,
 // which the app entry role puts there (AppEntryRole.mainFile), whichever
@@ -25,6 +29,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
+import 'start_probes.dart';
+
 /// How long main() of the app may take.
 const _mainLimit = Duration(seconds: 60);
 
@@ -33,6 +39,9 @@ const _settleLimit = Duration(seconds: 30);
 
 /// How long the app must schedule no frame for its screen to be settled.
 const _quiet = Duration(milliseconds: 500);
+
+/// How long the probes of the tests of the app may take together.
+const _probesLimit = Duration(seconds: 60);
 
 Future<void> main() async {
   final problems = <String>[];
@@ -66,8 +75,13 @@ Future<void> main() async {
     return true;
   };
   if (returned) {
-    if (await _settle(binding) case final problem?) problems.add(problem);
-    problems.addAll(_problemsOnScreen(binding.rootElement));
+    if (await _settle(binding) case final problem?) {
+      problems.add(problem);
+    } else {
+      problems
+        ..addAll(_problemsOnScreen(binding.rootElement))
+        ..addAll(await _problemsOfProbes(binding));
+    }
   }
   final result = problems.isEmpty ? 'passed' : 'failed: ${problems.join('; ')}';
   debugPrint('SMF_START_CHECK: $result');
@@ -81,8 +95,12 @@ Future<void> main() async {
 
 /// Waits until the app has shown its first frame and then schedules no
 /// frame for [_quiet], as `pumpAndSettle` of flutter_test does; returns
-/// the problem if that takes longer than [_settleLimit].
-Future<String?> _settle(WidgetsBinding binding) async {
+/// the problem if that takes longer than [_settleLimit], with [screen], the
+/// screen that the app shows.
+Future<String?> _settle(
+  WidgetsBinding binding, {
+  String screen = 'the first screen',
+}) async {
   final elapsed = Stopwatch()..start();
   try {
     await binding.waitUntilFirstFrameRasterized.timeout(_settleLimit);
@@ -93,8 +111,7 @@ Future<String?> _settle(WidgetsBinding binding) async {
   final quiet = Stopwatch()..start();
   while (quiet.elapsed < _quiet) {
     if (elapsed.elapsed > _settleLimit) {
-      return 'the first screen still changed after '
-          '${_settleLimit.inSeconds} s';
+      return '$screen still changed after ${_settleLimit.inSeconds} s';
     }
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (binding.hasScheduledFrame ||
@@ -103,6 +120,67 @@ Future<String?> _settle(WidgetsBinding binding) async {
     }
   }
   return null;
+}
+
+/// Runs the probes of the tests of the app ([startProbes]) one after
+/// another, each with a function that waits until the screen settles, and
+/// returns their problems, each after the name of the tests of its probe.
+/// The probes take [_probesLimit] together: a probe that is still running
+/// then is a problem, and so is each that did not start. It prints the
+/// probes that ran to the log of the device, with the time each took, so
+/// that the log tells which the check ran, even when it passed.
+Future<List<String>> _problemsOfProbes(WidgetsBinding binding) async {
+  final problems = <String>[];
+  final ran = <String>[];
+  final elapsed = Stopwatch()..start();
+  Future<void> settle() async {
+    if (await _settle(binding, screen: 'the screen') case final problem?) {
+      throw _Unsettled(problem);
+    }
+  }
+
+  for (final (name, probe) in startProbes) {
+    final left = _probesLimit - elapsed.elapsed;
+    if (left <= Duration.zero) {
+      problems.add(
+        '$name: the probe did not start: the probes before it took the '
+        '${_probesLimit.inSeconds} s of the probes',
+      );
+      continue;
+    }
+    final started = elapsed.elapsed;
+    try {
+      final found = await probe(settle).timeout(
+        left,
+        onTimeout: () => [
+          'the probe did not finish within the ${_probesLimit.inSeconds} s '
+              'of the probes',
+        ],
+      );
+      problems.addAll([for (final problem in found) '$name: $problem']);
+    } on Object catch (error, stack) {
+      problems.add('$name: the probe threw ${_firstLine(error)}');
+      debugPrint('The probe of $name threw $error\n$stack');
+    }
+    ran.add('$name in ${(elapsed.elapsed - started).inMilliseconds} ms');
+  }
+  debugPrint(
+    ran.isEmpty
+        ? 'The start check ran no probe.'
+        : 'The start check ran the probes of ${ran.join(', ')}.',
+  );
+  return problems;
+}
+
+/// The screen did not settle while a probe waited for it, with the
+/// [problem].
+final class _Unsettled implements Exception {
+  const _Unsettled(this.problem);
+
+  final String problem;
+
+  @override
+  String toString() => problem;
 }
 
 /// The problems of the widgets under [root]: the app has a [WidgetsApp],

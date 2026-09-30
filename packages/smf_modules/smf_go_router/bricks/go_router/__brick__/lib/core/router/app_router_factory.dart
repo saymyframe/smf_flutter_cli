@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -137,7 +138,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (screen == _screen) return;
     _screen = screen;
     for (final listener in _screenListeners) {
-      listener(top?.route.name, location);
+      _callAlone(listener, top?.route.name, location);
     }
   }{{#main_navigation}}
 
@@ -176,4 +177,23 @@ List<NavigatorObserver> _observers() => [
 final List<void Function(String? route, String location)> _screenListeners = [
 {{{smf_router__screen_listeners}}}
 ];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
 {{{value_checks}}}

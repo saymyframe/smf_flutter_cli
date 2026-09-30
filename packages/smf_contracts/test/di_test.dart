@@ -431,6 +431,54 @@ void main() {
     });
   });
 
+  group('the interface of the DI role', () {
+    /// The index of the file of a provider with `dependencies.dart` that
+    /// declares the functions [names], each with the return type that the
+    /// role requires of it.
+    DartFileIndex dependencies(List<String> names) => DartFileIndex(
+          path: DiRole.dependenciesFile,
+          declarations: [
+            for (final name in names)
+              IndexedDeclaration(
+                name: name,
+                kind: DeclarationKind.function,
+                type: name == 'createServiceLocator'
+                    ? 'ServiceLocator'
+                    : 'Future<void>',
+              ),
+          ],
+        );
+
+    test(
+        'requires every provider to create the service locator, to register '
+        'the services and to reset the container, which disposes of them '
+        'and removes them', () {
+      List<String> problemsOf(List<String> names) => [
+            for (final issue in diRole.interface.checkSymbols({
+              DiRole.dependenciesFile: dependencies(names),
+            }))
+              issue.message,
+          ];
+
+      expect(
+        problemsOf(const [
+          'createServiceLocator',
+          'registerDependencies',
+          'resetDependencies',
+        ]),
+        isEmpty,
+      );
+      // A provider that cannot reset its container, whose services a test
+      // of the app could then not register again.
+      const missing = 'lib/core/di/dependencies.dart does not declare '
+          'function resetDependencies().';
+      expect(
+        problemsOf(const ['createServiceLocator', 'registerDependencies']),
+        [missing],
+      );
+    });
+  });
+
   group('the DI template', () {
     final template = diRole.template;
 

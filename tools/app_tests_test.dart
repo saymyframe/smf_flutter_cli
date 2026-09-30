@@ -29,40 +29,46 @@
 // package of no module, whose app tests the other checks would then read
 // as those of a package of no module, is a problem too.
 //
-// A tool selects the apps of a test, and fills the values of its files,
-// only by the roles of the app (`MatrixApp.hook`) and by the ids of the
-// modules that the test knows: the modules of the package that keeps it and
-// of the packages of modules it depends on, or, for the fixture registry,
-// those of the fixture modules it depends on, whose files the test may
-// import (`knownModules`). What a test needs of the other modules of an app
-// comes from its roles: the tool of the CLI once filled the start screen of
-// the screen views test with `home.home` when the app had the module home,
-// which a second feature with a start screen, or `--start`, would make
-// wrong, while the router role knows the screen that the app starts on.
-// Each tool reports the modules whose ids it uses for each test: those
-// that, with another id in their place in an app of the matrix, change
-// whether the test applies to the app or the values of its files there. So
-// a use of an id counts however the tool writes it: as a string, a
-// `ModuleId`, the id of the class of a module or a lookup of the modules by
-// their ids. A test of what only one provider of a role does, such as the
-// refresh of go_router, selects the apps of that provider by its id: those
-// tests are the only exceptions, which _ofOneProvider lists. And the code
+// A tool selects the apps of a test, fills the values of its files and
+// generates files for it only by the roles of the app (`MatrixApp.hook`)
+// and by the ids of the modules that the test knows: the modules of the
+// package that keeps it and of the packages of modules it depends on, or,
+// for the fixture registry, those of the fixture modules it depends on,
+// whose files the test may import (`knownModules`). What a test needs of
+// the other modules of an app comes from its roles: the tool of the CLI
+// once filled the start screen of the screen views test with `home.home`
+// when the app had the module home, which a second feature with a start
+// screen, or `--start`, would make wrong, while the router role knows the
+// screen that the app starts on. Each tool reports the modules whose ids
+// it uses for each test: those that, with another id in their place in an
+// app of the matrix, change whether the test applies to the app, the
+// values of its files there or the files it generates there. So a use of
+// an id counts however the tool writes it: as a string, a `ModuleId`, the
+// id of the class of a module or a lookup of the modules by their ids. A
+// test of what only one provider of a role does, such as the refresh of
+// go_router, selects the apps of that provider by its id: those tests are
+// the only exceptions, which _ofOneProvider lists. And the code
 // that registers the app tests of a tool, the tool and the library of its
 // package that `matrixTools` names, imports, of the packages of the
 // workspace, only the packages of the modules whose app tests it registers,
 // for their ids and the directories of their app tests, and the packages
 // that it needs besides, which declare no module (_needed).
 //
-// An app test runs in every app with its module, whatever else the app
-// has. A role that an app can have several providers of, such as crash
-// reporting, generates functions that reach all of them, such as
+// An app test of a module runs in every app with its module, whatever else
+// the app has. A role that an app can have several providers of, such as
+// crash reporting, generates functions that reach all of them, such as
 // createCrashReporter(), whose reporter reports to every provider, and
 // what the other providers do is known only to their own tests. So an app
 // test calls no such function: a test of a provider uses the
 // implementation of its own module instead, such as
-// createCrashlyticsCrashReporter(). Each tool reports the calls of such
-// functions in each of its app tests, with the functions of the roles of
-// the modules of its matrix, so the app tests of every registry are
+// createCrashlyticsCrashReporter(). Only a test of the contract of such a
+// role calls them, since what the role does with every provider is its
+// contract: it names the role in its MatrixAppTest.roles, a package of no
+// module keeps it, such as the fixture registry, and it looks only at what
+// reaches the providers that its package knows, such as the fixture
+// providers of the role. Each tool reports the calls of such functions in
+// each of its app tests, with their roles and the functions of the roles
+// of the modules of its matrix, so the app tests of every registry are
 // checked with the providers that their apps can have.
 import 'dart:io';
 
@@ -314,10 +320,21 @@ List<String> moduleProblemsOf(
 }
 
 /// The problems of the MatrixAppTests of the matrix tools, [listed] by the
-/// path of each tool: one line for each use, in the files of a test, of a
-/// function of a role that an app can have several providers of, which the
-/// tool reports, and for each test whose uses the tool does not report.
+/// path of each tool, among the [packages] of the workspace at [root]: one
+/// line for each use, in the files of a test, of a function of a role that
+/// an app can have several providers of, which the tool reports, but for
+/// the uses in a test of the contract of that role that a package of no
+/// module keeps; and one for each test whose uses the tool does not
+/// report.
+///
+/// A test of the role names it in its roles (ListedAppTest.roles). A test
+/// that a package of modules keeps, which the tool knows by the modules of
+/// that package (ListedAppTest.modules) whatever
+/// WorkspacePackage.declaresModules says, tests those modules, even when it
+/// names the role.
 List<String> roleFunctionProblemsOf(
+  String root,
+  List<WorkspacePackage> packages,
   Map<String, List<ListedAppTest>> listed,
 ) {
   final problems = <String>[];
@@ -332,12 +349,20 @@ List<String> roleFunctionProblemsOf(
         );
         continue;
       }
+      final keeper = _keeperOf(root, packages, test.directory);
+      final ofNoModule =
+          keeper != null && !keeper.declaresModules && test.modules.isEmpty;
       for (final use in uses) {
+        if (ofNoModule && test.roles.contains(use.role)) continue;
         problems.add(
-          '${test.directory}/$use: the function reaches every provider of '
-          'its role, and only the tests of each provider know what it does. '
-          'A test of a provider uses the implementation of its own module '
-          'instead, such as createCrashlyticsCrashReporter().',
+          '${test.directory}/${use.use}: the function reaches every provider '
+          'of its role, ${use.role}, and only the tests of each provider know '
+          'what it does. Only a test of the contract of the role calls it: '
+          'its MatrixAppTest names the role in its roles, a package of no '
+          'module keeps it, such as the fixture registry, and it looks only '
+          'at what reaches the providers that its package knows. A test of a '
+          'provider uses the implementation of its own module instead, such '
+          'as createCrashlyticsCrashReporter().',
         );
       }
     }
@@ -398,11 +423,12 @@ List<String> usesProblemsOf(
         } else if (!test.modules.contains(use.module) &&
             !known.contains(use.package)) {
           problems.add(
-            '$tool selects the apps of $directory, or fills the values of its '
-            'files, by the id of ${use.module}, a module of ${use.package} '
-            'that its tests do not know: with another module in its place, '
-            'they would apply otherwise, or get other values, in these apps '
-            'of the matrix: ${use.apps.join(', ')}. What they need of the '
+            '$tool selects the apps of $directory, fills the values of its '
+            'files or generates files by the id of ${use.module}, a module of '
+            '${use.package} that its tests do not know: with another module in '
+            'its place, they would apply otherwise, or get other values or '
+            'files, in these apps of the matrix: ${use.apps.join(', ')}. What '
+            'they need of the '
             'other modules of an app comes from the roles of the app '
             '(MatrixApp.hook), such as whether it has a router (presentRoles) '
             'or the screen it starts on. The tests of ${package.name} know '
@@ -768,11 +794,12 @@ void main() {
     // The problem of a use of the id of the module of the package of the
     // same name.
     String problem(String directory, String module, String known) =>
-        'tool/matrix.dart selects the apps of $directory, or fills the values '
-        'of its files, by the id of $module, a module of $module that its '
-        'tests do not know: with another module in its place, they would '
-        'apply otherwise, or get other values, in these apps of the matrix: '
-        'every module. What they need of the other modules of an app comes '
+        'tool/matrix.dart selects the apps of $directory, fills the values of '
+        'its files or generates files by the id of $module, a module of '
+        '$module that its tests do not know: with another module in its '
+        'place, they would apply otherwise, or get other values or files, in '
+        'these apps of the matrix: every module. What they need of the other '
+        'modules of an app comes '
         'from the roles of the app (MatrixApp.hook), such as whether it has a '
         'router (presentRoles) or the screen it starts on. $known; a test of '
         'what only one provider of a role does names the provider in '
@@ -815,26 +842,101 @@ void main() {
 
   test(
       'finds the uses of the functions of roles that a tool reports in its '
-      'app tests, and the app tests whose uses it does not report', () {
-    const use = 'test/a_test.dart: createCrashReporter() of '
-        'lib/core/crash_reporting/crash_reporter.dart';
+      'app tests, but those of a test of the role that a package of no module '
+      'keeps, and the app tests whose uses it does not report', () {
+    final temp = Directory.systemTemp.createTempSync('smf_role_functions_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final root = temp.path;
+    for (final path in [
+      'crashlytics/app_tests/crashlytics',
+      'crashlytics/app_tests/of_role',
+      'aliased/app_tests/of_role',
+      'registry/app_tests/clean',
+      'registry/app_tests/of_role',
+      'registry/app_tests/of_other_role',
+      'registry/app_tests/unknown',
+    ]) {
+      Directory('$root/$path').createSync(recursive: true);
+    }
+    WorkspacePackage package(String name, {required bool declaresModules}) =>
+        WorkspacePackage(
+          name,
+          name: name,
+          dependencies: const {},
+          published: declaresModules,
+          declaresModules: declaresModules,
+        );
+    final packages = [
+      package('crashlytics', declaresModules: true),
+      // A package whose modules declaresModule does not see, which the tool
+      // knows.
+      package('aliased', declaresModules: false),
+      package('registry', declaresModules: false),
+    ];
+    const use = RoleFunctionUse(
+      'test/a_test.dart: createCrashReporter() of '
+      'lib/core/crash_reporting/crash_reporter.dart',
+      role: 'crash_reporting',
+    );
     final listed = {
       'tool/matrix.dart': [
-        const ListedAppTest('/a/app_tests/clean', roleFunctionUses: []),
-        const ListedAppTest('/a/app_tests/calls', roleFunctionUses: [use]),
-        const ListedAppTest('/a/app_tests/unknown'),
+        // A test of a provider, and one of the role, that a package of
+        // modules keeps.
+        ListedAppTest(
+          '$root/crashlytics/app_tests/crashlytics',
+          modules: ['crashlytics'],
+          roleFunctionUses: [use],
+        ),
+        ListedAppTest(
+          '$root/crashlytics/app_tests/of_role',
+          modules: ['crashlytics'],
+          roles: ['crash_reporting'],
+          roleFunctionUses: [use],
+        ),
+        ListedAppTest(
+          '$root/aliased/app_tests/of_role',
+          modules: ['aliased'],
+          roles: ['crash_reporting'],
+          roleFunctionUses: [use],
+        ),
+        // Tests that a package of no module keeps: without uses, of the
+        // role, of another role, and one whose uses the tool does not
+        // report.
+        ListedAppTest('$root/registry/app_tests/clean', roleFunctionUses: []),
+        ListedAppTest(
+          '$root/registry/app_tests/of_role',
+          roles: ['analytics', 'crash_reporting'],
+          roleFunctionUses: [use],
+        ),
+        ListedAppTest(
+          '$root/registry/app_tests/of_other_role',
+          roles: ['analytics'],
+          roleFunctionUses: [use],
+        ),
+        ListedAppTest('$root/registry/app_tests/unknown'),
       ],
     };
-    const calls = '/a/app_tests/calls/$use: the function reaches every '
-        'provider of its role, and only the tests of each provider know what '
-        'it does. A test of a provider uses the implementation of its own '
-        'module instead, such as createCrashlyticsCrashReporter().';
-    const unknown = 'tool/matrix.dart reports no uses of the functions of '
-        'roles in the app tests of /a/app_tests/unknown, so nothing checks '
-        'that they call none of a role that an app can have several providers '
-        'of.';
+    String problem(String directory) =>
+        '$root/$directory/${use.use}: the function reaches every provider '
+        'of its role, crash_reporting, and only the tests of each provider '
+        'know what it does. Only a test of the contract of the role calls '
+        'it: its MatrixAppTest names the role in its roles, a package of no '
+        'module keeps it, such as the fixture registry, and it looks only at '
+        'what reaches the providers that its package knows. A test of a '
+        'provider uses the implementation of its own module instead, such as '
+        'createCrashlyticsCrashReporter().';
+    final unknown = 'tool/matrix.dart reports no uses of the functions of '
+        'roles in the app tests of $root/registry/app_tests/unknown, so '
+        'nothing checks that they call none of a role that an app can have '
+        'several providers of.';
 
-    expect(roleFunctionProblemsOf(listed), [calls, unknown]);
+    expect(roleFunctionProblemsOf(root, packages, listed), [
+      problem('crashlytics/app_tests/crashlytics'),
+      problem('crashlytics/app_tests/of_role'),
+      problem('aliased/app_tests/of_role'),
+      problem('registry/app_tests/of_other_role'),
+      unknown,
+    ]);
   });
 
   test(
@@ -888,9 +990,9 @@ void main() {
   );
 
   test(
-    'the matrix tools select the apps of their tests, and fill the values of '
-    'their files, by the roles of the apps and by the modules that the tests '
-    'know',
+    'the matrix tools select the apps of their tests, fill the values of '
+    'their files and generate files for them by the roles of the apps and by '
+    'the modules that the tests know',
     () async {
       final root = repositoryRoot();
 
@@ -918,9 +1020,15 @@ void main() {
 
   test(
     'the app tests of every matrix tool call no function of a role that an '
-    'app can have several providers of',
+    'app can have several providers of, but the tests of the role that a '
+    'package of no module keeps',
     () async {
-      expect(roleFunctionProblemsOf(await _listed), isEmpty);
+      final root = repositoryRoot();
+
+      expect(
+        roleFunctionProblemsOf(root, workspacePackages(root), await _listed),
+        isEmpty,
+      );
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );

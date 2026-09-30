@@ -83,28 +83,26 @@ final class FakeDiProvider extends DiProvider {
       final deps = [for (final dep in create.deps) resolve(dep)];
       final name = registration.instanceName;
       final named = name == null ? '' : ', name: ${SmfNames.dartString(name)}';
+      // The function that resetDependencies() disposes of the service with,
+      // if the map created it.
+      final disposed = switch (registration.dispose) {
+        null => '',
+        final dispose =>
+          ', dispose: ${dispose.codeWith(prefixOf(dispose.import))}',
+      };
       final call = '$factory(${deps.join(', ')})';
       lines.add(
         switch (registration.lifetime) {
           DiLifetime.singleton when registration.isAsync =>
-            '  locator.singleton<$serviceType>(await $call$named);',
+            '  locator.singleton<$serviceType>(await $call$named$disposed);',
           DiLifetime.singleton =>
-            '  locator.singleton<$serviceType>($call$named);',
+            '  locator.singleton<$serviceType>($call$named$disposed);',
           DiLifetime.lazySingleton =>
-            '  locator.lazy<$serviceType>(() => $call$named);',
+            '  locator.lazy<$serviceType>(() => $call$named$disposed);',
           DiLifetime.factory =>
             '  locator.factoryOf<$serviceType>(() => $call$named);',
         },
       );
-      if (registration.dispose case final dispose?) {
-        final instance =
-            name == null ? '' : 'instanceName: ${SmfNames.dartString(name)}';
-        lines.add(
-          '  locator.onDispose(() => '
-          '${dispose.codeWith(prefixOf(dispose.import))}('
-          'locator.resolve<$serviceType>($instance)));',
-        );
-      }
     }
     return RoleOutput(
       vars: {

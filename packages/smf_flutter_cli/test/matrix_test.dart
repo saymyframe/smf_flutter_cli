@@ -506,7 +506,8 @@ void main() {
 
   test(
       'the report of the app tests names the modules of the package that '
-      'keeps each, and the apps it applies to without them', () async {
+      'keeps each, the apps it applies to without them, and the roles whose '
+      'contract it checks', () async {
     final home = await _appTestsOf('smf_home_flutter');
     final cli = await _appTestsOf('smf_flutter_cli');
     const packages = {
@@ -558,6 +559,14 @@ void main() {
         ),
         // A test of a package of no module of the matrix.
         MatrixAppTest('$cli/start', appliesTo: (_) => true),
+        // A test of the contract of roles, which the report names by their
+        // ids.
+        MatrixAppTest(
+          '$cli/of_roles',
+          appliesTo: (app) =>
+              app.hook?.presentRoles.contains(routerRole) ?? false,
+          roles: {routerRole, layoutRole},
+        ),
       ],
       modules: const [FlutterCoreModule(), HomeModule()],
       packages: packages,
@@ -570,7 +579,8 @@ void main() {
         'modules': ['home'],
         'appliesWithout': ['with home', 'without home', 'every module'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/with_home',
@@ -583,21 +593,24 @@ void main() {
             'apps': ['with home', 'every module'],
           },
         ],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/start',
         'modules': ['home'],
         'appliesWithout': ['with home'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/every_module',
         'modules': ['home'],
         'appliesWithout': ['every module'],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$home/every_module_with_home',
@@ -610,14 +623,24 @@ void main() {
             'apps': ['every module'],
           },
         ],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
       },
       {
         'directory': '$cli/start',
         'modules': <String>[],
         'appliesWithout': <String>[],
         'uses': <Object>[],
-        'roleFunctionUses': <String>[],
+        'roles': <String>[],
+        'roleFunctionUses': <Object>[],
+      },
+      {
+        'directory': '$cli/of_roles',
+        'modules': <String>[],
+        'appliesWithout': <String>[],
+        'uses': <Object>[],
+        'roles': ['router', 'layout'],
+        'roleFunctionUses': <Object>[],
       },
     ]);
     // It builds the apps once for all the tests, and not without tests.
@@ -677,12 +700,18 @@ import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart'
         'final create = role.createCrashReporter;'
       ),
     ]) {
-      test('such as $use, through an import of its file', () async {
+      test('such as $use, through an import of its file, with its role',
+          () async {
         expect(
           await usesIn({
             'test/a_test.dart': '$imports\nvoid main() {\n  $code\n}\n',
           }),
-          ['test/a_test.dart: createCrashReporter() of $path'],
+          [
+            {
+              'use': 'test/a_test.dart: createCrashReporter() of $path',
+              'role': 'crash_reporting',
+            },
+          ],
         );
       });
     }
@@ -732,7 +761,13 @@ import 'package:{{app_name}}/core/analytics/analytics_service.dart';
 final analytics = createAnalyticsService();
 """,
         }),
-        [analytics, 'test/a_test.dart: installCrashReporting() of $path'],
+        [
+          {'use': analytics, 'role': 'analytics'},
+          {
+            'use': 'test/a_test.dart: installCrashReporting() of $path',
+            'role': 'crash_reporting',
+          },
+        ],
       );
     });
 
@@ -792,7 +827,8 @@ Type type() => Types;
   test(
       'the report of the app tests names the modules whose ids each uses: '
       'those that, with another module in their place, change whether it '
-      'applies to an app or the values of its files there', () async {
+      'applies to an app, the values of its files there or the files it '
+      'generates', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     final withHome = [
       for (final app in apps)
@@ -801,18 +837,20 @@ Type type() => Types;
     final cli = await _appTestsOf('smf_flutter_cli');
     bool hasRouter(MatrixApp app) =>
         app.hook!.presentRoles.contains(routerRole);
+    String startScreenOf(MatrixApp app) =>
+        routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ?? '/';
 
     final report = await appTestsReport(
       [
         // The start screen that the router role chose for the app, by the
-        // routes of its modules.
+        // routes of its modules, as a value and in a file that it
+        // generates.
         MatrixAppTest(
           '$cli/by_role',
           appliesTo: hasRouter,
-          values: (app) => {
-            'start_screen':
-                routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ??
-                    '/',
+          values: (app) => {'start_screen': startScreenOf(app)},
+          generatedFiles: (app, packageName) => {
+            'test/start_screen.dart': "const start = '${startScreenOf(app)}';",
           },
         ),
         // The start screen by whether the app has home, which a second
@@ -838,6 +876,16 @@ Type type() => Types;
             for (final id in app.modules)
               smfModules.singleWhere((module) => module.descriptor.id == id),
           ].any((module) => module.descriptor.provides.contains(routerRole)),
+        ),
+        // A file that it generates by whether the app has home.
+        MatrixAppTest(
+          '$cli/files_by_id',
+          appliesTo: hasRouter,
+          generatedFiles: (app, packageName) => {
+            'test/start_screen.dart': app.modules.contains(HomeModule.id)
+                ? "const start = 'home.home';"
+                : "const start = '/';",
+          },
         ),
       ],
       modules: smfModules,
@@ -867,6 +915,9 @@ Type type() => Types;
         for (final module in smfModules) module.descriptor.id.value,
       ]),
     );
+    expect(report[4]['uses'], [
+      {'module': 'home', 'package': 'smf_home_flutter', 'apps': withHome},
+    ]);
   });
 
   group('runMatrix', () {
@@ -1107,13 +1158,14 @@ Type type() => Types;
       /// provider [id] apart by its id in the apps [names].
       String byId(String id, String names) =>
           'The tests of /tests/state check the state management role, but '
-          'select their apps, or take the values of their files, by the id of '
-          '$id, which provides it: with another module in its place, they '
-          'would apply otherwise, or get other values, in these apps of the '
-          'matrix: $names. A test of a role takes what it needs of the '
-          'providers of the role from the roles of the app (MatrixApp.hook), '
-          'such as whether the app has the role (presentRoles), so that a new '
-          'provider of the role gets the test as it is.';
+          'select their apps, take the values of their files or generate '
+          'files by the id of $id, which provides it: with another module in '
+          'its place, they would apply otherwise, or get other values or '
+          'files, in these apps of the matrix: $names. A test of a role takes '
+          'what it needs of the providers of the role from the roles of the '
+          'app (MatrixApp.hook), such as whether the app has the role '
+          '(presentRoles), so that a new provider of the role gets the test '
+          'as it is.';
 
       test(
           'passes when they apply to an app of every provider of the role, '
@@ -1121,16 +1173,30 @@ Type type() => Types;
         final byRole = stateTest(
           (app) => app.hook!.presentRoles.contains(stateManagementRole),
         );
-
-        expect(
-          await run(
-            modules: modules,
-            appTests: [byRole],
-            testedRoles: {stateManagementRole},
-          ),
-          0,
+        // Tests that generate a file from the roles of the app.
+        final generating = MatrixAppTest(
+          '/tests/state',
+          appliesTo: (app) =>
+              app.hook!.presentRoles.contains(stateManagementRole),
+          generatedFiles: (app, packageName) => {
+            'test/roles.dart': [
+              for (final role in app.hook!.presentRoles) '// ${role.id}\n',
+            ].join(),
+          },
+          roles: {stateManagementRole},
         );
-        expect(problems(), isEmpty);
+
+        for (final test in [byRole, generating]) {
+          expect(
+            await run(
+              modules: modules,
+              appTests: [test],
+              testedRoles: {stateManagementRole},
+            ),
+            0,
+          );
+          expect(problems(), isEmpty);
+        }
         expect(tested, isNotEmpty);
       });
 
@@ -1195,6 +1261,21 @@ Type type() => Types;
         );
         expect(await run(modules: modules, appTests: [values]), 1);
         expect(problems(), [equals(byId('bloc', 'bloc'))]);
+        log.clear();
+
+        // A file that the tests generate by the id of a provider.
+        final files = MatrixAppTest(
+          '/tests/state',
+          appliesTo: (app) =>
+              app.hook!.presentRoles.contains(stateManagementRole),
+          generatedFiles: (app, packageName) => {
+            'test/manager.dart':
+                app.modules.contains(RiverpodModule.id) ? 'riverpod' : 'other',
+          },
+          roles: {stateManagementRole},
+        );
+        expect(await run(modules: modules, appTests: [files]), 1);
+        expect(problems(), [equals(byId('riverpod', 'riverpod'))]);
       });
 
       test(
@@ -1567,6 +1648,142 @@ Type type() => Types;
     expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
   });
 
+  test(
+      'the tests of an app go into it with the files that they generate for '
+      'the app of the matrix, as they generate them', () {
+    final fileSystem = MemoryFileSystem();
+    fileSystem.file('/tests/core/test/core/core_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'services.dart';\n// {{app_name}}\n");
+    fileSystem.file('/tests/more/test/more_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// more\n');
+    const app = MatrixApp('home', [ModuleId('home')]);
+    final generating = <String>[];
+
+    final added = addAppTests(
+      [
+        MatrixAppTest(
+          '/tests/core',
+          appliesTo: (app) => true,
+          generatedFiles: (app, packageName) {
+            generating.add('${app.name} as $packageName');
+            return {
+              // What the app is, with the name of its package, and no
+              // placeholder filled.
+              'test/core/services.dart':
+                  "import 'package:$packageName/app.dart';\n"
+                      '// ${app.modules.single} {{app_name}}\n',
+              'lib/services.dart': '// ${app.name}\n',
+            };
+          },
+        ),
+        MatrixAppTest('/tests/more', appliesTo: (app) => true),
+      ],
+      app: app,
+      directory: '/apps/app_1',
+      packageName: 'my_app',
+      fileSystem: fileSystem,
+    );
+
+    expect(generating, ['home as my_app']);
+    expect(added, [
+      'test/core/core_test.dart',
+      'test/core/services.dart',
+      'lib/services.dart',
+      'test/more_test.dart',
+    ]);
+    String read(String path) =>
+        fileSystem.file('/apps/app_1/$path').readAsStringSync();
+    expect(read('test/core/core_test.dart'), contains('// my_app\n'));
+    expect(
+      read('test/core/services.dart'),
+      "import 'package:my_app/app.dart';\n// home {{app_name}}\n",
+    );
+    expect(read('lib/services.dart'), '// home\n');
+  });
+
+  test(
+      'the files that tests generate go into the app of the matrix only at '
+      'paths in it that no other file of the tests has', () {
+    final fileSystem = MemoryFileSystem();
+    fileSystem.file('/tests/core/test/core_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// core\n');
+    fileSystem.file('/tests/more/test/more_test.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// more\n');
+    const app = MatrixApp('home', [ModuleId('home')]);
+    List<String> add(
+      Map<String, String> files, {
+      MatrixApp? matrixApp = app,
+    }) =>
+        addAppTests(
+          [
+            MatrixAppTest('/tests/core', appliesTo: (app) => true),
+            MatrixAppTest(
+              '/tests/more',
+              appliesTo: (app) => true,
+              generatedFiles: (app, packageName) => files,
+            ),
+          ],
+          app: matrixApp,
+          directory: '/apps/app_1',
+          packageName: 'my_app',
+          fileSystem: fileSystem,
+        );
+    // A problem reads as its message.
+    Matcher throwsProblem(String message) => throwsA(
+          isA<MatrixAppTestException>()
+              .having((error) => error.message, 'message', message),
+        );
+
+    for (final (path, other) in [
+      // A file of other tests, and one of their own.
+      ('test/core_test.dart', '/tests/core'),
+      ('test/more_test.dart', '/tests/more'),
+    ]) {
+      expect(
+        () => add({path: '// generated\n'}),
+        throwsProblem(
+          'The tests of /tests/more generate $path, which the tests of '
+          '$other have too.',
+        ),
+        reason: path,
+      );
+    }
+    for (final path in [
+      '',
+      '/test/services.dart',
+      '../services.dart',
+      'test/../../services.dart',
+      'test/./services.dart',
+      'test//services.dart',
+      r'test\services.dart',
+      'C:/services.dart',
+    ]) {
+      expect(
+        () => add({path: '// generated\n'}),
+        throwsProblem(
+          'The tests of /tests/more generate a file at "$path", which is no '
+          'path in the app, such as test/services.dart: names separated by /, '
+          r'none of them empty, . or .., and none with \ or :.',
+        ),
+        reason: path,
+      );
+    }
+    // An app that smf create generated outside the matrix, which the files
+    // of an app of the matrix do not fit.
+    expect(
+      () => add({'test/services.dart': '// generated\n'}, matrixApp: null),
+      throwsProblem(
+        'The tests of /tests/more generate files for an app of the matrix, '
+        'but the app is none.',
+      ),
+    );
+    expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+  });
+
   group('the mocks of the tests of an app', () {
     late MemoryFileSystem fileSystem;
     const app = MatrixApp('home', [ModuleId('home')]);
@@ -1732,6 +1949,242 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     });
   });
 
+  group('the probes of the tests of an app', () {
+    late MemoryFileSystem fileSystem;
+    const app = MatrixApp('home', [ModuleId('home')]);
+
+    setUp(() {
+      fileSystem = MemoryFileSystem();
+      for (final path in [
+        '/tests/walk/integration_test/walk/walk.dart',
+        '/tests/walk/test/walk_test.dart',
+        '/tests/start/integration_test/start_check.dart',
+        '/tests/services/test/services_test.dart',
+      ]) {
+        fileSystem.file(path)
+          ..createSync(recursive: true)
+          ..writeAsStringSync('// {{app_name}}\n');
+      }
+    });
+
+    List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          tests,
+          app: app,
+          directory: '/apps/app_1',
+          packageName: 'my_app',
+          fileSystem: fileSystem,
+        );
+
+    MatrixAppTest walk({String path = 'integration_test/walk/walk.dart'}) =>
+        MatrixAppTest(
+          '/tests/walk',
+          appliesTo: (_) => true,
+          startProbe: MatrixStartProbe(path, 'probeRoutes'),
+        );
+    // A probe in a file that the tests generate for the app.
+    final services = MatrixAppTest(
+      '/tests/services',
+      appliesTo: (_) => true,
+      generatedFiles: (app, packageName) => {
+        'integration_test/services/probe.dart': '// ${app.name}\n',
+      },
+      startProbe: const MatrixStartProbe(
+        'integration_test/services/probe.dart',
+        'probeServices',
+      ),
+    );
+    final start = MatrixAppTest(
+      '/tests/start',
+      appliesTo: (_) => true,
+      readsStartProbes: true,
+    );
+
+    test(
+        'go into the app with the list of the probes, which the tests that '
+        'run them import: the probe of each test, in the order of the '
+        'tests, after the name of its directory', () {
+      final added = add([services, start, walk()]);
+
+      expect(added, [
+        'test/services_test.dart',
+        'integration_test/services/probe.dart',
+        'integration_test/start_check.dart',
+        'integration_test/walk/walk.dart',
+        'test/walk_test.dart',
+        startProbesFile,
+      ]);
+      expect(startProbesFile, 'integration_test/start_probes.dart');
+      final list =
+          fileSystem.file('/apps/app_1/$startProbesFile').readAsStringSync();
+      expect(
+        list,
+        endsWith('''
+import 'services/probe.dart' as probe0;
+import 'walk/walk.dart' as probe1;
+
+/// The probes of the tests of the app, each with the name of its tests: a
+/// function that goes through the running app, with the function that
+/// waits until the screen settles, and returns the problems that it finds.
+const List<(String, Future<List<String>> Function(Future<void> Function()))>
+    startProbes = [
+  ('services', probe0.probeServices),
+  ('walk', probe1.probeRoutes),
+];
+'''),
+      );
+      // The check imports it next to itself, and reads startProbes.
+      final (:index, :errors) = DartFileIndexer.parse(startProbesFile, list);
+      expect(errors, isEmpty);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['startProbes'],
+      );
+      expect(
+        [
+          for (final import in index.imports) '${import.prefix}: ${import.uri}',
+        ],
+        ['probe0: services/probe.dart', 'probe1: walk/walk.dart'],
+      );
+      expect(
+        [
+          for (final access in index.memberAccesses)
+            '${access.enclosingDeclaration}: ${access.target}.${access.name}',
+        ],
+        [
+          'startProbes: probe0.probeServices',
+          'startProbes: probe1.probeRoutes',
+        ],
+      );
+    });
+
+    test(
+        'go into the list as none when no test that goes into the app has '
+        'one, and the list goes into no app without tests that run them', () {
+      expect(add([start]), contains(startProbesFile));
+      final list =
+          fileSystem.file('/apps/app_1/$startProbesFile').readAsStringSync();
+      final (:index, :errors) = DartFileIndexer.parse(startProbesFile, list);
+      expect(errors, isEmpty);
+      expect(index.imports, isEmpty);
+      expect(index.memberAccesses, isEmpty);
+      expect(list, contains('startProbes = [\n];\n'));
+
+      fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
+      expect(add([services, walk()]), isNot(contains(startProbesFile)));
+      expect(
+        fileSystem.file('/apps/app_1/$startProbesFile').existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+        'are in a file of their tests in integration_test/, with the tests '
+        'that run them or without, and the list is no file of a test', () {
+      // A problem reads as its message.
+      Matcher throwsProblem(String message) => throwsA(
+            isA<MatrixAppTestException>()
+                .having((error) => error.message, 'message', message),
+          );
+
+      for (final path in [
+        // No file of the tests.
+        'integration_test/walk/gone.dart',
+        // A file of the tests out of integration_test/.
+        'test/walk_test.dart',
+        // A file of other tests.
+        'integration_test/start_check.dart',
+        'integration_test/services/probe.dart',
+      ]) {
+        for (final tests in [
+          [walk(path: path), start, services],
+          [walk(path: path), services],
+        ]) {
+          expect(
+            () => add(tests),
+            throwsProblem(
+              'The tests of /tests/walk declare their probe in $path, which '
+              'is no file of theirs in integration_test/.',
+            ),
+            reason: '$path with ${tests.length} tests',
+          );
+        }
+      }
+
+      fileSystem.file('/tests/walk/integration_test/start_probes.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// Of the tests.\n');
+      expect(
+        () => add([walk(), start]),
+        throwsProblem(
+          'The tests of /tests/walk have integration_test/start_probes.dart, '
+          'which the matrix writes for the probes of the tests.',
+        ),
+      );
+      expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+  });
+
+  group('appTestsFor', () {
+    const app = MatrixApp('home', [ModuleId('home')]);
+    const other = MatrixApp('other', [ModuleId('other')]);
+    bool onlyHome(MatrixApp app) => app.name == 'home';
+    final start = MatrixAppTest(
+      '/tests/start',
+      appliesTo: (_) => true,
+      readsStartProbes: true,
+    );
+    const probe = MatrixStartProbe('integration_test/probe.dart', 'probe');
+    final walk =
+        MatrixAppTest('/tests/walk', appliesTo: onlyHome, startProbe: probe);
+    final services = MatrixAppTest(
+      '/tests/services',
+      appliesTo: (_) => true,
+      startProbe: probe,
+    );
+    final plain = MatrixAppTest('/tests/plain', appliesTo: (_) => true);
+    final all = [walk, plain, start, services];
+    List<String> directories(List<MatrixAppTest> tests) =>
+        [for (final test in tests) test.directory];
+
+    test(
+        'adds to the tests named for an app of the matrix, with tests that '
+        'run the probes, each other test with a probe that applies to it', () {
+      expect(directories(appTestsFor(app, [start], all)), [
+        '/tests/start',
+        '/tests/walk',
+        '/tests/services',
+      ]);
+      expect(directories(appTestsFor(other, [start], all)), [
+        '/tests/start',
+        '/tests/services',
+      ]);
+      // A test named with them goes into the app once, where it is named.
+      expect(directories(appTestsFor(app, [services, start], all)), [
+        '/tests/services',
+        '/tests/start',
+        '/tests/walk',
+      ]);
+      // Without tests that run the probes, only the tests named.
+      expect(directories(appTestsFor(app, [plain, walk], all)), [
+        '/tests/plain',
+        '/tests/walk',
+      ]);
+    });
+
+    test('fails on a test named for an app that it does not apply to', () {
+      expect(
+        () => appTestsFor(other, [start, walk], all),
+        throwsA(
+          isA<MatrixAppTestException>().having(
+            (error) => error.message,
+            'message',
+            'The tests of /tests/walk do not apply to other.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('runAppTests', () {
     late MemoryFileSystem fileSystem;
     late List<String> commands;
@@ -1829,10 +2282,12 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     Future<(int, String)> add(
       List<MatrixAppTest> tests, {
       Map<String, int> codes = const {},
+      MatrixApp? app,
     }) =>
         addAppTestsTo(
           generated,
           tests,
+          app: app,
           fileSystem: fileSystem,
           flutter: (arguments, directory) async {
             final command = arguments.join(' ');
@@ -1947,6 +2402,58 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
         'integration_test/start_test.dart: no value fills it.',
       );
       expect(commands, isEmpty);
+      expect(fileSystem.directory('/apps/start_app').existsSync(), isFalse);
+    });
+
+    test(
+        'adds the tests to the app of the matrix that smf create generated '
+        'outside it, with the values and the files of that app', () async {
+      fileSystem
+          .file('/tests/start/integration_test/start_test.dart')
+          .writeAsStringSync('// {{app_name}} {{screen}}\n');
+      final tests = [
+        MatrixAppTest(
+          '/tests/start',
+          appliesTo: (app) => true,
+          values: (app) => {'screen': '${app.modules.single}.home'},
+          generatedFiles: (app, packageName) => {
+            'integration_test/screens.dart': '// $packageName ${app.name}\n',
+          },
+        ),
+      ];
+
+      final (code, output) = await add(
+        tests,
+        app: const MatrixApp('every module', [ModuleId('home')]),
+      );
+
+      expect(code, 0);
+      expect(
+        output,
+        'Added the tests integration_test/start_test.dart, '
+        'integration_test/screens.dart.\n',
+      );
+      String read(String path) =>
+          fileSystem.file('/apps/start_app/$path').readAsStringSync();
+      expect(
+        read('integration_test/start_test.dart'),
+        '// start_app home.home\n',
+      );
+      expect(
+        read('integration_test/screens.dart'),
+        '// start_app every module\n',
+      );
+
+      // Without the app of the matrix, which the files come from.
+      fileSystem.directory('/apps/start_app').deleteSync(recursive: true);
+      final (failed, problem) = await add(tests);
+
+      expect(failed, 1);
+      expect(
+        problem,
+        'The tests of /tests/start generate files for an app of the matrix, '
+        'but the app is none.',
+      );
       expect(fileSystem.directory('/apps/start_app').existsSync(), isFalse);
     });
   });

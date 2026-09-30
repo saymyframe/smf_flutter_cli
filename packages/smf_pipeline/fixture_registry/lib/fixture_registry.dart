@@ -94,22 +94,31 @@ List<ModuleId> everyFixture({
 /// role an app can have several providers of, Firebase Crashlytics and
 /// Firebase Analytics, with the module they depend on, next to the fixture
 /// providers of the same roles, whose start-up and services go through
-/// platform channels of their own; a fixture module whose start-up waits
-/// for a timer; and flutter_core and go_router, the app entry and a router,
-/// for the screens that Firebase Analytics logs.
+/// platform channels of their own; a fixture that provides both roles and
+/// notes each call that reaches it, which the tests of the roles look at;
+/// a fixture module whose start-up waits for a timer; flutter_core and
+/// go_router, the app entry and a router, for the screens that Firebase
+/// Analytics logs; get_it, a DI container, in which those roles register
+/// their services, for the test of the DI role that the CLI keeps; and the
+/// fixture events, whose channel opens in the start-up, for the test of the
+/// events role that the CLI keeps.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
 /// roles and whatever else the start-up of an app does: they must pass in
 /// every app with their module, whose other modules only their own tests
-/// know.
+/// know. There the tests of the roles check that each call reaches every
+/// provider, whatever the others do with it.
 List<SmfModule> severalProvidersModules() => const [
       FlutterCoreModule(),
       GoRouterModule(),
+      GetItModule(),
       FirebaseCoreModule(),
       FirebaseCrashlyticsModule(),
       FirebaseAnalyticsModule(),
       FakeCrashModule(),
       FakeAnalyticsModule(),
+      FakeServiceLogModule(),
+      FakeEventsModule(),
       FakeSlowStartModule(),
     ];

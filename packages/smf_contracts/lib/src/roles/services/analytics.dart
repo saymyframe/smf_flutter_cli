@@ -14,6 +14,19 @@ const analyticsRole = AnalyticsRole._();
 /// in its platform phase. With a DI container, the service is registered as
 /// a lazy singleton.
 ///
+/// The service of the app calls each implementation on its own, and never
+/// fails: an implementation that throws, or whose future fails, keeps no
+/// other from the call, and its failure does not reach the code that
+/// called. That code may not await the call, and then the failure would be
+/// an error that nothing catches, which crash reporting reports. In debug
+/// mode the service prints the failure, so that an implementation that
+/// does not work shows in the console. Each implementation gets a copy of
+/// its own of the map of parameters of a call, so that one that changes the
+/// map, such as to add a parameter of its own, changes nothing that the
+/// caller or another implementation has. An implementation whose factory
+/// throws, or whose asynchronous start fails, is left out, and the app
+/// starts and works with the others (see [RoleImplementation]).
+///
 /// A provider contributes its implementation as a [RoleImplementation]. It
 /// may also follow the router, with `when: {routerRole}`: log the screens
 /// the user sees with a listener in [RouterRole.screenListeners], or watch

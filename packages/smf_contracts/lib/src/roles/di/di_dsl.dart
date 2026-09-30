@@ -24,7 +24,9 @@ enum DiCapability {
   /// Singletons created only after the services they depend on are ready.
   dependsOn,
 
-  /// Singletons disposed of by a function when the container is reset.
+  /// Singletons and lazy singletons disposed of by a function when
+  /// `resetDependencies()` resets the container; see
+  /// [DiRole.resetDependencies].
   dispose,
 
   /// Several services of one type told apart by name.
@@ -103,6 +105,10 @@ final class DiRegistration {
   /// The function that disposes of the instance of a singleton or lazy
   /// singleton, such as `(HttpClient client) => client.close()` declared as
   /// a top-level function.
+  ///
+  /// `resetDependencies()` calls it with the instance, if the container
+  /// created one, in the reverse order of the registrations; see
+  /// [DiRole.resetDependencies].
   ///
   /// Needs [DiCapability.dispose].
   final FunctionRef? dispose;

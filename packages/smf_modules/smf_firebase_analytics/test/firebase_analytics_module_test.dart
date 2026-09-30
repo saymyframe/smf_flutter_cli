@@ -285,8 +285,10 @@ List<String> _startUpOf(ContractResult result) => [
         ..._contributionsTo(result, phase),
     ];
 
-/// The factories that the analytics service of the app in [app] forwards
-/// to, as written in the list of the services of the template of the role.
+/// The factories of the implementations that the analytics service of the
+/// app in [app] forwards to, in the order of the list of the services of
+/// the template of the role, which creates each on its own with
+/// `_createAlone(name, factory)`; the code of any other element.
 List<String> _servicesOf(RenderedApp app) {
   final services = _unitOf(app, AnalyticsRole.file)
       .declarations
@@ -294,7 +296,19 @@ List<String> _servicesOf(RenderedApp app) {
       .expand((declaration) => declaration.variables.variables)
       .singleWhere((variable) => variable.name.lexeme == '_analyticsServices');
   final list = services.initializer! as ListLiteral;
-  return [for (final element in list.elements) '$element'];
+  return [
+    for (final element in list.elements)
+      if (element
+          case NullAwareElement(
+            value: MethodInvocation(
+              methodName: SimpleIdentifier(name: '_createAlone'),
+              :final argumentList,
+            ),
+          ))
+        '${argumentList.arguments.last}'
+      else
+        '$element',
+  ];
 }
 
 /// The methods of the class [name] in [unit], by name.
@@ -480,7 +494,7 @@ void main() {
       final file = withAnalytics.files[AnalyticsRole.file]!;
 
       expect(_servicesOf(withAnalytics), [
-        'impl0.createFirebaseAnalyticsService()',
+        'impl0.createFirebaseAnalyticsService',
       ]);
       expect(
         [
@@ -496,13 +510,14 @@ void main() {
           ),
         ],
       );
-      // Nothing to await: the service is created without waiting.
+      // Nothing to await: the service is created without waiting, by the
+      // function of the role that creates each implementation on its own.
       expect(
         _unitOf(withAnalytics, AnalyticsRole.file)
             .declarations
             .whereType<FunctionDeclaration>()
             .map((function) => function.name.lexeme),
-        ['createAnalyticsService'],
+        ['createAnalyticsService', '_createAlone'],
       );
     });
 
@@ -833,8 +848,8 @@ void main() {
             GoRouterModule.id,
           ],
           [
-            'impl0.createFirebaseAnalyticsService()',
-            'impl1.createOtherAnalyticsService()',
+            'impl0.createFirebaseAnalyticsService',
+            'impl1.createOtherAnalyticsService',
           ],
         ),
         (
@@ -844,8 +859,8 @@ void main() {
             GoRouterModule.id,
           ],
           [
-            'impl0.createOtherAnalyticsService()',
-            'impl1.createFirebaseAnalyticsService()',
+            'impl0.createOtherAnalyticsService',
+            'impl1.createFirebaseAnalyticsService',
           ],
         ),
       ]) {

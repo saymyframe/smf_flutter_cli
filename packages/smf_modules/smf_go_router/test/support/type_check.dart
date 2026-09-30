@@ -74,6 +74,14 @@ final class IconData {
 }
 ''';
 
+/// Stand-ins for the parts of Flutter's foundation library that the checked
+/// files use, with the signatures of Flutter 3.44.
+const _foundation = '''
+const bool kDebugMode = true;
+
+void debugPrint(String? message, {int? wrapWidth}) {}
+''';
+
 /// Flutter's material library, of which the checked files use what it
 /// exports of the widgets library, such as the classes of the screens of
 /// the app entry, and the icons of the destinations of the features of the
@@ -259,6 +267,7 @@ Future<List<String>> analysisProblems(RenderedApp app) async {
       ..createSync(recursive: true)
       ..writeAsStringSync(text);
 
+    write('flutter/lib/foundation.dart', _foundation);
     write('flutter/lib/widgets.dart', _widgets);
     write('flutter/lib/material.dart', _material);
     write('go_router/lib/go_router.dart', _goRouter);

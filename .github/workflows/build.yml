@@ -133,6 +133,10 @@ jobs:
       # main. tools/workflow_apps_test.dart checks this.
       save_gradle_cache: ${{ github.ref == 'refs/heads/main' }}
       save_swiftpm_cache: ${{ github.ref == 'refs/heads/main' }}
+      # The tests of the roles fail on the providers with a known bug, so a
+      # change that makes a test of a role pass whatever the provider does
+      # fails here.
+      broken_providers: true
     secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it

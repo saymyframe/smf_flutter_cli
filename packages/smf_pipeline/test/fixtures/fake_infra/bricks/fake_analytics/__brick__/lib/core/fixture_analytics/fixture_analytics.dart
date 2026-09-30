@@ -40,6 +40,21 @@ final List<FixtureObserver> fixtureObservers = [];
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
 
+/// Whether the screen listener of the fixture throws once it noted a
+/// screen, as a test that a listener of the screen that throws keeps no
+/// other from hearing it sets it.
+bool fixtureScreensThrow = false;
+
+/// The screen listener of the fixture: notes the screen of [route] at
+/// [location] in [fixtureScreens], and then throws if
+/// [fixtureScreensThrow].
+void noteFixtureScreen(String? route, String location) {
+  fixtureScreens.add((route, location));
+  if (fixtureScreensThrow) {
+    throw StateError('The screen listener of the fixture analytics throws.');
+  }
+}
+
 /// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
   /// Creates the service.

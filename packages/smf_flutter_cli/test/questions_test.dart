@@ -604,7 +604,7 @@ void main() {
           .readAsStringSync(),
       allOf(
         contains('abstract interface class CrashReporter'),
-        contains('createCrashlyticsCrashReporter()'),
+        contains('impl0.createCrashlyticsCrashReporter'),
       ),
     );
     expect(
@@ -698,7 +698,7 @@ void main() {
           .readAsStringSync(),
       allOf(
         contains('abstract interface class AnalyticsService'),
-        contains('createFirebaseAnalyticsService()'),
+        contains('impl0.createFirebaseAnalyticsService'),
       ),
     );
     expect(

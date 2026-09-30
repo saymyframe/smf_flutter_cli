@@ -53,7 +53,8 @@ const routerRole = RouterRole._();
 ///   button to the system, which closes the app;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - calls the listeners of [screenListeners] each time the screen the user
-///   sees changes;
+///   sees changes, each on its own, so that a listener that throws keeps no
+///   other from hearing the screen;
 /// - imports screens with a prefix of its own and does not name its router
 ///   class `AppRouter`;
 /// - creates `config` once.
@@ -136,6 +137,12 @@ final class RouterRole extends Role<RoutesData> {
   /// A provider may call the listeners while the app builds, such as for
   /// its first screen, so a listener only takes note of the screen: it does
   /// not navigate or rebuild widgets, and it returns without throwing.
+  ///
+  /// A provider calls each listener on its own, as the modules of the
+  /// listeners know nothing of each other: what one throws anyway keeps no
+  /// other listener from hearing the screen, and reaches neither the router
+  /// nor the handlers of the errors of the app. In debug mode the provider
+  /// prints it, so that a listener that fails shows in the console.
   static const screenListeners = SocketRef<FactoryListSocket>.role(
     routerRole,
     'screen_listeners',

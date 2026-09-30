@@ -248,8 +248,10 @@ List<String> _startUpOf(ContractResult result) => [
           ].join(' '),
     ];
 
-/// The factories that the reporter of the app in [app] forwards to, as
-/// written in the list of the reporters of the template of the role.
+/// The factories of the implementations that the reporter of the app in
+/// [app] forwards to, in the order of the list of the reporters of the
+/// template of the role, which creates each on its own with
+/// `_createAlone(name, factory)`; the code of any other element.
 List<String> _reportersOf(RenderedApp app) {
   final unit = parseString(
     content: app.files[CrashReportingRole.file]!.text,
@@ -259,7 +261,19 @@ List<String> _reportersOf(RenderedApp app) {
       .expand((declaration) => declaration.variables.variables)
       .singleWhere((variable) => variable.name.lexeme == '_crashReporters');
   final list = reporters.initializer! as ListLiteral;
-  return [for (final element in list.elements) '$element'];
+  return [
+    for (final element in list.elements)
+      if (element
+          case NullAwareElement(
+            value: MethodInvocation(
+              methodName: SimpleIdentifier(name: '_createAlone'),
+              :final argumentList,
+            ),
+          ))
+        '${argumentList.arguments.last}'
+      else
+        '$element',
+  ];
 }
 
 /// The methods of the class [name] in [unit], by name.
@@ -569,7 +583,7 @@ void main() {
       final file = withCrashlytics.files[CrashReportingRole.file]!;
 
       expect(_reportersOf(withCrashlytics), [
-        'impl0.createCrashlyticsCrashReporter()',
+        'impl0.createCrashlyticsCrashReporter',
       ]);
       expect(
         [
@@ -585,13 +599,14 @@ void main() {
           ),
         ],
       );
-      // Nothing to await: the reporter is created without waiting.
+      // Nothing to await: the reporter is created without waiting, by the
+      // function of the role that creates each implementation on its own.
       final unit = parseString(content: file.text).unit;
       expect(
         unit.declarations
             .whereType<FunctionDeclaration>()
             .map((function) => function.name.lexeme),
-        ['createCrashReporter', 'installCrashReporting'],
+        ['createCrashReporter', 'installCrashReporting', '_createAlone'],
       );
     });
 
@@ -756,15 +771,15 @@ void main() {
         (
           const [FirebaseCrashlyticsModule.id, _OtherReporterModule.id],
           [
-            'impl0.createCrashlyticsCrashReporter()',
-            'impl1.createOtherCrashReporter()',
+            'impl0.createCrashlyticsCrashReporter',
+            'impl1.createOtherCrashReporter',
           ],
         ),
         (
           const [_OtherReporterModule.id, FirebaseCrashlyticsModule.id],
           [
-            'impl0.createOtherCrashReporter()',
-            'impl1.createCrashlyticsCrashReporter()',
+            'impl0.createOtherCrashReporter',
+            'impl1.createCrashlyticsCrashReporter',
           ],
         ),
       ]) {

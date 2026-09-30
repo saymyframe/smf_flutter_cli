@@ -5,7 +5,8 @@
 /// navigation: the `AppShell` of the layout around a navigator for each
 /// branch, which it creates when the branch is first selected. It calls
 /// every observer factory once for each navigator, tells the screen
-/// listeners about the page on top whenever another is on top, completes a
+/// listeners about the page on top whenever another is on top, each on its
+/// own, so that one that throws keeps no other from hearing it, completes a
 /// push with the value that the page pops with, closes with the back button
 /// of the system the route on top of the innermost navigator that the user
 /// sees, such as a dialog, and annotates every screen and parameter with

@@ -35,15 +35,17 @@ const diRole = DiRole._();
 /// files call or tear off the factory of every registration and its
 /// dispose function, which the contract harness checks, so the tests of a
 /// module that registers a service check the registration through
-/// [graphOf], not in the files of a provider.
+/// [graphOf], not in the files of a provider. Its [resetDependencies]
+/// disposes of the services that the container created and removes every
+/// service, so that `registerDependencies()` can register them again.
 final class DiRole extends Role<DiRegistration> {
   const DiRole._();
 
   /// The path of the file with `ServiceLocator` and `resolve`.
   static const serviceLocatorFile = 'lib/core/di/service_locator.dart';
 
-  /// The path of the provider's file with [createServiceLocator] and
-  /// [registerDependencies].
+  /// The path of the provider's file with [createServiceLocator],
+  /// [registerDependencies] and [resetDependencies].
   static const dependenciesFile = 'lib/core/di/dependencies.dart';
 
   /// `ServiceLocator createServiceLocator()`, which creates the provider's
@@ -63,6 +65,20 @@ final class DiRole extends Role<DiRegistration> {
     returnType: 'Future<void>',
   );
 
+  /// `Future<void> resetDependencies()`, which disposes of the services
+  /// that the container created, with the [DiRegistration.dispose] function
+  /// of each, in the reverse order of their registration, and then removes
+  /// every service, so that [registerDependencies] can register them again.
+  ///
+  /// It creates no service: a lazy singleton that was never resolved is
+  /// neither created nor disposed of. The app itself does not call it; its
+  /// tests do, such as a test that registers the services again.
+  static const resetDependencies = RequiredFunction(
+    'resetDependencies',
+    path: dependenciesFile,
+    returnType: 'Future<void>',
+  );
+
   @override
   String get id => 'di';
 
@@ -75,7 +91,11 @@ final class DiRole extends Role<DiRegistration> {
   @override
   RoleInterface get interface => const RoleInterface(
         files: [serviceLocatorFile],
-        symbols: [createServiceLocator, registerDependencies],
+        symbols: [
+          createServiceLocator,
+          registerDependencies,
+          resetDependencies,
+        ],
       );
 
   @override

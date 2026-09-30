@@ -71,7 +71,7 @@ class _GoAppRouter {
     if (screen == _screen) return;
     _screen = screen;
     for (final listener in _screenListeners) {
-      listener(top?.route.name, location);
+      _callAlone(listener, top?.route.name, location);
     }
   }
 }
@@ -85,6 +85,26 @@ class _GoAppRouter {
     .members
     .single
     .toSource();
+
+/// `_callAlone`, with which the router calls each listener of the screen,
+/// as the analyzer prints its declaration.
+final String _expectedCallAlone = parseString(
+  content: r'''
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
+''',
+).unit.declarations.single.toSource();
 
 /// The members of the router that let each push complete with the value
 /// that its page returns when it closes, whatever completer go_router gives
@@ -381,6 +401,15 @@ void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
         .singleWhere((method) => method.name.lexeme == '_showScreen')
         .toSource(),
     _expectedShowScreen,
+  );
+  // Each listener on its own: what one throws keeps no other from hearing
+  // the screen, and reaches no handler of the errors of the app.
+  expect(
+    unit.declarations
+        .whereType<FunctionDeclaration>()
+        .singleWhere((function) => function.name.lexeme == '_callAlone')
+        .toSource(),
+    _expectedCallAlone,
   );
   // One list for the whole app, not a list for each navigator.
   final declaration = _screenListenersOf(unit);

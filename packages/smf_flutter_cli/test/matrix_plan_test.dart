@@ -805,6 +805,24 @@ void main() {
       expect(create.selection, isA<NamedEveryModuleApp>());
       expect(create.problem, isNull);
 
+      // The app of the matrix that --add-app-tests adds the tests to.
+      final add = MatrixToolOptions.parse([
+        '--add-app-tests',
+        '--without-external-steps',
+        '--app',
+        'every module (bloc)',
+        '/apps/start_app',
+        'app_tests/start',
+      ]);
+      expect(add.arguments, [
+        '--add-app-tests',
+        '--without-external-steps',
+        '/apps/start_app',
+        'app_tests/start',
+      ]);
+      expect(add.selection, isA<NamedEveryModuleApp>());
+      expect(add.problem, isNull);
+
       expect(
         MatrixToolOptions.parse(['--combinations', '3-wise', '/apps'])
             .selection,

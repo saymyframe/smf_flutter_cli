@@ -60,7 +60,10 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// change of its stacks, a switch of branches included, and the router
 /// calls the listeners when another page comes on top or the page on top
 /// shows another location, with the name of the route of the page, `null`
-/// for the fallback screen and the error screen, and its location.
+/// for the fallback screen and the error screen, and its location. It calls
+/// each listener on its own: what one throws keeps no other listener from
+/// hearing the screen, and reaches neither the router nor the handlers of
+/// the errors of the app; in debug mode it is printed.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();

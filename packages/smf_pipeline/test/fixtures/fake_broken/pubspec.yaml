@@ -1,0 +1,22 @@
+name: fake_broken
+description: Providers of roles with one known bug each, for the tests of the SMF pipeline. Not modules to use.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  # The fixtures whose code the broken modules render with their bugs: the
+  # fake DI container, the fake events, analytics and crash reporting, and
+  # the fake router.
+  fake_di: any
+  fake_infra: any
+  fake_router: any
+  mason: ^0.1.1
+  smf_contracts: ^0.3.0
+
+dev_dependencies:
+  very_good_analysis: ^10.3.0

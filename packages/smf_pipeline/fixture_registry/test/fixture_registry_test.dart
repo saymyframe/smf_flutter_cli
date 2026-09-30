@@ -117,6 +117,39 @@ void main() {
       }
     });
 
+    test(
+        'has the service log of the fixtures, which the tests of the '
+        'analytics role and of the crash reporting role look at, and a '
+        'fixture provider of each of those roles that starts later', () {
+      final modules = {
+        for (final module in severalProvidersModules())
+          module.descriptor.id: module,
+      };
+      for (final (role, later) in [
+        (analyticsRole, FakeAnalyticsModule.id),
+        (crashReportingRole, FakeCrashModule.id),
+      ]) {
+        // The implementations created with the app come first among those
+        // of the role, and those that start asynchronously after them, so a
+        // call that the service log throws on must still reach the fixture
+        // that starts later, which the tests look at too.
+        expect(
+          _implementationOf(modules[FakeServiceLogModule.id], role)?.isAsync,
+          isFalse,
+          reason: 'The tests of the $role look at what reaches '
+              'fake_service_log: add it to severalProvidersModules(), with an '
+              'implementation of the role created with the app.',
+        );
+        expect(
+          _implementationOf(modules[later], role)?.isAsync,
+          isTrue,
+          reason: 'The tests of the $role look at what reaches $later after '
+              'fake_service_log: add it to severalProvidersModules(), with an '
+              'implementation of the role that starts asynchronously.',
+        );
+      }
+    });
+
     test('builds one app with every module, whose cases have no errors',
         () async {
       final (:apps, :failed) = await everyModuleAppsOf(
@@ -417,10 +450,7 @@ void main() {
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
       expect(router, contains('() => FixtureObserver(),'));
-      expect(
-        router,
-        contains('(route, location) => fixtureScreens.add((route, location)),'),
-      );
+      expect(router, contains('noteFixtureScreen,'));
     });
 
     test('starts on the second tab that --start names', () async {
@@ -691,6 +721,21 @@ void main() {
 /// The one of the two modules [both] that is not [one].
 String _other(List<String> both, String one) =>
     both.singleWhere((module) => module != one);
+
+/// The implementation of [role] that [module] contributes, or `null` if
+/// there is no [module] or it contributes none.
+RoleImplementation? _implementationOf(SmfModule? module, Role role) {
+  if (module == null) return null;
+  for (final contribution
+      in module.contribute(ContractHarness.defaultContext)) {
+    if (contribution
+        case RoleData<RoleImplementation>(role: final of, :final value)
+        when identical(of, role)) {
+      return value;
+    }
+  }
+  return null;
+}
 
 /// The forms in which a DI container renders [registration] of [graph]: its
 /// kind with or without a name, how it waits for other services, and

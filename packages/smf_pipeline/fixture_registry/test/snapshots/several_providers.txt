@@ -246,6 +246,8 @@ class App extends StatelessWidget {
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fixture_app/core/analytics/analytics_service.dart';
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
+import 'package:fixture_app/core/di/dependencies.dart';
+import 'package:fixture_app/core/events/communication_service.dart';
 import 'package:fixture_app/core/fixture_start/fixture_start.dart';
 import 'package:fixture_app/firebase_options.dart';
 
@@ -257,6 +259,8 @@ Future<void> bootstrap() async {
   await initAnalytics();
   await initCrashReporting();
   installCrashReporting();
+  await initEvents();
+  await registerDependencies();
   await startFixture();
 }
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
@@ -264,6 +268,9 @@ import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
     as impl0;
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
     as impl1;
+import 'package:fixture_app/core/fixture_service_log/fixture_service_log.dart'
+    as impl2;
+import 'package:flutter/foundation.dart';
 
 /// Records what users do in the app.
 abstract interface class AnalyticsService {
@@ -291,6 +298,18 @@ abstract interface class AnalyticsService {
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. An analytics service that throws, or whose future fails,
+/// keeps no other from the call, and its failure does not reach the code
+/// that called: that code may not await the call, and then nothing would
+/// catch the failure. In debug mode the failure is printed, so that an
+/// analytics service that does not work, such as one that is not set up,
+/// shows in the console. Each analytics service gets a copy of its own of
+/// the map of parameters, so that one that changes the map changes nothing
+/// that the caller or another analytics service has. An analytics service
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -298,15 +317,54 @@ final AnalyticsService _analyticsService = _AnalyticsServices(
 );
 
 final List<AnalyticsService> _analyticsServices = [
-  impl0.createFirebaseAnalyticsService(),
+  ?_createAlone(
+    'createFirebaseAnalyticsService',
+    impl0.createFirebaseAnalyticsService,
+  ),
+  ?_createAlone('createServiceLogAnalytics', impl2.createServiceLogAnalytics),
 ];
 
 /// Creates the implementations of AnalyticsService that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initAnalytics() async {
-  _analyticsServices.addAll(
-    await Future.wait<AnalyticsService>([impl1.initFixtureAnalytics()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureAnalytics', impl1.initFixtureAnalytics),
+  ]);
+  _analyticsServices.addAll(started.nonNulls);
+}
+
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+AnalyticsService? _createAlone(
+  String name,
+  AnalyticsService Function() create,
+) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<AnalyticsService?> _startAlone(
+  String name,
+  Future<AnalyticsService> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _AnalyticsServices implements AnalyticsService {
@@ -316,12 +374,15 @@ final class _AnalyticsServices implements AnalyticsService {
 
   @override
   Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
-      _forAll((service) => service.logEvent(name, parameters: parameters));
+      _forAll(
+        (service) => service.logEvent(name, parameters: _copyOf(parameters)),
+      );
 
   @override
   Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
       _forAll(
-        (service) => service.logSignIn(method: method, parameters: parameters),
+        (service) =>
+            service.logSignIn(method: method, parameters: _copyOf(parameters)),
       );
 
   @override
@@ -329,7 +390,8 @@ final class _AnalyticsServices implements AnalyticsService {
     required String method,
     Map<String, Object>? parameters,
   }) => _forAll(
-    (service) => service.logSignUp(method: method, parameters: parameters),
+    (service) =>
+        service.logSignUp(method: method, parameters: _copyOf(parameters)),
   );
 
   @override
@@ -346,10 +408,37 @@ final class _AnalyticsServices implements AnalyticsService {
     required String? value,
   }) => _forAll((service) => service.setUserProperty(name: name, value: value));
 
+  /// Calls [call] with each analytics service on its own, and completes
+  /// once all of them are done, whatever each does; see
+  /// [createAnalyticsService].
   Future<void> _forAll(
     Future<void> Function(AnalyticsService service) call,
   ) async {
-    await Future.wait(_services.map(call));
+    await Future.wait([
+      for (final service in _services) _callAlone(service, call),
+    ]);
+  }
+
+  /// A copy of [parameters] for one analytics service; see
+  /// [createAnalyticsService].
+  static Map<String, Object>? _copyOf(Map<String, Object>? parameters) =>
+      parameters == null ? null : Map.of(parameters);
+
+  /// Calls [call] with [service], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    AnalyticsService service,
+    Future<void> Function(AnalyticsService service) call,
+  ) async {
+    try {
+      await call(service);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The analytics service ${service.runtimeType} failed: $error',
+        );
+      }
+    }
   }
 }
 === lib/core/analytics/firebase_analytics_service.dart (firebase_analytics) ===
@@ -445,6 +534,8 @@ import 'dart:async';
 import 'package:fixture_app/core/crash_reporting/crashlytics_crash_reporter.dart'
     as impl0;
 import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl1;
+import 'package:fixture_app/core/fixture_service_log/fixture_service_log.dart'
+    as impl2;
 import 'package:flutter/foundation.dart';
 
 /// Reports the errors of the app.
@@ -473,6 +564,16 @@ abstract interface class CrashReporter {
 
 /// Returns the crash reporter of the app, which forwards every call to the
 /// crash reporters of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. A crash reporter that throws, or whose future fails,
+/// keeps no other from the call, and its failure reaches neither the code
+/// that called nor the handlers of [installCrashReporting], which would
+/// report it to the same crash reporter again, without end. In debug mode
+/// the failure is printed, so that a crash reporter that does not work,
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
 CrashReporter createCrashReporter() => _crashReporter;
 
 /// Reports the errors of the main isolate that nothing handles, each once.
@@ -486,6 +587,9 @@ CrashReporter createCrashReporter() => _crashReporter;
 ///   such as in a `Future`, a `Timer` or the handler of a port, with its
 ///   type. In debug mode it leaves the error unhandled, so the engine prints
 ///   it.
+///
+/// Each report reaches every crash reporter, and the failure of a crash
+/// reporter comes back to neither handler; see [createCrashReporter].
 ///
 /// `compute()` and `Isolate.run()` throw the error of their isolate to the
 /// code that awaits them, so it reaches the platform dispatcher unless that
@@ -509,15 +613,54 @@ void installCrashReporting() {
 final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
 
 final List<CrashReporter> _crashReporters = [
-  impl0.createCrashlyticsCrashReporter(),
+  ?_createAlone(
+    'createCrashlyticsCrashReporter',
+    impl0.createCrashlyticsCrashReporter,
+  ),
+  ?_createAlone(
+    'createServiceLogCrashReporter',
+    impl2.createServiceLogCrashReporter,
+  ),
 ];
 
 /// Creates the implementations of CrashReporter that start
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initCrashReporting() async {
-  _crashReporters.addAll(
-    await Future.wait<CrashReporter>([impl1.initFixtureCrashReporter()]),
-  );
+  final started = await Future.wait([
+    _startAlone('initFixtureCrashReporter', impl1.initFixtureCrashReporter),
+  ]);
+  _crashReporters.addAll(started.nonNulls);
+}
+
+/// Calls [create], the function [name], on its own: returns what it
+/// creates, or `null` if it throws, so that the app works without it, and
+/// in debug mode prints the error.
+CrashReporter? _createAlone(String name, CrashReporter Function() create) {
+  try {
+    return create();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<CrashReporter?> _startAlone(
+  String name,
+  Future<CrashReporter> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
 }
 
 final class _CrashReporters implements CrashReporter {
@@ -551,10 +694,29 @@ final class _CrashReporters implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _forAll((reporter) => reporter.setUserId(userId));
 
+  /// Calls [call] with each crash reporter on its own, and completes once
+  /// all of them are done, whatever each does; see [createCrashReporter].
   Future<void> _forAll(
     Future<void> Function(CrashReporter reporter) call,
   ) async {
-    await Future.wait(_reporters.map(call));
+    await Future.wait([
+      for (final reporter in _reporters) _callAlone(reporter, call),
+    ]);
+  }
+
+  /// Calls [call] with [reporter], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    CrashReporter reporter,
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    try {
+      await call(reporter);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('The crash reporter ${reporter.runtimeType} failed: $error');
+      }
+    }
   }
 }
 === lib/core/crash_reporting/crashlytics_crash_reporter.dart (firebase_crashlytics) ===
@@ -624,6 +786,105 @@ final class CrashlyticsCrashReporter implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _crashlytics.setUserIdentifier(userId ?? '');
 }
+=== lib/core/di/dependencies.dart (get_it) ===
+import 'package:fixture_app/core/analytics/analytics_service.dart' as di1;
+import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di0;
+import 'package:fixture_app/core/events/communication_service.dart' as di2;
+import 'package:get_it/get_it.dart';
+
+import 'service_locator.dart';
+
+/// Creates the service locator of the app, which finds the services in the
+/// global instance of get_it, [GetIt.instance].
+ServiceLocator createServiceLocator() => _GetItServiceLocator(GetIt.instance);
+
+/// Registers the services of the modules of the app in get_it, each after
+/// the services it takes or waits for, and completes when all of them are
+/// ready.
+///
+/// [resetDependencies] removes them again.
+Future<void> registerDependencies() async {
+  final getIt = GetIt.instance;
+  getIt.registerLazySingleton<di0.CrashReporter>(
+    () => di0.createCrashReporter(),
+  );
+  getIt.registerLazySingleton<di1.AnalyticsService>(
+    () => di1.createAnalyticsService(),
+  );
+  getIt.registerLazySingleton<di2.CommunicationService>(
+    () => di2.createCommunicationService(),
+  );
+}
+
+/// Disposes of the services that get_it created, with the functions that
+/// dispose of them, in the reverse order of their registration, and removes
+/// every service from get_it, so that [registerDependencies] can register
+/// them again.
+Future<void> resetDependencies() => GetIt.instance.reset();
+
+/// Finds the services of the app in get_it.
+final class _GetItServiceLocator implements ServiceLocator {
+  _GetItServiceLocator(this._getIt);
+
+  final GetIt _getIt;
+
+  @override
+  T resolve<T extends Object>({String? instanceName}) =>
+      _getIt<T>(instanceName: instanceName);
+}
+=== lib/core/di/service_locator.dart (role:di) ===
+import 'dependencies.dart';
+
+/// The service locator of the app, created on first use.
+final ServiceLocator serviceLocator = createServiceLocator();
+
+/// Returns the service of type [T], or the one named [instanceName].
+///
+/// Only the composition file of a feature calls it, to create what the
+/// feature's screens need; other code receives its services as parameters.
+T resolve<T extends Object>({String? instanceName}) =>
+    serviceLocator.resolve<T>(instanceName: instanceName);
+
+/// Finds the services that `registerDependencies()` registers.
+abstract interface class ServiceLocator {
+  /// Returns the service of type [T], or the one named [instanceName].
+  T resolve<T extends Object>({String? instanceName});
+}
+=== lib/core/events/communication_service.dart (role:events) ===
+import 'package:fixture_app/core/fixture_events/fixture_events.dart' as impl0;
+
+/// A message that one part of the app sends to the others, such as
+/// `final class ItemAdded extends AppEvent`.
+abstract class AppEvent {
+  /// Allows the events to have constant constructors.
+  const AppEvent();
+}
+
+/// Delivers [AppEvent]s between parts of the app that do not know each
+/// other.
+///
+/// Whether a listener of a type that an event extends or implements, such
+/// as a listener of `on<AppEvent>()`, gets the event is up to the provider
+/// of the service.
+abstract interface class CommunicationService {
+  /// Sends [event] to everyone listening to its type when it is fired.
+  void fire(AppEvent event);
+
+  /// The events of type [T] fired after the stream is listened to. An event
+  /// fired before, even after this call returned the stream, is not in it.
+  Stream<T> on<T extends AppEvent>();
+}
+
+/// Returns the communication service of the app.
+CommunicationService createCommunicationService() => _communicationService;
+
+late final CommunicationService _communicationService;
+
+/// Creates the CommunicationService of the app, which starts asynchronously;
+/// `bootstrap()` awaits it.
+Future<void> initEvents() async {
+  _communicationService = await impl0.openFixtureEvents();
+}
 === lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -666,6 +927,21 @@ final List<FixtureObserver> fixtureObservers = [];
 /// The screens the user saw, as the screen listener of the fixture heard of
 /// them: the full name of the route of each, or `null`, and its location.
 final List<(String?, String)> fixtureScreens = [];
+
+/// Whether the screen listener of the fixture throws once it noted a
+/// screen, as a test that a listener of the screen that throws keeps no
+/// other from hearing it sets it.
+bool fixtureScreensThrow = false;
+
+/// The screen listener of the fixture: notes the screen of [route] at
+/// [location] in [fixtureScreens], and then throws if
+/// [fixtureScreensThrow].
+void noteFixtureScreen(String? route, String location) {
+  fixtureScreens.add((route, location));
+  if (fixtureScreensThrow) {
+    throw StateError('The screen listener of the fixture analytics throws.');
+  }
+}
 
 /// Analytics that sends what it records to its platform side.
 final class FixtureAnalytics implements AnalyticsService {
@@ -755,6 +1031,175 @@ final class FixtureCrashReporter implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       fixtureCrashChannel.invokeMethod<void>('setUserId', userId);
 }
+=== lib/core/fixture_events/fixture_events.dart (fake_events) ===
+import 'dart:async';
+
+import '../events/communication_service.dart';
+
+/// Opens the event channel of the fixture, which takes a moment.
+Future<CommunicationService> openFixtureEvents() async => FixtureEvents();
+
+/// Delivers events to the listeners of their type through one stream.
+final class FixtureEvents implements CommunicationService {
+  final _events = StreamController<AppEvent>.broadcast();
+
+  @override
+  void fire(AppEvent event) => _events.add(event);
+
+  @override
+  Stream<T> on<T extends AppEvent>() =>
+      _events.stream.where((event) => event is T).cast<T>();
+}
+=== lib/core/fixture_service_log/fixture_service_log.dart (fake_service_log) ===
+import 'package:flutter/foundation.dart';
+
+import '../analytics/analytics_service.dart';
+import '../crash_reporting/crash_reporter.dart';
+
+/// How the services of the log fail once they noted a call, which a test
+/// sets.
+enum ServiceLogFailure {
+  /// They do not fail.
+  none,
+
+  /// They throw as they are called, before they return a future.
+  throwing,
+
+  /// They return a future that fails.
+  failing,
+}
+
+/// How each call of the services of the log fails from now on, until a
+/// test sets it back to [ServiceLogFailure.none], as each call of a service
+/// fails whose platform side is broken.
+ServiceLogFailure serviceLogFailure = ServiceLogFailure.none;
+
+/// Whether the factories of the services of the log throw, as the factory
+/// of a service may whose SDK is not set up; a test sets it before the
+/// start-up of the app, which creates the services.
+bool serviceLogFactoriesThrow = false;
+
+/// Whether the analytics service of the log, once it noted a call, adds a
+/// parameter of its own, `service_log`, to the map of parameters that it
+/// got, as a service may that sends a value with every event; a test sets
+/// it.
+bool serviceLogChangesParameters = false;
+
+/// The calls that reached the analytics service of the log, in their order:
+/// each as the name of its method followed by its arguments, with a copy of
+/// the map of parameters as the service got it.
+final List<List<Object?>> loggedAnalyticsCalls = [];
+
+/// The calls that reached the crash reporter of the log, in their order:
+/// each as the name of its method followed by its arguments, with the error
+/// or the details of the error of Flutter that it got.
+final List<List<Object?>> loggedCrashReporterCalls = [];
+
+/// Creates the analytics service of the log, or throws if
+/// [serviceLogFactoriesThrow].
+AnalyticsService createServiceLogAnalytics() {
+  _throwIfAsked();
+  return const ServiceLogAnalytics();
+}
+
+/// Creates the crash reporter of the log, or throws if
+/// [serviceLogFactoriesThrow].
+CrashReporter createServiceLogCrashReporter() {
+  _throwIfAsked();
+  return const ServiceLogCrashReporter();
+}
+
+/// Throws if [serviceLogFactoriesThrow].
+void _throwIfAsked() {
+  if (serviceLogFactoriesThrow) {
+    throw StateError('The service log could not be created.');
+  }
+}
+
+/// Analytics that notes each call in [loggedAnalyticsCalls], and then fails
+/// as [serviceLogFailure] says.
+final class ServiceLogAnalytics implements AnalyticsService {
+  /// Creates the service.
+  const ServiceLogAnalytics();
+
+  @override
+  Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
+      _note(loggedAnalyticsCalls, ['logEvent', name, _take(parameters)]);
+
+  @override
+  Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
+      _note(loggedAnalyticsCalls, ['logSignIn', method, _take(parameters)]);
+
+  @override
+  Future<void> logSignUp({
+    required String method,
+    Map<String, Object>? parameters,
+  }) => _note(loggedAnalyticsCalls, ['logSignUp', method, _take(parameters)]);
+
+  @override
+  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
+      _note(loggedAnalyticsCalls, ['setAnalyticsCollectionEnabled', enabled]);
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _note(loggedAnalyticsCalls, ['setUserId', userId]);
+
+  @override
+  Future<void> setUserProperty({
+    required String name,
+    required String? value,
+  }) => _note(loggedAnalyticsCalls, ['setUserProperty', name, value]);
+}
+
+/// Crash reporting that notes each call in [loggedCrashReporterCalls], and
+/// then fails as [serviceLogFailure] says.
+final class ServiceLogCrashReporter implements CrashReporter {
+  /// Creates the reporter.
+  const ServiceLogCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _note(loggedCrashReporterCalls, ['recordError', error, fatal, reason]);
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) => _note(loggedCrashReporterCalls, ['recordFlutterError', details, fatal]);
+
+  @override
+  Future<void> log(String message) =>
+      _note(loggedCrashReporterCalls, ['log', message]);
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _note(loggedCrashReporterCalls, ['setUserId', userId]);
+}
+
+/// A copy of [parameters] as the service got them, for its notes. Then, if
+/// [serviceLogChangesParameters], the service adds `service_log` to
+/// [parameters].
+Map<String, Object>? _take(Map<String, Object>? parameters) {
+  if (parameters == null) return null;
+  final noted = Map.of(parameters);
+  if (serviceLogChangesParameters) parameters['service_log'] = true;
+  return noted;
+}
+
+/// Notes [call] in [calls], and then fails as [serviceLogFailure] says.
+Future<void> _note(List<List<Object?>> calls, List<Object?> call) {
+  calls.add(call);
+  final failure = StateError('The service log failed on ${call.first}.');
+  return switch (serviceLogFailure) {
+    ServiceLogFailure.none => Future<void>.value(),
+    ServiceLogFailure.throwing => throw failure,
+    ServiceLogFailure.failing => Future<void>.error(failure),
+  };
+}
 === lib/core/fixture_start/fixture_start.dart (fake_slow_start) ===
 import 'dart:async';
 
@@ -825,6 +1270,7 @@ import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
     show logFirebaseScreenView;
 import 'package:fixture_app/core/app/fallback_start_screen.dart';
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -963,7 +1409,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (screen == _screen) return;
     _screen = screen;
     for (final listener in _screenListeners) {
-      listener(top?.route.name, location);
+      _callAlone(listener, top?.route.name, location);
     }
   }
 }
@@ -979,9 +1425,28 @@ List<NavigatorObserver> _observers() => [
 /// the route of the screen, or `null` for a screen that is not a route of a
 /// module, and its location.
 final List<void Function(String? route, String location)> _screenListeners = [
-  (route, location) => fixtureScreens.add((route, location)),
+  noteFixtureScreen,
   logFirebaseScreenView,
 ];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 
@@ -1127,6 +1592,7 @@ dependencies:
   firebase_analytics: "^12.6.0"
   firebase_core: "^4.15.0"
   firebase_crashlytics: "^5.4.0"
+  get_it: "^9.3.0"
   go_router: "^17.5.0"
 
 dev_dependencies:

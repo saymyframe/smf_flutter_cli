@@ -5,6 +5,7 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'package:fake_infra/fake_infra.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -45,15 +46,104 @@ void main() {
   });
 
   test(
-      'the app tests check the contract of the router role and of the layout '
-      'role with every provider of each, which they tell apart by the roles '
-      'of the app only', () {
-    expect(appTests.testedRoles, containsAll([routerRole, layoutRole]));
+      'the app tests check the contract of the router role, of the layout '
+      'role, of the DI role and of the events role with every provider of '
+      'each, which they tell apart by the roles of the app only', () {
+    expect(
+      appTests.testedRoles,
+      containsAll([routerRole, layoutRole, diRole, eventsRole]),
+    );
     expect(named('router_screens').roles, {routerRole});
+    expect(named('router_listeners').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
+    expect(named('di_role').roles, {diRole});
+    expect(named('di_disposal').roles, {diRole});
+    expect(named('events_role').roles, {eventsRole});
+    expect(named('router_walk').roles, {routerRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
+  });
+
+  test(
+      'the test of the DI role applies only to the apps with the role whose '
+      'services have every lifetime, of each DI container', () {
+    final diRoleTest = named('di_role');
+
+    for (final app in apps) {
+      final hook = app.hook!;
+      final lifetimes = hook.presentRoles.contains(diRole)
+          ? {
+              for (final registration
+                  in diRole.graphOf(diRole.hookInput(hook)).ordered)
+                registration.lifetime,
+            }
+          : const <DiLifetime>{};
+      expect(
+        diRoleTest.appliesTo(app),
+        lifetimes.containsAll(DiLifetime.values),
+        reason: app.name,
+      );
+    }
+    // Those of the fixture services, with each container.
+    expect(
+      appsOf(diRoleTest),
+      containsAll([
+        'fake_registrations (fake_di)',
+        'fake_registrations (get_it)',
+      ]),
+    );
+  });
+
+  test(
+      'the test of the disposal of the fixture services applies to the apps '
+      'with them, of each DI container, which have the test of the DI role '
+      'too', () {
+    final disposal = appsOf(named('di_disposal'));
+
+    expect(disposal, [
+      for (final app in apps)
+        if (app.modules.contains(FakeRegistrationsModule.id)) app.name,
+    ]);
+    expect(
+      disposal,
+      containsAll([
+        'fake_registrations (fake_di)',
+        'fake_registrations (get_it)',
+      ]),
+    );
+    // So it adds no app to those that run flutter test for the DI role.
+    expect(appsOf(named('di_role')), containsAll(disposal));
+  });
+
+  test(
+      'the tests of the events role and of the walk of the routes apply '
+      'only to the apps with every module, which have the roles and run '
+      'flutter test for other tests already', () {
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    expect(appsOf(named('events_role')), [
+      for (final app in everyModule) app.name,
+    ]);
+    // So does the walk of the routes, which goes to the start screens of
+    // both fixture features, destinations of the main navigation, with
+    // each router and each layout.
+    expect(appsOf(named('router_walk')), [
+      for (final app in everyModule) app.name,
+    ]);
+    // One for each combination of the providers of the roles that take one.
+    expect(everyModule, hasLength(8));
+    for (final app in everyModule) {
+      expect(
+        app.hook!.presentRoles,
+        contains(eventsRole),
+        reason: app.name,
+      );
+      expect(appsOf(named('router_screens')), contains(app.name));
+    }
   });
 
   test(
@@ -62,6 +152,7 @@ void main() {
     final routerScreens = appsOf(named('router_screens'));
 
     for (final name in [
+      'router_listeners',
       'layout_screens',
       'go_router_screens',
       'bottom_tabs_screens',
@@ -70,40 +161,76 @@ void main() {
     }
   });
 
-  test(
-      'the app of several providers gets the app tests of the modules of the '
-      'CLI and the mocks of the fixture providers, which all apply to it',
-      () async {
-    final severalProviders = await severalProvidersAppTests();
-    final (apps: matrix, :failed) = await matrixOf(severalProvidersModules());
-    expect(failed, isEmpty);
-    final everyModule = [
-      for (final app in matrix)
-        if (app.everyModuleWith != null) app,
-    ];
-    expect(everyModule, hasLength(1));
+  group('the app of several providers', () {
+    late MatrixAppTests severalProviders;
+    late List<MatrixApp> matrix;
+    late MatrixApp everyModule;
 
-    expect(
-      [for (final test in severalProviders.tests) nameOf(test)],
-      containsAll([
-        'firebase_core',
-        'firebase_crashlytics',
-        'firebase_analytics',
-        'screen_views',
-        'fake_crash',
-        'fake_analytics',
-      ]),
-    );
-    for (final test in severalProviders.tests) {
+    setUpAll(() async {
+      severalProviders = await severalProvidersAppTests();
+      final (apps: all, :failed) = await matrixOf(severalProvidersModules());
+      expect(failed, isEmpty);
+      matrix = all;
+      everyModule = matrix.singleWhere((app) => app.everyModuleWith != null);
+    });
+
+    /// The app test of the app of several providers whose files are in the
+    /// directory [name].
+    MatrixAppTest ofSeveral(String name) =>
+        severalProviders.tests.singleWhere((test) => nameOf(test) == name);
+
+    test(
+        'gets the app tests of the modules of the CLI, the test of the DI '
+        'role, the mocks of the fixture providers and the tests of the roles '
+        'of several providers, which all apply to it', () {
       expect(
-        test.appliesTo(everyModule.single),
-        isTrue,
-        reason: test.directory,
+        [for (final test in severalProviders.tests) nameOf(test)],
+        containsAll([
+          'firebase_core',
+          'firebase_crashlytics',
+          'firebase_analytics',
+          'screen_views',
+          'di_role',
+          'events_role',
+          'router_walk',
+          'fake_crash',
+          'fake_analytics',
+          'analytics_role',
+          'crash_reporting_role',
+        ]),
       );
-    }
-    expect(
-      severalProviders.roleProblems(severalProvidersModules(), matrix),
-      isEmpty,
-    );
+      for (final test in severalProviders.tests) {
+        expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
+      }
+    });
+
+    test(
+        'checks the contract of the analytics role and of the crash reporting '
+        'role with every provider of each, which it tells apart by the roles '
+        'of the app only, in the app with every module only', () {
+      expect(severalProviders.testedRoles, {analyticsRole, crashReportingRole});
+      for (final (name, role) in [
+        ('analytics_role', analyticsRole),
+        ('crash_reporting_role', crashReportingRole),
+      ]) {
+        final test = ofSeveral(name);
+        expect(test.roles, {role}, reason: name);
+        // The tests look at the service log of the fixtures, which only the
+        // app with every module of the registry is sure to have.
+        expect(
+          [
+            for (final app in matrix)
+              if (test.appliesTo(app)) app,
+          ],
+          [everyModule],
+          reason: name,
+        );
+      }
+
+      expect(
+        severalProviders.roleProblems(severalProvidersModules(), matrix),
+        isEmpty,
+      );
+    });
   });
 }

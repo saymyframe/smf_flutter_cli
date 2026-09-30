@@ -2,7 +2,8 @@
 /// with `smf create` and analyzes with Flutter: every app that the contract
 /// harness builds for a set of modules, and the apps with every module, of
 /// which CI also builds a covering for Android and iOS and starts it on
-/// devices, one app for each job of the plan of CI; and the versions of
+/// devices, one app for each job of the plan of CI; the apps whose tests
+/// must fail, which show that the tests can fail; and the versions of
 /// Flutter that its nightly run checks them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
@@ -16,10 +17,12 @@ import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
+import 'package:smf_flutter_cli/src/expected_failures.dart';
 import 'package:smf_flutter_cli/src/matrix_plan.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
+export 'src/expected_failures.dart';
 export 'src/flutter_versions.dart';
 export 'src/matrix_plan.dart';
 
@@ -343,14 +346,19 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   hook;
 /// - `uses`, the modules of the matrix whose ids it uses: those that, with
 ///   another id in their place in an app of the matrix, change whether it
-///   applies to the app or the values of its files there. Each has the id
-///   of the module (`module`), its package (`package`) and the names of
-///   those apps (`apps`), in the order of the apps;
+///   applies to the app, the values of its files there or the files it
+///   generates there. Each has the id of the module (`module`), its
+///   package (`package`) and the names of those apps (`apps`), in the
+///   order of the apps;
+/// - `roles`, the ids of the roles whose contract it checks
+///   ([MatrixAppTest.roles]), such as `router`;
 /// - `roleFunctionUses`, the uses, in its Dart files, of the functions of
 ///   the roles of [modules], the modules of the matrix, that an app can
-///   have several providers of, each as the path of the file from the
-///   directory and the function, such as `test/a_test.dart:
-///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`.
+///   have several providers of. Each has the path of the file from the
+///   directory and the function (`use`), such as `test/a_test.dart:
+///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`,
+///   and the id of the role of the function (`role`), such as
+///   `crash_reporting`.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -363,11 +371,15 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 /// modules it had. [apps] gives the apps of the matrix, which it builds
 /// once, if there are [tests].
 ///
-/// An app test runs in every app with its module, whatever else the app
-/// has, so it uses no function of a role that reaches every provider of
-/// the role, such as `createCrashReporter()`, whose reporter reports to all
-/// of them: what another provider does, only the tests of its own module
-/// know. Such functions are the public top-level functions of the files of
+/// An app test of a module runs in every app with its module, whatever else
+/// the app has, so it uses no function of a role that reaches every
+/// provider of the role, such as `createCrashReporter()`, whose reporter
+/// reports to all of them: what another provider does, only the tests of
+/// its own module know. A test of the contract of such a role calls them,
+/// since what the role does with every provider is its contract, and looks
+/// only at what reaches the providers that it knows; the checks of the
+/// repository tell it from the others by its `roles` and the role of each
+/// use. Such functions are the public top-level functions of the files of
 /// the interface of each role that an app can have several providers of,
 /// in the app of each of its providers that the contract harness renders
 /// first, and a use is a call or a tear-off through an import of their
@@ -405,6 +417,7 @@ Future<List<Map<String, Object>>> appTestsReport(
             in _usesOf(test, matrix).entries)
           {'module': id.value, 'package': packages[id]!, 'apps': names},
       ],
+      'roles': [for (final role in test.roles) role.id],
       'roleFunctionUses': _roleFunctionUses(
         test.directory,
         functions,
@@ -416,12 +429,13 @@ Future<List<Map<String, Object>>> appTestsReport(
 }
 
 /// The uses of [functions], the functions of roles by the path of their
-/// file in the app, in the Dart files of the tests in [directory], each as
-/// the path of the file from [directory] and the use; none if [directory]
-/// does not exist, which the checks of the repository find otherwise.
-List<String> _roleFunctionUses(
+/// file in the app, in the Dart files of the tests in [directory], each
+/// with the path of the file from [directory] and the use, and the id of
+/// the role; none if [directory] does not exist, which the checks of the
+/// repository find otherwise.
+List<Map<String, String>> _roleFunctionUses(
   String directory,
-  Map<String, Set<String>> functions,
+  Map<String, _RoleFunctions> functions,
   FileSystem fileSystem,
 ) {
   if (!fileSystem.directory(directory).existsSync()) return const [];
@@ -430,13 +444,16 @@ List<String> _roleFunctionUses(
     for (final (relative, file) in _filesOf(directory, fileSystem))
       if (context.split(relative).join('/') case final path
           when path.endsWith('.dart'))
-        for (final use in _roleFunctionUsesIn(
+        for (final (:use, :role) in _roleFunctionUsesIn(
           DartFileIndexer.index(path, file.readAsStringSync()),
           functions,
         ))
-          '$path: $use',
+          {'use': '$path: $use', 'role': role.id},
   ];
 }
+
+/// A role and the names of its functions in one file of its interface.
+typedef _RoleFunctions = ({Role role, Set<String> names});
 
 /// The functions of the roles of [modules] that an app can have several
 /// providers of, by the path in the app of the file of the role that
@@ -444,11 +461,11 @@ List<String> _roleFunctionUses(
 /// the public top-level functions of the files of the interface of each
 /// such role, in the app of each of its providers that the contract harness
 /// renders first; see [appTestsReport].
-Future<Map<String, Set<String>>> _roleFunctionsOf(
+Future<Map<String, _RoleFunctions>> _roleFunctionsOf(
   List<SmfModule> modules,
 ) async {
   final harness = ContractHarness(ModuleRegistry(modules));
-  final functions = <String, Set<String>>{};
+  final functions = <String, _RoleFunctions>{};
   for (final module in modules) {
     final roles = [
       for (final role in module.descriptor.provides)
@@ -473,7 +490,7 @@ Future<Map<String, Set<String>>> _roleFunctionsOf(
             'of the $role.',
           );
         }
-        (functions[path] ??= {}).addAll([
+        (functions[path] ??= (role: role, names: {})).names.addAll([
           for (final declaration
               in DartFileIndexer.index(path, file.text).declarations)
             if (declaration.kind == DeclarationKind.function &&
@@ -489,13 +506,14 @@ Future<Map<String, Set<String>>> _roleFunctionsOf(
 /// The uses in [file], a Dart file of app tests, of the [functions] of
 /// roles by the path of their file in the app: calls and tear-offs through
 /// an import of that file as `package:{{app_name}}/...`, with a prefix or
-/// without, each as `<function>() of <path>`.
-List<String> _roleFunctionUsesIn(
+/// without, each as `<function>() of <path>`, with the role of the
+/// function.
+List<({String use, Role role})> _roleFunctionUsesIn(
   DartFileIndex file,
-  Map<String, Set<String>> functions,
+  Map<String, _RoleFunctions> functions,
 ) {
-  final uses = <String>[];
-  for (final MapEntry(key: path, value: names) in functions.entries) {
+  final uses = <({String use, Role role})>[];
+  for (final MapEntry(key: path, value: (:role, :names)) in functions.entries) {
     final uri = 'package:{{app_name}}/${path.substring('lib/'.length)}';
     final imports = [
       for (final import in file.imports)
@@ -519,7 +537,9 @@ List<String> _roleFunctionUsesIn(
         if (names.contains(access.name) && prefixes.contains(access.target))
           access.name,
     };
-    uses.addAll([for (final name in used) '$name() of $path']);
+    uses.addAll([
+      for (final name in used) (use: '$name() of $path', role: role),
+    ]);
   }
   return uses;
 }
@@ -567,8 +587,9 @@ List<String> _appliesWithout(
     ];
 
 /// The modules of [apps] whose ids [test] uses, each with the names of the
-/// apps where another id in its place changes whether [test] applies, or
-/// the values of its files; in the order of the apps and of their modules.
+/// apps where another id in its place changes whether [test] applies, the
+/// values of its files or the files it generates; in the order of the apps
+/// and of their modules.
 Map<ModuleId, List<String>> _usesOf(
   MatrixAppTest test,
   List<MatrixApp> apps,
@@ -584,8 +605,8 @@ Map<ModuleId, List<String>> _usesOf(
 
 /// Whether [test] uses the id of the module [id] of [app]: whether it
 /// applies to [app] with another id in place of [id] other than to [app],
-/// or fills the values of its files there otherwise, or throws there, as a
-/// test that looks the module up by its id does.
+/// or fills the values of its files, or generates files, there otherwise,
+/// or throws there, as a test that looks the module up by its id does.
 bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
   final selection = _selectionOf(test, app);
   try {
@@ -596,9 +617,19 @@ bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
 }
 
 /// Whether [test] applies to [app] and, if it does, the values of its
-/// files there, as text.
-String _selectionOf(MatrixAppTest test, MatrixApp app) =>
-    test.appliesTo(app) ? jsonEncode(test.values?.call(app) ?? const {}) : '';
+/// files and the files it generates there, as text.
+String _selectionOf(MatrixAppTest test, MatrixApp app) => test.appliesTo(app)
+    ? jsonEncode([
+        test.values?.call(app) ?? const <String, String>{},
+        test.generatedFiles?.call(app, _packageOfUses) ??
+            const <String, String>{},
+      ])
+    : '';
+
+/// The name of the package that [_selectionOf] gives the apps whose files
+/// a test generates: the same for every app, so that only what the app is
+/// changes the files.
+const _packageOfUses = 'matrix_app';
 
 /// [app] with another id in place of the module [id], in its modules, its
 /// [MatrixApp.everyModuleWith] and its name, as if another module took the
@@ -636,8 +667,11 @@ final class MatrixAppTest {
     required this.appliesTo,
     this.devDependencies = const [],
     this.values,
+    this.generatedFiles,
     this.roles = const {},
     this.mocks,
+    this.startProbe,
+    this.readsStartProbes = false,
   });
 
   /// The directory of the files that go into an app, each at its path
@@ -648,7 +682,8 @@ final class MatrixAppTest {
   /// package of the app, and `{{<key>}}` the value of each key of the
   /// [values] of the app. Hidden files stay out. The files of the tests of
   /// an app may use those of other tests that the app always has too, such
-  /// as the tests of a module that another depends on.
+  /// as the tests of a module that another depends on, and those that the
+  /// tests generate for the app ([generatedFiles]).
   final String directory;
 
   /// Whether the tests run in an app of the matrix.
@@ -668,6 +703,25 @@ final class MatrixAppTest {
   /// besides `app_name`.
   final Map<String, String> Function(MatrixApp app)? values;
 
+  /// The files that the matrix generates for the tests in an app of the
+  /// matrix, next to the files of [directory], or `null` if they need none:
+  /// the text of each by its path in the app, such as
+  /// `integration_test/di_role/registered_services.dart`, for the app and
+  /// the name of its package, which the imports of the files of the app
+  /// take, as `package:<name>/...`. The matrix writes them as they are, with
+  /// no placeholder filled.
+  ///
+  /// A test of a role needs to know what the modules of an app give the
+  /// role, such as the services that they register in the DI container,
+  /// and the files of [directory], the same in every app, cannot say it.
+  /// The function writes it from the data of the roles of the app
+  /// ([MatrixApp.hook]), such as the registrations of
+  /// `diRole.graphOf(diRole.hookInput(app.hook!))`, and the files of
+  /// [directory] import what it writes. So it takes what it needs of the
+  /// modules of the app from their roles, as [values] do.
+  final Map<String, String> Function(MatrixApp app, String packageName)?
+      generatedFiles;
+
   /// The roles whose contract the tests check, whichever module provides
   /// each, such as the router role, whose provider calls the listeners of
   /// the screen once for each screen the user sees.
@@ -676,9 +730,9 @@ final class MatrixAppTest {
   /// which [appliesTo] selects by the role, through the roles of the app
   /// ([MatrixApp.hook]), rather than by the ids of the modules that provide
   /// it; [runMatrix] fails when they apply to no app of one of them, or
-  /// when they select their apps, or take their [values], by the id of one
-  /// of them (see [MatrixAppTests]). Tests of what only one provider does
-  /// name no role.
+  /// when they select their apps, take their [values] or generate their
+  /// [generatedFiles] by the id of one of them (see [MatrixAppTests]).
+  /// Tests of what only one provider does name no role.
   final Set<Role> roles;
 
   /// The mocks of the platform side of what the module of the tests runs in
@@ -696,7 +750,49 @@ final class MatrixAppTest {
   /// tests rather than while its `main()` declares them, such as mocks that
   /// record what reaches the platform side of its module.
   final MatrixMocks? mocks;
+
+  /// The probe of the tests for a check that runs on a device, such as the
+  /// start check, or `null` if they have none: a function that goes through
+  /// what the tests check in the running app, without a test framework, and
+  /// returns what is wrong, such as the walk of the routes of the app.
+  ///
+  /// The matrix lists the probes of the tests that it adds to an app with a
+  /// test that runs them ([readsStartProbes]); see [addAppTests].
+  final MatrixStartProbe? startProbe;
+
+  /// Whether the tests run the probes of the tests of the app
+  /// ([startProbe]), as the start check does once the first screen of the
+  /// app settled: with such tests, the matrix writes the list of the probes
+  /// of the tests that it adds to the app, [startProbesFile], which they
+  /// import.
+  final bool readsStartProbes;
 }
+
+/// A function among the files of a [MatrixAppTest], in their directory
+/// `integration_test/`, that a check on a device runs once the first screen
+/// of the app settled (see [MatrixAppTest.startProbe]).
+final class MatrixStartProbe {
+  /// Creates the probe that the function [function] of the file at [path]
+  /// is.
+  const MatrixStartProbe(this.path, this.function);
+
+  /// The path of the Dart file with the function among the files of the
+  /// tests or those that they generate, in their directory
+  /// `integration_test/`, such as `integration_test/router_walk/walk.dart`.
+  final String path;
+
+  /// The name of the top-level function of the file, of the type
+  /// `Future<List<String>> Function(Future<void> Function() settle)`, such
+  /// as `probeRoutes`. The check calls it with a function that waits until
+  /// the screen settles, and adds the problems that it returns to its own.
+  final String function;
+}
+
+/// The path in an app of the list of the probes of its tests, which
+/// [addAppTests] writes for the tests that run them
+/// ([MatrixAppTest.readsStartProbes]): `startProbes`, the name of the tests
+/// of each probe and the probe, in the order of the tests.
+const startProbesFile = 'integration_test/start_probes.dart';
 
 /// A function among the files of a [MatrixAppTest] that sets up the mocks of
 /// the platform side of what the module of the tests runs in an app (see
@@ -736,8 +832,8 @@ final class MatrixAppTests {
   /// apps are [apps]: for each role of the [tests] and of [testedRoles],
   /// and each module that provides it and is in [apps], a test of the role
   /// that applies to none of the apps of the module, or that selects its
-  /// apps or takes its values by the id of the module, and no test of a
-  /// role of [testedRoles] at all.
+  /// apps, takes its values or generates its files by the id of the
+  /// module, and no test of a role of [testedRoles] at all.
   ///
   /// A provider of the role that the tests leave out, such as one that a
   /// module adds later, is a problem, since its apps would be generated and
@@ -745,7 +841,7 @@ final class MatrixAppTests {
   /// contract of the role. So is a test that tells the providers apart by
   /// their ids, which a new provider would not have: with another id in
   /// place of that of a provider in one of its apps, it must apply to the
-  /// app and fill its values as before.
+  /// app, fill its values and generate its files as before.
   List<String> roleProblems(List<SmfModule> modules, List<MatrixApp> apps) {
     final roles = {...testedRoles, for (final test in tests) ...test.roles};
     return [
@@ -814,9 +910,9 @@ final class MatrixAppTests {
       'with $id, which provides it: a test of a role applies to the apps of '
       'every provider of the role, which it selects by the role.';
 
-  /// The problem that [test], a test of [role], selects its apps or takes
-  /// its values by the id of the module [id], which provides it, in the
-  /// apps [using].
+  /// The problem that [test], a test of [role], selects its apps, takes its
+  /// values or generates its files by the id of the module [id], which
+  /// provides it, in the apps [using].
   static String _byId(
     MatrixAppTest test,
     Role role,
@@ -824,23 +920,24 @@ final class MatrixAppTests {
     List<String> using,
   ) =>
       'The tests of ${test.directory} check the $role, but select their apps, '
-      'or take the values of their files, by the id of $id, which provides '
-      'it: with another module in its place, they would apply otherwise, or '
-      'get other values, in these apps of the matrix: ${using.join(', ')}. '
-      'A test of a role takes what it needs of the providers of the role '
-      'from the roles of the app (MatrixApp.hook), such as whether the app '
-      'has the role (presentRoles), so that a new provider of the role gets '
-      'the test as it is.';
+      'take the values of their files or generate files by the id of $id, '
+      'which provides it: with another module in its place, they would apply '
+      'otherwise, or get other values or files, in these apps of the matrix: '
+      '${using.join(', ')}. A test of a role takes what it needs of the '
+      'providers of the role from the roles of the app (MatrixApp.hook), such '
+      'as whether the app has the role (presentRoles), so that a new provider '
+      'of the role gets the test as it is.';
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
 /// in [directory] with the package [packageName], with the placeholders
-/// of the files filled, and returns the paths of the files in the app; see
-/// [MatrixAppTest.directory].
+/// of the files filled, writes the files that the tests generate for the
+/// app next to them, and returns the paths of the files in the app; see
+/// [MatrixAppTest.directory] and [MatrixAppTest.generatedFiles].
 ///
 /// Without [app], for an app that `smf create` generated outside the
 /// matrix, only `{{app_name}}` is filled: the [MatrixAppTest.values] come
-/// from an app of the matrix.
+/// from an app of the matrix, and so do the files that the tests generate.
 ///
 /// If some of the [tests] declare [MatrixAppTest.mocks], it also writes the
 /// configuration of the tests of the app, `test/flutter_test_config.dart`,
@@ -851,11 +948,22 @@ final class MatrixAppTests {
 /// of an app are set up for the tests of each module, which the tests of
 /// the matrix and the tests added to an app outside it get alike.
 ///
-/// Throws a [MatrixAppTestException], before it copies anything, if a file
-/// keeps a placeholder that no value fills, if two of the [tests] have a
-/// file at the same path, if the mocks of a test are in no file of it in
-/// `test/`, or if a test has a file at the path of the configuration that
-/// the matrix writes for the mocks.
+/// If some of the [tests] run the probes of the tests of the app
+/// ([MatrixAppTest.readsStartProbes]), such as the start check, it also
+/// writes the list of the probes of the [tests], [startProbesFile], in the
+/// order of the [tests], each named after the directory of its tests. So
+/// the start check that the matrix analyzes in its apps and the one that CI
+/// starts on a device run the probes of the tests that go into the app.
+///
+/// Throws a [MatrixAppTestException], before it copies anything, if a test
+/// generates files without [app], if a file keeps a placeholder that no
+/// value fills, if two of the [tests] have a file at the same path, the
+/// files they generate included, if a test generates a file at a path that
+/// is no relative path in the app, if the mocks of a test are in no file
+/// of it in `test/`, if its probe is in no file of it in
+/// `integration_test/`, or if a test has a file at the path of the
+/// configuration of the mocks or of the list of the probes, which the
+/// matrix writes.
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
   required String directory,
@@ -867,6 +975,14 @@ List<String> addAppTests(
   final texts = <String, String>{};
   final owners = <String, String>{};
   for (final test in tests) {
+    final files = switch ((test.generatedFiles, app)) {
+      (null, _) => const <String, String>{},
+      (final generate?, final app?) => generate(app, packageName),
+      (_, null) => throw MatrixAppTestException(
+          'The tests of ${test.directory} generate files for an app of the '
+          'matrix, but the app is none.',
+        ),
+    };
     final values = {
       'app_name': packageName,
       if (app != null) ...?test.values?.call(app),
@@ -879,6 +995,25 @@ List<String> addAppTests(
       }
       owners[path] = test.directory;
       texts[path] = _filled(file.readAsStringSync(), values, test, path);
+    }
+    for (final MapEntry(key: generated, value: text) in files.entries) {
+      if (!_isPathInApp(generated)) {
+        throw MatrixAppTestException(
+          'The tests of ${test.directory} generate a file at "$generated", '
+          'which is no path in the app, such as test/services.dart: names '
+          r'separated by /, none of them empty, . or .., and none with \ or '
+          ':.',
+        );
+      }
+      final path = context.joinAll(generated.split('/'));
+      if (owners[path] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of ${test.directory} generate $generated, which the '
+          'tests of $other have too.',
+        );
+      }
+      owners[path] = test.directory;
+      texts[path] = text;
     }
   }
   final mocks = <MatrixMocks>[];
@@ -904,12 +1039,67 @@ List<String> addAppTests(
     }
     texts[config] = _testConfigOf(mocks);
   }
+  final probes = <(String, MatrixStartProbe)>[];
+  for (final test in tests) {
+    final probe = test.startProbe;
+    if (probe == null) continue;
+    final path = context.joinAll(probe.path.split('/'));
+    if (!probe.path.startsWith(_integrationTest) ||
+        owners[path] != test.directory) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} declare their probe in '
+        '${probe.path}, which is no file of theirs in $_integrationTest.',
+      );
+    }
+    probes.add((context.basename(test.directory), probe));
+  }
+  if (tests.any((test) => test.readsStartProbes)) {
+    final list = context.joinAll(startProbesFile.split('/'));
+    if (owners[list] case final other?) {
+      throw MatrixAppTestException(
+        'The tests of $other have $startProbesFile, which the matrix writes '
+        'for the probes of the tests.',
+      );
+    }
+    texts[list] = _startProbesOf(probes);
+  }
   for (final MapEntry(key: path, value: text) in texts.entries) {
     fileSystem.file(context.join(directory, path))
       ..createSync(recursive: true)
       ..writeAsStringSync(text);
   }
   return [...texts.keys];
+}
+
+/// The directory of an app with the checks that run on a device, such as
+/// the start check, as the paths of the files of a [MatrixAppTest] start.
+const _integrationTest = 'integration_test/';
+
+/// The list of the probes of the tests of an app, [startProbesFile], with
+/// [probes], each with the name of its tests; see [addAppTests].
+String _startProbesOf(List<(String, MatrixStartProbe)> probes) {
+  final imports = StringBuffer();
+  final entries = StringBuffer();
+  for (final (index, (name, probe)) in probes.indexed) {
+    final uri = probe.path.substring(_integrationTest.length);
+    imports.writeln("import '$uri' as probe$index;");
+    entries.writeln(
+      '  (${SmfNames.dartString(name)}, probe$index.${probe.function}),',
+    );
+  }
+  return '''
+// The probes of the tests of the app, which the matrix of SMF writes for
+// the check that runs them on a device, such as the start check
+// (MatrixAppTest.startProbe): each goes through the running app and
+// returns what is wrong.
+$imports
+/// The probes of the tests of the app, each with the name of its tests: a
+/// function that goes through the running app, with the function that
+/// waits until the screen settles, and returns the problems that it finds.
+const List<(String, Future<List<String>> Function(Future<void> Function()))>
+    startProbes = [
+$entries];
+''';
 }
 
 /// The files in the directory [directory] and in its directories, each
@@ -926,6 +1116,18 @@ List<(String, File)> _filesOf(String directory, FileSystem fileSystem) {
           (path, entity),
   ]..sort((a, b) => a.$1.compareTo(b.$1));
 }
+
+/// Whether [path], the path of a file that a [MatrixAppTest] generates, is a
+/// path in the app, relative to its root: names separated by `/`, none of
+/// them empty, `.` or `..`, which would lead out of the app, and none with
+/// `\` or `:`, which would make it another path on Windows.
+bool _isPathInApp(String path) => path.split('/').every(
+      (name) =>
+          name.isNotEmpty &&
+          name != '.' &&
+          name != '..' &&
+          !name.contains(RegExp(r'[\\:]')),
+    );
 
 /// The path in an app of the configuration of its tests, which
 /// [addAppTests] writes for the [MatrixAppTest.mocks] of the tests.
@@ -1051,6 +1253,40 @@ Future<(int, String)> runAppTests(
       fileSystem: fileSystem,
     );
 
+/// The tests of [all] to add to [app], an app of the matrix that
+/// `smf create` generated outside it, such as one that CI starts on a
+/// device, for the tests [named]: those, and, if one of them runs the
+/// probes of the tests of the app ([MatrixAppTest.readsStartProbes]), such
+/// as the start check, each other test of [all] with a probe
+/// ([MatrixAppTest.startProbe]) that applies to [app], in the order of
+/// [all]. So the start check goes through the roles of the app, whichever
+/// they are, without the caller naming the tests of the roles.
+///
+/// Throws a [MatrixAppTestException] if a test of [named] does not apply to
+/// [app]: its files would not fit the app.
+List<MatrixAppTest> appTestsFor(
+  MatrixApp app,
+  List<MatrixAppTest> named,
+  List<MatrixAppTest> all,
+) {
+  for (final test in named) {
+    if (!test.appliesTo(app)) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} do not apply to ${app.name}.',
+      );
+    }
+  }
+  return [
+    ...named,
+    if (named.any((test) => test.readsStartProbes))
+      for (final test in all)
+        if (test.startProbe != null &&
+            !named.contains(test) &&
+            test.appliesTo(app))
+          test,
+  ];
+}
+
 /// Adds [tests] to [generated], an app that `smf create` generated outside
 /// the matrix, such as one that CI starts on a device: copies their files
 /// with [addAppTests], which fills only `{{app_name}}` in them, and adds
@@ -1058,19 +1294,26 @@ Future<(int, String)> runAppTests(
 /// have any. It runs neither the analysis nor the tests, which the caller
 /// runs where it needs them.
 ///
+/// With [app], the app of the matrix that [generated] was generated as,
+/// such as an app with every module of the plan of CI that the matrix tool
+/// of the CLI generates with `--create --app`, it fills the values of the
+/// tests too, and writes the files that they generate for [app] (see
+/// [MatrixAppTest.generatedFiles]), as for an app of the matrix.
+///
 /// Returns 0 and the output, or the exit code of `flutter pub add` and the
 /// output if it fails. A problem of the files of the tests is a failure
 /// too, with the exit code 1, such as a placeholder that only an app of the
-/// matrix fills.
+/// matrix fills, or files that tests generate, without [app].
 Future<(int, String)> addAppTestsTo(
   GeneratedApp generated,
   List<MatrixAppTest> tests, {
+  MatrixApp? app,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
     _addAndRun(
       generated,
-      null,
+      app,
       tests,
       _pubAdd(tests),
       flutter: flutter,
@@ -1315,6 +1558,198 @@ Future<int> createEveryModuleApps(
     );
     problems.addAll(appProblems);
   }
+  return _exitCode(problems, say);
+}
+
+/// An app whose tests must fail, and how: of the apps with every module of
+/// the registry [modules], one for each combination of the providers of the
+/// roles that take one, the one with the [providers], such as an app with a
+/// provider of a role that has a known bug and the modules that the tests
+/// of the role need, whose tests of the role must fail as [failures]
+/// expect, and whose other tests must pass; see [runFailingApps].
+///
+/// Being an app with every module of its registry, it gets the tests that a
+/// matrix runs only in such apps too ([MatrixApp.everyModuleWith]).
+final class MatrixFailingApp {
+  /// Creates the app [name] with every module of [modules] and [providers],
+  /// whose tests must fail as [failures] expect.
+  const MatrixFailingApp(
+    this.name, {
+    required this.modules,
+    required this.failures,
+    this.providers = const [],
+  });
+
+  /// The name of the app, such as that of the provider with a bug.
+  final String name;
+
+  /// The registry of the app, which `smf create` generates it from: the
+  /// modules of the app, and the other providers of its roles that its
+  /// modules need in a registry, such as those that a module has variants
+  /// for.
+  final List<SmfModule> modules;
+
+  /// The providers that the app has of the roles that take one and have
+  /// several in [modules], such as the state manager of the variant of a
+  /// feature; among other modules, as any module of the app may be named.
+  final List<ModuleId> providers;
+
+  /// The tests of the app that must fail, each with the reason of its first
+  /// failure.
+  final List<MatrixExpectedFailure> failures;
+
+  /// The app of the matrix, the app with every module of [modules] that has
+  /// the [providers], as the contract harness builds and renders it, with
+  /// the data and roles of its case ([MatrixApp.hook]), under [name]; or
+  /// `null` and the problems when not one app with every module has them:
+  /// the errors of the cases of the apps that the harness found errors in,
+  /// and the number of the apps that have them.
+  Future<({MatrixApp? app, List<String> problems})> check() async {
+    final (:apps, :failed) = await everyModuleAppsOf(modules);
+    final withProviders = [
+      for (final app in apps)
+        if (providers.every(app.modules.contains)) app,
+    ];
+    if (withProviders case [final app]) {
+      return (
+        app: MatrixApp(
+          name,
+          app.modules,
+          roleOptions: app.roleOptions,
+          everyModuleWith: app.everyModuleWith,
+          hook: app.hook,
+        ),
+        problems: const <String>[],
+      );
+    }
+    final named = providers.isEmpty ? 'its modules' : providers.join(', ');
+    final count = '${withProviders.length} apps with every module of the '
+        'registry of $name have $named, rather than one.';
+    return (
+      app: null,
+      problems: [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+        count,
+      ],
+    );
+  }
+}
+
+/// Adds [tests] to [generated], the app of the matrix [app], with their dev
+/// dependencies, and runs them with `flutter test --reporter json` through
+/// [flutter] once the app with the tests passes `flutter analyze`: the tests
+/// of [failures] must fail as they expect, and the other tests of the app
+/// must pass (see [expectedFailureProblems]).
+///
+/// Returns the problems, and the output with a line for each test that ran
+/// (see [testRunSummary]). When a command before the tests fails, or the
+/// files of the tests have a problem, the problem is the last line of the
+/// output, and no test runs.
+Future<(List<String>, String)> runFailingAppTests(
+  GeneratedApp generated,
+  MatrixApp app,
+  List<MatrixAppTest> tests,
+  List<MatrixExpectedFailure> failures, {
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) async {
+  final (code, output) = await _addAndRun(
+    generated,
+    app,
+    tests,
+    [
+      ..._pubAdd(tests),
+      const ['analyze'],
+    ],
+    flutter: flutter,
+    fileSystem: fileSystem,
+  );
+  if (code != 0) return ([output.trim().split('\n').last], output);
+  final (_, report) = await flutter(
+    const ['test', '--reporter', 'json'],
+    generated.path,
+  );
+  final summary = testRunSummary(report, directory: generated.path);
+  return (
+    expectedFailureProblems(report, failures, directory: generated.path),
+    [output, ...summary].join('\n'),
+  );
+}
+
+/// Generates each of [apps] in [directory], with the options of CI, adds
+/// to it the tests of [appTests] that apply to it, and runs them: its
+/// expected failures must fail as they expect, and its other tests must
+/// pass; see [runFailingAppTests]. Returns the exit code: 0 if the contract
+/// harness builds each app without errors ([MatrixFailingApp.check]),
+/// `smf create` generates it with every module and every step that the
+/// options of CI do not leave for later, the app with its tests has no
+/// issue, and its tests fail as expected; 1 otherwise.
+///
+/// So the tests of the apps of the matrix show that they can fail: the app
+/// of a provider of a role that has a known bug must fail the tests of the
+/// role on that bug, and on nothing else.
+///
+/// The apps stay in [directory], with the tests. The log of [commands] gets
+/// what happens, and their create generates each app, by default from the
+/// registry of the app; [flutter] runs the commands of the tests on the
+/// files of [fileSystem]. The analyze and the test of [commands] do not
+/// run.
+Future<int> runFailingApps(
+  List<MatrixFailingApp> apps, {
+  required String directory,
+  MatrixAppTests appTests = const MatrixAppTests([]),
+  MatrixCommands commands = const MatrixCommands(),
+  MatrixFlutter flutter = _flutter,
+  FileSystem fileSystem = const LocalFileSystem(),
+}) async {
+  // coverage:ignore-start
+  // The default prints to the terminal, as the runs in CI do; the tests
+  // give their own.
+  final say = commands.log ?? _print;
+  // coverage:ignore-end
+  final problems = <String>[];
+  var count = 0;
+  for (final (index, failing) in apps.indexed) {
+    final (:app, problems: checked) = await failing.check();
+    if (app == null) {
+      problems.addAll([
+        for (final problem in checked) '${failing.name}: $problem',
+      ]);
+      continue;
+    }
+    final name = 'app_${index + 1}';
+    say('\n=== $name: $app');
+    final (generated, appProblems) = await _generate(
+      // coverage:ignore-start
+      // The default creates the app with smf, as CI does; the tests give
+      // their own.
+      commands.create ?? _smfCreate(failing.modules),
+      // coverage:ignore-end
+      app,
+      name,
+      directory,
+    );
+    problems.addAll(appProblems);
+    if (generated == null) continue;
+    count++;
+    final (testProblems, output) = await runFailingAppTests(
+      generated,
+      app,
+      [
+        for (final test in appTests.tests)
+          if (test.appliesTo(app)) test,
+      ],
+      failing.failures,
+      flutter: flutter,
+      fileSystem: fileSystem,
+    );
+    say(output.trim());
+    problems.addAll([
+      for (final problem in testProblems) '$name ($app): $problem',
+    ]);
+  }
+  say('\n$count apps generated in $directory.');
   return _exitCode(problems, say);
 }
 
