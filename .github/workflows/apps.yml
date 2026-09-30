@@ -559,12 +559,16 @@ jobs:
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
+      # The FlutterFire CLI in the version that firebase_core activates on
+      # the machine of a user, which a tool of the module prints, so that CI
+      # configures the apps with that version whichever it is.
       - &install_firebase
         name: Install the Firebase CLI and the FlutterFire CLI
         run: |
           npm install --global firebase-tools
           firebase --version
-          dart pub global activate flutterfire_cli 1.4.1
+          version="$(dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart | jq -er .version)"
+          dart pub global activate flutterfire_cli "$version"
 
       # A test of smf_firebase_core runs the command of the README of the app
       # for Android, with the key of the service account in a file that only
@@ -1088,24 +1092,32 @@ jobs:
       # What smf create --explain says of the machine for the app with every
       # module of each provider of the app entry, which the plan gives: an
       # app whose modules check the FlutterFire CLI must find it, and one
-      # without them says nothing of it. --explain generates nothing.
+      # without them says nothing of it. --explain generates nothing. The
+      # version of the FlutterFire CLI and the name of its check come from a
+      # tool of firebase_core, as in the jobs with Firebase; --explain shows
+      # the name of a check that passed with the module that asks for it, and
+      # nothing after them.
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() && needs.plan.result == 'success' }}
         env:
           ENTRIES: ${{ needs.plan.outputs.entries }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          dart pub global activate flutterfire_cli 1.4.1
+          $flutterfire = dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart | ConvertFrom-Json
+          $version = $flutterfire.version
+          if (-not $version) { throw 'firebase_core gives no version of the FlutterFire CLI.' }
+          dart pub global activate flutterfire_cli $version
           dart pub global run flutterfire_cli:flutterfire --version
+          $passed = '(?m)' + [regex]::Escape($flutterfire.check) + ' \(for \w+\)\r?$'
           $apps = @($env:ENTRIES | ConvertFrom-Json)
           if ($apps.Count -eq 0) { throw 'The plan has no app for an app entry.' }
           $found = 0
           foreach ($app in $apps) {
             $explain = dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $app "$env:RUNNER_TEMP\probe" probe --explain | Out-String
             $explain
-            if ($explain -match '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for \w+\)\r?$') {
+            if ($explain -match $passed) {
               $found++
-            } elseif ($explain -match 'FlutterFire CLI') {
+            } elseif ($explain.Contains($flutterfire.check)) {
               throw "SMF does not find the FlutterFire CLI for $app."
             }
           }
