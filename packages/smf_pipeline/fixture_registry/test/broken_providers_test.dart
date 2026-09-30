@@ -3,8 +3,9 @@
 // their roles show that they fail on the bug. CI runs the tests of the apps
 // only in its job with Flutter; these tests check without Flutter that
 // each app can be generated, that the tests that must fail are in it as
-// they are named, with their reasons, and that every role whose contract
-// the tests of the apps check has a broken provider.
+// they are named, with their reasons, that it has the files that its tests
+// import, and that every role whose contract the tests of the apps check
+// has a broken provider.
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -14,6 +15,7 @@ import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -82,6 +84,54 @@ List<_Template> _stringsIn(String text) {
   final strings = _Strings();
   parseString(content: text, throwIfDiagnostics: false).unit.accept(strings);
   return strings.templates;
+}
+
+/// What a Dart file of an app test writes before the path of a file of the
+/// app that it imports: the package of the app, whose name the matrix
+/// fills in.
+const _appPackage = 'package:{{app_name}}/';
+
+/// The files of an app that the Dart files of [test] import, each as its
+/// path in the app, in `lib/`, and the file of [test] that imports it, by
+/// its path from the directory of the app tests of its package, such as
+/// `analytics_role/test/analytics_role_test.dart`.
+List<({String path, String importer})> _appFilesImportedBy(
+  MatrixAppTest test,
+) {
+  final directory = Directory(test.directory);
+  return [
+    for (final file in directory
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart')))
+      for (final directive in parseString(
+        content: file.readAsStringSync(),
+        throwIfDiagnostics: false,
+      ).unit.directives.whereType<UriBasedDirective>())
+        if (directive.uri.stringValue case final uri?
+            when uri.startsWith(_appPackage))
+          (
+            path: 'lib/${uri.substring(_appPackage.length)}',
+            importer: file.path.substring(directory.parent.path.length + 1),
+          ),
+  ];
+}
+
+/// The files of the app of [provider], by their paths, as the contract
+/// harness renders it.
+Future<Set<String>> _filesOfAppOf(BrokenProvider provider) async {
+  final harness = ContractHarness(ModuleRegistry(provider.modules));
+  final files = <Set<String>>[];
+  for (final contractCase in harness.casesOfAll()) {
+    final result = await harness.check(contractCase);
+    final modules = {
+      for (final module in result.resolution!.modules) module.id,
+    };
+    if (provider.app.every(modules.contains)) {
+      files.add(result.app!.files.keys.toSet());
+    }
+  }
+  return files.single;
 }
 
 /// Finds the templates of the strings of a file; see [_stringsIn].
@@ -197,6 +247,29 @@ void main() {
   });
 
   test(
+      'the apps of the broken providers get the app tests of the apps of the '
+      'fixtures and of the app of several providers, each directory once, '
+      'those of the fixtures first', () async {
+    final directories = [
+      for (final test in await brokenProviderAppTests()) test.directory,
+    ];
+    final ofFixtures = [
+      for (final test in (await fixtureAppTests()).tests) test.directory,
+    ];
+    final ofSeveralProviders = [
+      for (final test in (await severalProvidersAppTests()).tests)
+        test.directory,
+    ];
+
+    expect(directories.toSet(), hasLength(directories.length));
+    expect(directories.take(ofFixtures.length), ofFixtures);
+    expect(directories.toSet(), {...ofFixtures, ...ofSeveralProviders});
+    // Both have the tests of the events role, the tests of the DI role and
+    // the mocks of the fixture providers.
+    expect(ofSeveralProviders.where(ofFixtures.contains), isNotEmpty);
+  });
+
+  test(
       'each broken provider provides its role, and has a bug and tests that '
       'must fail on it', () {
     expect(providers, isNotEmpty);
@@ -304,7 +377,7 @@ void main() {
           'are named, with their reasons', () async {
         final (:app, problems: _) = await provider.failingApp.check();
         final tests = [
-          for (final test in (await fixtureAppTests()).tests)
+          for (final test in await brokenProviderAppTests())
             if (test.appliesTo(app!)) test,
         ];
 
@@ -331,6 +404,29 @@ void main() {
             isTrue,
             reason: 'The reason of $failure is a text that its file writes.',
           );
+        }
+      });
+
+      test(
+          'the files of the app that the tests of its app import are in its '
+          'app, such as those of the fixture providers that the tests of '
+          'the analytics role and of the crash reporting role look at',
+          () async {
+        final (:app, problems: _) = await provider.failingApp.check();
+        final files = await _filesOfAppOf(provider);
+
+        for (final test in await brokenProviderAppTests()) {
+          if (!test.appliesTo(app!)) continue;
+          for (final (:path, :importer) in _appFilesImportedBy(test)) {
+            expect(
+              files.contains(path) ||
+                  File('${test.directory}/$path').existsSync(),
+              isTrue,
+              reason: '$importer imports $path, which the app of $id does '
+                  'not have: add the module that renders it to the app of '
+                  '$id in brokenProviders().',
+            );
+          }
         }
       });
     });

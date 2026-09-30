@@ -19,6 +19,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
+import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -46,8 +47,11 @@ final class BrokenProvider {
   final String bug;
 
   /// The other modules of the app but its app entry, in order: the fixture
-  /// modules that the tests of [failures] need, and no more, so that the
-  /// app is small.
+  /// modules that its tests need, and no more, so that the app is small.
+  /// Those are the modules that the tests of [failures] need, and those
+  /// whose files the other tests that apply to the app import, such as the
+  /// fixture providers of the analytics role and of the crash reporting
+  /// role, which the tests of these roles look at in an app with either.
   final List<ModuleId> app;
 
   /// The tests of the role that must fail on the bug in the app, each with
@@ -64,12 +68,15 @@ final class BrokenProvider {
         module,
       ];
 
-  /// The registry of the app: its app entry, [module] and the fixture
-  /// modules of [app], and then the other fixture providers that these have
-  /// variants for, which a registry must have.
+  /// The registry of the app: its app entry, [module] and the modules of
+  /// [app], and then the other providers that these have variants for,
+  /// which a registry must have, all from the registries of the fixtures
+  /// ([fixtureModules]) and of several providers ([severalProvidersModules]),
+  /// which has the service log of the fixtures.
   List<SmfModule> get modules {
     final fixtures = {
-      for (final other in fixtureModules()) other.descriptor.id: other,
+      for (final other in [...fixtureModules(), ...severalProvidersModules()])
+        other.descriptor.id: other,
     };
     final ofApp = [
       for (final other in fixtureModules())
@@ -112,6 +119,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
         ],
         failures: [
           MatrixExpectedFailure(
@@ -132,6 +141,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
           FakeScreenLogModule.id,
         ],
         failures: [
@@ -157,6 +168,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
           FakeScreenLogModule.id,
         ],
         failures: [
@@ -179,6 +192,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
         ],
         failures: [
           MatrixExpectedFailure(
@@ -201,6 +216,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
         ],
         failures: [
           MatrixExpectedFailure(
@@ -223,6 +240,8 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
           FakeScreenLogModule.id,
         ],
         failures: [
@@ -249,6 +268,26 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
     ];
+
+/// The app tests that the apps of the broken providers get: those of the
+/// apps of the fixture modules ([fixtureAppTests]) and those of the app of
+/// several providers ([severalProvidersAppTests]), such as the tests of the
+/// analytics role and of the crash reporting role, the tests of each
+/// directory once. Both have some, such as the mocks of the fixture
+/// providers and the tests of the DI role and of the events role, and those
+/// of the apps of the fixtures come first.
+Future<List<MatrixAppTest>> brokenProviderAppTests() async {
+  final tests = <String, MatrixAppTest>{};
+  for (final appTests in [
+    await fixtureAppTests(),
+    await severalProvidersAppTests(),
+  ]) {
+    for (final test in appTests.tests) {
+      tests.putIfAbsent(test.directory, () => test);
+    }
+  }
+  return [...tests.values];
+}
 
 /// The roles whose contract the app tests check but no broken provider
 /// breaks, each with the reason.

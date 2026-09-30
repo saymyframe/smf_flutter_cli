@@ -308,18 +308,18 @@ jobs:
   # A test of a role that passes whatever the provider of the role does
   # checks nothing. So each fixture provider of a role with one known bug
   # (brokenProviders of packages/smf_pipeline/fixture_registry/lib/
-  # broken_providers.dart) gets its app, the smallest that the tests of its
-  # role need, with the app tests of the fixtures that apply to it: the
-  # tests of the role must fail first on an expectation with the reason
-  # that the registry gives, and every other test of the app must pass. The
-  # tool checks those few apps only, so the job takes neither a shard nor
-  # an app of the plan.
+  # broken_providers.dart) gets its app, the smallest that its tests need,
+  # with the app tests of the fixtures and of the app of several providers
+  # that apply to it: the tests of the role must fail first on an
+  # expectation with the reason that the registry gives, and every other
+  # test of the app must pass. The tool checks those few apps only, so the
+  # job takes neither a shard nor an app of the plan.
   broken-providers:
     name: Generated apps (broken providers)
     if: inputs.broken_providers
     runs-on: ubuntu-latest
-    # About 10 minutes for its six small apps, one after another, each a
-    # minute or two; the timeout leaves room for a few more.
+    # Its small apps run one after another, each in about half a minute;
+    # the timeout leaves room for many more.
     timeout-minutes: 20
     env: *linux_env
 
