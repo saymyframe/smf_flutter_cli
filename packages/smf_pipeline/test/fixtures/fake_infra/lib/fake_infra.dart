@@ -354,8 +354,9 @@ final class FakeCrashModule extends SmfModule {
 
 /// A provider of the analytics role and of the crash reporting role whose
 /// services, created synchronously, note each call in lists that the tests
-/// of those roles read, and fail when a test says so: they throw as they
-/// are called, or return a future that fails.
+/// of those roles read, and misbehave when a test says so: their factories
+/// throw, they throw as they are called or return a future that fails, and
+/// the analytics service changes the map of parameters that it gets.
 ///
 /// The tests of a role that an app can have several providers of look at
 /// what reaches it, next to the other providers of the role, whose own

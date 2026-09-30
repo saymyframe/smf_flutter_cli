@@ -148,17 +148,18 @@ Future<MatrixAppTests> severalProvidersAppTests() async {
       ...(await smfAppTests()).tests,
       ...await _fixtureMocks(),
       // Each call of the analytics service of the app reaches every
-      // analytics service once, and a service that fails keeps no other
-      // from it.
+      // analytics service once. A service that fails, or that changes the
+      // parameters it gets, keeps no other from the call, and one whose
+      // factory or start fails is left out.
       MatrixAppTest(
         '$appTests/analytics_role',
         appliesTo: (app) => _withEveryModule(app, analyticsRole),
         roles: {analyticsRole},
       ),
       // Each call of the crash reporter of the app, and each error that
-      // nothing catches, reaches every crash reporter once, and a crash
+      // nothing catches, reaches every crash reporter once. A crash
       // reporter that fails keeps no other from it and is not reported to
-      // again.
+      // again, and one whose factory or start fails is left out.
       MatrixAppTest(
         '$appTests/crash_reporting_role',
         appliesTo: (app) => _withEveryModule(app, crashReportingRole),

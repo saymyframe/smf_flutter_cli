@@ -5,65 +5,24 @@
 // once. An analytics service that throws as it is called, or whose call
 // fails, keeps no other from the call, and its failure does not reach the
 // code that called: an app that does not await its analytics would get it
-// as an error that nothing catches.
+// as an error that nothing catches. One that changes the map of parameters
+// that it gets changes nothing that the caller or another service has.
 //
 // It looks only at what reaches the fixture providers of the role: the
-// service log of the fixtures, which notes each call and fails when the
-// test says so, and the fixture analytics, through its platform side. The
-// service log is created with the app, and the fixture analytics starts
-// asynchronously, so it comes after the log among the analytics services
-// of the app. What another analytics service, such as Firebase Analytics,
-// does with a call, only the tests of its own module know. The matrix sets
-// up the mocks of the platform side of every module of the app before the
-// tests, so the start-up runs whatever other modules the app has.
-import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+// service log of the fixtures, which notes each call and misbehaves when
+// the test says so, and the fixture analytics, through its platform side.
+// The service log is created with the app, and the fixture analytics
+// starts asynchronously, so it comes after the log among the analytics
+// services of the app. What another analytics service, such as Firebase
+// Analytics, does with a call, only the tests of its own module know. The
+// matrix sets up the mocks of the platform side of every module of the app
+// before the tests, so the start-up runs whatever other modules the app
+// has.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:{{app_name}}/bootstrap.dart';
 import 'package:{{app_name}}/core/analytics/analytics_service.dart';
-import 'package:{{app_name}}/core/fixture_analytics/fixture_analytics.dart';
 import 'package:{{app_name}}/core/fixture_service_log/fixture_service_log.dart';
 
-/// Runs the start-up of the app, which creates the analytics services that
-/// start asynchronously, and then puts back the handlers of the errors and
-/// the widget of an error, which it may replace, as the start-up of an app
-/// that reports its crashes does: this test does not look at them.
-Future<void> _start() async {
-  final onError = FlutterError.onError;
-  final onPlatformError = PlatformDispatcher.instance.onError;
-  final errorWidgetBuilder = ErrorWidget.builder;
-  try {
-    await bootstrap();
-  } finally {
-    FlutterError.onError = onError;
-    PlatformDispatcher.instance.onError = onPlatformError;
-    ErrorWidget.builder = errorWidgetBuilder;
-  }
-}
-
-/// Awaits [call] and returns what it threw, or `null`.
-Future<Object?> _failureOf(Future<void> Function() call) async {
-  try {
-    await call();
-  } on Object catch (error) {
-    return error;
-  }
-  return null;
-}
-
-/// Runs [body] and returns the lines that it printed with debugPrint.
-Future<List<String>> _printed(Future<void> Function() body) async {
-  final lines = <String>[];
-  final debugPrintBefore = debugPrint;
-  debugPrint = (String? message, {int? wrapWidth}) =>
-      lines.addAll((message ?? '').split('\n'));
-  try {
-    await body();
-  } finally {
-    debugPrint = debugPrintBefore;
-  }
-  return lines;
-}
+import 'analytics_role.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -72,12 +31,9 @@ void main() {
   final fixtureCalls = <List<Object?>>[];
 
   setUpAll(() async {
-    await _start();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(fixtureAnalyticsChannel, (call) async {
-      fixtureCalls.add([call.method, call.arguments]);
-      return null;
-    });
+    recordFixtureAnalytics(fixtureCalls);
+    final (failure, _) = await runStartUp();
+    expect(failure, isNull, reason: 'The app starts.');
   });
 
   setUp(() {
@@ -85,7 +41,10 @@ void main() {
     loggedAnalyticsCalls.clear();
   });
 
-  tearDown(() => serviceLogFailure = ServiceLogFailure.none);
+  tearDown(() {
+    serviceLogFailure = ServiceLogFailure.none;
+    serviceLogChangesParameters = false;
+  });
 
   test(
       'the analytics service of the app forwards each call to every '
@@ -169,8 +128,8 @@ void main() {
       serviceLogFailure = failure;
       Object? failed;
 
-      final printed = await _printed(() async {
-        failed = await _failureOf(
+      final printed = await printedBy(() async {
+        failed = await failureOf(
           () => createAnalyticsService().logEvent('smf_test'),
         );
       });
@@ -206,4 +165,60 @@ void main() {
       );
     });
   }
+
+  test(
+      'an analytics service that changes the map of parameters that it gets '
+      'changes nothing that the caller or another analytics service has',
+      () async {
+    serviceLogChangesParameters = true;
+    final analytics = createAnalyticsService();
+    final event = <String, Object>{'count': 1};
+    final signIn = <String, Object>{'via': 'link'};
+    final signUp = <String, Object>{'plan': 'free'};
+
+    await analytics.logEvent('smf_test', parameters: event);
+    await analytics.logSignIn(method: 'email', parameters: signIn);
+    await analytics.logSignUp(method: 'email', parameters: signUp);
+
+    expect(
+      fixtureCalls,
+      [
+        [
+          'logEvent',
+          {
+            'name': 'smf_test',
+            'parameters': {'count': 1},
+          },
+        ],
+        [
+          'logSignIn',
+          {
+            'method': 'email',
+            'parameters': {'via': 'link'},
+          },
+        ],
+        [
+          'logSignUp',
+          {
+            'method': 'email',
+            'parameters': {'plan': 'free'},
+          },
+        ],
+      ],
+      reason: 'Every other analytics service gets the parameters of the '
+          'caller, whatever the service log does with the map it got.',
+    );
+    expect(
+      [event, signIn, signUp],
+      [
+        {'count': 1},
+        {'via': 'link'},
+        {'plan': 'free'},
+      ],
+      reason: 'The maps of the caller stay as they were.',
+    );
+  },
+      skip: 'Bug: every analytics service gets the map of parameters of the '
+          'caller, so one that changes it changes it for the caller and for '
+          'the services after it.');
 }

@@ -963,8 +963,20 @@ enum ServiceLogFailure {
 /// fails whose platform side is broken.
 ServiceLogFailure serviceLogFailure = ServiceLogFailure.none;
 
+/// Whether the factories of the services of the log throw, as the factory
+/// of a service may whose SDK is not set up; a test sets it before the
+/// start-up of the app, which creates the services.
+bool serviceLogFactoriesThrow = false;
+
+/// Whether the analytics service of the log, once it noted a call, adds a
+/// parameter of its own, `service_log`, to the map of parameters that it
+/// got, as a service may that sends a value with every event; a test sets
+/// it.
+bool serviceLogChangesParameters = false;
+
 /// The calls that reached the analytics service of the log, in their order:
-/// each as the name of its method followed by its arguments.
+/// each as the name of its method followed by its arguments, with a copy of
+/// the map of parameters as the service got it.
 final List<List<Object?>> loggedAnalyticsCalls = [];
 
 /// The calls that reached the crash reporter of the log, in their order:
@@ -972,12 +984,26 @@ final List<List<Object?>> loggedAnalyticsCalls = [];
 /// or the details of the error of Flutter that it got.
 final List<List<Object?>> loggedCrashReporterCalls = [];
 
-/// Creates the analytics service of the log.
-AnalyticsService createServiceLogAnalytics() => const ServiceLogAnalytics();
+/// Creates the analytics service of the log, or throws if
+/// [serviceLogFactoriesThrow].
+AnalyticsService createServiceLogAnalytics() {
+  _throwIfAsked();
+  return const ServiceLogAnalytics();
+}
 
-/// Creates the crash reporter of the log.
-CrashReporter createServiceLogCrashReporter() =>
-    const ServiceLogCrashReporter();
+/// Creates the crash reporter of the log, or throws if
+/// [serviceLogFactoriesThrow].
+CrashReporter createServiceLogCrashReporter() {
+  _throwIfAsked();
+  return const ServiceLogCrashReporter();
+}
+
+/// Throws if [serviceLogFactoriesThrow].
+void _throwIfAsked() {
+  if (serviceLogFactoriesThrow) {
+    throw StateError('The service log could not be created.');
+  }
+}
 
 /// Analytics that notes each call in [loggedAnalyticsCalls], and then fails
 /// as [serviceLogFailure] says.
@@ -987,17 +1013,17 @@ final class ServiceLogAnalytics implements AnalyticsService {
 
   @override
   Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
-      _note(loggedAnalyticsCalls, ['logEvent', name, parameters]);
+      _note(loggedAnalyticsCalls, ['logEvent', name, _take(parameters)]);
 
   @override
   Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
-      _note(loggedAnalyticsCalls, ['logSignIn', method, parameters]);
+      _note(loggedAnalyticsCalls, ['logSignIn', method, _take(parameters)]);
 
   @override
   Future<void> logSignUp({
     required String method,
     Map<String, Object>? parameters,
-  }) => _note(loggedAnalyticsCalls, ['logSignUp', method, parameters]);
+  }) => _note(loggedAnalyticsCalls, ['logSignUp', method, _take(parameters)]);
 
   @override
   Future<void> setAnalyticsCollectionEnabled(bool enabled) =>
@@ -1041,6 +1067,16 @@ final class ServiceLogCrashReporter implements CrashReporter {
   @override
   Future<void> setUserId(String? userId) =>
       _note(loggedCrashReporterCalls, ['setUserId', userId]);
+}
+
+/// A copy of [parameters] as the service got them, for its notes. Then, if
+/// [serviceLogChangesParameters], the service adds `service_log` to
+/// [parameters].
+Map<String, Object>? _take(Map<String, Object>? parameters) {
+  if (parameters == null) return null;
+  final noted = Map.of(parameters);
+  if (serviceLogChangesParameters) parameters['service_log'] = true;
+  return noted;
 }
 
 /// Notes [call] in [calls], and then fails as [serviceLogFailure] says.
