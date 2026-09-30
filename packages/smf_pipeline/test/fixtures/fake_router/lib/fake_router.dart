@@ -113,7 +113,7 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
         // pipeline adds to the file that reads the variable.
         'screen': Fragment(
           cases.isEmpty
-              ? 'const FallbackStartScreen()'
+              ? 'const ${AppEntryRole.fallbackStartScreen.name}()'
               : 'switch (location) {\n${cases.join('\n')}\n}',
           imports: [...prefixes.values],
         ),
