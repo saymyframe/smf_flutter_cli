@@ -231,7 +231,7 @@ final class _RouteCode {
         '  // The navigator of each branch has observers of its own, so the',
         '  // observers of the root navigator are not told about its pages.',
         '  notifyRootObserver: false,',
-        '  builder: (context, state, shell) => AppShell(',
+        '  builder: (context, state, shell) => ${LayoutRole.appShell.name}(',
         '    destinations: const [',
         for (final route in destinations)
           '      ${GoRoutes._destinationOf(route.route.destination!)},',

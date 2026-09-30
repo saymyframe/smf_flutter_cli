@@ -6,7 +6,7 @@ It adds `get_it` to the app and generates `registerDependencies()`, which the ap
 
 ## Use with the SMF CLI
 
-`smf create` asks which module provides dependency injection, and offers none as well. When a module you chose needs dependency injection, `smf create` adds this one by itself. To choose it without the question:
+`smf create` asks which module provides dependency injection, and offers none as well. When a module you chose needs dependency injection, `smf create` adds this one by itself if it is the only module that provides it, and asks otherwise. To choose it without the question:
 
 ```bash
 smf create my_app -m get_it
