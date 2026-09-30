@@ -217,8 +217,5 @@ void main() {
       ],
       reason: 'The maps of the caller stay as they were.',
     );
-  },
-      skip: 'Bug: every analytics service gets the map of parameters of the '
-          'caller, so one that changes it changes it for the caller and for '
-          'the services after it.');
+  });
 }

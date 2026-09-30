@@ -20,7 +20,10 @@ const analyticsRole = AnalyticsRole._();
 /// called. That code may not await the call, and then the failure would be
 /// an error that nothing catches, which crash reporting reports. In debug
 /// mode the service prints the failure, so that an implementation that
-/// does not work shows in the console.
+/// does not work shows in the console. Each implementation gets a copy of
+/// its own of the map of parameters of a call, so that one that changes the
+/// map, such as to add a parameter of its own, changes nothing that the
+/// caller or another implementation has.
 ///
 /// A provider contributes its implementation as a [RoleImplementation]. It
 /// may also follow the router, with `when: {routerRole}`: log the screens

@@ -279,7 +279,9 @@ abstract interface class AnalyticsService {
 /// that called: that code may not await the call, and then nothing would
 /// catch the failure. In debug mode the failure is printed, so that an
 /// analytics service that does not work, such as one that is not set up,
-/// shows in the console.
+/// shows in the console. Each analytics service gets a copy of its own of
+/// the map of parameters, so that one that changes the map changes nothing
+/// that the caller or another analytics service has.
 AnalyticsService createAnalyticsService() => _analyticsService;
 
 final AnalyticsService _analyticsService = _AnalyticsServices(
@@ -297,12 +299,15 @@ final class _AnalyticsServices implements AnalyticsService {
 
   @override
   Future<void> logEvent(String name, {Map<String, Object>? parameters}) =>
-      _forAll((service) => service.logEvent(name, parameters: parameters));
+      _forAll(
+        (service) => service.logEvent(name, parameters: _copyOf(parameters)),
+      );
 
   @override
   Future<void> logSignIn({String? method, Map<String, Object>? parameters}) =>
       _forAll(
-        (service) => service.logSignIn(method: method, parameters: parameters),
+        (service) =>
+            service.logSignIn(method: method, parameters: _copyOf(parameters)),
       );
 
   @override
@@ -310,7 +315,8 @@ final class _AnalyticsServices implements AnalyticsService {
     required String method,
     Map<String, Object>? parameters,
   }) => _forAll(
-    (service) => service.logSignUp(method: method, parameters: parameters),
+    (service) =>
+        service.logSignUp(method: method, parameters: _copyOf(parameters)),
   );
 
   @override
@@ -337,6 +343,11 @@ final class _AnalyticsServices implements AnalyticsService {
       for (final service in _services) _callAlone(service, call),
     ]);
   }
+
+  /// A copy of [parameters] for one analytics service; see
+  /// [createAnalyticsService].
+  static Map<String, Object>? _copyOf(Map<String, Object>? parameters) =>
+      parameters == null ? null : Map.of(parameters);
 
   /// Calls [call] with [service], and keeps what it throws, or the error of
   /// its future, from the caller: in debug mode it prints it.
