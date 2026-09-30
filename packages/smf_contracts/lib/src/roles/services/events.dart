@@ -10,9 +10,15 @@ const eventsRole = EventsRole._();
 /// with:
 /// - `AppEvent`, the base class of every event;
 /// - the `CommunicationService` interface: `fire(event)` sends an event to
-///   everyone listening to its type through `on<T>()`;
+///   everyone listening to its type through `on<T>()` when it is fired. The
+///   stream of `on<T>()` has the events of type `T` fired after it is
+///   listened to: an event fired before, even after `on<T>()` returned the
+///   stream, is not in it;
 /// - `CommunicationService createCommunicationService()`, which returns the
 ///   provider's implementation.
+///
+/// Whether a listener of a type that an event extends or implements, such
+/// as a listener of `on<AppEvent>()`, gets the event is up to the provider.
 ///
 /// The provider contributes its implementation as a [RoleImplementation].
 /// With a DI container, the service is registered as a lazy singleton.

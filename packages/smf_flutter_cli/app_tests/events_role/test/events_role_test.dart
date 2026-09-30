@@ -2,17 +2,17 @@
 // role, whichever module provides it: through the communication service of
 // the role, every listener of a type gets each event of that type once, in
 // the order the events were fired; a listener of another type gets none of
-// them, and no error; an event fired before on<T>() is not in the stream
-// that on<T>() returns; and a cancelled subscription gets no more events.
+// them, and no error; the stream of on<T>() has only the events fired after
+// it is listened to, not one fired before, even after on<T>() was called;
+// and a cancelled subscription gets no more events.
 //
 // It knows only the role, and fires events of its own. The start-up of the
 // app runs first, as on a device, since a provider may open its service in
 // the start-up, with the mocks of the platform side of every module of the
 // app, which the matrix sets up before the tests of each test file
-// (flutter_test_config.dart). The role says that fire() sends an event to
-// everyone listening to its type; it does not say whether a listener of a
-// type that the event extends or implements gets it, so the test does not
-// look.
+// (flutter_test_config.dart). Whether a listener of a type that an event
+// extends or implements gets the event is up to the provider, as the role
+// says, so the test does not look.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -36,12 +36,15 @@ final class _Pong extends AppEvent {}
 /// app, which notes the events it gets and the errors of its stream, such as
 /// a cast error of an event of another type.
 final class _Listener<T extends AppEvent> {
-  _Listener() {
-    _subscription = createCommunicationService().on<T>().listen(
-          events.add,
-          onError: (Object error, StackTrace stackTrace) =>
-              errors.add('$error'),
-        );
+  /// Listens to the stream of `on<T>()` of the service of the app.
+  _Listener() : this.to(createCommunicationService().on<T>());
+
+  /// Listens to [stream], which `on<T>()` returned.
+  _Listener.to(Stream<T> stream) {
+    _subscription = stream.listen(
+      events.add,
+      onError: (Object error, StackTrace stackTrace) => errors.add('$error'),
+    );
   }
 
   late final StreamSubscription<T> _subscription;
@@ -197,7 +200,8 @@ void main() {
   );
 
   testWidgets(
-    'an event fired before on<T>() is not in the stream that it returns',
+    'an event fired before the stream of on<T>() is listened to is not in '
+    'it, even after on<T>() returned the stream',
     (tester) async {
       await _startUp(tester);
       late _Listener<_Ping> listener;
@@ -205,15 +209,19 @@ void main() {
       await _inRealTime(tester, 'firing events', () async {
         final service = createCommunicationService();
         service.fire(const _Ping(1));
-        listener = _Listener<_Ping>();
-        await _fire(const [_Ping(2)]);
+        final stream = service.on<_Ping>();
+        service.fire(const _Ping(2));
+        listener = _Listener<_Ping>.to(stream);
+        await _fire(const [_Ping(3)]);
         await listener.cancel();
       });
 
       expect(
         _ids(listener),
-        [2],
-        reason: 'on<T>() is the stream of the events sent from then on.',
+        [3],
+        reason: 'The stream of on<T>() has the events fired after it is '
+            'listened to: neither the event fired before on<T>() nor the one '
+            'fired after it, before the stream was listened to.',
       );
       expect(listener.errors, isEmpty);
     },

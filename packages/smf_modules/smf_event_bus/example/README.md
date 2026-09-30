@@ -12,14 +12,21 @@ The module adds event_bus to the `pubspec.yaml` of the app, and `lib/core/events
 ```dart
 /// Delivers [AppEvent]s between parts of the app that do not know each
 /// other.
+///
+/// Whether a listener of a type that an event extends or implements, such
+/// as a listener of `on<AppEvent>()`, gets the event is up to the provider
+/// of the service.
 abstract interface class CommunicationService {
-  /// Sends [event] to everyone listening to its type.
+  /// Sends [event] to everyone listening to its type when it is fired.
   void fire(AppEvent event);
 
-  /// The events of type [T] sent from now on.
+  /// The events of type [T] fired after the stream is listened to. An event
+  /// fired before, even after this call returned the stream, is not in it.
   Stream<T> on<T extends AppEvent>();
 }
 ```
+
+With `event_bus`, a listener of a type gets the events of the types that extend or implement it too, so `on<AppEvent>()` gets every event.
 
 An event is a subclass of `AppEvent`. One part of the app listens, another fires:
 

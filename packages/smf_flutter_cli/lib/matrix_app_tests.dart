@@ -103,9 +103,9 @@ Future<MatrixAppTests> smfAppTests() async {
 /// provides it, that [among] accepts, or all of them: once the start-up of
 /// the app ran, every listener of a type gets each event of that type once,
 /// in the order the events were fired; a listener of another type gets none
-/// of them, and no error; an event fired before `on<T>()` is not in the
-/// stream that it returns; and a cancelled subscription gets no more
-/// events.
+/// of them, and no error; an event fired before the stream of `on<T>()` is
+/// listened to is not in it, even after `on<T>()` returned the stream; and a
+/// cancelled subscription gets no more events.
 ///
 /// The test knows only the role and fires events of its own through
 /// `createCommunicationService()` of the role. The matrix of the fixtures
