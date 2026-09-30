@@ -89,6 +89,10 @@ Future<MatrixAppTests> smfAppTests() async {
       // The events of the apps with the events role, whichever module
       // provides it.
       await eventsRoleAppTest(),
+      // The routes of the apps with a router, whichever module provides
+      // it: the test starts the app and goes to each location that needs
+      // no values.
+      await routerWalkAppTest(),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
@@ -121,6 +125,101 @@ Future<MatrixAppTest> eventsRoleAppTest({
           (among?.call(app) ?? true),
       roles: {eventsRole},
     );
+
+/// The test of the router role that the CLI keeps in its
+/// `app_tests/router_walk`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them: it starts the app
+/// with `main()` and goes to each location of the app that needs no
+/// values, at most [routerWalkLimit], with `go()` of the navigator of the
+/// role. Each must show the page named after its route on top of the
+/// innermost navigator on the screen, and the screen of the route, without
+/// an `ErrorWidget` on the screen or an error that Flutter reports.
+///
+/// The test knows only the role. The matrix writes the locations of each
+/// app for it, from the routes of its router role, into [routerWalkFile],
+/// next to the walk in `integration_test/router_walk/walk.dart`, which a
+/// check that runs on a device can run too. The matrix of the fixtures
+/// runs it too, only in the apps with every module, which run other tests
+/// already.
+Future<MatrixAppTest> routerWalkAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/router_walk',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(routerRole) &&
+          (among?.call(app) ?? true),
+      generatedFiles: _walkedLocationsOf,
+      roles: {routerRole},
+    );
+
+/// The path in an app of the locations that the walk of the test of the
+/// router role goes to, which the matrix writes: `walkedLocations`, the
+/// locations of the routes that need no values, in the order of the routes
+/// of the app ([RouterFacade.routes]), each with the full name of its route
+/// ([FacadeRoute.fullName]), the location, created as `const` from its
+/// class of the navigation of the role, and the type of the screen that the
+/// route shows.
+const routerWalkFile = 'integration_test/router_walk/locations.dart';
+
+/// The most locations that the walk of the test of the router role goes
+/// to, the first of the app.
+const routerWalkLimit = 20;
+
+/// The file at [routerWalkFile] of [app], an app of the matrix with the
+/// router role, whose package is [packageName].
+///
+/// It imports the navigation of the role without a prefix, since the names
+/// of its classes differ from those of the file, and the file of every
+/// screen once, with a prefix of its own, `screen0`, `screen1`, ..., so
+/// that no name clashes.
+Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
+  final routes = [
+    for (final route
+        in routerRole.facadeOf(routerRole.hookInput(app.hook!)).routes)
+      if (!route.hasRequiredParams) route,
+  ].take(routerWalkLimit);
+  final screens = <String, String>{};
+  final locations = StringBuffer();
+  for (final route in routes) {
+    final screen = route.route.screen;
+    final prefix = screens.putIfAbsent(
+      screen.import.resolveUri(packageName),
+      () => 'screen${screens.length}',
+    );
+    locations
+      ..writeln('  (')
+      ..writeln('    route: ${SmfNames.dartString(route.fullName)},')
+      ..writeln('    location: ${route.locationClass}(),')
+      ..writeln('    screen: $prefix.${screen.className},')
+      ..writeln('  ),');
+  }
+  final navigation = ImportRef.app(
+    RouterRole.navigationFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  final imports = [
+    "import '$navigation';",
+    for (final MapEntry(key: uri, value: prefix) in screens.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  return {
+    routerWalkFile: '''
+// The locations of the app that need no values, at most $routerWalkLimit,
+// which the matrix of SMF writes from the data of the router role of the
+// app for the walk of its routes, walk.dart.
+${imports.join('\n')}
+
+/// A location of the app that needs no values: the full name of its route,
+/// the location, and the type of the screen that the route shows.
+typedef WalkedLocation = ({String route, AppLocation location, Type screen});
+
+/// The locations of the app that need no values, in the order of the
+/// routes of the app.
+const List<WalkedLocation> walkedLocations = [
+$locations];
+''',
+  };
+}
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
 /// for the apps with the role, whichever module provides it, whose modules

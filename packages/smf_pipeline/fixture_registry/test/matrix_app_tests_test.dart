@@ -60,6 +60,7 @@ void main() {
     expect(named('di_role').roles, {diRole});
     expect(named('di_disposal').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('router_walk').roles, {routerRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -116,15 +117,21 @@ void main() {
   });
 
   test(
-      'the test of the events role applies only to the apps with every '
-      'module, which have the role and run flutter test for other tests '
-      'already', () {
+      'the tests of the events role and of the walk of the routes apply '
+      'only to the apps with every module, which have the roles and run '
+      'flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
     ];
 
     expect(appsOf(named('events_role')), [
+      for (final app in everyModule) app.name,
+    ]);
+    // So does the walk of the routes, which goes to the start screens of
+    // both fixture features, destinations of the main navigation, with
+    // each router and each layout.
+    expect(appsOf(named('router_walk')), [
       for (final app in everyModule) app.name,
     ]);
     // One for each combination of the providers of the roles that take one.
@@ -185,6 +192,7 @@ void main() {
           'screen_views',
           'di_role',
           'events_role',
+          'router_walk',
           'fake_crash',
           'fake_analytics',
           'analytics_role',

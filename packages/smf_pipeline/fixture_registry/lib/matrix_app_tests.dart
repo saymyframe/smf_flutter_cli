@@ -129,6 +129,11 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // provides it, the test that the CLI keeps: only in the apps with
       // every module, which run flutter test for other tests already.
       await eventsRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The routes of the apps with a router, whichever module provides it,
+      // the test that the CLI keeps: only in the apps with every module,
+      // which run flutter test for other tests already, and whose layout
+      // shows the destinations of both fixture features.
+      await routerWalkAppTest(among: (app) => app.everyModuleWith != null),
     ],
     testedRoles: {routerRole, layoutRole, diRole, eventsRole},
   );

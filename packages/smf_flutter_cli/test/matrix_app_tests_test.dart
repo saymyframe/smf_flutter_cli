@@ -44,8 +44,157 @@ void main() {
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('router_walk').roles, {routerRole});
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
+  });
+
+  test(
+      'the walk of the routes applies to the apps with the router role, or '
+      'to those of them that it is given, and goes to the locations of the '
+      'app that need no values', () async {
+    final walk = named('router_walk');
+
+    expect(
+      [
+        for (final app in apps)
+          if (walk.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(routerRole)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (walk.appliesTo(app)) app.name,
+      ],
+      containsAll(['home', 'every module (bloc)', 'every module (riverpod)']),
+    );
+    final everyModule = await routerWalkAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (everyModule.appliesTo(app)) app.name,
+      ],
+      ['every module (bloc)', 'every module (riverpod)'],
+    );
+
+    // The locations of an app with home, whose route starts the app.
+    final home = apps.singleWhere((app) => app.name == 'home');
+    final files = walk.generatedFiles!(home, 'my_app');
+    expect(files.keys, [routerWalkFile]);
+    final (:index, :errors) = DartFileIndexer.parse(
+      routerWalkFile,
+      files[routerWalkFile]!,
+    );
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} ${import.prefix}'],
+      [
+        'package:my_app/core/router/navigation.dart null',
+        'package:my_app/features/home/home_screen.dart screen0',
+      ],
+    );
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      ['WalkedLocation', 'walkedLocations'],
+    );
+    expect(
+      files[routerWalkFile],
+      contains(
+        '  (\n'
+        "    route: 'home.home',\n"
+        '    location: HomeHomeLocation(),\n'
+        '    screen: screen0.HomeScreen,\n'
+        '  ),\n',
+      ),
+    );
+  });
+
+  test(
+      'the walk of the routes goes to the first $routerWalkLimit locations '
+      'that need no values, children and optional values included, with '
+      'the screen of each', () {
+    const file = ImportRef.app('features/many/many_screens.dart');
+    const other = ImportRef.app('features/many/other_screen.dart');
+    Route route(int index, {List<Route> children = const []}) => Route(
+          '/r$index',
+          name: 'r$index',
+          screen: ScreenRef('Screen$index', import: file),
+          children: children,
+        );
+    final app = MatrixApp(
+      'many',
+      const [ModuleId('many')],
+      hook: RoleHookRequest(
+        data: [
+          routerRole
+              .data(
+                RoutesData([
+                  // A route that needs a value, and one whose value may be
+                  // left out, with a child that needs none.
+                  const Route(
+                    '/item/:id',
+                    name: 'item',
+                    screen: ScreenRef('ItemScreen', import: other),
+                    params: [RouteParam.path('id', type: int)],
+                  ),
+                  const Route(
+                    '/search',
+                    name: 'search',
+                    screen: ScreenRef('SearchScreen', import: other),
+                    params: [
+                      RouteParam.query('q', type: String, optional: true),
+                    ],
+                    children: [
+                      Route(
+                        'filters',
+                        name: 'filters',
+                        screen: ScreenRef('FiltersScreen', import: other),
+                      ),
+                    ],
+                  ),
+                  for (var index = 0; index < routerWalkLimit; index++)
+                    route(index),
+                ]),
+              )
+              .withOrigin(const ModuleOrigin(ModuleId('many'))),
+        ],
+        presentRoles: {routerRole},
+        context: ContractHarness.defaultContext,
+      ),
+    );
+
+    final text =
+        named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+
+    expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
+    expect(
+      [
+        for (final match in RegExp(r"route: '([\w.]+)'").allMatches(text))
+          match[1],
+      ],
+      [
+        'many.search',
+        'many.filters',
+        for (var index = 0; index < routerWalkLimit - 2; index++)
+          'many.r$index',
+      ],
+    );
+    expect(text, contains('location: ManySearchLocation(),'));
+    expect(text, contains('screen: screen0.FiltersScreen,'));
+    expect(text, contains('screen: screen1.Screen0,'));
+    expect(
+      text,
+      contains(
+        "import 'package:my_app/features/many/other_screen.dart' as "
+        'screen0;',
+      ),
+    );
   });
 
   test(
