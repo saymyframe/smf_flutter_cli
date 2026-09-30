@@ -866,6 +866,60 @@ void main() {
       expect(issues.first.origin, const ModuleOrigin(ModuleId('auth')));
       expect(issues.first.path, path);
     });
+
+    test('tells a factory its dependencies and a dispose function its service',
+        () {
+      final issues = check(
+        'AuthService createAuth() => AuthService();\n'
+        'void close() {}\n'
+        'void shut(Client client, Client other) {}\n',
+        const [
+          DiRegistration(
+            type: service,
+            create: FactoryRef(
+              'createAuth',
+              import: file,
+              deps: [ServiceRef(client)],
+            ),
+            dispose: FunctionRef('close', import: file),
+          ),
+          DiRegistration(
+            type: client,
+            create: FactoryRef('createClient', import: file),
+            dispose: FunctionRef('shut', import: file),
+          ),
+          DiRegistration(
+            type: TypeRef('Session', import: file),
+            create: FactoryRef(
+              'createSession',
+              import: ImportRef('package:auth/auth.dart'),
+            ),
+            dispose: FunctionRef('release', import: file),
+          ),
+        ],
+      );
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          contains('createAuth() in $path must accept 1 positional'),
+          contains('close() in $path must accept 1 positional'),
+          contains('does not declare function createClient()'),
+          contains('shut() in $path must not require more than 1 positional'),
+          contains('does not declare function release()'),
+        ],
+      );
+      const ofFactory =
+          'The pipeline calls it with the dependencies of the registration.';
+      final ofDispose = allOf(
+        contains('with the service'),
+        isNot(contains('dependencies')),
+      );
+      expect(
+        [for (final issue in issues) issue.hint],
+        [ofFactory, ofDispose, ofFactory, ofDispose, ofDispose],
+      );
+    });
   });
 }
 
