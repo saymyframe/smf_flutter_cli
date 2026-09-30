@@ -1,6 +1,6 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
-import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
+import 'package:smf_contribution_engine/src/utils/bodies.dart';
 import 'package:smf_contribution_engine/src/utils/statement_inserts.dart';
 
 /// Inserts statements into the body of a method, after the statements that
@@ -53,24 +53,7 @@ class InsertIntoMethodInClass extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetClass =
-        unit.declarations.whereType<ClassDeclaration>().firstWhere(
-              (c) => c.name.lexeme == className,
-              orElse: () => throw Exception('Class $className not found'),
-            );
-
-    final targetMethod = targetClass.members
-        .whereType<MethodDeclaration>()
-        .firstWhere(
-          (m) => m.name.lexeme == method,
-          orElse: () =>
-              throw Exception('Method $method not found in class $className'),
-        );
-
-    final body = targetMethod.body;
-    if (body is! BlockFunctionBody) {
-      throw Exception('Method body is not a block');
-    }
+    final body = methodBodyIn(unit, className: className, method: method);
 
     final updated = insertStatements(
       original,

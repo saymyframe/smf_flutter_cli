@@ -36,10 +36,10 @@ class ScopedWidgetVisitor extends GeneralizingAstVisitor<void> {
 
   @override
   void visitClassDeclaration(ClassDeclaration node) {
-    if (className != null && node.name.lexeme != className) return;
+    if (className != null && node.namePart.typeName.lexeme != className) return;
 
     if (methodName != null) {
-      final methods = node.members.whereType<MethodDeclaration>();
+      final methods = node.body.members.whereType<MethodDeclaration>();
       for (final method in methods) {
         if (method.name.lexeme == methodName) {
           method.visitChildren(_matcher);

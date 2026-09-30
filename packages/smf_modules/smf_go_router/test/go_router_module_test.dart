@@ -51,6 +51,7 @@ class _GoAppRouter {
     .declarations
     .whereType<ClassDeclaration>()
     .single
+    .body
     .members
     .single
     .toSource();
@@ -80,6 +81,7 @@ class _GoAppRouter {
     .declarations
     .whereType<ClassDeclaration>()
     .single
+    .body
     .members
     .single
     .toSource();
@@ -155,7 +157,7 @@ class _GoAppRouter {
   }
 }
 ''',
-  ).unit.declarations.whereType<ClassDeclaration>().single.members)
+  ).unit.declarations.whereType<ClassDeclaration>().single.body.members)
     _nameOf(member)!: member.toSource(),
 };
 
@@ -190,9 +192,9 @@ MethodInvocation _goRouterOf(CompilationUnit unit) {
 /// The named argument [label] of [call], or `null`.
 Expression? _argument(MethodInvocation call, String label) => [
       for (final argument in call.argumentList.arguments)
-        if (argument case NamedExpression(:final name, :final expression)
-            when name.label.name == label)
-          expression,
+        if (argument case NamedArgument(:final name, :final argumentExpression)
+            when name.lexeme == label)
+          argumentExpression,
     ].firstOrNull;
 
 /// A `GoRoute(...)` of the generated code.
@@ -223,8 +225,8 @@ final class _GoRoute {
     };
     return {
       for (final argument in arguments.arguments)
-        if (argument case NamedExpression(:final name, :final expression))
-          name.label.name: expression.toSource(),
+        if (argument case NamedArgument(:final name, :final argumentExpression))
+          name.lexeme: argumentExpression.toSource(),
     };
   }
 
@@ -331,7 +333,7 @@ String? _nameOf(ClassMember member) => switch (member) {
 /// pushes complete and tells the listeners of the screen.
 void _expectPagesChanged(CompilationUnit unit) {
   final router = _routerClassOf(unit);
-  final config = router.members
+  final config = router.body.members
       .whereType<FieldDeclaration>()
       .singleWhere((field) => _nameOf(field) == 'config')
       .fields
@@ -341,12 +343,14 @@ void _expectPagesChanged(CompilationUnit unit) {
   expect(config, isA<CascadeExpression>());
   config as CascadeExpression;
   expect(config.target, _goRouterOf(unit));
+  // The sections after the target, as written: analyzer 14 prints a section
+  // such as `..a.b()` without its `..`, and the cascade with it.
   expect(
-    config.cascadeSections.map((section) => section.toSource()),
-    ['..routerDelegate.addListener(_pagesChanged)'],
+    config.toSource().substring(config.target.toSource().length),
+    '..routerDelegate.addListener(_pagesChanged)',
   );
   expect(
-    router.members
+    router.body.members
         .singleWhere((member) => _nameOf(member) == '_pagesChanged')
         .toSource(),
     _expectedPushMembers['_pagesChanged'],
@@ -361,7 +365,8 @@ void _expectPagesChanged(CompilationUnit unit) {
 void _expectPushResults(CompilationUnit unit) {
   final router = _routerClassOf(unit);
   final members = {
-    for (final member in router.members) _nameOf(member): member.toSource(),
+    for (final member in router.body.members)
+      _nameOf(member): member.toSource(),
   };
   for (final MapEntry(key: name, value: source)
       in _expectedPushMembers.entries) {
@@ -382,7 +387,7 @@ void _expectPushResults(CompilationUnit unit) {
 void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
   final router = _routerClassOf(unit);
   final fields = {
-    for (final field in router.members.whereType<FieldDeclaration>())
+    for (final field in router.body.members.whereType<FieldDeclaration>())
       field.fields.variables.single.name.lexeme: field.fields,
   };
 
@@ -391,7 +396,7 @@ void _expectScreenListeners(CompilationUnit unit, List<String> listeners) {
   _expectPagesChanged(unit);
   expect(fields['_screen']!.type!.toSource(), '(LocalKey?, String)?');
   expect(
-    router.members
+    router.body.members
         .whereType<MethodDeclaration>()
         .singleWhere((method) => method.name.lexeme == '_showScreen')
         .toSource(),
@@ -445,17 +450,18 @@ ClassDeclaration _routerClassOf(CompilationUnit unit) {
       .singleWhere((function) => function.name.lexeme == 'createAppRouter');
   final body = factory.functionExpression.body as ExpressionFunctionBody;
   final created = (body.expression as MethodInvocation).methodName.name;
-  return unit.declarations
-      .whereType<ClassDeclaration>()
-      .singleWhere((declaration) => declaration.name.lexeme == created);
+  return unit.declarations.whereType<ClassDeclaration>().singleWhere(
+        (declaration) => declaration.namePart.typeName.lexeme == created,
+      );
 }
 
 /// The source of the body of the method [name] of [declaration].
-String _bodyOf(ClassDeclaration declaration, String name) => declaration.members
-    .whereType<MethodDeclaration>()
-    .singleWhere((method) => method.name.lexeme == name)
-    .body
-    .toSource();
+String _bodyOf(ClassDeclaration declaration, String name) =>
+    declaration.body.members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == name)
+        .body
+        .toSource();
 
 /// The files of the provider of the app entry in the app of [result] that
 /// import the file of the router role with `appRouter`: where the app runs
@@ -878,10 +884,12 @@ void main() {
         () {
       final router = _routerClassOf(unit);
 
-      expect(router.name.lexeme, isNot('AppRouter'));
-      final config = router.members.whereType<FieldDeclaration>().singleWhere(
-            (field) => field.fields.variables.single.name.lexeme == 'config',
-          );
+      expect(router.namePart.typeName.lexeme, isNot('AppRouter'));
+      final config =
+          router.body.members.whereType<FieldDeclaration>().singleWhere(
+                (field) =>
+                    field.fields.variables.single.name.lexeme == 'config',
+              );
       expect(config.fields.isLate, isTrue);
       expect(config.fields.isFinal, isTrue);
       expect(_bodyOf(router, 'navigatorOf'), '=> this;');
@@ -1054,7 +1062,7 @@ void main() {
         'config.pushReplacement<Object?>(location.path);}',
       );
       expect(
-        router.members
+        router.body.members
             .whereType<MethodDeclaration>()
             .singleWhere(
               (method) => method.name.lexeme == '_checkMainNavigation',

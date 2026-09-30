@@ -278,11 +278,12 @@ List<String> _reportersOf(RenderedApp app) {
 
 /// The methods of the class [name] in [unit], by name.
 Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
-  final declaration = unit.declarations
-      .whereType<ClassDeclaration>()
-      .singleWhere((declaration) => declaration.name.lexeme == name);
+  final declaration =
+      unit.declarations.whereType<ClassDeclaration>().singleWhere(
+            (declaration) => declaration.namePart.typeName.lexeme == name,
+          );
   return {
-    for (final member in declaration.members)
+    for (final member in declaration.body.members)
       if (member is MethodDeclaration) member.name.lexeme: member,
   };
 }
@@ -295,14 +296,14 @@ MethodInvocation _callOf(MethodDeclaration method) =>
 /// The named arguments of [call], as written, by name.
 Map<String, String> _namedOf(MethodInvocation call) => {
       for (final argument in call.argumentList.arguments)
-        if (argument is NamedExpression)
-          argument.name.label.name: '${argument.expression}',
+        if (argument is NamedArgument)
+          argument.name.lexeme: '${argument.argumentExpression}',
     };
 
 /// The positional arguments of [call], as written.
 List<String> _positionalOf(MethodInvocation call) => [
       for (final argument in call.argumentList.arguments)
-        if (argument is! NamedExpression) '$argument',
+        if (argument is! NamedArgument) '$argument',
     ];
 
 /// Collects the names of the methods and functions that a unit invokes.

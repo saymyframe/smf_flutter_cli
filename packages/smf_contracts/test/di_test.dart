@@ -528,7 +528,7 @@ void main() {
           parseString(content: rendered.files[DiRole.serviceLocatorFile]!).unit;
       final locator = unit.declarations
           .whereType<ClassDeclaration>()
-          .singleWhere((c) => c.name.lexeme == 'ServiceLocator');
+          .singleWhere((c) => c.namePart.typeName.lexeme == 'ServiceLocator');
 
       expect(
         [
@@ -540,7 +540,8 @@ void main() {
       );
       expect(
         [
-          for (final method in locator.members.whereType<MethodDeclaration>())
+          for (final method
+              in locator.body.members.whereType<MethodDeclaration>())
             '${method.name.lexeme}${method.parameters}',
         ],
         ['resolve({String? instanceName})'],

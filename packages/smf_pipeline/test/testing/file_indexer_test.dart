@@ -134,6 +134,21 @@ void main() {
     );
   });
 
+  test('a function-typed parameter has the whole parameter as its type', () {
+    final listen = DartFileIndexer.index('lib/listen.dart', '''
+void listen(void onData<T>(T value)?, onDone(), [int retry(int n) = once]) {}
+''').declaration('listen')!;
+    expect(
+      [for (final p in listen.parameters) '${p.name}: ${p.type}'],
+      [
+        'onData: void onData<T>(T value)?',
+        'onDone: onDone()',
+        // Without its default value.
+        'retry: int retry(int n)',
+      ],
+    );
+  });
+
   test('indexes constructors and their parameters', () {
     final screen = index.declaration('HomeScreen')!;
     expect(
@@ -162,6 +177,43 @@ void main() {
     );
     expect(meters.unnamedConstructor!.parameters.single.type, 'double');
     expect(index.declaration('Mode')!.constructors, isEmpty);
+  });
+
+  test('indexes the primary constructors of classes and enums', () {
+    // Dart 3.13 lets a class or an enum declare its constructor after its
+    // name, as an extension type does.
+    final index = DartFileIndexer.index('lib/point.dart', '''
+class const Point(final int x, [int y = 0]) {
+  const Point.origin() : this(0);
+}
+
+class Line.between(this.from) {
+  final Point from;
+}
+
+enum Tone(final String name) { soft('soft') }
+''');
+
+    final point = index.declaration('Point')!;
+    expect(
+      [for (final c in point.constructors) '${c.name}|${c.isConst}'],
+      ['|true', 'origin|true'],
+    );
+    expect(
+      [
+        for (final p in point.unnamedConstructor!.parameters)
+          '${p.name} ${p.kind.name} ${p.type}',
+      ],
+      ['x requiredPositional int', 'y optionalPositional int'],
+    );
+    final line = index.declaration('Line')!;
+    expect(line.unnamedConstructor, isNull);
+    // this.from takes the type of its field.
+    expect(line.constructors.single.parameters.single.type, 'Point');
+    expect(
+      index.declaration('Tone')!.unnamedConstructor!.parameters.single.type,
+      'String',
+    );
   });
 
   test('indexes the members that a class declares', () {

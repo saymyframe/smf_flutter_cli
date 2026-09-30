@@ -438,12 +438,13 @@ void main() {
         'ServiceLocator createServiceLocator() => '
         '_GetItServiceLocator(GetIt.instance);',
       );
-      final locator =
-          unit.declarations.whereType<ClassDeclaration>().singleWhere(
-                (declaration) =>
-                    declaration.name.lexeme == '_GetItServiceLocator',
-              );
-      final methods = locator.members.whereType<MethodDeclaration>();
+      final locator = unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere(
+            (declaration) =>
+                declaration.namePart.typeName.lexeme == '_GetItServiceLocator',
+          );
+      final methods = locator.body.members.whereType<MethodDeclaration>();
       expect(
         [
           for (final method in methods)

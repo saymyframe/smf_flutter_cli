@@ -210,9 +210,9 @@ void main() {
         'shows a bar with a tab for each destination below the screen of the '
         'selected one', () {
       final unit = _parsed(app, _shell);
-      final shell = unit.declarations
-          .whereType<ClassDeclaration>()
-          .singleWhere((declaration) => declaration.name.lexeme == 'AppShell');
+      final shell = unit.declarations.whereType<ClassDeclaration>().singleWhere(
+            (declaration) => declaration.namePart.typeName.lexeme == 'AppShell',
+          );
 
       expect(
         unit.directives.map((directive) => directive.toSource()),
@@ -224,7 +224,7 @@ void main() {
       expect(unit.declarations, [shell]);
       expect(shell.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
       final constructor =
-          shell.members.whereType<ConstructorDeclaration>().single;
+          shell.body.members.whereType<ConstructorDeclaration>().single;
       expect(constructor.name, isNull);
       expect(constructor.constKeyword, isNotNull);
       expect(
@@ -234,7 +234,7 @@ void main() {
       );
       expect(
         {
-          for (final field in shell.members.whereType<FieldDeclaration>())
+          for (final field in shell.body.members.whereType<FieldDeclaration>())
             field.fields.variables.single.name.lexeme:
                 field.fields.type!.toSource(),
         },
@@ -245,7 +245,7 @@ void main() {
           'body': 'Widget',
         },
       );
-      final build = shell.members
+      final build = shell.body.members
           .whereType<MethodDeclaration>()
           .singleWhere((method) => method.name.lexeme == 'build');
       expect(

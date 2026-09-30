@@ -84,12 +84,12 @@ Iterable<IndexedDeclaration> _declarations(
   final annotations = _annotations(member.metadata);
   final offset = member.offset;
   switch (member) {
-    case ClassDeclaration():
+    case ClassDeclaration(:final namePart, :final body):
       yield IndexedDeclaration(
-        name: member.name.lexeme,
+        name: namePart.typeName.lexeme,
         kind: DeclarationKind.classType,
-        constructors: _constructors(member.members),
-        members: _members(member.members),
+        constructors: _constructors(namePart, body.members),
+        members: _members(body.members),
         annotations: annotations,
         offset: offset,
       );
@@ -100,33 +100,19 @@ Iterable<IndexedDeclaration> _declarations(
         annotations: annotations,
         offset: offset,
       );
-    case EnumDeclaration():
+    case EnumDeclaration(:final namePart, :final body):
       yield IndexedDeclaration(
-        name: member.name.lexeme,
+        name: namePart.typeName.lexeme,
         kind: DeclarationKind.enumType,
-        constructors: _constructors(member.members),
+        constructors: _constructors(namePart, body.members),
         annotations: annotations,
         offset: offset,
       );
-    case ExtensionTypeDeclaration(:final representation):
+    case ExtensionTypeDeclaration(:final namePart, :final body):
       yield IndexedDeclaration(
-        name: member.name.lexeme,
+        name: namePart.typeName.lexeme,
         kind: DeclarationKind.extensionType,
-        constructors: [
-          IndexedConstructor(
-            name: representation.constructorName?.name.lexeme ?? '',
-            parameters: [
-              IndexedParameter(
-                representation.fieldName.lexeme,
-                kind: ParameterKind.requiredPositional,
-                type: representation.fieldType.toSource(),
-                annotations: _annotations(representation.fieldMetadata),
-              ),
-            ],
-            isConst: member.constKeyword != null,
-          ),
-          ..._constructors(member.members),
-        ],
+        constructors: _constructors(namePart, body.members),
         annotations: annotations,
         offset: offset,
       );
@@ -185,7 +171,14 @@ DeclarationKind _functionKind(FunctionDeclaration function) {
   return DeclarationKind.function;
 }
 
-List<IndexedConstructor> _constructors(NodeList<ClassMember> members) {
+/// The constructors of a class, enum or extension type: the primary
+/// constructor that [namePart] declares, if it does, such as that of an
+/// extension type, whose one parameter is its representation, and then
+/// those among its [members].
+List<IndexedConstructor> _constructors(
+  ClassNamePart namePart,
+  NodeList<ClassMember> members,
+) {
   // The types of the fields, for initializing formals such as `this.tab`.
   final fields = <String, String>{};
   for (final member in members) {
@@ -198,6 +191,17 @@ List<IndexedConstructor> _constructors(NodeList<ClassMember> members) {
     }
   }
   return [
+    if (namePart
+        case PrimaryConstructorDeclaration(
+          :final constructorName,
+          :final formalParameters,
+          :final constKeyword,
+        ))
+      IndexedConstructor(
+        name: constructorName?.name.lexeme ?? '',
+        parameters: _parameters(formalParameters, fields),
+        isConst: constKeyword != null,
+      ),
     for (final member in members)
       if (member is ConstructorDeclaration)
         IndexedConstructor(
@@ -258,19 +262,25 @@ ParameterKind _parameterKind(FormalParameter parameter) {
   return ParameterKind.optionalNamed;
 }
 
-String? _typeOf(FormalParameter parameter, Map<String, String> fields) {
-  final normal = switch (parameter) {
-    DefaultFormalParameter(:final parameter) => parameter,
-    NormalFormalParameter() => parameter,
-  };
-  return switch (normal) {
-    SimpleFormalParameter(:final type) => type?.toSource(),
-    FieldFormalParameter(:final type, :final name) =>
-      type?.toSource() ?? fields[name.lexeme],
-    SuperFormalParameter(:final type) => type?.toSource(),
-    FunctionTypedFormalParameter() => normal.toSource(),
-  };
-}
+/// The type of [parameter] as written, without its default value: that of
+/// its field for an initializing formal without one, and the whole
+/// parameter for a function-typed one, such as `void callback(int value)`.
+String? _typeOf(FormalParameter parameter, Map<String, String> fields) =>
+    switch (parameter) {
+      FieldFormalParameter(:final type, :final name) =>
+        type?.toSource() ?? fields[name.lexeme],
+      SuperFormalParameter(:final type) => type?.toSource(),
+      RegularFormalParameter(
+        :final type,
+        :final name?,
+        :final functionTypedSuffix?,
+      ) =>
+        [
+          if (type != null) type.toSource(),
+          '${name.lexeme}${functionTypedSuffix.toSource()}',
+        ].join(' '),
+      RegularFormalParameter(:final type) => type?.toSource(),
+    };
 
 /// The name of the top-level declaration that contains [node], if any.
 String? _enclosing(AstNode node) {
@@ -278,7 +288,14 @@ String? _enclosing(AstNode node) {
     final parent = current.parent;
     if (parent is! CompilationUnit) continue;
     return switch (current) {
-      NamedCompilationUnitMember(:final name) => name.lexeme,
+      ClassDeclaration(:final namePart) ||
+      EnumDeclaration(:final namePart) ||
+      ExtensionTypeDeclaration(:final namePart) =>
+        namePart.typeName.lexeme,
+      MixinDeclaration(:final name) ||
+      FunctionDeclaration(:final name) ||
+      TypeAlias(:final name) =>
+        name.lexeme,
       ExtensionDeclaration(:final name) => name?.lexeme,
       TopLevelVariableDeclaration(:final variables) =>
         _variableOf(variables, node),
@@ -327,7 +344,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
 
   List<String> _namedArguments(ArgumentList list) => [
         for (final argument in list.arguments)
-          if (argument is NamedExpression) argument.name.label.name,
+          if (argument is NamedArgument) argument.name.lexeme,
       ];
 
   @override
@@ -404,7 +421,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitSimpleIdentifier(SimpleIdentifier node) {
-    if (_named.contains(node) || _isDeclarationOrLabel(node)) return;
+    if (_named.contains(node) || _isNotAUse(node)) return;
     references.add(
       IndexedReference(
         node.name,
@@ -415,12 +432,14 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
   }
 
   /// Whether [node] is not a use of a name: a part of the declaration of a
-  /// constructor or of a call to one, the label of a named argument, a name
-  /// in a combinator, a part of a directive, or a part of an annotation,
-  /// which the index keeps as text.
-  static bool _isDeclarationOrLabel(SimpleIdentifier node) {
+  /// constructor or of a call to one, a name in a combinator, a part of a
+  /// directive, or a part of an annotation, which the index keeps as text.
+  /// The labels of named arguments, of the named fields of records and of
+  /// statements are tokens rather than identifiers, so the visitor meets
+  /// none of them.
+  static bool _isNotAUse(SimpleIdentifier node) {
     final parent = node.parent;
-    if ((parent is ConstructorDeclaration && parent.returnType == node) ||
+    if ((parent is ConstructorDeclaration && parent.typeName == node) ||
         (parent is ConstructorFieldInitializer && parent.fieldName == node) ||
         parent is ConstructorName ||
         parent is SuperConstructorInvocation ||
@@ -428,8 +447,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
       return true;
     }
     for (var current = node.parent; current != null; current = current.parent) {
-      if (current is Label ||
-          current is Combinator ||
+      if (current is Combinator ||
           current is Directive ||
           current is Annotation) {
         return true;

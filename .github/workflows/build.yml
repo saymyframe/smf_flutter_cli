@@ -45,16 +45,10 @@ jobs:
         with:
           sdk: ${{ env.DART_SDK }}
 
-      - name: Cache pub packages
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-dart-${{ env.DART_SDK }}-pub-
-
-      # Resolves the workspace and re-bundles every brick
+      # Resolves the workspace and re-bundles every brick. pub downloads the
+      # packages fast, so no job keeps a cache of them, which would take a
+      # large part of the 10 GB of caches of the repository, and a copy for
+      # each change of a pubspec.
       - name: Bootstrap workspace
         run: melos bootstrap
 
@@ -131,6 +125,14 @@ jobs:
       # Firebase project, such as those of a new provider in the run of its
       # pull request into main; the nightly run finds them.
       register_firebase_apps: true
+      # Only the runs on main, of pushes and by hand, save the caches of
+      # Gradle and of Swift packages. A run of a pull request, or a run by
+      # hand on another branch, would save them for its own ref, where only
+      # its own later runs find them, so they would only duplicate those of
+      # main in the 10 GB of caches of the repository; it restores those of
+      # main. tools/workflow_apps_test.dart checks this.
+      save_gradle_cache: ${{ github.ref == 'refs/heads/main' }}
+      save_swiftpm_cache: ${{ github.ref == 'refs/heads/main' }}
       # The tests of the roles fail on the providers with a known bug, so a
       # change that makes a test of a role pass whatever the provider does
       # fails here.

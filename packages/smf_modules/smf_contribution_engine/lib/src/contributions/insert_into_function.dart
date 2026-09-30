@@ -1,6 +1,6 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
-import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/src/contribution.dart';
+import 'package:smf_contribution_engine/src/utils/bodies.dart';
 import 'package:smf_contribution_engine/src/utils/statement_inserts.dart';
 
 /// Inserts statements into the body of a top-level function, next to the
@@ -56,16 +56,7 @@ class InsertIntoFunction extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetFunction =
-        unit.declarations.whereType<FunctionDeclaration>().firstWhere(
-              (f) => f.name.lexeme == function,
-              orElse: () => throw Exception('Function $function not found'),
-            );
-
-    final body = targetFunction.functionExpression.body;
-    if (body is! BlockFunctionBody) {
-      throw Exception('Function body is not a block');
-    }
+    final body = functionBodyIn(unit, function);
 
     final updated = insertStatements(
       original,

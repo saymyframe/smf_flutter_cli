@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contribution_engine/smf_contribution_engine.dart';
+import 'package:smf_contribution_engine/src/utils/bodies.dart';
 import 'package:smf_contribution_engine/src/utils/list_inserts.dart';
 import 'package:smf_contribution_engine/src/utils/named_lists.dart';
 import 'package:smf_contribution_engine/src/utils/source_edits.dart';
@@ -62,16 +63,7 @@ class InsertIntoListInFunction extends Contribution {
     final result = parseString(content: original);
     final unit = result.unit;
 
-    final targetFunction =
-        unit.declarations.whereType<FunctionDeclaration>().firstWhere(
-              (f) => f.name.lexeme == function,
-              orElse: () => throw Exception('Function $function not found'),
-            );
-
-    final body = targetFunction.functionExpression.body;
-    if (body is! BlockFunctionBody) {
-      throw Exception('Function body is not a block');
-    }
+    final body = functionBodyIn(unit, function);
 
     final childrenMatches = <ListLiteral>[];
 
