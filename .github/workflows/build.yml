@@ -131,6 +131,14 @@ jobs:
       # Firebase project, such as those of a new provider in the run of its
       # pull request into main; the nightly run finds them.
       register_firebase_apps: true
+      # Only the runs on main, of pushes and by hand, save the caches of
+      # Gradle and of Swift packages. A run of a pull request, or a run by
+      # hand on another branch, would save them for its own ref, where only
+      # its own later runs find them, so they would only duplicate those of
+      # main in the 10 GB of caches of the repository; it restores those of
+      # main. tools/workflow_apps_test.dart checks this.
+      save_gradle_cache: ${{ github.ref == 'refs/heads/main' }}
+      save_swiftpm_cache: ${{ github.ref == 'refs/heads/main' }}
     secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it

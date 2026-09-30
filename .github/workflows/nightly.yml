@@ -60,11 +60,13 @@ jobs:
       # A cache for each version and row would crowd the caches of the pull
       # requests out of the 10 GB of the repository.
       pub_cache: false
-      # Only the job with the latest Flutter saves the cache of Gradle; the
-      # others restore it.
-      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
-      # And so does it with the cache of Swift packages.
-      save_swiftpm_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # Only the job with the latest Flutter saves the caches of Gradle and
+      # of Swift packages, and only in a run on main, whose caches the runs
+      # of every branch find, not in a run by hand on another branch; the
+      # others restore them. tools/workflow_apps_test.dart checks that the
+      # workflows save them only on main.
+      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
+      save_swiftpm_cache: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
       # The jobs of the matrices with the latest Flutter check the apps with
       # every module of every combination of the providers of the roles that
       # take one, or of a 3-wise covering of more than 100, rather than of a

@@ -58,13 +58,13 @@ on:
         type: boolean
         default: true
       save_gradle_cache:
-        description: Whether the first job that builds an app for Android saves what Gradle downloaded to the cache of the repository, once a week, rather than only restoring it.
+        description: Whether the jobs that build an app for Android save what Gradle downloaded to the cache of the repository, under the key of what their app builds with and the week, when the cache has nothing under that key yet and their build added more than NATIVE_CACHE_SAVE_ABOVE_MB to what they restored, rather than only restoring it. The workflows pass it only for the runs on main, whose caches the runs of every branch find; tools/workflow_apps_test.dart checks this.
         type: boolean
-        default: true
+        default: false
       save_swiftpm_cache:
-        description: Whether the first job that builds an app for iOS saves what Swift Package Manager downloaded to the cache of the repository, once a week, rather than only restoring it.
+        description: Whether the jobs that build an app for iOS save what Swift Package Manager downloaded to the cache of the repository, under the key of what their app builds with and the week, when the cache has nothing under that key yet and their build added more than NATIVE_CACHE_SAVE_ABOVE_MB to what they restored, rather than only restoring it. The workflows pass it only for the runs on main, as save_gradle_cache.
         type: boolean
-        default: true
+        default: false
       published_cli:
         description: Whether a job also checks the apps of smf_flutter_cli from pub.dev, which users install.
         type: boolean
@@ -86,6 +86,17 @@ env:
   FLUTTER_VERSION: ${{ inputs.flutter_version }}
   DART_SDK: ${{ inputs.dart_version }}
   PUB_ENVIRONMENT: ci
+  # A job saves the cache of what Gradle or Swift Package Manager downloaded
+  # for its app only when its build added more than this many MB to the
+  # cache that the job restored. A cache is saved whole, over 1 GB for
+  # Gradle and over 400 MB for Swift packages, and the caches of a
+  # repository share 10 GB. So an app that needs only a few MB more than
+  # the cache of another app, such as the test runner of the start check or
+  # the Gradle plugins that flutterfire adds, downloads them in each run
+  # rather than storing a near copy of that cache, while an app that builds
+  # with another version of Gradle or of its plugins, hundreds of MB, gets a
+  # cache of its own, and so does a job that found no cache at all.
+  NATIVE_CACHE_SAVE_ABOVE_MB: 100
 
 jobs:
   plan:
@@ -338,49 +349,105 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-real-
 
-      # Gradle downloads the Android Gradle Plugin, Kotlin and the Android
-      # side of the plugins from Maven Central, which answers 403 to a
-      # runner that downloads too much, as when the nightly run builds on
-      # every version of Flutter at once. So what Gradle downloaded, and
-      # Gradle itself, go into one cache for every version of Flutter, by
-      # the Android files of the bricks of the modules and the week, so that
-      # a new version of a plugin gets into it within a week. Every job that
-      # builds for Android restores the newest one, and this job saves it
-      # for the first app of the plan: in the runs of pushes and pull
-      # requests, and of the nightly run only with the latest Flutter,
-      # rather than in each of its jobs. A cache that nothing restores for 7
-      # days is deleted by GitHub, so the caches of past weeks go away.
       - &gradle_week
         name: Find the week of the cache of Gradle
         id: gradle_week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Gradle
-        if: inputs.save_gradle_cache && strategy.job-index == 0
-        uses: actions/cache@v6
-        with: &gradle_cache
-          path: |
-            ~/.gradle/caches/modules-2
-            ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-
-            ${{ runner.os }}-gradle-
-
-      - name: Restore the cache of Gradle
-        if: ${{ !(inputs.save_gradle_cache && strategy.job-index == 0) }}
-        uses: actions/cache/restore@v6
-        with: *gradle_cache
-
       - *pub_get
 
-      - name: Build the app with every module for Android
+      - name: Generate the app with every module
         env: &app_env
           APP: ${{ matrix.app }}
         run: |
-          apps="$RUNNER_TEMP/SMF apps/android"
-          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
-          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" \
+            "$RUNNER_TEMP/SMF apps/android" android_app
+
+      # Gradle downloads the Android Gradle Plugin, Kotlin and the Android
+      # side of the plugins from Maven Central, which answers 403 to a
+      # runner that downloads too much, as when the nightly run builds on
+      # every version of Flutter at once. So what Gradle downloaded, and
+      # Gradle itself, go into a cache for every version of Flutter, keyed
+      # by what the app of the job builds with and by the week.
+      # tools/native_build.dart writes what the app builds with once it is
+      # generated, and configured in the jobs that configure it: its
+      # plugins with Android code, with their versions, and its Gradle files
+      # without its ids, which name the versions of Gradle and of its
+      # plugins. The key has the hash of that file, so the apps that build
+      # with the same share a cache, whatever their names, and an app with
+      # another plugin, or another version of one, may get a cache of its
+      # own. The tool writes no file for apps that download nothing, and
+      # the job then neither restores nor saves a cache. Every job that
+      # builds for Android restores the cache of its app, or else the newest
+      # of its app from an earlier week, or else the newest of any app. When
+      # it did not find the cache of its app, it measures what it restored,
+      # and after the build saves the cache of its app when the build added
+      # more than NATIVE_CACHE_SAVE_ABOVE_MB, whose reason is at the top of
+      # the workflow: only in the runs on main, of pushes and of the nightly
+      # run with the latest Flutter (the input save_gradle_cache), since a
+      # cache of another ref would only duplicate that of main. When jobs
+      # save the same key at once, the first reserves it and the others skip
+      # it. Each week the jobs measure again what their builds add, so what
+      # the key leaves out, such as a newer version of a library that a
+      # plugin takes as a range, gets into a cache once it adds up to more
+      # than the threshold, and GitHub deletes a cache that nothing restores
+      # for 7 days.
+      - name: Find what the app builds with for Android
+        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/android" build/native_build/android.txt
+
+      - &restore_gradle
+        name: Restore the cache of Gradle
+        id: gradle
+        if: hashFiles('build/native_build/android.txt') != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: &gradle_paths |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: ${{ runner.os }}-gradle-${{ hashFiles('build/native_build/android.txt') }}-${{ steps.gradle_week.outputs.week }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-${{ hashFiles('build/native_build/android.txt') }}-
+            ${{ runner.os }}-gradle-
+
+      # The size of what the job restored, which the step after the build
+      # compares with, when the job may save a cache of its app.
+      - &gradle_restored
+        name: Measure the cache of Gradle that the job restored
+        id: gradle_restored
+        if: inputs.save_gradle_cache && steps.gradle.outcome == 'success' && steps.gradle.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists
+          echo "megabytes=$(du -smc ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists | tail -n 1 | cut -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app with every module for Android
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" flutter build apk --debug
+
+      # Only after a build that succeeded: a build that failed may have
+      # downloaded part of what the app needs, and a later job would find
+      # that under the key of the app and save nothing more.
+      - &gradle_added
+        name: Measure what the build added to the cache of Gradle
+        id: gradle_added
+        if: steps.gradle_restored.outcome == 'success'
+        env:
+          RESTORED: ${{ steps.gradle_restored.outputs.megabytes }}
+        run: |
+          size="$(du -smc ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists | tail -n 1 | cut -f 1)"
+          added=$((size - RESTORED))
+          echo "The build added $added MB to the $RESTORED MB of the cache of Gradle that the job restored."
+          if [ "$added" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The job saves the cache of its app only when its build added more than $NATIVE_CACHE_SAVE_ABOVE_MB MB."
+          fi
+
+      - &save_gradle
+        name: Save the cache of Gradle
+        if: steps.gradle_added.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: *gradle_paths
+          key: ${{ steps.gradle.outputs.cache-primary-key }}
 
   # An app with every module but the modules whose steps need an external
   # service, such as the Firebase project that flutterfire configures an
@@ -408,12 +475,6 @@ jobs:
       - *check_flutter_linux
       - *restore_pub_cache
       - *gradle_week
-
-      - &restore_gradle
-        name: Restore the cache of Gradle
-        uses: actions/cache/restore@v6
-        with: *gradle_cache
-
       - *pub_get
 
       # Android 15 (API level 35) with the Google APIs, which boots in the
@@ -467,6 +528,14 @@ jobs:
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
+      # The cache of Gradle of what the app builds with, as in the job
+      # Android, restored while the emulator boots.
+      - name: Find what the app builds with for Android
+        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/start" build/native_build/android.txt
+
+      - *restore_gradle
+      - *gradle_restored
+
       - &wait_for_emulator
         name: Wait for the Android emulator
         timeout-minutes: 15
@@ -499,6 +568,9 @@ jobs:
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
+
+      - *gradle_added
+      - *save_gradle
 
   # An app with Firebase starts only once flutterfire configured it: the
   # placeholder of its options throws at start-up. flutterfire writes the
@@ -544,7 +616,6 @@ jobs:
       - *check_flutter_linux
       - *restore_pub_cache
       - *gradle_week
-      - *restore_gradle
       - *pub_get
       - *start_emulator
 
@@ -594,6 +665,14 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
 
+      # The cache of Gradle of what the app builds with, as in the job
+      # Android, once flutterfire added to it the Gradle plugins of Google
+      # services and Crashlytics, which its build downloads too.
+      - name: Find what the app builds with for Android
+        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/firebase" build/native_build/android.txt
+
+      - *restore_gradle
+      - *gradle_restored
       - *wait_for_emulator
 
       - name: Start the app with every module on the Android emulator
@@ -601,6 +680,9 @@ jobs:
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/firebase" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
+
+      - *gradle_added
+      - *save_gradle
 
       # The tests of the packages that failed, as annotations that the page
       # of the run lists at the top rather than as lines in the long log of
@@ -657,7 +739,6 @@ jobs:
       - *setup_flutter_linux
       - *check_flutter_linux
       - *gradle_week
-      - *restore_gradle
 
       - name: Activate the CLI from pub.dev
         working-directory: ${{ runner.temp }}
@@ -701,12 +782,30 @@ jobs:
             smf "${arguments[@]}"
           done
 
+      # The cache of Gradle of what the apps of the release build with, as
+      # in the job Android, with the packages of the workspace for the
+      # tool: the cache of the apps of the workspace when the apps of the
+      # release build with the same, and otherwise a cache of their own
+      # once they download more than NATIVE_CACHE_SAVE_ABOVE_MB beyond what
+      # the job restored, as when the release has other versions of Gradle
+      # or of its plugins.
+      - *pub_get
+
+      - name: Find what the apps build with for Android
+        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps from pub.dev" build/native_build/android.txt
+
+      - *restore_gradle
+      - *gradle_restored
+
       - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
         run: |
           apps="$RUNNER_TEMP/SMF apps from pub.dev"
           .github/scripts/each_app.sh "$apps" flutter analyze
           .github/scripts/each_app.sh "$apps" flutter test
           .github/scripts/each_app.sh "$apps" flutter build apk --debug
+
+      - *gradle_added
+      - *save_gradle
 
   # The tests of every package and of tools/ on macOS, where a test of
   # something that only macOS does runs too.
@@ -791,35 +890,10 @@ jobs:
       - *setup_flutter_macos
       - *check_tools_macos
 
-      # Swift Package Manager downloads the packages of the plugins for iOS,
-      # such as the Firebase SDK, from their repositories, and xcodebuild
-      # keeps the clones in its cache of the repositories of packages,
-      # ~/Library/Caches/org.swift.swiftpm, from which it checks out the
-      # packages of each app. So that cache goes into one cache of the
-      # repository for every version of Flutter and every app, by the week,
-      # as the cache of Gradle does for Android: every job that builds for
-      # iOS restores the newest one, and this job saves it for the first app
-      # of the plan, in the runs of pushes and pull requests, and of the
-      # nightly run only with the latest Flutter. A new version of a package
-      # gets into it within a week.
       - &swiftpm_week
         name: Find the week of the cache of Swift packages
         id: swiftpm_week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Swift packages
-        if: inputs.save_swiftpm_cache && strategy.job-index == 0
-        uses: actions/cache@v6
-        with: &swiftpm_cache
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-swiftpm-${{ steps.swiftpm_week.outputs.week }}
-          restore-keys: |
-            ${{ runner.os }}-swiftpm-
-
-      - name: Restore the cache of Swift packages
-        if: ${{ !(inputs.save_swiftpm_cache && strategy.job-index == 0) }}
-        uses: actions/cache/restore@v6
-        with: *swiftpm_cache
 
       - *pub_get
 
@@ -829,10 +903,80 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" \
             "$RUNNER_TEMP/SMF apps застосунки é/ios" ios_app
 
+      # Swift Package Manager downloads the packages of the plugins for iOS,
+      # such as the Firebase SDK, from their repositories, and xcodebuild
+      # keeps the clones in its cache of the repositories of packages,
+      # ~/Library/Caches/org.swift.swiftpm, from which it checks out the
+      # packages of each app. So that cache goes into a cache of the
+      # repository for every version of Flutter, keyed by what the app
+      # builds with and by the week, as the cache of Gradle is for Android:
+      # tools/native_build.dart writes the plugins of the app with iOS code,
+      # with their versions, and the Swift packages that its Xcode project
+      # refers to itself. The ids of the app and the build phase that
+      # flutterfire adds to its Xcode project download nothing, so the jobs
+      # whose apps have the same plugins share a cache, and the tool writes
+      # no file for an app without plugins with iOS code, such as the app of
+      # the start check without Firebase, which then neither restores nor
+      # saves a cache. Every job that builds for iOS restores the cache of
+      # its app, or else the newest of its app from an earlier week, or else
+      # the newest of any app, and saves the cache of its app as for Gradle:
+      # when it did not find it and its build added more than
+      # NATIVE_CACHE_SAVE_ABOVE_MB, only in the runs on main, of pushes and
+      # of the nightly run with the latest Flutter (the input
+      # save_swiftpm_cache).
+      - name: Find what the app builds with for iOS
+        run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/ios" build/native_build/ios.txt
+
+      - &restore_swiftpm
+        name: Restore the cache of Swift packages
+        id: swiftpm
+        if: hashFiles('build/native_build/ios.txt') != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: &swiftpm_path ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-${{ steps.swiftpm_week.outputs.week }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-
+            ${{ runner.os }}-swiftpm-
+
+      # As for Gradle.
+      - &swiftpm_restored
+        name: Measure the cache of Swift packages that the job restored
+        id: swiftpm_restored
+        if: inputs.save_swiftpm_cache && steps.swiftpm.outcome == 'success' && steps.swiftpm.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/Library/Caches/org.swift.swiftpm
+          echo "megabytes=$(du -smc ~/Library/Caches/org.swift.swiftpm | tail -n 1 | cut -f 1)" >> "$GITHUB_OUTPUT"
+
       - name: Build the app with every module for the iOS simulator
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/ios" \
             flutter build ios --simulator --no-codesign
+
+      # Only after a build that succeeded, as for Gradle.
+      - &swiftpm_added
+        name: Measure what the build added to the cache of Swift packages
+        id: swiftpm_added
+        if: steps.swiftpm_restored.outcome == 'success'
+        env:
+          RESTORED: ${{ steps.swiftpm_restored.outputs.megabytes }}
+        run: |
+          size="$(du -smc ~/Library/Caches/org.swift.swiftpm | tail -n 1 | cut -f 1)"
+          added=$((size - RESTORED))
+          echo "The build added $added MB to the $RESTORED MB of the cache of Swift packages that the job restored."
+          if [ "$added" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The job saves the cache of its app only when its build added more than $NATIVE_CACHE_SAVE_ABOVE_MB MB."
+          fi
+
+      - &save_swiftpm
+        name: Save the cache of Swift packages
+        if: steps.swiftpm_added.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: *swiftpm_path
+          key: ${{ steps.swiftpm.outputs.cache-primary-key }}
 
   # An app with every module but the modules whose steps need an external
   # service and those that need them, of a pairwise covering of them, with
@@ -858,10 +1002,6 @@ jobs:
       - *setup_flutter_macos
       - *check_tools_macos
       - *swiftpm_week
-      - &restore_swiftpm
-        name: Restore the cache of Swift packages
-        uses: actions/cache/restore@v6
-        with: *swiftpm_cache
       - *pub_get
 
       - name: Generate the app without external services to start
@@ -873,6 +1013,14 @@ jobs:
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
+
+      # The cache of Swift packages of what the app builds with, as in the
+      # job iOS.
+      - name: Find what the app builds with for iOS
+        run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/start" build/native_build/ios.txt
+
+      - *restore_swiftpm
+      - *swiftpm_restored
 
       # A new iPhone of the newest iOS runtime of the image that the SDK of
       # the Xcode of the job runs apps on; the image has several of each.
@@ -906,6 +1054,9 @@ jobs:
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
+      - *swiftpm_added
+      - *save_swiftpm
+
   # The app with every module of each provider of the app entry, as on
   # Linux, archived with the build phase for Crashlytics that flutterfire
   # configure adds, fixed by the command that the README of the app gives.
@@ -930,7 +1081,6 @@ jobs:
       - *setup_flutter_macos
       - *check_tools_macos
       - *swiftpm_week
-      - *restore_swiftpm
       - *pub_get
 
       - name: Generate the app with every module to archive
@@ -939,12 +1089,22 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" \
             "$RUNNER_TEMP/SMF apps застосунки é/archive" archive_app
 
+      # The cache of Swift packages of what the app builds with, as in the
+      # job iOS.
+      - name: Find what the app builds with for iOS
+        run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/archive" build/native_build/ios.txt
+
+      - *restore_swiftpm
+      - *swiftpm_restored
+
       - name: Archive the app with every module
         working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CRASHLYTICS_APP \
             "$RUNNER_TEMP/SMF apps застосунки é/archive" dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
 
+      - *swiftpm_added
+      - *save_swiftpm
       - *annotate
 
   # The app with every module of each provider of the app entry, with the
@@ -972,7 +1132,6 @@ jobs:
       - *setup_flutter_macos
       - *check_tools_macos
       - *swiftpm_week
-      - *restore_swiftpm
       - *pub_get
 
       - name: Generate the app with every module to configure with Firebase
@@ -1021,6 +1180,13 @@ jobs:
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
             "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/flutterfire_phase_test.dart --file-reporter json:build/test-results/flutterfire_phase_test.json
 
+      # The cache of Swift packages of what the app builds with, as in the
+      # job iOS, once the app is configured.
+      - name: Find what the app builds with for iOS
+        run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/firebase" build/native_build/ios.txt
+
+      - *restore_swiftpm
+      - *swiftpm_restored
       - *boot_simulator
 
       - name: Start the app with every module on the iOS simulator
@@ -1029,6 +1195,8 @@ jobs:
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/firebase" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
+      - *swiftpm_added
+      - *save_swiftpm
       - *annotate
 
   # The tests of every package and of tools/ on Windows, where a test of
