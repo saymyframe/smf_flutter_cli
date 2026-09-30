@@ -335,7 +335,7 @@ void main() {
     return;
   }
   stderr
-    ..writeln('Banned names, which the module model replaced:')
+    ..writeln('Banned names:')
     ..writeln(problems.map((problem) => '  $problem').join('\n'));
   exitCode = 1;
 }
