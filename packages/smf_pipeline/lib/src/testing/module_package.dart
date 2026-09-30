@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:file/file.dart';
 import 'package:file/local.dart';
+import 'package:smf_pipeline/src/testing/resolved_packages.dart';
 import 'package:yaml/yaml.dart';
 
 /// The libraries of `smf_contracts` that a module may use: the module
@@ -12,11 +11,6 @@ const _model = {
   'package:smf_contracts/smf_contracts.dart',
   'package:smf_contracts/core.dart',
 };
-
-/// The module packages by name: `smf_contracts`, which does not depend on
-/// itself, and `smf_pipeline`, whose contract harness the tests of a module
-/// use.
-const _modelPackages = {'smf_contracts', 'smf_pipeline'};
 
 /// The libraries of Dart that reach the machine, which the code of a module
 /// does not use: it runs tools and reads the machine only through the
@@ -116,32 +110,8 @@ final class ModulePackage {
           final YamlMap packages => {...packages.keys.cast<String>()},
           _ => const {},
         };
-    final config = _packageConfigOf(
-      fileSystem.directory(fileSystem.path.normalize(directory.absolute.path)),
-    );
-    if (config == null) {
-      final problem = 'Neither the directory $root nor one above it has '
-          '.dart_tool/package_config.json: run dart pub get.';
-      return [problem];
-    }
-
-    final roots = _packageRootsIn(config);
-    // A package that the package config leads to no pubspec of is
-    // unresolved, and the rules take it for a package of no module.
-    final unresolved = <String>{};
-    bool isModule(String package) {
-      if (_modelPackages.contains(package)) return true;
-      final file = roots[package]?.childFile('pubspec.yaml');
-      if (file == null || !file.existsSync()) {
-        unresolved.add(package);
-        return false;
-      }
-      return switch (loadYaml(file.readAsStringSync())) {
-        {'dependencies': final YamlMap dependencies} =>
-          dependencies.containsKey('smf_contracts'),
-        _ => false,
-      };
-    }
+    final packages = ResolvedPackages.of(directory);
+    if (packages == null) return [ResolvedPackages.missingConfig(root)];
 
     final code = {'smf_contracts', ...dependencies};
     final tests = {'smf_pipeline', ...testModules};
@@ -150,18 +120,12 @@ final class ModulePackage {
       ..._devDependencyProblems(
         tests,
         packagesOf('dev_dependencies'),
-        isModule,
+        packages.isModule,
       ),
       ..._libProblems(directory, code),
-      ..._testProblems(directory, tests, isModule),
+      ..._testProblems(directory, tests, packages.isModule),
     ];
-    return [
-      ..._sorted(unresolved).map(
-        (package) => 'The package config ${config.path} has no package '
-            '$package with a pubspec.yaml: run dart pub get.',
-      ),
-      ...problems,
-    ];
+    return [...packages.problems, ...problems];
   }
 
   /// The problems of [dependsOn], the dependencies of the package, which
@@ -283,58 +247,14 @@ final class ModulePackage {
         final package => isModule != null && !isModule(package),
       };
 
-  /// The package config that `dart pub get` wrote for the package in
-  /// [directory], by its normalized absolute path:
-  /// `.dart_tool/package_config.json` in [directory] or in the nearest
-  /// directory above it that has one, or `null` when none has.
-  static File? _packageConfigOf(Directory directory) {
-    final config =
-        directory.childDirectory('.dart_tool').childFile('package_config.json');
-    if (config.existsSync()) return config;
-    final parent = directory.parent;
-    return parent.path == directory.path ? null : _packageConfigOf(parent);
-  }
-
-  /// The root directory of each package in the package [config], by name.
-  /// `dart pub get` writes a root as a URI relative to [config], as for the
-  /// packages of a workspace, or as an absolute `file:` URI, as for those
-  /// in the pub cache.
-  static Map<String, Directory> _packageRootsIn(File config) {
-    final fileSystem = config.fileSystem;
-    final context = fileSystem.path;
-    final uri = context.toUri(config.path);
-    final json = jsonDecode(config.readAsStringSync()) as Map<String, Object?>;
-    return {
-      for (final package in json['packages']! as List<Object?>)
-        if (package
-            case {'name': final String name, 'rootUri': final String root})
-          name: fileSystem.directory(context.fromUri(uri.resolve(root))),
-    };
-  }
-
   /// The URIs of the imports, exports and parts of the Dart files in the
   /// directory [name] of [package], each with the path of its file relative
   /// to the package, as the parser of the analyzer reads them, so that text
   /// in strings does not count.
-  static List<(String, String)> _directives(Directory package, String name) {
-    final directory = package.childDirectory(name);
-    if (!directory.existsSync()) return const [];
-    final context = package.fileSystem.path;
-    final files = [
-      for (final entity in directory.listSync(recursive: true))
-        if (entity is File && entity.path.endsWith('.dart')) entity,
-    ]..sort((a, b) => a.path.compareTo(b.path));
-    return [
-      for (final file in files)
-        for (final uri in _urisOf(file.readAsStringSync()))
-          (
-            context
-                .relative(file.path, from: package.path)
-                .replaceAll(context.separator, '/'),
-            uri,
-          ),
-    ];
-  }
+  static List<(String, String)> _directives(Directory package, String name) => [
+        for (final (path, file) in dartFilesIn(package, name))
+          for (final uri in _urisOf(file.readAsStringSync())) (path, uri),
+      ];
 
   /// The URIs of the imports, exports and parts of the Dart file with
   /// [text], and of the libraries that a conditional import or export may

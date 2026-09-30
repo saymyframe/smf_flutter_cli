@@ -428,6 +428,33 @@ String _bodyOf(ClassDeclaration declaration, String name) => declaration.members
     .body
     .toSource();
 
+/// The files of the provider of the app entry in the app of [result] that
+/// import the file of the router role with `appRouter`: where the app runs
+/// the router, whichever module provides the app entry.
+Set<String> _runningTheRouter(ContractResult result) {
+  final entry = {
+    for (final module in result.resolution!.providersOf(appEntryRole))
+      module.id,
+  };
+  const app = 'package:contract_app/';
+  bool importsTheRouter(String path, String text) =>
+      DartFileIndexer.index(path, text).imports.any(
+            (import) =>
+                (import.uri.startsWith(app)
+                    ? 'lib/${import.uri.substring(app.length)}'
+                    : Uri.parse(path).resolve(import.uri).path) ==
+                RouterRole.appRouterFile,
+          );
+  return {
+    for (final MapEntry(key: path, value: file) in result.app!.files.entries)
+      if (file.owner case ModuleOrigin(:final module)
+          when entry.contains(module) &&
+              path.endsWith('.dart') &&
+              importsTheRouter(path, file.text))
+        path,
+  };
+}
+
 void main() {
   const module = GoRouterModule();
 
@@ -498,13 +525,15 @@ void main() {
 
   group('an app without features', () {
     late ContractResult result;
+    late ContractResult resultWithout;
     late RenderedApp withRouter;
     late RenderedApp without;
 
     setUpAll(() async {
       result = await renderedApp(const [GoRouterModule.id]);
       withRouter = result.app!;
-      without = (await renderedApp(const [FlutterCoreModule.id])).app!;
+      resultWithout = await renderedApp(const [FlutterCoreModule.id]);
+      without = resultWithout.app!;
     });
 
     test('gets go_router and the brick of the router, and nothing else', () {
@@ -564,15 +593,12 @@ void main() {
       _expectScreenListeners(unit, const []);
     });
 
-    test('runs the router of the app in the MaterialApp', () {
-      expect(
-        withRouter.files['lib/app.dart']!.text,
-        allOf(
-          contains('MaterialApp.router('),
-          contains('routerConfig: appRouter.config,'),
-          isNot(contains('home:')),
-        ),
-      );
+    test('is run by the root of the app, which the app entry builds', () {
+      // The provider of the app entry builds the root as a MaterialApp.router
+      // with the router of the role when the role is present, which its own
+      // tests check.
+      expect(_runningTheRouter(result), isNotEmpty);
+      expect(_runningTheRouter(resultWithout), isEmpty);
     });
 
     test('is the app without a router but for the router', () {
@@ -589,8 +615,10 @@ void main() {
         withRouter.files[_factory]!.owner,
         const ModuleOrigin(GoRouterModule.id),
       );
+      // The files of the app entry that run the router change with it.
+      final running = _runningTheRouter(result);
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (const {'pubspec.yaml', 'lib/app.dart'}.contains(path)) continue;
+        if (path == 'pubspec.yaml' || running.contains(path)) continue;
         expect(withRouter.files[path]!.bytes, file.bytes, reason: path);
       }
       final pubspec = _pubspecOf(withRouter);
@@ -637,15 +665,7 @@ void main() {
     test(
         'has a route for every route of the facade, named by its full name, '
         'with its children below it', () {
-      final facade = routerRole.facadeOf(
-        routerRole.hookInput(
-          RoleHookRequest(
-            data: result.collection!.roleData,
-            presentRoles: result.resolution!.presentRoles,
-            context: ContractHarness.defaultContext,
-          ),
-        ),
-      );
+      final facade = routerRole.facadeOf(routerRole.hookInput(result.hook!));
       final parents = {
         for (final (route, parent) in _allOf(_routesOf(unit)))
           if (route.name case final name?) name: parent,
@@ -1085,6 +1105,25 @@ void main() {
       expect(branches[2].initialLocation, '/profile');
       expect(branches[2].routes.single.name, 'profile.profile');
       expect(await analysisProblems(result.app!), isEmpty);
+    });
+
+    test('shows the shell with one destination too', () async {
+      final result = await renderedApp(
+        const [CatalogFeature.id, TabsLayout.id],
+      );
+      final shell = _shellOf(_factoryOf(result.app!))!;
+
+      expect(
+        [for (final branch in _branchesOf(shell)) branch.initialLocation],
+        ['/catalog'],
+      );
+      expect(
+        _argument(shell, 'builder')!.toSource(),
+        contains(
+          "destinations: const [Destination(label: 'Catalog', icon: "
+          'Icons.list)]',
+        ),
+      );
     });
 
     test('has no shell without destinations', () async {

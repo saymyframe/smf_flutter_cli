@@ -23,6 +23,6 @@ Until `flutterfire configure` runs, `lib/firebase_options.dart` is a placeholder
 [WARN] Configuring Firebase with flutterfire is not done, because the run skips external setup. Run it in the app: dart pub global run flutterfire_cli:flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
 ```
 
-`firebase_crashlytics` and `firebase_analytics` depend on this module, so it comes with them.
+The other Firebase modules depend on this module, so it comes with them.
 
 The documentation has more on [the firebase_core module](https://doc.saymyframe.com/modules/firebase-core) and on [Firebase in SMF](https://doc.saymyframe.com/guides/firebase).

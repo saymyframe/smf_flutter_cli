@@ -1,12 +1,16 @@
 // Checks that the repository no longer uses what the module model replaced:
 // the names of the old contracts API, the constants and hooks of the old
 // modules and their direct use of get_it, the old way to render bricks, the
-// old template markers, and dependencies that only some packages may have.
+// old template markers, dependencies that only some packages may have, and
+// the files that the providers of roles render in the tests of other
+// modules; and that only tools/workspace_members.dart reads the members of
+// the workspace from the root pubspec.
 //
 // Run it anywhere in the repository: `dart tools/banlist.dart`. It reads the
 // files that git tracks, and the new ones it does not ignore.
 //
-// A file may use a banned name only if an exception names the file:
+// A ban may hold only in some files, such as the tests of modules. A file
+// may use a banned name only if an exception names the file:
 // - a lasting exception, for a package that owns the name, such as getIt in
 //   smf_get_it, or a test that checks that nothing else uses it;
 // - a migration exception, for a package that still uses the old model.
@@ -17,18 +21,23 @@ import 'dart:io';
 
 /// A name that the tracked files may not use.
 final class _Ban {
-  const _Ban(this.name, this.pattern);
+  const _Ban(this.name, this.pattern, {this.files});
 
   /// A word: a name that stands alone, not a part of a longer name.
   _Ban.word(this.name)
       : pattern = RegExp('(?<![A-Za-z0-9_])${RegExp.escape(name)}'
-            '(?![A-Za-z0-9_])');
+            '(?![A-Za-z0-9_])'),
+        files = null;
 
   /// How the name is shown.
   final String name;
 
   /// What finds the name in a line.
   final Pattern pattern;
+
+  /// What finds the paths of the files where the name is banned, or `null`
+  /// when it is banned in every file that the check reads.
+  final RegExp? files;
 }
 
 /// Files that may use some banned names.
@@ -146,6 +155,47 @@ final List<_Ban> _bans = [
   // module is the only one that provides the role, and asks otherwise, so a
   // paragraph that says so names that condition.
   _Ban('"by itself" without "only"', RegExp(r'^(?!.*\bonly\b).*\bby itself\b')),
+  // The key of the members of the workspace in the root pubspec, which code
+  // that reads them looks up or matches the line of. workspace_members.dart
+  // reads them as YAML, as pub does, for every tool: code that reads the
+  // lines itself misses a member that YAML writes in another form, such as
+  // in quotes or after a comment on the line of the key.
+  _Ban(
+    'workspace: read by hand',
+    RegExp(r'''['"]\^?workspace:?(?:\\s[*+])?\$?['"]'''),
+  ),
+  // A module never learns which module provides a role, so its tests check
+  // what it gives the role through the data and the sockets of the role,
+  // not in the files that the provider of the role renders: the file of
+  // createAppRouter() of the router, of registerDependencies() of the DI
+  // container, or of AppShell of the layout; and the files of the app
+  // entry into which its provider renders the sockets of start-up, those
+  // of bootstrap() and main(), and lib/app.dart, which no role guarantees.
+  // A test may name such a file by its constant or its path only as the
+  // key of a map, for the files of a provider of its own, and the package
+  // of a provider tests its own files. The contribution engine is no
+  // module.
+  for (final (name, path) in const [
+    (
+      'RouterRole.appRouterFactoryFile',
+      r'core/router/app_router_factory\.dart'
+    ),
+    ('DiRole.dependenciesFile', r'core/di/dependencies\.dart'),
+    ('LayoutRole.appShellFile', r'core/layout/app_shell\.dart'),
+    ('AppEntryRole.bootstrapFile', r'(?:lib|package:\w+)/bootstrap\.dart'),
+    ('AppEntryRole.mainFile', r'(?:lib|package:\w+)/main\.dart'),
+    ('lib/app.dart', r'(?:lib|package:\w+)/app\.dart'),
+  ])
+    _Ban(
+      name,
+      RegExp(
+        '(?:(?<![A-Za-z0-9_])${RegExp.escape(name)}|$path)'
+        r'''(?![A-Za-z0-9_]|['"]?\s*:)''',
+      ),
+      files: RegExp(
+        '^packages/smf_modules/(?!smf_contribution_engine/)[^/]+/test/',
+      ),
+    ),
 ];
 
 const _lasting = [
@@ -158,6 +208,27 @@ const _lasting = [
     ['packages/smf_modules/smf_get_it/'],
     {'getIt', 'GetIt', 'package:get_it', 'get_it:'},
     'smf_get_it provides the GetIt container.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_go_router/test/'],
+    {'RouterRole.appRouterFactoryFile'},
+    'smf_go_router provides the router role, and its tests check its file.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_get_it/test/'],
+    {'DiRole.dependenciesFile'},
+    'smf_get_it provides the DI role, and its tests check its file.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_bottom_tabs/test/'],
+    {'LayoutRole.appShellFile'},
+    'smf_bottom_tabs provides the layout role, and its tests check its file.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_flutter_core/test/'],
+    {'AppEntryRole.bootstrapFile', 'AppEntryRole.mainFile', 'lib/app.dart'},
+    'smf_flutter_core provides the app entry role, and its tests check its '
+    'files.',
   ),
   _Exception(
     ['packages/smf_modules/smf_contribution_engine/'],
@@ -184,6 +255,11 @@ const _lasting = [
     {'mustachex', 'smf_contribution_engine'},
     'The test checks that the package does not use them.',
   ),
+  _Exception(
+    ['tools/workspace_members.dart'],
+    {'workspace: read by hand'},
+    'It reads the members of the workspace for every tool.',
+  ),
 ];
 
 const _migrating = <_Exception>[];
@@ -203,8 +279,9 @@ bool _checked(String path) =>
         !path.endsWith('/CHANGELOG.md'));
 
 /// The problems of [files], the text of each file by its path from the
-/// root of the repository: every line that uses a banned name that no
-/// exception allows, and every path of an exception that allows nothing.
+/// root of the repository: every line that uses a name banned in its file
+/// that no exception allows, and every path of an exception that allows
+/// nothing.
 List<String> problemsOf(Map<String, String> files) {
   final exceptions = [..._lasting, ..._migrating];
   final problems = <String>[];
@@ -213,6 +290,7 @@ List<String> problemsOf(Map<String, String> files) {
     if (!_checked(path)) continue;
     for (final (index, line) in text.split('\n').indexed) {
       for (final ban in _bans) {
+        if (!(ban.files?.hasMatch(path) ?? true)) continue;
         if (!line.contains(ban.pattern)) continue;
         final allowing = [
           for (final exception in exceptions)
@@ -275,7 +353,7 @@ void main() {
     return;
   }
   stderr
-    ..writeln('Banned names, which the module model replaced:')
+    ..writeln('Banned names:')
     ..writeln(problems.map((problem) => '  $problem').join('\n'));
   exitCode = 1;
 }

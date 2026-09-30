@@ -81,11 +81,10 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
 ///
 /// Elsewhere it registers the iOS app and writes its options, but writes no
 /// `GoogleService-Info.plist` and leaves the Xcode project as it is, without
-/// the build phases that it adds there for some Firebase packages, such as
-/// the upload of the debug symbols of Crashlytics, so it is set up by
-/// running `flutterfire configure` again on a Mac. The check passes on
-/// macOS, where [XcodeProjectToolsCheck] checks what that needs, and nothing
-/// here can be installed.
+/// the build phases that it adds there for some Firebase packages, so it is
+/// set up by running `flutterfire configure` again on a Mac. The check
+/// passes on macOS, where [XcodeProjectToolsCheck] checks what that needs,
+/// and nothing here can be installed.
 final class XcodeProjectOnMacCheck extends PreflightCheck {
   /// Creates the check.
   const XcodeProjectOnMacCheck();
@@ -107,8 +106,7 @@ final class XcodeProjectOnMacCheck extends PreflightCheck {
                   'writes its options into lib/firebase_options.dart, but '
                   'writes no GoogleService-Info.plist and leaves the Xcode '
                   'project as it is, without the build phases that it adds '
-                  'for some Firebase packages, such as the upload of the '
-                  'debug symbols of Crashlytics: run flutterfire configure '
+                  'for some Firebase packages: run flutterfire configure '
                   'again on a Mac.',
             );
 }

@@ -47,29 +47,42 @@ void main() {
   ]);
   final harness = ContractHarness(registry);
 
-  test('builds a case per variant and subset of used roles', () {
+  test(
+      'builds a case per subset of used roles, variant and provider of each '
+      'used role', () {
     final cases = harness.casesOfModule(const ModuleId('home'));
+    const variants = ['bloc', 'riverpod', 'signals'];
 
     expect(cases.map((c) => '$c'), [
-      'home (bloc) with tracking, nav',
-      'home (bloc) with tracking',
-      'home (bloc) with nav',
-      'home (bloc)',
-      'home (riverpod) with tracking, nav',
-      'home (riverpod) with tracking',
-      'home (riverpod) with nav',
-      'home (riverpod)',
-      'home (signals) with tracking, nav',
-      'home (signals) with tracking',
-      'home (signals) with nav',
-      'home (signals)',
+      for (final variant in variants)
+        for (final tracker in ['a1', 'a2'])
+          for (final router in ['go', 'auto'])
+            'home ($variant, $tracker, $router) with tracking, nav',
+      for (final variant in variants)
+        for (final tracker in ['a1', 'a2'])
+          'home ($variant, $tracker) with tracking',
+      for (final variant in variants)
+        for (final router in ['go', 'auto'])
+          'home ($variant, $router) with nav',
+      for (final variant in variants) 'home ($variant)',
     ]);
+    ContractCase named(String name) => cases.singleWhere((c) => c.name == name);
     expect(
-      cases[0].requested.map((id) => id.value),
+      named('home (bloc, a1, go) with tracking, nav')
+          .requested
+          .map((id) => id.value),
       ['home', 'a1', 'go'],
     );
-    expect(cases[4].picks[state], const ModuleId('riverpod'));
-    expect(cases[4].picks[tracking], const ModuleId('a1'));
+    final withSecond = named('home (riverpod, a2, auto) with tracking, nav');
+    expect(withSecond.requested.map((id) => id.value), ['home', 'a2', 'auto']);
+    expect(withSecond.picks[state], const ModuleId('riverpod'));
+    expect(withSecond.picks[tracking], const ModuleId('a2'));
+    expect(withSecond.picks[nav], const ModuleId('auto'));
+    // A used role left out of the case is not asked for.
+    expect(
+      named('home (bloc, auto) with nav').requested.map((id) => id.value),
+      ['home', 'auto'],
+    );
     expect(
       () => harness.casesOfModule(const ModuleId('nope')),
       throwsArgumentError,
@@ -575,9 +588,12 @@ void main() {
         'broken',
         'both',
         'home (signals)',
-        'home (signals) with tracking',
-        'home (signals) with nav',
-        'home (signals) with tracking, nav',
+        for (final tracker in ['a1', 'a2']) ...[
+          'home (signals, $tracker) with tracking',
+          for (final router in ['go', 'auto'])
+            'home (signals, $tracker, $router) with tracking, nav',
+        ],
+        for (final router in ['go', 'auto']) 'home (signals, $router) with nav',
       },
     );
     final keys = [
@@ -613,7 +629,9 @@ void main() {
     );
   });
 
-  test('a role that uses another builds a case per subset', () {
+  test(
+      'a role that uses another builds a case per subset and provider of each '
+      'role it uses', () {
     final tracking = TestRole<NoDsl>(
       'tracking',
       cardinality: RoleCardinality.many,
@@ -624,13 +642,18 @@ void main() {
         scaffold(),
         TestModule('go', providers: [RoleProvider.plain(nav)]),
         TestModule('a1', providers: [RoleProvider.plain(tracking)]),
+        TestModule('a2', providers: [RoleProvider.plain(tracking)]),
       ]),
     );
 
-    expect(
-      harness.casesOfRole(nav).map((c) => '$c'),
-      ['nav by go with tracking', 'nav by go'],
-    );
+    final cases = harness.casesOfRole(nav);
+    expect(cases.map((c) => '$c'), [
+      'nav by go (a1) with tracking',
+      'nav by go (a2) with tracking',
+      'nav by go',
+    ]);
+    expect(cases[1].requested.map((id) => id.value), ['go', 'a2']);
+    expect(cases[1].picks[nav], const ModuleId('go'));
   });
 
   test('a required role with several providers takes each', () {
@@ -652,6 +675,260 @@ void main() {
       harness.casesOfRole(session).map((c) => '$c'),
       ['session by keys', 'session by vault'],
     );
+  });
+
+  /// The errors of [results], each with its case.
+  List<String> errorsOf(List<ContractResult> results) => [
+        for (final result in results)
+          for (final issue in result.errors) '${result.contractCase}: $issue',
+      ];
+
+  test(
+      'builds no case with another provider of a role that a module gets '
+      'from a module it depends on', () async {
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        // Add-ons of go: one uses the role that go provides, the other
+        // requires it.
+        TestModule('addon', dependsOn: {'go'}, uses: {nav}),
+        TestModule('plugin', dependsOn: {'go'}, requires: {nav}),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('addon')).map((c) => '$c'),
+      ['addon (go) with nav', 'addon'],
+    );
+    expect(
+      harness.casesOfModule(const ModuleId('plugin')).map((c) => '$c'),
+      ['plugin (go)'],
+    );
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+  });
+
+  test(
+      'builds no case of a role with another provider of a role that the '
+      'provider of the role provides too', () async {
+    final shell = TestRole<NoDsl>('shell', uses: {nav});
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'frame',
+          providers: [RoleProvider.plain(shell), RoleProvider.plain(nav)],
+        ),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      ]),
+    );
+
+    expect(harness.casesOfRole(shell).map((c) => '$c'), [
+      'shell by frame (frame) with nav',
+      'shell by frame',
+    ]);
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+  });
+
+  test('builds no case whose picked providers cannot be in one app', () async {
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('feature', requires: {store}, uses: {nav}),
+        TestModule('disk', providers: [RoleProvider.plain(store)]),
+        // Cloud brings go, a provider of the nav role, through its
+        // dependency, and hub provides both roles itself.
+        TestModule(
+          'cloud',
+          dependsOn: {'go'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'hub',
+          providers: [RoleProvider.plain(store), RoleProvider.plain(nav)],
+        ),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('feature')).map((c) => '$c'),
+      [
+        'feature (disk, go) with nav',
+        'feature (disk, auto) with nav',
+        'feature (cloud, go) with nav',
+        'feature (hub, hub) with nav',
+        'feature (disk)',
+        'feature (cloud)',
+        'feature (hub)',
+      ],
+    );
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+    // The cases left out take no provider of a role of feature away from
+    // its apps.
+    expect(await harness.uncheckedProviders(), isEmpty);
+  });
+
+  /// The names of the cases of [results] with errors.
+  Set<String> failingOf(List<ContractResult> results) => {
+        for (final result in results)
+          if (result.errors.isNotEmpty) '${result.contractCase}',
+      };
+
+  test(
+      'keeps every combination of providers for a subset of used roles when '
+      'none can be in one app with the module, so that the cases report why',
+      () async {
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        // Every provider of the store role brings auto, and each add-on of
+        // go needs the store role: one requires it, the other uses it.
+        TestModule(
+          'disk',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'cloud',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule('addon', dependsOn: {'go'}, requires: {store}),
+        TestModule('extra', dependsOn: {'go'}, uses: {store}),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('addon')).map((c) => '$c'),
+      ['addon (disk)', 'addon (cloud)'],
+    );
+    // Without the store role, extra can be in an app.
+    expect(
+      harness.casesOfModule(const ModuleId('extra')).map((c) => '$c'),
+      ['extra (disk) with store', 'extra (cloud) with store', 'extra'],
+    );
+    final results = await harness.checkAll();
+    expect(failingOf(results), {
+      'addon (disk)',
+      'addon (cloud)',
+      'extra (disk) with store',
+      'extra (cloud) with store',
+    });
+    expect(
+      errorsOf(results),
+      everyElement(contains('at most one provider of the nav role')),
+    );
+  });
+
+  test(
+      'keeps every case of a provider of a role when no combination of the '
+      'providers it requires can be in one app with it, so that the cases '
+      'report why', () async {
+    final store = TestRole<NoDsl>('store');
+    final shell = TestRole<NoDsl>('shell');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        TestModule(
+          'disk',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'cloud',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        // A provider of the shell role that brings go and requires the
+        // store role, whose every provider brings auto.
+        TestModule(
+          'frame',
+          dependsOn: {'go'},
+          requires: {store},
+          providers: [RoleProvider.plain(shell)],
+        ),
+      ]),
+    );
+
+    expect(harness.casesOfRole(shell).map((c) => '$c'), [
+      'shell by frame (disk)',
+      'shell by frame (cloud)',
+    ]);
+    final results = await harness.checkAll();
+    expect(failingOf(results), {
+      'frame (disk)',
+      'frame (cloud)',
+      'shell by frame (disk)',
+      'shell by frame (cloud)',
+    });
+    expect(
+      errorsOf(results),
+      everyElement(contains('at most one provider of the nav role')),
+    );
+  });
+
+  test(
+      'checks each module with every provider of each role it requires or '
+      'uses', () async {
+    expect(await harness.uncheckedProviders(), isEmpty);
+  });
+
+  test(
+      'names a provider of a role of a module that no app of its cases has, '
+      'but none that cannot be in an app with the module', () async {
+    final session = TestRole<NoDsl>('session');
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'feature',
+          requires: {store},
+          uses: {nav},
+          variants: Variants(
+            role: state,
+            byProvider: {const ModuleId('bloc'): none},
+          ),
+        ),
+        TestModule('bloc', providers: [RoleProvider.plain(state)]),
+        // Feature has no variant for signals, so the two are in no app.
+        TestModule('signals', providers: [RoleProvider.plain(state)]),
+        TestModule('disk', providers: [RoleProvider.plain(store)]),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        // No module provides the session role, so the apps with cloud or
+        // auto do not resolve.
+        TestModule(
+          'cloud',
+          providers: [RoleProvider.plain(store)],
+          requires: {session},
+        ),
+        TestModule(
+          'auto',
+          providers: [RoleProvider.plain(nav)],
+          requires: {session},
+        ),
+      ]),
+    );
+
+    expect(await harness.uncheckedProviders(), [
+      equals(
+        'No case of feature builds an app in which cloud provides the store '
+        'role, which feature requires.',
+      ),
+      equals(
+        'No case of feature builds an app in which auto provides the nav '
+        'role, which feature uses.',
+      ),
+    ]);
   });
 
   test('checks rendered code with the structural rules of the roles', () async {
@@ -722,6 +999,7 @@ void main() {
       );
       expect(unchosen.errors.single.message, 'Give --pick.');
       expect(unchosen.app, isNull);
+      expect(unchosen.hook, isNull);
       expect(unchosen.collection, isNotNull);
 
       // The options of the harness apply to every case, unless the case
@@ -742,6 +1020,58 @@ void main() {
         ),
       );
       expect(overridden.choices, {pick: 'blue'});
+    });
+
+    test(
+        'gives the result the data and the roles of its app, with the context '
+        'of the harness and the choices of the roles', () async {
+      final pick = TestRole<String>(
+        'pick',
+        options: const [RoleOption(name: 'pick', help: 'What to pick.')],
+        template: _PickTemplate(),
+      );
+      const context = ModuleContext(
+        appName: 'bird_watch',
+        orgName: 'org.example',
+        appIdentity: AppIdentity(
+          platforms: ['android'],
+          androidApplicationId: 'org.example.bird_watch',
+          iosBundleId: 'org.example.bird-watch',
+          androidNamespace: 'org.example.bird_watch',
+        ),
+      );
+      final harness = ContractHarness(
+        ModuleRegistry([
+          scaffold(),
+          TestModule(
+            'picker',
+            providers: [RoleProvider.plain(pick)],
+            contributions: [pick.data('seeds')],
+          ),
+        ]),
+        context: context,
+      );
+
+      final result = await harness.check(
+        const ContractCase(
+          'picker',
+          requested: [ModuleId('picker')],
+          roleOptions: {'pick': 'blue'},
+        ),
+      );
+
+      expect(result.errors, isEmpty);
+      final hook = result.hook!;
+      expect(hook.presentRoles, result.resolution!.presentRoles);
+      expect(hook.presentRoles, containsAll([appEntryRole, pick]));
+      expect(hook.context, same(context));
+      expect(hook.choices, {pick: 'blue'});
+      // A role reads from it what its hooks got when the app was rendered.
+      final input = pick.hookInput(hook);
+      expect([for (final data in input.data) data.value], ['seeds']);
+      expect(input.data.single.origin, const ModuleOrigin(ModuleId('picker')));
+      expect(input.choice, 'blue');
+      expect(input.context.appName, 'bird_watch');
     });
 
     group('a question of a role', () {
@@ -795,6 +1125,7 @@ void main() {
         Future<String> errorOf(RoleTemplate<String> template) async {
           final result = await harnessOf(colors(template)).check(asker);
           expect(result.app, isNull);
+          expect(result.hook, isNull);
           return result.errors.single.message;
         }
 
@@ -925,6 +1256,7 @@ void main() {
       expect(result.errors, isEmpty);
       expect(result.app, isNull);
       expect(result.choices, isNull);
+      expect(result.hook, isNull);
     });
 
     test('problems of rendering become issues', () async {
@@ -1043,6 +1375,9 @@ void main() {
             ),
           ],
         );
+        // The app with its problems, and what its roles got.
+        expect(result.app, isNotNull);
+        expect(result.hook!.presentRoles, result.resolution!.presentRoles);
       });
 
       test(

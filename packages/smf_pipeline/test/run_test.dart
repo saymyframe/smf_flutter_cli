@@ -165,39 +165,60 @@ void main() {
     expect(runner.lines, isNot(contains(startsWith('tool'))));
   });
 
-  test('runs the follow-ups of a step after it, or leaves them with it',
-      () async {
+  test(
+      'runs the steps of a module that continue a step of a module it '
+      'depends on right after it, or leaves them with it', () async {
     // On the PATH of the host.
     host.fileSystem.file('/sdk/bin/fix').createSync(recursive: true);
-    const fix = PostGenStep(
-      ToolRef('fix'),
-      ['it'],
-      description: 'Fix',
-      skippable: true,
+    const first = PostGenStepId(ModuleId('extra'), 'first');
+    // Of a module that depends on extra, which knows nothing of it, and
+    // whose own step comes before.
+    final fixer = TestModule(
+      'fixer',
+      dependsOn: {'extra'},
+      contributions: const [
+        PostGenStep(ToolRef('fix'), ['own']),
+        PostGenStep(
+          ToolRef('fix'),
+          ['it'],
+          followUpOf: first,
+          description: 'Fix',
+          skippable: true,
+        ),
+      ],
     );
 
-    final ran = await pipeline(
-      modulesWith([
-        const PostGenStep(ToolRef('fix'), ['first'], followUps: [fix]),
+    final ran = await pipeline([
+      ...modulesWith([
+        const PostGenStep(ToolRef('fix'), ['first'], id: first),
+        const PostGenStep(ToolRef('fix'), ['second']),
       ]),
-    ).run(request(onConflict: OnConflict.replace));
+      fixer,
+    ]).run(request(modules: ['fixer'], onConflict: OnConflict.replace));
 
     expect(ran!.skippedSteps, isEmpty);
-    expect(runner.lines, containsAllInOrder(['fix first', 'fix it']));
+    expect(
+      [
+        for (final line in runner.lines)
+          if (line.startsWith('fix ')) line,
+      ],
+      ['fix first', 'fix it', 'fix second', 'fix own'],
+    );
 
-    final left = await pipeline(
-      modulesWith([
+    final left = await pipeline([
+      ...modulesWith([
         const Preflight([_Missing()]),
         const PostGenStep(
           ToolRef('tool'),
           ['go'],
+          id: first,
           description: 'Go',
           skippable: true,
           needs: ['tool'],
-          followUps: [fix],
         ),
       ]),
-    ).run(request(onConflict: OnConflict.replace));
+      fixer,
+    ]).run(request(modules: ['fixer'], onConflict: OnConflict.replace));
 
     expect(left!.skippedSteps.map((step) => '$step'), [
       'Go: tool go (Tool is missing)',

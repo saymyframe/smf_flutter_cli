@@ -1,6 +1,5 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -37,9 +36,6 @@ const List<SmfModule> _more = [
 /// The path of the file of `AppShell`.
 const String _shell = LayoutRole.appShellFile;
 
-/// The path of the file of `createAppRouter()`.
-const String _factory = RouterRole.appRouterFactoryFile;
-
 /// What the contract harness finds for the app of [modules] among
 /// [registry].
 Future<ContractResult> _check(
@@ -69,54 +65,21 @@ Future<ContractResult> _rendered(
 CompilationUnit _parsed(RenderedApp app, String path) =>
     parseString(content: app.files[path]!.text).unit;
 
-/// The named argument [label] of [arguments], or `null`.
-Expression? _argument(ArgumentList arguments, String label) => [
-      for (final argument in arguments.arguments)
-        if (argument case NamedExpression(:final name, :final expression)
-            when name.label.name == label)
-          expression,
-    ].firstOrNull;
-
-/// The names of the named arguments of [arguments].
-List<String> _argumentNames(ArgumentList arguments) => [
-      for (final argument in arguments.arguments)
-        if (argument case NamedExpression(:final name)) name.label.name,
+/// The labels of the destinations of the main navigation of the app of
+/// [result], in their order, as the layout role gives them to the router,
+/// which builds the shell of the layout from them, whichever module provides
+/// it.
+List<String> _labelsOf(ContractResult result) => [
+      for (final route
+          in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
+        route.route.destination!.label,
     ];
 
-/// The arguments of the calls of the function or constructor [name] in
-/// [unit], without a target, as the parser reads them.
-List<ArgumentList> _callsOf(CompilationUnit unit, String name) {
-  final finder = _CallFinder(name);
-  unit.accept(finder);
-  return finder.calls;
-}
-
-final class _CallFinder extends RecursiveAstVisitor<void> {
-  _CallFinder(this.name);
-
-  final String name;
-  final List<ArgumentList> calls = [];
-
-  @override
-  void visitMethodInvocation(MethodInvocation node) {
-    if (node.target == null && node.methodName.name == name) {
-      calls.add(node.argumentList);
-    }
-    super.visitMethodInvocation(node);
-  }
-}
-
-/// The labels of the destinations that the router of [app] gives the shell.
-List<String> _labelsOf(RenderedApp app) {
-  final shell = _callsOf(_parsed(app, _factory), 'AppShell').single;
-  final destinations = _argument(shell, 'destinations')! as ListLiteral;
-  return [
-    for (final element in destinations.elements)
-      (_argument((element as MethodInvocation).argumentList, 'label')!
-              as StringLiteral)
-          .stringValue!,
-  ];
-}
+/// The modules that provide [role] in the app of [result], whichever they
+/// are.
+Set<ModuleId> _providersOf(ContractResult result, Role role) => {
+      for (final module in result.resolution!.providersOf(role)) module.id,
+    };
 
 void main() {
   const module = BottomTabsModule();
@@ -228,15 +191,19 @@ void main() {
         app.files[LayoutRole.destinationFile]!.owner,
         const RoleTemplateOrigin(layoutRole),
       );
-      // The pubspec too: the shell needs nothing but Flutter.
+      // The pubspec too: the shell needs nothing but Flutter. The router
+      // builds its main navigation around the shell.
+      final router = _providersOf(result, routerRole);
+      final ofRouter = <String>[];
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (path == _factory) continue;
+        if (file.owner case ModuleOrigin(:final module)
+            when router.contains(module)) {
+          if (app.files[path]!.text != file.text) ofRouter.add(path);
+          continue;
+        }
         expect(app.files[path]!.bytes, file.bytes, reason: path);
       }
-      expect(
-        app.files[_factory]!.text,
-        isNot(without.files[_factory]!.text),
-      );
+      expect(ofRouter, isNotEmpty);
     });
 
     test(
@@ -294,31 +261,25 @@ void main() {
     test(
         'is built by the router with the destinations of the features, in '
         'their order', () async {
-      final shell = _callsOf(_parsed(app, _factory), 'AppShell').single;
-
-      expect(
-        _argumentNames(shell),
-        ['destinations', 'currentIndex', 'onSelect', 'body'],
-      );
-      expect(_labelsOf(app), ['Inbox', 'Search']);
+      expect(_labelsOf(result), ['Inbox', 'Search']);
 
       final reversed =
-          (await _rendered([_search.id, _inbox.id, BottomTabsModule.id])).app!;
+          await _rendered([_search.id, _inbox.id, BottomTabsModule.id]);
       expect(_labelsOf(reversed), ['Search', 'Inbox']);
     });
 
     test('is built with one destination too, whose bar the shell hides',
         () async {
-      final app = (await _rendered([_inbox.id, BottomTabsModule.id])).app!;
+      final result = await _rendered([_inbox.id, BottomTabsModule.id]);
 
-      expect(_labelsOf(app), ['Inbox']);
+      expect(_labelsOf(result), ['Inbox']);
     });
 
     test('has no shell to show without destinations', () async {
-      final app = (await _rendered(const [BottomTabsModule.id])).app!;
+      final result = await _rendered(const [BottomTabsModule.id]);
 
-      expect(app.files.keys, contains(_shell));
-      expect(_callsOf(_parsed(app, _factory), 'AppShell'), isEmpty);
+      expect(result.app!.files.keys, contains(_shell));
+      expect(_labelsOf(result), isEmpty);
     });
   });
 
@@ -337,7 +298,7 @@ void main() {
       );
 
       expect(
-        _labelsOf(result.app!),
+        _labelsOf(result),
         ['Inbox', 'Search', 'People', 'Settings', 'Help'],
       );
     });

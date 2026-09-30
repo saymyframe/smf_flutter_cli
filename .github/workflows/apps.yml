@@ -559,12 +559,16 @@ jobs:
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
+      # The FlutterFire CLI in the version that firebase_core activates on
+      # the machine of a user, which a tool of the module prints, so that CI
+      # configures the apps with that version whichever it is.
       - &install_firebase
         name: Install the Firebase CLI and the FlutterFire CLI
         run: |
           npm install --global firebase-tools
           firebase --version
-          dart pub global activate flutterfire_cli 1.4.1
+          version="$(dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart | jq -er .version)"
+          dart pub global activate flutterfire_cli "$version"
 
       # A test of smf_firebase_core runs the command of the README of the app
       # for Android, with the key of the service account in a file that only
@@ -905,9 +909,9 @@ jobs:
   # The app with every module of each provider of the app entry, as on
   # Linux, archived with the build phase for Crashlytics that flutterfire
   # configure adds, fixed by the command that the README of the app gives.
-  # The test skips an app that does not depend on firebase_crashlytics, to
-  # which flutterfire adds no such phase. It needs no Firebase project, so
-  # it runs without the key too.
+  # The test of smf_firebase_crashlytics skips an app that does not depend on
+  # firebase_crashlytics, to which flutterfire adds no such phase. It needs
+  # no Firebase project, so it runs without the key too.
   ios-archive:
     name: iOS archive (${{ matrix.app }})
     needs: plan
@@ -936,7 +940,7 @@ jobs:
             "$RUNNER_TEMP/SMF apps застосунки é/archive" archive_app
 
       - name: Archive the app with every module
-        working-directory: packages/smf_modules/smf_firebase_core
+        working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CRASHLYTICS_APP \
             "$RUNNER_TEMP/SMF apps застосунки é/archive" dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
@@ -988,9 +992,8 @@ jobs:
 
       # A test of smf_firebase_core runs the command of the README of the app
       # for iOS, with the key of the service account in a file that only
-      # this step has, and fixes the build phase for Crashlytics with the
-      # command of the README, as SMF does after it configures an app. It
-      # skips an app that does not depend on firebase_core, as on Linux.
+      # this step has. It skips an app that does not depend on
+      # firebase_core, as on Linux.
       - name: Configure the app with every module with Firebase for iOS
         working-directory: packages/smf_modules/smf_firebase_core
         env:
@@ -1007,6 +1010,17 @@ jobs:
             "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
       - *delete_key
+
+      # A test of smf_firebase_crashlytics fixes the build phase for
+      # Crashlytics that flutterfire added with the command of the README of
+      # the app, as SMF does right after it configures an app, and skips an
+      # app that does not depend on firebase_crashlytics.
+      - name: Fix the build phase for Crashlytics of the app with every module
+        working-directory: packages/smf_modules/smf_firebase_crashlytics
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
+            "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/flutterfire_phase_test.dart --file-reporter json:build/test-results/flutterfire_phase_test.json
+
       - *boot_simulator
 
       - name: Start the app with every module on the iOS simulator
@@ -1088,24 +1102,32 @@ jobs:
       # What smf create --explain says of the machine for the app with every
       # module of each provider of the app entry, which the plan gives: an
       # app whose modules check the FlutterFire CLI must find it, and one
-      # without them says nothing of it. --explain generates nothing.
+      # without them says nothing of it. --explain generates nothing. The
+      # version of the FlutterFire CLI and the name of its check come from a
+      # tool of firebase_core, as in the jobs with Firebase; --explain shows
+      # the name of a check that passed with the module that asks for it, and
+      # nothing after them.
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
         if: ${{ !cancelled() && needs.plan.result == 'success' }}
         env:
           ENTRIES: ${{ needs.plan.outputs.entries }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          dart pub global activate flutterfire_cli 1.4.1
+          $flutterfire = dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart | ConvertFrom-Json
+          $version = $flutterfire.version
+          if (-not $version) { throw 'firebase_core gives no version of the FlutterFire CLI.' }
+          dart pub global activate flutterfire_cli $version
           dart pub global run flutterfire_cli:flutterfire --version
+          $passed = '(?m)' + [regex]::Escape($flutterfire.check) + ' \(for \w+\)\r?$'
           $apps = @($env:ENTRIES | ConvertFrom-Json)
           if ($apps.Count -eq 0) { throw 'The plan has no app for an app entry.' }
           $found = 0
           foreach ($app in $apps) {
             $explain = dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $app "$env:RUNNER_TEMP\probe" probe --explain | Out-String
             $explain
-            if ($explain -match '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for \w+\)\r?$') {
+            if ($explain -match $passed) {
               $found++
-            } elseif ($explain -match 'FlutterFire CLI') {
+            } elseif ($explain.Contains($flutterfire.check)) {
               throw "SMF does not find the FlutterFire CLI for $app."
             }
           }

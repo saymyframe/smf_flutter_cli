@@ -24,6 +24,7 @@ export 'package:smf_pipeline/src/preflight.dart';
 export 'package:smf_pipeline/src/pubspec.dart';
 export 'package:smf_pipeline/src/resolver.dart';
 export 'package:smf_pipeline/src/selection.dart';
+export 'package:smf_pipeline/src/steps.dart';
 export 'package:smf_pipeline/src/validation.dart';
 
 /// A role for tests, configured through its constructor.

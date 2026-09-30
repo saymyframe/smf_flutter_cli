@@ -30,7 +30,10 @@
 //   (packages/smf_flutter_cli/tool/every_module_apps.dart), which the check
 //   does not read;
 // - refers to the package of a module, but in a step that runs the tests of
-//   that module.
+//   that module, or in one that refers to it only to run a tool of the
+//   module with dart run, which prints what the step needs to know of the
+//   module, such as the version of a program that the module installs on
+//   the machine of a user, rather than the step repeating it.
 // A step that must do one of these is an exception below, with the reason.
 // The words of a command are read as its shell reads them: bash, or
 // PowerShell, where `\` is a character of a path rather than an escape.
@@ -71,12 +74,37 @@ const modulePaths = {
     'smf_firebase_core',
   ): 'The test of firebase_core that configures the app of the job with '
       'Firebase with the command of its README, before CI starts it.',
-  ('Archive the app with every module', 'smf_firebase_core'):
-      'The test of firebase_core that archives the app of the job with the '
-          'build phase for Crashlytics fixed by the command of its README.',
+  ('Archive the app with every module', 'smf_firebase_crashlytics'):
+      'The test of firebase_crashlytics that archives the app of the job '
+          'with the build phase for Crashlytics fixed by the command of its '
+          'README.',
+  (
+    'Fix the build phase for Crashlytics of the app with every module',
+    'smf_firebase_crashlytics',
+  ): 'The test of firebase_crashlytics that fixes the build phase for '
+      'Crashlytics that flutterfire added to the app of the job with the '
+      'command of its README, before CI starts it.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',
+};
+
+/// The steps that may run a tool of the package of a module with dart run,
+/// by the name of the step and the path of the tool from the root of the
+/// repository, with the reason. Each tool prints what the step needs to
+/// know of the module, and the step refers to the package for nothing else.
+const moduleTools = {
+  (
+    'Install the Firebase CLI and the FlutterFire CLI',
+    'packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart',
+  ): 'The version of the FlutterFire CLI that firebase_core activates on the '
+      'machine of a user, which the step activates for the apps of its job.',
+  (
+    'Run the FlutterFire CLI through dart.bat, and find it as SMF does',
+    'packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart',
+  ): 'The version of the FlutterFire CLI that firebase_core activates on the '
+      'machine of a user, and the name of its check of the machine, which '
+      'the step finds in what smf create --explain says.',
 };
 
 /// The problems of the [workflow], the text of the workflow [file] of
@@ -84,8 +112,8 @@ const modulePaths = {
 /// name, that refer by its name to an app that the --create of a matrix
 /// tool generates in their job, that run smf create themselves or name the
 /// modules of an app with -m, and that refer to the package of a module,
-/// other than the exceptions of [modulePaths]. The exceptions that apply to
-/// a step go into [used].
+/// other than the exceptions of [modulePaths] and [moduleTools]. The
+/// exceptions that apply to a step go into [used].
 List<String> problemsOf(
   String workflow, {
   required String file,
@@ -123,9 +151,18 @@ List<String> problemsOf(
     final created = {for (final script in scripts) ...script.createdNames};
     for (final (index, step) in steps.indexed) {
       final script = scripts[index];
+      final name = _nameOf(step);
       problems.addAll(script.problems(created));
-      for (final package in _modulePackages(step)) {
-        final exception = (_nameOf(step), package);
+      // The tools of modules that the step may run, and runs.
+      final tools = {
+        for (final (named, tool) in moduleTools.keys)
+          if (named == name && _runOf(tool).hasMatch(script.text)) tool,
+      };
+      for (final tool in tools) {
+        used?.add((name, tool));
+      }
+      for (final package in _modulePackages(step, tools)) {
+        final exception = (name, package);
         if (!modulePaths.containsKey(exception)) {
           problems.add(
             _modulePackage(script.where, package, 'Only a step that runs'),
@@ -167,10 +204,11 @@ String _nameOf(YamlMap step) =>
     '${step['name'] ?? step['uses'] ?? step['run']}';
 
 /// The problem that [where] refers to the package [package] of a module,
-/// which only [who] the tests of the module may.
+/// which only [who] the tests of the module, or a tool of it, may.
 String _modulePackage(String where, String package, String who) =>
     '$where refers to the package $package of a module. $who the tests of '
-    'the module may, as an exception of tools/workflow_apps_test.dart with '
+    'the module, or a tool of it that prints what the step needs to know of '
+    'the module, may, as an exception of tools/workflow_apps_test.dart with '
     'its reason.';
 
 /// A script to check: the `run` of a step, or a script of .github/scripts.
@@ -775,16 +813,28 @@ bool _namesModules(List<String> words) {
 
 /// The packages of modules that [step] refers to by path in its command,
 /// its working directory, its environment and its inputs: a directory
-/// right in packages/smf_modules, but not a pattern for any of them.
-Set<String> _modulePackages(YamlMap step) => {
+/// right in packages/smf_modules, but not a pattern for any of them, nor
+/// the path of one of [tools] in a run of it with dart run in its command.
+Set<String> _modulePackages(YamlMap step, Set<String> tools) => {
       for (final text in [
-        step['run'],
+        tools.fold(
+          '${step['run'] ?? ''}',
+          (run, tool) => run.replaceAll(_runOf(tool), 'dart run'),
+        ),
         step['working-directory'],
         if (step['env'] case final YamlMap env) ...env.values,
         if (step['with'] case final YamlMap inputs) ...inputs.values,
       ])
         ..._packagesIn('${text ?? ''}'),
     };
+
+/// A run of the tool at [path], a path from the root of the repository,
+/// with dart run: the path with either separator, maybe in quotes.
+RegExp _runOf(String path) => RegExp(
+      r'''\bdart\s+run\s+(["']?)'''
+      '${path.split('/').map(RegExp.escape).join(r'[/\\]')}'
+      r'\1(?![\w.])',
+    );
 
 /// The packages of modules that [text] refers to by path.
 Set<String> _packagesIn(String text) => {
@@ -1164,7 +1214,7 @@ jobs:
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
       - name: Archive the app with every module
-        working-directory: packages/smf_modules/smf_firebase_core
+        working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: dart run tool/archive.dart
       - name: Start the app with every module
         env:
@@ -1178,13 +1228,14 @@ jobs:
       [
         equals(
           'apps.yml, job a, step "Archive the app with every module" refers '
-          'to the package smf_firebase_core of a module, but runs no test of '
-          'it with dart test.',
+          'to the package smf_firebase_crashlytics of a module, but runs no '
+          'test of it with dart test.',
         ),
         equals(
           'apps.yml, job a, step "Start the app with every module" refers to '
           'the package smf_home_flutter of a module. Only a step that runs '
-          'the tests of the module may, as an exception of '
+          'the tests of the module, or a tool of it that prints what the step '
+          'needs to know of the module, may, as an exception of '
           'tools/workflow_apps_test.dart with its reason.',
         ),
         startsWith(
@@ -1199,6 +1250,99 @@ jobs:
         'smf_flutter_core'
       ),
     });
+  });
+
+  test(
+      'passes a step that runs a tool of a module as an exception, but finds '
+      'one that refers to the package for something else, or that another '
+      'step runs', () {
+    const install = 'Install the Firebase CLI and the FlutterFire CLI';
+    const explain =
+        'Run the FlutterFire CLI through dart.bat, and find it as SMF does';
+    const tool =
+        'packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart';
+    final used = <Object>{};
+
+    expect(
+      problemsOf(
+        r'''
+jobs:
+  linux:
+    steps:
+      - name: Install the Firebase CLI and the FlutterFire CLI
+        run: |
+          version="$(dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart | jq -er .version)"
+          dart pub global activate flutterfire_cli "$version"
+  windows:
+    steps:
+      - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
+        shell: pwsh
+        run: |
+          $flutterfire = dart run "packages\smf_modules\smf_firebase_core\tool\flutterfire_version.dart" | ConvertFrom-Json
+          dart pub global activate flutterfire_cli $flutterfire.version
+''',
+        file: 'apps.yml',
+        used: used,
+      ),
+      isEmpty,
+    );
+    expect(used, {(install, tool), (explain, tool)});
+
+    used.clear();
+    expect(
+      problemsOf(
+        '''
+jobs:
+  linux:
+    steps:
+      - name: Install the Firebase CLI and the FlutterFire CLI
+        run: |
+          dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart > version.json
+          cat packages/smf_modules/smf_firebase_core/lib/src/preflight/flutterfire_cli.dart
+  macos:
+    steps:
+      - name: Install the Firebase CLI and the FlutterFire CLI
+        working-directory: packages/smf_modules/smf_firebase_core
+        run: dart run tool/flutterfire_version.dart
+  windows:
+    steps:
+      - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
+        run: cat packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart
+      - name: Activate the FlutterFire CLI
+        run: dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart
+  other:
+    steps:
+      - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
+        run: dart run packages/smf_modules/smf_firebase_core/tool/flutterfire_version.dart.old
+''',
+        file: 'apps.yml',
+        used: used,
+      ),
+      [
+        startsWith(
+          'apps.yml, job linux, step "$install" refers to the package '
+          'smf_firebase_core of a module. Only a step that runs the tests of '
+          'the module, or a tool of it',
+        ),
+        startsWith(
+          'apps.yml, job macos, step "$install" refers to the package '
+          'smf_firebase_core of a module.',
+        ),
+        startsWith(
+          'apps.yml, job windows, step "$explain" refers to the package '
+          'smf_firebase_core of a module.',
+        ),
+        startsWith(
+          'apps.yml, job windows, step "Activate the FlutterFire CLI" refers '
+          'to the package smf_firebase_core of a module.',
+        ),
+        startsWith(
+          'apps.yml, job other, step "$explain" refers to the package '
+          'smf_firebase_core of a module.',
+        ),
+      ],
+    );
+    expect(used, {(install, tool)});
   });
 
   test('finds the same in a script of .github/scripts', () {
@@ -1230,8 +1374,9 @@ cd packages/smf_modules/smf_go_router
         equals(
           '.github/scripts/build.sh refers to the package smf_go_router of a '
           'module. Only a step of a workflow that runs the tests of the '
-          'module may, as an exception of tools/workflow_apps_test.dart with '
-          'its reason.',
+          'module, or a tool of it that prints what the step needs to know of '
+          'the module, may, as an exception of tools/workflow_apps_test.dart '
+          'with its reason.',
         ),
       ],
     );
@@ -1734,7 +1879,7 @@ jobs:
       );
     }
     expect(
-      {...modulePaths.keys}.difference(used),
+      {...modulePaths.keys, ...moduleTools.keys}.difference(used),
       isEmpty,
       reason: 'An exception that applies to no step is left over: remove it.',
     );

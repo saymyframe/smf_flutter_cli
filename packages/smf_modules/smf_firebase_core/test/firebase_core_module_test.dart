@@ -4,7 +4,6 @@ library;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/configure.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -35,6 +34,12 @@ Future<ContractResult> _resultOf(List<ModuleId> modules) async {
   }
   return result;
 }
+
+/// Whether the pipeline put code of this module into [file], whose imports
+/// it added to the file.
+bool _holdsCodeOfModule(RenderedFile file) => file.addedImports.any(
+      (added) => added.contributor == const ModuleOrigin(FirebaseCoreModule.id),
+    );
 
 /// The pubspec [text] as plain maps and lists.
 Map<String, Object?> _yamlOf(String text) {
@@ -106,12 +111,15 @@ void main() {
 
     test(
         'configures Firebase with flutterfire after generation, for the '
-        'platforms of the app', () {
+        'platforms of the app, in a step that the modules which depend on it '
+        'may continue', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
           .single;
 
+      expect(step.id, FirebaseCoreModule.configureStep);
+      expect(FirebaseCoreModule.configureStep.module, FirebaseCoreModule.id);
       expect(step.tool, same(flutterfireTool));
       expect(step.tool.executable, 'dart');
       expect(
@@ -149,57 +157,14 @@ void main() {
     });
 
     test(
-        'then points the phase for Crashlytics of flutterfire at the upload '
-        'script in the build directory of the app', () {
-      final step = module
+        'is its only step: no step of the module continues it, which the '
+        'modules that depend on it may do', () {
+      final steps = module
           .contribute(ContractHarness.defaultContext)
-          .whereType<PostGenStep>()
-          .single;
+          .whereType<PostGenStep>();
 
-      final fix = step.followUps.single;
-      expect(fix.tool.executable, 'ruby');
-      expect(fix.tool.prefixArgs, isEmpty);
-      expect(fix.arguments, hasLength(3));
-      expect(fix.arguments.first, '-e');
-      expect(
-        fix.arguments[1],
-        allOf(
-          contains(
-            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
-            'Crashlytics/run"',
-          ),
-          contains(
-            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
-            'firebase-ios-sdk/Crashlytics/run"',
-          ),
-        ),
-      );
-      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
-      // Without firebase_crashlytics, which the module does not know about,
-      // flutterfire adds no phase.
-      expect(
-        fix.description,
-        'Fixing the Crashlytics phase of flutterfire, if any, for flutter '
-        'build ipa',
-      );
-      // It changes a file of the app, so it runs without asking or the
-      // terminal, and the app is complete without it.
-      expect(fix.interactive, isFalse);
-      expect(fix.external, isFalse);
-      expect(fix.skippable, isTrue);
-      // flutterfire adds the phase only on macOS, and elsewhere there is
-      // nothing to fix; the step that it follows needs the Ruby of the Mac.
-      expect(fix.hosts, {HostOperatingSystem.macos});
-      expect(fix.needs, isEmpty);
-      expect(fix.when, isEmpty);
-      expect(fix.followUps, isEmpty);
-      // The README of the app gives it as the pipeline prints it, in single
-      // quotes, which the program has none of.
-      expect(fix.arguments[1], isNot(contains("'")));
-      expect(
-        crashlyticsPhaseFixCommand,
-        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
-      );
+      expect(steps.map((step) => step.id), [FirebaseCoreModule.configureStep]);
+      expect(steps.single.followUpOf, isNull);
     });
   });
 
@@ -301,11 +266,13 @@ void main() {
   });
 
   group('an app with Firebase', () {
+    late ContractResult result;
     late RenderedApp withFirebase;
     late RenderedApp without;
 
     setUpAll(() async {
-      withFirebase = (await _resultOf(const [FirebaseCoreModule.id])).app!;
+      result = await _resultOf(const [FirebaseCoreModule.id]);
+      withFirebase = result.app!;
       without = (await _resultOf(const [FlutterCoreModule.id])).app!;
     });
 
@@ -321,11 +288,10 @@ void main() {
         const ModuleOrigin(FirebaseCoreModule.id),
       );
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (const {
-          'pubspec.yaml',
-          AppEntryRole.bootstrapFile,
-          AppEntryRole.readmeFile,
-        }.contains(path)) {
+        // The file that starts Firebase, which the tests below check.
+        if (path == 'pubspec.yaml' ||
+            path == AppEntryRole.readmeFile ||
+            _holdsCodeOfModule(withFirebase.files[path]!)) {
           continue;
         }
         expect(withFirebase.files[path]!.bytes, file.bytes, reason: path);
@@ -374,40 +340,52 @@ void main() {
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('run `flutterfire` from `~/.pub-cache/bin`'),
           contains('if you change them, change them in the command too'),
-          contains('`flutter build ipa` needs one more change on macOS'),
-          contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
         ),
+      );
+      // Nothing of the build phases that flutterfire adds for other
+      // packages, which the modules of those packages tell of.
+      expect(
+        readme.text,
+        isNot(anyOf(contains('ruby -e'), contains('flutter build ipa'))),
       );
     });
 
     test('initializes Firebase with the options of the platform in bootstrap()',
         () {
-      final file = withFirebase.files[AppEntryRole.bootstrapFile]!;
-      final index = DartFileIndexer.index(file.path, file.text);
-
-      final calls = index.invocations
-          .where((call) => call.name == 'initializeApp')
-          .toList();
-      expect(calls, hasLength(1));
-      expect(calls.single.target, 'Firebase');
-      expect(calls.single.awaited, isTrue);
-      expect(calls.single.enclosingDeclaration, 'bootstrap');
-      expect(calls.single.namedArguments, ['options']);
+      // The platform phase of start-up, which the provider of the app entry
+      // runs in bootstrap(), whichever module it is.
+      final start = result.app!.socketOrders[AppEntryRole.bootstrapPlatform]!
+          .contributions.single;
+      expect(start.origin, const ModuleOrigin(FirebaseCoreModule.id));
+      final code = (start.contribution as SocketContribution).fragment!.code;
       expect(
-        file.text,
-        contains(
-          'await Firebase.initializeApp(options: '
-          'DefaultFirebaseOptions.currentPlatform);',
-        ),
+        code,
+        'await Firebase.initializeApp(options: '
+        'DefaultFirebaseOptions.currentPlatform);',
       );
+      // One statement that awaits the call, as code.
+      final call = DartFileIndexer.index(
+        'lib/start.dart',
+        'Future<void> start() async {\n$code\n}\n',
+      ).invocations.single;
+      expect(call.name, 'initializeApp');
+      expect(call.target, 'Firebase');
+      expect(call.awaited, isTrue);
+      expect(call.namedArguments, ['options']);
+      // The pipeline adds its imports to the file of the app entry with the
+      // phase.
+      final entry = result.resolution!.providersOf(appEntryRole).single.id;
       expect(
         [
-          for (final added in file.addedImports)
-            (added.import.uri, '${added.contributor}'),
+          for (final file in withFirebase.files.values)
+            for (final added in file.addedImports)
+              if (added.contributor ==
+                  const ModuleOrigin(FirebaseCoreModule.id))
+                ('${file.owner}', added.import.uri),
         ],
         [
-          ('package:firebase_core/firebase_core.dart', 'firebase_core'),
-          ('package:contract_app/firebase_options.dart', 'firebase_core'),
+          ('$entry', 'package:firebase_core/firebase_core.dart'),
+          ('$entry', 'package:contract_app/firebase_options.dart'),
         ],
       );
     });

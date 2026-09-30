@@ -1,6 +1,5 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -19,9 +18,6 @@ const List<SmfModule> _modules = [
 
 /// The path of the screen of the module in the app.
 const _screen = 'lib/features/home/home_screen.dart';
-
-/// The path of the file of `createAppRouter()`.
-const String _factory = RouterRole.appRouterFactoryFile;
 
 /// The annotation that [_Annotating] gives the class of the screen.
 const String _annotation = "@Deprecated('An annotation of the tests')";
@@ -99,56 +95,25 @@ Expression _returnedBy(ClassDeclaration declaration, String name) {
   return (member.body as ExpressionFunctionBody).expression;
 }
 
-/// The named argument [label] of [call], or `null`.
-Expression? _argument(MethodInvocation call, String label) => [
-      for (final argument in call.argumentList.arguments)
-        if (argument case NamedExpression(:final name, :final expression)
-            when name.label.name == label)
-          expression,
-    ].firstOrNull;
-
-final class _CallFinder extends RecursiveAstVisitor<void> {
-  _CallFinder(this.name);
-
-  final String name;
-  final List<MethodInvocation> calls = [];
-
-  @override
-  void visitMethodInvocation(MethodInvocation node) {
-    if (node.target == null && node.methodName.name == name) calls.add(node);
-    super.visitMethodInvocation(node);
-  }
-}
-
-/// The calls of the function or constructor [name] in [unit].
-List<MethodInvocation> _callsOf(CompilationUnit unit, String name) {
-  final finder = _CallFinder(name);
-  unit.accept(finder);
-  return finder.calls;
-}
-
 /// The value of the string literal [expression].
 String? _string(Expression? expression) =>
     (expression as StringLiteral?)?.stringValue;
-
-/// The expression that the function [expression] returns.
-Expression _bodyOf(Expression expression) =>
-    ((expression as FunctionExpression).body as ExpressionFunctionBody)
-        .expression;
 
 /// The path of the route that the router role chose to start the app of
 /// [result] on.
 String? _startOf(ContractResult result) =>
     (result.choices![routerRole]! as RouterChoice).startPath;
 
-/// The initial location of the `GoRouter` in the file of `createAppRouter()`
-/// of [app].
-String? _initialLocationOf(RenderedApp app) => _string(
-      _argument(
-        _callsOf(_parsed(app, _factory), 'GoRouter').single,
-        'initialLocation',
-      ),
-    );
+/// The route that the router role chose to start the app of [result] on,
+/// as every router gets it, whichever module provides the role.
+FacadeRoute? _startRouteOf(ContractResult result) =>
+    routerRole.startIn(routerRole.hookInput(result.hook!));
+
+/// The modules that provide [role] in the app of [result], whichever they
+/// are.
+Set<ModuleId> _providersOf(ContractResult result, Role role) => {
+      for (final module in result.resolution!.providersOf(role)) module.id,
+    };
 
 void main() {
   const module = HomeModule();
@@ -273,13 +238,18 @@ void main() {
     });
 
     test('is the app with the router but for the screen and its route', () {
-      const routeFiles = {_factory, RouterRole.navigationFile};
+      final router = _providersOf(result, routerRole);
 
       expect(app.files.keys.toSet(), {...withRouter.files.keys, _screen});
       expect(app.files[_screen]!.owner, const ModuleOrigin(HomeModule.id));
-      // The pubspec too: home adds no dependency.
+      // The pubspec too: home adds no dependency. The route goes into the
+      // navigation of the role and into the files of the router.
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
-        if (routeFiles.contains(path)) continue;
+        if (path == RouterRole.navigationFile) continue;
+        if (file.owner case ModuleOrigin(:final module)
+            when router.contains(module)) {
+          continue;
+        }
         expect(app.files[path]!.bytes, file.bytes, reason: path);
       }
     });
@@ -288,33 +258,17 @@ void main() {
       expect(_startOf(result), '/home');
     });
 
-    test('opens on the screen of home at /home, which / redirects to', () {
-      final unit = _parsed(app, _factory);
+    test('opens on the screen of home at /home', () {
+      // The router opens the app on the route that its role chose, which
+      // the tests of each router and the tests of the router role in the
+      // apps of the matrix check.
+      final start = _startRouteOf(result)!;
 
-      expect(_initialLocationOf(app), '/home');
-      final routes = {
-        for (final route in _callsOf(unit, 'GoRoute'))
-          _string(_argument(route, 'path')): route,
-      };
-      expect(routes.keys, ['/', '/home']);
-      expect(_string(_bodyOf(_argument(routes['/']!, 'redirect')!)), '/home');
-      expect(_argument(routes['/']!, 'builder'), isNull);
-      final home = routes['/home']!;
-      expect(_string(_argument(home, 'name')), 'home.home');
-      expect(_argument(home, 'redirect'), isNull);
-      // The builder creates the screen from the file of home, whatever the
-      // prefix of its import.
-      final screenFile =
-          unit.directives.whereType<ImportDirective>().singleWhere(
-                (directive) =>
-                    directive.uri.stringValue ==
-                    'package:contract_app/features/home/home_screen.dart',
-              );
-      final prefix = screenFile.prefix?.name;
-      expect(
-        _bodyOf(_argument(home, 'builder')!).toSource(),
-        prefix == null ? 'const HomeScreen()' : 'const $prefix.HomeScreen()',
-      );
+      expect(start.fullPath, '/home');
+      expect(start.fullName, 'home.home');
+      expect(start.parent, isNull);
+      expect(start.route.screen.className, 'HomeScreen');
+      expect(start.route.screen.file, _screen);
     });
 
     test('offers the route to the navigation of the app', () {
@@ -390,7 +344,6 @@ void main() {
     );
 
     expect(_startOf(result), '/home');
-    expect(_initialLocationOf(result.app!), '/home');
   });
 
   test('keeps the annotations of the router role on the class of the screen',

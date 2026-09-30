@@ -59,6 +59,31 @@ void main() {
     );
   });
 
+  test(
+      'finds the key of the members of the workspace that code looks up or '
+      'matches, but in tools/workspace_members.dart, which reads them', () {
+    expect(
+      _names({
+        'tools/a.dart': "if (line == 'workspace:') inWorkspace = true;\n"
+            "final members = pubspec['workspace'];\n"
+            'final key = RegExp(r"^workspace:\\s*\$");\n'
+            // The text of a pubspec in a test, and other names.
+            "const pubspec = 'name: root\\n' 'workspace:\\n';\n"
+            "const other = 'workspace: # The packages.\\n';\n"
+            "const names = ['workspaces', 'my_workspace'];\n",
+        'tools/workspace_members.dart':
+            "final workspace = pubspec.nodes['workspace'];\n",
+        'pubspec.yaml': 'workspace:\n  - packages/a\n',
+        'README.md': 'The `workspace:` of the root pubspec lists them.\n',
+      }),
+      [
+        'tools/a.dart:1: workspace: read by hand',
+        'tools/a.dart:2: workspace: read by hand',
+        'tools/a.dart:3: workspace: read by hand',
+      ],
+    );
+  });
+
   test('reads Dart code, pubspecs, templates, workflows and Markdown only', () {
     expect(
       _names({
@@ -102,6 +127,87 @@ void main() {
         '$template:1: {{app_name_sc}}',
         'packages/smf_contracts/pubspec.yaml:1: smf_contribution_engine',
         'packages/smf_contracts/pubspec.yaml:2: mustachex',
+      ],
+    );
+  });
+
+  test(
+      'finds the files of the providers of roles in the tests of modules, '
+      'but as the keys of maps and in the tests of the provider', () {
+    const home = 'packages/smf_modules/smf_home_flutter/test/home_test.dart';
+    const router = 'packages/smf_modules/smf_go_router/test/support/app.dart';
+    const tabs = 'packages/smf_modules/smf_bottom_tabs/test/tabs_test.dart';
+    expect(
+      _names({
+        home: 'const factory = RouterRole.appRouterFactoryFile;\n'
+            'final di = app.files[DiRole.dependenciesFile]!;\n'
+            "final path = 'lib/core/layout/app_shell.dart';\n"
+            "import 'package:contract_app/core/di/dependencies.dart';\n"
+            "  RouterRole.appRouterFactoryFile: '''\n"
+            '  LayoutRole.appShellFile : [\n'
+            "  'lib/core/router/app_router_factory.dart': '',\n"
+            'final other = RouterRole.appRouterFactoryFileOf(app);\n'
+            'final named = MyDiRole.dependenciesFile;\n',
+        router: 'const factory = RouterRole.appRouterFactoryFile;\n'
+            'final shell = app.files[LayoutRole.appShellFile]!;\n',
+        'packages/smf_modules/smf_get_it/test/get_it_test.dart':
+            'const file = DiRole.dependenciesFile;\n',
+        tabs: 'const file = LayoutRole.appShellFile;\n'
+            'const router = RouterRole.appRouterFactoryFile;\n',
+        // Code of modules, and the tests of other packages.
+        'packages/smf_modules/smf_home_flutter/lib/home.dart':
+            'const factory = RouterRole.appRouterFactoryFile;\n',
+        'packages/smf_pipeline/fixture_registry/test/registry_test.dart':
+            'final router = app.files[RouterRole.appRouterFactoryFile]!;\n',
+        'packages/smf_contracts/test/di_test.dart':
+            'expect(issue.path, DiRole.dependenciesFile);\n',
+      }),
+      [
+        '$home:1: RouterRole.appRouterFactoryFile',
+        '$home:2: DiRole.dependenciesFile',
+        '$home:3: LayoutRole.appShellFile',
+        '$home:4: DiRole.dependenciesFile',
+        '$router:2: LayoutRole.appShellFile',
+        '$tabs:2: RouterRole.appRouterFactoryFile',
+      ],
+    );
+  });
+
+  test(
+      'finds the files that the provider of the app entry renders in the '
+      'tests of modules, but as the keys of maps and in the tests of the '
+      'provider', () {
+    const state = 'packages/smf_modules/smf_riverpod/test/state_test.dart';
+    const core = 'packages/smf_modules/smf_flutter_core/test/core_test.dart';
+    expect(
+      _names({
+        state: 'final main = app.files[AppEntryRole.mainFile]!;\n'
+            'if (path == AppEntryRole.bootstrapFile) continue;\n'
+            "final app = withRouter.files['lib/app.dart']!;\n"
+            "final start = app.files['lib/bootstrap.dart']!;\n"
+            "import 'package:contract_app/main.dart' as app;\n"
+            "  AppEntryRole.mainFile: '''\n"
+            "  'lib/app.dart': '',\n"
+            // Files that the roles guarantee, and other files.
+            "const fallback = 'lib/core/app/fallback_start_screen.dart';\n"
+            'const readme = AppEntryRole.readmeFile;\n'
+            "const router = 'lib/core/router/app_router.dart';\n"
+            "const shell = 'lib/features/shell/main.dart.txt';\n"
+            'final other = AppEntryRole.mainFiles;\n',
+        core: "final app = texts['lib/app.dart']!;\n"
+            'final bootstrap = texts[AppEntryRole.bootstrapFile]!;\n',
+        // No module, and the tests of other packages.
+        'packages/smf_modules/smf_contribution_engine/test/engine_test.dart':
+            "const untouchedFile = 'lib/app.dart';\n",
+        'packages/smf_pipeline/test/render_test.dart':
+            "final bootstrap = app.files['lib/bootstrap.dart']!;\n",
+      }),
+      [
+        '$state:1: AppEntryRole.mainFile',
+        '$state:2: AppEntryRole.bootstrapFile',
+        '$state:3: lib/app.dart',
+        '$state:4: AppEntryRole.bootstrapFile',
+        '$state:5: AppEntryRole.mainFile',
       ],
     );
   });

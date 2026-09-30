@@ -11,6 +11,8 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
+import 'package:smf_firebase_crashlytics/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -154,13 +156,36 @@ Map<String, Object?> _pubspecWithoutCrashlytics(RenderedApp app) {
   return {...pubspec, 'dependencies': dependencies};
 }
 
+/// The modules that provide [role] in the app of [result], whichever they
+/// are.
+Set<ModuleId> _providersOf(ContractResult result, Role role) => {
+      for (final module in result.resolution!.providersOf(role)) module.id,
+    };
+
+/// The registrations of the DI role in the app of [result], as the provider
+/// of the role gets them to render.
+List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
+    diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
+
+/// Whether the pipeline put code of the crash reporting, of this module or
+/// of the template of its role, into [file], whose imports it added to the
+/// file.
+bool _holdsCodeOfCrashReporting(RenderedFile file) => file.addedImports.any(
+      (added) => const [
+        ModuleOrigin(FirebaseCrashlyticsModule.id),
+        RoleTemplateOrigin(crashReportingRole),
+      ].contains(added.contributor),
+    );
+
 /// Checks that [app] is [without] but for the files of the crash reporting,
-/// the dependency on firebase_crashlytics, `bootstrap()` and the files at
-/// [changed].
+/// the dependency on firebase_crashlytics, the files that hold code of the
+/// crash reporting, such as the start-up, the section of the module in the
+/// README, after those of [without], and the files that the modules
+/// [changedBy] generate.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
-  Set<String> changed = const {},
+  Set<ModuleId> changedBy = const {},
 }) {
   expect(
     app.files.keys.toSet(),
@@ -176,8 +201,12 @@ void _expectTheAppWithout(
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
     if (path == 'pubspec.yaml' ||
-        path == AppEntryRole.bootstrapFile ||
-        changed.contains(path)) {
+        path == AppEntryRole.readmeFile ||
+        _holdsCodeOfCrashReporting(app.files[path]!)) {
+      continue;
+    }
+    if (file.owner case ModuleOrigin(:final module)
+        when changedBy.contains(module)) {
       continue;
     }
     expect(app.files[path]!.bytes, file.bytes, reason: path);
@@ -187,19 +216,37 @@ void _expectTheAppWithout(
     _pubspecWithoutCrashlytics(app),
     _yamlOf(without.files['pubspec.yaml']!.text),
   );
+  final readme = app.files[AppEntryRole.readmeFile]!;
+  expect(readme.owner, without.files[AppEntryRole.readmeFile]!.owner);
+  expect(
+    readme.text,
+    '${without.files[AppEntryRole.readmeFile]!.text}'
+    '\n'
+    '## Crashlytics\n'
+    '\n'
+    '$readmeSection',
+  );
 }
 
-/// The statements of `bootstrap()` in [app], as written.
-List<String> _bootstrapOf(RenderedApp app) {
-  final unit = parseString(
-    content: app.files[AppEntryRole.bootstrapFile]!.text,
-  ).unit;
-  final bootstrap = unit.declarations
-      .whereType<FunctionDeclaration>()
-      .singleWhere((function) => function.name.lexeme == 'bootstrap');
-  final body = bootstrap.functionExpression.body as BlockFunctionBody;
-  return [for (final statement in body.block.statements) '$statement'];
-}
+/// The code that the modules and the templates of the roles put into the
+/// phases of start-up in the app of [result], phase after phase, each as its
+/// contributor and its code: what `bootstrap()` runs, into which the
+/// provider of the app entry renders the phases, whichever module it is.
+List<String> _startUpOf(ContractResult result) => [
+      for (final phase in const [
+        AppEntryRole.bootstrapEarly,
+        AppEntryRole.bootstrapPlatform,
+        AppEntryRole.bootstrapDi,
+        AppEntryRole.bootstrapLate,
+      ])
+        for (final collected
+            in result.app!.socketOrders[phase]?.contributions ??
+                const <Collected>[])
+          [
+            '${collected.origin}:',
+            (collected.contribution as SocketContribution).fragment!.code,
+          ].join(' '),
+    ];
 
 /// The factories that the reporter of the app in [app] forwards to, as
 /// written in the list of the reporters of the template of the role.
@@ -278,11 +325,12 @@ void main() {
     });
 
     test(
-        'contributes its brick, firebase_crashlytics and its implementation of '
-        'the reporter, created without waiting, and nothing else', () {
+        'contributes its brick, firebase_crashlytics, its implementation of '
+        'the reporter, created without waiting, the fix of the build phase '
+        'for Crashlytics and its section of the README, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(5));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseCrashlyticsBundle));
       expect(brick.bundle.name, 'firebase_crashlytics');
@@ -308,6 +356,79 @@ void main() {
         ),
       );
       expect(implementation.create!.import, implementation.type.import);
+      expect(contributions[3], same(crashlyticsPhaseFix));
+      final readme = contributions[4] as SocketContribution;
+      expect(readme.socket, AppEntryRole.readmeSections);
+      expect(readme.entryKey, 'Crashlytics');
+      expect(readme.entryValue, readmeSection);
+    });
+
+    test(
+        'continues the step of firebase_core that runs flutterfire configure, '
+        'on macOS, with Ruby that points the phase for Crashlytics of '
+        'flutterfire at the upload script in the build directory of the app',
+        () {
+      final fix = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+
+      expect(fix.followUpOf, FirebaseCoreModule.configureStep);
+      expect(fix.tool.executable, 'ruby');
+      expect(fix.tool.prefixArgs, isEmpty);
+      expect(fix.arguments, hasLength(3));
+      expect(fix.arguments.first, '-e');
+      expect(
+        fix.arguments[1],
+        allOf(
+          contains(
+            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
+            'Crashlytics/run"',
+          ),
+          contains(
+            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
+            'firebase-ios-sdk/Crashlytics/run"',
+          ),
+        ),
+      );
+      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
+      expect(
+        fix.description,
+        'Fixing the Crashlytics phase of flutterfire for flutter build ipa',
+      );
+      // It changes a file of the app, so it runs without asking or the
+      // terminal, and the app is complete without it.
+      expect(fix.interactive, isFalse);
+      expect(fix.external, isFalse);
+      expect(fix.skippable, isTrue);
+      // flutterfire adds the phase only on macOS, and elsewhere there is
+      // nothing to fix; the step that it continues needs the Ruby of the
+      // Mac.
+      expect(fix.hosts, {HostOperatingSystem.macos});
+      expect(fix.needs, isEmpty);
+      expect(fix.when, isEmpty);
+      expect(fix.id, isNull);
+      // The README of the app gives it as the pipeline prints it, in single
+      // quotes, which the program has none of.
+      expect(fix.arguments[1], isNot(contains("'")));
+      expect(
+        crashlyticsPhaseFixCommand,
+        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
+      );
+    });
+
+    test(
+        'tells in the README of the app how to fix the phase once the app is '
+        'configured again on macOS', () {
+      expect(readmeHeading, 'Crashlytics');
+      expect(
+        readmeSection,
+        allOf(
+          contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
+          contains('`flutter build ipa` needs one more change on macOS'),
+          contains('flutterfire_cli 1.4.1 or a later 1.x'),
+        ),
+      );
     });
   });
 
@@ -338,6 +459,37 @@ void main() {
       }
     });
 
+    test(
+        'runs the fix of the phase in the apps of the module right after '
+        'flutterfire configure of firebase_core, which it continues', () {
+      final apps = [
+        for (final result in results)
+          if (result.resolution!.modules
+              .any((module) => module.id == FirebaseCrashlyticsModule.id))
+            result,
+      ];
+
+      expect(apps, hasLength(2));
+      for (final result in apps) {
+        final steps = [
+          for (final collected in result.validation!.postGenOrder.contributions)
+            (
+              '${collected.origin}',
+              collected.contribution as PostGenStep,
+            ),
+        ];
+        expect(
+          [for (final (origin, step) in steps) (origin, step.id)],
+          [
+            ('firebase_core', FirebaseCoreModule.configureStep),
+            ('firebase_crashlytics', null),
+          ],
+          reason: '${result.contractCase}',
+        );
+        expect(steps.last.$2, same(crashlyticsPhaseFix));
+      }
+    });
+
     test('finds no errors in any app, rendered code included', () {
       for (final result in results) {
         expect(
@@ -351,21 +503,24 @@ void main() {
   });
 
   group('an app without a DI container', () {
+    late ContractResult result;
+    late ContractResult resultWithout;
     late RenderedApp withCrashlytics;
     late RenderedApp without;
 
     setUpAll(() async {
-      withCrashlytics =
-          (await _resultOf(const [FirebaseCrashlyticsModule.id])).app!;
-      without = (await _resultOf(const [FirebaseCoreModule.id])).app!;
+      result = await _resultOf(const [FirebaseCrashlyticsModule.id]);
+      withCrashlytics = result.app!;
+      resultWithout = await _resultOf(const [FirebaseCoreModule.id]);
+      without = resultWithout.app!;
     });
 
     test(
         'is the app of Firebase but for the reporter, its implementation, '
         'firebase_crashlytics and the start of the crash reporting', () {
       // Its native files, the Gradle files and the Xcode project among
-      // them, and its README are those of Firebase: the module sets up
-      // nothing of the platforms.
+      // them, are those of Firebase: the module sets up nothing of the
+      // platforms. Its README tells of Crashlytics after Firebase.
       _expectTheAppWithout(withCrashlytics, without);
       expect(
         _yamlOf(withCrashlytics.files['pubspec.yaml']!.text)['dependencies'],
@@ -382,20 +537,26 @@ void main() {
         'initialized', () {
       // The template of the role comes after its providers and the modules
       // they depend on: firebase_core, whose Firebase app Crashlytics uses.
-      expect(_bootstrapOf(withCrashlytics), [
-        _initializeFirebase,
-        'installCrashReporting();',
+      expect(_startUpOf(result), [
+        'firebase_core: $_initializeFirebase',
+        'role:crash_reporting: installCrashReporting();',
       ]);
-      expect(_bootstrapOf(without), [_initializeFirebase]);
+      expect(_startUpOf(resultWithout), [
+        'firebase_core: $_initializeFirebase',
+      ]);
+      // The pipeline adds the import of the role to the file of the app
+      // entry with the phase, whichever module provides the app entry.
+      final entry = ModuleOrigin(
+        result.resolution!.providersOf(appEntryRole).single.id,
+      );
       expect(
         [
-          for (final added in withCrashlytics
-              .files[AppEntryRole.bootstrapFile]!.addedImports)
-            if (added.contributor ==
-                const RoleTemplateOrigin(
-                  crashReportingRole,
-                ))
-              added.import.uri,
+          for (final file in withCrashlytics.files.values)
+            if (file.owner == entry)
+              for (final added in file.addedImports)
+                if (added.contributor ==
+                    const RoleTemplateOrigin(crashReportingRole))
+                  added.import.uri,
         ],
         ['package:contract_app/core/crash_reporting/crash_reporter.dart'],
       );
@@ -553,16 +714,17 @@ void main() {
       _expectTheAppWithout(
         withCrashlytics,
         without,
-        changed: const {DiRole.dependenciesFile},
+        changedBy: _providersOf(result, diRole),
       );
     });
 
     test('registers the reporter in the container, which creates it', () {
+      // The contract harness, which found no errors in the app, checks that
+      // the provider of the role creates it with its factory.
       final registrations = [
-        for (final data in result.collection!.roleData)
-          if (identical(data.role, diRole) &&
-              data.origin == const RoleTemplateOrigin(crashReportingRole))
-            data.value as DiRegistration,
+        for (final data in _registrationsOf(result))
+          if (data.origin == const RoleTemplateOrigin(crashReportingRole))
+            data.value,
       ];
       expect(registrations, hasLength(1));
       final registration = registrations.single;
@@ -570,25 +732,15 @@ void main() {
       expect(registration.create.name, 'createCrashReporter');
       expect(registration.create.deps, isEmpty);
       expect(registration.lifetime, DiLifetime.lazySingleton);
-
-      final container = withCrashlytics.files[DiRole.dependenciesFile]!;
-      final calls = DartFileIndexer.index(container.path, container.text)
-          .invocations
-          .where((call) => call.name == 'createCrashReporter');
-      expect(calls, hasLength(1));
-      expect(
-        calls.single.enclosingDeclaration,
-        DiRole.registerDependencies.name,
-      );
     });
 
     test(
         'installs the crash reporting between the start of Firebase and the '
         'registration of the services', () {
-      expect(_bootstrapOf(withCrashlytics), [
-        _initializeFirebase,
-        'installCrashReporting();',
-        'await registerDependencies();',
+      expect(_startUpOf(result), [
+        'firebase_core: $_initializeFirebase',
+        'role:crash_reporting: installCrashReporting();',
+        'role:di: await registerDependencies();',
       ]);
     });
   });
@@ -615,12 +767,15 @@ void main() {
           ],
         ),
       ]) {
-        final app = (await _resultOf(modules, registry: registry)).app!;
+        final result = await _resultOf(modules, registry: registry);
 
-        expect(_reportersOf(app), reporters, reason: '$modules');
+        expect(_reportersOf(result.app!), reporters, reason: '$modules');
         expect(
-          _bootstrapOf(app),
-          [_initializeFirebase, 'installCrashReporting();'],
+          _startUpOf(result),
+          [
+            'firebase_core: $_initializeFirebase',
+            'role:crash_reporting: installCrashReporting();',
+          ],
           reason: '$modules',
         );
       }

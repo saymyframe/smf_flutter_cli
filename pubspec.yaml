@@ -81,7 +81,7 @@ melos:
         melos exec -c 6 -- 'dart format --output=none --set-exit-if-changed $(find $(ls -d lib test bin tool app_tests example 2>/dev/null) -name "*.dart" -not -path "lib/bundles/*" -not -path "test/fixtures/*")' && \
         dart format --output=none --set-exit-if-changed tools
     banlist:
-      description: Check that no file uses what the module model replaced; see tools/banlist.dart.
+      description: Check that no file uses a name that the repository bans, such as what the module model replaced; see tools/banlist.dart.
       run: dart tools/banlist.dart
     test:
       run: |

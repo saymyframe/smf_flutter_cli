@@ -850,6 +850,82 @@ Future<void> bootstrap() async {
       ]);
     });
 
+    test('the phases of start-up are in the body of bootstrap()', () {
+      final issues = checkModule({
+        AppEntryRole.bootstrapFile: '''
+Future<void> bootstrap() async {
+{{{smf_app_entry__bootstrap_early}}}
+{{{smf_app_entry__bootstrap_platform}}}
+{{{smf_app_entry__bootstrap_di}}}
+}
+
+void later() {
+{{{smf_app_entry__bootstrap_late}}}
+}
+''',
+      });
+
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'The tag {{{smf_app_entry__bootstrap_late}}} is in '
+          'lib/bootstrap.dart, but not in the body of bootstrap(), which '
+          'runs the phases of start-up.',
+        ),
+      ]);
+      expect(issues.single.origin, const ModuleOrigin(ModuleId('scaffold')));
+
+      for (final template in [
+        'Future<void> bootstrap() async => run();\n',
+        // A body that the template does not close.
+        'Future<void> bootstrap() async {\n',
+      ]) {
+        final withoutBody = checkModule({
+          AppEntryRole.bootstrapFile:
+              '$template{{{smf_app_entry__bootstrap_early}}}\n',
+        });
+        expect(
+          withoutBody.map((issue) => issue.message),
+          [
+            equals(
+              'The tag {{{smf_app_entry__bootstrap_early}}} is in '
+              'lib/bootstrap.dart, but not in the body of bootstrap(), which '
+              'runs the phases of start-up.',
+            ),
+          ],
+          reason: template,
+        );
+      }
+    });
+
+    test(
+        'the body of bootstrap() ends at its own brace, whatever the strings, '
+        'comments, tags and closures in it', () {
+      expect(
+        checkModule({
+          AppEntryRole.bootstrapFile: '''
+{{{smf_app_entry__top_level}}}
+
+/// Runs the start-up code of {{app_name}}, not a } of a comment.
+Future<void> bootstrap() async {
+  // A brace in a comment: }
+  /* And in another: } */
+  print('A brace in a string: }');
+  print(""" and in another: } """);
+{{{smf_app_entry__bootstrap_early}}}
+  await runZoned(() async {
+{{{smf_app_entry__bootstrap_platform}}}
+  });
+{{{smf_app_entry__bootstrap_di}}}
+{{{smf_app_entry__bootstrap_late}}}
+}
+
+void later() {}
+''',
+        }),
+        isEmpty,
+      );
+    });
+
     test('line tags stand alone at the start of a line of their file', () {
       final issues = checkModule({
         AppEntryRole.androidManifestFile: _manifestTemplate.replaceFirst(

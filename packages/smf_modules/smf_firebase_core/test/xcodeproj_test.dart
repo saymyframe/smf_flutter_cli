@@ -9,7 +9,6 @@ import 'dart:io';
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/xcode_project_tools.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -17,7 +16,6 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/fake_machine.dart';
-import 'support/flutterfire.dart';
 import 'support/ruby.dart';
 
 /// Runs [call] on this machine.
@@ -80,67 +78,17 @@ void main() {
       });
 
       test(
-          'flutterfire adds its phase for Crashlytics to the Xcode project of '
-          'an app of SMF as the tests of the module repeat it, last in the '
-          'target Runner, and keeps the Swift package of Flutter', () {
-        addCrashlyticsPhase(ruby!, app.path, '1.4.1');
+          'flutterfire opens and saves the Xcode project of an app of SMF, '
+          'and keeps the Swift package of Flutter', () {
+        saveXcodeProject(ruby!, app.path);
 
-        final saved = file.readAsStringSync();
-        final phase = RegExp(
-          r'\t\t([0-9A-F]{24}) /\* FlutterFire: "flutterfire '
-          r'upload-crashlytics-symbols" \*/ = \{.*?\n\t\t\};\n',
-          dotAll: true,
-        ).firstMatch(saved)!;
-        final id = phase[1]!;
-        final anyId = RegExp('[0-9A-F]{24}');
-        expect(
-          phase[0]!.replaceAll(id, '<id>'),
-          crashlyticsPhases['1.4.1']!.replaceAll(anyId, '<id>'),
-        );
-        expect(
-          saved,
-          contains(
-            '/* Thin Binary */,\n'
-            '\t\t\t\t$id /* $crashlyticsPhaseName */,\n'
-            '\t\t\t);',
-          ),
-        );
         // The gem needs 1.23.0 or newer to keep it.
         const package = 'FlutterGeneratedPluginSwiftPackage';
         expect(
-          saved,
+          file.readAsStringSync(),
           allOf(
             contains('relativePath = Flutter/ephemeral/Packages/$package;'),
             contains('productName = $package;'),
-          ),
-        );
-      });
-
-      test(
-          'the fix points the phase that flutterfire adds at the upload '
-          'script in the app, and the gem reads the script with the path '
-          'replaced', () {
-        addCrashlyticsPhase(ruby!, app.path, '1.4.1');
-        const step = crashlyticsPhaseFix;
-
-        final result = Process.runSync(
-          ruby,
-          step.tool.argumentsFor(step.arguments),
-          workingDirectory: app.path,
-          stdoutEncoding: utf8,
-          stderrEncoding: utf8,
-        );
-
-        expect(result.exitCode, 0, reason: '${result.stderr}');
-        expect(
-          result.stdout,
-          'Fixed the Crashlytics phase in ${AppEntryRole.xcodeProjectFile}\n',
-        );
-        expect(
-          crashlyticsPhaseScriptIn(ruby, app.path),
-          crashlyticsPhaseScript('1.4.1').replaceAll(
-            crashlyticsScriptInBuildDirectory,
-            crashlyticsScriptInApp,
           ),
         );
       });

@@ -1,7 +1,7 @@
 // The fix of the build phase for Crashlytics runs here with each Ruby of the
 // machine that a user may run it with, as the step runs it, on the Xcode
-// project of an app of SMF in a temporary directory; without Ruby, the
-// tests are skipped.
+// project of an app of SMF with Crashlytics in a temporary directory;
+// without Ruby, the tests are skipped.
 @TestOn('vm && !windows')
 library;
 
@@ -10,13 +10,14 @@ import 'dart:io';
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
+import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
-import 'support/flutterfire.dart';
+import 'support/crashlytics_phases.dart';
 import 'support/ruby.dart';
 
 void main() {
@@ -33,10 +34,14 @@ void main() {
   const nothing = 'Nothing to fix in ${AppEntryRole.xcodeProjectFile}\n';
 
   setUpAll(() async {
-    const modules = [FlutterCoreModule(), FirebaseCoreModule()];
+    const modules = [
+      FlutterCoreModule(),
+      FirebaseCoreModule(),
+      FirebaseCrashlyticsModule(),
+    ];
     final result = await ContractHarness(ModuleRegistry(modules)).check(
       ContractCase(
-        'firebase',
+        'crashlytics',
         requested: [for (final module in modules) module.descriptor.id],
       ),
     );

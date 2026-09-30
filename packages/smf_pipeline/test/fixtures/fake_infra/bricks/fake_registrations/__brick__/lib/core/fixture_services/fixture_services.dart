@@ -100,6 +100,9 @@ final class FixtureCounter {
 /// Creates a stamp in [zone].
 FixtureStamp createFixtureStamp(FixtureZone zone) => FixtureStamp(zone);
 
+/// Creates a stamp in the local time zone.
+FixtureStamp createLocalStamp() => const FixtureStamp(FixtureZone('local'));
+
 /// Creates the audit log.
 FixtureLog createAuditLog() => FixtureLog();
 

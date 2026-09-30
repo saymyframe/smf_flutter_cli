@@ -134,7 +134,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
   for (final result in await harness.checkAll()) {
-    switch (_appOf(result, roleOptions, harness.context)) {
+    switch (_appOf(result, roleOptions)) {
       case final app?:
         apps.add(app);
       case null:
@@ -224,7 +224,6 @@ Future<
     final app = _appOf(
       result,
       roleOptions,
-      harness.context,
       everyModuleWith: _everyModuleWith(contractCase, names),
     );
     if (app == null) {
@@ -233,7 +232,7 @@ Future<
     }
     apps.add(app);
     if (withoutExternalSteps) {
-      external.addAll(_withExternalSteps(result.collection!));
+      external.addAll(_withExternalSteps(result.validation!));
     }
   }
   return (apps: apps, failed: failed, external: external);
@@ -260,11 +259,12 @@ List<ModuleId> _everyModuleWith(
     ];
 
 /// The app of the matrix that [result] built with the values of role
-/// options [roleOptions], or `null` if the case has errors.
+/// options [roleOptions], or `null` if the case has errors. The harness of
+/// the matrix renders every app, so a case without errors has the request
+/// that the hooks of the roles got ([ContractResult.hook]).
 MatrixApp? _appOf(
   ContractResult result,
-  Map<String, String?> roleOptions,
-  ModuleContext context, {
+  Map<String, String?> roleOptions, {
   List<ModuleId>? everyModuleWith,
 }) {
   final resolution = result.resolution;
@@ -278,15 +278,7 @@ MatrixApp? _appOf(
       ...result.answers,
     },
     everyModuleWith: everyModuleWith,
-    // In a case without errors, all data of the roles is of the type they
-    // take and comes from modules that may give it, so it is the data that
-    // the hooks of the roles got when the harness rendered the app.
-    hook: RoleHookRequest(
-      data: result.collection!.roleData,
-      presentRoles: resolution.presentRoles,
-      context: context,
-      choices: result.choices!,
-    ),
+    hook: result.hook,
   );
 }
 
@@ -295,20 +287,19 @@ MatrixApp? _appOf(
 String _keyOf(MatrixApp app) =>
     ([for (final module in app.modules) module.value]..sort()).join(',');
 
-/// The modules whose steps after generation in the app of [collection]
-/// need an external service, or have a follow-up that does.
-Set<ModuleId> _withExternalSteps(Collection collection) => {
-      for (final collected in collection.applying)
+/// The modules whose steps after generation in the app that [validation]
+/// checked need an external service ([PostGenStep.external]). A step that
+/// continues a step of another module (see [PostGenStep.followUpOf]) is a
+/// step of the module that contributes it.
+Set<ModuleId> _withExternalSteps(ValidationResult validation) => {
+      for (final collected in validation.postGenOrder.contributions)
         if (collected
             case Collected(
-              contribution: final PostGenStep step,
+              contribution: PostGenStep(external: true),
               origin: ModuleOrigin(:final module),
-            ) when _isExternal(step))
+            ))
           module,
     };
-
-bool _isExternal(PostGenStep step) =>
-    step.external || step.followUps.any(_isExternal);
 
 /// [modules] without those of [removed], without those that depend on one
 /// of them, directly or not, and without those that are then left without a

@@ -1,10 +1,8 @@
 // flutterfire configure of an app with Firebase for one platform, in a
 // Firebase project, without questions: the command that the README of the
 // app gives, with the project, the key of a service account of the project
-// and the platform, as CI runs it before it starts the app on a device. For
-// iOS, which only macOS configures, the test then fixes the build phase for
-// Crashlytics with the command of the README, as SMF does after it
-// configures an app. It needs the Firebase CLI, the FlutterFire CLI and a
+// and the platform, as CI runs it before it starts the app on a device; only
+// macOS configures iOS. It needs the Firebase CLI, the FlutterFire CLI and a
 // Firebase project, so it runs only with an app generated with
 // firebase_core in SMF_FIREBASE_APP, the id of the project in
 // SMF_FIREBASE_PROJECT, the path of the key in SMF_FIREBASE_SERVICE_ACCOUNT
@@ -28,8 +26,6 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:test/test.dart';
 
@@ -211,19 +207,6 @@ void main() {
           contains('<string>$appId</string>'),
           contains('<string>$id</string>'),
         ),
-      );
-      // The phase for Crashlytics that flutterfire adds, fixed for
-      // flutter build ipa, as the README says.
-      expect(readme, contains('```bash\n$crashlyticsPhaseFixCommand\n```'));
-      final fixed = await _run(
-        '/bin/sh',
-        ['-c', crashlyticsPhaseFixCommand],
-        directory: app,
-      );
-      printOnFailure(fixed);
-      expect(
-        File('$app/${AppEntryRole.xcodeProjectFile}').readAsStringSync(),
-        isNot(contains(crashlyticsScriptInBuildDirectory)),
       );
     },
     skip: [app, project, serviceAccount, platform].contains(null)

@@ -539,26 +539,21 @@ void main() {
     );
     expect(
       run.lines,
-      containsAllInOrder([
+      contains(
         // The reason names what the command needs too, which the machine of
         // the test lacks.
-        equals(
-          'Configuring Firebase with flutterfire is not done, because the run '
-          'skips external setup, and Firebase CLI, Firebase login, FlutterFire '
-          'CLI 1.4.1 or a later 1.x and Xcode project tools of flutterfire are '
-          'missing. Run it in the app: dart pub global run '
-          'flutterfire_cli:flutterfire configure --platforms=android,ios '
-          '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
-          '--android-package-name=com.example.my_app',
-        ),
-        startsWith(
-          'Fixing the Crashlytics phase of flutterfire, if any, for flutter '
-          'build ipa is not done, because it runs after "Configuring Firebase '
-          'with flutterfire", which is not done. Run it in the app: ruby -e '
-          "'f = ARGV[0]; ",
-        ),
-      ]),
+        'Configuring Firebase with flutterfire is not done, because the run '
+        'skips external setup, and Firebase CLI, Firebase login, FlutterFire '
+        'CLI 1.4.1 or a later 1.x and Xcode project tools of flutterfire are '
+        'missing. Run it in the app: dart pub global run '
+        'flutterfire_cli:flutterfire configure --platforms=android,ios '
+        '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
+        '--android-package-name=com.example.my_app',
+      ),
     );
+    // Nothing continues the configuration in an app without the modules
+    // that depend on firebase_core.
+    expect(run.lines, isNot(contains(contains('Crashlytics'))));
   });
 
   test(
@@ -644,9 +639,23 @@ void main() {
         contains('  firebase_core: '),
       ),
     );
+    // The fix of the phase for Crashlytics that flutterfire adds is left
+    // for later with the configuration, which it continues.
     expect(
       run.lines,
-      contains(startsWith('Configuring Firebase with flutterfire is not done')),
+      containsAllInOrder([
+        startsWith('Configuring Firebase with flutterfire is not done'),
+        startsWith(
+          'Fixing the Crashlytics phase of flutterfire for flutter build ipa '
+          'is not done, because it runs after "Configuring Firebase with '
+          'flutterfire", which is not done. Run it in the app: ruby -e '
+          "'f = ARGV[0]; ",
+        ),
+      ]),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      allOf(contains('\n## Firebase\n'), contains('\n## Crashlytics\n')),
     );
   });
 

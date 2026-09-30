@@ -587,78 +587,352 @@ void main() {
     ]);
   });
 
-  test('a follow-up needs checks of its own module too', () {
-    final result = _validate([
-      scaffold(
+  group('steps that continue other steps', () {
+    const configure = PostGenStepId(ModuleId('core'), 'configure');
+    const fix = PostGenStepId(ModuleId('crash'), 'fix');
+
+    /// The module core, with its step [configure], which runs the tool
+    /// configure, and [more].
+    TestModule core({List<Contribution> more = const []}) => TestModule(
+          'core',
+          contributions: [
+            const PostGenStep(ToolRef('configure'), [], id: configure),
+            ...more,
+          ],
+        );
+
+    /// The tools of the steps that apply in [result], in their order.
+    List<String> tools(ValidationResult result) => [
+          for (final collected in result.postGenOrder.contributions)
+            (collected.contribution as PostGenStep).tool.executable,
+        ];
+
+    test(
+        'continue the steps of their module and of the modules that it '
+        'depends on directly', () {
+      final result = _validate([
+        entry,
+        core(
+          more: const [
+            PostGenStep(ToolRef('check'), [], followUpOf: configure),
+          ],
+        ),
+        TestModule(
+          'crash',
+          dependsOn: {'core'},
+          contributions: const [
+            PostGenStep(ToolRef('fix'), [], id: fix, followUpOf: configure),
+            PostGenStep(ToolRef('verify'), [], followUpOf: fix),
+          ],
+        ),
+      ]);
+
+      expect(result.issues, isEmpty);
+      expect(tools(result), ['configure', 'check', 'fix', 'verify']);
+    });
+
+    test(
+        'may not continue the steps of a module that their module does not '
+        'depend on directly', () {
+      final nav = TestRole<String>(
+        'nav',
+        template: TestTemplate(
+          contributions: const [
+            PostGenStep(ToolRef('t'), [], followUpOf: configure),
+          ],
+        ),
+      );
+      final result = _validate([
+        entry,
+        core(),
+        TestModule('crash', dependsOn: {'core'}),
+        TestModule(
+          'other',
+          contributions: const [
+            PostGenStep(
+              ToolRef('a'),
+              [],
+              description: 'Step a',
+              followUpOf: configure,
+            ),
+          ],
+        ),
+        TestModule(
+          'indirect',
+          dependsOn: {'crash'},
+          contributions: const [
+            PostGenStep(ToolRef('b'), [], followUpOf: configure),
+          ],
+        ),
+        TestModule('prov', providers: [RoleProvider.plain(nav)]),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'other: The step Step a of other continues the step '
+          'core.configure, but only core and the modules that depend on it '
+          'directly may.',
+        ),
+        equals(
+          'indirect: The step b of indirect continues the step '
+          'core.configure, but only core and the modules that depend on it '
+          'directly may.',
+        ),
+        equals(
+          'role:nav: The step t of role:nav continues the step '
+          'core.configure, but only core and the modules that depend on it '
+          'directly may.',
+        ),
+      ]);
+    });
+
+    test('continue a step that the module whose step it is has', () {
+      final result = _validate([
+        entry,
+        core(),
+        TestModule(
+          'crash',
+          dependsOn: {'core'},
+          contributions: const [
+            PostGenStep(
+              ToolRef('fix'),
+              [],
+              description: 'Fix',
+              followUpOf: PostGenStepId(ModuleId('core'), 'deploy'),
+            ),
+            PostGenStep(
+              ToolRef('check'),
+              [],
+              followUpOf: PostGenStepId(ModuleId('crash'), 'missing'),
+            ),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'crash: The step Fix of crash continues the step core.deploy, but '
+          'core has no step with that id.',
+        ),
+        equals(
+          'crash: The step check of crash continues the step crash.missing, '
+          'but crash has no step with that id.',
+        ),
+      ]);
+      expect(tools(result), ['configure']);
+    });
+
+    test(
+        'do not apply when the step they continue does not, and need '
+        'nothing of the run then', () {
+      final nav = TestRole<String>('nav');
+      final modules = [
+        entry,
+        TestModule(
+          'core',
+          uses: {nav},
+          contributions: [
+            PostGenStep(
+              const ToolRef('configure'),
+              const [],
+              id: configure,
+              when: {nav},
+            ),
+          ],
+        ),
+        TestModule(
+          'crash',
+          dependsOn: {'core'},
+          contributions: const [
+            PostGenStep(
+              ToolRef('fix'),
+              [],
+              id: fix,
+              followUpOf: configure,
+              interactive: true,
+            ),
+            PostGenStep(ToolRef('check'), [], followUpOf: fix, external: true),
+          ],
+        ),
+      ];
+      final resolution = resolutionOf(modules);
+      final result = validate(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        context: testContext,
+        interactive: false,
+        skipExternalSetup: true,
+      );
+
+      expect(result.issues, isEmpty);
+      expect(result.postGenOrder.contributions, isEmpty);
+    });
+
+    test('have no conditions of their own', () {
+      final nav = TestRole<String>('nav');
+      final result = _validate([
+        entry,
+        TestModule(
+          'core',
+          uses: {nav},
+          contributions: [
+            PostGenStep(
+              const ToolRef('configure'),
+              const [],
+              id: configure,
+              when: {nav},
+            ),
+          ],
+        ),
+        TestModule(
+          'crash',
+          dependsOn: {'core'},
+          uses: {nav},
+          contributions: [
+            const PostGenStep(ToolRef('fix'), [], followUpOf: configure),
+            PostGenStep(
+              const ToolRef('check'),
+              const [],
+              description: 'Check',
+              followUpOf: configure,
+              when: {nav},
+            ),
+          ],
+        ),
+      ]);
+
+      expect(
+        _messages(result).single,
+        'crash: The step Check of crash continues another step, but has '
+        'conditions of its own.',
+      );
+      expect(
+        result.issues.single.hint,
+        'A step that continues another applies whenever that step does.',
+      );
+    });
+
+    test('need checks of their own module', () {
+      final result = _validate([
+        entry,
+        core(
+          more: const [
+            Preflight([_Check('login')]),
+          ],
+        ),
+        TestModule(
+          'crash',
+          dependsOn: {'core'},
+          contributions: const [
+            Preflight([_Check('tool')]),
+            PostGenStep(
+              ToolRef('fix'),
+              [],
+              followUpOf: configure,
+              needs: ['tool'],
+            ),
+            PostGenStep(
+              ToolRef('check'),
+              [],
+              description: 'Check',
+              followUpOf: configure,
+              needs: ['login'],
+            ),
+          ],
+        ),
+      ]);
+
+      expect(
+        _messages(result).single,
+        'crash: The step Check of crash needs the preflight check "login", '
+        'which crash does not have.',
+      );
+    });
+
+    test('continue each other in a cycle, and would never run', () {
+      const a = PostGenStepId(ModuleId('core'), 'a');
+      const b = PostGenStepId(ModuleId('core'), 'b');
+      const self = PostGenStepId(ModuleId('core'), 'self');
+      final result = _validate([
+        entry,
+        core(
+          more: const [
+            PostGenStep(ToolRef('a'), [], id: a, followUpOf: b),
+            PostGenStep(ToolRef('b'), [], id: b, followUpOf: a),
+            PostGenStep(ToolRef('self'), [], id: self, followUpOf: self),
+            // It continues a step of the cycle, but is not on it.
+            PostGenStep(ToolRef('c'), [], followUpOf: a),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'core: The steps core.a and core.b of core continue each other in a '
+          'cycle, so none of them would run.',
+        ),
+        equals(
+          'core: The step core.self of core continues itself, so it would '
+          'never run.',
+        ),
+      ]);
+      expect(tools(result), ['configure']);
+    });
+  });
+
+  test(
+      'a post-generation step has an id of its own module, which no other '
+      'step has', () {
+    const configure = PostGenStepId(ModuleId('core'), 'configure');
+    final nav = TestRole<String>(
+      'nav',
+      template: TestTemplate(
         contributions: const [
-          Preflight([_Check('tool')]),
           PostGenStep(
-            ToolRef('tool'),
-            ['a'],
-            needs: ['tool'],
-            followUps: [
-              PostGenStep(ToolRef('fix'), [], needs: ['tool']),
-              PostGenStep(
-                ToolRef('fix'),
-                [],
-                followUps: [
-                  PostGenStep(
-                    ToolRef('check'),
-                    [],
-                    description: 'Check',
-                    needs: ['login'],
-                  ),
-                ],
-              ),
-            ],
+            ToolRef('t'),
+            [],
+            id: PostGenStepId(ModuleId('nav'), 'setup'),
           ),
         ],
       ),
-    ]);
-
-    expect(
-      _messages(result).single,
-      'scaffold: The step Check of scaffold needs the preflight check '
-      '"login", which scaffold does not have.',
     );
-  });
-
-  test('a follow-up has no conditions of its own', () {
-    final nav = TestRole<String>('nav');
     final result = _validate([
       entry,
       TestModule(
-        'other',
-        uses: {nav},
-        contributions: [
-          PostGenStep(
-            const ToolRef('tool'),
-            const ['a'],
-            when: {nav},
-            followUps: [
-              const PostGenStep(ToolRef('fix'), []),
-              PostGenStep(
-                const ToolRef('check'),
-                const [],
-                description: 'Check',
-                when: {nav},
-              ),
-            ],
-          ),
+        'core',
+        contributions: const [
+          PostGenStep(ToolRef('configure'), [], id: configure),
+          PostGenStep(ToolRef('again'), [], id: configure),
         ],
       ),
+      TestModule(
+        'other',
+        contributions: const [
+          PostGenStep(ToolRef('mine'), [], description: 'Mine', id: configure),
+        ],
+      ),
+      TestModule('prov', providers: [RoleProvider.plain(nav)]),
     ]);
 
-    expect(
-      _messages(result).single,
-      'other: The step Check of other follows another step, but has '
-      'conditions of its own.',
-    );
-    expect(
-      result.issues.single.hint,
-      'A follow-up applies when the step it follows does, so put the '
-      'conditions on that step.',
-    );
+    expect(_messages(result), [
+      equals(
+        'other: The step Mine of other has the id core.configure, but only '
+        'core gives its steps the ids of core.',
+      ),
+      equals(
+        'role:nav: The step t of role:nav has the id nav.setup, but only '
+        'nav gives its steps the ids of nav.',
+      ),
+      equals(
+        'core: Two steps of core have the id core.configure; a step '
+        'continues the one step with its id.',
+      ),
+      equals(
+        'other: Both core and other have a step with the id '
+        'core.configure; a step continues the one step with its id.',
+      ),
+    ]);
   });
 
   test('kinds require and forbid data', () {
@@ -1270,21 +1544,29 @@ void main() {
   });
 
   test('a step that cannot run must be skippable', () {
+    const d = PostGenStepId(ModuleId('scaffold'), 'd');
     final modules = [
       scaffold(
         contributions: const [
           PostGenStep(ToolRef('a'), [], interactive: true),
           PostGenStep(ToolRef('b'), [], external: true, description: 'Log in'),
           PostGenStep(ToolRef('c'), [], interactive: true, skippable: true),
+          PostGenStep(ToolRef('d'), [], id: d, skippable: true),
+        ],
+      ),
+      // Steps that continue a step of the module that they depend on.
+      TestModule(
+        'other',
+        dependsOn: {'scaffold'},
+        contributions: const [
           PostGenStep(
-            ToolRef('d'),
+            ToolRef('e'),
             [],
+            followUpOf: d,
+            external: true,
             skippable: true,
-            followUps: [
-              PostGenStep(ToolRef('e'), [], external: true, skippable: true),
-              PostGenStep(ToolRef('f'), [], interactive: true),
-            ],
           ),
+          PostGenStep(ToolRef('f'), [], followUpOf: d, interactive: true),
         ],
       ),
     ];
@@ -1312,10 +1594,10 @@ void main() {
           'The step Log in of scaffold cannot run with --skip-external-setup, '
           'and the app is not complete without it.',
         ),
-        // A follow-up too.
+        // A step that continues another too, of its own module.
         equals(
-          'The step f of scaffold cannot run without a terminal, and the app '
-          'is not complete without it.',
+          'The step f of other cannot run without a terminal, and the app is '
+          'not complete without it.',
         ),
       ],
     );

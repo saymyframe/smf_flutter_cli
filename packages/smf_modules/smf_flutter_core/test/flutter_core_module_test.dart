@@ -217,6 +217,14 @@ void main() {
 
       expect(offsets, everyElement(greaterThan(0)));
       expect(offsets, orderedEquals([...offsets]..sort()));
+      // The code of every phase runs in bootstrap(), which main() awaits,
+      // and nowhere else.
+      final calls = DartFileIndexer.index('lib/bootstrap.dart', bootstrap)
+          .invocationsOf('debugPrint');
+      expect(
+        [for (final call in calls) call.enclosingDeclaration],
+        List.filled(4, 'bootstrap'),
+      );
       expect(
         bootstrap,
         startsWith("import 'package:flutter/foundation.dart';\n\n"

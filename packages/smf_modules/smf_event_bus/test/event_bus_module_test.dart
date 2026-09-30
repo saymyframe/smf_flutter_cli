@@ -71,12 +71,24 @@ Map<String, Object?> _pubspecWithoutEventBus(RenderedApp app) {
   return {...pubspec, 'dependencies': dependencies};
 }
 
+/// The modules that provide [role] in the app of [result], whichever they
+/// are.
+Set<ModuleId> _providersOf(ContractResult result, Role role) => {
+      for (final module in result.resolution!.providersOf(role)) module.id,
+    };
+
+/// The registrations of the DI role in the app of [result], as the provider
+/// of the role gets them to render.
+List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
+    diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
+
 /// Checks that [app] is [without] but for the files of the events, the
-/// dependency on event_bus, and the files at [changed].
+/// dependency on event_bus, and the files that the modules [changedBy]
+/// generate.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
-  Set<String> changed = const {},
+  Set<ModuleId> changedBy = const {},
 }) {
   expect(
     app.files.keys.toSet(),
@@ -91,7 +103,11 @@ void _expectTheAppWithout(
     const ModuleOrigin(EventBusModule.id),
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml' || changed.contains(path)) continue;
+    if (path == 'pubspec.yaml') continue;
+    if (file.owner case ModuleOrigin(:final module)
+        when changedBy.contains(module)) {
+      continue;
+    }
     expect(app.files[path]!.bytes, file.bytes, reason: path);
     expect(app.files[path]!.owner, file.owner, reason: path);
   }
@@ -380,16 +396,16 @@ void main() {
       _expectTheAppWithout(
         withEvents,
         without,
-        changed: const {DiRole.dependenciesFile},
+        changedBy: _providersOf(result, diRole),
       );
     });
 
     test('registers the service in the container, which creates it', () {
+      // The contract harness, which found no errors in the app, checks that
+      // the provider of the role creates it with its factory.
       final registrations = [
-        for (final data in result.collection!.roleData)
-          if (identical(data.role, diRole) &&
-              data.origin == const RoleTemplateOrigin(eventsRole))
-            data.value as DiRegistration,
+        for (final data in _registrationsOf(result))
+          if (data.origin == const RoleTemplateOrigin(eventsRole)) data.value,
       ];
       expect(registrations, hasLength(1));
       final registration = registrations.single;
@@ -397,16 +413,6 @@ void main() {
       expect(registration.create.name, 'createCommunicationService');
       expect(registration.create.deps, isEmpty);
       expect(registration.lifetime, DiLifetime.lazySingleton);
-
-      final container = withEvents.files[DiRole.dependenciesFile]!;
-      final calls = DartFileIndexer.index(container.path, container.text)
-          .invocations
-          .where((call) => call.name == 'createCommunicationService');
-      expect(calls, hasLength(1));
-      expect(
-        calls.single.enclosingDeclaration,
-        DiRole.registerDependencies.name,
-      );
     });
   });
 }

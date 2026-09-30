@@ -829,30 +829,52 @@ void main() {
       });
     });
 
-    group('with follow-ups', () {
-      const fix = PostGenStep(
-        ToolRef('fix'),
-        ['project'],
-        description: 'Fix the project',
-        skippable: true,
-        followUps: [
-          PostGenStep(ToolRef('check'), ['project'], skippable: true),
-        ],
-      );
+    group('that continue other steps', () {
+      const setUpId = PostGenStepId(ModuleId('firebase'), 'setup');
+      const fixId = PostGenStepId(ModuleId('crash'), 'fix');
       const setUp = PostGenStep(
         ToolRef('firebase'),
         ['setup'],
+        id: setUpId,
         description: 'Set up Firebase',
         interactive: true,
         skippable: true,
-        followUps: [
-          fix,
-          PostGenStep(ToolRef('tidy'), [], skippable: true),
-        ],
+      );
+      // Steps of a module that depends on firebase, which knows nothing of
+      // them.
+      const fix = PostGenStep(
+        ToolRef('fix'),
+        ['project'],
+        id: fixId,
+        followUpOf: setUpId,
+        description: 'Fix the project',
+        skippable: true,
+      );
+      const check = PostGenStep(
+        ToolRef('check'),
+        ['project'],
+        followUpOf: fixId,
+        skippable: true,
+      );
+      const tidy = PostGenStep(
+        ToolRef('tidy'),
+        [],
+        followUpOf: setUpId,
+        skippable: true,
       );
       const tool = PlannedCheck(_Check('tool', 'Tool'), _firebase);
 
-      /// Puts the tools of the follow-ups on the PATH.
+      /// [firebase], the step of the module firebase, and the steps of the
+      /// module crash, which continue it, in the order of the pipeline:
+      /// crash depends on firebase, so its steps come after.
+      List<Collected> stepsOf(PostGenStep firebase) => [
+            _step('firebase', firebase),
+            _step('crash', fix),
+            _step('crash', check),
+            _step('crash', tidy),
+          ];
+
+      /// Puts the tools of the steps of crash on the PATH.
       void installTools() {
         for (final name in ['fix', 'check', 'tidy']) {
           host.fileSystem.file('/usr/bin/$name').createSync();
@@ -864,8 +886,9 @@ void main() {
           [for (final step in steps) '$step'];
 
       test(
-          'run right after their step, in their order, once it succeeded, '
-          'without a question', () async {
+          'run right after the step they continue, in their order, each '
+          'before the steps that continue it, once it succeeded, without a '
+          'question', () async {
         environment = environmentOf(interactive: true, answers: [true, true]);
         installTools();
 
@@ -874,10 +897,12 @@ void main() {
           environment: environment,
           steps: [
             _step('firebase', setUp),
+            // A step of its own that comes between in the order.
             _step(
               'other',
               const PostGenStep(ToolRef('firebase'), ['use'], skippable: true),
             ),
+            ...stepsOf(setUp).skip(1),
           ],
         );
 
@@ -893,8 +918,8 @@ void main() {
           'Set up Firebase (firebase setup), for firebase. Run it now?',
           'firebase use, for other. Run it now?',
         ]);
-        // Each runs as it is: the step with the terminal, its follow-up
-        // without, in the directory of the app.
+        // Each runs as it is: the step with the terminal, the step that
+        // continues it without, in the directory of the app.
         expect(runner.calls[1].interactive, isTrue);
         expect(runner.calls[2].interactive, isFalse);
         expect(runner.calls[2].workingDirectory, '/tmp/app');
@@ -916,7 +941,7 @@ void main() {
         final skipped = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', setUp)],
+          steps: stepsOf(setUp),
         );
 
         expect(records(skipped), [
@@ -946,7 +971,7 @@ void main() {
         final skipped = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', setUp)],
+          steps: stepsOf(setUp),
         );
 
         expect(skipped.map((step) => step.reason), [
@@ -988,21 +1013,18 @@ void main() {
           final skipped = await runPostGen(
             directory: '/tmp/app',
             environment: environment,
-            steps: [
-              _step(
-                'firebase',
-                const PostGenStep(
-                  ToolRef('firebase'),
-                  ['setup'],
-                  description: 'Set up Firebase',
-                  interactive: true,
-                  skippable: true,
-                  external: true,
-                  needs: ['tool'],
-                  followUps: [fix],
-                ),
+            steps: stepsOf(
+              const PostGenStep(
+                ToolRef('firebase'),
+                ['setup'],
+                id: setUpId,
+                description: 'Set up Firebase',
+                interactive: true,
+                skippable: true,
+                external: true,
+                needs: ['tool'],
               ),
-            ],
+            ),
             checks: checks,
           );
 
@@ -1018,6 +1040,10 @@ void main() {
                 'check project: check project (it runs after "Fix the '
                 'project", which is not done)',
               ),
+              equals(
+                'tidy: tidy (it runs after "Set up Firebase", which is not '
+                'done)',
+              ),
             ],
             reason: reason,
           );
@@ -1026,7 +1052,9 @@ void main() {
         }
       });
 
-      test('otherwise go by their own needs, tools and results', () async {
+      test(
+          'otherwise go by their own needs, of the checks of their own '
+          'module, tools and results', () async {
         environment = environmentOf(interactive: true, answers: [true]);
         // The tool of tidy is missing.
         for (final name in ['fix', 'check']) {
@@ -1037,32 +1065,41 @@ void main() {
           directory: '/tmp/app',
           environment: environment,
           steps: [
+            _step('firebase', setUp),
             _step(
-              'firebase',
+              'crash',
               const PostGenStep(
-                ToolRef('firebase'),
-                ['setup'],
-                description: 'Set up Firebase',
-                interactive: true,
+                ToolRef('fix'),
+                ['project'],
+                id: fixId,
+                followUpOf: setUpId,
+                description: 'Fix the project',
                 skippable: true,
-                followUps: [
-                  PostGenStep(
-                    ToolRef('fix'),
-                    ['project'],
-                    description: 'Fix the project',
-                    skippable: true,
-                    needs: ['tool'],
-                    followUps: [
-                      PostGenStep(ToolRef('check'), ['project']),
-                    ],
-                  ),
-                  PostGenStep(ToolRef('tidy'), [], skippable: true),
-                ],
+                needs: ['tool'],
               ),
             ),
+            _step(
+              'crash',
+              const PostGenStep(
+                ToolRef('check'),
+                ['project'],
+                followUpOf: fixId,
+              ),
+            ),
+            _step('crash', tidy),
           ],
           checks: const [
-            CheckResult(tool, PreflightMissing(instructions: 'Install it.')),
+            // The check of the module that continues the step, and one of
+            // the same id of the module whose step it continues, which has
+            // passed.
+            CheckResult(
+              PlannedCheck(
+                _Check('tool', 'Tool'),
+                ModuleOrigin(ModuleId('crash')),
+              ),
+              PreflightMissing(instructions: 'Install it.'),
+            ),
+            CheckResult(tool, PreflightPassed()),
           ],
         );
 
@@ -1078,6 +1115,37 @@ void main() {
         expect(runner.lines, contains('firebase setup'));
         expect(runner.lines, isNot(contains(startsWith('fix'))));
 
+        // A check of the module whose step it continues holds nothing of
+        // the module crash back.
+        environment = environmentOf(interactive: true, answers: [true]);
+        installTools();
+
+        final otherModule = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step('firebase', setUp),
+            _step(
+              'crash',
+              const PostGenStep(
+                ToolRef('fix'),
+                ['project'],
+                followUpOf: setUpId,
+                needs: ['tool'],
+              ),
+            ),
+          ],
+          checks: const [
+            CheckResult(tool, PreflightMissing(instructions: 'Install it.')),
+          ],
+        );
+
+        expect(otherModule, isEmpty);
+        expect(
+          runner.lines,
+          containsAllInOrder(['firebase setup', 'fix project']),
+        );
+
         environment = environmentOf(interactive: true, answers: [true]);
         installTools();
         runner.onRun = (call) => call.line == 'fix project'
@@ -1087,7 +1155,7 @@ void main() {
         final fails = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', setUp)],
+          steps: stepsOf(setUp),
         );
 
         expect(records(fails), [
@@ -1116,17 +1184,16 @@ void main() {
           steps: [
             _step(
               'firebase',
+              const PostGenStep(ToolRef('firebase'), ['setup'], id: setUpId),
+            ),
+            _step(
+              'crash',
               const PostGenStep(
-                ToolRef('firebase'),
-                ['setup'],
-                followUps: [
-                  PostGenStep(
-                    ToolRef('fix'),
-                    ['project'],
-                    interactive: true,
-                    skippable: true,
-                  ),
-                ],
+                ToolRef('fix'),
+                ['project'],
+                followUpOf: setUpId,
+                interactive: true,
+                skippable: true,
               ),
             ),
           ],
@@ -1138,7 +1205,9 @@ void main() {
         expect(runner.lines, contains('firebase setup'));
       });
 
-      test('that are not skippable stop generation when they fail', () async {
+      test(
+          'that are not skippable stop generation when they fail, as a step '
+          'of their own module', () async {
         installTools();
         runner.onRun = (call) => call.line == 'fix project'
             ? const SmfProcessResult(exitCode: 4)
@@ -1151,16 +1220,15 @@ void main() {
             steps: [
               _step(
                 'firebase',
+                const PostGenStep(ToolRef('firebase'), ['setup'], id: setUpId),
+              ),
+              _step(
+                'crash',
                 const PostGenStep(
-                  ToolRef('firebase'),
-                  ['setup'],
-                  followUps: [
-                    PostGenStep(
-                      ToolRef('fix'),
-                      ['project'],
-                      description: 'Fix the project',
-                    ),
-                  ],
+                  ToolRef('fix'),
+                  ['project'],
+                  followUpOf: setUpId,
+                  description: 'Fix the project',
                 ),
               ),
             ],
@@ -1169,19 +1237,38 @@ void main() {
             isA<GenerationFailedException>().having(
               (e) => e.message,
               'message',
-              'The step "Fix the project" of firebase failed: it exited with '
+              'The step "Fix the project" of crash failed: it exited with '
                   'code 4',
             ),
           ),
         );
       });
+
+      test('do not run without the step they continue', () async {
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          // The step of firebase does not apply, so validation left it
+          // out.
+          steps: stepsOf(setUp).skip(1).toList(),
+        );
+
+        expect(skipped, isEmpty);
+        expect(runner.lines, isNot(contains(startsWith('fix'))));
+        expect(runner.lines, isNot(contains(startsWith('check'))));
+        expect(runner.lines, isNot(contains(startsWith('tidy'))));
+      });
     });
 
     group('for some systems', () {
       const macos = {HostOperatingSystem.macos};
+      const setUpId = PostGenStepId(ModuleId('firebase'), 'setup');
       const fix = PostGenStep(
         ToolRef('fix'),
         ['project'],
+        followUpOf: setUpId,
         description: 'Fix the project',
         skippable: true,
         hosts: macos,
@@ -1193,21 +1280,33 @@ void main() {
 
       test(
           'run on those systems and not elsewhere, where they are not left '
-          'for later, nor are their follow-ups', () async {
-        const step = PostGenStep(
-          ToolRef('firebase'),
-          ['setup'],
-          skippable: true,
-          hosts: macos,
-          followUps: [
-            PostGenStep(ToolRef('firebase'), ['check'], skippable: true),
-          ],
-        );
+          'for later, nor are the steps that continue them', () async {
+        final steps = [
+          _step(
+            'firebase',
+            const PostGenStep(
+              ToolRef('firebase'),
+              ['setup'],
+              id: setUpId,
+              skippable: true,
+              hosts: macos,
+            ),
+          ),
+          _step(
+            'crash',
+            const PostGenStep(
+              ToolRef('firebase'),
+              ['check'],
+              followUpOf: setUpId,
+              skippable: true,
+            ),
+          ),
+        ];
 
         final elsewhere = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', step)],
+          steps: steps,
         );
 
         expect(elsewhere, isEmpty);
@@ -1217,7 +1316,7 @@ void main() {
         final there = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', step)],
+          steps: steps,
         );
 
         expect(there, isEmpty);
@@ -1228,22 +1327,28 @@ void main() {
       });
 
       test(
-          'as follow-ups, run after their step on those systems, and are '
-          'not left for later with it elsewhere', () async {
+          'as steps that continue others, run after their step on those '
+          'systems, and are not left for later with it elsewhere', () async {
         installFix();
-        const step = PostGenStep(
-          ToolRef('firebase'),
-          ['setup'],
-          description: 'Set up Firebase',
-          skippable: true,
-          external: true,
-          followUps: [fix],
-        );
+        final steps = [
+          _step(
+            'firebase',
+            const PostGenStep(
+              ToolRef('firebase'),
+              ['setup'],
+              id: setUpId,
+              description: 'Set up Firebase',
+              skippable: true,
+              external: true,
+            ),
+          ),
+          _step('crash', fix),
+        ];
 
         final ran = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', step)],
+          steps: steps,
         );
 
         expect(ran, isEmpty);
@@ -1254,7 +1359,7 @@ void main() {
         final held = await runPostGen(
           directory: '/tmp/app',
           environment: environment,
-          steps: [_step('firebase', step)],
+          steps: steps,
         );
 
         expect(held.map((step) => '$step'), [
@@ -1271,7 +1376,7 @@ void main() {
           final skipped = await runPostGen(
             directory: '/tmp/app',
             environment: environment,
-            steps: [_step('firebase', step)],
+            steps: steps,
           );
 
           if (skip) {

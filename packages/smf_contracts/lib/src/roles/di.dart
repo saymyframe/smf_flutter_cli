@@ -31,7 +31,11 @@ const diRole = DiRole._();
 /// A provider extends [DiProvider], renders the registrations of
 /// [graphOf] in [DiGraph.ordered] order, makes each singleton wait for the
 /// services of [DiGraph.dependsOnOf], and, if [DiGraph.needsAllReady], ends
-/// `registerDependencies()` by waiting until all services are ready.
+/// `registerDependencies()` by waiting until all services are ready. Its
+/// files call or tear off the factory of every registration and its
+/// dispose function, which the contract harness checks, so the tests of a
+/// module that registers a service check the registration through
+/// [graphOf], not in the files of a provider.
 final class DiRole extends Role<DiRegistration> {
   const DiRole._();
 
@@ -91,6 +95,13 @@ final class DiRole extends Role<DiRegistration> {
               'function in its file that takes the dependencies of the '
               'registration, and its dispose function takes the service.',
           check: _checkFactories,
+        ),
+        StructuralRule(
+          id: 'di.registrations_rendered',
+          description: 'The files of the provider of the role call or tear '
+              'off the factory of every registration, and its dispose '
+              'function.',
+          check: _checkRendered,
         ),
       ];
 
@@ -226,20 +237,21 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
   return issues;
 }
 
-/// The problems with the functions that registrations name: a factory that
-/// is missing from its file of the app, or that cannot take its
-/// dependencies as positional arguments, and a dispose function that cannot
-/// take the service.
+/// The problems with the functions that registrations name: a factory or a
+/// dispose function that is missing from its file of the app, a factory
+/// that cannot take its dependencies as positional arguments, and a dispose
+/// function that cannot take the service.
 ///
 /// Functions from other packages are left to the compiler.
 List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   final issues = <SmfIssue>[];
   void check(
     String name,
-    ImportRef import,
-    int arguments,
-    ContributionOrigin? origin,
-  ) {
+    ImportRef import, {
+    required int arguments,
+    required String hint,
+    required ContributionOrigin? origin,
+  }) {
     if (!import.isAppFile) return;
     final symbol = RequiredFunction(
       name,
@@ -248,13 +260,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
     );
     for (final issue in symbol.checkIn(input.files)) {
       issues.add(
-        SmfIssue(
-          issue.message,
-          hint: 'The pipeline calls it with the dependencies of the '
-              'registration.',
-          origin: origin,
-          path: issue.path,
-        ),
+        SmfIssue(issue.message, hint: hint, origin: origin, path: issue.path),
       );
     }
   }
@@ -262,9 +268,77 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   for (final data in diRole.graphOf(input.roleInput).registrations) {
     final registration = data.value;
     final create = registration.create;
-    check(create.name, create.import, create.deps.length, data.origin);
+    check(
+      create.name,
+      create.import,
+      arguments: create.deps.length,
+      hint: 'The pipeline calls it with the dependencies of the registration.',
+      origin: data.origin,
+    );
     if (registration.dispose case final dispose?) {
-      check(dispose.name, dispose.import, 1, data.origin);
+      check(
+        dispose.name,
+        dispose.import,
+        arguments: 1,
+        hint: 'The container calls it with the service of the registration '
+            'when it disposes of the service.',
+        origin: data.origin,
+      );
+    }
+  }
+  return issues;
+}
+
+/// The registrations that the provider of the role does not render: those
+/// whose factory, or dispose function, none of the files of the provider
+/// calls or tears off, through an import of the file or library that
+/// declares it.
+///
+/// So no provider leaves out a service that a module declares, and the
+/// tests of the modules need not look into the files of any provider.
+/// Without the descriptor of a provider in [input], no file renders the
+/// registrations and there is nothing to check.
+List<SmfIssue> _checkRendered(StructuralRuleInput<DiRegistration> input) {
+  final providers = {
+    for (final module in input.modules)
+      if (module.provides.contains(diRole)) module.id,
+  };
+  if (providers.isEmpty) return const [];
+  final files = [
+    for (final MapEntry(key: path, value: file) in input.files.entries)
+      if (input.owners[path] case ModuleOrigin(:final module)
+          when providers.contains(module))
+        file,
+  ];
+  final issues = <SmfIssue>[];
+  void check(
+    RoleData<DiRegistration> data,
+    String function,
+    String name,
+    ImportRef import,
+  ) {
+    if (files.any((file) => usesImported(file, name, import))) return;
+    final library = import.isAppFile ? 'lib/${import.uri}' : import.uri;
+    issues.add(
+      SmfIssue(
+        'The provider of the $diRole does not render the ${data.value}: '
+        'none of its files calls or tears off its $function $name() of '
+        '$library.',
+        hint: 'Register every service of DiRole.graphOf() with a call or a '
+            'tear-off of its factory, and of its dispose function if it has '
+            'one.',
+        origin: data.origin,
+        path: DiRole.dependenciesFile,
+      ),
+    );
+  }
+
+  for (final data in diRole.graphOf(input.roleInput).registrations) {
+    final registration = data.value;
+    final create = registration.create;
+    check(data, 'factory', create.name, create.import);
+    if (registration.dispose case final dispose?) {
+      check(data, 'dispose function', dispose.name, dispose.import);
     }
   }
   return issues;

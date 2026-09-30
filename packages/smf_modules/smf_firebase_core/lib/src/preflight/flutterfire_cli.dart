@@ -4,21 +4,22 @@ import 'package:smf_firebase_core/src/preflight/commands.dart';
 /// The version of flutterfire_cli that [FlutterfireCliCheck] activates.
 ///
 /// The tests of the module repeat the edits that this version makes to the
-/// Gradle files of the app. It is exact, rather than a range such as
-/// `^1.4.1`: `cmd.exe`, which runs `dart.bat` on Windows, would read `^`,
-/// `<` and `>` in the argument as its own.
+/// Gradle files of the app, and CI activates it too, as
+/// `tool/flutterfire_version.dart` prints it. It is exact, rather than a
+/// range such as `^1.4.1`: `cmd.exe`, which runs `dart.bat` on Windows,
+/// would read `^`, `<` and `>` in the argument as its own.
 const flutterfireVersion = '1.4.1';
 
 /// The lowest version of flutterfire_cli that the check accepts.
 ///
 /// It writes `lib/firebase_options.dart` in the form of the placeholder, as
-/// 1.4.0 does. For an app with Crashlytics, flutterfire adds a build phase to
-/// the Xcode project that uploads the debug symbols with the upload script of
-/// Crashlytics. With Swift Package Manager, Flutter puts the Swift packages
-/// of the app, and the script with them, in `build/ios/SourcePackages`,
-/// where the phase of 1.4.0 does not look, so the iOS build fails. The phase
-/// of 1.4.1 looks in `SourcePackages` of the build directory of Xcode, which
-/// `flutter run` and `flutter build ios` set to `build/ios`.
+/// 1.4.0 does. For some Firebase packages, flutterfire adds a build phase to
+/// the Xcode project that runs a script of the package from the Swift
+/// packages of the app. With Swift Package Manager, Flutter puts them in
+/// `build/ios/SourcePackages`, where the phases of 1.4.0 do not look, so the
+/// iOS build fails. Those of 1.4.1 look in `SourcePackages` of the build
+/// directory of Xcode, which `flutter run` and `flutter build ios` set to
+/// `build/ios`.
 const minimumFlutterfireVersion = '1.4.1';
 
 /// How the module runs the FlutterFire CLI: through the Dart of the Flutter

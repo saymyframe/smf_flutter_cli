@@ -8,8 +8,8 @@ import 'package:yaml/yaml.dart';
 
 /// Whether the app in the directory [app] depends on the package
 /// [package], by the dependencies of its pubspec.yaml rather than its dev
-/// dependencies: such as on firebase_crashlytics, for which flutterfire
-/// adds a build phase for Crashlytics to the Xcode project of the app.
+/// dependencies: such as on firebase_core, which gives flutterfire the app
+/// to configure.
 bool dependsOn(String app, String package) =>
     switch (loadYaml(File('$app/pubspec.yaml').readAsStringSync())) {
       {'dependencies': final YamlMap dependencies} =>

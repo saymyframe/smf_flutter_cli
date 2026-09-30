@@ -8,8 +8,6 @@ import 'dart:io';
 
 import 'package:smf_contracts/smf_contracts.dart';
 
-import 'flutterfire.dart';
-
 /// The Ruby on the `PATH`, or `null` without one, or without `which` to find
 /// it.
 String? rubyOnPath() {
@@ -22,15 +20,6 @@ String? rubyOnPath() {
   final path = result.stdout.toString().trim();
   return result.exitCode == 0 && path.isNotEmpty ? path : null;
 }
-
-/// The Rubies that a user of this machine may run a command of SMF with:
-/// the one on the `PATH` and, on macOS, the Ruby of macOS in `/usr/bin`,
-/// which is the one on the `PATH` unless another Ruby is installed.
-List<String> rubiesOfMachine() => {
-      if (rubyOnPath() case final ruby?) ruby,
-      if (Platform.isMacOS && File('/usr/bin/ruby').existsSync())
-        '/usr/bin/ruby',
-    }.toList();
 
 /// The version of the gem xcodeproj that [ruby] loads, or `null` if it
 /// loads none.
@@ -46,66 +35,22 @@ String? xcodeprojVersion(String ruby) {
 /// The Xcode project of the app, relative to the app.
 final String _xcodeProject = File(AppEntryRole.xcodeProjectFile).parent.path;
 
-/// Runs [program] with [ruby] in [app], with [arguments] and the variables
-/// of [environment]; returns what it prints, or throws a [StateError] with
-/// its errors if it fails.
-String _runRuby(
-  String ruby,
-  String app,
-  String program,
-  List<String> arguments, {
-  Map<String, String> environment = const {},
-}) {
+/// Opens the Xcode project in [app] with the gem xcodeproj of [ruby] and
+/// saves it, as `flutterfire configure` does when it changes the project;
+/// throws a [StateError] with the errors of Ruby if it fails.
+void saveXcodeProject(String ruby, String app) {
   final result = Process.runSync(
     ruby,
-    ['-e', program, ...arguments],
+    [
+      '-e',
+      "require 'xcodeproj'; Xcodeproj::Project.open(ARGV[0]).save",
+      _xcodeProject,
+    ],
     workingDirectory: app,
-    environment: environment,
     stdoutEncoding: utf8,
     stderrEncoding: utf8,
   );
   if (result.exitCode != 0) {
     throw StateError('Ruby exited with ${result.exitCode}: ${result.stderr}');
   }
-  return '${result.stdout}';
 }
-
-/// Adds the build phase for Crashlytics of flutterfire_cli [version] to the
-/// target Runner of the Xcode project in [app], with the gem xcodeproj of
-/// [ruby], as the program of `addFlutterFireDebugSymbolsScript` in
-/// `lib/src/firebase/firebase_apple_writes.dart` of flutterfire_cli does in
-/// an app without the phase: it creates a phase of shell scripts with the
-/// name of the phase, gives it its script and saves the project. The phase
-/// comes last in the target, where flutterfire leaves it in an app without
-/// its phase for `GoogleService-Info.plist`.
-void addCrashlyticsPhase(String ruby, String app, String version) {
-  _runRuby(
-    ruby,
-    app,
-    '''
-require 'xcodeproj'
-project = Xcodeproj::Project.open(ARGV[0])
-target = project.targets.find { |target| target.name == 'Runner' }
-phase = target.new_shell_script_build_phase(ARGV[1])
-phase.shell_script = ENV.fetch('SMF_TEST_SCRIPT')
-project.save
-''',
-    [_xcodeProject, crashlyticsPhaseName],
-    environment: {'SMF_TEST_SCRIPT': crashlyticsPhaseScript(version)},
-  );
-}
-
-/// The script of the build phase for Crashlytics in the Xcode project of
-/// [app], as the gem xcodeproj of [ruby] reads it.
-String crashlyticsPhaseScriptIn(String ruby, String app) => _runRuby(
-      ruby,
-      app,
-      '''
-require 'xcodeproj'
-project = Xcodeproj::Project.open(ARGV[0])
-target = project.targets.find { |target| target.name == 'Runner' }
-phase = target.shell_script_build_phases.find { |phase| phase.name == ARGV[1] }
-print phase.shell_script
-''',
-      [_xcodeProject, crashlyticsPhaseName],
-    );

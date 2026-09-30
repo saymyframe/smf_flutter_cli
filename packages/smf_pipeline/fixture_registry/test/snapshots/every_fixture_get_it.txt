@@ -601,6 +601,10 @@ Future<void> registerDependencies() async {
   getIt.registerFactory<di0.FixtureStamp>(
     () => di0.createFixtureStamp(getIt<di0.FixtureZone>(instanceName: 'utc')),
   );
+  getIt.registerFactory<di0.FixtureStamp>(
+    () => di0.createLocalStamp(),
+    instanceName: 'local',
+  );
   getIt.registerSingleton<di0.FixtureLog>(
     di0.createAuditLog(),
     instanceName: 'audit',
@@ -987,6 +991,9 @@ final class FixtureCounter {
 
 /// Creates a stamp in [zone].
 FixtureStamp createFixtureStamp(FixtureZone zone) => FixtureStamp(zone);
+
+/// Creates a stamp in the local time zone.
+FixtureStamp createLocalStamp() => const FixtureStamp(FixtureZone('local'));
 
 /// Creates the audit log.
 FixtureLog createAuditLog() => FixtureLog();
