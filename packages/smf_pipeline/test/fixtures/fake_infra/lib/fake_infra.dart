@@ -512,6 +512,14 @@ final class FakeRegistrationsModule extends SmfModule {
         ),
         diRole.data(
           const DiRegistration(
+            type: _stamp,
+            create: FactoryRef('createLocalStamp', import: _file),
+            lifetime: DiLifetime.factory,
+            instanceName: 'local',
+          ),
+        ),
+        diRole.data(
+          const DiRegistration(
             type: _log,
             create: FactoryRef('createAuditLog', import: _file),
             lifetime: DiLifetime.singleton,
