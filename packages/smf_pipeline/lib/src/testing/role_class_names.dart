@@ -21,11 +21,12 @@ import 'package:yaml/yaml.dart';
 /// router, do not count, nor do the files in `lib/bundles/`, which bricks
 /// generate.
 ///
-/// The module packages are `smf_contracts`, `smf_pipeline` and every
-/// package that depends on `smf_contracts`, as for `ModulePackage`, which
-/// finds them the same way: through the package config that `dart pub get`
-/// writes, and without it, or without the pubspec of a package it has to
-/// tell, the problems ask to run `dart pub get`.
+/// It tells the module packages as `ModulePackage` does: they are
+/// `smf_contracts`, `smf_pipeline` and every package that depends on
+/// `smf_contracts`, which it finds through the package config that
+/// `dart pub get` writes. Without the package config, or without the
+/// pubspec of a package it has to tell, the problems ask to run
+/// `dart pub get`.
 ///
 /// ```dart
 /// test('takes the names of the classes of roles from the roles', () {
@@ -54,7 +55,8 @@ List<String> roleClassNameProblems(
       (name, directory),
       for (final package in dependencies)
         if (packages.isModule(package))
-          if (packages.rootOf(package) case final root?) (package, root),
+          if (packages.rootOf(package) case final packageRoot?)
+            (package, packageRoot),
     ];
     final classes = {
       for (final role in roles)
@@ -62,8 +64,8 @@ List<String> roleClassNameProblems(
           if (symbol is RequiredClass) symbol.name: role,
     };
     final problems = [
-      for (final (package, root) in checked)
-        for (final (path, file) in dartFilesIn(root, 'lib'))
+      for (final (package, packageRoot) in checked)
+        for (final (path, file) in dartFilesIn(packageRoot, 'lib'))
           if (!path.startsWith('lib/bundles/'))
             ..._problemsOf('$package/$path', file.readAsStringSync(), classes),
     ];
