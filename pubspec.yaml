@@ -41,11 +41,11 @@ dev_dependencies:
   # The tests of the repository in tools/ read the directives of Dart files
   # with the analyzer, and the files that the roles guarantee from
   # smf_contracts, the package of the workspace whatever its version.
-  analyzer: ^8.1.0
+  analyzer: ^14.4.0
   lints: ^6.0.0
-  melos: ^7.1.0
+  melos: ^8.9.0
   smf_contracts: any
-  test: ^1.24.0
+  test: ^1.32.0
   yaml: ^3.1.2
 
 melos:
