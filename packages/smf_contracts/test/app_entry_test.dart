@@ -6,6 +6,9 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
+/// The file of the provider with the root widget of the app.
+const _appFile = 'lib/app.dart';
+
 /// Indexes of a minimal app that satisfies the app entry role.
 Map<String, DartFileIndex> _app({
   List<IndexedImport> bootstrapImports = const [
@@ -26,8 +29,16 @@ Map<String, DartFileIndex> _app({
     ),
     IndexedInvocation('runApp', enclosingDeclaration: 'main', offset: 30),
   ],
+  List<IndexedInvocation> appCalls = const [
+    IndexedInvocation(
+      'router',
+      target: 'MaterialApp',
+      enclosingDeclaration: 'App',
+    ),
+  ],
 }) {
   return {
+    _appFile: DartFileIndex(path: _appFile, invocations: appCalls),
     AppEntryRole.mainFile: DartFileIndex(
       path: AppEntryRole.mainFile,
       declarations: const [
@@ -72,7 +83,12 @@ Map<String, DartFileIndex> _app({
   };
 }
 
-List<SmfIssue> _check(Map<String, DartFileIndex> files) {
+/// Checks [files] of an app whose app entry flutter_core provides; it owns
+/// each file, unless [owners] names another owner.
+List<SmfIssue> _check(
+  Map<String, DartFileIndex> files, {
+  Map<String, ContributionOrigin> owners = const {},
+}) {
   final request = StructuralRuleRequest(
     hook: const RoleHookRequest(
       data: [],
@@ -83,7 +99,21 @@ List<SmfIssue> _check(Map<String, DartFileIndex> files) {
     owners: {
       for (final path in files.keys)
         path: const ModuleOrigin(ModuleId('flutter_core')),
+      ...owners,
     },
+    modules: const [
+      ModuleDescriptor(
+        id: ModuleId('flutter_core'),
+        description: 'Flutter core',
+        kind: ModuleKinds.scaffold,
+        providers: [RoleProvider.plain(appEntryRole)],
+      ),
+      ModuleDescriptor(
+        id: ModuleId('home'),
+        description: 'Home',
+        kind: ModuleKinds.feature,
+      ),
+    ],
   );
   return [
     ...appEntryRole.interface.checkSymbols(files),
@@ -116,18 +146,21 @@ void main() {
       expect(appEntryRole.openToAllModules, isTrue);
     });
 
-    test('has the projects of Android and iOS', () {
-      expect(AppEntryRole.platforms, ['android', 'ios']);
-      // Each native file is in the project of one of the platforms.
-      for (final file in const [
-        AppEntryRole.androidManifestFile,
-        AppEntryRole.gradleSettingsFile,
-        AppEntryRole.gradleAppFile,
-        AppEntryRole.infoPlistFile,
-        AppEntryRole.xcodeProjectFile,
-      ]) {
-        expect(AppEntryRole.platforms, contains(file.split('/').first));
-      }
+    test('has its native files in the projects of Android and iOS', () {
+      // The directory of each project has the name of its platform in
+      // AppIdentity.platforms, which is that of flutter create --platforms.
+      final projects = {
+        for (final file in const [
+          AppEntryRole.androidManifestFile,
+          AppEntryRole.gradleSettingsFile,
+          AppEntryRole.gradleAppFile,
+          AppEntryRole.infoPlistFile,
+          AppEntryRole.xcodeProjectFile,
+        ])
+          file.split('/').first,
+      };
+
+      expect(projects, {'android', 'ios'});
     });
 
     test('owns all its sockets, with valid and distinct tags', () {
@@ -174,6 +207,7 @@ void main() {
         [
           'app_entry.bootstrap_without_material',
           'app_entry.main_sequence',
+          'app_entry.material_root',
           'app_entry.native_keys',
         ],
       );
@@ -298,6 +332,78 @@ void main() {
       );
 
       expect(issues.single.message, contains('ensureInitialized'));
+    });
+
+    test('require a MaterialApp at the root of the app', () {
+      final issues = _check(
+        _app(
+          appCalls: const [
+            IndexedInvocation('CupertinoApp', enclosingDeclaration: 'App'),
+          ],
+        ),
+      );
+
+      expect(issues.map((issue) => issue.message), [
+        equals(
+          'The root of the app must be a MaterialApp, but the module '
+          'flutter_core creates none in lib/.',
+        ),
+      ]);
+      expect(
+        issues.single.origin,
+        const ModuleOrigin(ModuleId('flutter_core')),
+      );
+      expect(issues.single.hint, contains('MaterialApp.router'));
+    });
+
+    test('accept a MaterialApp or a MaterialApp.router at the root', () {
+      expect(
+        _check(_app(appCalls: const [IndexedInvocation('MaterialApp')])),
+        isEmpty,
+      );
+      // The index records MaterialApp.router() as router() on MaterialApp.
+      expect(
+        _check(
+          _app(
+            appCalls: const [
+              IndexedInvocation('router', target: 'MaterialApp'),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('count only a MaterialApp that the provider creates in lib/', () {
+      const material = [IndexedInvocation('MaterialApp')];
+      const screen = 'lib/features/home/home_screen.dart';
+      final issues = _check(
+        {
+          ..._app(
+            appCalls: const [
+              IndexedInvocation('router', target: 'CupertinoApp'),
+            ],
+          ),
+          // A widget test of the provider, outside lib/.
+          'test/app_test.dart': const DartFileIndex(
+            path: 'test/app_test.dart',
+            invocations: material,
+          ),
+          screen: const DartFileIndex(path: screen, invocations: material),
+          RouterRole.appRouterFile: const DartFileIndex(
+            path: RouterRole.appRouterFile,
+            invocations: material,
+          ),
+        },
+        owners: {
+          screen: const ModuleOrigin(ModuleId('home')),
+          RouterRole.appRouterFile: const RoleTemplateOrigin(routerRole),
+        },
+      );
+
+      expect(issues.map((issue) => issue.message), [
+        contains('must be a MaterialApp'),
+      ]);
     });
   });
 

@@ -19,7 +19,6 @@ final class FakeDiModule extends SmfModule {
   static const id = ModuleId('fake_di');
 
   static const Set<DiCapability> _all = {
-    DiCapability.factoryWithParams,
     DiCapability.asyncInit,
     DiCapability.dependsOn,
     DiCapability.dispose,
@@ -84,13 +83,7 @@ final class FakeDiProvider extends DiProvider {
       final deps = [for (final dep in create.deps) resolve(dep)];
       final name = registration.instanceName;
       final named = name == null ? '' : ', name: ${SmfNames.dartString(name)}';
-      final params = registration.params;
       final call = '$factory(${deps.join(', ')})';
-      final paramCall = '$factory(${[
-        ...deps,
-        if (params.isNotEmpty) 'param1 as ${type(params.first)}',
-        if (params.length > 1) 'param2 as ${type(params[1])}',
-      ].join(', ')})';
       lines.add(
         switch (registration.lifetime) {
           DiLifetime.singleton when registration.isAsync =>
@@ -99,11 +92,8 @@ final class FakeDiProvider extends DiProvider {
             '  locator.singleton<$serviceType>($call$named);',
           DiLifetime.lazySingleton =>
             '  locator.lazy<$serviceType>(() => $call$named);',
-          DiLifetime.factory when params.isEmpty =>
-            '  locator.factoryOf<$serviceType>(() => $call$named);',
           DiLifetime.factory =>
-            '  locator.factoryWith<$serviceType>((param1, param2) => '
-                '$paramCall$named);',
+            '  locator.factoryOf<$serviceType>(() => $call$named);',
         },
       );
       if (registration.dispose case final dispose?) {

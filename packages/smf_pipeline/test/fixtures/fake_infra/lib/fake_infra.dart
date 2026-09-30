@@ -419,8 +419,8 @@ final class FakeEventsModule extends SmfModule {
 /// in each form a DI container can have to render: singletons, lazy
 /// singletons and factories, with and without names; singletons created
 /// asynchronously, and singletons that wait for them, named or not, by
-/// saying so or by taking them; factories with one and two parameters; and
-/// functions that dispose of singletons of each kind.
+/// saying so or by taking them; and functions that dispose of singletons of
+/// each kind.
 final class FakeRegistrationsModule extends SmfModule {
   /// Creates the module.
   const FakeRegistrationsModule();
@@ -436,8 +436,6 @@ final class FakeRegistrationsModule extends SmfModule {
   static const _api = TypeRef('FixtureApi', import: _file);
   static const _session = TypeRef('FixtureSession', import: _file);
   static const _cache = TypeRef('FixtureCache', import: _file);
-  static const _greeting = TypeRef('FixtureGreeting', import: _file);
-  static const _label = TypeRef('FixtureLabel', import: _file);
   static const _zone = TypeRef('FixtureZone', import: _file);
   static const _stamp = TypeRef('FixtureStamp', import: _file);
   static const _log = TypeRef('FixtureLog', import: _file);
@@ -492,30 +490,6 @@ final class FakeRegistrationsModule extends SmfModule {
             lifetime: DiLifetime.singleton,
             dependsOn: [ServiceRef(_session)],
             dispose: FunctionRef('closeFixtureCache', import: _file),
-          ),
-        ),
-        diRole.data(
-          const DiRegistration(
-            type: _greeting,
-            create: FactoryRef(
-              'createFixtureGreeting',
-              import: _file,
-              deps: [ServiceRef(_config)],
-            ),
-            lifetime: DiLifetime.factory,
-            params: [TypeRef('String'), TypeRef('int')],
-          ),
-        ),
-        diRole.data(
-          const DiRegistration(
-            type: _label,
-            create: FactoryRef(
-              'createFixtureLabel',
-              import: _file,
-              deps: [ServiceRef(_config)],
-            ),
-            lifetime: DiLifetime.factory,
-            params: [TypeRef('String')],
           ),
         ),
         diRole.data(

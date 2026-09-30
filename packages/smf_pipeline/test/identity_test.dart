@@ -1,4 +1,5 @@
 import 'package:smf_contracts/core.dart';
+import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -74,5 +75,18 @@ void main() {
     expect(hyphens.orgName, 'io.my_org');
     expect(hyphens.appIdentity.androidApplicationId, 'io.my_org.app');
     expect(hyphens.appIdentity.iosBundleId, 'io.my-org.app');
+  });
+
+  test('contextOf gives every app the platforms of SMF, as the harness does',
+      () {
+    final context = AppNames.contextOf(name: 'my_app', org: 'com.example');
+
+    // By the names of flutter create --platforms.
+    expect(context.appIdentity.platforms, ['android', 'ios']);
+    // So the tests of a module see the platforms of a generated app.
+    expect(
+      ContractHarness.defaultContext.appIdentity.platforms,
+      context.appIdentity.platforms,
+    );
   });
 }

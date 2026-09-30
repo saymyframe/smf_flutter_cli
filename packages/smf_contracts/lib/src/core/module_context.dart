@@ -1,13 +1,18 @@
 import 'package:smf_contracts/core.dart';
 
-/// Platform identifiers of the generated app.
+/// The platforms and the platform identifiers of the generated app.
 final class AppIdentity {
-  /// Creates the identifiers of an app.
+  /// Creates the identity of an app.
   const AppIdentity({
+    required this.platforms,
     required this.androidApplicationId,
     required this.iosBundleId,
     required this.androidNamespace,
   });
+
+  /// The platforms of the app, by the names of `flutter create --platforms`,
+  /// such as `android`.
+  final List<String> platforms;
 
   /// The Android application id, such as `com.example.my_app`.
   final String androidApplicationId;
@@ -42,6 +47,6 @@ final class ModuleContext {
   /// The organization, in reverse domain notation, such as `com.example`.
   final String orgName;
 
-  /// The platform identifiers of the app.
+  /// The platforms and the platform identifiers of the app.
   final AppIdentity appIdentity;
 }

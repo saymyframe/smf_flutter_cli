@@ -21,7 +21,10 @@ void main() {
             "const route = '/main-tabs';\n"
             "const other = '/main-tabs-2';\n"
             'final locator = GetIt.instance;\n'
-            "import 'package:get_it/get_it.dart';\n",
+            "import 'package:get_it/get_it.dart';\n"
+            'final file = kind.compositionFile;\n'
+            'final path = kind.compositionFileOf(home);\n'
+            "const rule = CompositionFile('lib/a.dart');\n",
         'packages/a/pubspec.yaml': 'dependencies:\n  get_it: ^9.0.0\n',
         'packages/a/bricks/b/__brick__/lib/b.dart': '{{app_name_sc}}\n',
       }),
@@ -32,8 +35,26 @@ void main() {
         'packages/a/lib/a.dart:6: main-tabs',
         'packages/a/lib/a.dart:8: GetIt',
         'packages/a/lib/a.dart:9: package:get_it',
+        'packages/a/lib/a.dart:10: compositionFile',
+        'packages/a/lib/a.dart:11: compositionFileOf',
         'packages/a/pubspec.yaml:2: get_it:',
         'packages/a/bricks/b/__brick__/lib/b.dart:1: {{app_name_sc}}',
+      ],
+    );
+  });
+
+  test('finds "by itself" in a line that does not say "only"', () {
+    expect(
+      _names({
+        'packages/a/README.md':
+            'When a feature needs a router, `smf create` adds it by itself.\n'
+                '`smf create` adds it by itself if it is the only module that '
+                'provides the router, and asks otherwise.\n'
+                'It commonly adds it by itself.\n',
+      }),
+      [
+        'packages/a/README.md:1: "by itself" without "only"',
+        'packages/a/README.md:3: "by itself" without "only"',
       ],
     );
   });

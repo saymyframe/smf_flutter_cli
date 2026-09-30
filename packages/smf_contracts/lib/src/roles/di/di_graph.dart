@@ -35,9 +35,8 @@ final class DiGraph {
   DiRegistration? registrationOf(ServiceRef service) => _byKey[service]?.value;
 
   /// The problems of the registrations: those of each one alone, services
-  /// registered twice, services needed but not registered or created with
-  /// parameters, cycles, and services a singleton waits for that are not
-  /// created asynchronously.
+  /// registered twice, services needed but not registered, cycles, and
+  /// services a singleton waits for that are not created asynchronously.
   List<SmfIssue> get issues {
     final issues = [
       for (final data in registrations) ..._issuesOf(data),
@@ -75,7 +74,7 @@ final class DiGraph {
 
   /// The problems of the registration [data] alone, whether it registers a
   /// service registered before, and otherwise the services it needs that no
-  /// module registers or that are created with parameters.
+  /// module registers.
   List<SmfIssue> _issuesOf(RoleData<DiRegistration> data) {
     final registration = data.value;
     final origin = data.origin;
@@ -99,21 +98,11 @@ final class DiGraph {
       ...registration.create.deps,
       ...registration.dependsOn,
     ]) {
-      final target = _byKey[service]?.value;
-      if (target == null) {
+      if (!_byKey.containsKey(service)) {
         issues.add(
           SmfIssue(
             'The registration of ${registration.key} needs $service, which '
             'no module registers.',
-            origin: origin,
-          ),
-        );
-      } else if (target.params.isNotEmpty) {
-        // The container would create it without the values it takes.
-        issues.add(
-          SmfIssue(
-            'The registration of ${registration.key} needs $service, which '
-            'takes parameters that only resolveWith can pass.',
             origin: origin,
           ),
         );
@@ -186,7 +175,6 @@ final class DiGraph {
   /// The capabilities the container needs for [registration], including
   /// waiting for the services of [dependsOnOf].
   Set<DiCapability> capabilitiesOf(DiRegistration registration) => {
-        if (registration.params.isNotEmpty) DiCapability.factoryWithParams,
         if (registration.isAsync) DiCapability.asyncInit,
         if (dependsOnOf(registration).isNotEmpty) DiCapability.dependsOn,
         if (registration.dispose != null) DiCapability.dispose,

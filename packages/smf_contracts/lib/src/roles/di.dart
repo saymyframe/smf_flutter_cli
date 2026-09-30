@@ -16,17 +16,17 @@ const diRole = DiRole._();
 /// renders them in the form of its container. The role abstracts how
 /// services are registered, not how they are consumed: code gets its
 /// services as parameters of its factory function (see
-/// [FactoryRef.deps]), and only the composition file of a feature resolves
-/// them itself, to create what the feature's screens need, such as a Cubit.
+/// [FactoryRef.deps]), and only the composition file of a feature (see
+/// [CompositionFile]) resolves them itself, to create what the feature's
+/// screens need, such as a Cubit.
 /// Consumption through widgets, as with Riverpod or provider, is not part of
 /// this role.
 ///
 /// The role's template generates `lib/core/di/service_locator.dart` with
 /// the `ServiceLocator` interface, the instance `serviceLocator` created by
-/// the provider's [createServiceLocator], and the top-level functions
-/// `resolve<T>({instanceName})` and `resolveWith<T>(param1, [param2])`. It
-/// also calls the provider's [registerDependencies] in the DI phase of
-/// `bootstrap()`.
+/// the provider's [createServiceLocator], and the top-level function
+/// `resolve<T>({instanceName})`. It also calls the provider's
+/// [registerDependencies] in the DI phase of `bootstrap()`.
 ///
 /// A provider extends [DiProvider], renders the registrations of
 /// [graphOf] in [DiGraph.ordered] order, makes each singleton wait for the
@@ -88,9 +88,8 @@ final class DiRole extends Role<DiRegistration> {
         StructuralRule(
           id: 'di.factories',
           description: 'The factory of every registration is a top-level '
-              'function in its file that takes the dependencies and then the '
-              'parameters of the registration, and its dispose function '
-              'takes the service.',
+              'function in its file that takes the dependencies of the '
+              'registration, and its dispose function takes the service.',
           check: _checkFactories,
         ),
       ];
@@ -157,11 +156,34 @@ abstract base class DiProvider extends RoleProvider<DiRegistration> {
   }
 }
 
-const _resolveNames = {'resolve', 'resolveWith', 'serviceLocator'};
+/// The file where a module of a kind may resolve services, such as the
+/// composition file of a feature, which creates what its screens need.
+///
+/// A kind lists it in [ModuleKind.roleRules]. A module of the kind may
+/// resolve services in this file and nowhere else, and only if it requires
+/// the [DiRole]; a module of a kind without it resolves no service itself.
+/// Other code gets its services as parameters of its factory function (see
+/// [FactoryRef.deps]).
+final class CompositionFile extends KindRule {
+  /// Creates the rule for the file at [path].
+  const CompositionFile(this.path);
 
-/// Whether [file] resolves services: it calls, tears off or reads `resolve`,
-/// `resolveWith` or `serviceLocator` of the service locator's file, which it
-/// imports with or without a prefix.
+  /// The path of the file relative to the project root, where `<id>` stands
+  /// for the module id, such as `lib/features/<id>/<id>_composition.dart`.
+  final String path;
+
+  @override
+  Role get role => diRole;
+
+  /// [path] for the module [module].
+  String pathOf(ModuleId module) => path.replaceAll('<id>', module.value);
+}
+
+const _resolveNames = {'resolve', 'serviceLocator'};
+
+/// Whether [file] resolves services: it calls, tears off or reads `resolve`
+/// or `serviceLocator` of the service locator's file, which it imports with
+/// or without a prefix.
 bool _resolves(DartFileIndex file) =>
     usesSymbols(file, _resolveNames, DiRole.serviceLocatorFile);
 
@@ -173,7 +195,8 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
     final module = input.module(owner.module);
     // The container implements resolving itself.
     if (module?.provides.contains(diRole) ?? false) continue;
-    final allowed = module?.kind.compositionFileOf(owner.module);
+    final allowed =
+        module?.kind.ruleOf<CompositionFile>()?.pathOf(owner.module);
     if (!_resolves(file)) continue;
     if (path == allowed) {
       if (!(module?.effectiveRequires.contains(diRole) ?? false)) {
@@ -205,8 +228,8 @@ List<SmfIssue> _checkResolve(StructuralRuleInput<DiRegistration> input) {
 
 /// The problems with the functions that registrations name: a factory that
 /// is missing from its file of the app, or that cannot take its
-/// dependencies and parameters as positional arguments, and a dispose
-/// function that cannot take the service.
+/// dependencies as positional arguments, and a dispose function that cannot
+/// take the service.
 ///
 /// Functions from other packages are left to the compiler.
 List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
@@ -228,7 +251,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
         SmfIssue(
           issue.message,
           hint: 'The pipeline calls it with the dependencies of the '
-              'registration, then its parameters.',
+              'registration.',
           origin: origin,
           path: issue.path,
         ),
@@ -239,12 +262,7 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
   for (final data in diRole.graphOf(input.roleInput).registrations) {
     final registration = data.value;
     final create = registration.create;
-    check(
-      create.name,
-      create.import,
-      create.deps.length + registration.params.length,
-      data.origin,
-    );
+    check(create.name, create.import, create.deps.length, data.origin);
     if (registration.dispose case final dispose?) {
       check(dispose.name, dispose.import, 1, data.origin);
     }

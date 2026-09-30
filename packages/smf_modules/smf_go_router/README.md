@@ -6,7 +6,7 @@ The features of the app declare their routes, and the router role gives the app 
 
 ## Use with the SMF CLI
 
-`smf create` asks which module provides the router, and offers none as well. When a module you chose needs a router, such as the start screen of `home`, `smf create` adds this one by itself. To choose it without the question:
+`smf create` asks which module provides the router, and offers none as well. When a module you chose needs a router, such as the start screen of `home`, `smf create` adds this one by itself if it is the only module that provides the router, and asks otherwise. To choose it without the question:
 
 ```bash
 smf create my_app -m go_router

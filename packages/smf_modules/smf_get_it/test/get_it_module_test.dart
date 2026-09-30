@@ -93,9 +93,8 @@ Future<void> registerDependencies() async {
     dependsOn: [di1.Store],
     dispose: di1.stopSync,
   );
-  getIt.registerFactoryParam<di1.Report, String, int>(
-    (param1, param2) =>
-        di1.createReport(getIt<di1.Repository>(), param1, param2),
+  getIt.registerLazySingleton<di1.ReportFactory>(
+    () => di1.createReportFactory(getIt<di1.Repository>()),
   );
   getIt.registerSingletonAsync<di1.Session>(
     () => di1.openSession(),
@@ -142,17 +141,19 @@ Future<void> registerDependencies() async {
     () => di0.createRefreshToken(getIt<di0.ApiConfig>(instanceName: 'staging')),
     instanceName: 'refresh',
   );
-  getIt.registerFactoryParam<di0.Request, String, void>(
-    (param1, _) => di0.createRequest(getIt<di0.ApiClient>(), param1),
+  getIt.registerLazySingleton<Uri>(
+    () => di0.createApiUri(getIt<di0.ApiConfig>()),
+    instanceName: 'api',
   );
   await getIt.allReady();
 }
 ''');
 
 /// Runs `registerDependencies()` of the app of the services of both
-/// modules, resolves services of each kind, by name too, and with one and
-/// two parameters, resets get_it, and sends what the functions of the
-/// services did at each stage and what the services were.
+/// modules, resolves services of each kind, by name too, creates a report
+/// with the values of its caller through the service that creates reports,
+/// resets get_it, and sends what the functions of the services did at each
+/// stage and what the services were.
 ///
 /// It imports the files of the DI role and of the services only, not those
 /// of the app entry, which may need Flutter.
@@ -171,8 +172,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   final ready = [...events];
   events.clear();
   final sync = resolve<Sync>();
-  final report = resolveWith<Report>('Weekly', 3);
-  final request = resolveWith<Request>('/items');
+  final report = resolve<ReportFactory>()('Weekly', 3);
   final services = <String, Object?>{
     'one singleton': identical(resolve<Sync>(), sync),
     'one lazy singleton': identical(resolve<Repository>(), sync.repository),
@@ -183,7 +183,6 @@ Future<void> main(List<String> arguments, SendPort port) async {
       report.pages,
       identical(report.repository, sync.repository),
     ],
-    'request': [request.path, identical(request.client, resolve<ApiClient>())],
     'configs': [
       resolve<ApiConfig>().host,
       resolve<ApiConfig>(instanceName: 'staging').host,
@@ -205,6 +204,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
       resolve<Cache>(instanceName: 'backup').name,
     ],
     'one random': identical(resolve<Random>(), resolve<Random>()),
+    'api': resolve<Uri>(instanceName: 'api').toString(),
   };
   final resolved = [...events];
   events.clear();
@@ -268,6 +268,10 @@ void main() {
       final provider = module.descriptor.providers.single as DiProvider;
 
       expect(provider.capabilities, DiCapability.values.toSet());
+      expect(
+        {for (final capability in provider.capabilities) capability.name},
+        {'asyncInit', 'dependsOn', 'dispose', 'instanceName'},
+      );
     });
 
     test('forms a valid registry with the modules of the tests', () {
@@ -380,15 +384,17 @@ void main() {
                 (declaration) =>
                     declaration.name.lexeme == '_GetItServiceLocator',
               );
-      String bodyOf(String method) => locator.members
-          .whereType<MethodDeclaration>()
-          .singleWhere((declaration) => declaration.name.lexeme == method)
-          .body
-          .toSource();
-      expect(bodyOf('resolve'), '=> _getIt<T>(instanceName: instanceName);');
+      final methods = locator.members.whereType<MethodDeclaration>();
       expect(
-        bodyOf('resolveWith'),
-        '=> _getIt<T>(param1: param1, param2: param2);',
+        [
+          for (final method in methods)
+            '${method.name.lexeme}${method.parameters}',
+        ],
+        ['resolve({String? instanceName})'],
+      );
+      expect(
+        methods.single.body.toSource(),
+        '=> _getIt<T>(instanceName: instanceName);',
       );
     });
 
@@ -497,7 +503,7 @@ void main() {
         'registerLazySingleton<di0.Clock>',
         'registerFactory<di0.Token>',
         'registerFactory<di0.Token>',
-        'registerFactoryParam<di0.Request, String, void>',
+        'registerLazySingleton<Uri>',
       ]);
     });
 
@@ -549,27 +555,28 @@ void main() {
       expect(before('opened backup Session', 'open Mirror'), isTrue);
 
       expect(result['resolved'], [
+        'create ReportFactory',
         'create Report Weekly',
-        'create Request /items',
         'create Token',
         'create Token',
         'create Token',
         'create refresh Token',
         'create Clock',
         'create Random',
+        'create api Uri',
       ]);
       expect(result['services'], {
         'one singleton': true,
         'one lazy singleton': true,
         'a new instance of a factory': true,
         'report': ['Weekly', 3, true],
-        'request': ['/items', true],
         'configs': ['example.com', 'staging.example.com'],
         'tokens': ['example.com', 'staging.example.com'],
         'clocks': ['UTC', 'local'],
         'sessions': ['main', 'backup'],
         'caches': ['main', 'backup'],
         'one random': true,
+        'api': 'https://example.com',
       });
       // The reverse order of registration: what a service takes is
       // disposed of after it.

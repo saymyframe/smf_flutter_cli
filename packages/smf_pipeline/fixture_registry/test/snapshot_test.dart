@@ -76,6 +76,7 @@ const _context = ModuleContext(
   appName: 'fixture_app',
   orgName: 'com.example',
   appIdentity: AppIdentity(
+    platforms: ['android', 'ios'],
     androidApplicationId: 'com.example.fixture_app',
     iosBundleId: 'com.example.fixture-app',
     androidNamespace: 'com.example.fixture_app',

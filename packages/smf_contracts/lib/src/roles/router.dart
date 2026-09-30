@@ -58,8 +58,9 @@ const routerRole = RouterRole._();
 ///   class `AppRouter`;
 /// - creates `config` once.
 ///
-/// The scaffold of the app switches to `MaterialApp.router` when the role is
-/// present and passes it `appRouter.config`.
+/// When the role is present, the provider of the [AppEntryRole] builds the
+/// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
+/// `appRouter.config`.
 final class RouterRole extends Role<RoutesData> {
   const RouterRole._();
 

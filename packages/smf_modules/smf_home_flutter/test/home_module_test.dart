@@ -368,6 +368,7 @@ void main() {
         appName: 'bird_watch',
         orgName: 'org.example',
         appIdentity: AppIdentity(
+          platforms: ['android', 'ios'],
           androidApplicationId: 'org.example.bird_watch',
           iosBundleId: 'org.example.bird-watch',
           androidNamespace: 'org.example.bird_watch',
