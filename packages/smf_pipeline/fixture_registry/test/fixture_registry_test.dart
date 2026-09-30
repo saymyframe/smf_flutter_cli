@@ -67,8 +67,8 @@ void main() {
             contains(module.descriptor.id),
             reason: '${module.descriptor.id} provides the $role, which an app '
                 'can have several providers of: add it to '
-                'severalProvidersModules(), and register its app tests in '
-                'tool/several_providers_matrix.dart.',
+                'severalProvidersModules(); the app of several providers runs '
+                'its app tests as smfAppTests() registers them.',
           );
         }
       }
