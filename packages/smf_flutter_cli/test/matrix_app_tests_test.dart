@@ -3,6 +3,8 @@
 // only in its job with Flutter, which checks that they apply to some app
 // and that they check the contract of their roles with every provider
 // only at its end; these tests check the same without Flutter.
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -420,6 +422,79 @@ void main() {
     expect(everyLifetime.appliesTo(app), isTrue);
     expect(everyLifetime.appliesTo(appOf(registrations.sublist(1))), isFalse);
     expect(apps.where(everyLifetime.appliesTo), isEmpty);
+  });
+
+  test(
+      'the start check runs the probes of the tests of the roles that go '
+      'into an app with it, the walk of the routes and the services of the '
+      'DI role, each a function of a file of its tests that takes the one '
+      'that waits until the screen settles', () async {
+    expect(named('start').readsStartProbes, isTrue);
+    expect(
+      {
+        for (final test in appTests.tests)
+          if (test.startProbe case final probe?)
+            p.basename(test.directory): '${probe.path} ${probe.function}',
+      },
+      {
+        'di_role': 'integration_test/di_role/probe.dart probeServices',
+        'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
+      },
+    );
+    for (final test in appTests.tests) {
+      final probe = test.startProbe;
+      if (probe == null) continue;
+      final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+      final (:index, :errors) =
+          DartFileIndexer.parse(probe.path, file.readAsStringSync());
+      expect(errors, isEmpty, reason: probe.path);
+      final function = index.declarations
+          .singleWhere((declaration) => declaration.name == probe.function);
+      expect(function.kind, DeclarationKind.function);
+      expect(function.type, 'Future<List<String>>');
+      expect(
+        [
+          for (final parameter in function.parameters)
+            '${parameter.kind.name} ${parameter.type}',
+        ],
+        ['requiredPositional Future<void> Function()'],
+      );
+    }
+
+    // With the start check, an app with every module gets the probes of
+    // both, which the list of the probes names.
+    final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
+    final tests = appTestsFor(app, [named('start')], appTests.tests);
+    expect(
+      [for (final test in tests) p.basename(test.directory)],
+      ['start', 'di_role', 'router_walk'],
+    );
+    final directory = Directory.systemTemp.createTempSync('smf_probes_');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final added = addAppTests(
+      tests,
+      directory: directory.path,
+      packageName: 'my_app',
+      app: app,
+    );
+    expect(
+      added,
+      containsAll([startProbesFile, registeredServicesFile, routerWalkFile]),
+    );
+    final list = File(
+      p.joinAll([directory.path, ...startProbesFile.split('/')]),
+    ).readAsStringSync();
+    final (:index, :errors) = DartFileIndexer.parse(startProbesFile, list);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
+      [
+        'probe0: di_role/probe.dart',
+        'probe1: router_walk/walk.dart',
+      ],
+    );
+    expect(list, contains("('di_role', probe0.probeServices),"));
+    expect(list, contains("('router_walk', probe1.probeRoutes),"));
   });
 
   test(

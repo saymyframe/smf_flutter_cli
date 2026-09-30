@@ -33,7 +33,14 @@ Future<MatrixAppTests> smfAppTests() async {
       // whichever module provides it, so the CLI keeps it and it applies to
       // every app. In the apps of the matrix it is only analyzed, and
       // flutter test runs the tests that the modules put into each app.
-      MatrixAppTest('$cli/start', appliesTo: (_) => true),
+      // Once the first screen settled, it runs the probes of the tests that
+      // go into the app with it, which go through the roles of the app,
+      // such as the walk of its routes.
+      MatrixAppTest(
+        '$cli/start',
+        appliesTo: (_) => true,
+        readsStartProbes: true,
+      ),
       // The start-up of the app initializes Firebase, with the options that
       // `flutterfire configure` would write, and the mocks of Firebase Core,
       // which the matrix sets up for the tests of every module of the app.
@@ -137,10 +144,10 @@ Future<MatrixAppTest> eventsRoleAppTest({
 ///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes of its router role, into [routerWalkFile],
-/// next to the walk in `integration_test/router_walk/walk.dart`, which a
-/// check that runs on a device can run too. The matrix of the fixtures
-/// runs it too, only in the apps with every module, which run other tests
-/// already.
+/// next to the walk in `integration_test/router_walk/walk.dart`, whose
+/// probe, `probeRoutes()`, the start check runs on a device. The matrix of
+/// the fixtures runs it too, only in the apps with every module, which run
+/// other tests already.
 Future<MatrixAppTest> routerWalkAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>
@@ -151,6 +158,10 @@ Future<MatrixAppTest> routerWalkAppTest({
           (among?.call(app) ?? true),
       generatedFiles: _walkedLocationsOf,
       roles: {routerRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/router_walk/walk.dart',
+        'probeRoutes',
+      ),
     );
 
 /// The path in an app of the locations that the walk of the test of the
@@ -231,7 +242,10 @@ $locations];
 /// The test knows only the role. The matrix writes the services of each
 /// app for it, from the registrations of its DI role, into
 /// [registeredServicesFile]. The matrix of the fixtures runs it too, in the
-/// apps whose services have every lifetime.
+/// apps whose services have every lifetime. Its probe, `probeServices()` of
+/// `integration_test/di_role/probe.dart`, resolves each service on a device
+/// for the start check, a singleton and a lazy singleton twice, without
+/// calling it or resetting the container.
 Future<MatrixAppTest> diRoleAppTest({
   Set<DiLifetime> lifetimes = const {},
 }) async =>
@@ -246,6 +260,10 @@ Future<MatrixAppTest> diRoleAppTest({
       },
       generatedFiles: _registeredServicesOf,
       roles: {diRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/di_role/probe.dart',
+        'probeServices',
+      ),
     );
 
 /// The path in an app of the services that its modules register, which the
@@ -254,7 +272,8 @@ Future<MatrixAppTest> diRoleAppTest({
 /// with its name, such as `FixtureZone "utc"`, its lifetime, such as
 /// `lazySingleton`, and a function that resolves it with `resolve()` of the
 /// service locator of the role, by its type and its instance name.
-const registeredServicesFile = 'test/di_role/registered_services.dart';
+const registeredServicesFile =
+    'integration_test/di_role/registered_services.dart';
 
 /// The file at [registeredServicesFile] of [app], an app of the matrix with
 /// the DI role, whose package is [packageName].

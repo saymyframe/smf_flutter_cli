@@ -670,6 +670,8 @@ final class MatrixAppTest {
     this.generatedFiles,
     this.roles = const {},
     this.mocks,
+    this.startProbe,
+    this.readsStartProbes = false,
   });
 
   /// The directory of the files that go into an app, each at its path
@@ -748,7 +750,49 @@ final class MatrixAppTest {
   /// tests rather than while its `main()` declares them, such as mocks that
   /// record what reaches the platform side of its module.
   final MatrixMocks? mocks;
+
+  /// The probe of the tests for a check that runs on a device, such as the
+  /// start check, or `null` if they have none: a function that goes through
+  /// what the tests check in the running app, without a test framework, and
+  /// returns what is wrong, such as the walk of the routes of the app.
+  ///
+  /// The matrix lists the probes of the tests that it adds to an app with a
+  /// test that runs them ([readsStartProbes]); see [addAppTests].
+  final MatrixStartProbe? startProbe;
+
+  /// Whether the tests run the probes of the tests of the app
+  /// ([startProbe]), as the start check does once the first screen of the
+  /// app settled: with such tests, the matrix writes the list of the probes
+  /// of the tests that it adds to the app, [startProbesFile], which they
+  /// import.
+  final bool readsStartProbes;
 }
+
+/// A function among the files of a [MatrixAppTest], in their directory
+/// `integration_test/`, that a check on a device runs once the first screen
+/// of the app settled (see [MatrixAppTest.startProbe]).
+final class MatrixStartProbe {
+  /// Creates the probe that the function [function] of the file at [path]
+  /// is.
+  const MatrixStartProbe(this.path, this.function);
+
+  /// The path of the Dart file with the function among the files of the
+  /// tests or those that they generate, in their directory
+  /// `integration_test/`, such as `integration_test/router_walk/walk.dart`.
+  final String path;
+
+  /// The name of the top-level function of the file, of the type
+  /// `Future<List<String>> Function(Future<void> Function() settle)`, such
+  /// as `probeRoutes`. The check calls it with a function that waits until
+  /// the screen settles, and adds the problems that it returns to its own.
+  final String function;
+}
+
+/// The path in an app of the list of the probes of its tests, which
+/// [addAppTests] writes for the tests that run them
+/// ([MatrixAppTest.readsStartProbes]): `startProbes`, the name of the tests
+/// of each probe and the probe, in the order of the tests.
+const startProbesFile = 'integration_test/start_probes.dart';
 
 /// A function among the files of a [MatrixAppTest] that sets up the mocks of
 /// the platform side of what the module of the tests runs in an app (see
@@ -904,13 +948,22 @@ final class MatrixAppTests {
 /// of an app are set up for the tests of each module, which the tests of
 /// the matrix and the tests added to an app outside it get alike.
 ///
+/// If some of the [tests] run the probes of the tests of the app
+/// ([MatrixAppTest.readsStartProbes]), such as the start check, it also
+/// writes the list of the probes of the [tests], [startProbesFile], in the
+/// order of the [tests], each named after the directory of its tests. So
+/// the start check that the matrix analyzes in its apps and the one that CI
+/// starts on a device run the probes of the tests that go into the app.
+///
 /// Throws a [MatrixAppTestException], before it copies anything, if a test
 /// generates files without [app], if a file keeps a placeholder that no
 /// value fills, if two of the [tests] have a file at the same path, the
 /// files they generate included, if a test generates a file at a path that
 /// is no relative path in the app, if the mocks of a test are in no file
-/// of it in `test/`, or if a test has a file at the path of the
-/// configuration that the matrix writes for the mocks.
+/// of it in `test/`, if its probe is in no file of it in
+/// `integration_test/`, or if a test has a file at the path of the
+/// configuration of the mocks or of the list of the probes, which the
+/// matrix writes.
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
   required String directory,
@@ -986,12 +1039,67 @@ List<String> addAppTests(
     }
     texts[config] = _testConfigOf(mocks);
   }
+  final probes = <(String, MatrixStartProbe)>[];
+  for (final test in tests) {
+    final probe = test.startProbe;
+    if (probe == null) continue;
+    final path = context.joinAll(probe.path.split('/'));
+    if (!probe.path.startsWith(_integrationTest) ||
+        owners[path] != test.directory) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} declare their probe in '
+        '${probe.path}, which is no file of theirs in $_integrationTest.',
+      );
+    }
+    probes.add((context.basename(test.directory), probe));
+  }
+  if (tests.any((test) => test.readsStartProbes)) {
+    final list = context.joinAll(startProbesFile.split('/'));
+    if (owners[list] case final other?) {
+      throw MatrixAppTestException(
+        'The tests of $other have $startProbesFile, which the matrix writes '
+        'for the probes of the tests.',
+      );
+    }
+    texts[list] = _startProbesOf(probes);
+  }
   for (final MapEntry(key: path, value: text) in texts.entries) {
     fileSystem.file(context.join(directory, path))
       ..createSync(recursive: true)
       ..writeAsStringSync(text);
   }
   return [...texts.keys];
+}
+
+/// The directory of an app with the checks that run on a device, such as
+/// the start check, as the paths of the files of a [MatrixAppTest] start.
+const _integrationTest = 'integration_test/';
+
+/// The list of the probes of the tests of an app, [startProbesFile], with
+/// [probes], each with the name of its tests; see [addAppTests].
+String _startProbesOf(List<(String, MatrixStartProbe)> probes) {
+  final imports = StringBuffer();
+  final entries = StringBuffer();
+  for (final (index, (name, probe)) in probes.indexed) {
+    final uri = probe.path.substring(_integrationTest.length);
+    imports.writeln("import '$uri' as probe$index;");
+    entries.writeln(
+      '  (${SmfNames.dartString(name)}, probe$index.${probe.function}),',
+    );
+  }
+  return '''
+// The probes of the tests of the app, which the matrix of SMF writes for
+// the check that runs them on a device, such as the start check
+// (MatrixAppTest.startProbe): each goes through the running app and
+// returns what is wrong.
+$imports
+/// The probes of the tests of the app, each with the name of its tests: a
+/// function that goes through the running app, with the function that
+/// waits until the screen settles, and returns the problems that it finds.
+const List<(String, Future<List<String>> Function(Future<void> Function()))>
+    startProbes = [
+$entries];
+''';
 }
 
 /// The files in the directory [directory] and in its directories, each
@@ -1144,6 +1252,40 @@ Future<(int, String)> runAppTests(
       flutter: flutter,
       fileSystem: fileSystem,
     );
+
+/// The tests of [all] to add to [app], an app of the matrix that
+/// `smf create` generated outside it, such as one that CI starts on a
+/// device, for the tests [named]: those, and, if one of them runs the
+/// probes of the tests of the app ([MatrixAppTest.readsStartProbes]), such
+/// as the start check, each other test of [all] with a probe
+/// ([MatrixAppTest.startProbe]) that applies to [app], in the order of
+/// [all]. So the start check goes through the roles of the app, whichever
+/// they are, without the caller naming the tests of the roles.
+///
+/// Throws a [MatrixAppTestException] if a test of [named] does not apply to
+/// [app]: its files would not fit the app.
+List<MatrixAppTest> appTestsFor(
+  MatrixApp app,
+  List<MatrixAppTest> named,
+  List<MatrixAppTest> all,
+) {
+  for (final test in named) {
+    if (!test.appliesTo(app)) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} do not apply to ${app.name}.',
+      );
+    }
+  }
+  return [
+    ...named,
+    if (named.any((test) => test.readsStartProbes))
+      for (final test in all)
+        if (test.startProbe != null &&
+            !named.contains(test) &&
+            test.appliesTo(app))
+          test,
+  ];
+}
 
 /// Adds [tests] to [generated], an app that `smf create` generated outside
 /// the matrix, such as one that CI starts on a device: copies their files

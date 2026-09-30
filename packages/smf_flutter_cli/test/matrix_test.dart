@@ -1949,6 +1949,242 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     });
   });
 
+  group('the probes of the tests of an app', () {
+    late MemoryFileSystem fileSystem;
+    const app = MatrixApp('home', [ModuleId('home')]);
+
+    setUp(() {
+      fileSystem = MemoryFileSystem();
+      for (final path in [
+        '/tests/walk/integration_test/walk/walk.dart',
+        '/tests/walk/test/walk_test.dart',
+        '/tests/start/integration_test/start_check.dart',
+        '/tests/services/test/services_test.dart',
+      ]) {
+        fileSystem.file(path)
+          ..createSync(recursive: true)
+          ..writeAsStringSync('// {{app_name}}\n');
+      }
+    });
+
+    List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          tests,
+          app: app,
+          directory: '/apps/app_1',
+          packageName: 'my_app',
+          fileSystem: fileSystem,
+        );
+
+    MatrixAppTest walk({String path = 'integration_test/walk/walk.dart'}) =>
+        MatrixAppTest(
+          '/tests/walk',
+          appliesTo: (_) => true,
+          startProbe: MatrixStartProbe(path, 'probeRoutes'),
+        );
+    // A probe in a file that the tests generate for the app.
+    final services = MatrixAppTest(
+      '/tests/services',
+      appliesTo: (_) => true,
+      generatedFiles: (app, packageName) => {
+        'integration_test/services/probe.dart': '// ${app.name}\n',
+      },
+      startProbe: const MatrixStartProbe(
+        'integration_test/services/probe.dart',
+        'probeServices',
+      ),
+    );
+    final start = MatrixAppTest(
+      '/tests/start',
+      appliesTo: (_) => true,
+      readsStartProbes: true,
+    );
+
+    test(
+        'go into the app with the list of the probes, which the tests that '
+        'run them import: the probe of each test, in the order of the '
+        'tests, after the name of its directory', () {
+      final added = add([services, start, walk()]);
+
+      expect(added, [
+        'test/services_test.dart',
+        'integration_test/services/probe.dart',
+        'integration_test/start_check.dart',
+        'integration_test/walk/walk.dart',
+        'test/walk_test.dart',
+        startProbesFile,
+      ]);
+      expect(startProbesFile, 'integration_test/start_probes.dart');
+      final list =
+          fileSystem.file('/apps/app_1/$startProbesFile').readAsStringSync();
+      expect(
+        list,
+        endsWith('''
+import 'services/probe.dart' as probe0;
+import 'walk/walk.dart' as probe1;
+
+/// The probes of the tests of the app, each with the name of its tests: a
+/// function that goes through the running app, with the function that
+/// waits until the screen settles, and returns the problems that it finds.
+const List<(String, Future<List<String>> Function(Future<void> Function()))>
+    startProbes = [
+  ('services', probe0.probeServices),
+  ('walk', probe1.probeRoutes),
+];
+'''),
+      );
+      // The check imports it next to itself, and reads startProbes.
+      final (:index, :errors) = DartFileIndexer.parse(startProbesFile, list);
+      expect(errors, isEmpty);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['startProbes'],
+      );
+      expect(
+        [
+          for (final import in index.imports) '${import.prefix}: ${import.uri}',
+        ],
+        ['probe0: services/probe.dart', 'probe1: walk/walk.dart'],
+      );
+      expect(
+        [
+          for (final access in index.memberAccesses)
+            '${access.enclosingDeclaration}: ${access.target}.${access.name}',
+        ],
+        [
+          'startProbes: probe0.probeServices',
+          'startProbes: probe1.probeRoutes',
+        ],
+      );
+    });
+
+    test(
+        'go into the list as none when no test that goes into the app has '
+        'one, and the list goes into no app without tests that run them', () {
+      expect(add([start]), contains(startProbesFile));
+      final list =
+          fileSystem.file('/apps/app_1/$startProbesFile').readAsStringSync();
+      final (:index, :errors) = DartFileIndexer.parse(startProbesFile, list);
+      expect(errors, isEmpty);
+      expect(index.imports, isEmpty);
+      expect(index.memberAccesses, isEmpty);
+      expect(list, contains('startProbes = [\n];\n'));
+
+      fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
+      expect(add([services, walk()]), isNot(contains(startProbesFile)));
+      expect(
+        fileSystem.file('/apps/app_1/$startProbesFile').existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+        'are in a file of their tests in integration_test/, with the tests '
+        'that run them or without, and the list is no file of a test', () {
+      // A problem reads as its message.
+      Matcher throwsProblem(String message) => throwsA(
+            isA<MatrixAppTestException>()
+                .having((error) => error.message, 'message', message),
+          );
+
+      for (final path in [
+        // No file of the tests.
+        'integration_test/walk/gone.dart',
+        // A file of the tests out of integration_test/.
+        'test/walk_test.dart',
+        // A file of other tests.
+        'integration_test/start_check.dart',
+        'integration_test/services/probe.dart',
+      ]) {
+        for (final tests in [
+          [walk(path: path), start, services],
+          [walk(path: path), services],
+        ]) {
+          expect(
+            () => add(tests),
+            throwsProblem(
+              'The tests of /tests/walk declare their probe in $path, which '
+              'is no file of theirs in integration_test/.',
+            ),
+            reason: '$path with ${tests.length} tests',
+          );
+        }
+      }
+
+      fileSystem.file('/tests/walk/integration_test/start_probes.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// Of the tests.\n');
+      expect(
+        () => add([walk(), start]),
+        throwsProblem(
+          'The tests of /tests/walk have integration_test/start_probes.dart, '
+          'which the matrix writes for the probes of the tests.',
+        ),
+      );
+      expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+  });
+
+  group('appTestsFor', () {
+    const app = MatrixApp('home', [ModuleId('home')]);
+    const other = MatrixApp('other', [ModuleId('other')]);
+    bool onlyHome(MatrixApp app) => app.name == 'home';
+    final start = MatrixAppTest(
+      '/tests/start',
+      appliesTo: (_) => true,
+      readsStartProbes: true,
+    );
+    const probe = MatrixStartProbe('integration_test/probe.dart', 'probe');
+    final walk =
+        MatrixAppTest('/tests/walk', appliesTo: onlyHome, startProbe: probe);
+    final services = MatrixAppTest(
+      '/tests/services',
+      appliesTo: (_) => true,
+      startProbe: probe,
+    );
+    final plain = MatrixAppTest('/tests/plain', appliesTo: (_) => true);
+    final all = [walk, plain, start, services];
+    List<String> directories(List<MatrixAppTest> tests) =>
+        [for (final test in tests) test.directory];
+
+    test(
+        'adds to the tests named for an app of the matrix, with tests that '
+        'run the probes, each other test with a probe that applies to it', () {
+      expect(directories(appTestsFor(app, [start], all)), [
+        '/tests/start',
+        '/tests/walk',
+        '/tests/services',
+      ]);
+      expect(directories(appTestsFor(other, [start], all)), [
+        '/tests/start',
+        '/tests/services',
+      ]);
+      // A test named with them goes into the app once, where it is named.
+      expect(directories(appTestsFor(app, [services, start], all)), [
+        '/tests/services',
+        '/tests/start',
+        '/tests/walk',
+      ]);
+      // Without tests that run the probes, only the tests named.
+      expect(directories(appTestsFor(app, [plain, walk], all)), [
+        '/tests/plain',
+        '/tests/walk',
+      ]);
+    });
+
+    test('fails on a test named for an app that it does not apply to', () {
+      expect(
+        () => appTestsFor(other, [start, walk], all),
+        throwsA(
+          isA<MatrixAppTestException>().having(
+            (error) => error.message,
+            'message',
+            'The tests of /tests/walk do not apply to other.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('runAppTests', () {
     late MemoryFileSystem fileSystem;
     late List<String> commands;

@@ -4,9 +4,11 @@
 // and a lazy singleton to one instance; resetDependencies() removes them
 // all, and registerDependencies() registers them again.
 //
-// It knows only the role. The matrix writes registered_services.dart next
-// to it, with the services of the app from the data of its DI role, each
-// resolved with resolve() of the service locator of the role. The start-up
+// It knows only the role. The matrix writes registered_services.dart into
+// integration_test/di_role/ of the app, with the services of the app from
+// the data of its DI role, each resolved with resolve() of the service
+// locator of the role, and the probe of the role there, which the start
+// check runs on a device, checks the services as this test does. The start-up
 // runs as on a device, with the mocks of the platform side of every module
 // of the app, which the matrix sets up before the tests of each test file
 // (flutter_test_config.dart): some services need the platform services
@@ -17,7 +19,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/bootstrap.dart';
 import 'package:{{app_name}}/core/di/dependencies.dart';
 
-import 'registered_services.dart';
+import '../../integration_test/di_role/probe.dart';
+import '../../integration_test/di_role/registered_services.dart';
 
 /// Runs [action], which [what] names, in real time, as on a device, so that
 /// what it waits for, such as a timer or input and output, does not keep
@@ -60,31 +63,6 @@ Future<void> _startUp(WidgetTester tester) async {
   }
 }
 
-/// What is wrong with the services of the app: each that does not resolve,
-/// with its error, and each singleton or lazy singleton that resolves to
-/// another instance the second time. A factory creates the service again
-/// for each resolve, but may return the same instance, such as a constant.
-List<String> _problemsOfResolving() {
-  final problems = <String>[];
-  for (final service in registeredServices) {
-    final Object instance;
-    try {
-      instance = service.resolve();
-    } on Object catch (error) {
-      problems.add('${service.name} does not resolve: $error');
-      continue;
-    }
-    if (service.lifetime != 'factory' &&
-        !identical(service.resolve(), instance)) {
-      problems.add(
-        '${service.name}, a ${service.lifetime}, resolves to another '
-        'instance the second time.',
-      );
-    }
-  }
-  return problems;
-}
-
 /// The names of the services of the app that resolve.
 List<String> _resolving() => [
       for (final service in registeredServices)
@@ -115,7 +93,7 @@ void main() {
       // The services are created as the app creates them, in real time.
       var problems = <String>[];
       await _inRealTime(tester, 'resolving the services', () async {
-        problems = _problemsOfResolving();
+        problems = problemsOfResolving();
       });
       expect(problems, isEmpty);
 
@@ -132,7 +110,7 @@ void main() {
 
       await _inRealTime(tester, 'registerDependencies() again', () async {
         await registerDependencies();
-        problems = _problemsOfResolving();
+        problems = problemsOfResolving();
       });
       expect(problems, isEmpty);
     },

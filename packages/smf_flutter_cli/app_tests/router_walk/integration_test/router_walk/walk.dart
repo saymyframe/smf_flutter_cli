@@ -34,6 +34,12 @@ final class WalkProblems {
   List<String> get all => [...errors, ...pages, ...screens];
 }
 
+/// The probe of the start check, which it runs on a device once the first
+/// screen settled: walks the routes of the app with [settle] and returns
+/// every problem; see [walkRoutes].
+Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
+    (await walkRoutes(settle)).all;
+
 /// Goes to each of [walkedLocations] with `go()` of the navigator of the
 /// router of the app, from the navigator of the page that the user sees,
 /// waits with [settle] until the screen settles, and returns what is wrong

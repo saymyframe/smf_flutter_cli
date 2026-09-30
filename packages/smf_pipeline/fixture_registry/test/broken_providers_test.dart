@@ -86,6 +86,37 @@ List<_Template> _stringsIn(String text) {
   return strings.templates;
 }
 
+/// The texts of the Dart files of the app test in [directory] that [file]
+/// imports by a relative path, directly or through one another, such as the
+/// probe of the DI role, which writes the problems of the services that the
+/// test of the role expects none of. A file that the matrix generates for
+/// the app, which [directory] lacks, has no text here.
+List<String> _importedTextsOf(File file, String directory) {
+  final tests = '${Directory(directory).absolute.uri}';
+  final seen = {'${file.absolute.uri}'};
+  final texts = <String>[];
+  void visit(File importer) {
+    final unit = parseString(
+      content: importer.readAsStringSync(),
+      throwIfDiagnostics: false,
+    ).unit;
+    for (final directive in unit.directives.whereType<UriBasedDirective>()) {
+      final uri = Uri.tryParse(directive.uri.stringValue ?? '');
+      if (uri == null || uri.hasScheme) continue;
+      final imported = importer.absolute.uri.resolveUri(uri);
+      final path = '$imported';
+      if (!path.startsWith(tests) || !seen.add(path)) continue;
+      final file = File.fromUri(imported);
+      if (!file.existsSync()) continue;
+      texts.add(file.readAsStringSync());
+      visit(file);
+    }
+  }
+
+  visit(file);
+  return texts;
+}
+
 /// What a Dart file of an app test writes before the path of a file of the
 /// app that it imports: the package of the app, whose name the matrix
 /// fills in.
@@ -386,23 +417,27 @@ void main() {
             for (final test in tests)
               if (File('${test.directory}/${failure.file}') case final file
                   when file.existsSync())
-                file,
+                (file: file, directory: test.directory),
           ];
           expect(
             files,
             hasLength(1),
             reason: 'The tests of the app have ${failure.file} once.',
           );
-          final text = files.single.readAsStringSync();
+          final (:file, :directory) = files.single;
+          final text = file.readAsStringSync();
           expect(
             _testNamesIn(text).any((name) => _writesAll(name, failure.test)),
             isTrue,
             reason: '$failure is a test of its file.',
           );
           expect(
-            _stringsIn(text).any((text) => _writesPart(text, failure.reason)),
+            [text, ..._importedTextsOf(file, directory)]
+                .expand(_stringsIn)
+                .any((text) => _writesPart(text, failure.reason)),
             isTrue,
-            reason: 'The reason of $failure is a text that its file writes.',
+            reason: 'The reason of $failure is a text that its file writes, '
+                'or a file of its tests that it imports.',
           );
         }
       });
