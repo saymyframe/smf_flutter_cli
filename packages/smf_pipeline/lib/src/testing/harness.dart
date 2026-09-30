@@ -135,11 +135,13 @@ final class ContractResult {
 /// generate them in every combination that matters.
 ///
 /// For a module it builds an app for every provider of the role of its
-/// variants, every provider of each role it requires that has several, each
-/// subset of the roles it only uses, and every provider of a role whose
-/// package it contributes. For a role it builds an app for each of its
-/// providers, with every provider of each role the provider requires that
-/// has several, and each subset of the roles the role uses.
+/// variants, every provider of each role it requires, each subset of the
+/// roles it only uses with every provider of each of them, and every
+/// provider of a role whose package it contributes. For a role it builds an
+/// app for each of its providers, with every provider of each role the
+/// provider requires, and each subset of the roles the role uses with every
+/// provider of each of them. [uncheckedProviders] lists each provider of a
+/// role of a module that none of the apps of the module has.
 /// Each app goes through the stages 3 to 5 of the pipeline, in a run
 /// without a terminal that skips external setup, as the Flutter job
 /// generates apps; stage 5 includes [checkTemplateTags], and the
@@ -196,11 +198,14 @@ final class ContractHarness {
   final Map<String, String?> roleOptions;
 
   /// The cases of the module [id]:
-  /// - every provider of the role of its variants, including a provider
-  ///   the module has no variant for, whose app the pipeline rejects;
-  /// - every provider of each role the module requires that has several;
-  /// - each subset of the roles the module only uses, the largest first,
-  ///   with the first registered provider of each;
+  /// - for each subset of the roles the module only uses, the largest
+  ///   first, one case for each combination of a provider of the role of
+  ///   its variants, of each role it requires and of each role of the
+  ///   subset, as `<module> (<providers>) with <roles of the subset>`,
+  ///   which names the providers of the roles that have several in the
+  ///   registry, such as `home (bloc, firebase_analytics) with analytics`.
+  ///   The providers of the role of its variants include those the module
+  ///   has no variant for, whose app the pipeline rejects;
   /// - every provider of a role in the registry whose package the module
   ///   contributes, itself or in a variant, and that can be in an app with
   ///   the module, as `<module> with <provider>`, such as `banner with
@@ -237,11 +242,12 @@ final class ContractHarness {
         if (registry.providersOf(role).isNotEmpty) role,
     ];
     return [
-      for (final picks in _picksOf([
-        if (descriptor.variants case final variants?) variants.role,
-        ...descriptor.effectiveRequires,
-      ]))
-        for (final subset in _subsets(used))
+      for (final subset in _subsets(used))
+        for (final picks in _picksOf([
+          if (descriptor.variants case final variants?) variants.role,
+          ...descriptor.effectiveRequires,
+          ...subset,
+        ]))
           _case(
             _caseName(id.value, picks, subset),
             [id],
@@ -406,9 +412,11 @@ final class ContractHarness {
     }
   }
 
-  /// The cases of [role]: each of its providers, with every provider of
-  /// each role the provider requires that has several, and each subset of
-  /// the roles the role uses.
+  /// The cases of [role]: for each of its providers and each subset of the
+  /// roles the role uses, the largest first, one case for each combination
+  /// of a provider of each role the provider requires and of each role of
+  /// the subset, named as the cases of [casesOfModule] are, such as
+  /// `analytics by firebase_analytics (get_it) with di`.
   List<ContractCase> casesOfRole(Role role) {
     final used = [
       for (final other in role.uses)
@@ -416,10 +424,11 @@ final class ContractHarness {
     ];
     return [
       for (final provider in registry.providersOf(role))
-        for (final picks in _picksOf(
-          provider.descriptor.effectiveRequires.toList(),
-        ))
-          for (final subset in _subsets(used))
+        for (final subset in _subsets(used))
+          for (final picks in _picksOf([
+            ...provider.descriptor.effectiveRequires,
+            ...subset,
+          ]))
             _case(
               _caseName(
                 '${role.id} by ${provider.descriptor.id}',
@@ -781,17 +790,16 @@ final class ContractHarness {
     return results;
   }
 
-  /// The providers that the harness checks no module of the registry with,
-  /// though the module requires or uses their role, one line for each: for
-  /// each module, each role that it requires or uses and each provider of
-  /// the role that can be in an app with the module (see [casesOfModule]),
-  /// no case of [casesOfModule] builds an app in which the provider
-  /// provides the role. Either no case asks for the provider, or the apps
-  /// of those that do fail to resolve, such as when no module of the
-  /// registry provides a role that the provider requires.
+  /// The providers that the harness checks no module with, though the
+  /// module requires or uses their role, one line for each: a provider of a
+  /// role that a module of the registry requires or uses, which can be in
+  /// an app with the module (see [casesOfModule]) but provides the role in
+  /// no app of the cases of the module. Either no case asks for the
+  /// provider, or the apps of those that do fail to resolve, such as when
+  /// no module of the registry provides a role that the provider requires.
   ///
-  /// The tests of a registry expect none, so that each module is checked
-  /// with every provider of its roles, also when a role gets another
+  /// The tests of a registry expect none, so that the harness checks each
+  /// module with every provider of its roles, also when a role gets another
   /// provider.
   Future<List<String>> uncheckedProviders() async {
     final unchecked = <String>[];
