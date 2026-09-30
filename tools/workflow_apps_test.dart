@@ -74,9 +74,16 @@ const modulePaths = {
     'smf_firebase_core',
   ): 'The test of firebase_core that configures the app of the job with '
       'Firebase with the command of its README, before CI starts it.',
-  ('Archive the app with every module', 'smf_firebase_core'):
-      'The test of firebase_core that archives the app of the job with the '
-          'build phase for Crashlytics fixed by the command of its README.',
+  ('Archive the app with every module', 'smf_firebase_crashlytics'):
+      'The test of firebase_crashlytics that archives the app of the job '
+          'with the build phase for Crashlytics fixed by the command of its '
+          'README.',
+  (
+    'Fix the build phase for Crashlytics of the app with every module',
+    'smf_firebase_crashlytics',
+  ): 'The test of firebase_crashlytics that fixes the build phase for '
+      'Crashlytics that flutterfire added to the app of the job with the '
+      'command of its README, before CI starts it.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',
@@ -1207,7 +1214,7 @@ jobs:
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart
       - name: Archive the app with every module
-        working-directory: packages/smf_modules/smf_firebase_core
+        working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: dart run tool/archive.dart
       - name: Start the app with every module
         env:
@@ -1221,8 +1228,8 @@ jobs:
       [
         equals(
           'apps.yml, job a, step "Archive the app with every module" refers '
-          'to the package smf_firebase_core of a module, but runs no test of '
-          'it with dart test.',
+          'to the package smf_firebase_crashlytics of a module, but runs no '
+          'test of it with dart test.',
         ),
         equals(
           'apps.yml, job a, step "Start the app with every module" refers to '

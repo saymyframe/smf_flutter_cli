@@ -1131,8 +1131,8 @@ void main() {
     });
 
     test(
-        'activates 1.4.1 in place of 1.4.0, whose build phase of Crashlytics '
-        'fails with Swift Package Manager, and passes then', () async {
+        'activates 1.4.1 in place of 1.4.0, whose build phases fail with '
+        'Swift Package Manager, and passes then', () async {
       var active = '1.4.0';
       final machine = FakeMachine(
         executables: {'dart': _dart},
@@ -1391,8 +1391,7 @@ void main() {
                 'its options into lib/firebase_options.dart, but writes no '
                 'GoogleService-Info.plist and leaves the Xcode project as it '
                 'is, without the build phases that it adds for some Firebase '
-                'packages, such as the upload of the debug symbols of '
-                'Crashlytics: run flutterfire configure again on a Mac.',
+                'packages: run flutterfire configure again on a Mac.',
             installable: false,
           ),
           reason: '$system',

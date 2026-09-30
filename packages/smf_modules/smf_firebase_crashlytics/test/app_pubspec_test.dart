@@ -19,24 +19,24 @@ name: my_app
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: "^4.15.0"
+  firebase_crashlytics: "^5.4.0"
 dev_dependencies:
-  firebase_core_platform_interface: any
+  firebase_crashlytics_platform_interface: any
 ''');
 
-    expect(dependsOn(app.path, 'firebase_core'), isTrue);
+    expect(dependsOn(app.path, 'firebase_crashlytics'), isTrue);
     expect(dependsOn(app.path, 'flutter'), isTrue);
     // Not as a dev dependency, which the tests of the app use.
     expect(
-      dependsOn(app.path, 'firebase_core_platform_interface'),
+      dependsOn(app.path, 'firebase_crashlytics_platform_interface'),
       isFalse,
     );
-    expect(dependsOn(app.path, 'cloud_firestore'), isFalse);
+    expect(dependsOn(app.path, 'firebase_analytics'), isFalse);
   });
 
   test('finds no package in a pubspec without dependencies', () {
     pubspec('name: my_app\n');
 
-    expect(dependsOn(app.path, 'firebase_core'), isFalse);
+    expect(dependsOn(app.path, 'firebase_crashlytics'), isFalse);
   });
 }

@@ -3,7 +3,6 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -266,31 +265,6 @@ void main() {
       expect(
         fillsOptionsInPlace('class DefaultFirebaseOptions {}', 'ios'),
         isFalse,
-      );
-    });
-  });
-
-  group('the build phase for Crashlytics', () {
-    test('is repeated for every version that the tests repeat', () {
-      expect(crashlyticsPhases.keys.toSet(), emulatedFlutterfireVersions);
-    });
-
-    test(
-        'of 1.4.1 looks for the upload script in the build directory of '
-        'Xcode, which the step that follows the configuration changes', () {
-      final phase = crashlyticsPhases['1.4.1']!;
-
-      expect(
-        crashlyticsScriptInBuildDirectory.allMatches(phase),
-        hasLength(2),
-      );
-      expect(phase, isNot(contains(crashlyticsScriptInApp)));
-    });
-
-    test('of 1.4.0 does not, so the step leaves it as it is', () {
-      expect(
-        crashlyticsPhases['1.4.0'],
-        isNot(contains(crashlyticsScriptInBuildDirectory)),
       );
     });
   });

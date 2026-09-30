@@ -11,6 +11,8 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
+import 'package:smf_firebase_crashlytics/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -155,7 +157,8 @@ Map<String, Object?> _pubspecWithoutCrashlytics(RenderedApp app) {
 }
 
 /// Checks that [app] is [without] but for the files of the crash reporting,
-/// the dependency on firebase_crashlytics, `bootstrap()` and the files at
+/// the dependency on firebase_crashlytics, `bootstrap()`, the section of the
+/// module in the README, after those of [without], and the files at
 /// [changed].
 void _expectTheAppWithout(
   RenderedApp app,
@@ -177,6 +180,7 @@ void _expectTheAppWithout(
   for (final MapEntry(key: path, value: file) in without.files.entries) {
     if (path == 'pubspec.yaml' ||
         path == AppEntryRole.bootstrapFile ||
+        path == AppEntryRole.readmeFile ||
         changed.contains(path)) {
       continue;
     }
@@ -186,6 +190,16 @@ void _expectTheAppWithout(
   expect(
     _pubspecWithoutCrashlytics(app),
     _yamlOf(without.files['pubspec.yaml']!.text),
+  );
+  final readme = app.files[AppEntryRole.readmeFile]!;
+  expect(readme.owner, without.files[AppEntryRole.readmeFile]!.owner);
+  expect(
+    readme.text,
+    '${without.files[AppEntryRole.readmeFile]!.text}'
+    '\n'
+    '## Crashlytics\n'
+    '\n'
+    '$readmeSection',
   );
 }
 
@@ -278,11 +292,12 @@ void main() {
     });
 
     test(
-        'contributes its brick, firebase_crashlytics and its implementation of '
-        'the reporter, created without waiting, and nothing else', () {
+        'contributes its brick, firebase_crashlytics, its implementation of '
+        'the reporter, created without waiting, the fix of the build phase '
+        'for Crashlytics and its section of the README, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(5));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseCrashlyticsBundle));
       expect(brick.bundle.name, 'firebase_crashlytics');
@@ -308,6 +323,79 @@ void main() {
         ),
       );
       expect(implementation.create!.import, implementation.type.import);
+      expect(contributions[3], same(crashlyticsPhaseFix));
+      final readme = contributions[4] as SocketContribution;
+      expect(readme.socket, AppEntryRole.readmeSections);
+      expect(readme.entryKey, 'Crashlytics');
+      expect(readme.entryValue, readmeSection);
+    });
+
+    test(
+        'continues the step of firebase_core that runs flutterfire configure, '
+        'on macOS, with Ruby that points the phase for Crashlytics of '
+        'flutterfire at the upload script in the build directory of the app',
+        () {
+      final fix = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+
+      expect(fix.followUpOf, FirebaseCoreModule.configureStep);
+      expect(fix.tool.executable, 'ruby');
+      expect(fix.tool.prefixArgs, isEmpty);
+      expect(fix.arguments, hasLength(3));
+      expect(fix.arguments.first, '-e');
+      expect(
+        fix.arguments[1],
+        allOf(
+          contains(
+            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
+            'Crashlytics/run"',
+          ),
+          contains(
+            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
+            'firebase-ios-sdk/Crashlytics/run"',
+          ),
+        ),
+      );
+      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
+      expect(
+        fix.description,
+        'Fixing the Crashlytics phase of flutterfire for flutter build ipa',
+      );
+      // It changes a file of the app, so it runs without asking or the
+      // terminal, and the app is complete without it.
+      expect(fix.interactive, isFalse);
+      expect(fix.external, isFalse);
+      expect(fix.skippable, isTrue);
+      // flutterfire adds the phase only on macOS, and elsewhere there is
+      // nothing to fix; the step that it continues needs the Ruby of the
+      // Mac.
+      expect(fix.hosts, {HostOperatingSystem.macos});
+      expect(fix.needs, isEmpty);
+      expect(fix.when, isEmpty);
+      expect(fix.id, isNull);
+      // The README of the app gives it as the pipeline prints it, in single
+      // quotes, which the program has none of.
+      expect(fix.arguments[1], isNot(contains("'")));
+      expect(
+        crashlyticsPhaseFixCommand,
+        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
+      );
+    });
+
+    test(
+        'tells in the README of the app how to fix the phase once the app is '
+        'configured again on macOS', () {
+      expect(readmeHeading, 'Crashlytics');
+      expect(
+        readmeSection,
+        allOf(
+          contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
+          contains('`flutter build ipa` needs one more change on macOS'),
+          contains('flutterfire_cli 1.4.1 or a later 1.x'),
+        ),
+      );
     });
   });
 
@@ -338,6 +426,37 @@ void main() {
       }
     });
 
+    test(
+        'runs the fix of the phase in the apps of the module right after '
+        'flutterfire configure of firebase_core, which it continues', () {
+      final apps = [
+        for (final result in results)
+          if (result.resolution!.modules
+              .any((module) => module.id == FirebaseCrashlyticsModule.id))
+            result,
+      ];
+
+      expect(apps, hasLength(2));
+      for (final result in apps) {
+        final steps = [
+          for (final collected in result.validation!.postGenOrder.contributions)
+            (
+              '${collected.origin}',
+              collected.contribution as PostGenStep,
+            ),
+        ];
+        expect(
+          [for (final (origin, step) in steps) (origin, step.id)],
+          [
+            ('firebase_core', FirebaseCoreModule.configureStep),
+            ('firebase_crashlytics', null),
+          ],
+          reason: '${result.contractCase}',
+        );
+        expect(steps.last.$2, same(crashlyticsPhaseFix));
+      }
+    });
+
     test('finds no errors in any app, rendered code included', () {
       for (final result in results) {
         expect(
@@ -364,8 +483,8 @@ void main() {
         'is the app of Firebase but for the reporter, its implementation, '
         'firebase_crashlytics and the start of the crash reporting', () {
       // Its native files, the Gradle files and the Xcode project among
-      // them, and its README are those of Firebase: the module sets up
-      // nothing of the platforms.
+      // them, are those of Firebase: the module sets up nothing of the
+      // platforms. Its README tells of Crashlytics after Firebase.
       _expectTheAppWithout(withCrashlytics, without);
       expect(
         _yamlOf(withCrashlytics.files['pubspec.yaml']!.text)['dependencies'],

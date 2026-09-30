@@ -1,6 +1,8 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dart';
+import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
+import 'package:smf_firebase_crashlytics/src/readme.dart';
 
 /// The module that reports the errors of the app to Firebase Crashlytics
 /// with the firebase_crashlytics package, and so provides the crash
@@ -22,6 +24,15 @@ import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dar
 /// `bootstrap()` installs the handlers after that. The reporter is created
 /// on first use, without waiting. When the app has a DI container, the role
 /// registers the reporter in it.
+///
+/// On macOS, `flutterfire configure`, which [FirebaseCoreModule] runs after
+/// generation, adds a build phase for Crashlytics to the Xcode project.
+/// Once flutterfire succeeded there, the module points the phase at the
+/// upload script of Crashlytics where Flutter puts it, so that
+/// `flutter build ipa` finds it too: its step continues the step of
+/// firebase_core that runs flutterfire, [FirebaseCoreModule.configureStep].
+/// The README of the app tells how to fix the phase after configuring the
+/// app again.
 final class FirebaseCrashlyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseCrashlyticsModule();
@@ -58,5 +69,7 @@ final class FirebaseCrashlyticsModule extends SmfModule {
             ),
           ),
         ),
+        crashlyticsPhaseFix,
+        AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
       ];
 }

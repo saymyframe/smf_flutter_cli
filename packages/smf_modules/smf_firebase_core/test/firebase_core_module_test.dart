@@ -4,7 +4,6 @@ library;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/configure.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -111,7 +110,6 @@ void main() {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
-          .where((step) => step.followUpOf == null)
           .single;
 
       expect(step.id, FirebaseCoreModule.configureStep);
@@ -153,58 +151,14 @@ void main() {
     });
 
     test(
-        'then points the phase for Crashlytics of flutterfire at the upload '
-        'script in the build directory of the app', () {
-      final fix = module
+        'is its only step: no step of the module continues it, which the '
+        'modules that depend on it may do', () {
+      final steps = module
           .contribute(ContractHarness.defaultContext)
-          .whereType<PostGenStep>()
-          .where((step) => step.followUpOf != null)
-          .single;
+          .whereType<PostGenStep>();
 
-      expect(fix.followUpOf, FirebaseCoreModule.configureStep);
-      expect(fix.tool.executable, 'ruby');
-      expect(fix.tool.prefixArgs, isEmpty);
-      expect(fix.arguments, hasLength(3));
-      expect(fix.arguments.first, '-e');
-      expect(
-        fix.arguments[1],
-        allOf(
-          contains(
-            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
-            'Crashlytics/run"',
-          ),
-          contains(
-            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
-            'firebase-ios-sdk/Crashlytics/run"',
-          ),
-        ),
-      );
-      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
-      // Without firebase_crashlytics, which the module does not know about,
-      // flutterfire adds no phase.
-      expect(
-        fix.description,
-        'Fixing the Crashlytics phase of flutterfire, if any, for flutter '
-        'build ipa',
-      );
-      // It changes a file of the app, so it runs without asking or the
-      // terminal, and the app is complete without it.
-      expect(fix.interactive, isFalse);
-      expect(fix.external, isFalse);
-      expect(fix.skippable, isTrue);
-      // flutterfire adds the phase only on macOS, and elsewhere there is
-      // nothing to fix; the step that it follows needs the Ruby of the Mac.
-      expect(fix.hosts, {HostOperatingSystem.macos});
-      expect(fix.needs, isEmpty);
-      expect(fix.when, isEmpty);
-      expect(fix.id, isNull);
-      // The README of the app gives it as the pipeline prints it, in single
-      // quotes, which the program has none of.
-      expect(fix.arguments[1], isNot(contains("'")));
-      expect(
-        crashlyticsPhaseFixCommand,
-        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
-      );
+      expect(steps.map((step) => step.id), [FirebaseCoreModule.configureStep]);
+      expect(steps.single.followUpOf, isNull);
     });
   });
 
@@ -379,9 +333,13 @@ void main() {
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('run `flutterfire` from `~/.pub-cache/bin`'),
           contains('if you change them, change them in the command too'),
-          contains('`flutter build ipa` needs one more change on macOS'),
-          contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
         ),
+      );
+      // Nothing of the build phases that flutterfire adds for other
+      // packages, which the modules of those packages tell of.
+      expect(
+        readme.text,
+        isNot(anyOf(contains('ruby -e'), contains('flutter build ipa'))),
       );
     });
 

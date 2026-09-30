@@ -13,7 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
+import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
 import 'package:test/test.dart';
 
 import 'support/app_pubspec.dart';

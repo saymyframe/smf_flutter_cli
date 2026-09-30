@@ -4,7 +4,6 @@ library;
 import 'package:file/memory.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
-import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
@@ -69,21 +68,6 @@ const _replaceFlutterfire = 'FlutterFire CLI 1.4.1 or a later 1.x is needed '
 String _notConfigured(String reason) =>
     'Configuring Firebase with flutterfire is not done, because $reason. Run '
     'it in the app: $_later';
-
-/// The fix of the phase for Crashlytics, as the steps run it: Ruby with the
-/// program and the Xcode project, which the line does not quote.
-final String _fix = [
-  '/bin/ruby',
-  ...crashlyticsPhaseFix.arguments,
-].join(' ');
-
-/// The warning that the phase for Crashlytics is not fixed, since Firebase
-/// is not configured, with the command of the README of the app.
-const _fixAfterConfigure =
-    'Fixing the Crashlytics phase of flutterfire, if any, for flutter build '
-    'ipa is not done, because it runs after "Configuring Firebase with '
-    'flutterfire", which is not done. Run it in the app: '
-    '$crashlyticsPhaseFixCommand';
 
 /// What a firebase command in `/bin` that runs the Firebase CLI of another
 /// Node.js writes when it cannot find it.
@@ -345,7 +329,6 @@ void main() {
         'Firebase CLI, Firebase login and FlutterFire CLI 1.4.1 or a later '
         '1.x are missing',
       ),
-      _fixAfterConfigure,
     ]);
     expect(
       machine.files.file('/work/my_app/lib/firebase_options.dart').existsSync(),
@@ -384,9 +367,8 @@ void main() {
       '$_dart pub global list',
       _activate,
       '$_dart pub global list',
+      // The last step of the app, which no step of the module continues.
       _configure,
-      // Right after it, without a question.
-      _fix,
     ]);
     final login = machine.fake.calls.firstWhere(
       (call) => call.line == '$_firebase login',
@@ -411,48 +393,33 @@ void main() {
     expect(configure.workingDirectory, endsWith('/my_app'));
     expect(configure.workingDirectory, isNot('/work/my_app'));
     expect(configure.environment['PATH'], contains('/opt/npm/bin'));
-
-    // The fix of the phase for Crashlytics, in the same place, with the
-    // Xcode project of the app.
-    final fix = calls.singleWhere((call) => call.line == _fix);
-    expect(calls.indexOf(fix), calls.indexOf(configure) + 1);
-    expect(fix.interactive, isFalse);
-    expect(fix.workingDirectory, configure.workingDirectory);
-    expect(fix.arguments.last, 'ios/Runner.xcodeproj/project.pbxproj');
   });
 
   test(
-      'a user who leaves the configuration for later gets the fix of the '
-      'phase for Crashlytics for later too, as the README of the app gives it',
-      () async {
+      'a user who leaves the configuration for later gets it for later, as '
+      'the README of the app gives it', () async {
     final machine = _Machine(confirmations: [true, true, true, false]);
 
     final code = await machine.create();
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
-    // Nothing is asked about the fix, which is part of the configuration.
     expect(machine.fake.questions.last, _configureNow);
     expect(machine.fake.questions, hasLength(4));
     expect(machine.checks, isNot(contains(_configure)));
-    expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
       _notConfigured('you chose to run it later'),
-      _fixAfterConfigure,
     ]);
     expect(
       machine.files.file('/work/my_app/README.md').readAsStringSync(),
-      allOf(
-        contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
-        contains(
-          'flutterfire configure --platforms=android,ios '
-          '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
-          '--android-package-name=com.example.my_app\n',
-        ),
+      contains(
+        'flutterfire configure --platforms=android,ios '
+        '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
+        '--android-package-name=com.example.my_app\n',
       ),
     );
   });
 
-  test('a configuration that fails leaves the fix for later', () async {
+  test('a configuration that fails is left for later', () async {
     final machine = _Machine(
       confirmations: [true, true, true, true],
       configureCode: 1,
@@ -462,14 +429,12 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.checks, contains(_configure));
-    expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
       equals(
         'The step "Configuring Firebase with flutterfire" failed: it exited '
         'with code 1',
       ),
       _notConfigured('it exited with code 1'),
-      _fixAfterConfigure,
     ]);
   });
 
@@ -502,7 +467,6 @@ void main() {
       _notConfigured(
         'Firebase login and FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),
-      _fixAfterConfigure,
     ]);
   });
 
@@ -517,12 +481,10 @@ void main() {
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, hasLength(3));
     expect(machine.checks, isNot(contains(_configure)));
-    expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
       contains('Xcode project tools of flutterfire is missing. flutterfire '
           'configure changes the Xcode project with the Ruby gem xcodeproj'),
       _notConfigured('Xcode project tools of flutterfire is missing'),
-      _fixAfterConfigure,
     ]);
   });
 
@@ -552,10 +514,6 @@ void main() {
       '$_dart pub global list',
       _configure,
     ]);
-    // flutterfire adds no phase there, so the fix neither runs nor is left
-    // for later: the README of the app gives it for after a configuration
-    // on a Mac.
-    expect(machine.checks, isNot(contains(_fix)));
     expect(machine.warnings, [
       contains('Setup of the Xcode project on a Mac is needed, but this '
           'machine is not a Mac. flutterfire configure changes the Xcode '
@@ -637,7 +595,6 @@ void main() {
           'is needed, but /bin/firebase does not run, and Firebase login is '
           'needed, but the Firebase CLI does not run',
         ),
-        _fixAfterConfigure,
       ]);
     });
   });
@@ -737,7 +694,6 @@ void main() {
         '$_firebase login:list --json',
         '$_firebase projects:list --debug',
         _configure,
-        _fix,
       ]);
       final login = machine.fake.calls.singleWhere(
         (call) => call.line == '$_firebase login --reauth',
@@ -768,7 +724,6 @@ void main() {
       expect(machine.warnings, [
         endsWith('$expired. $logInAgain'),
         _notConfigured(expired),
-        _fixAfterConfigure,
       ]);
     });
 
@@ -849,7 +804,6 @@ void main() {
     expect(machine.warnings, [
       endsWith(unchecked),
       _notConfigured('Firebase login could not be checked'),
-      _fixAfterConfigure,
     ]);
 
     final explained = _Machine(offline: true, flutterfire: '1.4.1');
@@ -887,7 +841,6 @@ void main() {
         'the run skips external setup, and Firebase CLI, Firebase login and '
         'FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),
-      _fixAfterConfigure,
     ]);
   });
 
@@ -899,15 +852,14 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, isEmpty);
-    expect(machine.warnings.sublist(machine.warnings.length - 2), [
+    expect(
+      machine.warnings.last,
       _notConfigured(
         'the run cannot ask the user, and Firebase CLI, Firebase login and '
         'FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),
-      _fixAfterConfigure,
-    ]);
+    );
     expect(machine.checks, isNot(contains(_configure)));
-    expect(machine.checks, isNot(contains(_fix)));
   });
 
   group('with flutterfire_cli 1.4.0 active', () {
@@ -970,7 +922,6 @@ void main() {
         _notConfigured(
           'FlutterFire CLI 1.4.1 or a later 1.x is needed, but $_tooOld',
         ),
-        _fixAfterConfigure,
       ]);
     });
   });
@@ -1001,7 +952,6 @@ void main() {
         'FlutterFire CLI 1.4.1 or a later 1.x is needed, but flutterfire_cli '
         '2.0.0 is active',
       ),
-      _fixAfterConfigure,
     ]);
   });
 

@@ -534,19 +534,16 @@ void main() {
             result.stdout,
             allOf([
               contains('  firebase_core: requested\n'),
+              // No step continues it in an app without the modules that
+              // depend on firebase_core.
               contains(
                 'After generation\n'
                 '  dart pub global run flutterfire_cli:flutterfire configure '
                 '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n'
-                // Once it succeeded, on macOS, the fix of the phase for
-                // Crashlytics, quoted for a shell of macOS on any system.
-                "    then ruby -e 'f = ARGV[0]; ",
-              ),
-              contains(
-                "' ios/Runner.xcodeproj/project.pbxproj (firebase_core, on "
-                'macOS)\n',
+                '\n'
+                'Machine\n',
               ),
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n'
@@ -632,7 +629,15 @@ void main() {
                 '  dart pub global run flutterfire_cli:flutterfire configure '
                 '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
-                '--android-package-name=com.example.my_app (firebase_core)\n',
+                '--android-package-name=com.example.my_app (firebase_core)\n'
+                // Once it succeeded, on macOS, the fix of the phase for
+                // Crashlytics, which continues it, quoted for a shell of
+                // macOS on any system.
+                "    then ruby -e 'f = ARGV[0]; ",
+              ),
+              contains(
+                "' ios/Runner.xcodeproj/project.pbxproj "
+                '(firebase_crashlytics, on macOS)\n',
               ),
             ]),
           );

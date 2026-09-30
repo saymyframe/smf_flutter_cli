@@ -13,13 +13,13 @@ const flutterfireVersion = '1.4.1';
 /// The lowest version of flutterfire_cli that the check accepts.
 ///
 /// It writes `lib/firebase_options.dart` in the form of the placeholder, as
-/// 1.4.0 does. For an app with Crashlytics, flutterfire adds a build phase to
-/// the Xcode project that uploads the debug symbols with the upload script of
-/// Crashlytics. With Swift Package Manager, Flutter puts the Swift packages
-/// of the app, and the script with them, in `build/ios/SourcePackages`,
-/// where the phase of 1.4.0 does not look, so the iOS build fails. The phase
-/// of 1.4.1 looks in `SourcePackages` of the build directory of Xcode, which
-/// `flutter run` and `flutter build ios` set to `build/ios`.
+/// 1.4.0 does. For some Firebase packages, flutterfire adds a build phase to
+/// the Xcode project that runs a script of the package from the Swift
+/// packages of the app. With Swift Package Manager, Flutter puts them in
+/// `build/ios/SourcePackages`, where the phases of 1.4.0 do not look, so the
+/// iOS build fails. Those of 1.4.1 look in `SourcePackages` of the build
+/// directory of Xcode, which `flutter run` and `flutter build ios` set to
+/// `build/ios`.
 const minimumFlutterfireVersion = '1.4.1';
 
 /// How the module runs the FlutterFire CLI: through the Dart of the Flutter

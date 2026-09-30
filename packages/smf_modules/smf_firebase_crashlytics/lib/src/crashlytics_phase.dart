@@ -1,5 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_firebase_core/src/firebase_core_module.dart';
+import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// Where the build phase for Crashlytics that `flutterfire configure` of
 /// flutterfire_cli 1.4.1 adds to the Xcode project looks for the upload
@@ -52,18 +52,18 @@ const _program = 'f = ARGV[0]; '
 const crashlyticsPhaseFixCommand =
     "ruby -e '$_program' ${AppEntryRole.xcodeProjectFile}";
 
-/// The step that follows `flutterfire configure` and points the build phase
-/// for Crashlytics that flutterfire adds at the upload script of Crashlytics
-/// in `build/ios/SourcePackages` of the app, so that `flutter build ipa`
-/// finds it; see [crashlyticsScriptInBuildDirectory].
+/// The step that continues the step of firebase_core that runs
+/// `flutterfire configure` ([FirebaseCoreModule.configureStep]), and points
+/// the build phase for Crashlytics that flutterfire adds at the upload script
+/// of Crashlytics in `build/ios/SourcePackages` of the app, so that
+/// `flutter build ipa` finds it; see [crashlyticsScriptInBuildDirectory].
 ///
 /// It replaces [crashlyticsScriptInBuildDirectory] with
 /// [crashlyticsScriptInApp] in the Xcode project of the app, with Ruby,
 /// which `flutterfire configure` needs on macOS too, and changes nothing
-/// else. An app without the phase, such as one without firebase_crashlytics,
-/// which the module does not know about, or with a phase of another version
-/// of flutterfire that has no such path, stays as it is, and so does an app
-/// that the step fixed already; its description says so.
+/// else. An app with a phase of another version of flutterfire that has no
+/// such path stays as it is, and so does an app that the step fixed
+/// already; its output says so.
 ///
 /// flutterfire adds the phase only on macOS, so the step runs only there.
 /// Elsewhere there is nothing for it to fix, and the app is configured again
@@ -72,8 +72,8 @@ const crashlyticsPhaseFix = PostGenStep(
   ToolRef('ruby'),
   ['-e', _program, AppEntryRole.xcodeProjectFile],
   followUpOf: FirebaseCoreModule.configureStep,
-  description: 'Fixing the Crashlytics phase of flutterfire, if any, for '
-      'flutter build ipa',
+  description: 'Fixing the Crashlytics phase of flutterfire for flutter '
+      'build ipa',
   skippable: true,
   hosts: {HostOperatingSystem.macos},
 );
