@@ -189,6 +189,29 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerShowingAnotherScreen,
+        role: routerRole,
+        bug: 'It shows the screen of the first destination of the main '
+            'navigation in the page of each top-level route outside the main '
+            'navigation, which it names after the route of the page.',
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_walk_test.dart',
+            'each location that needs no values shows the page and the screen '
+                'of its route',
+            'Each location shows the screen of its route.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenLayoutModule(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '

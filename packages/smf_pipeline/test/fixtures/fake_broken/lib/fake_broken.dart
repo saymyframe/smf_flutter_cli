@@ -107,6 +107,33 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that shows the screen of the first destination of the
+  /// main navigation in the page of each top-level route outside the main
+  /// navigation, which it names after the route of the page as it should: a
+  /// route builds the screen of another route.
+  static const routerShowingAnotherScreen = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_shows_another_screen'),
+    'A plain navigator that shows the screen of another route (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '          child: _screen(location),\n',
+        '          child: _screen(\n'
+            '            location.parent == null &&\n'
+            '                    _destinations.isNotEmpty &&\n'
+            '                    !_destinations.any(\n'
+            '                      (destination) =>\n'
+            '                          destination.routeName == '
+            'location.routeName,\n'
+            '                    )\n'
+            '                ? _destinations.first\n'
+            '                : location,\n'
+            '          ),\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.
