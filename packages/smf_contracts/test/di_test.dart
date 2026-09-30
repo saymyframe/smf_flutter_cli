@@ -921,6 +921,253 @@ void main() {
       );
     });
   });
+
+  group('the structural rule di.registrations_rendered', () {
+    const auth = ImportRef.app('core/auth/auth.dart');
+    const authPath = 'lib/core/auth/auth.dart';
+    const session = ImportRef('package:session/session.dart');
+    const setupPath = 'lib/core/auth/setup.dart';
+    const helpersPath = 'lib/core/di/registrations.dart';
+    const container = ModuleOrigin(ModuleId('container'));
+    const registrant = ModuleOrigin(ModuleId('auth'));
+
+    const registrations = [
+      DiRegistration(
+        type: TypeRef('AuthService', import: auth),
+        create: FactoryRef('createAuth', import: auth),
+      ),
+      DiRegistration(
+        type: TypeRef('Client', import: auth),
+        create: FactoryRef('createClient', import: auth),
+        dispose: FunctionRef('closeClient', import: auth),
+      ),
+      DiRegistration(
+        type: TypeRef('Session', import: session),
+        create: FactoryRef('createSession', import: session),
+      ),
+    ];
+
+    /// The file of the module auth with the functions of the
+    /// registrations, and another of its files that calls them all, which
+    /// renders no registration, since only the provider of the role does.
+    final authFiles = {
+      authPath: const DartFileIndex(
+        path: authPath,
+        declarations: [
+          IndexedDeclaration(
+            name: 'createAuth',
+            kind: DeclarationKind.function,
+          ),
+          IndexedDeclaration(
+            name: 'createClient',
+            kind: DeclarationKind.function,
+          ),
+          IndexedDeclaration(
+            name: 'closeClient',
+            kind: DeclarationKind.function,
+            parameters: [
+              IndexedParameter(
+                'client',
+                kind: ParameterKind.requiredPositional,
+              ),
+            ],
+          ),
+        ],
+      ),
+      setupPath: const DartFileIndex(
+        path: setupPath,
+        imports: [
+          IndexedImport('auth.dart'),
+          IndexedImport('package:session/session.dart'),
+        ],
+        invocations: [
+          IndexedInvocation('createAuth'),
+          IndexedInvocation('createClient'),
+          IndexedInvocation('closeClient'),
+          IndexedInvocation('createSession'),
+        ],
+      ),
+    };
+
+    /// The issues of the rules of the role in an app where the module auth
+    /// registers [registrations] and the module container, the provider of
+    /// the role unless [withProvider] is `false`, generates [files].
+    List<SmfIssue> check(
+      List<DartFileIndex> files, {
+      bool withProvider = true,
+    }) =>
+        diRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [
+                for (final registration in registrations)
+                  dataOf(diRole, registration, module: 'auth'),
+              ],
+              presentRoles: {diRole},
+              context: testContext,
+            ),
+            files: {
+              ...authFiles,
+              for (final file in files) file.path: file,
+            },
+            owners: {
+              authPath: registrant,
+              setupPath: registrant,
+              for (final file in files) file.path: container,
+            },
+            modules: [
+              if (withProvider)
+                ModuleDescriptor(
+                  id: container.module,
+                  description: 'Container',
+                  kind: ModuleKinds.infrastructure,
+                  providers: const [
+                    _Container({DiCapability.dispose}),
+                  ],
+                ),
+              const ModuleDescriptor(
+                id: ModuleId('auth'),
+                description: 'Auth',
+                kind: ModuleKinds.infrastructure,
+              ),
+            ],
+          ),
+        );
+
+    /// The file of the provider with `registerDependencies()`, which
+    /// imports the file of auth and the library of session with the
+    /// prefixes `di0` and `di1`, and calls [calls] and reads [accesses]
+    /// through them.
+    DartFileIndex dependencies({
+      List<IndexedInvocation> calls = const [],
+      List<IndexedMemberAccess> accesses = const [],
+    }) =>
+        DartFileIndex(
+          path: DiRole.dependenciesFile,
+          imports: const [
+            IndexedImport('package:my_app/core/auth/auth.dart', prefix: 'di0'),
+            IndexedImport('package:session/session.dart', prefix: 'di1'),
+          ],
+          invocations: calls,
+          memberAccesses: accesses,
+        );
+
+    /// Another file of the provider, which imports the file of auth by a
+    /// relative path and without a prefix, and tears off createClient.
+    const helpers = DartFileIndex(
+      path: helpersPath,
+      imports: [IndexedImport('../auth/auth.dart')],
+      references: [IndexedReference('createClient')],
+    );
+
+    test('is a structural rule of the role', () {
+      expect(
+        diRole.structuralRules.map((rule) => rule.id),
+        [
+          'di.resolve_in_composition_files',
+          'di.factories',
+          'di.registrations_rendered',
+        ],
+      );
+    });
+
+    test(
+        'accepts a provider whose files call or tear off every factory and '
+        'dispose function', () {
+      expect(
+        check([
+          dependencies(
+            calls: const [
+              IndexedInvocation('createAuth', target: 'di0'),
+              IndexedInvocation('createSession', target: 'di1'),
+            ],
+            accesses: const [IndexedMemberAccess('di0', 'closeClient')],
+          ),
+          helpers,
+        ]),
+        isEmpty,
+      );
+    });
+
+    test(
+        'reports a registration whose factory no file of the provider '
+        'calls or tears off', () {
+      final issue = check([
+        dependencies(
+          calls: const [IndexedInvocation('createAuth', target: 'di0')],
+          accesses: const [IndexedMemberAccess('di0', 'closeClient')],
+        ),
+        helpers,
+      ]).single;
+
+      expect(
+        issue.message,
+        'The provider of the dependency injection role does not render the '
+        'registration of Session: none of its files calls or tears off its '
+        'factory createSession() of package:session/session.dart.',
+      );
+      expect(issue.hint, contains('DiRole.graphOf()'));
+      expect(issue.origin, registrant);
+      expect(issue.path, DiRole.dependenciesFile);
+    });
+
+    test('reports a dispose function that no file of the provider uses', () {
+      final issue = check([
+        dependencies(
+          calls: const [
+            IndexedInvocation('createAuth', target: 'di0'),
+            IndexedInvocation('createSession', target: 'di1'),
+          ],
+        ),
+        helpers,
+      ]).single;
+
+      expect(
+        issue.message,
+        'The provider of the dependency injection role does not render the '
+        'registration of Client: none of its files calls or tears off its '
+        'dispose function closeClient() of lib/core/auth/auth.dart.',
+      );
+      expect(issue.origin, registrant);
+    });
+
+    test('counts only the functions of the files the registrations name', () {
+      final issues = check([
+        const DartFileIndex(
+          path: DiRole.dependenciesFile,
+          imports: [
+            IndexedImport('package:my_app/core/other.dart'),
+            IndexedImport('package:my_app/core/auth/auth.dart', prefix: 'di0'),
+          ],
+          invocations: [
+            // Of other.dart, which the file imports without a prefix.
+            IndexedInvocation('createAuth'),
+            // Of an object, not of an import.
+            IndexedInvocation('createClient', target: 'client'),
+            IndexedInvocation('closeClient', target: 'di0'),
+            // Through a prefix that the file does not import.
+            IndexedInvocation('createSession', target: 'di1'),
+          ],
+        ),
+      ]);
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          contains('its factory createAuth()'),
+          contains('its factory createClient()'),
+          contains('its factory createSession()'),
+        ],
+      );
+    });
+
+    test(
+        'checks the files of a provider among the modules, and nothing '
+        'without one', () {
+      expect(check(const []), hasLength(4));
+      expect(check(const [], withProvider: false), isEmpty);
+    });
+  });
 }
 
 /// The index of [source] as the harness builds it, by hand: only the

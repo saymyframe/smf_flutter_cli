@@ -31,7 +31,11 @@ const diRole = DiRole._();
 /// A provider extends [DiProvider], renders the registrations of
 /// [graphOf] in [DiGraph.ordered] order, makes each singleton wait for the
 /// services of [DiGraph.dependsOnOf], and, if [DiGraph.needsAllReady], ends
-/// `registerDependencies()` by waiting until all services are ready.
+/// `registerDependencies()` by waiting until all services are ready. Its
+/// files call or tear off the factory of every registration and its
+/// dispose function, which the contract harness checks, so the tests of a
+/// module that registers a service check the registration through
+/// [graphOf], not in the files of a provider.
 final class DiRole extends Role<DiRegistration> {
   const DiRole._();
 
@@ -91,6 +95,13 @@ final class DiRole extends Role<DiRegistration> {
               'function in its file that takes the dependencies of the '
               'registration, and its dispose function takes the service.',
           check: _checkFactories,
+        ),
+        StructuralRule(
+          id: 'di.registrations_rendered',
+          description: 'The files of the provider of the role call or tear '
+              'off the factory of every registration, and its dispose '
+              'function.',
+          check: _checkRendered,
         ),
       ];
 
@@ -273,6 +284,61 @@ List<SmfIssue> _checkFactories(StructuralRuleInput<DiRegistration> input) {
             'when it disposes of the service.',
         origin: data.origin,
       );
+    }
+  }
+  return issues;
+}
+
+/// The registrations that the provider of the role does not render: those
+/// whose factory, or dispose function, none of the files of the provider
+/// calls or tears off, through an import of the file or library that
+/// declares it.
+///
+/// So no provider leaves out a service that a module declares, and the
+/// tests of the modules need not look into the files of any provider.
+/// Without the descriptor of a provider in [input], no file renders the
+/// registrations and there is nothing to check.
+List<SmfIssue> _checkRendered(StructuralRuleInput<DiRegistration> input) {
+  final providers = {
+    for (final module in input.modules)
+      if (module.provides.contains(diRole)) module.id,
+  };
+  if (providers.isEmpty) return const [];
+  final files = [
+    for (final MapEntry(key: path, value: file) in input.files.entries)
+      if (input.owners[path] case ModuleOrigin(:final module)
+          when providers.contains(module))
+        file,
+  ];
+  final issues = <SmfIssue>[];
+  void check(
+    RoleData<DiRegistration> data,
+    String function,
+    String name,
+    ImportRef import,
+  ) {
+    if (files.any((file) => usesImported(file, name, import))) return;
+    final library = import.isAppFile ? 'lib/${import.uri}' : import.uri;
+    issues.add(
+      SmfIssue(
+        'The provider of the $diRole does not render the ${data.value}: '
+        'none of its files calls or tears off its $function $name() of '
+        '$library.',
+        hint: 'Register every service of DiRole.graphOf() with a call or a '
+            'tear-off of its factory, and of its dispose function if it has '
+            'one.',
+        origin: data.origin,
+        path: DiRole.dependenciesFile,
+      ),
+    );
+  }
+
+  for (final data in diRole.graphOf(input.roleInput).registrations) {
+    final registration = data.value;
+    final create = registration.create;
+    check(data, 'factory', create.name, create.import);
+    if (registration.dispose case final dispose?) {
+      check(data, 'dispose function', dispose.name, dispose.import);
     }
   }
   return issues;
