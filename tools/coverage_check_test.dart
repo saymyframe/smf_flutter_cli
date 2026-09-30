@@ -144,20 +144,28 @@ void main() {
     );
   });
 
-  test('reads the members of the workspace', () {
+  test(
+      'reads the lcov.info of every member that the root pubspec lists, with '
+      'comments and quotes', () {
+    final root = Directory.systemTemp.createTempSync('coverage_check_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n',
+    );
+    for (final package in ['a', 'b']) {
+      Directory('${root.path}/packages/$package/test')
+          .createSync(recursive: true);
+      File('${root.path}/packages/$package/coverage/lcov.info')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('SF:$package\n');
+    }
+
     expect(
-      workspaceMembers(
-        'name: root\r\n'
-        'workspace:\r\n'
-        '  - packages/a\r\n'
-        '  # A comment.\r\n'
-        '  - packages/a/b\r\n'
-        '\r\n'
-        '  -   packages/c\r\n'
-        'dev_dependencies:\r\n'
-        '  - packages/d\r\n',
-      ),
-      ['packages/a', 'packages/a/b', 'packages/c'],
+      lcovsOf(root.path),
+      {'packages/a': 'SF:a\n', 'packages/b': 'SF:b\n'},
     );
   });
 

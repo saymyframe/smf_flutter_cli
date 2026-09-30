@@ -6,7 +6,9 @@
 // `dart tools/coverage_check.dart`. It reads the lcov.info of the packages
 // that melos runs the tests of, the members of the workspace in the root
 // pubspec.yaml with a test/ directory, and fails when one of them has none,
-// so that it cannot pass on tests that did not run.
+// so that it cannot pass on tests that did not run. It also fails on a
+// member that it cannot read as a path, such as a glob, which it does not
+// expand (see workspace_members.dart).
 //
 // test_with_coverage leaves out of lcov.info, with their branches, the lines
 // from `// coverage:ignore-start` to `// coverage:ignore-end` and a line
@@ -15,22 +17,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// The members of the workspace that the root pubspec [text] lists, by
-/// their paths from the root of the repository.
-List<String> workspaceMembers(String text) {
-  final members = <String>[];
-  var inWorkspace = false;
-  for (final line in const LineSplitter().convert(text)) {
-    if (RegExp(r'^\S').hasMatch(line)) {
-      inWorkspace = line.trimRight() == 'workspace:';
-    } else if (inWorkspace) {
-      if (RegExp(r'^\s+-\s+(\S+)').firstMatch(line) case final match?) {
-        members.add(match[1]!);
-      }
-    }
-  }
-  return members;
-}
+import 'workspace_members.dart';
 
 /// The lcov.info of each member of the workspace at [root] with a test/
 /// directory, by the path of the member from [root], or `null` when the

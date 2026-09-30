@@ -1,69 +1,29 @@
 // A test that continuous integration runs in the apps with Firebase
 // Crashlytics, on the real Firebase packages, whose platform side answers
-// as their packages for tests let it: the start-up of the app installs the
-// handlers of the errors that nothing catches, which report them to
-// Crashlytics, and the crash reporter of the app reaches it. The mocks of
-// Firebase Core come with the tests of firebase_core, which every app with
-// Crashlytics has.
+// as their packages for tests let it: the crash reporter of the module,
+// which createCrashlyticsCrashReporter() creates, reports to Crashlytics,
+// and neither presents nor prints what it reports, which the handlers of
+// the crash reporting role leave to Flutter and to the engine.
+//
+// The app may have other crash reporters, which only the tests of their
+// own modules know, so the test uses the reporter of the module rather
+// than createCrashReporter(), which reports to all of them. It initializes
+// Firebase as the start-up of the app does, and runs none of the rest of
+// the start-up; firebase_crashlytics_uncaught_errors_test.dart checks the
+// handlers of the errors that the start-up installs. The options of
+// Firebase come with the tests of firebase_core, which every app with
+// Crashlytics has, and the matrix sets up the mocks of the platform side
+// of every module of the app before the tests; the test takes its own
+// mocks of Crashlytics, which record what reaches it.
 import 'dart:async';
 
-import 'package:firebase_crashlytics_platform_interface/test.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:{{app_name}}/bootstrap.dart';
-import 'package:{{app_name}}/core/crash_reporting/crash_reporter.dart';
+import 'package:{{app_name}}/core/crash_reporting/crashlytics_crash_reporter.dart';
+import 'package:{{app_name}}/firebase_options.dart';
 
-import 'firebase_core_mocks.dart';
-
-/// Records what reaches the platform side of Firebase Crashlytics.
-final class _Crashlytics implements TestFirebaseCrashlyticsHostApi {
-  final List<RecordErrorRequest> errors = [];
-  final List<String> logs = [];
-  final List<String> users = [];
-
-  void clear() {
-    errors.clear();
-    logs.clear();
-    users.clear();
-  }
-
-  @override
-  Future<void> recordError(RecordErrorRequest request) async =>
-      errors.add(request);
-
-  @override
-  Future<void> log(String message) async => logs.add(message);
-
-  @override
-  Future<void> setUserIdentifier(String identifier) async =>
-      users.add(identifier);
-
-  @override
-  Future<bool> checkForUnsentReports() async => false;
-
-  @override
-  Future<void> crash() async {}
-
-  @override
-  Future<void> deleteUnsentReports() async {}
-
-  @override
-  Future<bool> didCrashOnPreviousExecution() async => false;
-
-  @override
-  Future<void> sendUnsentReports() async {}
-
-  @override
-  Future<bool> setCrashlyticsCollectionEnabled(bool enabled) async => enabled;
-
-  @override
-  Future<void> setCustomKey(String key, String value) async {}
-
-  // A method that a later version of the package adds fails only if the
-  // app calls it.
-  @override
-  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
+import 'firebase_crashlytics_mocks.dart';
 
 /// Runs [body] and returns what it printed, with print or debugPrint.
 Future<List<String>> _printed(FutureOr<void> Function() body) async {
@@ -101,31 +61,22 @@ Future<List<FlutterErrorDetails>> _presented(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final crashlytics = _Crashlytics();
-  final onErrorBefore = FlutterError.onError;
+  late MockCrashlytics crashlytics;
 
   setUpAll(() async {
-    mockFirebaseCore(
-      pluginConstants: {
-        'plugins.flutter.io/firebase_crashlytics': {
-          'isCrashlyticsCollectionEnabled': true,
-        },
-      },
+    crashlytics = mockFirebaseCrashlytics();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
     );
-    TestFirebaseCrashlyticsHostApi.setUp(crashlytics);
-    // As by default, the handler of the errors of Flutter presents them.
-    FlutterError.onError = (details) => FlutterError.presentError(details);
-    await bootstrap();
   });
 
-  tearDownAll(() => FlutterError.onError = onErrorBefore);
-
-  setUp(crashlytics.clear);
+  setUp(() => crashlytics.clear());
 
   test(
-      'an error that Flutter catches is presented once and reaches '
-      'Crashlytics as fatal', () async {
+      'the reporter reports an error of Flutter to Crashlytics, and neither '
+      'presents nor prints it', () async {
     expect(kDebugMode, isTrue);
+    final reporter = createCrashlyticsCrashReporter();
     final details = FlutterErrorDetails(
       exception: StateError('broken in a build'),
       stack: StackTrace.current,
@@ -135,13 +86,12 @@ void main() {
 
     late List<String> printed;
     final presented = await _presented(() async {
-      printed = await _printed(() async {
-        FlutterError.onError!(details);
-        await pumpEventQueue();
-      });
+      printed = await _printed(
+        () => reporter.recordFlutterError(details, fatal: true),
+      );
     });
 
-    expect(presented, [same(details)]);
+    expect(presented, isEmpty);
     expect(printed, isEmpty);
     final request = crashlytics.errors.single;
     expect(request.exception, 'Bad state: broken in a build');
@@ -151,26 +101,9 @@ void main() {
   });
 
   test(
-      'an error that nothing catches reaches Crashlytics as fatal, and is '
-      'left to the engine in debug mode', () async {
-    final printed = await _printed(() async {
-      expect(
-        PlatformDispatcher.instance.onError!(
-          StateError('broken later'),
-          StackTrace.current,
-        ),
-        isFalse,
-      );
-      await pumpEventQueue();
-    });
-
-    expect(printed, isEmpty);
-    expect(crashlytics.errors.single.exception, 'Bad state: broken later');
-    expect(crashlytics.errors.single.fatal, isTrue);
-  });
-
-  test('the crash reporter of the app reaches Crashlytics', () async {
-    final reporter = createCrashReporter();
+      'the reporter reports errors, the log and the user to Crashlytics, and '
+      'prints nothing', () async {
+    final reporter = createCrashlyticsCrashReporter();
 
     final printed = await _printed(() async {
       await reporter.recordError(
@@ -178,16 +111,24 @@ void main() {
         StackTrace.current,
         reason: 'while saving',
       );
+      await reporter.recordError(
+        StateError('broken later'),
+        StackTrace.current,
+        fatal: true,
+      );
       await reporter.log('saved');
       await reporter.setUserId('user-1');
       await reporter.setUserId(null);
     });
 
     expect(printed, isEmpty);
-    final request = crashlytics.errors.single;
-    expect(request.exception, 'Invalid argument(s): caught');
-    expect(request.reason, 'while saving');
-    expect(request.fatal, isFalse);
+    final [caught, fatal] = crashlytics.errors;
+    expect(caught.exception, 'Invalid argument(s): caught');
+    expect(caught.reason, 'while saving');
+    expect(caught.fatal, isFalse);
+    expect(caught.stackTraceElements, isNotEmpty);
+    expect(fatal.exception, 'Bad state: broken later');
+    expect(fatal.fatal, isTrue);
     expect(crashlytics.logs, ['saved']);
     expect(crashlytics.users, ['user-1', '']);
   });

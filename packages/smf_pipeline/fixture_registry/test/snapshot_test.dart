@@ -19,36 +19,69 @@ import 'package:yaml/yaml.dart';
 /// Set to rewrite the snapshots with what the pipeline renders now.
 const _update = 'SMF_UPDATE_SNAPSHOTS';
 
-/// The apps whose rendered files are kept as snapshots.
-final _apps = <String, ContractCase>{
-  'every_fixture_bloc': ContractCase(
-    'every fixture with BLoC',
-    requested: everyFixture(),
+/// The apps whose rendered files are kept as snapshots, each with the
+/// modules of its registry.
+final _apps = <String, (List<SmfModule>, ContractCase)>{
+  'every_fixture_bloc': (
+    fixtureModules(),
+    ContractCase('every fixture with BLoC', requested: everyFixture()),
   ),
-  'every_fixture_riverpod': ContractCase(
-    'every fixture with Riverpod',
-    requested: everyFixture(stateManager: FakeRiverpodModule.id),
+  'every_fixture_riverpod': (
+    fixtureModules(),
+    ContractCase(
+      'every fixture with Riverpod',
+      requested: everyFixture(stateManager: FakeRiverpodModule.id),
+    ),
   ),
   // The services of the fixtures registered by a real DI container.
-  'every_fixture_get_it': ContractCase(
-    'every fixture with get_it',
-    requested: everyFixture(di: GetItModule.id),
+  'every_fixture_get_it': (
+    fixtureModules(),
+    ContractCase(
+      'every fixture with get_it',
+      requested: everyFixture(di: GetItModule.id),
+    ),
   ),
   // No router, no DI, and the clock without the badge: the other branches
   // of the templates.
-  'without_router': const ContractCase(
-    'without a router',
-    requested: [
-      ModuleId('fake_sockets'),
-      ModuleId('fake_overlap'),
-      ModuleId('fake_events'),
-      ModuleId('fake_crash'),
-      ModuleId('fake_child'),
-      ModuleId('fake_codegen'),
-      ModuleId('fake_clock_user'),
-    ],
+  'without_router': (
+    fixtureModules(),
+    const ContractCase(
+      'without a router',
+      requested: [
+        ModuleId('fake_sockets'),
+        ModuleId('fake_overlap'),
+        ModuleId('fake_events'),
+        ModuleId('fake_crash'),
+        ModuleId('fake_child'),
+        ModuleId('fake_codegen'),
+        ModuleId('fake_clock_user'),
+      ],
+    ),
+  ),
+  // Providers of a role created synchronously and asynchronously, in one
+  // app.
+  'several_providers': (
+    severalProvidersModules(),
+    ContractCase(
+      'several providers',
+      requested: [
+        for (final module in severalProvidersModules()) module.descriptor.id,
+      ],
+    ),
   ),
 };
+
+/// The context of the apps of the snapshots.
+const _context = ModuleContext(
+  appName: 'fixture_app',
+  orgName: 'com.example',
+  appIdentity: AppIdentity(
+    platforms: ['android', 'ios'],
+    androidApplicationId: 'com.example.fixture_app',
+    iosBundleId: 'com.example.fixture-app',
+    androidNamespace: 'com.example.fixture_app',
+  ),
+);
 
 /// The files of flutter_core that the fixtures change: the Dart code, the
 /// pubspec, the README, and the native files with sockets. The Xcode project
@@ -118,22 +151,13 @@ String _snapshotOf(RenderedApp app) {
 }
 
 void main() {
-  final harness = ContractHarness(
-    ModuleRegistry(fixtureModules()),
-    context: const ModuleContext(
-      appName: 'fixture_app',
-      orgName: 'com.example',
-      appIdentity: AppIdentity(
-        platforms: ['android', 'ios'],
-        androidApplicationId: 'com.example.fixture_app',
-        iosBundleId: 'com.example.fixture-app',
-        androidNamespace: 'com.example.fixture_app',
-      ),
-    ),
-  );
-
-  for (final MapEntry(key: name, value: contractCase) in _apps.entries) {
+  for (final MapEntry(key: name, value: (modules, contractCase))
+      in _apps.entries) {
     test('the app with $contractCase renders as its snapshot', () async {
+      final harness = ContractHarness(
+        ModuleRegistry(modules),
+        context: _context,
+      );
       final result = await harness.check(contractCase);
       expect(result.errors.map((issue) => '$issue'), isEmpty);
 

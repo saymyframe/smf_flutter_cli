@@ -22,7 +22,7 @@ late final GoRouter config = GoRouter(
       builder: (context, state) => const screen0.HomeScreen(),
     ),
   ],
-)..routerDelegate.addListener(_showScreen);
+)..routerDelegate.addListener(_pagesChanged);
 ```
 
 Screens navigate with `context.nav`, such as `context.nav.home.home().go()`, which the router role writes into `lib/core/router/navigation.dart`. It does not name go_router, so the screens of a feature work with any router. With a layout such as `bottom_tabs`, the router builds the main navigation with a branch for each tab.

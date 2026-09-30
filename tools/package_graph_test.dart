@@ -7,32 +7,26 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
+
+import 'workspace_members.dart';
 
 /// A package of the workspace, as its pubspec describes it.
 final class _Package {
   const _Package(this.name, {required this.published, required this.uses});
 
-  /// Reads the pubspec [text]; a pubspec of the workspace puts its sections
-  /// at the start of a line and its packages two spaces in.
+  /// Reads the pubspec [text] as YAML, as pub reads it.
   factory _Package.parse(String text) {
-    String? name;
-    var published = true;
-    String? section;
-    final uses = <String>{};
-    for (final line in text.split('\n')) {
-      if (RegExp(r'^name:\s*(\S+)').firstMatch(line) case final match?) {
-        name = match[1];
-      } else if (RegExp(r'^publish_to:\s*none\b').hasMatch(line)) {
-        published = false;
-      } else if (RegExp(r'^(\w+):').firstMatch(line) case final match?) {
-        section = match[1];
-      } else if (const {'dependencies', 'dev_dependencies'}.contains(section)) {
-        if (RegExp('^  ([a-z0-9_]+):').firstMatch(line) case final match?) {
-          uses.add(match[1]!);
-        }
-      }
-    }
-    return _Package(name ?? '', published: published, uses: uses);
+    final pubspec = loadYaml(text) as YamlMap;
+    return _Package(
+      pubspec['name'] as String,
+      published: pubspec['publish_to'] != 'none',
+      uses: {
+        for (final section in ['dependencies', 'dev_dependencies'])
+          if (pubspec[section] case final YamlMap packages)
+            ...packages.keys.cast<String>(),
+      },
+    );
   }
 
   final String name;
@@ -70,17 +64,9 @@ List<List<String>> cyclesOf(Map<String, Set<String>> graph) {
 /// The published packages of the workspace at [root] and the published
 /// packages of the workspace each one uses.
 Map<String, Set<String>> _workspaceGraph(String root) {
-  final members = <String>[];
-  var inWorkspace = false;
-  for (final line in File('$root/pubspec.yaml').readAsLinesSync()) {
-    if (RegExp(r'^\S').hasMatch(line)) inWorkspace = line == 'workspace:';
-    if (!inWorkspace) continue;
-    if (RegExp(r'^  - (\S+)').firstMatch(line) case final match?) {
-      members.add(match[1]!);
-    }
-  }
+  final pubspec = File('$root/pubspec.yaml').readAsStringSync();
   final packages = [
-    for (final member in members)
+    for (final member in workspaceMembers(pubspec))
       _Package.parse(File('$root/$member/pubspec.yaml').readAsStringSync()),
   ];
   final published = {
@@ -137,6 +123,53 @@ void main() {
     expect(package.name, 'smf_router');
     expect(package.published, isFalse);
     expect(package.uses, {'smf_contracts', 'flutter', 'smf_pipeline'});
+  });
+
+  test('reads a pubspec as YAML, with quotes, comments and flow maps', () {
+    final package = _Package.parse(
+      'name: "smf_router" # The router.\n'
+      "publish_to: 'none'\n"
+      'dependencies: {smf_contracts: ^0.2.0}\n'
+      'dev_dependencies: # For its tests.\n'
+      '  smf_pipeline: any\n',
+    );
+
+    expect(package.name, 'smf_router');
+    expect(package.published, isFalse);
+    expect(package.uses, {'smf_contracts', 'smf_pipeline'});
+  });
+
+  test(
+      'reads the members that the root pubspec lists, with comments and '
+      'quotes, into the graph of the published ones', () {
+    final root = Directory.systemTemp.createTempSync('package_graph_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n'
+      '  - packages/c\n',
+    );
+    void write(String path, String text) => File('${root.path}/$path')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+    write(
+      'packages/a/pubspec.yaml',
+      'name: a\ndependencies:\n  b: any\n  c: any\n',
+    );
+    write('packages/b/pubspec.yaml', 'name: b\ndev_dependencies:\n  a: any\n');
+    write('packages/c/pubspec.yaml', 'name: c\npublish_to: none\n');
+
+    final graph = _workspaceGraph(root.path);
+
+    expect(graph, {
+      'a': {'b'},
+      'b': {'a'},
+    });
+    expect(cyclesOf(graph), [
+      ['a', 'b', 'a'],
+    ]);
   });
 
   test(

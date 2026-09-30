@@ -2,10 +2,12 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -16,6 +18,90 @@ import 'host.dart';
 void main() {
   test('the fixtures form a valid registry', () {
     expect(ModuleRegistry.problemsOf(fixtureModules()), isEmpty);
+  });
+
+  test(
+      'has every module of the CLI that provides the router role or the '
+      'layout role, so that the tests of the apps of the fixtures check the '
+      'listeners of the screen with each', () {
+    final fixtures = {
+      for (final module in fixtureModules()) module.descriptor.id,
+    };
+    final providers = [
+      for (final module in smfModules)
+        if (module.descriptor.provides.any({routerRole, layoutRole}.contains))
+          module.descriptor.id,
+    ];
+
+    expect(providers, isNotEmpty);
+    for (final id in providers) {
+      expect(
+        fixtures,
+        contains(id),
+        reason: '$id provides the router role or the layout role: add it to '
+            'fixtureModules().',
+      );
+    }
+  });
+
+  group('the registry of several providers', () {
+    test('is a valid registry', () {
+      expect(ModuleRegistry.problemsOf(severalProvidersModules()), isEmpty);
+    });
+
+    test(
+        'has every module of the CLI that provides a role that an app can '
+        'have several providers of, and a fixture provider of each such role '
+        'besides, so that the app tests of the modules run next to another '
+        'provider of their roles', () {
+      final modules = severalProvidersModules();
+      final ids = {for (final module in modules) module.descriptor.id};
+      final ofCli = {for (final module in smfModules) module.descriptor.id};
+      final roles = <Role>{};
+      for (final module in smfModules) {
+        for (final role in module.descriptor.provides) {
+          if (!role.cardinality.allowsMany) continue;
+          roles.add(role);
+          expect(
+            ids,
+            contains(module.descriptor.id),
+            reason: '${module.descriptor.id} provides the $role, which an app '
+                'can have several providers of: add it to '
+                'severalProvidersModules(); the app of several providers runs '
+                'its app tests as smfAppTests() registers them.',
+          );
+        }
+      }
+
+      expect(roles, isNotEmpty);
+      for (final role in roles) {
+        expect(
+          [
+            for (final module in modules)
+              if (module.descriptor.provides.contains(role) &&
+                  !ofCli.contains(module.descriptor.id))
+                module.descriptor.id,
+          ],
+          isNotEmpty,
+          reason: 'No fixture provides the $role next to the modules of the '
+              'CLI that do.',
+        );
+      }
+    });
+
+    test('builds one app with every module, whose cases have no errors',
+        () async {
+      final (:apps, :failed) = await everyModuleAppsOf(
+        severalProvidersModules(),
+      );
+
+      expect(failed, isEmpty);
+      expect(apps.map((app) => app.modules), [
+        unorderedEquals([
+          for (final module in severalProvidersModules()) module.descriptor.id,
+        ]),
+      ]);
+    });
   });
 
   group('the contract harness', () {
@@ -156,12 +242,16 @@ void main() {
       expect(pubspec.usesMaterialDesign, isTrue);
       expect(result.collection!.applyingOf<CodegenRequest>(), hasLength(1));
       // The analytics of the fixtures watches the navigators of the router
-      // and listens to the screen the user sees.
-      for (final socket in [RouterRole.observers, RouterRole.screenListeners]) {
+      // and listens to the screen the user sees, and so does the screen log
+      // of the fixtures, so the router has two listeners.
+      for (final (socket, contributors) in [
+        (RouterRole.observers, ['fake_analytics']),
+        (RouterRole.screenListeners, ['fake_analytics', 'fake_screen_log']),
+      ]) {
         expect(
           result.validation!.socketOrders[socket]!.contributions
               .map((collected) => '${collected.origin}'),
-          ['fake_analytics'],
+          contributors,
           reason: '$socket',
         );
       }
@@ -318,9 +408,27 @@ void main() {
       expect(failed, isEmpty);
       final every = [
         for (final app in apps)
-          if (app.name.startsWith('every module')) app,
+          if (app.everyModuleWith != null) app,
       ];
-      expect(every, hasLength(8));
+      // Each combination of a router, a DI container and a state manager,
+      // named after the providers other than the first of their roles:
+      // fake_router, fake_di and fake_bloc.
+      expect(every.map((app) => app.name), [
+        for (final router in ['fake_router', 'go_router'])
+          for (final container in ['fake_di', 'get_it'])
+            for (final stateManager in ['fake_bloc', 'fake_riverpod'])
+              'every module ($router, $container, $stateManager)',
+      ]);
+      expect(every.map((app) => app.packageName('app')), [
+        'app',
+        'app_fake_riverpod',
+        'app_get_it',
+        'app_get_it_fake_riverpod',
+        'app_go_router',
+        'app_go_router_fake_riverpod',
+        'app_go_router_get_it',
+        'app_go_router_get_it_fake_riverpod',
+      ]);
       for (final app in every) {
         expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
@@ -336,6 +444,87 @@ void main() {
             .roleOptions,
         isEmpty,
       );
+    });
+  });
+
+  group('the fixture router', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+
+    /// The top-level declarations of the router of the app of [modules],
+    /// by name.
+    Future<Map<String, Declaration>> routerOf(List<ModuleId> modules) async {
+      final result = await harness.check(
+        ContractCase('fixture router', requested: modules),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      final unit = parseString(
+        content: result.app!.files[RouterRole.appRouterFactoryFile]!.text,
+      ).unit;
+      return {
+        for (final declaration in unit.declarations)
+          if (declaration case FunctionDeclaration(:final name))
+            name.lexeme: declaration
+          else if (declaration
+              case TopLevelVariableDeclaration(:final variables))
+            for (final variable in variables.variables)
+              variable.name.lexeme: declaration,
+      };
+    }
+
+    /// The locations that the branches of the main navigation of [router]
+    /// start on, and the code of its layout around the navigator of the
+    /// selected branch.
+    (List<String>, String) mainNavigationOf(Map<String, Declaration> router) {
+      final destinations =
+          router['_destinations']! as TopLevelVariableDeclaration;
+      final shell = router['_shell']! as FunctionDeclaration;
+      return (
+        [
+          for (final element in (destinations
+                  .variables.variables.single.initializer! as ListLiteral)
+              .elements)
+            element.toSource(),
+        ],
+        (shell.functionExpression.body as ExpressionFunctionBody)
+            .expression
+            .toSource(),
+      );
+    }
+
+    test(
+        'with bottom tabs, builds the main navigation of the layout, with the '
+        'destinations of the features in their order', () async {
+      final router = await routerOf([
+        ...everyFixture(),
+        const ModuleId('bottom_tabs'),
+      ]);
+
+      final (locations, shell) = mainNavigationOf(router);
+      expect(locations, [
+        'FakeFeatureHomeLocation()',
+        'FakeSecondSecondLocation()',
+      ]);
+      expect(
+        shell,
+        [
+          'AppShell(destinations: const [',
+          "Destination(label: 'Fixture', icon: Icons.star), ",
+          "Destination(label: 'Second', icon: Icons.looks_two)], ",
+          'currentIndex: index, onSelect: onSelect, body: body)',
+        ].join(),
+      );
+    });
+
+    test('without a layout or without destinations, has no main navigation',
+        () async {
+      for (final modules in [
+        everyFixture(),
+        const [FakeRouterModule.id, ModuleId('bottom_tabs')],
+      ]) {
+        final (locations, shell) = mainNavigationOf(await routerOf(modules));
+        expect(locations, isEmpty, reason: '$modules');
+        expect(shell, 'body', reason: '$modules');
+      }
     });
   });
 
@@ -495,6 +684,8 @@ const _cases = [
   'fake_analytics with di',
   'fake_analytics with router',
   'fake_analytics',
+  'fake_screen_log (fake_router)',
+  'fake_screen_log (go_router)',
   'fake_crash with di',
   'fake_crash',
   'fake_events with di',

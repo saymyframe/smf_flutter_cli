@@ -2,6 +2,26 @@ name: Generated apps
 # The jobs with Flutter, for one version of it: build.yml runs them with the
 # pinned Flutter, and nightly.yml with every stable release that the
 # generated apps allow.
+#
+# The apps with every module are one for each combination of the providers
+# of the roles that take one, the product of their numbers, such as 48 for
+# two app entries, two routers, two DI containers, three state managers and
+# two layouts. So the job Plan runs the matrix tools with --plan, and each
+# other job takes one app or one shard of the plan from its matrix: the
+# shards of the matrices, which check a pairwise covering of the apps with
+# every module, in which every pair of providers of two different roles is
+# in one of the apps; a pairwise covering that CI builds for Android and
+# iOS, and another that it starts on devices; and one app for each provider
+# of the app entry, which owns the native projects and their configuration
+# with Firebase. A new provider or module then needs no change of this
+# workflow, and no job that takes its app or shard from the plan takes
+# longer as the apps get more: only the number of jobs grows, with the
+# covering rather than with every combination. The job CLI from pub.dev of
+# the nightly run alone checks the apps of a release one after another, as
+# a release that came out before the plan has none.
+# tools/workflow_apps_test.dart fails when a job generates or checks a whole
+# selection of apps rather than its app or shard of the plan, and when a job
+# or a step computes its timeout.
 on:
   workflow_call:
     inputs:
@@ -18,11 +38,11 @@ on:
         type: string
         required: true
       macos_sha256:
-        description: The SHA-256 of the release archive of the Flutter for macOS on Apple silicon, for the job on macOS.
+        description: The SHA-256 of the release archive of the Flutter for macOS on Apple silicon, for the jobs on macOS.
         type: string
         default: ""
       windows_sha256:
-        description: The SHA-256 of the release archive of the Flutter for Windows, for the job on Windows.
+        description: The SHA-256 of the release archive of the Flutter for Windows, for the jobs on Windows.
         type: string
         default: ""
       macos_and_windows:
@@ -38,39 +58,141 @@ on:
         type: boolean
         default: true
       save_gradle_cache:
-        description: Whether the job of the real modules on Linux saves what Gradle downloaded to the cache of the repository, once a week, rather than only restoring it.
+        description: Whether the first job that builds an app for Android saves what Gradle downloaded to the cache of the repository, once a week, rather than only restoring it.
+        type: boolean
+        default: true
+      save_swiftpm_cache:
+        description: Whether the first job that builds an app for iOS saves what Swift Package Manager downloaded to the cache of the repository, once a week, rather than only restoring it.
         type: boolean
         default: true
       published_cli:
-        description: Whether the job of the real modules on Linux also checks the apps of smf_flutter_cli from pub.dev, which users install.
+        description: Whether a job also checks the apps of smf_flutter_cli from pub.dev, which users install.
+        type: boolean
+        default: false
+      every_combination:
+        description: Whether the jobs of the matrices check the apps with every module of every combination of the providers of the roles that take one, or of a 3-wise covering of them when there are more than 100, rather than of a pairwise covering. The nightly run sets it for its latest Flutter; the apps that CI builds and starts stay a pairwise covering.
+        type: boolean
+        default: false
+      register_firebase_apps:
+        description: Whether flutterfire may register the apps with Firebase in the Firebase project of CI when it has none with their ids yet. Only build.yml lets it, so that runs at the same time, such as the jobs of the nightly run, cannot register an app each; tools/firebase_registration_test.dart checks this.
         type: boolean
         default: false
     secrets:
       FIREBASE_SERVICE_ACCOUNT:
-        description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the app without Firebase.
+        description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the apps without Firebase.
         required: false
 
+env:
+  FLUTTER_VERSION: ${{ inputs.flutter_version }}
+  DART_SDK: ${{ inputs.dart_version }}
+  PUB_ENVIRONMENT: ci
+
 jobs:
-  flutter:
-    name: Generated apps (${{ matrix.registry }})
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
-    # About 25 minutes for the row of the modules of the CLI, with the
-    # Android emulator.
-    timeout-minutes: 75
+    timeout-minutes: 10
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      apps: ${{ steps.plan.outputs.apps }}
+      start: ${{ steps.plan.outputs.start }}
+      entries: ${{ steps.plan.outputs.entries }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Dart of the Flutter of the other jobs, which run the same tools.
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ inputs.dart_version }}
+
+      - &pub_get
+        name: Get the packages of the workspace
+        run: dart pub get
+
+      # Each matrix tool prints its plan as one line of JSON (matrixPlanOf
+      # of packages/smf_flutter_cli/lib/src/matrix_plan.dart): the
+      # combinations of the providers that the apps with every module of its
+      # matrix cover, and the shards of the matrix, as many as it takes for a
+      # job to check at most 24 apps, about 20 minutes. The tool of the CLI
+      # adds the apps that the jobs below generate, one for each job, by the
+      # names of their cases, such as "every module (bloc)": apps, a pairwise
+      # covering of the apps with every module; start, one of those without
+      # the modules whose steps need an external service; and entries, one
+      # app for each provider of the app entry. With every_combination, the
+      # matrices check every combination, or a 3-wise covering of more than
+      # 100.
+      - name: Plan the jobs of the apps
+        id: plan
+        env:
+          EVERY_COMBINATION: ${{ inputs.every_combination }}
+        run: |
+          options=()
+          if [ "$EVERY_COMBINATION" = true ]; then
+            options+=(--every-combination)
+          fi
+          real="$(dart run packages/smf_flutter_cli/tool/matrix.dart --plan "${options[@]}")"
+          fixtures="$(dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart --plan "${options[@]}")"
+          jq . <<< "$real"
+          jq . <<< "$fixtures"
+          {
+            echo "shards=$(jq -cn --argjson real "$real" --argjson fixtures "$fixtures" '
+              [{registry: "real", plan: $real}, {registry: "fixtures", plan: $fixtures}]
+              | map(.registry as $registry | .plan.combinations as $combinations
+                | .plan.shards[] | {registry: $registry, shard: ., combinations: $combinations})')"
+            echo "apps=$(jq -c .apps <<< "$real")"
+            echo "start=$(jq -c .start <<< "$real")"
+            echo "entries=$(jq -c .entries <<< "$real")"
+          } >> "$GITHUB_OUTPUT"
+
+  # Whether the key of the service account is there, for the jobs that
+  # configure the apps with Firebase; the key itself goes only into the
+  # steps that need it. A job of its own: the runner hides the lines of each
+  # secret that a job refers to in the outputs of the job, and leaves out an
+  # output that has one of them, such as the { of the key, which is JSON, so
+  # the plan, whose outputs are JSON, refers to no secret.
+  firebase-key:
+    name: Firebase key
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      key: ${{ steps.firebase.outputs.key }}
+
+    steps:
+      - name: Find the key of the service account
+        id: firebase
+        env:
+          HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          echo "key=$HAS_FIREBASE_KEY" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_FIREBASE_KEY" != true ]; then
+            echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the apps with Firebase are neither configured nor started."
+          fi
+
+  # Every app of the matrix of a registry is generated with `smf create
+  # --no-input --skip-external-setup --no-dart-fix --strict` and must pass
+  # `flutter analyze`, and then the tests that the packages keep for it in
+  # `app_tests/`, with `flutter test`. Each job checks its shard of the apps
+  # in a directory with a space in its name, and then its shard of the apps
+  # with every module of the matrix in a directory whose name has letters
+  # beyond ASCII too.
+  matrix:
+    name: Generated apps (${{ matrix.registry }}, ${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # About 20 minutes: at most 24 apps, 45 to 50 seconds each.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        # real: the modules of the CLI; fixtures: the fake modules that use
-        # the features of the module model that no real module uses yet.
-        registry: [real, fixtures]
-    env:
-      FLUTTER_VERSION: ${{ inputs.flutter_version }}
+        # registry: real, the modules of the CLI, or fixtures, the fake
+        # modules that use the features of the module model that no real
+        # module uses yet; shard: <index>/<count>, of the apps of the matrix
+        # of the registry; combinations: those that its apps with every
+        # module cover.
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env: &linux_env
       FLUTTER_SHA256: ${{ inputs.linux_sha256 }}
-      DART_SDK: ${{ inputs.dart_version }}
-      PUB_ENVIRONMENT: ci
-      # Whether the key of the service account is there; the key itself goes
-      # only into the step that needs it.
-      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -78,7 +200,8 @@ jobs:
       # The repository allows only the actions of GitHub, of verified
       # creators and a few others by name, so Flutter comes from its release
       # archive rather than from a setup action.
-      - name: Setup Flutter
+      - &setup_flutter_linux
+        name: Setup Flutter
         id: flutter
         run: |
           archive="$RUNNER_TEMP/flutter.tar.xz"
@@ -94,7 +217,8 @@ jobs:
 
       # The Flutter the apps are checked with, and its Dart, which formats
       # them, must be those of the inputs.
-      - name: Check the versions of Flutter and Dart
+      - &check_flutter_linux
+        name: Check the versions of Flutter and Dart
         run: |
           flutter --version --machine > "$RUNNER_TEMP/flutter.json"
           cat "$RUNNER_TEMP/flutter.json"
@@ -102,38 +226,139 @@ jobs:
             '.frameworkVersion == $flutter and (.dartSdkVersion | startswith($dart))' \
             "$RUNNER_TEMP/flutter.json"
 
-      # One cache per row: the apps of each row get their own packages.
+      # One cache per registry, which the first shard of each saves and the
+      # other jobs restore: the apps of each registry get their own
+      # packages.
       - name: Cache pub packages
-        if: inputs.pub_cache
+        if: inputs.pub_cache && startsWith(matrix.shard, '1/')
         uses: actions/cache@v6
-        with:
+        with: &pub_cache
           path: |
             ~/.pub-cache
           key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-${{ hashFiles('**/pubspec.yaml') }}
           restore-keys: |
             ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-${{ matrix.registry }}-
 
+      - name: Restore the cache of pub packages
+        if: inputs.pub_cache && !startsWith(matrix.shard, '1/')
+        uses: actions/cache/restore@v6
+        with: *pub_cache
+
+      - *pub_get
+
+      - name: Generate, analyze and test the apps of the shard
+        env: &shard_env
+          REGISTRY: ${{ matrix.registry }}
+          SHARD: ${{ matrix.shard }}
+          COMBINATIONS: ${{ matrix.combinations }}
+        run: |
+          if [ "$REGISTRY" = real ]; then
+            tool=packages/smf_flutter_cli/tool/matrix.dart
+          else
+            tool=packages/smf_pipeline/fixture_registry/tool/matrix.dart
+          fi
+          dart run "$tool" --combinations "$COMBINATIONS" --shard "$SHARD" "$RUNNER_TEMP/SMF apps"
+
+      # Among them those with the fixture module that generates code with
+      # build_runner. flutter analyze of Flutter 3.44 and 3.47 fails in a
+      # directory whose path has letters beyond ASCII, on every system
+      # (https://github.com/flutter/flutter/pull/191377), so the matrix
+      # analyzes the apps there with dart analyze.
+      - name: Generate, analyze and test the apps with every module of the shard in a directory with letters beyond ASCII
+        if: ${{ !cancelled() }}
+        env: *shard_env
+        run: |
+          if [ "$REGISTRY" = real ]; then
+            tool=packages/smf_flutter_cli/tool/matrix.dart
+          else
+            tool=packages/smf_pipeline/fixture_registry/tool/matrix.dart
+          fi
+          dart run "$tool" --every-module --combinations "$COMBINATIONS" --shard "$SHARD" \
+            "$RUNNER_TEMP/SMF apps застосунки é"
+
+  # The tests that the modules of the CLI keep for the apps they are in, in
+  # the one app with every module of the registry of several providers
+  # (severalProvidersModules of the fixture registry): the modules of the
+  # CLI that provide a role an app can have several providers of, next to
+  # fixture providers of the same roles, whose start-up and services go
+  # through platform channels that no test of the CLI knows, and a fixture
+  # whose start-up waits for a timer. The tests of a module must pass
+  # whatever else an app with the module has. The tool checks that one app
+  # only, so the job takes neither a shard nor an app of the plan.
+  several-providers:
+    name: Generated apps (several providers)
+    runs-on: ubuntu-latest
+    # About 5 minutes for its one app.
+    timeout-minutes: 15
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *pub_get
+
+      - name: Generate, analyze and test the app of several providers of a role
+        run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
+
+  # An app with every module of the plan, of a pairwise covering of them,
+  # built for Android with the versions of Gradle, the Android Gradle Plugin
+  # and Kotlin that the app entry sets, and the Android side of the plugins
+  # of the modules. The matrix tool generates it with --create and --app,
+  # named after the providers other than the first of their roles, such as
+  # android_app and android_app_riverpod. So a new provider of the app
+  # entry, which owns the Android and Xcode projects, or of any other such
+  # role gets its native build without a change here.
+  # .github/scripts/each_app.sh runs a command for the app of a directory.
+  android:
+    name: Android (${{ matrix.app }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # About 10 minutes: the app and its first build with Gradle.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+
+      - &restore_pub_cache
+        name: Restore the cache of pub packages
+        if: inputs.pub_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-real-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-pub-real-
+
       # Gradle downloads the Android Gradle Plugin, Kotlin and the Android
       # side of the plugins from Maven Central, which answers 403 to a
       # runner that downloads too much, as when the nightly run builds on
-      # every version of Flutter at once. So the job of the real modules
-      # keeps what Gradle downloaded, and Gradle itself, in one cache for
-      # every version of Flutter, by the Android files of the bricks of the
-      # modules and the week, so that a new version of a plugin gets
-      # into it within a week. Each job restores the newest one; the runs of
-      # pushes and pull requests save it, and of the nightly run only the
-      # job with the latest Flutter, rather than each of its jobs. A cache
-      # that nothing restores for 7 days is deleted by GitHub, so the caches
-      # of past weeks go away.
-      - name: Find the week of the cache of Gradle
+      # every version of Flutter at once. So what Gradle downloaded, and
+      # Gradle itself, go into one cache for every version of Flutter, by
+      # the Android files of the bricks of the modules and the week, so that
+      # a new version of a plugin gets into it within a week. Every job that
+      # builds for Android restores the newest one, and this job saves it
+      # for the first app of the plan: in the runs of pushes and pull
+      # requests, and of the nightly run only with the latest Flutter,
+      # rather than in each of its jobs. A cache that nothing restores for 7
+      # days is deleted by GitHub, so the caches of past weeks go away.
+      - &gradle_week
+        name: Find the week of the cache of Gradle
         id: gradle_week
-        if: matrix.registry == 'real'
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Gradle
-        if: matrix.registry == 'real' && inputs.save_gradle_cache
+        if: inputs.save_gradle_cache && strategy.job-index == 0
         uses: actions/cache@v6
-        with:
+        with: &gradle_cache
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
@@ -143,40 +368,64 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Restore the cache of Gradle
-        if: matrix.registry == 'real' && !inputs.save_gradle_cache
+        if: ${{ !(inputs.save_gradle_cache && strategy.job-index == 0) }}
         uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/.gradle/caches/modules-2
-            ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-
-            ${{ runner.os }}-gradle-
+        with: *gradle_cache
 
-      - name: Get the packages of the workspace
-        run: dart pub get
+      - *pub_get
 
-      # Every app is generated with `smf create --no-input
-      # --skip-external-setup --no-dart-fix --strict` and must pass
-      # `flutter analyze`, and then the tests that the packages keep for it
-      # in `app_tests/`, with `flutter test`. The matrices run in a directory
-      # with a space in its name, and the last step checks one app in a
-      # directory whose name has letters beyond ASCII too.
-      - name: Generate, analyze and test the apps of the CLI's modules
-        if: matrix.registry == 'real'
-        run: dart run packages/smf_flutter_cli/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
+      - name: Build the app with every module for Android
+        env: &app_env
+          APP: ${{ matrix.app }}
+        run: |
+          apps="$RUNNER_TEMP/SMF apps/android"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+
+  # An app with every module but the modules whose steps need an external
+  # service, such as the Firebase project that flutterfire configures an
+  # app in, and the modules that need those, so that it starts as it is
+  # generated: of a pairwise covering of them. The check that an app starts
+  # is an entry of the app that the CLI keeps in app_tests/start, knowing no
+  # module; the matrix tool adds it to the app as it adds it to the apps of
+  # the matrix, where it is only analyzed.
+  android-start:
+    name: Android start (${{ matrix.app }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # About 12 minutes: the emulator boots while the app is generated, and
+    # start_app.sh gives the build and the start 480 s.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.start) }}
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *restore_pub_cache
+      - *gradle_week
+
+      - &restore_gradle
+        name: Restore the cache of Gradle
+        uses: actions/cache/restore@v6
+        with: *gradle_cache
+
+      - *pub_get
 
       # Android 15 (API level 35) with the Google APIs, which boots in the
-      # background while the next step builds an app. The repository allows
-      # no action for it, so it is set up here: KVM for the user of the
-      # runner, the emulator and the image from the SDK manager of the
+      # background while the next steps generate the app. The repository
+      # allows no action for it, so it is set up here: KVM for the user of
+      # the runner, the emulator and the image from the SDK manager of the
       # runner, and a virtual device without a window.
       # The directory of the AVD is set for avdmanager and the emulator
       # alike: avdmanager puts it under XDG_CONFIG_HOME, which the runners
       # set, while the emulator looks in ~/.android/avd.
-      - name: Start an Android emulator
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
+      - &start_emulator
+        name: Start an Android emulator
         env:
           ANDROID_IMAGE: system-images;android-35;google_apis;x86_64
           ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
@@ -185,7 +434,20 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null
+          # A download of the SDK manager that breaks off leaves an archive
+          # that it cannot open ("Error on ZipFile unknown archive"), and
+          # each job that starts an app downloads the emulator and the image,
+          # so it tries three times.
+          for attempt in 1 2 3; do
+            if "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "$ANDROID_IMAGE" > /dev/null; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              exit 1
+            fi
+            echo "::warning::The SDK manager could not install the emulator and the image, attempt $attempt of 3; trying again."
+            sleep 15
+          done
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --name smf --package "$ANDROID_IMAGE" --device pixel_6
@@ -195,20 +457,18 @@ jobs:
             -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/emulator.pid"
 
-      # With the versions of Gradle, the Android Gradle Plugin and Kotlin
-      # that the app entry sets, and the Android side of the plugins of
-      # Firebase.
-      - name: Build an app with every module for Android
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
+      - name: Generate the app without external services to start
+        env: *app_env
         run: |
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create android_app \
-            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
-            -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
-          cd "$RUNNER_TEMP/SMF apps/android_app"
-          flutter build apk --debug
+          apps="$RUNNER_TEMP/SMF apps/start"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
 
-      - name: Wait for the Android emulator
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
+      - &wait_for_emulator
+        name: Wait for the Android emulator
         timeout-minutes: 15
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
@@ -230,48 +490,77 @@ jobs:
           cat "$RUNNER_TEMP/emulator.log"
           exit 1
 
-      # The check that the app starts is an entry of the app that the CLI
-      # keeps in app_tests/start, knowing no module; the matrix tool adds it
-      # to the app as it adds it to the apps of the matrix, where it is only
-      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # .github/scripts/start_app.sh builds an app with the start check,
       # starts the app with adb and reads the result that the check writes,
-      # in one try: unlike flutter test, it does not connect to the app.
-      - name: Start an app without Firebase on the Android emulator
-        if: ${{ !cancelled() && matrix.registry == 'real' }}
-        timeout-minutes: 12
+      # in one try: unlike flutter test, it does not connect to the app. It
+      # gives up on the app after the seconds it is given.
+      - name: Start the app without external services on the Android emulator
+        timeout-minutes: 10
         run: |
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create plain_app \
-            -m go_router,home,bottom_tabs,riverpod,get_it,event_bus \
-            -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup --no-dart-fix --strict
-          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$RUNNER_TEMP/SMF apps/plain_app" packages/smf_flutter_cli/app_tests/start
-          cd "$RUNNER_TEMP/SMF apps/plain_app"
-          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
 
-      # An app with Firebase starts only once flutterfire configured it: the
-      # placeholder of its options throws at start-up. flutterfire writes
-      # the options of the Android and iOS apps with the ids of the app in
-      # the Firebase project of CI, saymyframe-app-cli, and on Android adds
-      # the Gradle plugins of Google services and Crashlytics. It registers
-      # the Firebase apps when the project has none with those ids, and
-      # finds them in later runs: the ids come from the organization of the
-      # apps of CI, com.saymyframe.ci, and the name of the app. The first
-      # run registers them, the Android one on Linux and the iOS one on
-      # macOS, one job each. Were they deleted, jobs that run at the same
-      # time, such as those of the nightly, could register one each, and the
-      # test of the configuration fails on a project with several.
-      - name: Generate an app with every module to configure with Firebase
-        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
+  # An app with Firebase starts only once flutterfire configured it: the
+  # placeholder of its options throws at start-up. flutterfire writes the
+  # options of the Android and iOS apps with the ids of the app in the
+  # Firebase project of CI, saymyframe-app-cli, and on Android adds the
+  # Gradle plugins of Google services and Crashlytics. The native projects
+  # and their configuration belong to the app entry, so the plan has one
+  # app with every module that fits for each of its providers, with the
+  # first providers of the other roles that fit with it: firebase_start_app
+  # for the first provider of the app entry, and firebase_start_app_<app
+  # entry> for another, after the providers other than the first of their
+  # roles, names that stay when another role gets a second provider.
+  # flutterfire registers the Firebase apps when the
+  # project has none with those ids, and finds them in later runs: the ids
+  # come from the organization of the apps of CI, com.saymyframe.ci, and the
+  # name of the app. Jobs that run at the same time, such as those of the
+  # nightly run, could register an app each, and the test of the
+  # configuration fails on a project with several. So only the runs of
+  # build.yml, with the input register_firebase_apps, let flutterfire
+  # register an app, the Android one on Linux and the iOS one on macOS, one
+  # job each: the run of the pull request into main that brings a new
+  # provider of the app entry, or of main after it. The test of any other
+  # run fails before flutterfire when the project has no app with the id,
+  # asking to run Build first. Without the key of the service account, as in
+  # a pull request from a fork, the jobs with Firebase do not run.
+  android-firebase:
+    name: Android with Firebase (${{ matrix.app }})
+    needs: [plan, firebase-key]
+    if: needs.firebase-key.outputs.key == 'true'
+    runs-on: ubuntu-latest
+    # About 13 minutes: the app, its configuration, and its start, for
+    # which start_app.sh gives the build and the start 480 s.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.entries) }}
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *restore_pub_cache
+      - *gradle_week
+      - *restore_gradle
+      - *pub_get
+      - *start_emulator
+
+      - name: Generate the app with every module to configure with Firebase
+        env: *app_env
         run: |
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create firebase_start_app \
-            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
-            --org com.saymyframe.ci -o "$RUNNER_TEMP/SMF apps" --no-input --skip-external-setup \
-            --no-dart-fix --strict
-          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$RUNNER_TEMP/SMF apps/firebase_start_app" packages/smf_flutter_cli/app_tests/start
+          apps="$RUNNER_TEMP/SMF apps/firebase"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" firebase_start_app \
+            --org com.saymyframe.ci
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
 
-      - name: Install the Firebase CLI and the FlutterFire CLI
-        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
+      - &install_firebase
+        name: Install the Firebase CLI and the FlutterFire CLI
         run: |
           npm install --global firebase-tools
           firebase --version
@@ -279,77 +568,94 @@ jobs:
 
       # A test of smf_firebase_core runs the command of the README of the app
       # for Android, with the key of the service account in a file that only
-      # this step has.
+      # this step has, and skips an app that does not depend on
+      # firebase_core, which starts without it.
       - name: Configure the app with every module with Firebase for Android
-        id: firebase_android
-        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY == 'true' }}
         working-directory: packages/smf_modules/smf_firebase_core
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          SMF_FIREBASE_APP: ${{ runner.temp }}/SMF apps/firebase_start_app
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: android
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
           unset FIREBASE_SERVICE_ACCOUNT
-          dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_FIREBASE_APP \
+            "$RUNNER_TEMP/SMF apps/firebase" dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
-      - name: Delete the key of the service account
+      - &delete_key
+        name: Delete the key of the service account
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
 
+      - *wait_for_emulator
+
       - name: Start the app with every module on the Android emulator
-        if: ${{ !cancelled() && steps.firebase_android.outcome == 'success' }}
         timeout-minutes: 10
-        working-directory: ${{ runner.temp }}/SMF apps/firebase_start_app
-        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480'
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/firebase" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
 
-      - name: Leave out the app with Firebase without the key
-        if: ${{ !cancelled() && matrix.registry == 'real' && env.HAS_FIREBASE_KEY != 'true' }}
-        run: echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the app with Firebase does not start on the Android emulator."
+      # The tests of the packages that failed, as annotations that the page
+      # of the run lists at the top rather than as lines in the long log of
+      # a step; see tools/test_annotations.dart. Also after a failed step and
+      # in a cancelled job, whenever Flutter is there.
+      - &annotate
+        name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
 
-      # The brick follows the template of the pinned Flutter, and another
-      # one may differ from it without breaking the apps.
+  # The brick follows the template of the pinned Flutter, and another one
+  # may differ from it without breaking the apps.
+  brick:
+    name: Brick of flutter_core
+    if: inputs.compare_brick
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *pub_get
+
       - name: Compare the brick of flutter_core with flutter create
-        if: ${{ !cancelled() && matrix.registry == 'real' && inputs.compare_brick }}
         run: |
           (cd "$RUNNER_TEMP" && flutter create --platforms=android,ios --org com.example --no-pub my_app)
           cd packages/smf_modules/smf_flutter_core
           SMF_FLUTTER_CREATE_APP="$RUNNER_TEMP/my_app" dart test test/flutter_create_test.dart --file-reporter json:build/test-results/flutter_create_test.json
 
-      - name: Generate, analyze and test the apps of the fixture modules
-        if: matrix.registry == 'fixtures'
-        run: dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$RUNNER_TEMP/SMF apps"
+      - *annotate
 
-      # flutter analyze of Flutter 3.44 and 3.47 fails in a directory whose
-      # path has letters beyond ASCII, on every system
-      # (https://github.com/flutter/flutter/pull/191377), so the matrix
-      # analyzes the app there with dart analyze.
-      - name: Generate, analyze and test an app in a directory with letters beyond ASCII
-        if: ${{ !cancelled() }}
-        run: |
-          apps="$RUNNER_TEMP/SMF apps застосунки é"
-          if [ "$REGISTRY" = real ]; then
-            dart run packages/smf_flutter_cli/tool/matrix.dart "$apps" 'every module (riverpod)'
-          else
-            # With the fixture module that generates code with build_runner.
-            dart run packages/smf_pipeline/fixture_registry/tool/matrix.dart "$apps" 'every module (go_router, get_it, fake_riverpod)'
-          fi
-        env:
-          REGISTRY: ${{ matrix.registry }}
+  # What users install: smf_flutter_cli from pub.dev, with the versions of
+  # its dependencies that pub resolves there rather than the packages of the
+  # workspace. As a user does, outside the checkout, it generates the apps
+  # with every module of that release, with the full dart fix, in a
+  # directory with a space in its name, and analyzes, tests and builds each
+  # for Android. A failure of this job affects the users of the published
+  # version, and its fix needs a release of the packages. The release lists
+  # its apps with its own matrix, every combination of its providers, which
+  # a release without the plan of CI cannot cover, so this job alone checks
+  # its apps one after another.
+  published:
+    name: CLI from pub.dev
+    if: inputs.published_cli
+    runs-on: ubuntu-latest
+    # About 10 minutes for each app with every module of the release.
+    timeout-minutes: 60
+    env: *linux_env
 
-      # What users install: smf_flutter_cli from pub.dev, with the versions
-      # of its dependencies that pub resolves there rather than the packages
-      # of the workspace. As a user does, outside the checkout, it generates
-      # an app with every module for each state manager, with the full dart
-      # fix, in a directory with a space in its name. A failure of these
-      # steps affects the users of the published version, and its fix needs
-      # a release of the packages.
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *gradle_week
+      - *restore_gradle
+
       - name: Activate the CLI from pub.dev
-        id: pub_dev_cli
-        if: ${{ !cancelled() && matrix.registry == 'real' && inputs.published_cli }}
         working-directory: ${{ runner.temp }}
         run: |
           dart pub global activate smf_flutter_cli
@@ -357,55 +663,65 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
           "$bin/smf" --version
 
+      # The CLI on pub.dev has the modules of its release, which may differ
+      # from those of the workspace, so the apps come from the matrix of
+      # that release: packages/smf_flutter_cli/tool/every_module_apps.dart,
+      # in a package of its own that depends on the version of
+      # smf_flutter_cli that is active, prints the arguments of smf create
+      # of each app with every module of the release, one for each
+      # combination of the providers of the roles that take one, as the
+      # matrix generates them but with the full dart fix. So a release with
+      # another provider of a role gets its apps here without a change of
+      # the workflow.
       - name: Generate the apps with every module with the CLI from pub.dev
-        id: pub_dev_apps
-        if: ${{ !cancelled() && steps.pub_dev_cli.outcome == 'success' }}
         working-directory: ${{ runner.temp }}
         run: |
-          for state in bloc riverpod; do
-            smf create "${state}_app" \
-              -m "go_router,home,bottom_tabs,$state,get_it,event_bus,firebase_crashlytics,firebase_analytics" \
-              -o "$RUNNER_TEMP/SMF apps from pub.dev" --no-input --skip-external-setup --strict
+          version="$(dart pub global list | awk '$1 == "smf_flutter_cli" { print $2 }')"
+          if [ -z "$version" ]; then
+            echo "::error::dart pub global list shows no smf_flutter_cli."
+            exit 1
+          fi
+          lister="$RUNNER_TEMP/every_module_apps"
+          mkdir -p "$lister/bin"
+          cp "$GITHUB_WORKSPACE/packages/smf_flutter_cli/tool/every_module_apps.dart" "$lister/bin/"
+          printf 'name: every_module_apps\npublish_to: none\nenvironment:\n  sdk: ^3.6.0\ndependencies:\n  smf_flutter_cli: %s\n' \
+            "$version" > "$lister/pubspec.yaml"
+          (cd "$lister" && dart pub get)
+          dart --packages="$lister/.dart_tool/package_config.json" "$lister/bin/every_module_apps.dart" \
+            "$RUNNER_TEMP/SMF apps from pub.dev" > "$lister/apps.json"
+          jq . "$lister/apps.json"
+          count="$(jq length "$lister/apps.json")"
+          for index in $(seq 0 $((count - 1))); do
+            mapfile -t arguments < <(jq -r ".[$index].arguments[]" "$lister/apps.json")
+            echo "=== ${arguments[1]}: $(jq -r ".[$index].name" "$lister/apps.json")"
+            smf "${arguments[@]}"
           done
 
       - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
-        if: ${{ !cancelled() && steps.pub_dev_apps.outcome == 'success' }}
         run: |
-          for app in bloc_app riverpod_app; do
-            cd "$RUNNER_TEMP/SMF apps from pub.dev/$app"
-            flutter analyze
-            flutter test
-            flutter build apk --debug
-          done
+          apps="$RUNNER_TEMP/SMF apps from pub.dev"
+          .github/scripts/each_app.sh "$apps" flutter analyze
+          .github/scripts/each_app.sh "$apps" flutter test
+          .github/scripts/each_app.sh "$apps" flutter build apk --debug
 
-      # The tests of the packages that failed, as annotations that the page
-      # of the run lists at the top rather than as lines in the long log of
-      # a step; see tools/test_annotations.dart. Also after a failed step and
-      # in a cancelled job, whenever Flutter is there.
-      - name: Annotate the failed tests
-        if: ${{ always() && steps.flutter.outcome == 'success' }}
-        run: dart tools/test_annotations.dart
-
+  # The tests of every package and of tools/ on macOS, where a test of
+  # something that only macOS does runs too.
   macos:
     name: macOS
     if: inputs.macos_and_windows
     runs-on: macos-26
-    timeout-minutes: 75
-    env:
-      FLUTTER_VERSION: ${{ inputs.flutter_version }}
+    # About 15 minutes.
+    timeout-minutes: 30
+    env: &macos_env
       FLUTTER_SHA256: ${{ inputs.macos_sha256 }}
-      DART_SDK: ${{ inputs.dart_version }}
-      PUB_ENVIRONMENT: ci
       # The Xcode of the image that builds the apps.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      # Whether the key of the service account is there; the key itself goes
-      # only into the step that needs it.
-      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Setup Flutter
+      - &setup_flutter_macos
+        name: Setup Flutter
         id: flutter
         run: |
           archive="$RUNNER_TEMP/flutter.zip"
@@ -417,7 +733,8 @@ jobs:
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
 
-      - name: Check the versions of the tools
+      - &check_tools_macos
+        name: Check the versions of the tools
         run: |
           flutter --version --machine > "$RUNNER_TEMP/flutter.json"
           cat "$RUNNER_TEMP/flutter.json"
@@ -432,8 +749,7 @@ jobs:
 
       # Without a cache of pub packages: restoring it takes longer than
       # getting them.
-      - name: Get the packages of the workspace
-        run: dart pub get
+      - *pub_get
 
       - name: Test the packages
         run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
@@ -442,41 +758,122 @@ jobs:
         if: ${{ !cancelled() }}
         run: dart test tools --file-reporter json:build/test-results/tools.json
 
-      # In a directory whose name has a space and letters beyond ASCII.
-      - name: Generate an app without Firebase and one with every module
-        if: ${{ !cancelled() }}
-        run: |
-          smf() {
-            dart run packages/smf_flutter_cli/bin/smf_flutter.dart create "$@" \
-              -o "$RUNNER_TEMP/SMF apps застосунки é" --no-input \
-              --skip-external-setup --no-dart-fix --strict
-          }
-          smf plain_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus
-          smf firebase_app -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics
+      # As in the jobs on Linux.
+      - *annotate
 
-      - name: Build the app without Firebase for the iOS simulator
-        if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/SMF apps застосунки é/plain_app
-        run: flutter build ios --simulator --no-codesign
+  # An app with every module of the plan, of a pairwise covering of them,
+  # as on Linux, generated with --create and --app as ios_app or
+  # ios_app_<providers>, in a directory whose name has a space and letters
+  # beyond ASCII, and built for the iOS simulator. GitHub runs only a few
+  # macOS jobs of a repository at a time, so the jobs of each matrix on
+  # macOS that grows with the plan run two at a time, which leaves macOS
+  # runners to the other jobs and runs.
+  ios:
+    name: iOS (${{ matrix.app }})
+    needs: plan
+    if: inputs.macos_and_windows
+    runs-on: macos-26
+    # About 10 minutes: the app and its build.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    env: *macos_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_macos
+      - *check_tools_macos
+
+      # Swift Package Manager downloads the packages of the plugins for iOS,
+      # such as the Firebase SDK, from their repositories, and xcodebuild
+      # keeps the clones in its cache of the repositories of packages,
+      # ~/Library/Caches/org.swift.swiftpm, from which it checks out the
+      # packages of each app. So that cache goes into one cache of the
+      # repository for every version of Flutter and every app, by the week,
+      # as the cache of Gradle does for Android: every job that builds for
+      # iOS restores the newest one, and this job saves it for the first app
+      # of the plan, in the runs of pushes and pull requests, and of the
+      # nightly run only with the latest Flutter. A new version of a package
+      # gets into it within a week.
+      - &swiftpm_week
+        name: Find the week of the cache of Swift packages
+        id: swiftpm_week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Swift packages
+        if: inputs.save_swiftpm_cache && strategy.job-index == 0
+        uses: actions/cache@v6
+        with: &swiftpm_cache
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-${{ steps.swiftpm_week.outputs.week }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-
+
+      - name: Restore the cache of Swift packages
+        if: ${{ !(inputs.save_swiftpm_cache && strategy.job-index == 0) }}
+        uses: actions/cache/restore@v6
+        with: *swiftpm_cache
+
+      - *pub_get
+
+      - name: Generate the app with every module
+        env: *app_env
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" \
+            "$RUNNER_TEMP/SMF apps застосунки é/ios" ios_app
 
       - name: Build the app with every module for the iOS simulator
-        if: ${{ !cancelled() }}
-        working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
-        run: flutter build ios --simulator --no-codesign
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/ios" \
+            flutter build ios --simulator --no-codesign
 
-      # With the build phase for Crashlytics that flutterfire configure adds,
-      # fixed by the command that the README of the app gives.
-      - name: Archive the app with every module
-        if: ${{ !cancelled() }}
-        working-directory: packages/smf_modules/smf_firebase_core
-        env:
-          SMF_CRASHLYTICS_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_app
-        run: dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
+  # An app with every module but the modules whose steps need an external
+  # service and those that need them, of a pairwise covering of them, with
+  # the start check, as on Linux. start_app.sh builds it for the iOS
+  # simulator.
+  ios-start:
+    name: iOS start (${{ matrix.app }})
+    needs: plan
+    if: inputs.macos_and_windows
+    runs-on: macos-26
+    # About 15 minutes: the app, the simulator, and the 600 s that
+    # start_app.sh gives the build and the start.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.start) }}
+    env: *macos_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_macos
+      - *check_tools_macos
+      - *swiftpm_week
+      - &restore_swiftpm
+        name: Restore the cache of Swift packages
+        uses: actions/cache/restore@v6
+        with: *swiftpm_cache
+      - *pub_get
+
+      - name: Generate the app without external services to start
+        env: *app_env
+        run: |
+          apps="$RUNNER_TEMP/SMF apps застосунки é/start"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
 
       # A new iPhone of the newest iOS runtime of the image that the SDK of
       # the Xcode of the job runs apps on; the image has several of each.
-      - name: Boot an iOS simulator
-        if: ${{ !cancelled() }}
+      - &boot_simulator
+        name: Boot an iOS simulator
         timeout-minutes: 10
         run: |
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
@@ -495,105 +892,155 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
 
-      # The check that the app starts is an entry of the app that the CLI
-      # keeps in app_tests/start, knowing no module; the matrix tool adds it
-      # to the app as it adds it to the apps of the matrix, where it is only
-      # analyzed. .github/scripts/start_app.sh builds the app with it,
+      # .github/scripts/start_app.sh builds an app with the start check,
       # starts the app with simctl and reads the result that the check
       # writes, in one try: unlike flutter test, it does not connect to the
-      # app.
-      - name: Start the app without Firebase on the iOS simulator
-        if: ${{ !cancelled() && env.SIMULATOR != '' }}
-        timeout-minutes: 15
+      # app. It gives up on the app after the seconds it is given.
+      - name: Start the app without external services on the iOS simulator
+        timeout-minutes: 13
         run: |
-          app="$RUNNER_TEMP/SMF apps застосунки é/plain_app"
-          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$app" packages/smf_flutter_cli/app_tests/start
-          cd "$app"
-          "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
-      # An app of its own rather than firebase_app, whose Xcode project has
-      # the build phase for Crashlytics of the test of the archive:
-      # flutterfire configures it in the Firebase project of CI, as on
-      # Linux.
-      - name: Generate an app with every module to configure with Firebase
-        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
+  # The app with every module of each provider of the app entry, as on
+  # Linux, archived with the build phase for Crashlytics that flutterfire
+  # configure adds, fixed by the command that the README of the app gives.
+  # The test skips an app that does not depend on firebase_crashlytics, to
+  # which flutterfire adds no such phase. It needs no Firebase project, so
+  # it runs without the key too.
+  ios-archive:
+    name: iOS archive (${{ matrix.app }})
+    needs: plan
+    if: inputs.macos_and_windows
+    runs-on: macos-26
+    # About 12 minutes: the app and its archive.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.entries) }}
+    env: *macos_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_macos
+      - *check_tools_macos
+      - *swiftpm_week
+      - *restore_swiftpm
+      - *pub_get
+
+      - name: Generate the app with every module to archive
+        env: *app_env
         run: |
-          apps="$RUNNER_TEMP/SMF apps застосунки é"
-          dart run packages/smf_flutter_cli/bin/smf_flutter.dart create firebase_start_app \
-            -m go_router,home,bottom_tabs,bloc,get_it,event_bus,firebase_crashlytics,firebase_analytics \
-            --org com.saymyframe.ci -o "$apps" --no-input --skip-external-setup --no-dart-fix --strict
-          dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-            "$apps/firebase_start_app" packages/smf_flutter_cli/app_tests/start
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" \
+            "$RUNNER_TEMP/SMF apps застосунки é/archive" archive_app
+
+      - name: Archive the app with every module
+        working-directory: packages/smf_modules/smf_firebase_core
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CRASHLYTICS_APP \
+            "$RUNNER_TEMP/SMF apps застосунки é/archive" dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
+
+      - *annotate
+
+  # The app with every module of each provider of the app entry, with the
+  # names and ids of the apps on Linux, which flutterfire configures in the
+  # Firebase project of CI and registers only in the runs of build.yml, as
+  # on Linux, before it starts on the iOS simulator. An app of its own
+  # rather than that of the archive, whose Xcode project has the build phase
+  # for Crashlytics of the test of the archive.
+  ios-firebase:
+    name: iOS with Firebase (${{ matrix.app }})
+    needs: [plan, firebase-key]
+    if: inputs.macos_and_windows && needs.firebase-key.outputs.key == 'true'
+    runs-on: macos-26
+    # About 17 minutes: the app, its configuration, the simulator, and the
+    # 600 s that start_app.sh gives the build and the start.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.entries) }}
+    env: *macos_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_macos
+      - *check_tools_macos
+      - *swiftpm_week
+      - *restore_swiftpm
+      - *pub_get
+
+      - name: Generate the app with every module to configure with Firebase
+        env: *app_env
+        run: |
+          apps="$RUNNER_TEMP/SMF apps застосунки é/firebase"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" firebase_start_app \
+            --org com.saymyframe.ci
+          for app in "$apps"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              "${app%/}" packages/smf_flutter_cli/app_tests/start
+          done
 
       # The build phase for Crashlytics that flutterfire adds runs flutterfire
       # from ~/.pub-cache/bin in each build for iOS.
-      - name: Install the Firebase CLI and the FlutterFire CLI
-        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
-        run: |
-          npm install --global firebase-tools
-          firebase --version
-          dart pub global activate flutterfire_cli 1.4.1
+      - *install_firebase
 
       # A test of smf_firebase_core runs the command of the README of the app
       # for iOS, with the key of the service account in a file that only
       # this step has, and fixes the build phase for Crashlytics with the
-      # command of the README, as SMF does after it configures an app.
+      # command of the README, as SMF does after it configures an app. It
+      # skips an app that does not depend on firebase_core, as on Linux.
       - name: Configure the app with every module with Firebase for iOS
-        id: firebase_ios
-        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY == 'true' }}
         working-directory: packages/smf_modules/smf_firebase_core
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          SMF_FIREBASE_APP: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
           SMF_FIREBASE_PLATFORM: ios
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
           unset FIREBASE_SERVICE_ACCOUNT
-          dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_FIREBASE_APP \
+            "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
-      - name: Delete the key of the service account
-        if: always()
-        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
+      - *delete_key
+      - *boot_simulator
 
       - name: Start the app with every module on the iOS simulator
-        if: ${{ !cancelled() && env.SIMULATOR != '' && steps.firebase_ios.outcome == 'success' }}
         timeout-minutes: 13
-        working-directory: ${{ runner.temp }}/SMF apps застосунки é/firebase_start_app
-        run: '"$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600'
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/firebase" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
 
-      - name: Leave out the app with Firebase without the key
-        if: ${{ !cancelled() && env.HAS_FIREBASE_KEY != 'true' }}
-        run: echo "::notice::The secret FIREBASE_SERVICE_ACCOUNT is not there, as in a pull request from a fork, so the app with Firebase does not start on the iOS simulator."
+      - *annotate
 
-      # As in the job on Linux.
-      - name: Annotate the failed tests
-        if: ${{ always() && steps.flutter.outcome == 'success' }}
-        run: dart tools/test_annotations.dart
-
+  # The tests of every package and of tools/ on Windows, where a test of
+  # something that only Windows does runs too, and the FlutterFire CLI
+  # through dart.bat, for the apps of the plan. The tests run whether the
+  # plan succeeded or not.
   windows:
     name: Windows
-    if: inputs.macos_and_windows
+    needs: plan
+    if: ${{ !cancelled() && inputs.macos_and_windows }}
     runs-on: windows-latest
-    timeout-minutes: 60
+    # About 20 minutes.
+    timeout-minutes: 45
     defaults:
       run:
         shell: pwsh
-    env:
-      FLUTTER_VERSION: ${{ inputs.flutter_version }}
+    env: &windows_env
       FLUTTER_SHA256: ${{ inputs.windows_sha256 }}
-      DART_SDK: ${{ inputs.dart_version }}
-      PUB_ENVIRONMENT: ci
 
     steps:
       - uses: actions/checkout@v7
 
       # SMF generates an app in %TEMP% and moves it into place, which the
       # job puts on another drive, as moving between drives copies the app.
-      - name: Check that the temporary directories are on two drives
+      - &check_drives
+        name: Check that the temporary directories are on two drives
         run: |
           "TEMP: $env:TEMP"
           "RUNNER_TEMP: $env:RUNNER_TEMP"
@@ -601,7 +1048,8 @@ jobs:
             throw 'TEMP and RUNNER_TEMP are on one drive.'
           }
 
-      - name: Setup Flutter
+      - &setup_flutter_windows
+        name: Setup Flutter
         id: flutter
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'flutter.zip'
@@ -616,7 +1064,8 @@ jobs:
           Join-Path $env:RUNNER_TEMP 'flutter\bin' >> $env:GITHUB_PATH
           & (Join-Path $env:RUNNER_TEMP 'flutter\bin\flutter.bat') --disable-analytics
 
-      - name: Check the versions of Flutter and Dart
+      - &check_flutter_windows
+        name: Check the versions of Flutter and Dart
         run: |
           $machine = flutter --version --machine | Out-String
           $machine
@@ -627,8 +1076,7 @@ jobs:
 
       # Without a cache of pub packages: restoring it takes longer than
       # getting them.
-      - name: Get the packages of the workspace
-        run: dart pub get
+      - *pub_get
 
       - name: Test the packages
         run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
@@ -637,49 +1085,95 @@ jobs:
         if: ${{ !cancelled() }}
         run: dart test tools --file-reporter json:build/test-results/tools.json
 
-      # In a directory with a space in its name, and then in one whose name
-      # has letters beyond ASCII too, where the matrix analyzes the app with
-      # dart analyze, as flutter analyze of Flutter 3.44 and 3.47 fails there
-      # on every system (https://github.com/flutter/flutter/pull/191377).
-      - name: Generate, analyze and test the apps with every module
-        if: ${{ !cancelled() }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps" 'every module (bloc)'
-          dart run packages/smf_flutter_cli/tool/matrix.dart "$env:RUNNER_TEMP\SMF apps застосунки é" 'every module (riverpod)'
-
-      # As a user runs it, with the full dart fix of the app.
-      - name: Generate an app in a directory with letters beyond ASCII
-        if: ${{ !cancelled() }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          # smf writes UTF-8.
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é'
-          $output = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create my_app -m go_router,home,bottom_tabs,riverpod,get_it,event_bus,firebase_crashlytics,firebase_analytics -o $apps --no-input --skip-external-setup --strict | Out-String
-          $output
-          $app = Join-Path $apps 'my_app'
-          if (-not $output.Contains("cd `"$app`"")) { throw 'SMF does not say how to go to the app.' }
-          Set-Location $app
-          dart analyze --fatal-infos
-          flutter test
-          # SMF generates the apps in %TEMP% and moves them to another drive.
-          $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
-          if ($left) { throw "SMF left $left in $env:TEMP." }
-
+      # What smf create --explain says of the machine for the app with every
+      # module of each provider of the app entry, which the plan gives: an
+      # app whose modules check the FlutterFire CLI must find it, and one
+      # without them says nothing of it. --explain generates nothing.
       - name: Run the FlutterFire CLI through dart.bat, and find it as SMF does
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.plan.result == 'success' }}
+        env:
+          ENTRIES: ${{ needs.plan.outputs.entries }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           dart pub global activate flutterfire_cli 1.4.1
           dart pub global run flutterfire_cli:flutterfire --version
-          $explain = dart run packages/smf_flutter_cli/bin/smf_flutter.dart create probe -m firebase_core --explain | Out-String
-          $explain
-          if ($explain -notmatch '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for firebase_core\)\r?$') {
-            throw 'SMF does not find the FlutterFire CLI.'
+          $apps = @($env:ENTRIES | ConvertFrom-Json)
+          if ($apps.Count -eq 0) { throw 'The plan has no app for an app entry.' }
+          $found = 0
+          foreach ($app in $apps) {
+            $explain = dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $app "$env:RUNNER_TEMP\probe" probe --explain | Out-String
+            $explain
+            if ($explain -match '(?m)FlutterFire CLI 1\.4\.1 or a later 1\.x \(for \w+\)\r?$') {
+              $found++
+            } elseif ($explain -match 'FlutterFire CLI') {
+              throw "SMF does not find the FlutterFire CLI for $app."
+            }
           }
+          if ($found -eq 0) { throw 'No app with every module checks the FlutterFire CLI.' }
+          "SMF finds the FlutterFire CLI for $found of the $($apps.Count) apps with every module."
 
-      # As in the job on Linux.
-      - name: Annotate the failed tests
-        if: ${{ always() && steps.flutter.outcome == 'success' }}
-        run: dart tools/test_annotations.dart
+      # As in the jobs on Linux.
+      - *annotate
+
+  # An app with every module of the plan, of a pairwise covering of them,
+  # in a directory with a space in its name, and then in one whose name has
+  # letters beyond ASCII too, where the matrix analyzes it with dart
+  # analyze, as flutter analyze of Flutter 3.44 and 3.47 fails there on
+  # every system (https://github.com/flutter/flutter/pull/191377); and once
+  # more as a user generates it.
+  windows-apps:
+    name: Windows (${{ matrix.app }})
+    needs: plan
+    if: inputs.macos_and_windows
+    runs-on: windows-latest
+    # About 20 minutes: the app, three times.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    defaults:
+      run:
+        shell: pwsh
+    env: *windows_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *check_drives
+      - *setup_flutter_windows
+      - *check_flutter_windows
+      - *pub_get
+
+      - name: Generate, analyze and test the app with every module
+        env: *app_env
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app $env:APP "$env:RUNNER_TEMP\SMF apps"
+          dart run packages/smf_flutter_cli/tool/matrix.dart --every-module --app $env:APP "$env:RUNNER_TEMP\SMF apps застосунки é"
+
+      # As a user runs smf create, with the full dart fix of the app: the
+      # matrix tool generates the app with every module with the options of
+      # CI, and --dart-fix after them turns the full dart fix back on.
+      - name: Generate the app with every module in a directory with letters beyond ASCII
+        env: *app_env
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # smf writes UTF-8.
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $apps = Join-Path $env:RUNNER_TEMP 'SMF apps застосунки é\user'
+          $output = dart run packages/smf_flutter_cli/tool/matrix.dart --create --app $env:APP $apps my_app --dart-fix | Out-String
+          $output
+          $generated = @(Get-ChildItem -Directory $apps)
+          if ($generated.Count -eq 0) { throw "SMF generated no app in $apps." }
+          foreach ($app in $generated) {
+            if (-not $output.Contains("cd `"$($app.FullName)`"")) {
+              throw "SMF does not say how to go to $($app.Name)."
+            }
+            Push-Location $app.FullName
+            dart analyze --fatal-infos
+            flutter test
+            Pop-Location
+          }
+          # SMF generates the apps in %TEMP% and moves them to another drive.
+          $left = Get-ChildItem $env:TEMP -Filter 'smf_create_*'
+          if ($left) { throw "SMF left $left in $env:TEMP." }

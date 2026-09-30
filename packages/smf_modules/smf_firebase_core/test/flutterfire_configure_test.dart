@@ -9,13 +9,19 @@
 // firebase_core in SMF_FIREBASE_APP, the id of the project in
 // SMF_FIREBASE_PROJECT, the path of the key in SMF_FIREBASE_SERVICE_ACCOUNT
 // and the platform, android or ios, in SMF_FIREBASE_PLATFORM, as CI gives
-// them; the test changes the app.
+// them; the test changes the app. CI gives it the app with every module of
+// each provider of the app entry, one in each job, and it skips an app that
+// does not depend on firebase_core, which has nothing for flutterfire to
+// configure.
 //
 // flutterfire registers the Android or iOS app in the project when the
 // project has no app with its id yet, and otherwise takes the first app
 // with the id. The test fails when the project has more than one, which
 // runs that register the app at the same time can leave: each run could get
-// the options of another.
+// the options of another. So only a run with SMF_FIREBASE_REGISTER=1, which
+// CI gives only the runs of the workflow Build, lets flutterfire register
+// the app; any other run fails before flutterfire when the project has no
+// app with the id (see configurationProblem).
 @TestOn('vm')
 library;
 
@@ -26,6 +32,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/crashlytics_phase.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:test/test.dart';
+
+import 'support/app_pubspec.dart';
+import 'support/firebase_apps.dart';
 
 /// The option of `flutterfire configure` that gives the id of the app of
 /// each platform.
@@ -79,11 +88,13 @@ void main() {
   final project = environment['SMF_FIREBASE_PROJECT'];
   final serviceAccount = environment['SMF_FIREBASE_SERVICE_ACCOUNT'];
   final platform = environment['SMF_FIREBASE_PLATFORM'];
+  final register = environment['SMF_FIREBASE_REGISTER'] == '1';
 
   test(
     'flutterfire configure with the command of the README fills in the '
     'options of the platform from the only Firebase app with its id in the '
-    'project',
+    'project, which only a run that may register the app lets flutterfire '
+    'register',
     () async {
       expect(_idOptions.keys, contains(platform));
       if (platform == 'ios') {
@@ -119,6 +130,35 @@ void main() {
             'the id from the files of the app.',
       );
 
+      // The Firebase apps of the platform in the project with the id, as
+      // flutterfire lists them to find the app.
+      Future<List<String>> firebaseApps() async => firebaseAppIdsOf(
+            await _run(
+              'firebase',
+              [
+                'apps:list',
+                _firebasePlatforms[platform]!,
+                '--project=$project',
+                '--json',
+              ],
+              environment: {'GOOGLE_APPLICATION_CREDENTIALS': serviceAccount!},
+            ),
+            id!,
+          );
+
+      // Before flutterfire, which registers the app when the project has
+      // none with the id.
+      if (configurationProblem(
+        appIds: await firebaseApps(),
+        project: project!,
+        platform: platform!,
+        id: id!,
+        register: register,
+      )
+          case final problem?) {
+        fail(problem);
+      }
+
       final configured = await _run(
         flutterfireTool.executable,
         flutterfireTool.argumentsFor(arguments),
@@ -127,37 +167,27 @@ void main() {
       printOnFailure(configured);
 
       final options = File('$app/lib/firebase_options.dart').readAsStringSync();
-      expect(_option(options, platform!, 'projectId'), project);
+      expect(_option(options, platform, 'projectId'), project);
       expect(options, contains('return $platform;'));
       final appId = _option(options, platform, 'appId');
       expect(appId, isNotNull);
 
-      // The Firebase apps of the platform in the project, as flutterfire
-      // lists them to find the app.
-      final listed = await _run(
-        'firebase',
-        [
-          'apps:list',
-          _firebasePlatforms[platform]!,
-          '--project=$project',
-          '--json',
-        ],
-        environment: {'GOOGLE_APPLICATION_CREDENTIALS': serviceAccount!},
-      );
-      final apps = (jsonDecode(listed.substring(listed.indexOf('{')))
-          as Map<String, Object?>)['result']! as List<Object?>;
-      final withId = [
-        for (final firebaseApp in apps.cast<Map<String, Object?>>())
-          if ((firebaseApp['packageName'] ?? firebaseApp['bundleId']) == id)
-            firebaseApp['appId'],
-      ];
+      // The one Firebase app with the id, which flutterfire found or
+      // registered: another run that registered one at the same time would
+      // leave a second.
+      final withId = await firebaseApps();
       expect(
         withId,
         [appId],
-        reason: 'The Firebase project $project should have one $platform app '
-            'with the id $id, but has ${withId.length}: ${withId.join(', ')}. '
-            'flutterfire takes the first, so the options may change from run '
-            'to run; delete the others in the Firebase console.',
+        reason: configurationProblem(
+              appIds: withId,
+              project: project,
+              platform: platform,
+              id: id,
+              register: true,
+            ) ??
+            'flutterfire configured the app with the Firebase app $appId, '
+                'but the project has ${withId.join(', ')} with the id $id.',
       );
 
       if (platform == 'android') {
@@ -201,7 +231,10 @@ void main() {
             'project in SMF_FIREBASE_PROJECT, the key of a service account '
             'of the project in SMF_FIREBASE_SERVICE_ACCOUNT and the platform '
             'in SMF_FIREBASE_PLATFORM.'
-        : null,
+        : !dependsOn(app!, 'firebase_core')
+            ? 'The app in SMF_FIREBASE_APP does not depend on firebase_core, '
+                'so it has nothing for flutterfire to configure.'
+            : null,
     timeout: const Timeout(Duration(minutes: 10)),
   );
 }
