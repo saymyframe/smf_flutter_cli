@@ -47,29 +47,42 @@ void main() {
   ]);
   final harness = ContractHarness(registry);
 
-  test('builds a case per variant and subset of used roles', () {
+  test(
+      'builds a case per subset of used roles, variant and provider of each '
+      'used role', () {
     final cases = harness.casesOfModule(const ModuleId('home'));
+    const variants = ['bloc', 'riverpod', 'signals'];
 
     expect(cases.map((c) => '$c'), [
-      'home (bloc) with tracking, nav',
-      'home (bloc) with tracking',
-      'home (bloc) with nav',
-      'home (bloc)',
-      'home (riverpod) with tracking, nav',
-      'home (riverpod) with tracking',
-      'home (riverpod) with nav',
-      'home (riverpod)',
-      'home (signals) with tracking, nav',
-      'home (signals) with tracking',
-      'home (signals) with nav',
-      'home (signals)',
+      for (final variant in variants)
+        for (final tracker in ['a1', 'a2'])
+          for (final router in ['go', 'auto'])
+            'home ($variant, $tracker, $router) with tracking, nav',
+      for (final variant in variants)
+        for (final tracker in ['a1', 'a2'])
+          'home ($variant, $tracker) with tracking',
+      for (final variant in variants)
+        for (final router in ['go', 'auto'])
+          'home ($variant, $router) with nav',
+      for (final variant in variants) 'home ($variant)',
     ]);
+    ContractCase named(String name) => cases.singleWhere((c) => c.name == name);
     expect(
-      cases[0].requested.map((id) => id.value),
+      named('home (bloc, a1, go) with tracking, nav')
+          .requested
+          .map((id) => id.value),
       ['home', 'a1', 'go'],
     );
-    expect(cases[4].picks[state], const ModuleId('riverpod'));
-    expect(cases[4].picks[tracking], const ModuleId('a1'));
+    final withSecond = named('home (riverpod, a2, auto) with tracking, nav');
+    expect(withSecond.requested.map((id) => id.value), ['home', 'a2', 'auto']);
+    expect(withSecond.picks[state], const ModuleId('riverpod'));
+    expect(withSecond.picks[tracking], const ModuleId('a2'));
+    expect(withSecond.picks[nav], const ModuleId('auto'));
+    // A used role left out of the case is not asked for.
+    expect(
+      named('home (bloc, auto) with nav').requested.map((id) => id.value),
+      ['home', 'auto'],
+    );
     expect(
       () => harness.casesOfModule(const ModuleId('nope')),
       throwsArgumentError,
@@ -575,9 +588,12 @@ void main() {
         'broken',
         'both',
         'home (signals)',
-        'home (signals) with tracking',
-        'home (signals) with nav',
-        'home (signals) with tracking, nav',
+        for (final tracker in ['a1', 'a2']) ...[
+          'home (signals, $tracker) with tracking',
+          for (final router in ['go', 'auto'])
+            'home (signals, $tracker, $router) with tracking, nav',
+        ],
+        for (final router in ['go', 'auto']) 'home (signals, $router) with nav',
       },
     );
     final keys = [
@@ -613,7 +629,9 @@ void main() {
     );
   });
 
-  test('a role that uses another builds a case per subset', () {
+  test(
+      'a role that uses another builds a case per subset and provider of each '
+      'role it uses', () {
     final tracking = TestRole<NoDsl>(
       'tracking',
       cardinality: RoleCardinality.many,
@@ -624,13 +642,18 @@ void main() {
         scaffold(),
         TestModule('go', providers: [RoleProvider.plain(nav)]),
         TestModule('a1', providers: [RoleProvider.plain(tracking)]),
+        TestModule('a2', providers: [RoleProvider.plain(tracking)]),
       ]),
     );
 
-    expect(
-      harness.casesOfRole(nav).map((c) => '$c'),
-      ['nav by go with tracking', 'nav by go'],
-    );
+    final cases = harness.casesOfRole(nav);
+    expect(cases.map((c) => '$c'), [
+      'nav by go (a1) with tracking',
+      'nav by go (a2) with tracking',
+      'nav by go',
+    ]);
+    expect(cases[1].requested.map((id) => id.value), ['go', 'a2']);
+    expect(cases[1].picks[nav], const ModuleId('go'));
   });
 
   test('a required role with several providers takes each', () {
@@ -652,6 +675,61 @@ void main() {
       harness.casesOfRole(session).map((c) => '$c'),
       ['session by keys', 'session by vault'],
     );
+  });
+
+  test(
+      'checks each module with every provider of each role it requires or '
+      'uses', () async {
+    expect(await harness.uncheckedProviders(), isEmpty);
+  });
+
+  test(
+      'names a provider of a role of a module that no app of its cases has, '
+      'but none that cannot be in an app with the module', () async {
+    final session = TestRole<NoDsl>('session');
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'feature',
+          requires: {store},
+          uses: {nav},
+          variants: Variants(
+            role: state,
+            byProvider: {const ModuleId('bloc'): none},
+          ),
+        ),
+        TestModule('bloc', providers: [RoleProvider.plain(state)]),
+        // Feature has no variant for signals, so the two are in no app.
+        TestModule('signals', providers: [RoleProvider.plain(state)]),
+        TestModule('disk', providers: [RoleProvider.plain(store)]),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        // No module provides the session role, so the apps with cloud or
+        // auto do not resolve.
+        TestModule(
+          'cloud',
+          providers: [RoleProvider.plain(store)],
+          requires: {session},
+        ),
+        TestModule(
+          'auto',
+          providers: [RoleProvider.plain(nav)],
+          requires: {session},
+        ),
+      ]),
+    );
+
+    expect(await harness.uncheckedProviders(), [
+      equals(
+        'No case of feature builds an app in which cloud provides the store '
+        'role, which feature requires.',
+      ),
+      equals(
+        'No case of feature builds an app in which auto provides the nav '
+        'role, which feature uses.',
+      ),
+    ]);
   });
 
   test('checks rendered code with the structural rules of the roles', () async {

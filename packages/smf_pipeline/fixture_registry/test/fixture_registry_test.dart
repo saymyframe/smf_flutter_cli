@@ -121,6 +121,17 @@ void main() {
     });
 
     test(
+        'checks each fixture with every provider of each role it requires or '
+        'uses', () async {
+      expect(
+        await ContractHarness(
+          ModuleRegistry(fixtureModules()),
+        ).uncheckedProviders(),
+        isEmpty,
+      );
+    });
+
+    test(
         'builds an app of every fixture that fits for each router, DI '
         'container and state manager', () async {
       final harness = ContractHarness(ModuleRegistry(fixtureModules()));
@@ -659,11 +670,11 @@ const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 /// The cases of the harness over the fixtures, each building another app,
 /// so that a case that stops being built fails the test.
 const _cases = [
-  'flutter_core with router',
+  'flutter_core (fake_router) with router',
+  'flutter_core (go_router) with router',
   'flutter_core',
   'fake_router with layout',
   'go_router with layout',
-  'go_router',
   'fake_di',
   'get_it',
   'fake_bloc',
@@ -680,15 +691,22 @@ const _cases = [
   'fake_second (go_router)',
   'fake_sockets',
   'fake_overlap',
-  'fake_analytics with di, router',
-  'fake_analytics with di',
-  'fake_analytics with router',
+  'fake_analytics (fake_di, fake_router) with di, router',
+  'fake_analytics (fake_di, go_router) with di, router',
+  'fake_analytics (get_it, fake_router) with di, router',
+  'fake_analytics (get_it, go_router) with di, router',
+  'fake_analytics (fake_di) with di',
+  'fake_analytics (get_it) with di',
+  'fake_analytics (fake_router) with router',
+  'fake_analytics (go_router) with router',
   'fake_analytics',
   'fake_screen_log (fake_router)',
   'fake_screen_log (go_router)',
-  'fake_crash with di',
+  'fake_crash (fake_di) with di',
+  'fake_crash (get_it) with di',
   'fake_crash',
-  'fake_events with di',
+  'fake_events (fake_di) with di',
+  'fake_events (get_it) with di',
   'fake_events',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',

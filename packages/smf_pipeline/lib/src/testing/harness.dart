@@ -781,6 +781,74 @@ final class ContractHarness {
     return results;
   }
 
+  /// The providers that the harness checks no module of the registry with,
+  /// though the module requires or uses their role, one line for each: for
+  /// each module, each role that it requires or uses and each provider of
+  /// the role that can be in an app with the module (see [casesOfModule]),
+  /// no case of [casesOfModule] builds an app in which the provider
+  /// provides the role. Either no case asks for the provider, or the apps
+  /// of those that do fail to resolve, such as when no module of the
+  /// registry provides a role that the provider requires.
+  ///
+  /// The tests of a registry expect none, so that each module is checked
+  /// with every provider of its roles, also when a role gets another
+  /// provider.
+  Future<List<String>> uncheckedProviders() async {
+    final unchecked = <String>[];
+    for (final module in registry.modules) {
+      final descriptor = module.descriptor;
+      final apps = [
+        for (final contractCase in casesOfModule(descriptor.id))
+          if (await _resolutionOf(contractCase) case final resolution?)
+            resolution,
+      ];
+      bool checks(Role role, ModuleId provider) => apps.any(
+            (app) => app.providersOf(role).any((other) => other.id == provider),
+          );
+      for (final (roles, verb) in [
+        (descriptor.effectiveRequires, 'requires'),
+        (descriptor.effectiveUses, 'uses'),
+      ]) {
+        for (final role in roles) {
+          for (final provider in registry.providersOf(role)) {
+            final id = provider.descriptor.id;
+            if (_fit([
+                  ..._withDependencies(module),
+                  ..._withDependencies(provider),
+                ]) &&
+                !checks(role, id)) {
+              unchecked.add(
+                'No case of ${descriptor.id} builds an app in which $id '
+                'provides the $role, which ${descriptor.id} $verb.',
+              );
+            }
+          }
+        }
+      }
+    }
+    return unchecked;
+  }
+
+  /// The modules of the app of [contractCase], or `null` if it does not
+  /// resolve.
+  Future<Resolution?> _resolutionOf(ContractCase contractCase) async {
+    try {
+      final resolved = await resolve(
+        requested: contractCase.requested,
+        registry: registry,
+        environment: PipelineEnvironment(
+          _silentHost,
+          interactive: false,
+          skipExternalSetup: true,
+        ),
+        answers: {...contractCase.picks},
+      );
+      return resolved.resolution;
+    } on SmfUsageException {
+      return null;
+    }
+  }
+
   /// Indexes the Dart files among [files], the text files of the rendered
   /// app of [result] by path, runs the structural rules of its present roles
   /// with the data it collected and the texts, and checks the symbols of
