@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_core/src/firebase_core_module.dart';
 
 /// Where the build phase for Crashlytics that `flutterfire configure` of
 /// flutterfire_cli 1.4.1 adds to the Xcode project looks for the upload
@@ -70,6 +71,7 @@ const crashlyticsPhaseFixCommand =
 const crashlyticsPhaseFix = PostGenStep(
   ToolRef('ruby'),
   ['-e', _program, AppEntryRole.xcodeProjectFile],
+  followUpOf: FirebaseCoreModule.configureStep,
   description: 'Fixing the Crashlytics phase of flutterfire, if any, for '
       'flutter build ipa',
   skippable: true,

@@ -51,6 +51,12 @@ final class FirebaseCoreModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('firebase_core');
 
+  /// The id of the step that runs `flutterfire configure` after generation,
+  /// which the steps of the modules that depend on this one may continue,
+  /// such as with a change of a file that flutterfire writes; see
+  /// [PostGenStep.followUpOf].
+  static const configureStep = PostGenStepId(id, 'configure');
+
   /// The minimum iOS version of the Firebase SDKs.
   static const minimumIosVersion = '15.0';
 
@@ -92,13 +98,14 @@ final class FirebaseCoreModule extends SmfModule {
       PostGenStep(
         flutterfireTool,
         configure,
+        id: configureStep,
         description: 'Configuring Firebase with flutterfire',
         interactive: true,
         skippable: true,
         external: true,
         needs: [for (final check in needed) check.id],
-        followUps: const [crashlyticsPhaseFix],
       ),
+      crashlyticsPhaseFix,
       AppEntryRole.readmeSections.entry(
         readmeHeading,
         readmeSection(['flutterfire', ...configure].join(' ')),

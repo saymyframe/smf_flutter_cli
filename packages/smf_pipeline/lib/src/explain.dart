@@ -7,6 +7,7 @@ import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/selection.dart';
 import 'package:smf_pipeline/src/shell.dart';
+import 'package:smf_pipeline/src/steps.dart';
 import 'package:smf_pipeline/src/validation.dart';
 
 /// The report of `--explain`: what the pipeline would generate and why, and
@@ -21,9 +22,9 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   contributors and the edges that decide it, and the same for the
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
-///   after generation, quoted for a shell of [operatingSystem], each
-///   follow-up of a step under it, and with the systems of a step that runs
-///   only on some;
+///   after generation, quoted for a shell of [operatingSystem], each step
+///   that continues another under it, and with the systems of a step that
+///   runs only on some;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do, and the versions
 ///   of the Flutter SDK outside the constraints of the app, with what to do
@@ -179,9 +180,8 @@ final class Explanation {
     final steps = [
       if (codegen.isNotEmpty)
         '  dart ${codegenArguments.join(' ')} (${codegen.toSet().join(', ')})',
-      for (final collected in validation.postGenOrder.contributions)
-        if (collected.contribution case final PostGenStep step)
-          ..._stepLines(step, collected.origin, operatingSystem),
+      for (final step in bindSteps(validation.postGenOrder.contributions))
+        ..._stepLines(step, operatingSystem),
     ];
     if (steps.isEmpty) return const [];
     return ['', 'After generation', ...steps];
@@ -269,17 +269,17 @@ List<String> _contributors(ContributionOrder order) => {
         contributorName(collected.origin),
     }.toList();
 
-/// The lines of [step] of [origin] under `After generation`: its command,
-/// quoted for a shell of [system], or of a system it runs on if it runs
-/// only on others, with the systems it runs on if it runs only on some,
-/// then, a level deeper each, those of its follow-ups, which run once it
-/// succeeded; [depth] is the level of [step].
+/// The lines of [bound] under `After generation`: its command, quoted for a
+/// shell of [system], or of a system it runs on if it runs only on others,
+/// with its contributor and the systems it runs on if it runs only on some,
+/// then, a level deeper each, those of the steps that continue it, which
+/// run once it succeeded; [depth] is the level of [bound].
 Iterable<String> _stepLines(
-  PostGenStep step,
-  ContributionOrigin origin,
+  BoundStep bound,
   HostOperatingSystem system, {
   int depth = 0,
 }) sync* {
+  final BoundStep(:step, :origin) = bound;
   final shell = step.hosts.isEmpty || step.hosts.contains(system)
       ? system
       : step.hosts.first;
@@ -291,8 +291,8 @@ Iterable<String> _stepLines(
   final where = systems.isEmpty ? '' : ', on ${systems.join(', ')}';
   yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command '
       '($origin$where)';
-  for (final next in step.followUps) {
-    yield* _stepLines(next, origin, system, depth: depth + 1);
+  for (final next in bound.followUps) {
+    yield* _stepLines(next, system, depth: depth + 1);
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/preflight.dart';
 import 'package:smf_pipeline/src/shell.dart';
+import 'package:smf_pipeline/src/steps.dart';
 
 /// A post-generation step that did not run or did not succeed, with the
 /// command to run later.
@@ -31,8 +32,8 @@ final class SkippedStep {
 
   /// Whether the step could not run or failed, rather than being left for
   /// later by the options of the run, by the user, or with the step that it
-  /// follows (see [PostGenStep.followUps]), whose record tells why that one
-  /// is not done.
+  /// continues (see [PostGenStep.followUpOf]), whose record tells why that
+  /// one is not done.
   final bool failed;
 
   @override
@@ -68,7 +69,8 @@ const importCleanupCodes = [
 ///    checks that it generated the outputs they name; see
 ///    [codegenArguments];
 /// 3. the post-generation [steps] of the modules, in their order, each
-///    with its follow-ups right after it (see [PostGenStep.followUps]);
+///    with the steps that continue it right after it (see
+///    [PostGenStep.followUpOf] and [bindSteps]);
 /// 4. `dart fix --apply` for the imports only; see [importCleanupCodes];
 /// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
 /// 6. `dart format .`.
@@ -80,16 +82,16 @@ const importCleanupCodes = [
 /// a step that [PostGenStep.needs] a check which has not passed among
 /// [checks], the results of stage 6, and the user is not asked about it. In
 /// an interactive run the user may also leave a skippable step for later,
-/// but for a follow-up, which is part of the step it follows. A skippable
-/// step whose tool is missing, or that fails, is left for later too; a
-/// failure is reported with the output of the command. The follow-ups of a
-/// step that is not done are left for later after it. Returns the steps
-/// that are not done, with their commands for later, in the order they
-/// would run.
+/// but for a step that continues another, which is part of that step. A
+/// skippable step whose tool is missing, or that fails, is left for later
+/// too; a failure is reported with the output of the command. The steps
+/// that continue a step that is not done are left for later after it.
+/// Returns the steps that are not done, with their commands for later, in
+/// the order they would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
-/// a step that is not skippable fails or cannot run, unless it is a
-/// follow-up of a step that is not done, and an
+/// a step that is not skippable fails or cannot run, unless it continues a
+/// step that is not done, and an
 /// [SmfCancelledException] when the user cancels the run. `dart fix` and
 /// `dart format` only warn when they fail, since the app is complete
 /// without them.
@@ -130,11 +132,8 @@ Future<List<SkippedStep>> runPostGen({
   }
 
   final moduleSteps = _ModuleSteps(commands, checks);
-  for (final collected in steps) {
-    await moduleSteps.run(
-      collected.contribution as PostGenStep,
-      collected.origin,
-    );
+  for (final step in bindSteps(steps)) {
+    await moduleSteps.run(step);
   }
 
   await commands.tryRun(
@@ -157,8 +156,8 @@ Future<List<SkippedStep>> runPostGen({
   return moduleSteps.skipped;
 }
 
-/// Runs the post-generation steps of the modules, each with its follow-ups,
-/// and records those that are not done.
+/// Runs the post-generation steps of the modules, each with the steps that
+/// continue it, and records those that are not done.
 final class _ModuleSteps {
   _ModuleSteps(this._commands, this._checks);
 
@@ -172,15 +171,13 @@ final class _ModuleSteps {
 
   PipelineEnvironment get _environment => _commands._environment;
 
-  /// Runs [step] of [origin], then its follow-ups once it succeeded, or
+  /// Runs [bound], then the steps that continue it once it succeeded, or
   /// records it and them as not done. The user is not asked about a
-  /// [followUp], which is part of the step it follows. A step for other
-  /// systems neither runs nor is recorded, and neither are its follow-ups.
-  Future<void> run(
-    PostGenStep step,
-    ContributionOrigin origin, {
-    bool followUp = false,
-  }) async {
+  /// [followUp], which is part of the step it continues. A step for other
+  /// systems neither runs nor is recorded, and neither are the steps that
+  /// continue it.
+  Future<void> run(BoundStep bound, {bool followUp = false}) async {
+    final BoundStep(:step, :origin) = bound;
     if (!_isForHost(step)) return;
     final environment = _environment;
     final resolved = await _commands.resolve(step.tool, step.arguments);
@@ -200,8 +197,8 @@ final class _ModuleSteps {
         interactive: step.interactive,
       );
       if (failure == null) {
-        for (final next in step.followUps) {
-          await run(next, origin, followUp: true);
+        for (final next in bound.followUps) {
+          await run(next, followUp: true);
         }
         return;
       }
@@ -217,13 +214,13 @@ final class _ModuleSteps {
       failed = true;
     }
     skipped.add(SkippedStep(description, command, reason, failed: failed));
-    await _leaveFollowUps(step, description);
+    await _leaveFollowUps(bound, description);
   }
 
   /// Why [step] of [origin], whose tool is [resolved] and whose [command]
   /// the user would run, does not run now, and whether that is a failure;
   /// no reason if it runs. In an interactive run, the user is asked about a
-  /// skippable step that is not a [followUp].
+  /// skippable step that is not a [followUp] of another.
   ///
   /// Throws a [GenerationFailedException] if a step that is not skippable
   /// cannot run.
@@ -297,11 +294,12 @@ final class _ModuleSteps {
   bool _isForHost(PostGenStep step) =>
       step.hosts.isEmpty || step.hosts.contains(_environment.operatingSystem);
 
-  /// Records the follow-ups of [step], the step of [description] that is
-  /// not done, as not done either, each before its own follow-ups, but for
-  /// those of other systems.
-  Future<void> _leaveFollowUps(PostGenStep step, String description) async {
-    for (final next in step.followUps) {
+  /// Records the steps that continue [bound], the step of [description]
+  /// that is not done, as not done either, each before the steps that
+  /// continue it in turn, but for those of other systems.
+  Future<void> _leaveFollowUps(BoundStep bound, String description) async {
+    for (final followUp in bound.followUps) {
+      final next = followUp.step;
       if (!_isForHost(next)) continue;
       final resolved = await _commands.resolve(next.tool, next.arguments);
       final command = _commands.display(next.tool, next.arguments, resolved);
@@ -313,7 +311,7 @@ final class _ModuleSteps {
           'it runs after "$description", which is not done',
         ),
       );
-      await _leaveFollowUps(next, nextDescription);
+      await _leaveFollowUps(followUp, nextDescription);
     }
   }
 }
