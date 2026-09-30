@@ -1,8 +1,9 @@
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// The arguments of `flutterfire configure` for the app with [identity]:
-/// the platforms of the app, the options written over the placeholder, and
-/// the ids of its Android and iOS apps.
+/// the platforms of the app, [AppIdentity.platforms], the options written
+/// over the placeholder, and the ids of its Android and iOS apps, each only
+/// when its platform is one of them.
 ///
 /// Without the ids, flutterfire reads them from the files of the app
 /// (`lib/src/flutter_app.dart` of flutterfire_cli 1.4.1): the bundle id from
@@ -21,7 +22,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// id. Such an id is left out, and flutterfire reads it from the files of the
 /// app instead.
 List<String> configureArguments(AppIdentity identity) {
-  const platforms = AppEntryRole.platforms;
+  final platforms = identity.platforms;
   return [
     'configure',
     '--platforms=${platforms.join(',')}',

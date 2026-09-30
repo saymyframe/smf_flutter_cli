@@ -586,13 +586,6 @@ Future<void> registerDependencies() async {
     dependsOn: [di0.FixtureSession],
     dispose: di0.closeFixtureCache,
   );
-  getIt.registerFactoryParam<di0.FixtureGreeting, String, int>(
-    (param1, param2) =>
-        di0.createFixtureGreeting(getIt<di0.FixtureConfig>(), param1, param2),
-  );
-  getIt.registerFactoryParam<di0.FixtureLabel, String, void>(
-    (param1, _) => di0.createFixtureLabel(getIt<di0.FixtureConfig>(), param1),
-  );
   getIt.registerLazySingleton<di0.FixtureZone>(
     () => di0.createUtcZone(),
     instanceName: 'utc',
@@ -644,10 +637,6 @@ final class _GetItServiceLocator implements ServiceLocator {
   @override
   T resolve<T extends Object>({String? instanceName}) =>
       _getIt<T>(instanceName: instanceName);
-
-  @override
-  T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
-      _getIt<T>(param1: param1, param2: param2);
 }
 === lib/core/di/service_locator.dart (role:di) ===
 import 'dependencies.dart';
@@ -662,19 +651,10 @@ final ServiceLocator serviceLocator = createServiceLocator();
 T resolve<T extends Object>({String? instanceName}) =>
     serviceLocator.resolve<T>(instanceName: instanceName);
 
-/// Returns a new service of type [T] from a factory that takes parameters,
-/// created with [param1] and [param2].
-T resolveWith<T extends Object>(Object? param1, [Object? param2]) =>
-    serviceLocator.resolveWith<T>(param1, param2);
-
 /// Finds the services that `registerDependencies()` registers.
 abstract interface class ServiceLocator {
   /// Returns the service of type [T], or the one named [instanceName].
   T resolve<T extends Object>({String? instanceName});
-
-  /// Returns a new service of type [T] from a factory that takes
-  /// parameters, created with [param1] and [param2].
-  T resolveWith<T extends Object>(Object? param1, [Object? param2]);
 }
 === lib/core/events/communication_service.dart (role:events) ===
 import 'package:fixture_app/core/fixture_events/fixture_events.dart' as impl0;
@@ -879,33 +859,6 @@ final class FixtureCache {
   bool closed = false;
 }
 
-/// A greeting built from parameters for every call.
-final class FixtureGreeting {
-  /// Creates the greeting.
-  const FixtureGreeting(this.config, this.name, this.times);
-
-  /// The configuration.
-  final FixtureConfig config;
-
-  /// Who to greet.
-  final String name;
-
-  /// How many times.
-  final int times;
-}
-
-/// A label built from a text for every call.
-final class FixtureLabel {
-  /// Creates the label.
-  const FixtureLabel(this.config, this.text);
-
-  /// The configuration.
-  final FixtureConfig config;
-
-  /// The text of the label.
-  final String text;
-}
-
 /// A clock for one time zone.
 final class FixtureZone {
   /// Creates the clock of [zone].
@@ -929,17 +882,6 @@ FixtureCache createFixtureCache(FixtureApi api) => FixtureCache(api);
 
 /// Closes the cache.
 void closeFixtureCache(FixtureCache cache) => cache.closed = true;
-
-/// Creates a greeting for [name], [times] times.
-FixtureGreeting createFixtureGreeting(
-  FixtureConfig config,
-  String name,
-  int times,
-) => FixtureGreeting(config, name, times);
-
-/// Creates a label with [text].
-FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
-    FixtureLabel(config, text);
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');

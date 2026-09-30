@@ -255,7 +255,8 @@ void main() {
     test('fills the options of each platform of the app in place', () {
       final options = texts['lib/firebase_options.dart']!;
 
-      for (final platform in AppEntryRole.platforms) {
+      for (final platform
+          in ContractHarness.defaultContext.appIdentity.platforms) {
         expect(
           fillsOptionsInPlace(options, platform),
           isTrue,

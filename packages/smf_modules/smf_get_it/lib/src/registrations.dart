@@ -35,7 +35,6 @@ final class _Code {
   /// The registration of [registration] as a call on `getIt`.
   String register(DiRegistration registration) {
     final type = _type(registration.type);
-    final params = [for (final param in registration.params) _type(param)];
     final create = registration.create;
     final factory = create.codeWith(_prefixOf(create.import));
     final services = [for (final dep in create.deps) _get(dep)];
@@ -70,34 +69,9 @@ final class _Code {
         registerWith('registerSingleton', [call, name, dispose]),
       DiLifetime.lazySingleton =>
         registerWith('registerLazySingleton', ['() => $call', name, dispose]),
-      DiLifetime.factory when params.isEmpty =>
+      DiLifetime.factory =>
         registerWith('registerFactory', ['() => $call', name]),
-      DiLifetime.factory => _registerFactoryParam(
-          type,
-          params,
-          factory,
-          services,
-        ),
     };
-  }
-
-  /// The registration of a factory that takes [params] from the caller
-  /// after [services]: get_it passes two values, and `void` stands for the
-  /// second when the factory takes one.
-  ///
-  /// A factory with parameters has no instance name, since `resolveWith`
-  /// cannot ask for one.
-  String _registerFactoryParam(
-    String type,
-    List<String> params,
-    String factory,
-    List<String> services,
-  ) {
-    final two = params.length == 2;
-    final arguments = [...services, 'param1', if (two) 'param2'];
-    return 'getIt.registerFactoryParam<$type, ${params.first}, '
-        '${two ? params.last : 'void'}>((param1, ${two ? 'param2' : '_'}) => '
-        '$factory(${arguments.join(', ')}))';
   }
 
   /// [service] from get_it, by its type and name.

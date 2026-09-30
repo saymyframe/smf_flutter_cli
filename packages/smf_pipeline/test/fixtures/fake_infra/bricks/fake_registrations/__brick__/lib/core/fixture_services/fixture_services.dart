@@ -34,33 +34,6 @@ final class FixtureCache {
   bool closed = false;
 }
 
-/// A greeting built from parameters for every call.
-final class FixtureGreeting {
-  /// Creates the greeting.
-  const FixtureGreeting(this.config, this.name, this.times);
-
-  /// The configuration.
-  final FixtureConfig config;
-
-  /// Who to greet.
-  final String name;
-
-  /// How many times.
-  final int times;
-}
-
-/// A label built from a text for every call.
-final class FixtureLabel {
-  /// Creates the label.
-  const FixtureLabel(this.config, this.text);
-
-  /// The configuration.
-  final FixtureConfig config;
-
-  /// The text of the label.
-  final String text;
-}
-
 /// A clock for one time zone.
 final class FixtureZone {
   /// Creates the clock of [zone].
@@ -84,18 +57,6 @@ FixtureCache createFixtureCache(FixtureApi api) => FixtureCache(api);
 
 /// Closes the cache.
 void closeFixtureCache(FixtureCache cache) => cache.closed = true;
-
-/// Creates a greeting for [name], [times] times.
-FixtureGreeting createFixtureGreeting(
-  FixtureConfig config,
-  String name,
-  int times,
-) =>
-    FixtureGreeting(config, name, times);
-
-/// Creates a label with [text].
-FixtureLabel createFixtureLabel(FixtureConfig config, String text) =>
-    FixtureLabel(config, text);
 
 /// Creates the clock of UTC.
 FixtureZone createUtcZone() => const FixtureZone('UTC');

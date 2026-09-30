@@ -6,6 +6,24 @@ import 'support.dart';
 List<Contribution> _blocVariant(ModuleContext context) =>
     const [PubspecContribution.hosted('flutter_bloc', 'any')];
 
+/// A rule of a role for tests: a file for the modules of a kind.
+final class _FileRule extends KindRule {
+  const _FileRule(this.path);
+
+  final String path;
+
+  @override
+  Role get role => const MinimalRole();
+}
+
+/// A rule of a role for tests without data.
+final class _FlagRule extends KindRule {
+  const _FlagRule();
+
+  @override
+  Role get role => const MinimalRole();
+}
+
 void main() {
   final router = TestRole<String>('router');
   final layout = TestRole<NoDsl>('layout', requires: {router});
@@ -144,7 +162,6 @@ void main() {
       id: 'feature',
       label: 'Features',
       fileRoots: ['lib/features/<id>/'],
-      compositionFile: 'lib/features/<id>/<id>_composition.dart',
     );
     const infrastructure = ModuleKind(
       id: 'infrastructure',
@@ -160,17 +177,13 @@ void main() {
       expect(plainKind.requiredData, isEmpty);
       expect(plainKind.forbiddenData, isEmpty);
       expect(plainKind.allowsVariants, isTrue);
-      expect(plainKind.compositionFileOf(home), isNull);
+      expect(plainKind.roleRules, isEmpty);
       expect(plainKind.allowsFile(home, 'anything/at/all.dart'), isTrue);
       expect('$plainKind', 'module kind plain');
     });
 
     test('expands paths for a module', () {
       expect(feature.fileRootsOf(home), ['lib/features/home/']);
-      expect(
-        feature.compositionFileOf(home),
-        'lib/features/home/home_composition.dart',
-      );
       expect(infrastructure.forbiddenFileRootsOf(home), ['lib/features']);
       expect(infrastructure.allowsVariants, isFalse);
     });
@@ -187,11 +200,42 @@ void main() {
         isFalse,
       );
     });
+
+    group('ruleOf', () {
+      const first = _FileRule('lib/widgets/<id>/first.dart');
+      const flag = _FlagRule();
+      const second = _FileRule('lib/widgets/<id>/second.dart');
+      const widget = ModuleKind(
+        id: 'widget',
+        label: 'Widgets',
+        roleRules: [first, flag, second],
+      );
+
+      test('returns the rule of its type', () {
+        expect(widget.ruleOf<_FlagRule>(), same(flag));
+      });
+
+      test('returns null for a type the kind has no rule of', () {
+        const flagged = ModuleKind(
+          id: 'flagged',
+          label: 'Flagged',
+          roleRules: [flag],
+        );
+
+        expect(flagged.ruleOf<_FileRule>(), isNull);
+        expect(plainKind.ruleOf<_FlagRule>(), isNull);
+      });
+
+      test('returns the first one when there are two', () {
+        expect(widget.ruleOf<_FileRule>()?.path, first.path);
+      });
+    });
   });
 
   test('ModuleContext describes the app', () {
     expect(testContext.appName, 'my_app');
     expect(testContext.orgName, 'com.example');
+    expect(testContext.appIdentity.platforms, ['android', 'ios']);
     expect(testContext.appIdentity.androidApplicationId, 'com.example.my_app');
     expect(testContext.appIdentity.iosBundleId, 'com.example.my-app');
     expect(testContext.appIdentity.androidNamespace, 'com.example.my_app');

@@ -100,6 +100,7 @@ Future<void> main() async {
       appName: 'my_app',
       orgName: 'com.example',
       appIdentity: AppIdentity(
+        platforms: ['android', 'ios'],
         androidApplicationId: 'com.example.my_app',
         iosBundleId: 'com.example.my-app',
         androidNamespace: 'com.example.my_app',

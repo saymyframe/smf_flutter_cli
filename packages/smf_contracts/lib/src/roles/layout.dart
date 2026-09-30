@@ -44,10 +44,21 @@ final class LayoutRole extends Role<NoDsl> {
   /// selected one, an `onSelect` callback of type `ValueChanged<int>` that
   /// switches to another destination, and the `body`, the widget of the
   /// selected destination's branch.
+  ///
+  /// It keeps `destinations`, `currentIndex` and `onSelect` as public fields
+  /// or getters, since code that knows only the role reads them from the
+  /// shell, whichever layout provides it: a test of the main navigation
+  /// finds a destination among `destinations` by its label and icon,
+  /// selects it with `onSelect` as the layout does when the user selects
+  /// it, and reads the selected one from `currentIndex`. The `body` is the
+  /// widget of the router, which the shell only shows; such code finds what
+  /// the shell shows in the widget tree, so the provider may keep `body`
+  /// private.
   static const appShell = RequiredClass(
     'AppShell',
     path: appShellFile,
     namedParameters: ['destinations', 'currentIndex', 'onSelect', 'body'],
+    getters: ['destinations', 'currentIndex', 'onSelect'],
   );
 
   @override

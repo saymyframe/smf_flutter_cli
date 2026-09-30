@@ -153,7 +153,8 @@ final class Variants {
 ///
 /// Kinds are data: the pipeline applies them without knowing any kind. The
 /// kinds of the built-in modules are in `ModuleKinds` of
-/// `package:smf_contracts/smf_contracts.dart`.
+/// `package:smf_contracts/smf_contracts.dart`. A rule that only a role
+/// knows goes into [roleRules], where the role finds it.
 ///
 /// Paths are relative to the project root and may contain `<id>`, which
 /// stands for the module id; directories may end with a slash.
@@ -170,7 +171,7 @@ final class ModuleKind {
     this.requiredData = const {},
     this.forbiddenData = const {},
     this.allowsVariants = true,
-    this.compositionFile,
+    this.roleRules = const [],
   });
 
   /// A unique id in lower snake_case, such as `feature`.
@@ -207,11 +208,9 @@ final class ModuleKind {
   /// Whether modules of the kind may have [Variants].
   final bool allowsVariants;
 
-  /// The optional file where a module of the kind may obtain services from
-  /// the app's service locator, such as
-  /// `lib/features/<id>/<id>_composition.dart`, or `null` if the kind may
-  /// not obtain services at all.
-  final String? compositionFile;
+  /// Rules of roles for the modules of the kind, which each role reads with
+  /// [ruleOf]; the pipeline applies none of them.
+  final List<KindRule> roleRules;
 
   /// [fileRoots] for the module [module].
   List<String> fileRootsOf(ModuleId module) =>
@@ -221,11 +220,9 @@ final class ModuleKind {
   List<String> forbiddenFileRootsOf(ModuleId module) =>
       [for (final root in forbiddenFileRoots) _expand(root, module)];
 
-  /// [compositionFile] for the module [module], if the kind has one.
-  String? compositionFileOf(ModuleId module) {
-    final file = compositionFile;
-    return file == null ? null : _expand(file, module);
-  }
+  /// The first of [roleRules] of the type [T], or `null` if the kind has
+  /// none.
+  T? ruleOf<T extends KindRule>() => roleRules.whereType<T>().firstOrNull;
 
   /// Whether the module [module] may generate the file at [path].
   ///
@@ -245,4 +242,20 @@ final class ModuleKind {
 
   @override
   String toString() => 'module kind $id';
+}
+
+/// A rule of a role for the modules of a kind, which the role reads from
+/// the kind of a module with [ModuleKind.ruleOf].
+///
+/// A role defines its rules as subclasses, and a kind lists those its
+/// modules follow in [ModuleKind.roleRules]. Only the role knows what a
+/// rule means and checks it, such as in its [Role.structuralRules]; the
+/// pipeline knows no role, so it applies none of them.
+@immutable
+abstract base class KindRule {
+  /// Allows subclasses to have constant constructors.
+  const KindRule();
+
+  /// The role that reads the rule.
+  Role get role;
 }

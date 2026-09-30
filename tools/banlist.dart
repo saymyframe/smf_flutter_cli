@@ -85,11 +85,20 @@ final List<_Ban> _bans = [
     'DslContext',
     'DslAwareCodeGenerator',
     'FileMergeStrategy',
+    // The core knows no role: the file where a module may resolve services
+    // is the CompositionFile of the DI role, a rule in ModuleKind.roleRules.
+    'compositionFile',
+    'compositionFileOf',
     // Not in the model yet: DI scopes and route conditions come with a
     // module that needs them.
     'DiScopes',
     'ConditionData',
     'DiRuntimeNeed',
+    // The untyped factory parameters of the DI role, after get_it: a
+    // composition function takes such values as parameters, and a service
+    // that creates objects with them is a factory class.
+    'resolveWith',
+    'factoryWithParams',
     // Navigation of the old router module.
     'NavigationService',
     'NavigationTarget',
@@ -130,6 +139,9 @@ final List<_Ban> _bans = [
   const _Ban('{{#modules}}', '{{#modules}}'),
   _Ban('/noModules', RegExp('/noModules(?![A-Za-z0-9_])')),
   _Ban('main-tabs', RegExp('(?<![A-Za-z0-9_-])main-tabs(?![A-Za-z0-9_-])')),
+  // Members of the contracts that moved: the platforms of the app are in its
+  // identity, AppIdentity.platforms.
+  const _Ban('AppEntryRole.platforms', 'AppEntryRole.platforms'),
   // smf create adds a module that a role needs by itself only while the
   // module is the only one that provides the role, and asks otherwise, so a
   // paragraph that says so names that condition.

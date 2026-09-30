@@ -61,7 +61,7 @@ final class RoleHookInput<D extends Object> {
   final Set<Role> _present;
   final Map<Role, List<RoleData<Object>>> _visibleData;
 
-  /// The platform identifiers of the app.
+  /// The platforms and the platform identifiers of the app.
   AppIdentity get appIdentity => context.appIdentity;
 
   /// Whether [other] is present in the app.
