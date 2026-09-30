@@ -81,15 +81,15 @@ CompilationUnit _parsed(RenderedApp app, String path) =>
     parseString(content: app.files[path]!.text).unit;
 
 /// The class [name] of [unit].
-ClassDeclaration _classOf(CompilationUnit unit, String name) =>
-    unit.declarations
-        .whereType<ClassDeclaration>()
-        .singleWhere((declaration) => declaration.name.lexeme == name);
+ClassDeclaration _classOf(CompilationUnit unit, String name) => unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .singleWhere((declaration) => declaration.namePart.typeName.lexeme == name);
 
 /// The expression that the getter or the method [name] of [declaration]
 /// returns.
 Expression _returnedBy(ClassDeclaration declaration, String name) {
-  final member = declaration.members
+  final member = declaration.body.members
       .whereType<MethodDeclaration>()
       .singleWhere((method) => method.name.lexeme == name);
   return (member.body as ExpressionFunctionBody).expression;
@@ -304,7 +304,7 @@ void main() {
       expect(screen.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
       expect(screen.metadata, isEmpty);
       final constructor =
-          screen.members.whereType<ConstructorDeclaration>().single;
+          screen.body.members.whereType<ConstructorDeclaration>().single;
       expect(constructor.name, isNull);
       expect(constructor.constKeyword, isNotNull);
       expect(constructor.parameters.toSource(), '({super.key})');

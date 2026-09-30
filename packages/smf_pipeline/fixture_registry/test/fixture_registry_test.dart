@@ -815,10 +815,11 @@ final class _NamedArguments extends RecursiveAstVisitor<void> {
   final List<String> initialLocations = [];
 
   @override
-  void visitNamedExpression(NamedExpression node) {
-    if (node.name.label.name == 'initialLocation') {
-      initialLocations.add((node.expression as StringLiteral).stringValue!);
+  void visitNamedArgument(NamedArgument node) {
+    if (node.name.lexeme == 'initialLocation') {
+      initialLocations
+          .add((node.argumentExpression as StringLiteral).stringValue!);
     }
-    super.visitNamedExpression(node);
+    super.visitNamedArgument(node);
   }
 }

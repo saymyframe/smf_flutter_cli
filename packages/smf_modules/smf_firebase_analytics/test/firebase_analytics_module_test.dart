@@ -299,11 +299,12 @@ List<String> _servicesOf(RenderedApp app) {
 
 /// The methods of the class [name] in [unit], by name.
 Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
-  final declaration = unit.declarations
-      .whereType<ClassDeclaration>()
-      .singleWhere((declaration) => declaration.name.lexeme == name);
+  final declaration =
+      unit.declarations.whereType<ClassDeclaration>().singleWhere(
+            (declaration) => declaration.namePart.typeName.lexeme == name,
+          );
   return {
-    for (final member in declaration.members)
+    for (final member in declaration.body.members)
       if (member is MethodDeclaration) member.name.lexeme: member,
   };
 }
