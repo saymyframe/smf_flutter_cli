@@ -1,7 +1,9 @@
 // Checks that the repository no longer uses what the module model replaced:
 // the names of the old contracts API, the constants and hooks of the old
 // modules and their direct use of get_it, the old way to render bricks, the
-// old template markers, and dependencies that only some packages may have.
+// old template markers, and dependencies that only some packages may have;
+// and that only tools/workspace_members.dart reads the members of the
+// workspace from the root pubspec.
 //
 // Run it anywhere in the repository: `dart tools/banlist.dart`. It reads the
 // files that git tracks, and the new ones it does not ignore.
@@ -146,6 +148,15 @@ final List<_Ban> _bans = [
   // module is the only one that provides the role, and asks otherwise, so a
   // paragraph that says so names that condition.
   _Ban('"by itself" without "only"', RegExp(r'^(?!.*\bonly\b).*\bby itself\b')),
+  // The key of the members of the workspace in the root pubspec, which code
+  // that reads them looks up or matches the line of. workspace_members.dart
+  // reads them as YAML, as pub does, for every tool: code that reads the
+  // lines itself misses a member that YAML writes in another form, such as
+  // in quotes or after a comment on the line of the key.
+  _Ban(
+    'workspace: read by hand',
+    RegExp(r'''['"]\^?workspace:?(?:\\s[*+])?\$?['"]'''),
+  ),
 ];
 
 const _lasting = [
@@ -183,6 +194,11 @@ const _lasting = [
     ],
     {'mustachex', 'smf_contribution_engine'},
     'The test checks that the package does not use them.',
+  ),
+  _Exception(
+    ['tools/workspace_members.dart'],
+    {'workspace: read by hand'},
+    'It reads the members of the workspace for every tool.',
   ),
 ];
 

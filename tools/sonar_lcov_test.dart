@@ -11,6 +11,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import 'workspace_members.dart';
+
 /// The problems of the coverage reports that [properties], the text of
 /// sonar-project.properties, gives SonarCloud for [packages], the packages
 /// of the workspace by their paths from the root of the repository, each
@@ -111,23 +113,15 @@ RegExp _glob(String glob) {
   return RegExp('^$pattern\$');
 }
 
-/// The packages of the workspace at [root], by their paths from it, each
-/// with whether it has a test/ directory. The root pubspec puts its
-/// sections at the start of a line and the packages of `workspace:` two
-/// spaces in.
-Map<String, bool> _workspacePackages(String root) {
-  final packages = <String, bool>{};
-  var inWorkspace = false;
-  for (final line in File('$root/pubspec.yaml').readAsLinesSync()) {
-    if (RegExp(r'^\S').hasMatch(line)) inWorkspace = line == 'workspace:';
-    if (!inWorkspace) continue;
-    if (RegExp(r'^  - (\S+)').firstMatch(line) case final match?) {
-      final package = match[1]!;
-      packages[package] = Directory('$root/$package/test').existsSync();
-    }
-  }
-  return packages;
-}
+/// The packages of the workspace at [root], the members that its root
+/// pubspec lists as workspace_members.dart reads them, by their paths from
+/// [root], each with whether it has a test/ directory.
+Map<String, bool> _workspacePackages(String root) => {
+      for (final package in workspaceMembers(
+        File('$root/pubspec.yaml').readAsStringSync(),
+      ))
+        package: Directory('$root/$package/test').existsSync(),
+    };
 
 void main() {
   // The packages of a workspace, each with whether it has a test/ directory.
@@ -202,6 +196,58 @@ sonar.dart.lcov.reportPaths=\\
         _leftOver('packages/gone/coverage/lcov.info'),
         _leftOver('tool/d/coverage/lcov.info'),
       ],
+    );
+  });
+
+  /// A workspace in a temporary directory, deleted after the test, whose
+  /// root pubspec is [pubspec], with a test/ directory in each package of
+  /// [tested].
+  String workspace(String pubspec, List<String> tested) {
+    final root = Directory.systemTemp.createTempSync('sonar_lcov_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(pubspec);
+    for (final package in tested) {
+      Directory('${root.path}/$package/test').createSync(recursive: true);
+    }
+    return root.path;
+  }
+
+  test(
+      'reads a member of the workspace in quotes, so that the list cannot '
+      'lack the report of its package unseen', () {
+    final root = workspace(
+      'name: root\n'
+      'workspace:\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n',
+      ['packages/a', 'packages/b'],
+    );
+
+    expect(
+      problemsOf(
+        properties(['packages/a/coverage/lcov.info']),
+        _workspacePackages(root),
+      ),
+      [_missing('packages/b')],
+    );
+  });
+
+  test(
+      'reads the members of the workspace after a comment on its line, so '
+      'that the reports of their packages are not taken for left over', () {
+    final root = workspace(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n',
+      ['packages/a'],
+    );
+
+    expect(
+      problemsOf(
+        properties(['packages/a/coverage/lcov.info']),
+        _workspacePackages(root),
+      ),
+      isEmpty,
     );
   });
 
