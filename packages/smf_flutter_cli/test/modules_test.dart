@@ -18,4 +18,13 @@ void main() {
       expect(result.app, isNotNull, reason: '$result');
     }
   });
+
+  test(
+      'every module is checked with each provider of each role it requires or '
+      'uses', () async {
+    expect(
+      await ContractHarness(ModuleRegistry(smfModules)).uncheckedProviders(),
+      isEmpty,
+    );
+  });
 }
