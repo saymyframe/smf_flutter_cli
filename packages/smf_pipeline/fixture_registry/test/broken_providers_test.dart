@@ -20,60 +20,116 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
+/// A text that a Dart file writes: its parts in order, each a text of the
+/// file, or `null` for a value that the file interpolates, which may be any
+/// text.
+typedef _Template = List<String?>;
+
+/// The template of [node]: its text, adjacent strings as one, with a value
+/// in place of each expression it interpolates.
+_Template _templateOf(StringLiteral node) => switch (node) {
+      SimpleStringLiteral(:final value) => [value],
+      AdjacentStrings(:final strings) => [
+          for (final string in strings) ..._templateOf(string),
+        ],
+      StringInterpolation(:final elements) => [
+          for (final element in elements)
+            if (element is InterpolationString) element.value else null,
+        ],
+    };
+
+/// Whether [template], with any text in place of each of its values, writes
+/// [text], all of it.
+bool _writesAll(_Template template, String text) {
+  final parts = [
+    for (final part in template) part == null ? '.*' : RegExp.escape(part),
+  ];
+  return RegExp('^${parts.join()}\$', dotAll: true).hasMatch(text);
+}
+
+/// Whether [template], with any text in place of each of its values, writes
+/// a text that has [text], with at least one character of the template
+/// itself in [text], as a reason of an expectation that names a value of
+/// the app, such as a service, does.
+bool _writesPart(_Template template, String text) {
+  const value = '\u0000';
+  final written = [for (final part in template) part ?? value].join();
+  if (!written.contains(value)) return written.contains(text);
+  for (var start = 0; start < written.length; start++) {
+    for (var end = start + 1; end <= written.length; end++) {
+      final piece = written.substring(start, end);
+      if (piece.replaceAll(value, '').isEmpty) continue;
+      final pattern = piece.split(value).map(RegExp.escape).join('.*');
+      if (RegExp('^$pattern\$', dotAll: true).hasMatch(text)) return true;
+    }
+  }
+  return false;
+}
+
 /// The full names of the tests that the Dart file with [text] declares
 /// with `test` or `testWidgets`, as `flutter test` names them: the
-/// descriptions of their groups and their own, with a space between each.
-List<String> _testNamesIn(String text) {
+/// descriptions of their groups and their own, with a space between each,
+/// as templates, since a description may interpolate a value.
+List<_Template> _testNamesIn(String text) {
   final names = _TestNames();
   parseString(content: text, throwIfDiagnostics: false).unit.accept(names);
   return names.names;
 }
 
-/// The values of the string literals of the Dart file with [text], adjacent
-/// strings as one, such as the reasons of its expectations.
-List<String> _stringsIn(String text) {
+/// The templates of the strings of the Dart file with [text], such as the
+/// reasons of its expectations.
+List<_Template> _stringsIn(String text) {
   final strings = _Strings();
   parseString(content: text, throwIfDiagnostics: false).unit.accept(strings);
-  return strings.values;
+  return strings.templates;
 }
 
-/// Finds the values of the string literals of a file; see [_stringsIn].
+/// Finds the templates of the strings of a file; see [_stringsIn].
 final class _Strings extends RecursiveAstVisitor<void> {
-  final values = <String>[];
+  final templates = <_Template>[];
 
   @override
   void visitAdjacentStrings(AdjacentStrings node) {
-    if (node.stringValue case final value?) values.add(value);
+    templates.add(_templateOf(node));
     super.visitAdjacentStrings(node);
   }
 
   @override
   void visitSimpleStringLiteral(SimpleStringLiteral node) {
-    values.add(node.value);
+    templates.add(_templateOf(node));
     super.visitSimpleStringLiteral(node);
+  }
+
+  @override
+  void visitStringInterpolation(StringInterpolation node) {
+    templates.add(_templateOf(node));
+    super.visitStringInterpolation(node);
   }
 }
 
 /// Finds the full names of the tests of a file; see [_testNamesIn].
 final class _TestNames extends RecursiveAstVisitor<void> {
-  final names = <String>[];
+  final names = <_Template>[];
 
-  final _groups = <String>[];
+  final _groups = <_Template>[];
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
     final description = switch (node.argumentList.arguments.firstOrNull) {
       final StringLiteral literal when node.target == null =>
-        literal.stringValue,
+        _templateOf(literal),
       _ => null,
     };
     switch ((node.methodName.name, description)) {
-      case ('group', final String group):
+      case ('group', final _Template group):
         _groups.add(group);
         super.visitMethodInvocation(node);
         _groups.removeLast();
-      case ('test' || 'testWidgets', final String test):
-        names.add([..._groups, test].join(' '));
+      case ('test' || 'testWidgets', final _Template test):
+        names.add([
+          for (final group in _groups) ...[...group, ' '],
+          ...test,
+        ]);
         super.visitMethodInvocation(node);
       default:
         super.visitMethodInvocation(node);
@@ -84,21 +140,31 @@ final class _TestNames extends RecursiveAstVisitor<void> {
 void main() {
   final providers = brokenProviders();
 
-  test('reads the texts of a file, adjacent strings as one', () {
-    expect(
-      _stringsIn('''
+  test(
+      'reads the texts of a file, adjacent strings as one, and a text that '
+      'it writes with a value of the app in it', () {
+    final strings = _stringsIn(r'''
 void main() {
   expect(1, 2, reason: 'A reason '
       'on two lines.');
+  problems.add('${service.name} does not resolve: $error');
 }
-'''),
-      contains('A reason on two lines.'),
-    );
+''');
+    bool writes(String text) =>
+        strings.any((string) => _writesPart(string, text));
+
+    expect(writes('A reason on two lines.'), isTrue);
+    expect(writes('reason on two'), isTrue);
+    expect(writes('FixtureReplica does not resolve:'), isTrue);
+    expect(writes('FixtureReplica does not resolve: Bad state: gone.'), isTrue);
+    expect(writes('A reason on three lines.'), isFalse);
+    expect(writes('FixtureReplica is not resolved:'), isFalse);
   });
 
-  test('reads the names of the tests of a file', () {
-    expect(
-      _testNamesIn('''
+  test(
+      'reads the names of the tests of a file, with any text in place of a '
+      'value that a name interpolates', () {
+    final names = _testNamesIn(r'''
 void main() {
   test('a', () {});
   group('b', () {
@@ -107,12 +173,27 @@ void main() {
       test('f', () {});
     });
   });
+  for (final how in ['throws', 'fails']) {
+    test('a service that $how ' 'keeps no other', () {});
+  }
   other.test('g', () {});
   test(name, () {});
 }
-'''),
-      ['a', 'b c', 'b d e f'],
-    );
+''');
+    bool named(String name) => names.any((test) => _writesAll(test, name));
+
+    expect(names, hasLength(4));
+    for (final name in [
+      'a',
+      'b c',
+      'b d e f',
+      'a service that fails keeps no other',
+    ]) {
+      expect(named(name), isTrue, reason: name);
+    }
+    for (final name in ['b', 'c', 'g', 'a service that fails']) {
+      expect(named(name), isFalse, reason: name);
+    }
   });
 
   test(
@@ -241,14 +322,14 @@ void main() {
           );
           final text = files.single.readAsStringSync();
           expect(
-            _testNamesIn(text),
-            contains(failure.test),
-            reason: '$failure',
+            _testNamesIn(text).any((name) => _writesAll(name, failure.test)),
+            isTrue,
+            reason: '$failure is a test of its file.',
           );
           expect(
-            _stringsIn(text),
-            anyElement(contains(failure.reason)),
-            reason: 'The reason of $failure is a text of its file.',
+            _stringsIn(text).any((text) => _writesPart(text, failure.reason)),
+            isTrue,
+            reason: 'The reason of $failure is a text that its file writes.',
           );
         }
       });
