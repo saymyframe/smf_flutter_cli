@@ -14,7 +14,8 @@ environment:
 resolution: workspace
 
 dependencies:
-  analyzer: ^8.1.0
+  # 13.1 is the oldest analyzer with the AST that the file indexer reads.
+  analyzer: ">=13.1.0 <15.0.0"
   args: ^2.7.0
   file: ^7.0.1
   mason: ^0.1.1
