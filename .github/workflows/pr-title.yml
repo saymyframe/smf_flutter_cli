@@ -14,13 +14,16 @@ jobs:
     timeout-minutes: 2
 
     steps:
-      # PRs are squash-merged, and the commit on main takes the title of the
-      # PR as its only line. melos version reads that line for the version
-      # bumps and CHANGELOGs, so the title must be a Conventional Commit:
+      # A PR is squash-merged, and the commit takes the title of the PR as its
+      # only line. melos version reads that line for the version bumps and
+      # CHANGELOGs, so the title must be a Conventional Commit:
       # <type>(<scope>)!: <description>. The scope, which may be a list with
       # commas, and the ! are optional. A breaking change needs the ! in the
       # title, as a BREAKING CHANGE footer in a commit of the branch does not
-      # reach main.
+      # reach the squash. The PR of a branch that collects the PRs of a larger
+      # change is merged into main with a merge commit instead, so the squash
+      # commits of those PRs, whose titles this check checked, reach main as
+      # they are, and the ! goes into the title of the PR that breaks.
       #
       # The types are the usual ones of Conventional Commits. melos version
       # parses a title of any type, and bumps the version for docs, feat, fix,
@@ -41,6 +44,6 @@ jobs:
           scope='[a-z0-9_-]+'
           pattern="^($types)(\($scope(, ?$scope)*\))?!?: [^[:space:]]"
           if [[ ! $TITLE =~ $pattern ]]; then
-            echo "::error::The PR title must be a Conventional Commit, <type>(<scope>)!: <description>, such as 'fix(cli): print the real version in smf --version', with a type of ${types//|/, }; the scope and the ! are optional. PRs are squash-merged, so the title becomes the only line of the commit on main, which melos version reads for version bumps and CHANGELOGs. A breaking change needs the ! in the title."
+            echo "::error::The PR title must be a Conventional Commit, <type>(<scope>)!: <description>, such as 'fix(cli): print the real version in smf --version', with a type of ${types//|/, }; the scope and the ! are optional. A PR is squash-merged, so the title becomes the only line of its commit, which melos version reads for version bumps and CHANGELOGs. A breaking change needs the ! in the title."
             exit 1
           fi

@@ -476,9 +476,10 @@ const maxEveryCombination = 100;
 ///   [EveryModuleAppPerProvider]), which CI archives, and configures with
 ///   the external services of its modules to start it.
 ///
-/// So a new provider or module changes the plan, not the jobs of CI, and no
-/// job takes longer as the apps get more: only the number of jobs grows,
-/// with a pairwise or 3-wise covering rather than with every combination.
+/// So a new provider or module changes the plan, not the jobs of CI, and a
+/// job that takes its app or shard from the plan does not take longer as the
+/// apps get more: only the number of jobs grows, with a pairwise or 3-wise
+/// covering rather than with every combination.
 Future<({Map<String, Object> plan, List<String> problems})> matrixPlanOf(
   List<SmfModule> modules, {
   bool everyCombination = false,

@@ -19,7 +19,7 @@ import 'package:yaml/yaml.dart';
 /// `runMatrix`. The tests, and the roles whose contract they check with
 /// every provider, are those of `smfAppTests` in
 /// `lib/matrix_app_tests.dart`, which the tests of the package check too. Any further argument names an app of the matrix, such as
-/// `flutter_core (flutter_core)`, and only the apps named are checked.
+/// `go_router with layout`, and only the apps named are checked.
 ///
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles

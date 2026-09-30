@@ -25,7 +25,7 @@ The real SMF modules do not yet use every feature of the module model in `packag
 - Each fixture is a workspace package with `publish_to: none`, so melos bundles its bricks and analyzes it like any other package.
 - A fixture follows the same rules as a real module, and the contract harness checks it like one.
 - Fixtures are never part of the CLI's module registry or of a published package. The `.pubignore` of `smf_pipeline` leaves `test/fixtures/` and `fixture_registry/` out of its archive.
-- A fixture whose start-up or services call a platform channel keeps the mocks of its platform side in its `app_tests/`, as `fake_infra` does for its crash reporting and analytics, and the matrix tools of `fixture_registry` declare them (`MatrixAppTest.mocks`, in `tool/fixture_mocks.dart`): the matrix sets them up before the tests of every app with the fixture, whichever module the tests test.
+- A fixture whose start-up or services call a platform channel keeps the mocks of its platform side in its `app_tests/`, as `fake_infra` does for its crash reporting and analytics, and `fixture_registry` declares them where it registers the app tests of its matrix tools (`MatrixAppTest.mocks`, in `lib/matrix_app_tests.dart`): the matrix sets them up before the tests of every app with the fixture, whichever module the tests test.
 - Never run `dart format` on a `bricks/` folder: it breaks templates that parse as Dart, such as `<String>[{{{labels}}}]`.
 
 ## Running the tests

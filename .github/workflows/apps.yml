@@ -14,8 +14,11 @@ name: Generated apps
 # iOS, and another that it starts on devices; and one app for each provider
 # of the app entry, which owns the native projects and their configuration
 # with Firebase. A new provider or module then needs no change of this
-# workflow, and no job takes longer as the apps get more: only the number of
-# jobs grows, with the covering rather than with every combination.
+# workflow, and no job that takes its app or shard from the plan takes
+# longer as the apps get more: only the number of jobs grows, with the
+# covering rather than with every combination. The job CLI from pub.dev of
+# the nightly run alone checks the apps of a release one after another, as
+# a release that came out before the plan has none.
 # tools/workflow_apps_test.dart fails when a job generates or checks a whole
 # selection of apps rather than its app or shard of the plan, and when a job
 # or a step computes its timeout.

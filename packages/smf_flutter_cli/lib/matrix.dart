@@ -1174,7 +1174,7 @@ final class MatrixCommands {
 /// [MatrixAppTests.roleProblems]); 1 otherwise.
 ///
 /// With [only], it checks only the apps of the matrix with those names,
-/// such as `flutter_core (flutter_core)`, and runs the [appTests] that
+/// such as `go_router with layout`, and runs the [appTests] that
 /// apply to them; a name that no app of the matrix has is a problem too.
 /// With [everyModule], it checks only the apps with every module, one for
 /// each combination of the providers of the roles that take one (see
