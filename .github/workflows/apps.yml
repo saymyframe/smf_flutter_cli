@@ -77,6 +77,10 @@ on:
         description: Whether flutterfire may register the apps with Firebase in the Firebase project of CI when it has none with their ids yet. Only build.yml lets it, so that runs at the same time, such as the jobs of the nightly run, cannot register an app each; tools/firebase_registration_test.dart checks this.
         type: boolean
         default: false
+      broken_providers:
+        description: Whether a job generates the app of each fixture provider of a role with one known bug and checks that the tests of the role fail there on the bug, with the reason that the fixture registry expects, and on nothing else. build.yml sets it, and the nightly run only for its latest Flutter.
+        type: boolean
+        default: false
     secrets:
       FIREBASE_SERVICE_ACCOUNT:
         description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the apps without Firebase.
@@ -300,6 +304,33 @@ jobs:
 
       - name: Generate, analyze and test the app of several providers of a role
         run: dart run packages/smf_pipeline/fixture_registry/tool/several_providers_matrix.dart "$RUNNER_TEMP/SMF apps/several providers"
+
+  # A test of a role that passes whatever the provider of the role does
+  # checks nothing. So each fixture provider of a role with one known bug
+  # (brokenProviders of packages/smf_pipeline/fixture_registry/lib/
+  # broken_providers.dart) gets its app, the smallest that the tests of its
+  # role need, with the app tests of the fixtures that apply to it: the
+  # tests of the role must fail first on an expectation with the reason
+  # that the registry gives, and every other test of the app must pass. The
+  # tool checks those few apps only, so the job takes neither a shard nor
+  # an app of the plan.
+  broken-providers:
+    name: Generated apps (broken providers)
+    if: inputs.broken_providers
+    runs-on: ubuntu-latest
+    # About 10 minutes for its six small apps, one after another, each a
+    # minute or two; the timeout leaves room for a few more.
+    timeout-minutes: 20
+    env: *linux_env
+
+    steps:
+      - uses: actions/checkout@v7
+      - *setup_flutter_linux
+      - *check_flutter_linux
+      - *pub_get
+
+      - name: Generate the apps of the broken providers and check that the tests of their roles fail as expected
+        run: dart run packages/smf_pipeline/fixture_registry/tool/broken_providers_matrix.dart "$RUNNER_TEMP/SMF apps/broken providers"
 
   # An app with every module of the plan, of a pairwise covering of them,
   # built for Android with the versions of Gradle, the Android Gradle Plugin

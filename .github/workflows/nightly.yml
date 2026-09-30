@@ -71,6 +71,11 @@ jobs:
       # pairwise covering, in more shards; those of each version build and
       # start the apps of the pairwise coverings.
       every_combination: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # That the tests of the roles fail on the providers with a known bug
+      # hardly depends on the version of Flutter, but for how flutter_test
+      # reports a failure, which a new release may change: so only the job
+      # with the latest Flutter checks it.
+      broken_providers: ${{ matrix.flutter == needs.versions.outputs.latest }}
       # The CLI on pub.dev does not change with a pull request, so only this
       # workflow checks it.
       published_cli: true

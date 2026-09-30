@@ -131,6 +131,10 @@ jobs:
       # Firebase project, such as those of a new provider in the run of its
       # pull request into main; the nightly run finds them.
       register_firebase_apps: true
+      # The tests of the roles fail on the providers with a known bug, so a
+      # change that makes a test of a role pass whatever the provider does
+      # fails here.
+      broken_providers: true
     secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it
