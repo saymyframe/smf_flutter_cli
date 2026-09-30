@@ -677,6 +677,101 @@ void main() {
     );
   });
 
+  /// The errors of [results], each with its case.
+  List<String> errorsOf(List<ContractResult> results) => [
+        for (final result in results)
+          for (final issue in result.errors) '${result.contractCase}: $issue',
+      ];
+
+  test(
+      'builds no case with another provider of a role that a module gets '
+      'from a module it depends on', () async {
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        // Add-ons of go: one uses the role that go provides, the other
+        // requires it.
+        TestModule('addon', dependsOn: {'go'}, uses: {nav}),
+        TestModule('plugin', dependsOn: {'go'}, requires: {nav}),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('addon')).map((c) => '$c'),
+      ['addon (go) with nav', 'addon'],
+    );
+    expect(
+      harness.casesOfModule(const ModuleId('plugin')).map((c) => '$c'),
+      ['plugin (go)'],
+    );
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+  });
+
+  test(
+      'builds no case of a role with another provider of a role that the '
+      'provider of the role provides too', () async {
+    final shell = TestRole<NoDsl>('shell', uses: {nav});
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'frame',
+          providers: [RoleProvider.plain(shell), RoleProvider.plain(nav)],
+        ),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      ]),
+    );
+
+    expect(harness.casesOfRole(shell).map((c) => '$c'), [
+      'shell by frame (frame) with nav',
+      'shell by frame',
+    ]);
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+  });
+
+  test('builds no case whose picked providers cannot be in one app', () async {
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('feature', requires: {store}, uses: {nav}),
+        TestModule('disk', providers: [RoleProvider.plain(store)]),
+        // Cloud brings go, a provider of the nav role, through its
+        // dependency, and hub provides both roles itself.
+        TestModule(
+          'cloud',
+          dependsOn: {'go'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'hub',
+          providers: [RoleProvider.plain(store), RoleProvider.plain(nav)],
+        ),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('feature')).map((c) => '$c'),
+      [
+        'feature (disk, go) with nav',
+        'feature (disk, auto) with nav',
+        'feature (cloud, go) with nav',
+        'feature (hub, hub) with nav',
+        'feature (disk)',
+        'feature (cloud)',
+        'feature (hub)',
+      ],
+    );
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+    // The cases left out take no provider of a role of feature away from
+    // its apps.
+    expect(await harness.uncheckedProviders(), isEmpty);
+  });
+
   test(
       'checks each module with every provider of each role it requires or '
       'uses', () async {
