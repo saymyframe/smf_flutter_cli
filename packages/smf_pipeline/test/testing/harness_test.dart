@@ -772,6 +772,110 @@ void main() {
     expect(await harness.uncheckedProviders(), isEmpty);
   });
 
+  /// The names of the cases of [results] with errors.
+  Set<String> failingOf(List<ContractResult> results) => {
+        for (final result in results)
+          if (result.errors.isNotEmpty) '${result.contractCase}',
+      };
+
+  test(
+      'keeps every combination of providers for a subset of used roles when '
+      'none can be in one app with the module, so that the cases report why',
+      () async {
+    final store = TestRole<NoDsl>('store');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        // Every provider of the store role brings auto, and each add-on of
+        // go needs the store role: one requires it, the other uses it.
+        TestModule(
+          'disk',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'cloud',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule('addon', dependsOn: {'go'}, requires: {store}),
+        TestModule('extra', dependsOn: {'go'}, uses: {store}),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('addon')).map((c) => '$c'),
+      ['addon (disk)', 'addon (cloud)'],
+    );
+    // Without the store role, extra can be in an app.
+    expect(
+      harness.casesOfModule(const ModuleId('extra')).map((c) => '$c'),
+      ['extra (disk) with store', 'extra (cloud) with store', 'extra'],
+    );
+    final results = await harness.checkAll();
+    expect(failingOf(results), {
+      'addon (disk)',
+      'addon (cloud)',
+      'extra (disk) with store',
+      'extra (cloud) with store',
+    });
+    expect(
+      errorsOf(results),
+      everyElement(contains('at most one provider of the nav role')),
+    );
+  });
+
+  test(
+      'keeps every case of a provider of a role when no combination of the '
+      'providers it requires can be in one app with it, so that the cases '
+      'report why', () async {
+    final store = TestRole<NoDsl>('store');
+    final shell = TestRole<NoDsl>('shell');
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('auto', providers: [RoleProvider.plain(nav)]),
+        TestModule(
+          'disk',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        TestModule(
+          'cloud',
+          dependsOn: {'auto'},
+          providers: [RoleProvider.plain(store)],
+        ),
+        // A provider of the shell role that brings go and requires the
+        // store role, whose every provider brings auto.
+        TestModule(
+          'frame',
+          dependsOn: {'go'},
+          requires: {store},
+          providers: [RoleProvider.plain(shell)],
+        ),
+      ]),
+    );
+
+    expect(harness.casesOfRole(shell).map((c) => '$c'), [
+      'shell by frame (disk)',
+      'shell by frame (cloud)',
+    ]);
+    final results = await harness.checkAll();
+    expect(failingOf(results), {
+      'frame (disk)',
+      'frame (cloud)',
+      'shell by frame (disk)',
+      'shell by frame (cloud)',
+    });
+    expect(
+      errorsOf(results),
+      everyElement(contains('at most one provider of the nav role')),
+    );
+  });
+
   test(
       'checks each module with every provider of each role it requires or '
       'uses', () async {
