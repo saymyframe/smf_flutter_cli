@@ -35,6 +35,12 @@ Future<ContractResult> _resultOf(List<ModuleId> modules) async {
   return result;
 }
 
+/// Whether the pipeline put code of this module into [file], whose imports
+/// it added to the file.
+bool _holdsCodeOfModule(RenderedFile file) => file.addedImports.any(
+      (added) => added.contributor == const ModuleOrigin(FirebaseCoreModule.id),
+    );
+
 /// The pubspec [text] as plain maps and lists.
 Map<String, Object?> _yamlOf(String text) {
   Object? plain(Object? node) => switch (node) {
@@ -260,11 +266,13 @@ void main() {
   });
 
   group('an app with Firebase', () {
+    late ContractResult result;
     late RenderedApp withFirebase;
     late RenderedApp without;
 
     setUpAll(() async {
-      withFirebase = (await _resultOf(const [FirebaseCoreModule.id])).app!;
+      result = await _resultOf(const [FirebaseCoreModule.id]);
+      withFirebase = result.app!;
       without = (await _resultOf(const [FlutterCoreModule.id])).app!;
     });
 
@@ -280,11 +288,10 @@ void main() {
         const ModuleOrigin(FirebaseCoreModule.id),
       );
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (const {
-          'pubspec.yaml',
-          AppEntryRole.bootstrapFile,
-          AppEntryRole.readmeFile,
-        }.contains(path)) {
+        // The file that starts Firebase, which the tests below check.
+        if (path == 'pubspec.yaml' ||
+            path == AppEntryRole.readmeFile ||
+            _holdsCodeOfModule(withFirebase.files[path]!)) {
           continue;
         }
         expect(withFirebase.files[path]!.bytes, file.bytes, reason: path);
@@ -345,32 +352,40 @@ void main() {
 
     test('initializes Firebase with the options of the platform in bootstrap()',
         () {
-      final file = withFirebase.files[AppEntryRole.bootstrapFile]!;
-      final index = DartFileIndexer.index(file.path, file.text);
-
-      final calls = index.invocations
-          .where((call) => call.name == 'initializeApp')
-          .toList();
-      expect(calls, hasLength(1));
-      expect(calls.single.target, 'Firebase');
-      expect(calls.single.awaited, isTrue);
-      expect(calls.single.enclosingDeclaration, 'bootstrap');
-      expect(calls.single.namedArguments, ['options']);
+      // The platform phase of start-up, which the provider of the app entry
+      // runs in bootstrap(), whichever module it is.
+      final start = result.app!.socketOrders[AppEntryRole.bootstrapPlatform]!
+          .contributions.single;
+      expect(start.origin, const ModuleOrigin(FirebaseCoreModule.id));
+      final code = (start.contribution as SocketContribution).fragment!.code;
       expect(
-        file.text,
-        contains(
-          'await Firebase.initializeApp(options: '
-          'DefaultFirebaseOptions.currentPlatform);',
-        ),
+        code,
+        'await Firebase.initializeApp(options: '
+        'DefaultFirebaseOptions.currentPlatform);',
       );
+      // One statement that awaits the call, as code.
+      final call = DartFileIndexer.index(
+        'lib/start.dart',
+        'Future<void> start() async {\n$code\n}\n',
+      ).invocations.single;
+      expect(call.name, 'initializeApp');
+      expect(call.target, 'Firebase');
+      expect(call.awaited, isTrue);
+      expect(call.namedArguments, ['options']);
+      // The pipeline adds its imports to the file of the app entry with the
+      // phase.
+      final entry = result.resolution!.providersOf(appEntryRole).single.id;
       expect(
         [
-          for (final added in file.addedImports)
-            (added.import.uri, '${added.contributor}'),
+          for (final file in withFirebase.files.values)
+            for (final added in file.addedImports)
+              if (added.contributor ==
+                  const ModuleOrigin(FirebaseCoreModule.id))
+                ('${file.owner}', added.import.uri),
         ],
         [
-          ('package:firebase_core/firebase_core.dart', 'firebase_core'),
-          ('package:contract_app/firebase_options.dart', 'firebase_core'),
+          ('$entry', 'package:firebase_core/firebase_core.dart'),
+          ('$entry', 'package:contract_app/firebase_options.dart'),
         ],
       );
     });

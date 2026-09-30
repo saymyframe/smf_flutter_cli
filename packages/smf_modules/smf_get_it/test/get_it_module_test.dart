@@ -58,6 +58,11 @@ String _registration(Statement statement) => switch (statement) {
       _ => statement.toSource(),
     };
 
+/// Whether the pipeline put code of the template of the DI role into
+/// [file], whose imports it added to the file.
+bool _holdsCodeOfRole(RenderedFile file) => file.addedImports
+    .any((added) => added.contributor == const RoleTemplateOrigin(diRole));
+
 /// [code] as the analyzer prints it, to compare code without its layout.
 String _source(String code) =>
     parseString(content: code).unit.declarations.single.toSource();
@@ -399,17 +404,29 @@ void main() {
     });
 
     test('awaits the registration of the services in bootstrap()', () {
-      final bootstrap = withContainer.files['lib/bootstrap.dart']!;
-
+      // The DI role puts it into the DI phase of start-up, which the provider
+      // of the app entry runs in bootstrap(), whichever module it is.
+      final phase =
+          result.app!.socketOrders[AppEntryRole.bootstrapDi]!.contributions;
       expect(
-        bootstrap.text,
-        contains('await ${DiRole.registerDependencies.name}();'),
+        [
+          for (final collected in phase)
+            (
+              '${collected.origin}',
+              (collected.contribution as SocketContribution).fragment!.code,
+            ),
+        ],
+        [('role:di', 'await ${DiRole.registerDependencies.name}();')],
       );
+      final entry = result.resolution!.providersOf(appEntryRole).single.id;
       expect(
-        bootstrap.addedImports.map(
-          (added) => (added.import.uri, '${added.contributor}'),
-        ),
-        [('package:contract_app/core/di/dependencies.dart', 'role:di')],
+        [
+          for (final file in withContainer.files.values)
+            for (final added in file.addedImports)
+              if (added.contributor == const RoleTemplateOrigin(diRole))
+                ('${file.owner}', added.import.uri),
+        ],
+        [('$entry', 'package:contract_app/core/di/dependencies.dart')],
       );
     });
 
@@ -427,7 +444,10 @@ void main() {
         const ModuleOrigin(GetItModule.id),
       );
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (const {'pubspec.yaml', 'lib/bootstrap.dart'}.contains(path)) {
+        // The file that awaits the registration, which the test above
+        // checks.
+        if (path == 'pubspec.yaml' ||
+            _holdsCodeOfRole(withContainer.files[path]!)) {
           continue;
         }
         expect(withContainer.files[path]!.bytes, file.bytes, reason: path);

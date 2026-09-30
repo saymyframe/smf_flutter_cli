@@ -2,9 +2,9 @@
 // the names of the old contracts API, the constants and hooks of the old
 // modules and their direct use of get_it, the old way to render bricks, the
 // old template markers, dependencies that only some packages may have, and
-// the files of the providers of roles in the tests of other modules; and
-// that only tools/workspace_members.dart reads the members of the
-// workspace from the root pubspec.
+// the files that the providers of roles render in the tests of other
+// modules; and that only tools/workspace_members.dart reads the members of
+// the workspace from the root pubspec.
 //
 // Run it anywhere in the repository: `dart tools/banlist.dart`. It reads the
 // files that git tracks, and the new ones it does not ignore.
@@ -165,24 +165,36 @@ final List<_Ban> _bans = [
     RegExp(r'''['"]\^?workspace:?(?:\\s[*+])?\$?['"]'''),
   ),
   // A module never learns which module provides a role, so its tests check
-  // what it gives the role through the data of the role, not in the file
-  // that the provider of the role generates: the file of createAppRouter()
-  // of the router, of registerDependencies() of the DI container, or of
-  // AppShell of the layout, by its constant or by its path. A test may name
-  // such a file as the key of a map, for the files of a provider of its
-  // own, and the package of a provider tests its own file.
+  // what it gives the role through the data and the sockets of the role,
+  // not in the files that the provider of the role renders: the file of
+  // createAppRouter() of the router, of registerDependencies() of the DI
+  // container, or of AppShell of the layout; and the files of the app
+  // entry into which its provider renders the sockets of start-up, those
+  // of bootstrap() and main(), and lib/app.dart, which no role guarantees.
+  // A test may name such a file by its constant or its path only as the
+  // key of a map, for the files of a provider of its own, and the package
+  // of a provider tests its own files. The contribution engine is no
+  // module.
   for (final (name, path) in const [
-    ('RouterRole.appRouterFactoryFile', 'core/router/app_router_factory.dart'),
-    ('DiRole.dependenciesFile', 'core/di/dependencies.dart'),
-    ('LayoutRole.appShellFile', 'core/layout/app_shell.dart'),
+    (
+      'RouterRole.appRouterFactoryFile',
+      r'core/router/app_router_factory\.dart'
+    ),
+    ('DiRole.dependenciesFile', r'core/di/dependencies\.dart'),
+    ('LayoutRole.appShellFile', r'core/layout/app_shell\.dart'),
+    ('AppEntryRole.bootstrapFile', r'(?:lib|package:\w+)/bootstrap\.dart'),
+    ('AppEntryRole.mainFile', r'(?:lib|package:\w+)/main\.dart'),
+    ('lib/app.dart', r'(?:lib|package:\w+)/app\.dart'),
   ])
     _Ban(
       name,
       RegExp(
-        '(?:(?<![A-Za-z0-9_])${RegExp.escape(name)}|${RegExp.escape(path)})'
+        '(?:(?<![A-Za-z0-9_])${RegExp.escape(name)}|$path)'
         r'''(?![A-Za-z0-9_]|['"]?\s*:)''',
       ),
-      files: RegExp('^packages/smf_modules/[^/]+/test/'),
+      files: RegExp(
+        '^packages/smf_modules/(?!smf_contribution_engine/)[^/]+/test/',
+      ),
     ),
 ];
 
@@ -211,6 +223,12 @@ const _lasting = [
     ['packages/smf_modules/smf_bottom_tabs/test/'],
     {'LayoutRole.appShellFile'},
     'smf_bottom_tabs provides the layout role, and its tests check its file.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_flutter_core/test/'],
+    {'AppEntryRole.bootstrapFile', 'AppEntryRole.mainFile', 'lib/app.dart'},
+    'smf_flutter_core provides the app entry role, and its tests check its '
+    'files.',
   ),
   _Exception(
     ['packages/smf_modules/smf_contribution_engine/'],

@@ -173,6 +173,45 @@ void main() {
     );
   });
 
+  test(
+      'finds the files that the provider of the app entry renders in the '
+      'tests of modules, but as the keys of maps and in the tests of the '
+      'provider', () {
+    const state = 'packages/smf_modules/smf_riverpod/test/state_test.dart';
+    const core = 'packages/smf_modules/smf_flutter_core/test/core_test.dart';
+    expect(
+      _names({
+        state: 'final main = app.files[AppEntryRole.mainFile]!;\n'
+            'if (path == AppEntryRole.bootstrapFile) continue;\n'
+            "final app = withRouter.files['lib/app.dart']!;\n"
+            "final start = app.files['lib/bootstrap.dart']!;\n"
+            "import 'package:contract_app/main.dart' as app;\n"
+            "  AppEntryRole.mainFile: '''\n"
+            "  'lib/app.dart': '',\n"
+            // Files that the roles guarantee, and other files.
+            "const fallback = 'lib/core/app/fallback_start_screen.dart';\n"
+            'const readme = AppEntryRole.readmeFile;\n'
+            "const router = 'lib/core/router/app_router.dart';\n"
+            "const shell = 'lib/features/shell/main.dart.txt';\n"
+            'final other = AppEntryRole.mainFiles;\n',
+        core: "final app = texts['lib/app.dart']!;\n"
+            'final bootstrap = texts[AppEntryRole.bootstrapFile]!;\n',
+        // No module, and the tests of other packages.
+        'packages/smf_modules/smf_contribution_engine/test/engine_test.dart':
+            "const untouchedFile = 'lib/app.dart';\n",
+        'packages/smf_pipeline/test/render_test.dart':
+            "final bootstrap = app.files['lib/bootstrap.dart']!;\n",
+      }),
+      [
+        '$state:1: AppEntryRole.mainFile',
+        '$state:2: AppEntryRole.bootstrapFile',
+        '$state:3: lib/app.dart',
+        '$state:4: AppEntryRole.bootstrapFile',
+        '$state:5: AppEntryRole.mainFile',
+      ],
+    );
+  });
+
   test('reports every path of an exception that matches nothing', () {
     // Both exceptions are lasting ones.
     final problems = problemsOf({

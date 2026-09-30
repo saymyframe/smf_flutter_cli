@@ -1,6 +1,3 @@
-import 'package:analyzer/dart/analysis/utilities.dart';
-import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -133,47 +130,39 @@ Map<String, Object?> _pubspecOf(RenderedApp app) {
       as Map<String, Object?>;
 }
 
-/// The widgets that `main()` of [app] passes to `runApp()`, from the
-/// outermost to the root widget, each the `child` of the one before.
-List<String> _rootWidgetsOf(RenderedApp app) {
-  final unit = parseString(
-    content: app.files[AppEntryRole.mainFile]!.text,
-  ).unit;
-  final finder = _RunAppFinder();
-  unit.declarations
-      .whereType<FunctionDeclaration>()
-      .singleWhere((declaration) => declaration.name.lexeme == 'main')
-      .accept(finder);
-  final widgets = <String>[];
-  Expression? widget = finder.runApp!.argumentList.arguments.single;
-  while (widget != null) {
-    final (name, arguments) = switch (widget) {
-      MethodInvocation(target: null, :final methodName, :final argumentList) =>
-        (methodName.name, argumentList),
-      InstanceCreationExpression(:final constructorName, :final argumentList) =>
-        (constructorName.type.name.lexeme, argumentList),
-      _ => throw StateError('runApp() gets ${widget.toSource()}'),
-    };
-    widgets.add(name);
-    widget = [
-      for (final argument in arguments.arguments)
-        if (argument case NamedExpression(:final name, :final expression)
-            when name.label.name == 'child')
-          expression,
-    ].firstOrNull;
-  }
-  return widgets;
-}
+/// The widgets that the modules of the app of [result] put around its root
+/// widget, from the outermost, each as its contributor and the code that
+/// opens it: the contributions to the root wrappers of the app entry, which
+/// its provider renders around the root widget in `runApp()`, whichever
+/// module it is.
+List<String> _rootWrappersOf(ContractResult result) => [
+      for (final collected in result
+              .app!.socketOrders[AppEntryRole.rootWrappers]?.contributions ??
+          const <Collected>[])
+        [
+          '${collected.origin}:',
+          (collected.contribution as SocketContribution).fragment!.code,
+        ].join(' '),
+    ];
 
-final class _RunAppFinder extends RecursiveAstVisitor<void> {
-  MethodInvocation? runApp;
+/// The imports that the pipeline adds for the code of this module to the
+/// files of [app], each as the owner of its file and the import.
+List<String> _importsOfModuleIn(RenderedApp app) => [
+      for (final file in app.files.values)
+        for (final added in file.addedImports)
+          if (added.contributor == const ModuleOrigin(RiverpodModule.id))
+            [
+              '${file.owner}:',
+              added.import.uri,
+              'as ${added.import.prefix}',
+              'show ${added.import.show.join(', ')}',
+            ].join(' '),
+    ];
 
-  @override
-  void visitMethodInvocation(MethodInvocation node) {
-    if (node.methodName.name == 'runApp') runApp = node;
-    super.visitMethodInvocation(node);
-  }
-}
+/// Whether the pipeline put code of this module into [file], whose imports
+/// it added to the file.
+bool _holdsCodeOfModule(RenderedFile file) => file.addedImports
+    .any((added) => added.contributor == const ModuleOrigin(RiverpodModule.id));
 
 void main() {
   const module = RiverpodModule();
@@ -224,13 +213,15 @@ void main() {
 
   group('an app with Riverpod', () {
     late ContractResult result;
+    late ContractResult resultWithout;
     late RenderedApp withRiverpod;
     late RenderedApp without;
 
     setUpAll(() async {
       result = await _resultOf(const [RiverpodModule.id]);
       withRiverpod = result.app!;
-      without = (await _resultOf(const [FlutterCoreModule.id])).app!;
+      resultWithout = await _resultOf(const [FlutterCoreModule.id]);
+      without = resultWithout.app!;
     });
 
     test(
@@ -253,17 +244,18 @@ void main() {
     });
 
     test('runs the app inside a ProviderScope', () {
-      expect(_rootWidgetsOf(withRiverpod), ['ProviderScope', 'App']);
-      expect(_rootWidgetsOf(without), ['App']);
-
-      final main = withRiverpod.files[AppEntryRole.mainFile]!;
-      final imports = DartFileIndexer.index(main.path, main.text).imports;
-      final riverpod = imports.singleWhere(
-        (import) =>
-            import.uri == 'package:flutter_riverpod/flutter_riverpod.dart',
-      );
-      expect(riverpod.show, ['ProviderScope']);
-      expect(riverpod.prefix, isNull);
+      expect(_rootWrappersOf(result), ['riverpod: ProviderScope(child: ']);
+      expect(_rootWrappersOf(resultWithout), isEmpty);
+      // Only the name of the scope, in the file of the app entry that wraps
+      // the root widget, whichever module provides the app entry.
+      final entry = result.resolution!.providersOf(appEntryRole).single.id;
+      expect(_importsOfModuleIn(withRiverpod), [
+        [
+          '$entry:',
+          'package:flutter_riverpod/flutter_riverpod.dart',
+          'as null show ProviderScope',
+        ].join(' '),
+      ]);
     });
 
     test('depends on flutter_riverpod 3', () {
@@ -276,7 +268,11 @@ void main() {
     test('is the app without Riverpod but for the scope and dependency', () {
       expect(withRiverpod.files.keys, orderedEquals(without.files.keys));
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (path == 'pubspec.yaml' || path == AppEntryRole.mainFile) continue;
+        // The file that holds the scope, which the test above checks.
+        if (path == 'pubspec.yaml' ||
+            _holdsCodeOfModule(withRiverpod.files[path]!)) {
+          continue;
+        }
         expect(withRiverpod.files[path]!.bytes, file.bytes, reason: path);
         expect(withRiverpod.files[path]!.owner, file.owner, reason: path);
       }
@@ -308,12 +304,14 @@ void main() {
         result.resolution!.module(_VariantUser.id)!.variant,
         RiverpodModule.id,
       );
-      expect(_rootWidgetsOf(result.app!), [
-        'ProviderScope',
-        'KeyedSubtree',
-        'RepaintBoundary',
-        'Consumer',
-        'App',
+      expect(_rootWrappersOf(result), [
+        'riverpod: ProviderScope(child: ',
+        'a_riverpod_user: KeyedSubtree(child: ',
+        'a_state_user: RepaintBoundary(child: ',
+        [
+          'a_variant_user (riverpod):',
+          'Consumer(builder: (context, ref, child) => child!, child: ',
+        ].join(' '),
       ]);
     });
   });

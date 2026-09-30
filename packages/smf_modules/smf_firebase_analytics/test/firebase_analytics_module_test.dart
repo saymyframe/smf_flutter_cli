@@ -228,13 +228,13 @@ void _expectTheAppWithout(
   );
 }
 
-/// The contributions to [socket] in the app of [result], in their order,
+/// The contributions to [socket] in the app of [result], those of the
+/// render hooks of the roles included, in the order they were rendered,
 /// each as its contributor and its code: what the provider of the role of
 /// the socket renders, whichever module it is.
 List<String> _contributionsTo(ContractResult result, SocketRef socket) => [
-      for (final collected
-          in result.validation!.socketOrders[socket]?.contributions ??
-              const <Collected>[])
+      for (final collected in result.app!.socketOrders[socket]?.contributions ??
+          const <Collected>[])
         _described(collected),
     ];
 
@@ -254,7 +254,7 @@ const String _listenerOfModule = 'firebase_analytics: $_listener';
 /// after those of the other modules.
 void _expectTheRouterWithout(ContractResult result, ContractResult without) {
   Map<SocketRef, List<String>> routerSocketsOf(ContractResult result) => {
-        for (final socket in result.validation!.socketOrders.keys)
+        for (final socket in result.app!.socketOrders.keys)
           if (identical(socket.role, routerRole))
             socket: _contributionsTo(result, socket),
       };
@@ -271,15 +271,19 @@ void _expectTheRouterWithout(ContractResult result, ContractResult without) {
 CompilationUnit _unitOf(RenderedApp app, String path) =>
     parseString(content: app.files[path]!.text).unit;
 
-/// The statements of `bootstrap()` in [app], as written.
-List<String> _bootstrapOf(RenderedApp app) {
-  final bootstrap = _unitOf(app, AppEntryRole.bootstrapFile)
-      .declarations
-      .whereType<FunctionDeclaration>()
-      .singleWhere((function) => function.name.lexeme == 'bootstrap');
-  final body = bootstrap.functionExpression.body as BlockFunctionBody;
-  return [for (final statement in body.block.statements) '$statement'];
-}
+/// The code that the modules and the templates of the roles put into the
+/// phases of start-up in the app of [result], phase after phase, each as its
+/// contributor and its code: what `bootstrap()` runs, into which the
+/// provider of the app entry renders the phases, whichever module it is.
+List<String> _startUpOf(ContractResult result) => [
+      for (final phase in const [
+        AppEntryRole.bootstrapEarly,
+        AppEntryRole.bootstrapPlatform,
+        AppEntryRole.bootstrapDi,
+        AppEntryRole.bootstrapLate,
+      ])
+        ..._contributionsTo(result, phase),
+    ];
 
 /// The factories that the analytics service of the app in [app] forwards
 /// to, as written in the list of the services of the template of the role.
@@ -438,12 +442,13 @@ void main() {
   });
 
   group('an app without a router or a DI container', () {
+    late ContractResult result;
     late RenderedApp withAnalytics;
     late RenderedApp without;
 
     setUpAll(() async {
-      withAnalytics =
-          (await _resultOf(const [FirebaseAnalyticsModule.id])).app!;
+      result = await _resultOf(const [FirebaseAnalyticsModule.id]);
+      withAnalytics = result.app!;
       without = (await _resultOf(const [FirebaseCoreModule.id])).app!;
     });
 
@@ -465,7 +470,7 @@ void main() {
     });
 
     test('starts nothing in bootstrap(), as the service needs no waiting', () {
-      expect(_bootstrapOf(withAnalytics), [_initializeFirebase]);
+      expect(_startUpOf(result), ['firebase_core: $_initializeFirebase']);
     });
 
     test(
@@ -629,9 +634,9 @@ void main() {
         without,
         changedBy: _providersOf(result, diRole),
       );
-      expect(_bootstrapOf(withAnalytics), [
-        _initializeFirebase,
-        'await registerDependencies();',
+      expect(_startUpOf(result), [
+        'firebase_core: $_initializeFirebase',
+        'role:di: await registerDependencies();',
       ]);
     });
 
@@ -852,7 +857,11 @@ void main() {
           [_listenerOfModule],
           reason: '$modules',
         );
-        expect(_bootstrapOf(app), [_initializeFirebase], reason: '$modules');
+        expect(
+          _startUpOf(result),
+          ['firebase_core: $_initializeFirebase'],
+          reason: '$modules',
+        );
       }
     });
   });
