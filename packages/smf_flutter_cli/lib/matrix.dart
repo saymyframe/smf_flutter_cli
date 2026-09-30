@@ -343,9 +343,10 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   hook;
 /// - `uses`, the modules of the matrix whose ids it uses: those that, with
 ///   another id in their place in an app of the matrix, change whether it
-///   applies to the app or the values of its files there. Each has the id
-///   of the module (`module`), its package (`package`) and the names of
-///   those apps (`apps`), in the order of the apps;
+///   applies to the app, the values of its files there or the files it
+///   generates there. Each has the id of the module (`module`), its
+///   package (`package`) and the names of those apps (`apps`), in the
+///   order of the apps;
 /// - `roles`, the ids of the roles whose contract it checks
 ///   ([MatrixAppTest.roles]), such as `router`;
 /// - `roleFunctionUses`, the uses, in its Dart files, of the functions of
@@ -583,8 +584,9 @@ List<String> _appliesWithout(
     ];
 
 /// The modules of [apps] whose ids [test] uses, each with the names of the
-/// apps where another id in its place changes whether [test] applies, or
-/// the values of its files; in the order of the apps and of their modules.
+/// apps where another id in its place changes whether [test] applies, the
+/// values of its files or the files it generates; in the order of the apps
+/// and of their modules.
 Map<ModuleId, List<String>> _usesOf(
   MatrixAppTest test,
   List<MatrixApp> apps,
@@ -600,8 +602,8 @@ Map<ModuleId, List<String>> _usesOf(
 
 /// Whether [test] uses the id of the module [id] of [app]: whether it
 /// applies to [app] with another id in place of [id] other than to [app],
-/// or fills the values of its files there otherwise, or throws there, as a
-/// test that looks the module up by its id does.
+/// or fills the values of its files, or generates files, there otherwise,
+/// or throws there, as a test that looks the module up by its id does.
 bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
   final selection = _selectionOf(test, app);
   try {
@@ -612,9 +614,19 @@ bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
 }
 
 /// Whether [test] applies to [app] and, if it does, the values of its
-/// files there, as text.
-String _selectionOf(MatrixAppTest test, MatrixApp app) =>
-    test.appliesTo(app) ? jsonEncode(test.values?.call(app) ?? const {}) : '';
+/// files and the files it generates there, as text.
+String _selectionOf(MatrixAppTest test, MatrixApp app) => test.appliesTo(app)
+    ? jsonEncode([
+        test.values?.call(app) ?? const <String, String>{},
+        test.generatedFiles?.call(app, _packageOfUses) ??
+            const <String, String>{},
+      ])
+    : '';
+
+/// The name of the package that [_selectionOf] gives the apps whose files
+/// a test generates: the same for every app, so that only what the app is
+/// changes the files.
+const _packageOfUses = 'matrix_app';
 
 /// [app] with another id in place of the module [id], in its modules, its
 /// [MatrixApp.everyModuleWith] and its name, as if another module took the
@@ -652,6 +664,7 @@ final class MatrixAppTest {
     required this.appliesTo,
     this.devDependencies = const [],
     this.values,
+    this.generatedFiles,
     this.roles = const {},
     this.mocks,
   });
@@ -664,7 +677,8 @@ final class MatrixAppTest {
   /// package of the app, and `{{<key>}}` the value of each key of the
   /// [values] of the app. Hidden files stay out. The files of the tests of
   /// an app may use those of other tests that the app always has too, such
-  /// as the tests of a module that another depends on.
+  /// as the tests of a module that another depends on, and those that the
+  /// tests generate for the app ([generatedFiles]).
   final String directory;
 
   /// Whether the tests run in an app of the matrix.
@@ -684,6 +698,25 @@ final class MatrixAppTest {
   /// besides `app_name`.
   final Map<String, String> Function(MatrixApp app)? values;
 
+  /// The files that the matrix generates for the tests in an app of the
+  /// matrix, next to the files of [directory], or `null` if they need none:
+  /// the text of each by its path in the app, such as
+  /// `test/di_role/registered_services.dart`, for the app and the name of
+  /// its package, which the imports of the files of the app take, as
+  /// `package:<name>/...`. The matrix writes them as they are, with no
+  /// placeholder filled.
+  ///
+  /// A test of a role needs to know what the modules of an app give the
+  /// role, such as the services that they register in the DI container,
+  /// and the files of [directory], the same in every app, cannot say it.
+  /// The function writes it from the data of the roles of the app
+  /// ([MatrixApp.hook]), such as the registrations of
+  /// `diRole.graphOf(diRole.hookInput(app.hook!))`, and the files of
+  /// [directory] import what it writes. So it takes what it needs of the
+  /// modules of the app from their roles, as [values] do.
+  final Map<String, String> Function(MatrixApp app, String packageName)?
+      generatedFiles;
+
   /// The roles whose contract the tests check, whichever module provides
   /// each, such as the router role, whose provider calls the listeners of
   /// the screen once for each screen the user sees.
@@ -692,9 +725,9 @@ final class MatrixAppTest {
   /// which [appliesTo] selects by the role, through the roles of the app
   /// ([MatrixApp.hook]), rather than by the ids of the modules that provide
   /// it; [runMatrix] fails when they apply to no app of one of them, or
-  /// when they select their apps, or take their [values], by the id of one
-  /// of them (see [MatrixAppTests]). Tests of what only one provider does
-  /// name no role.
+  /// when they select their apps, take their [values] or generate their
+  /// [generatedFiles] by the id of one of them (see [MatrixAppTests]).
+  /// Tests of what only one provider does name no role.
   final Set<Role> roles;
 
   /// The mocks of the platform side of what the module of the tests runs in
@@ -752,8 +785,8 @@ final class MatrixAppTests {
   /// apps are [apps]: for each role of the [tests] and of [testedRoles],
   /// and each module that provides it and is in [apps], a test of the role
   /// that applies to none of the apps of the module, or that selects its
-  /// apps or takes its values by the id of the module, and no test of a
-  /// role of [testedRoles] at all.
+  /// apps, takes its values or generates its files by the id of the
+  /// module, and no test of a role of [testedRoles] at all.
   ///
   /// A provider of the role that the tests leave out, such as one that a
   /// module adds later, is a problem, since its apps would be generated and
@@ -761,7 +794,7 @@ final class MatrixAppTests {
   /// contract of the role. So is a test that tells the providers apart by
   /// their ids, which a new provider would not have: with another id in
   /// place of that of a provider in one of its apps, it must apply to the
-  /// app and fill its values as before.
+  /// app, fill its values and generate its files as before.
   List<String> roleProblems(List<SmfModule> modules, List<MatrixApp> apps) {
     final roles = {...testedRoles, for (final test in tests) ...test.roles};
     return [
@@ -830,9 +863,9 @@ final class MatrixAppTests {
       'with $id, which provides it: a test of a role applies to the apps of '
       'every provider of the role, which it selects by the role.';
 
-  /// The problem that [test], a test of [role], selects its apps or takes
-  /// its values by the id of the module [id], which provides it, in the
-  /// apps [using].
+  /// The problem that [test], a test of [role], selects its apps, takes its
+  /// values or generates its files by the id of the module [id], which
+  /// provides it, in the apps [using].
   static String _byId(
     MatrixAppTest test,
     Role role,
@@ -840,23 +873,24 @@ final class MatrixAppTests {
     List<String> using,
   ) =>
       'The tests of ${test.directory} check the $role, but select their apps, '
-      'or take the values of their files, by the id of $id, which provides '
-      'it: with another module in its place, they would apply otherwise, or '
-      'get other values, in these apps of the matrix: ${using.join(', ')}. '
-      'A test of a role takes what it needs of the providers of the role '
-      'from the roles of the app (MatrixApp.hook), such as whether the app '
-      'has the role (presentRoles), so that a new provider of the role gets '
-      'the test as it is.';
+      'take the values of their files or generate files by the id of $id, '
+      'which provides it: with another module in its place, they would apply '
+      'otherwise, or get other values or files, in these apps of the matrix: '
+      '${using.join(', ')}. A test of a role takes what it needs of the '
+      'providers of the role from the roles of the app (MatrixApp.hook), such '
+      'as whether the app has the role (presentRoles), so that a new provider '
+      'of the role gets the test as it is.';
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
 /// in [directory] with the package [packageName], with the placeholders
-/// of the files filled, and returns the paths of the files in the app; see
-/// [MatrixAppTest.directory].
+/// of the files filled, writes the files that the tests generate for the
+/// app next to them, and returns the paths of the files in the app; see
+/// [MatrixAppTest.directory] and [MatrixAppTest.generatedFiles].
 ///
 /// Without [app], for an app that `smf create` generated outside the
 /// matrix, only `{{app_name}}` is filled: the [MatrixAppTest.values] come
-/// from an app of the matrix.
+/// from an app of the matrix, and so do the files that the tests generate.
 ///
 /// If some of the [tests] declare [MatrixAppTest.mocks], it also writes the
 /// configuration of the tests of the app, `test/flutter_test_config.dart`,
@@ -867,11 +901,13 @@ final class MatrixAppTests {
 /// of an app are set up for the tests of each module, which the tests of
 /// the matrix and the tests added to an app outside it get alike.
 ///
-/// Throws a [MatrixAppTestException], before it copies anything, if a file
-/// keeps a placeholder that no value fills, if two of the [tests] have a
-/// file at the same path, if the mocks of a test are in no file of it in
-/// `test/`, or if a test has a file at the path of the configuration that
-/// the matrix writes for the mocks.
+/// Throws a [MatrixAppTestException], before it copies anything, if a test
+/// generates files without [app], if a file keeps a placeholder that no
+/// value fills, if two of the [tests] have a file at the same path, the
+/// files they generate included, if a test generates a file at a path that
+/// is no relative path in the app, if the mocks of a test are in no file
+/// of it in `test/`, or if a test has a file at the path of the
+/// configuration that the matrix writes for the mocks.
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
   required String directory,
@@ -883,6 +919,14 @@ List<String> addAppTests(
   final texts = <String, String>{};
   final owners = <String, String>{};
   for (final test in tests) {
+    final files = switch ((test.generatedFiles, app)) {
+      (null, _) => const <String, String>{},
+      (final generate?, final app?) => generate(app, packageName),
+      (_, null) => throw MatrixAppTestException(
+          'The tests of ${test.directory} generate files for an app of the '
+          'matrix, but the app is none.',
+        ),
+    };
     final values = {
       'app_name': packageName,
       if (app != null) ...?test.values?.call(app),
@@ -895,6 +939,25 @@ List<String> addAppTests(
       }
       owners[path] = test.directory;
       texts[path] = _filled(file.readAsStringSync(), values, test, path);
+    }
+    for (final MapEntry(key: generated, value: text) in files.entries) {
+      if (!_isPathInApp(generated)) {
+        throw MatrixAppTestException(
+          'The tests of ${test.directory} generate a file at "$generated", '
+          'which is no path in the app, such as test/services.dart: names '
+          r'separated by /, none of them empty, . or .., and none with \ or '
+          ':.',
+        );
+      }
+      final path = context.joinAll(generated.split('/'));
+      if (owners[path] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of ${test.directory} generate $generated, which the '
+          'tests of $other have too.',
+        );
+      }
+      owners[path] = test.directory;
+      texts[path] = text;
     }
   }
   final mocks = <MatrixMocks>[];
@@ -942,6 +1005,18 @@ List<(String, File)> _filesOf(String directory, FileSystem fileSystem) {
           (path, entity),
   ]..sort((a, b) => a.$1.compareTo(b.$1));
 }
+
+/// Whether [path], the path of a file that a [MatrixAppTest] generates, is a
+/// path in the app, relative to its root: names separated by `/`, none of
+/// them empty, `.` or `..`, which would lead out of the app, and none with
+/// `\` or `:`, which would make it another path on Windows.
+bool _isPathInApp(String path) => path.split('/').every(
+      (name) =>
+          name.isNotEmpty &&
+          name != '.' &&
+          name != '..' &&
+          !name.contains(RegExp(r'[\\:]')),
+    );
 
 /// The path in an app of the configuration of its tests, which
 /// [addAppTests] writes for the [MatrixAppTest.mocks] of the tests.
@@ -1074,19 +1149,26 @@ Future<(int, String)> runAppTests(
 /// have any. It runs neither the analysis nor the tests, which the caller
 /// runs where it needs them.
 ///
+/// With [app], the app of the matrix that [generated] was generated as,
+/// such as an app with every module of the plan of CI that the matrix tool
+/// of the CLI generates with `--create --app`, it fills the values of the
+/// tests too, and writes the files that they generate for [app] (see
+/// [MatrixAppTest.generatedFiles]), as for an app of the matrix.
+///
 /// Returns 0 and the output, or the exit code of `flutter pub add` and the
 /// output if it fails. A problem of the files of the tests is a failure
 /// too, with the exit code 1, such as a placeholder that only an app of the
-/// matrix fills.
+/// matrix fills, or files that tests generate, without [app].
 Future<(int, String)> addAppTestsTo(
   GeneratedApp generated,
   List<MatrixAppTest> tests, {
+  MatrixApp? app,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
     _addAndRun(
       generated,
-      null,
+      app,
       tests,
       _pubAdd(tests),
       flutter: flutter,

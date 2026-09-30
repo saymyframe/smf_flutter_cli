@@ -15,7 +15,8 @@ import 'workspace_members.dart';
 
 /// The matrix tools, by path from the root of the repository, each with the
 /// library of its package that registers its MatrixAppTests, whose code
-/// selects the apps of each test and fills the values of its files. Each
+/// selects the apps of each test, fills the values of its files and
+/// generates files for it. Each
 /// tool reports its MatrixAppTests with `--app-tests --json`.
 const matrixTools = {
   'packages/smf_flutter_cli/tool/matrix.dart':
@@ -75,7 +76,8 @@ final class ListedAppTest {
   final List<String> appliesWithout;
 
   /// The modules of the matrix whose ids the tool uses to select the apps
-  /// of the test or to fill the values of its files.
+  /// of the test, to fill the values of its files or to generate files for
+  /// it.
   final List<UsedModule> uses;
 
   /// The ids of the roles whose contract the test checks, such as `router`
@@ -109,7 +111,8 @@ final class RoleFunctionUse {
 
 /// A module whose id a matrix tool uses for a MatrixAppTest: with another
 /// id in its place in some apps of the matrix, the test applies to them
-/// otherwise, or gets other values of its files there.
+/// otherwise, or gets other values of its files or other generated files
+/// there.
 final class UsedModule {
   /// Describes the module [module] of the package [package], whose id the
   /// tool uses in the apps [apps].

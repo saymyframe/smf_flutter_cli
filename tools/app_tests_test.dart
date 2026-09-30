@@ -29,24 +29,25 @@
 // package of no module, whose app tests the other checks would then read
 // as those of a package of no module, is a problem too.
 //
-// A tool selects the apps of a test, and fills the values of its files,
-// only by the roles of the app (`MatrixApp.hook`) and by the ids of the
-// modules that the test knows: the modules of the package that keeps it and
-// of the packages of modules it depends on, or, for the fixture registry,
-// those of the fixture modules it depends on, whose files the test may
-// import (`knownModules`). What a test needs of the other modules of an app
-// comes from its roles: the tool of the CLI once filled the start screen of
-// the screen views test with `home.home` when the app had the module home,
-// which a second feature with a start screen, or `--start`, would make
-// wrong, while the router role knows the screen that the app starts on.
-// Each tool reports the modules whose ids it uses for each test: those
-// that, with another id in their place in an app of the matrix, change
-// whether the test applies to the app or the values of its files there. So
-// a use of an id counts however the tool writes it: as a string, a
-// `ModuleId`, the id of the class of a module or a lookup of the modules by
-// their ids. A test of what only one provider of a role does, such as the
-// refresh of go_router, selects the apps of that provider by its id: those
-// tests are the only exceptions, which _ofOneProvider lists. And the code
+// A tool selects the apps of a test, fills the values of its files and
+// generates files for it only by the roles of the app (`MatrixApp.hook`)
+// and by the ids of the modules that the test knows: the modules of the
+// package that keeps it and of the packages of modules it depends on, or,
+// for the fixture registry, those of the fixture modules it depends on,
+// whose files the test may import (`knownModules`). What a test needs of
+// the other modules of an app comes from its roles: the tool of the CLI
+// once filled the start screen of the screen views test with `home.home`
+// when the app had the module home, which a second feature with a start
+// screen, or `--start`, would make wrong, while the router role knows the
+// screen that the app starts on. Each tool reports the modules whose ids
+// it uses for each test: those that, with another id in their place in an
+// app of the matrix, change whether the test applies to the app, the
+// values of its files there or the files it generates there. So a use of
+// an id counts however the tool writes it: as a string, a `ModuleId`, the
+// id of the class of a module or a lookup of the modules by their ids. A
+// test of what only one provider of a role does, such as the refresh of
+// go_router, selects the apps of that provider by its id: those tests are
+// the only exceptions, which _ofOneProvider lists. And the code
 // that registers the app tests of a tool, the tool and the library of its
 // package that `matrixTools` names, imports, of the packages of the
 // workspace, only the packages of the modules whose app tests it registers,
@@ -422,11 +423,12 @@ List<String> usesProblemsOf(
         } else if (!test.modules.contains(use.module) &&
             !known.contains(use.package)) {
           problems.add(
-            '$tool selects the apps of $directory, or fills the values of its '
-            'files, by the id of ${use.module}, a module of ${use.package} '
-            'that its tests do not know: with another module in its place, '
-            'they would apply otherwise, or get other values, in these apps '
-            'of the matrix: ${use.apps.join(', ')}. What they need of the '
+            '$tool selects the apps of $directory, fills the values of its '
+            'files or generates files by the id of ${use.module}, a module of '
+            '${use.package} that its tests do not know: with another module in '
+            'its place, they would apply otherwise, or get other values or '
+            'files, in these apps of the matrix: ${use.apps.join(', ')}. What '
+            'they need of the '
             'other modules of an app comes from the roles of the app '
             '(MatrixApp.hook), such as whether it has a router (presentRoles) '
             'or the screen it starts on. The tests of ${package.name} know '
@@ -792,11 +794,12 @@ void main() {
     // The problem of a use of the id of the module of the package of the
     // same name.
     String problem(String directory, String module, String known) =>
-        'tool/matrix.dart selects the apps of $directory, or fills the values '
-        'of its files, by the id of $module, a module of $module that its '
-        'tests do not know: with another module in its place, they would '
-        'apply otherwise, or get other values, in these apps of the matrix: '
-        'every module. What they need of the other modules of an app comes '
+        'tool/matrix.dart selects the apps of $directory, fills the values of '
+        'its files or generates files by the id of $module, a module of '
+        '$module that its tests do not know: with another module in its '
+        'place, they would apply otherwise, or get other values or files, in '
+        'these apps of the matrix: every module. What they need of the other '
+        'modules of an app comes '
         'from the roles of the app (MatrixApp.hook), such as whether it has a '
         'router (presentRoles) or the screen it starts on. $known; a test of '
         'what only one provider of a role does names the provider in '
@@ -987,9 +990,9 @@ void main() {
   );
 
   test(
-    'the matrix tools select the apps of their tests, and fill the values of '
-    'their files, by the roles of the apps and by the modules that the tests '
-    'know',
+    'the matrix tools select the apps of their tests, fill the values of '
+    'their files and generate files for them by the roles of the apps and by '
+    'the modules that the tests know',
     () async {
       final root = repositoryRoot();
 
