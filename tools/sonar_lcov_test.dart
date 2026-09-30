@@ -205,6 +205,58 @@ sonar.dart.lcov.reportPaths=\\
     );
   });
 
+  /// A workspace in a temporary directory, deleted after the test, whose
+  /// root pubspec is [pubspec], with a test/ directory in each package of
+  /// [tested].
+  String workspace(String pubspec, List<String> tested) {
+    final root = Directory.systemTemp.createTempSync('sonar_lcov_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    File('${root.path}/pubspec.yaml').writeAsStringSync(pubspec);
+    for (final package in tested) {
+      Directory('${root.path}/$package/test').createSync(recursive: true);
+    }
+    return root.path;
+  }
+
+  test(
+      'reads a member of the workspace in quotes, so that the list cannot '
+      'lack the report of its package unseen', () {
+    final root = workspace(
+      'name: root\n'
+      'workspace:\n'
+      '  - packages/a\n'
+      '  - "packages/b"\n',
+      ['packages/a', 'packages/b'],
+    );
+
+    expect(
+      problemsOf(
+        properties(['packages/a/coverage/lcov.info']),
+        _workspacePackages(root),
+      ),
+      [_missing('packages/b')],
+    );
+  });
+
+  test(
+      'reads the members of the workspace after a comment on its line, so '
+      'that the reports of their packages are not taken for left over', () {
+    final root = workspace(
+      'name: root\n'
+      'workspace: # The packages of the repository.\n'
+      '  - packages/a\n',
+      ['packages/a'],
+    );
+
+    expect(
+      problemsOf(
+        properties(['packages/a/coverage/lcov.info']),
+        _workspacePackages(root),
+      ),
+      isEmpty,
+    );
+  });
+
   test(
       'sonar-project.properties lists the report of every package of the '
       'workspace with tests whose lib/ SonarCloud analyzes, and no other', () {

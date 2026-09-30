@@ -59,6 +59,31 @@ void main() {
     );
   });
 
+  test(
+      'finds the key of the members of the workspace that code looks up or '
+      'matches, but in tools/workspace_members.dart, which reads them', () {
+    expect(
+      _names({
+        'tools/a.dart': "if (line == 'workspace:') inWorkspace = true;\n"
+            "final members = pubspec['workspace'];\n"
+            'final key = RegExp(r"^workspace:\\s*\$");\n'
+            // The text of a pubspec in a test, and other names.
+            "const pubspec = 'name: root\\n' 'workspace:\\n';\n"
+            "const other = 'workspace: # The packages.\\n';\n"
+            "const names = ['workspaces', 'my_workspace'];\n",
+        'tools/workspace_members.dart':
+            "final workspace = pubspec.nodes['workspace'];\n",
+        'pubspec.yaml': 'workspace:\n  - packages/a\n',
+        'README.md': 'The `workspace:` of the root pubspec lists them.\n',
+      }),
+      [
+        'tools/a.dart:1: workspace: read by hand',
+        'tools/a.dart:2: workspace: read by hand',
+        'tools/a.dart:3: workspace: read by hand',
+      ],
+    );
+  });
+
   test('reads Dart code, pubspecs, templates, workflows and Markdown only', () {
     expect(
       _names({
