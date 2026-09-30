@@ -121,7 +121,7 @@ melos:
       # Additionally build a changelog at the root of the workspace.
       workspaceChangelog: true
       # Also update version constraints in dependent packages automatically.
-      updateDependents: true
+      updateDependentsConstraints: true
       hooks:
         # Keep `smf --version` in sync with the bumped CLI version.
         preCommit: |
