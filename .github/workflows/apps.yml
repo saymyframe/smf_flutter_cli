@@ -456,7 +456,10 @@ jobs:
   # generated: of a pairwise covering of them. The check that an app starts
   # is an entry of the app that the CLI keeps in app_tests/start, knowing no
   # module; the matrix tool adds it to the app as it adds it to the apps of
-  # the matrix, where it is only analyzed.
+  # the matrix, where it is only analyzed. With --app, the app of the job,
+  # it also adds the probes of the tests of the roles of the app, such as
+  # the walk of its routes, which the check runs once the first screen
+  # settled.
   android-start:
     name: Android start (${{ matrix.app }})
     needs: plan
@@ -525,6 +528,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              --without-external-steps --app "$APP" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
@@ -625,7 +629,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" firebase_start_app \
             --org com.saymyframe.ci
           for app in "$apps"/*/; do
-            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "$APP" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
@@ -1008,6 +1012,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+              --without-external-steps --app "$APP" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
@@ -1138,7 +1143,7 @@ jobs:
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" firebase_start_app \
             --org com.saymyframe.ci
           for app in "$apps"/*/; do
-            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
+            dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "$APP" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
