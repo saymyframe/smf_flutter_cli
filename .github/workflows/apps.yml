@@ -464,8 +464,9 @@ jobs:
     name: Android start (${{ matrix.app }})
     needs: plan
     runs-on: ubuntu-latest
-    # About 12 minutes: the emulator boots while the app is generated, and
-    # start_app.sh gives the build and the start 480 s.
+    # About 12 minutes: the emulator boots while the app is generated, then
+    # the app is built and starts, which start_app.sh gives 240 s once the
+    # app is built.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -566,12 +567,14 @@ jobs:
       # .github/scripts/start_app.sh builds an app with the start check,
       # starts the app with adb and reads the result that the check writes,
       # in one try: unlike flutter test, it does not connect to the app. It
-      # gives up on the app after the seconds it is given.
+      # gives up on the app when the app has not started in the seconds it
+      # is given once it is built, and the timeout of the step limits the
+      # build, so that a slow build does not leave the start without time.
       - name: Start the app without external services on the Android emulator
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
 
       - *gradle_added
       - *save_gradle
@@ -605,8 +608,8 @@ jobs:
     needs: [plan, firebase-key]
     if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
-    # About 13 minutes: the app, its configuration, and its start, for
-    # which start_app.sh gives the build and the start 480 s.
+    # About 13 minutes: the app, its configuration, its build and its start,
+    # which start_app.sh gives 240 s once the app is built.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -679,10 +682,10 @@ jobs:
       - *wait_for_emulator
 
       - name: Start the app with every module on the Android emulator
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/firebase" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 480
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
 
       - *gradle_added
       - *save_gradle
@@ -988,9 +991,10 @@ jobs:
     needs: plan
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 15 minutes: the app, the simulator, and the 600 s that
-    # start_app.sh gives the build and the start.
-    timeout-minutes: 25
+    # About 15 minutes: the app, the simulator, the build of the app, which
+    # takes up to 10 minutes on a busy runner, and its start, which
+    # start_app.sh gives 240 s once the app is built.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -1049,12 +1053,15 @@ jobs:
       # .github/scripts/start_app.sh builds an app with the start check,
       # starts the app with simctl and reads the result that the check
       # writes, in one try: unlike flutter test, it does not connect to the
-      # app. It gives up on the app after the seconds it is given.
+      # app. It gives up on the app when the app has not started in the
+      # seconds it is given once it is built, and the timeout of the step
+      # limits the build, so that a slow build does not leave the start
+      # without time.
       - name: Start the app without external services on the iOS simulator
-        timeout-minutes: 13
+        timeout-minutes: 18
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240
 
       - *swiftpm_added
       - *save_swiftpm
@@ -1120,9 +1127,10 @@ jobs:
     needs: [plan, firebase-key]
     if: inputs.macos_and_windows && needs.firebase-key.outputs.key == 'true'
     runs-on: macos-26
-    # About 17 minutes: the app, its configuration, the simulator, and the
-    # 600 s that start_app.sh gives the build and the start.
-    timeout-minutes: 25
+    # About 17 minutes: the app, its configuration, the simulator, the build
+    # of the app, which takes up to 10 minutes on a busy runner, and its
+    # start, which start_app.sh gives 240 s once the app is built.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -1192,10 +1200,10 @@ jobs:
       - *boot_simulator
 
       - name: Start the app with every module on the iOS simulator
-        timeout-minutes: 13
+        timeout-minutes: 18
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/firebase" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 600
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240
 
       - *swiftpm_added
       - *save_swiftpm

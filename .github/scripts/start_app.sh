@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Checks that the app in the current directory starts: on the Android
 # emulator or device $2 with $1 android, or on the booted iOS simulator
-# with the UDID $2 with $1 ios, in at most $3 seconds, the build of the app
-# included.
+# with the UDID $2 with $1 ios, in at most $3 seconds once the app is
+# built. The build has no limit here: on a busy runner, the build of the
+# Firebase SDK for iOS takes minutes longer than on another, which would
+# leave the start no time. The step of CI that runs the script limits it.
 #
 # The app has the start check that the CLI keeps in app_tests/start,
 # integration_test/start_check.dart, which its matrix tool adds with
@@ -27,7 +29,7 @@ fi
 platform="$1"
 device="$2"
 seconds="$3"
-deadline=$((SECONDS + seconds))
+deadline=
 check=integration_test/start_check.dart
 result=smf_start_check
 
@@ -45,8 +47,21 @@ within() {
   perl -e 'alarm shift; exec @ARGV' "$limit" "$@"
 }
 
-# Runs the command after $1, which names it, in the time that is left, and
-# fails when it fails.
+# Builds the app with the command after $1, which names it, and fails when
+# it fails. Once the app is built, the start has the seconds it is given.
+build() {
+  local name="$1" code=0
+  shift
+  "$@" || code=$?
+  if [ "$code" -ne 0 ]; then
+    echo "::error::$name failed with the exit code $code."
+    exit 1
+  fi
+  deadline=$((SECONDS + seconds))
+}
+
+# Runs the command after $1, which names it, in the time that is left of
+# the start, and fails when it fails.
 step() {
   local name="$1" left=$((deadline - SECONDS)) code=0
   shift
@@ -110,7 +125,7 @@ android() {
     fi
   fi
   adb=("$sdk/platform-tools/adb" -s "$device")
-  step 'flutter build apk' flutter build apk --debug -t "$check"
+  build 'flutter build apk' flutter build apk --debug -t "$check"
   # The application id and the activity that starts the app, from the APK,
   # with aapt2 of the newest build tools of the Android SDK.
   local apk=build/app/outputs/flutter-apk/app-debug.apk build_tools badging activity
@@ -163,7 +178,7 @@ ios() {
   # passes FLUTTER_XCODE_ARCHS to Xcode as ARCHS. (With Xcode 27, Flutter
   # 3.44 fails to build for both: the lipo of Xcode 27 takes only one
   # architecture after -verify_arch.)
-  step 'flutter build ios' env FLUTTER_XCODE_ARCHS="$(uname -m)" \
+  build 'flutter build ios' env FLUTTER_XCODE_ARCHS="$(uname -m)" \
     flutter build ios --simulator --debug -t "$check"
   local app=build/ios/iphonesimulator/Runner.app data launched
   id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
