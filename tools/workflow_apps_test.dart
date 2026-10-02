@@ -945,6 +945,82 @@ String _notByApp(
     'app builds with another plugin or another native project saves a '
     'cache of its own.';
 
+/// The init script of Gradle that every job that builds for Android puts
+/// into ~/.gradle/init.d, which takes what Gradle would download from Maven
+/// Central from the mirror of Maven Central that Google keeps.
+const mavenCentralMirror = '.github/gradle/maven_central_mirror.gradle';
+
+/// The problems of the downloads from Maven Central in [workflow], the text
+/// of the workflow [file] of GitHub Actions: a job on Linux that builds for
+/// Android, from the step that restores the cache of Gradle, builds an app
+/// with `flutter build apk` or starts one with .github/scripts/start_app.sh,
+/// whichever comes first, without a step before it that puts
+/// [mavenCentralMirror] into ~/.gradle/init.d. Maven Central answers 403 to
+/// a runner that downloads too much, and a job downloads what the cache
+/// that it restored lacks, such as what its app needs beyond the cache of
+/// another app that it found instead of the cache of its own.
+List<String> mavenCentralProblemsOf(String workflow, {required String file}) {
+  final problems = <String>[];
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  for (final MapEntry(key: job, :value) in jobs.entries) {
+    final definition = value as YamlMap;
+    if (_nativeCacheOf('${definition['runs-on']}')?.platform != 'android') {
+      continue;
+    }
+    final steps = [
+      for (final step in definition['steps'] as YamlList? ?? YamlList())
+        step as YamlMap,
+    ];
+    final gradle = steps.indexWhere(
+      (step) =>
+          (_cacheUseOf(step, '.gradle/')?.restores ?? false) ||
+          _buildsForAndroid(step),
+    );
+    if (gradle >= 0 && !steps.take(gradle).any(_mirrorsMavenCentral)) {
+      problems.add(_unmirrored(file, job, _nameOf(steps[gradle])));
+    }
+  }
+  return problems;
+}
+
+/// Whether [step] runs Gradle for Android: builds an app with `flutter
+/// build apk` or `flutter build appbundle`, or starts one on Android with
+/// .github/scripts/start_app.sh, which builds it.
+bool _buildsForAndroid(YamlMap step) =>
+    commandsOf('${step['run'] ?? ''}').any((words) {
+      for (final (index, word) in words.indexed) {
+        final rest = words.skip(index + 1).take(2).toList();
+        if (word == 'flutter' &&
+            rest.length == 2 &&
+            rest[0] == 'build' &&
+            (rest[1] == 'apk' || rest[1] == 'appbundle')) {
+          return true;
+        }
+        if (word.endsWith('start_app.sh') &&
+            rest.isNotEmpty &&
+            rest[0] == 'android') {
+          return true;
+        }
+      }
+      return false;
+    });
+
+/// Whether [step] puts [mavenCentralMirror] into ~/.gradle/init.d, where
+/// every build of Gradle of the user runs it.
+bool _mirrorsMavenCentral(YamlMap step) {
+  final run = '${step['run'] ?? ''}';
+  return run.contains(mavenCentralMirror) && run.contains('.gradle/init.d');
+}
+
+/// The problem that the job [job] of the workflow [file] builds for Android
+/// from the step [step] on without [mavenCentralMirror].
+String _unmirrored(String file, Object? job, String step) =>
+    '$file, job $job runs Gradle for Android from the step "$step" on, but '
+    'no step before it puts $mavenCentralMirror into ~/.gradle/init.d. '
+    'Gradle would download from Maven Central what the cache that the job '
+    'restored lacks, such as what its app needs beyond the cache of another '
+    'app, and Maven Central answers 403 to a runner that downloads too much.';
+
 /// The package manager of the native builds on the runner [runsOn], a part
 /// of the path of its cache, and the platform of the builds as
 /// [nativeBuildTool] takes it, or `null` for a runner that builds none.
@@ -2861,6 +2937,100 @@ jobs:
     });
   });
 
+  group('the mirror of Maven Central', () {
+    test(
+        'finds a job on Linux that restores the cache of Gradle, builds an '
+        'app for Android or starts one there without the init script of the '
+        'mirror, or puts it into ~/.gradle/init.d only after that', () {
+      const workflow = r'''
+jobs:
+  cached:
+    runs-on: ubuntu-latest
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
+      - name: Restore the cache of Gradle
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
+  start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start the app on the Android emulator
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+  late:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the app bundle
+        run: flutter build appbundle
+      - run: |
+          mkdir -p ~/.gradle/init.d
+          cp .github/gradle/maven_central_mirror.gradle ~/.gradle/init.d/
+''';
+      expect(mavenCentralProblemsOf(workflow, file: 'apps.yml'), [
+        equals(
+          'apps.yml, job cached runs Gradle for Android from the step '
+          '"Restore the cache of Gradle" on, but no step before it puts '
+          '.github/gradle/maven_central_mirror.gradle into '
+          '~/.gradle/init.d. Gradle would download from Maven Central what '
+          'the cache that the job restored lacks, such as what its app needs '
+          'beyond the cache of another app, and Maven Central answers 403 to '
+          'a runner that downloads too much.',
+        ),
+        startsWith(
+          'apps.yml, job start runs Gradle for Android from the step "Start '
+          'the app on the Android emulator" on, but no step before it puts ',
+        ),
+        startsWith(
+          'apps.yml, job late runs Gradle for Android from the step "Build '
+          'the app bundle" on, but no step before it puts ',
+        ),
+      ]);
+    });
+
+    test(
+        'passes a job that puts the init script into ~/.gradle/init.d before '
+        'Gradle runs, and the jobs that build nothing for Android', () {
+      const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - &mirror
+        name: Take the downloads of Gradle from the mirror of Maven Central
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cp .github/gradle/maven_central_mirror.gradle ~/.gradle/init.d/
+      - uses: actions/cache/restore@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
+  start:
+    runs-on: ubuntu-latest
+    steps:
+      - *mirror
+      - run: .github/scripts/start_app.sh android emulator-5554 240
+  matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --shard "$SHARD" "$RUNNER_TEMP/apps"
+  ios:
+    runs-on: macos-26
+    steps:
+      - run: .github/scripts/start_app.sh ios "$SIMULATOR" 240
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: flutter build apk --debug
+''';
+      expect(mavenCentralProblemsOf(workflow, file: 'apps.yml'), isEmpty);
+    });
+  });
+
   test(
       'the workflows and the scripts of the repository choose their apps by '
       'role and take them from the plan, and each exception applies to one '
@@ -2888,11 +3058,13 @@ jobs:
           ...problemsOf(file.readAsStringSync(), file: name, used: used),
           ...planProblemsOf(file.readAsStringSync(), file: name),
           ...nativeCacheProblemsOf(file.readAsStringSync(), file: name),
+          ...mavenCentralProblemsOf(file.readAsStringSync(), file: name),
         ],
         isEmpty,
         reason: name,
       );
     }
+    expect(File('$root/$mavenCentralMirror').existsSync(), isTrue);
     expect(
       nativeCacheSaveProblemsOf({
         for (final file in workflows)

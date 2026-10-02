@@ -396,6 +396,18 @@ jobs:
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/android" build/native_build/android.txt
 
+      # A job still downloads what the cache that it restored lacks, such as
+      # what its app needs beyond the cache of another app that it found
+      # instead of the cache of its own. So every build of Gradle in the job
+      # takes what it would download from Maven Central from the mirror of
+      # Maven Central that Google keeps, through the init script
+      # .github/gradle/maven_central_mirror.gradle in ~/.gradle/init.d.
+      - &maven_central_mirror
+        name: Take the downloads of Gradle from the mirror of Maven Central
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cp .github/gradle/maven_central_mirror.gradle ~/.gradle/init.d/
+
       - &restore_gradle
         name: Restore the cache of Gradle
         id: gradle
@@ -538,6 +550,7 @@ jobs:
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/start" build/native_build/android.txt
 
+      - *maven_central_mirror
       - *restore_gradle
       - *gradle_restored
 
@@ -677,6 +690,7 @@ jobs:
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/firebase" build/native_build/android.txt
 
+      - *maven_central_mirror
       - *restore_gradle
       - *gradle_restored
       - *wait_for_emulator
@@ -800,6 +814,7 @@ jobs:
       - name: Find what the apps build with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps from pub.dev" build/native_build/android.txt
 
+      - *maven_central_mirror
       - *restore_gradle
       - *gradle_restored
 
