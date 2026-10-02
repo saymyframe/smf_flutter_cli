@@ -1,0 +1,50 @@
+// An init script of Gradle for the jobs of CI that build the apps for
+// Android, which put it into ~/.gradle/init.d: Gradle takes what it would
+// download from Maven Central from the mirror of Maven Central that Google
+// keeps instead. Maven Central answers 403 to a runner that downloads too
+// much, and the cache of Gradle that a job restores lacks what its app
+// needs whenever the job found the cache of another app, such as
+// com.google.guava:listenablefuture:1.0 in the cache of an app with
+// Firebase, where guava replaces it.
+//
+// It changes the address of every repository of Maven Central that a build
+// declares, such as with mavenCentral(), in place, so the order of the
+// repositories stays: those of the settings, of the build scripts and of
+// the projects, the included build of the Gradle plugin of Flutter and the
+// projects of the plugins of the app among them. A build that declares no
+// repository of plugins, such as that included build, takes its plugins
+// from the Gradle Plugin Portal, which sends the requests of what Maven
+// Central has, such as the Kotlin Gradle plugin, on to Maven Central. Such
+// a build gets the mirror before the portal.
+
+def central = ~/^https:\/\/(repo\.maven\.apache\.org|repo1\.maven\.org)\/maven2\/?/
+def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+
+def toMirror = { RepositoryHandler repositories ->
+    repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        def url = repository.url.toString()
+        if (url =~ central) {
+            repository.url = url.replaceFirst(central, mirror)
+        }
+    }
+}
+
+beforeSettings { settings ->
+    toMirror(settings.buildscript.repositories)
+    toMirror(settings.pluginManagement.repositories)
+    toMirror(settings.dependencyResolutionManagement.repositories)
+}
+
+settingsEvaluated { settings ->
+    if (settings.pluginManagement.repositories.isEmpty()) {
+        settings.pluginManagement.repositories {
+            maven { url = mirror }
+            gradlePluginPortal()
+        }
+    }
+}
+
+allprojects { project ->
+    toMirror(project.buildscript.repositories)
+    toMirror(project.repositories)
+}
