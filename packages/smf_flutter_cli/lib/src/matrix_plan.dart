@@ -357,13 +357,62 @@ final class MatrixToolOptions {
   /// the others stay, with those after the directory, which may be options
   /// of `smf create`.
   factory MatrixToolOptions.parse(List<String> arguments) {
+    final (:rest, :flags, :values, :problems) = _leadingOptionsOf(arguments);
+    final combinations = switch (values[_combinationsOption]) {
+      final value? => EveryModuleCombinations.parse(value),
+      null => EveryModuleCombinations.pairwise,
+    };
+    if (combinations == null) {
+      problems.add(
+        '--combinations takes pairwise, 3-wise or all, not '
+        '${values[_combinationsOption]}.',
+      );
+    }
+    final shard = switch (values[_shardOption]) {
+      final value? => MatrixShard.parse(value),
+      null => null,
+    };
+    if (values[_shardOption] case final value? when shard == null) {
+      problems.add(
+        '--shard takes <index>/<count>, such as 1/2, with an index from 1 to '
+        'the count, not $value.',
+      );
+    }
+    problems.addAll(_misusesOf(flags, values));
+    final app = values[_appOption];
+    return MatrixToolOptions._(
+      rest,
+      app != null
+          ? NamedEveryModuleApp(app)
+          : combinations ?? EveryModuleCombinations.pairwise,
+      shard,
+      problems.isEmpty ? null : problems.join(' '),
+    );
+  }
+
+  static const _combinationsOption = '--combinations';
+  static const _appOption = '--app';
+  static const _shardOption = '--shard';
+
+  /// The options at the start of [arguments], before the directory of the
+  /// tool: the `values` of those that take one, by their names, with a
+  /// problem for one without its value or given more than once; the others,
+  /// its `flags`; and `rest`, the arguments without the options that take a
+  /// value.
+  static ({
+    List<String> rest,
+    Set<String> flags,
+    Map<String, String> values,
+    List<String> problems,
+  }) _leadingOptionsOf(List<String> arguments) {
     final rest = <String>[];
     final values = <String, String>{};
     final problems = <String>[];
     var index = 0;
     while (index < arguments.length && arguments[index].startsWith('-')) {
       final option = arguments[index];
-      if (!const {'--combinations', '--app', '--shard'}.contains(option)) {
+      if (!const {_combinationsOption, _appOption, _shardOption}
+          .contains(option)) {
         rest.add(option);
         index++;
       } else if (index + 1 == arguments.length) {
@@ -379,29 +428,17 @@ final class MatrixToolOptions {
     }
     final flags = {...rest};
     rest.addAll(arguments.skip(index));
+    return (rest: rest, flags: flags, values: values, problems: problems);
+  }
 
-    final combinations = switch (values['--combinations']) {
-      final value? => EveryModuleCombinations.parse(value),
-      null => EveryModuleCombinations.pairwise,
-    };
-    if (combinations == null) {
-      problems.add(
-        '--combinations takes pairwise, 3-wise or all, not '
-        '${values['--combinations']}.',
-      );
-    }
-    final shard = switch (values['--shard']) {
-      final value? => MatrixShard.parse(value),
-      null => null,
-    };
-    if (values['--shard'] case final value? when shard == null) {
-      problems.add(
-        '--shard takes <index>/<count>, such as 1/2, with an index from 1 to '
-        'the count, not $value.',
-      );
-    }
-    final app = values['--app'];
-    if (app != null) {
+  /// The problems of the options with [values] that do not go with the
+  /// [flags] of the tool or with each other.
+  static List<String> _misusesOf(
+    Set<String> flags,
+    Map<String, String> values,
+  ) {
+    final problems = <String>[];
+    if (values.containsKey(_appOption)) {
       if (!flags.contains('--every-module') &&
           !flags.contains('--create') &&
           !flags.contains('--add-app-tests')) {
@@ -410,24 +447,17 @@ final class MatrixToolOptions {
           '--create or --add-app-tests.',
         );
       }
-      if (values.containsKey('--combinations')) {
+      if (values.containsKey(_combinationsOption)) {
         problems.add('--app takes one app, so it goes without --combinations.');
       }
     }
-    if (flags.contains('--create') && values.containsKey('--shard')) {
+    if (flags.contains('--create') && values.containsKey(_shardOption)) {
       problems.add(
         '--shard takes a share of the apps that a run checks, not of those '
         'that --create generates.',
       );
     }
-    return MatrixToolOptions._(
-      rest,
-      app != null
-          ? NamedEveryModuleApp(app)
-          : combinations ?? EveryModuleCombinations.pairwise,
-      shard,
-      problems.isEmpty ? null : problems.join(' '),
-    );
+    return problems;
   }
 
   /// The arguments of the tool without these options.
@@ -492,11 +522,12 @@ Future<({Map<String, Object> plan, List<String> problems})> matrixPlanOf(
   // In the order found, once each.
   final problems = <String>{};
   final every = await everyModuleAppsOf(modules, roleOptions: roleOptions);
-  final combinations = !everyCombination
-      ? EveryModuleCombinations.pairwise
-      : every.apps.length > maxEveryCombination
-          ? EveryModuleCombinations.threeWise
-          : EveryModuleCombinations.all;
+  final combinations = switch (everyCombination) {
+    false => EveryModuleCombinations.pairwise,
+    true when every.apps.length > maxEveryCombination =>
+      EveryModuleCombinations.threeWise,
+    true => EveryModuleCombinations.all,
+  };
   final matrix = await matrixOf(
     modules,
     roleOptions: roleOptions,

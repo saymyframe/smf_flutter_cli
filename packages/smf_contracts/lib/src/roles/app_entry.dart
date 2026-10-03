@@ -447,20 +447,25 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
       ),
     );
   }
-  for (var i = 1; i < offsets.length; i++) {
-    if (offsets[i - 1] > offsets[i]) {
-      issues.add(
-        SmfIssue(
-          'The tags of the phases of start-up in $path are not in the order '
-          'early, platform, di, late.',
-          origin: origin,
-          path: path,
-        ),
-      );
-      break;
-    }
+  if (!_ascending(offsets)) {
+    issues.add(
+      SmfIssue(
+        'The tags of the phases of start-up in $path are not in the order '
+        'early, platform, di, late.',
+        origin: origin,
+        path: path,
+      ),
+    );
   }
   return issues;
+}
+
+/// Whether none of [offsets] is before the one in front of it.
+bool _ascending(List<int> offsets) {
+  for (var i = 1; i < offsets.length; i++) {
+    if (offsets[i - 1] > offsets[i]) return false;
+  }
+  return true;
 }
 
 /// The offsets from the opening brace to the closing brace of the body of

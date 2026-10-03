@@ -473,34 +473,58 @@ Future<Map<String, _RoleFunctions>> _roleFunctionsOf(
     ];
     if (roles.isEmpty) continue;
     final id = module.descriptor.id;
-    final result = await harness.check(harness.casesOfModule(id).first);
-    final app = result.app;
-    if (app == null) {
-      throw StateError(
-        'The contract harness renders no app of $id, which provides the '
-        '${roles.join(', the ')}: ${result.errors.join('; ')}',
-      );
-    }
+    final app = await _firstAppOf(harness, id, roles);
     for (final role in roles) {
       for (final path in role.interface.files) {
-        final file = app.files[path];
-        if (file == null) {
-          throw StateError(
-            'The app of $id that the contract harness renders has no $path '
-            'of the $role.',
-          );
-        }
-        (functions[path] ??= (role: role, names: {})).names.addAll([
-          for (final declaration
-              in DartFileIndexer.index(path, file.text).declarations)
-            if (declaration.kind == DeclarationKind.function &&
-                !declaration.name.startsWith('_'))
-              declaration.name,
-        ]);
+        (functions[path] ??= (role: role, names: {}))
+            .names
+            .addAll(_publicFunctionsOf(app, id, role, path));
       }
     }
   }
   return functions;
+}
+
+/// The app of the module [id] that the contract [harness] renders first, in
+/// which the module provides [roles].
+Future<RenderedApp> _firstAppOf(
+  ContractHarness harness,
+  ModuleId id,
+  List<Role> roles,
+) async {
+  final result = await harness.check(harness.casesOfModule(id).first);
+  final app = result.app;
+  if (app == null) {
+    throw StateError(
+      'The contract harness renders no app of $id, which provides the '
+      '${roles.join(', the ')}: ${result.errors.join('; ')}',
+    );
+  }
+  return app;
+}
+
+/// The names of the public top-level functions of [path], a file of the
+/// interface of [role], in [app], the app of the module [id].
+List<String> _publicFunctionsOf(
+  RenderedApp app,
+  ModuleId id,
+  Role role,
+  String path,
+) {
+  final file = app.files[path];
+  if (file == null) {
+    throw StateError(
+      'The app of $id that the contract harness renders has no $path '
+      'of the $role.',
+    );
+  }
+  return [
+    for (final declaration
+        in DartFileIndexer.index(path, file.text).declarations)
+      if (declaration.kind == DeclarationKind.function &&
+          !declaration.name.startsWith('_'))
+        declaration.name,
+  ];
 }
 
 /// The uses in [file], a Dart file of app tests, of the [functions] of
@@ -511,37 +535,61 @@ Future<Map<String, _RoleFunctions>> _roleFunctionsOf(
 List<({String use, Role role})> _roleFunctionUsesIn(
   DartFileIndex file,
   Map<String, _RoleFunctions> functions,
-) {
-  final uses = <({String use, Role role})>[];
-  for (final MapEntry(key: path, value: (:role, :names)) in functions.entries) {
-    final uri = 'package:{{app_name}}/${path.substring('lib/'.length)}';
-    final imports = [
-      for (final import in file.imports)
-        if (import.uri == uri) import,
+) =>
+    [
+      for (final MapEntry(key: path, value: (:role, :names))
+          in functions.entries)
+        for (final name in _usedThrough(
+          _importsOf(
+            file,
+            'package:{{app_name}}/${path.substring('lib/'.length)}',
+          ),
+          file,
+          names,
+        ))
+          (use: '$name() of $path', role: role),
     ];
-    if (imports.isEmpty) continue;
-    final unprefixed = imports.any((import) => import.prefix == null);
-    final prefixes = {
+
+/// How a Dart file imports a library: without a prefix, and with which
+/// prefixes; neither if it does not import the library.
+typedef _Imports = ({bool unprefixed, Set<String> prefixes});
+
+/// How [file] imports the library [uri].
+_Imports _importsOf(DartFileIndex file, String uri) {
+  final imports = [
+    for (final import in file.imports)
+      if (import.uri == uri) import,
+  ];
+  return (
+    unprefixed: imports.any((import) => import.prefix == null),
+    prefixes: {
       for (final import in imports)
         if (import.prefix case final prefix?) prefix,
-    };
-    bool through(String? target) =>
-        target == null ? unprefixed : prefixes.contains(target);
-    final used = {
-      for (final call in file.invocations)
-        if (names.contains(call.name) && through(call.target)) call.name,
-      if (unprefixed)
-        for (final reference in file.references)
-          if (names.contains(reference.name)) reference.name,
-      for (final access in file.memberAccesses)
-        if (names.contains(access.name) && prefixes.contains(access.target))
-          access.name,
-    };
-    uses.addAll([
-      for (final name in used) (use: '$name() of $path', role: role),
-    ]);
-  }
-  return uses;
+    },
+  );
+}
+
+/// The [names] of a library that [file] calls or tears off through its
+/// [imports] of the library.
+Set<String> _usedThrough(
+  _Imports imports,
+  DartFileIndex file,
+  Set<String> names,
+) {
+  final (:unprefixed, :prefixes) = imports;
+  bool through(String? target) =>
+      target == null ? unprefixed : prefixes.contains(target);
+  return {
+    for (final call in file.invocations)
+      if (names.contains(call.name) && through(call.target)) call.name,
+    if (unprefixed)
+      ...file.references
+          .map((reference) => reference.name)
+          .where(names.contains),
+    for (final access in file.memberAccesses)
+      if (names.contains(access.name) && prefixes.contains(access.target))
+        access.name,
+  };
 }
 
 /// The directory `app_tests` of the package [package], next to its `lib/`
@@ -972,63 +1020,13 @@ List<String> addAppTests(
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
-  final texts = <String, String>{};
-  final owners = <String, String>{};
-  for (final test in tests) {
-    final files = switch ((test.generatedFiles, app)) {
-      (null, _) => const <String, String>{},
-      (final generate?, final app?) => generate(app, packageName),
-      (_, null) => throw MatrixAppTestException(
-          'The tests of ${test.directory} generate files for an app of the '
-          'matrix, but the app is none.',
-        ),
-    };
-    final values = {
-      'app_name': packageName,
-      if (app != null) ...?test.values?.call(app),
-    };
-    for (final (path, file) in _filesOf(test.directory, fileSystem)) {
-      if (owners[path] case final other?) {
-        throw MatrixAppTestException(
-          'The tests of $other and ${test.directory} both have $path.',
-        );
-      }
-      owners[path] = test.directory;
-      texts[path] = _filled(file.readAsStringSync(), values, test, path);
-    }
-    for (final MapEntry(key: generated, value: text) in files.entries) {
-      if (!_isPathInApp(generated)) {
-        throw MatrixAppTestException(
-          'The tests of ${test.directory} generate a file at "$generated", '
-          'which is no path in the app, such as test/services.dart: names '
-          r'separated by /, none of them empty, . or .., and none with \ or '
-          ':.',
-        );
-      }
-      final path = context.joinAll(generated.split('/'));
-      if (owners[path] case final other?) {
-        throw MatrixAppTestException(
-          'The tests of ${test.directory} generate $generated, which the '
-          'tests of $other have too.',
-        );
-      }
-      owners[path] = test.directory;
-      texts[path] = text;
-    }
-  }
-  final mocks = <MatrixMocks>[];
-  for (final test in tests) {
-    final declared = test.mocks;
-    if (declared == null) continue;
-    final path = context.joinAll(declared.path.split('/'));
-    if (!declared.path.startsWith('test/') || owners[path] != test.directory) {
-      throw MatrixAppTestException(
-        'The tests of ${test.directory} declare their mocks in '
-        '${declared.path}, which is no file of theirs in test/.',
-      );
-    }
-    mocks.add(declared);
-  }
+  final (:texts, :owners) = _filesOfTests(
+    tests,
+    packageName: packageName,
+    app: app,
+    fileSystem: fileSystem,
+  );
+  final mocks = _mocksOf(tests, owners, fileSystem);
   if (mocks.isNotEmpty) {
     final config = context.joinAll(_testConfig.split('/'));
     if (owners[config] case final other?) {
@@ -1039,20 +1037,7 @@ List<String> addAppTests(
     }
     texts[config] = _testConfigOf(mocks);
   }
-  final probes = <(String, MatrixStartProbe)>[];
-  for (final test in tests) {
-    final probe = test.startProbe;
-    if (probe == null) continue;
-    final path = context.joinAll(probe.path.split('/'));
-    if (!probe.path.startsWith(_integrationTest) ||
-        owners[path] != test.directory) {
-      throw MatrixAppTestException(
-        'The tests of ${test.directory} declare their probe in '
-        '${probe.path}, which is no file of theirs in $_integrationTest.',
-      );
-    }
-    probes.add((context.basename(test.directory), probe));
-  }
+  final probes = _probesOf(tests, owners, fileSystem);
   if (tests.any((test) => test.readsStartProbes)) {
     final list = context.joinAll(startProbesFile.split('/'));
     if (owners[list] case final other?) {
@@ -1069,6 +1054,134 @@ List<String> addAppTests(
       ..writeAsStringSync(text);
   }
   return [...texts.keys];
+}
+
+/// The files that [tests] put into the app [app] with the package
+/// [packageName], see [addAppTests]: the `texts` of the files of their
+/// directories, with their values filled, and of the files that they
+/// generate, by the path of each in the app, and the `owners` of the files,
+/// the directory of the test of each.
+({Map<String, String> texts, Map<String, String> owners}) _filesOfTests(
+  List<MatrixAppTest> tests, {
+  required String packageName,
+  required MatrixApp? app,
+  required FileSystem fileSystem,
+}) {
+  final texts = <String, String>{};
+  final owners = <String, String>{};
+  for (final test in tests) {
+    final files = _generatedFilesOf(test, app, packageName);
+    final values = {
+      'app_name': packageName,
+      if (app != null) ...?test.values?.call(app),
+    };
+    for (final (path, file) in _filesOf(test.directory, fileSystem)) {
+      if (owners[path] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of $other and ${test.directory} both have $path.',
+        );
+      }
+      owners[path] = test.directory;
+      texts[path] = _filled(file.readAsStringSync(), values, test, path);
+    }
+    for (final MapEntry(key: generated, value: text) in files.entries) {
+      final path = _generatedPath(generated, test, fileSystem);
+      if (owners[path] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of ${test.directory} generate $generated, which the '
+          'tests of $other have too.',
+        );
+      }
+      owners[path] = test.directory;
+      texts[path] = text;
+    }
+  }
+  return (texts: texts, owners: owners);
+}
+
+/// The files that [test] generates for [app] with the package
+/// [packageName], by the path of each in the app; a test that generates
+/// files needs the app.
+Map<String, String> _generatedFilesOf(
+  MatrixAppTest test,
+  MatrixApp? app,
+  String packageName,
+) =>
+    switch ((test.generatedFiles, app)) {
+      (null, _) => const <String, String>{},
+      (final generate?, final app?) => generate(app, packageName),
+      (_, null) => throw MatrixAppTestException(
+          'The tests of ${test.directory} generate files for an app of the '
+          'matrix, but the app is none.',
+        ),
+    };
+
+/// The path in [fileSystem] of [generated], the path in the app of a file
+/// that [test] generates, which has to be one.
+String _generatedPath(
+  String generated,
+  MatrixAppTest test,
+  FileSystem fileSystem,
+) {
+  if (!_isPathInApp(generated)) {
+    throw MatrixAppTestException(
+      'The tests of ${test.directory} generate a file at "$generated", '
+      'which is no path in the app, such as test/services.dart: names '
+      r'separated by /, none of them empty, . or .., and none with \ or '
+      ':.',
+    );
+  }
+  return fileSystem.path.joinAll(generated.split('/'));
+}
+
+/// The mocks that [tests] declare, in their order, each in a file of its
+/// test in `test/`, as the [owners] of the files tell.
+List<MatrixMocks> _mocksOf(
+  List<MatrixAppTest> tests,
+  Map<String, String> owners,
+  FileSystem fileSystem,
+) {
+  final context = fileSystem.path;
+  final mocks = <MatrixMocks>[];
+  for (final test in tests) {
+    final declared = test.mocks;
+    if (declared == null) continue;
+    final path = context.joinAll(declared.path.split('/'));
+    if (!declared.path.startsWith('test/') || owners[path] != test.directory) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} declare their mocks in '
+        '${declared.path}, which is no file of theirs in test/.',
+      );
+    }
+    mocks.add(declared);
+  }
+  return mocks;
+}
+
+/// The probes that [tests] declare, in their order, each with the name of
+/// the directory of its test and in a file of its test in
+/// `integration_test/`, as the [owners] of the files tell.
+List<(String, MatrixStartProbe)> _probesOf(
+  List<MatrixAppTest> tests,
+  Map<String, String> owners,
+  FileSystem fileSystem,
+) {
+  final context = fileSystem.path;
+  final probes = <(String, MatrixStartProbe)>[];
+  for (final test in tests) {
+    final probe = test.startProbe;
+    if (probe == null) continue;
+    final path = context.joinAll(probe.path.split('/'));
+    if (!probe.path.startsWith(_integrationTest) ||
+        owners[path] != test.directory) {
+      throw MatrixAppTestException(
+        'The tests of ${test.directory} declare their probe in '
+        '${probe.path}, which is no file of theirs in $_integrationTest.',
+      );
+    }
+    probes.add((context.basename(test.directory), probe));
+  }
+  return probes;
 }
 
 /// The directory of an app with the checks that run on a device, such as
@@ -1465,14 +1578,13 @@ Future<int> runMatrix(
         if (app.everyModuleWith != null) app,
     ]),
   ];
-  final selected = [
-    for (final (index, app) in apps.indexed)
-      if ((only == null || only.contains(app.name)) &&
-          (!everyModule || app.everyModuleWith != null))
-        (index, app),
-  ];
   final checked = <MatrixApp>[];
-  for (final (index, app) in shard?.of(selected) ?? selected) {
+  for (final (index, app) in _selectedOf(
+    apps,
+    only: only,
+    everyModule: everyModule,
+    shard: shard,
+  )) {
     checked.add(app);
     // An app keeps its number in the matrix when only some are checked.
     problems.addAll(await run.check(app, 'app_${index + 1}'));
@@ -1487,6 +1599,25 @@ Future<int> runMatrix(
   problems.addAll(appTests.roleProblems(modules, apps));
   run.say('\n${checked.length} apps generated in $directory.');
   return _exitCode(problems, run.say);
+}
+
+/// The apps of [apps], the apps of a matrix, that a run of [runMatrix]
+/// checks, each with its position in the matrix: those named in [only], if
+/// given; only the apps with every module, with [everyModule]; and of
+/// those, the share of [shard], if given.
+List<(int, MatrixApp)> _selectedOf(
+  List<MatrixApp> apps, {
+  required Set<String>? only,
+  required bool everyModule,
+  required MatrixShard? shard,
+}) {
+  final selected = [
+    for (final (index, app) in apps.indexed)
+      if ((only == null || only.contains(app.name)) &&
+          (!everyModule || app.everyModuleWith != null))
+        (index, app),
+  ];
+  return shard?.of(selected) ?? selected;
 }
 
 /// Generates in [directory] the apps with every module of [modules] with
