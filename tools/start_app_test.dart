@@ -3,6 +3,13 @@
 // check writes, in the jobs of CI that start the apps. On Android, with
 // commands in place of flutter, adb and aapt2 of the Android SDK; the
 // script handles the time and the result of the check on iOS the same way.
+//
+// No test waits for the time to pass. The script tells the time by SECONDS
+// of bash, which the tests move on by the seconds that the build and each
+// sleep of the script stand for. So the start gets minutes after a build of
+// an hour, far more than the dozen processes that the script starts before
+// it launches the app take on a busy machine, where seconds that pass for
+// real would make the tests either slow or flaky.
 @TestOn('!windows')
 library;
 
@@ -44,8 +51,9 @@ void main() {
   }
 
   /// Runs start_app.sh for the emulator with [seconds] in the directory of
-  /// the app, with a build that takes [buildSeconds] and ends with
-  /// [buildCode], and a start check that writes [result], or nothing.
+  /// the app, with a build that takes [buildSeconds] by the clock of the
+  /// script and ends with [buildCode], and a start check that writes
+  /// [result], or nothing.
   ProcessResult run({
     required int seconds,
     int buildSeconds = 0,
@@ -53,10 +61,21 @@ void main() {
     String? result,
   }) {
     command('bin/flutter', '''
-sleep $buildSeconds
 [ $buildCode -eq 0 ] || exit $buildCode
 mkdir -p build/app/outputs/flutter-apk
 : > build/app/outputs/flutter-apk/app-debug.apk''');
+    // The clock: flutter and sleep as functions of the shell of the script,
+    // which bash reads from the file of BASH_ENV before the script, since
+    // only that shell can set its SECONDS. A build that the script ran in
+    // another process would take no time here, which the first test fails
+    // on.
+    File('${temp.path}/clock.sh').writeAsStringSync('''
+flutter() {
+  SECONDS=\$((SECONDS + $buildSeconds))
+  command flutter "\$@"
+}
+sleep() { SECONDS=\$((SECONDS + \$1)); }
+''');
     command('sdk/build-tools/35.0.0/aapt2', '''
 echo "package: name='com.example.app' versionCode='1'"
 echo "launchable-activity: name='com.example.app.MainActivity'"''');
@@ -78,6 +97,7 @@ esac''');
       workingDirectory: app,
       environment: {
         'PATH': '${temp.path}/bin:${Platform.environment['PATH']}',
+        'BASH_ENV': '${temp.path}/clock.sh',
         'ANDROID_HOME': '${temp.path}/sdk',
       },
     );
@@ -86,22 +106,24 @@ esac''');
   test(
       'gives the seconds to the start of the app once it is built, however '
       'long the build takes', () {
-    final result = run(seconds: 2, buildSeconds: 3, result: 'passed');
+    final result = run(seconds: 240, buildSeconds: 3600, result: 'passed');
 
     expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    final passed = RegExp('The start check of the app passed [0-9]+ s after '
+            r'the app was launched, ([0-9]+) s after the script started\.\n')
+        .firstMatch('${result.stdout}');
+    expect(passed, isNotNull, reason: '${result.stdout}');
     expect(
-      '${result.stdout}',
-      matches(
-        RegExp('The start check of the app passed [0-9]+ s after the app was '
-            'launched'),
-      ),
+      int.parse(passed!.group(1)!),
+      greaterThanOrEqualTo(3600),
+      reason: 'The build takes an hour by SECONDS, the clock of the script.',
     );
   });
 
   test(
       'fails when the start check writes no result in the seconds after the '
       'build, and prints what the app printed', () {
-    final result = run(seconds: 2, buildSeconds: 1);
+    final result = run(seconds: 60, buildSeconds: 3600);
 
     expect(result.exitCode, 1);
     expect(
@@ -110,7 +132,7 @@ esac''');
         contains('flutter: printed by the app'),
         matches(
           RegExp('::error::The start check of the app wrote no result in the '
-              '2 s of the start of the app, [0-9]+ s of them after the app '
+              '60 s of the start of the app, [0-9]+ s of them after the app '
               r'was launched\.\n$'),
         ),
       ),
