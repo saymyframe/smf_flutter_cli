@@ -947,8 +947,7 @@ Type type() => Types;
           modules,
           directory: '/apps',
           appTests: MatrixAppTests(appTests, testedRoles: testedRoles),
-          only: only,
-          everyModule: everyModule,
+          selection: MatrixSelection(only: only, everyModule: everyModule),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {
@@ -1366,8 +1365,8 @@ Type type() => Types;
           modules,
           directory: '/apps',
           name: name,
-          withoutExternalSteps: withoutExternalSteps,
           options: options,
+          apps: EveryModuleApps(withoutExternalSteps: withoutExternalSteps),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {

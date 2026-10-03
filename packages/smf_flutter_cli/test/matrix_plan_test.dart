@@ -520,9 +520,11 @@ void main() {
         runMatrix(
           modules,
           directory: '/apps',
-          everyModule: everyModule,
-          everyModuleApps: everyModuleApps,
-          shard: shard,
+          selection: MatrixSelection(
+            everyModule: everyModule,
+            everyModuleApps: everyModuleApps,
+            shard: shard,
+          ),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {
@@ -654,8 +656,10 @@ void main() {
           modules,
           directory: '/apps',
           name: 'start_app',
-          withoutExternalSteps: withoutExternalSteps,
-          selection: selection,
+          apps: EveryModuleApps(
+            selection: selection,
+            withoutExternalSteps: withoutExternalSteps,
+          ),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {

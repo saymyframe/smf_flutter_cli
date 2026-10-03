@@ -161,10 +161,12 @@ Future<void> main(List<String> given) async {
     smfModules,
     directory: rest.first,
     appTests: await smfAppTests(),
-    only: rest.length > 1 ? rest.skip(1).toSet() : null,
-    everyModule: everyModule,
-    everyModuleApps: choice.selection,
-    shard: choice.shard,
+    selection: MatrixSelection(
+      only: rest.length > 1 ? rest.skip(1).toSet() : null,
+      everyModule: everyModule,
+      everyModuleApps: choice.selection,
+      shard: choice.shard,
+    ),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
@@ -214,9 +216,11 @@ Future<int> _create(
     smfModules,
     directory: directory,
     name: name,
-    withoutExternalSteps: withoutExternalSteps,
     options: options,
-    selection: selection,
+    apps: EveryModuleApps(
+      selection: selection,
+      withoutExternalSteps: withoutExternalSteps,
+    ),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   return code;
