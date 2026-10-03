@@ -163,23 +163,9 @@ final class _Covering {
     List<SmfModule> modules,
     int strength,
   ) {
-    // The providers of each role that takes one, in the order in which the
-    // modules provide the roles.
-    final providersOf = <Role, Set<ModuleId>>{};
-    for (final module in modules) {
-      for (final role in module.descriptor.provides) {
-        if (role.cardinality.allowsMany) continue;
-        providersOf.putIfAbsent(role, () => {}).add(module.descriptor.id);
-      }
-    }
-    // The provider of each such role that each app has.
+    final providersOf = _providersOf(modules);
     final providers = [
-      for (final app in apps)
-        {
-          for (final MapEntry(key: role, value: ids) in providersOf.entries)
-            if (app.modules.where(ids.contains).firstOrNull case final id?)
-              role: id,
-        },
+      for (final app in apps) _providersIn(app, providersOf),
     ];
     // The roles with several providers among the apps.
     final roles = [
@@ -190,19 +176,52 @@ final class _Covering {
     final size = strength < roles.length ? strength : roles.length;
     return _Covering._([
       for (final (index, app) in apps.indexed)
-        {
-          for (final tuple in _subsets(
-            [
-              for (final role in roles)
-                if (providers[index][role] case final provider?)
-                  '${role.id}=$provider',
-            ],
-            size,
-          ))
-            if (tuple.isNotEmpty) tuple.join('+'),
-          for (final module in app.modules) 'module:$module',
-        },
+        _itemsOf(app, providers[index], roles, size),
     ]);
+  }
+
+  /// The providers of each role that takes one, in the order in which
+  /// [modules] provide the roles.
+  static Map<Role, Set<ModuleId>> _providersOf(List<SmfModule> modules) {
+    final providersOf = <Role, Set<ModuleId>>{};
+    for (final module in modules) {
+      for (final role in module.descriptor.provides) {
+        if (role.cardinality.allowsMany) continue;
+        providersOf.putIfAbsent(role, () => {}).add(module.descriptor.id);
+      }
+    }
+    return providersOf;
+  }
+
+  /// The provider that [app] has of each role of [providersOf], the
+  /// providers of each role.
+  static Map<Role, ModuleId> _providersIn(
+    MatrixApp app,
+    Map<Role, Set<ModuleId>> providersOf,
+  ) =>
+      {
+        for (final MapEntry(key: role, value: ids) in providersOf.entries)
+          if (app.modules.where(ids.contains).firstOrNull case final id?)
+            role: id,
+      };
+
+  /// What [app] has that a covering must have: the tuples of [size] of its
+  /// [providers] of [roles], and its modules.
+  static Set<String> _itemsOf(
+    MatrixApp app,
+    Map<Role, ModuleId> providers,
+    List<Role> roles,
+    int size,
+  ) {
+    final ofRoles = [
+      for (final role in roles)
+        if (providers[role] case final provider?) '${role.id}=$provider',
+    ];
+    return {
+      for (final tuple in _subsets(ofRoles, size))
+        if (tuple.isNotEmpty) tuple.join('+'),
+      for (final module in app.modules) 'module:$module',
+    };
   }
 
   /// What each app has that the covering must have: its tuples of
@@ -226,35 +245,48 @@ final class _Covering {
     final left = {for (final app in items) ...app};
     final taken = <int>[];
     while (left.isNotEmpty) {
-      final parts = <String, int>{};
-      if (byParts) {
-        for (final item in left) {
-          for (final part in item.split('+')) {
-            parts[part] = (parts[part] ?? 0) + 1;
-          }
-        }
-      }
-      var best = -1;
-      var bestNew = 0;
-      var bestParts = 0;
-      for (final (index, app) in items.indexed) {
-        final fresh = app.where(left.contains).length;
-        if (fresh == 0 || fresh < bestNew) continue;
-        final inParts = byParts
-            ? {for (final item in app) ...item.split('+')}
-                .map((part) => parts[part] ?? 0)
-                .fold(0, (sum, count) => sum + count)
-            : 0;
-        if (fresh > bestNew || inParts > bestParts) {
-          best = index;
-          bestNew = fresh;
-          bestParts = inParts;
-        }
-      }
+      final best = _bestOf(left, byParts ? _partsOf(left) : null);
       taken.add(best);
       left.removeAll(items[best]);
     }
     return taken;
+  }
+
+  /// The number of the items of [left] that each of their parts, a provider
+  /// or a module, is in.
+  static Map<String, int> _partsOf(Set<String> left) {
+    final parts = <String, int>{};
+    for (final item in left) {
+      for (final part in item.split('+')) {
+        parts[part] = (parts[part] ?? 0) + 1;
+      }
+    }
+    return parts;
+  }
+
+  /// The position of the app with the most items of [left], which is not
+  /// empty: on a tie the first, or, with [parts], the number of the items
+  /// of [left] that each part is in, the one whose parts are in the most
+  /// of them, and then the first.
+  int _bestOf(Set<String> left, Map<String, int>? parts) {
+    var best = -1;
+    var bestNew = 0;
+    var bestParts = 0;
+    for (final (index, app) in items.indexed) {
+      final fresh = app.where(left.contains).length;
+      if (fresh == 0 || fresh < bestNew) continue;
+      final inParts = parts == null
+          ? 0
+          : {for (final item in app) ...item.split('+')}
+              .map((part) => parts[part] ?? 0)
+              .fold(0, (sum, count) => sum + count);
+      if (fresh > bestNew || inParts > bestParts) {
+        best = index;
+        bestNew = fresh;
+        bestParts = inParts;
+      }
+    }
+    return best;
   }
 
   /// [taken] without each app whose items the others have too, the last
@@ -338,6 +370,90 @@ final class MatrixShard {
   String toString() => '$index/$count';
 }
 
+/// The apps of a matrix that a run of [runMatrix] checks: every app of the
+/// matrix, with each of its apps with every module, unless told otherwise.
+final class MatrixSelection {
+  /// Creates the selection of the apps named in [only], of only the apps
+  /// with every module with [everyModule], those of [everyModuleApps], and
+  /// of the share [shard] of them.
+  const MatrixSelection({
+    this.only,
+    this.everyModule = false,
+    this.everyModuleApps = EveryModuleCombinations.all,
+    this.shard,
+  });
+
+  /// The names of the apps of the matrix that the run checks, such as
+  /// `go_router with layout`, or `null` for all of them. A name that no app
+  /// of the matrix has is a problem.
+  final Set<String>? only;
+
+  /// Whether the run checks only the apps with every module, one for each
+  /// combination of the providers of the roles that take one (see
+  /// [everyModuleAppsOf]), which CI selects so rather than by their names:
+  /// the name of such an app names the provider of every role that has
+  /// several, so it changes when another role gets a second provider.
+  final bool everyModule;
+
+  /// The apps with every module of the matrix, such as a pairwise covering
+  /// of them, or one by the name of the plan of CI (see [matrixPlanOf]),
+  /// whose absence is a problem.
+  final EveryModuleSelection everyModuleApps;
+
+  /// The share of the apps that the run would check otherwise, so that jobs
+  /// of CI check the matrix side by side, or `null` for all of them.
+  final MatrixShard? shard;
+
+  /// The apps of [apps], the apps of the matrix, that the run checks, each
+  /// with its position in the matrix, from 0, which it keeps when only some
+  /// are checked.
+  List<(int, MatrixApp)> of(List<MatrixApp> apps) {
+    final only = this.only;
+    final selected = [
+      for (final (index, app) in apps.indexed)
+        if ((only == null || only.contains(app.name)) &&
+            (!everyModule || app.everyModuleWith != null))
+          (index, app),
+    ];
+    return shard?.of(selected) ?? selected;
+  }
+
+  /// The problems of the selection with [apps], the apps of the matrix: a
+  /// name of [only] that none of them has, and those of [everyModuleApps]
+  /// with the apps with every module among them.
+  List<String> problemsOf(List<MatrixApp> apps) => [
+        for (final name in only ?? const <String>{})
+          if (!apps.any((app) => app.name == name))
+            'No app of the matrix is $name.',
+        ...everyModuleApps.problemsOf([
+          for (final app in apps)
+            if (app.everyModuleWith != null) app,
+        ]),
+      ];
+}
+
+/// The apps with every module that [createEveryModuleApps] generates: those
+/// of [selection], each of them by default, among the apps with every
+/// module, or, with [withoutExternalSteps], among those without the modules
+/// whose steps need an external service (see [everyModuleAppsOf]).
+final class EveryModuleApps {
+  /// Creates the apps of [selection], with the modules whose steps need an
+  /// external service unless [withoutExternalSteps].
+  const EveryModuleApps({
+    this.selection = EveryModuleCombinations.all,
+    this.withoutExternalSteps = false,
+  });
+
+  /// The apps to take, such as a pairwise covering of the apps with every
+  /// module, or one by the name that the plan of CI gives a job (see
+  /// [matrixPlanOf]), whose absence is a problem.
+  final EveryModuleSelection selection;
+
+  /// Whether the apps leave out the modules whose steps need an external
+  /// service, so that they start as they are generated.
+  final bool withoutExternalSteps;
+}
+
 /// The options of a matrix tool that choose the apps of its run, which come
 /// before its directory: `--combinations <pairwise|3-wise|all>`, the apps
 /// with every module that a run checks or generates, a pairwise covering
@@ -357,13 +473,62 @@ final class MatrixToolOptions {
   /// the others stay, with those after the directory, which may be options
   /// of `smf create`.
   factory MatrixToolOptions.parse(List<String> arguments) {
+    final (:rest, :flags, :values, :problems) = _leadingOptionsOf(arguments);
+    final combinations = switch (values[_combinationsOption]) {
+      final value? => EveryModuleCombinations.parse(value),
+      null => EveryModuleCombinations.pairwise,
+    };
+    if (combinations == null) {
+      problems.add(
+        '--combinations takes pairwise, 3-wise or all, not '
+        '${values[_combinationsOption]}.',
+      );
+    }
+    final shard = switch (values[_shardOption]) {
+      final value? => MatrixShard.parse(value),
+      null => null,
+    };
+    if (values[_shardOption] case final value? when shard == null) {
+      problems.add(
+        '--shard takes <index>/<count>, such as 1/2, with an index from 1 to '
+        'the count, not $value.',
+      );
+    }
+    problems.addAll(_misusesOf(flags, values));
+    final app = values[_appOption];
+    return MatrixToolOptions._(
+      rest,
+      app != null
+          ? NamedEveryModuleApp(app)
+          : combinations ?? EveryModuleCombinations.pairwise,
+      shard,
+      problems.isEmpty ? null : problems.join(' '),
+    );
+  }
+
+  static const _combinationsOption = '--combinations';
+  static const _appOption = '--app';
+  static const _shardOption = '--shard';
+
+  /// The options at the start of [arguments], before the directory of the
+  /// tool: the `values` of those that take one, by their names, with a
+  /// problem for one without its value or given more than once; the others,
+  /// its `flags`; and `rest`, the arguments without the options that take a
+  /// value.
+  static ({
+    List<String> rest,
+    Set<String> flags,
+    Map<String, String> values,
+    List<String> problems,
+  }) _leadingOptionsOf(List<String> arguments) {
     final rest = <String>[];
     final values = <String, String>{};
     final problems = <String>[];
     var index = 0;
     while (index < arguments.length && arguments[index].startsWith('-')) {
       final option = arguments[index];
-      if (!const {'--combinations', '--app', '--shard'}.contains(option)) {
+      if (!const {_combinationsOption, _appOption, _shardOption}
+          .contains(option)) {
         rest.add(option);
         index++;
       } else if (index + 1 == arguments.length) {
@@ -379,29 +544,17 @@ final class MatrixToolOptions {
     }
     final flags = {...rest};
     rest.addAll(arguments.skip(index));
+    return (rest: rest, flags: flags, values: values, problems: problems);
+  }
 
-    final combinations = switch (values['--combinations']) {
-      final value? => EveryModuleCombinations.parse(value),
-      null => EveryModuleCombinations.pairwise,
-    };
-    if (combinations == null) {
-      problems.add(
-        '--combinations takes pairwise, 3-wise or all, not '
-        '${values['--combinations']}.',
-      );
-    }
-    final shard = switch (values['--shard']) {
-      final value? => MatrixShard.parse(value),
-      null => null,
-    };
-    if (values['--shard'] case final value? when shard == null) {
-      problems.add(
-        '--shard takes <index>/<count>, such as 1/2, with an index from 1 to '
-        'the count, not $value.',
-      );
-    }
-    final app = values['--app'];
-    if (app != null) {
+  /// The problems of the options with [values] that do not go with the
+  /// [flags] of the tool or with each other.
+  static List<String> _misusesOf(
+    Set<String> flags,
+    Map<String, String> values,
+  ) {
+    final problems = <String>[];
+    if (values.containsKey(_appOption)) {
       if (!flags.contains('--every-module') &&
           !flags.contains('--create') &&
           !flags.contains('--add-app-tests')) {
@@ -410,24 +563,17 @@ final class MatrixToolOptions {
           '--create or --add-app-tests.',
         );
       }
-      if (values.containsKey('--combinations')) {
+      if (values.containsKey(_combinationsOption)) {
         problems.add('--app takes one app, so it goes without --combinations.');
       }
     }
-    if (flags.contains('--create') && values.containsKey('--shard')) {
+    if (flags.contains('--create') && values.containsKey(_shardOption)) {
       problems.add(
         '--shard takes a share of the apps that a run checks, not of those '
         'that --create generates.',
       );
     }
-    return MatrixToolOptions._(
-      rest,
-      app != null
-          ? NamedEveryModuleApp(app)
-          : combinations ?? EveryModuleCombinations.pairwise,
-      shard,
-      problems.isEmpty ? null : problems.join(' '),
-    );
+    return problems;
   }
 
   /// The arguments of the tool without these options.
@@ -492,11 +638,12 @@ Future<({Map<String, Object> plan, List<String> problems})> matrixPlanOf(
   // In the order found, once each.
   final problems = <String>{};
   final every = await everyModuleAppsOf(modules, roleOptions: roleOptions);
-  final combinations = !everyCombination
-      ? EveryModuleCombinations.pairwise
-      : every.apps.length > maxEveryCombination
-          ? EveryModuleCombinations.threeWise
-          : EveryModuleCombinations.all;
+  final combinations = switch (everyCombination) {
+    false => EveryModuleCombinations.pairwise,
+    true when every.apps.length > maxEveryCombination =>
+      EveryModuleCombinations.threeWise,
+    true => EveryModuleCombinations.all,
+  };
   final matrix = await matrixOf(
     modules,
     roleOptions: roleOptions,

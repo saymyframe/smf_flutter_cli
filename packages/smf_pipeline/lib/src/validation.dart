@@ -126,6 +126,39 @@ List<String> strippedVars(Map<String, Object?> vars) {
   ];
 }
 
+/// The issues of the contributions of [collection] that break a rule of
+/// the pipeline (see [contributionIssues]), and the sockets with such a
+/// contribution.
+({List<SmfIssue> issues, Set<SocketRef> broken}) _brokenContributions(
+  Collection collection,
+  ModuleRegistry registry,
+  Resolution resolution,
+) {
+  final issues = <SmfIssue>[];
+  final broken = <SocketRef>{};
+  for (final collected in collection.all) {
+    final found = contributionIssues(collected, registry, resolution).toList();
+    if (found.isEmpty) continue;
+    issues.addAll(found);
+    if (collected.contribution case SocketContribution(:final socket)) {
+      broken.add(socket);
+    }
+  }
+  return (issues: issues, broken: broken);
+}
+
+/// The post-generation steps of [steps], those that apply to the app, that
+/// run: a step that continues a step which does not apply does not apply.
+List<Collected> _boundSteps(List<Collected> steps) {
+  final bound = {
+    for (final step in bindSteps(steps)) ...step.all,
+  };
+  return [
+    for (final collected in steps)
+      if (bound.contains(collected)) collected,
+  ];
+}
+
 /// Stage 5 of the pipeline: checks the contributions against the rules of
 /// the module model and the hooks of the roles, orders the contributions of
 /// every socket, and merges the pubspec.
@@ -161,23 +194,18 @@ ValidationResult validate({
   bool interactive = true,
   bool skipExternalSetup = false,
 }) {
-  final issues = <SmfIssue>[...collection.issues];
   // Sockets with a contribution that breaks a rule, whose tags are not
   // worth reporting too.
-  final broken = <SocketRef>{};
-  for (final collected in collection.all) {
-    final found = contributionIssues(collected, registry, resolution).toList();
-    if (found.isEmpty) continue;
-    issues.addAll(found);
-    if (collected.contribution case SocketContribution(:final socket)) {
-      broken.add(socket);
-    }
-  }
-  issues
-    ..addAll(_ownerIssues(collection))
-    ..addAll(_preflightIssues(collection))
-    ..addAll(_needsIssues(collection))
-    ..addAll(_stepIdIssues(collection, resolution));
+  final (issues: ofContributions, :broken) =
+      _brokenContributions(collection, registry, resolution);
+  final issues = <SmfIssue>[
+    ...collection.issues,
+    ...ofContributions,
+    ..._ownerIssues(collection),
+    ..._preflightIssues(collection),
+    ..._needsIssues(collection),
+    ..._stepIdIssues(collection, resolution),
+  ];
   for (final module in resolution.modules) {
     issues.addAll(_kindIssues(module, collection));
   }
@@ -217,14 +245,7 @@ ValidationResult validate({
         break;
     }
   }
-  // A step that continues a step which does not apply does not apply.
-  final bound = {
-    for (final step in bindSteps(steps)) ...step.all,
-  };
-  final postGen = [
-    for (final collected in steps)
-      if (bound.contains(collected)) collected,
-  ];
+  final postGen = _boundSteps(steps);
   for (final collected in postGen) {
     issues.addAll(
       _runIssues(
@@ -730,6 +751,18 @@ Iterable<SmfIssue> _stepIdIssues(
       origin: collected.origin,
     );
   }
+  yield* _followUpIssues(steps, byId, resolution);
+}
+
+/// The problems of the [steps] that continue another step, with the step of
+/// each id in [byId]: a step that continues a step which the app does not
+/// have, and steps that continue each other in a cycle; see
+/// [_stepIdIssues].
+Iterable<SmfIssue> _followUpIssues(
+  List<Collected> steps,
+  Map<PostGenStepId, Collected> byId,
+  Resolution resolution,
+) sync* {
   // The steps of the cycles reported so far.
   final inCycles = <Collected>{};
   for (final collected in steps) {

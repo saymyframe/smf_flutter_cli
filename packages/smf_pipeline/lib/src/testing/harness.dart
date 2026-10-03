@@ -874,35 +874,43 @@ final class ContractHarness {
   /// The tests of a registry expect none, so that the harness checks each
   /// module with every provider of its roles, also when a role gets another
   /// provider.
-  Future<List<String>> uncheckedProviders() async {
-    final unchecked = <String>[];
-    for (final module in registry.modules) {
-      final descriptor = module.descriptor;
-      final apps = [
-        for (final contractCase in casesOfModule(descriptor.id))
+  Future<List<String>> uncheckedProviders() async => [
+        for (final module in registry.modules)
+          ..._uncheckedProvidersOf(module, await _resolvedAppsOf(module)),
+      ];
+
+  /// The modules of the app of each case of [module] that resolves.
+  Future<List<Resolution>> _resolvedAppsOf(SmfModule module) async => [
+        for (final contractCase in casesOfModule(module.descriptor.id))
           if (await _resolutionOf(contractCase) case final resolution?)
             resolution,
       ];
-      bool checks(Role role, ModuleId provider) => apps.any(
-            (app) => app.providersOf(role).any((other) => other.id == provider),
-          );
-      for (final (roles, verb) in [
-        (descriptor.effectiveRequires, 'requires'),
-        (descriptor.effectiveUses, 'uses'),
-      ]) {
-        for (final role in roles) {
-          for (final provider in registry.providersOf(role)) {
-            final id = provider.descriptor.id;
-            if (_fit([
-                  ..._withDependencies(module),
-                  ..._withDependencies(provider),
-                ]) &&
-                !checks(role, id)) {
-              unchecked.add(
-                'No case of ${descriptor.id} builds an app in which $id '
-                'provides the $role, which ${descriptor.id} $verb.',
-              );
-            }
+
+  /// The providers of the roles that [module] requires or uses which can be
+  /// in an app with it but provide the role in none of [apps], the apps of
+  /// its cases, one line for each; see [uncheckedProviders].
+  List<String> _uncheckedProvidersOf(SmfModule module, List<Resolution> apps) {
+    final descriptor = module.descriptor;
+    bool checks(Role role, ModuleId provider) => apps.any(
+          (app) => app.providersOf(role).any((other) => other.id == provider),
+        );
+    final unchecked = <String>[];
+    for (final (roles, verb) in [
+      (descriptor.effectiveRequires, 'requires'),
+      (descriptor.effectiveUses, 'uses'),
+    ]) {
+      for (final role in roles) {
+        for (final provider in registry.providersOf(role)) {
+          final id = provider.descriptor.id;
+          if (_fit([
+                ..._withDependencies(module),
+                ..._withDependencies(provider),
+              ]) &&
+              !checks(role, id)) {
+            unchecked.add(
+              'No case of ${descriptor.id} builds an app in which $id '
+              'provides the $role, which ${descriptor.id} $verb.',
+            );
           }
         }
       }

@@ -46,23 +46,8 @@ List<String> roleClassNameProblems(
   if (pubspec case final YamlMap map && {'name': final String name}) {
     final packages = ResolvedPackages.of(directory);
     if (packages == null) return [ResolvedPackages.missingConfig(root)];
-    final dependencies = switch (map['dependencies']) {
-      final YamlMap dependencies => [...dependencies.keys.cast<String>()]
-        ..sort(),
-      _ => const <String>[],
-    };
-    final checked = [
-      (name, directory),
-      for (final package in dependencies)
-        if (packages.isModule(package))
-          if (packages.rootOf(package) case final packageRoot?)
-            (package, packageRoot),
-    ];
-    final classes = {
-      for (final role in roles)
-        for (final symbol in role.interface.symbols)
-          if (symbol is RequiredClass) symbol.name: role,
-    };
+    final checked = [(name, directory), ..._modulePackagesOf(map, packages)];
+    final classes = _requiredClassesOf(roles);
     final problems = [
       for (final (package, packageRoot) in checked)
         for (final (path, file) in dartFilesIn(packageRoot, 'lib'))
@@ -73,6 +58,32 @@ List<String> roleClassNameProblems(
   }
   return ['The directory $root has no pubspec.yaml.'];
 }
+
+/// The module packages among the dependencies of [pubspec] that [packages]
+/// resolved, in the order of their names, each with its root.
+List<(String, Directory)> _modulePackagesOf(
+  YamlMap pubspec,
+  ResolvedPackages packages,
+) {
+  final dependencies = switch (pubspec['dependencies']) {
+    final YamlMap dependencies => [...dependencies.keys.cast<String>()]..sort(),
+    _ => const <String>[],
+  };
+  return [
+    for (final package in dependencies)
+      if (packages.isModule(package))
+        if (packages.rootOf(package) case final packageRoot?)
+          (package, packageRoot),
+  ];
+}
+
+/// The role of each class that one of [roles] requires, by the name of the
+/// class.
+Map<String, Role> _requiredClassesOf(Iterable<Role> roles) => {
+      for (final role in roles)
+        for (final symbol in role.interface.symbols)
+          if (symbol is RequiredClass) symbol.name: role,
+    };
 
 /// The problems of [source], the Dart code of the file [path]: each string
 /// that spells out the name of a class of [classes], the role of each class

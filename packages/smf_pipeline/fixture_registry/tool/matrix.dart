@@ -69,10 +69,12 @@ Future<void> main(List<String> given) async {
   final code = await runMatrix(
     fixtureModules(),
     directory: rest.first,
-    only: rest.length > 1 ? rest.skip(1).toSet() : null,
-    everyModule: everyModule,
-    everyModuleApps: choice.selection,
-    shard: choice.shard,
+    selection: MatrixSelection(
+      only: rest.length > 1 ? rest.skip(1).toSet() : null,
+      everyModule: everyModule,
+      everyModuleApps: choice.selection,
+      shard: choice.shard,
+    ),
     appTests: await fixtureAppTests(),
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
