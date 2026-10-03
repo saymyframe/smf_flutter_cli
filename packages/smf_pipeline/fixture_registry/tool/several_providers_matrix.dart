@@ -50,7 +50,7 @@ Future<void> main(List<String> arguments) async {
       // Only its app with every module, which has each of its modules next
       // to the others; the matrices of the CLI and of the fixtures check
       // their modules in the other combinations.
-      everyModule: true,
+      selection: const MatrixSelection(everyModule: true),
       appTests: await severalProvidersAppTests(),
     );
     await Future.wait<void>([stdout.flush(), stderr.flush()]);

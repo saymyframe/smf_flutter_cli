@@ -1520,20 +1520,12 @@ final class MatrixCommands {
 /// they check the contract of their roles with every provider (see
 /// [MatrixAppTests.roleProblems]); 1 otherwise.
 ///
-/// With [only], it checks only the apps of the matrix with those names,
-/// such as `go_router with layout`, and runs the [appTests] that
-/// apply to them; a name that no app of the matrix has is a problem too.
-/// With [everyModule], it checks only the apps with every module, one for
-/// each combination of the providers of the roles that take one (see
-/// [everyModuleAppsOf]), which CI selects so rather than by their names:
-/// the name of such an app names the provider of every role that has
-/// several, so it changes when another role gets a second provider. The
-/// apps with every module of the matrix are those of [everyModuleApps],
-/// such as a pairwise covering of them, or one by the name of the plan of
-/// CI (see [matrixPlanOf]), whose absence is a problem. With [shard], it
-/// checks only its share of the apps that it would check otherwise, which
-/// keep their numbers in the matrix, so that jobs of CI check the matrix
-/// side by side.
+/// It checks the apps of [selection], every app of the matrix by default,
+/// such as those with some names, only the apps with every module, or a
+/// share of them (see [MatrixSelection]), and runs the [appTests] that
+/// apply to them. A problem of the selection, such as a name that no app of
+/// the matrix has, is a problem of the run too. The apps keep their numbers
+/// in the matrix when only some are checked.
 ///
 /// The apps stay in [directory], with the tests. [commands] run for each
 /// app, and their log gets what happens.
@@ -1542,10 +1534,7 @@ Future<int> runMatrix(
   required String directory,
   Map<String, String?> roleOptions = const {},
   MatrixAppTests appTests = const MatrixAppTests([]),
-  Set<String>? only,
-  bool everyModule = false,
-  EveryModuleSelection everyModuleApps = EveryModuleCombinations.all,
-  MatrixShard? shard,
+  MatrixSelection selection = const MatrixSelection(),
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   final run = _MatrixRun(
@@ -1565,26 +1554,15 @@ Future<int> runMatrix(
   final (:apps, :failed) = await matrixOf(
     modules,
     roleOptions: roleOptions,
-    everyModuleApps: everyModuleApps,
+    everyModuleApps: selection.everyModuleApps,
   );
   final problems = [
     for (final result in failed)
       '${result.contractCase}: ${result.errors.join('; ')}',
-    for (final name in only ?? const <String>{})
-      if (!apps.any((app) => app.name == name))
-        'No app of the matrix is $name.',
-    ...everyModuleApps.problemsOf([
-      for (final app in apps)
-        if (app.everyModuleWith != null) app,
-    ]),
+    ...selection.problemsOf(apps),
   ];
   final checked = <MatrixApp>[];
-  for (final (index, app) in _selectedOf(
-    apps,
-    only: only,
-    everyModule: everyModule,
-    shard: shard,
-  )) {
+  for (final (index, app) in selection.of(apps)) {
     checked.add(app);
     // An app keeps its number in the matrix when only some are checked.
     problems.addAll(await run.check(app, 'app_${index + 1}'));
@@ -1601,40 +1579,20 @@ Future<int> runMatrix(
   return _exitCode(problems, run.say);
 }
 
-/// The apps of [apps], the apps of a matrix, that a run of [runMatrix]
-/// checks, each with its position in the matrix: those named in [only], if
-/// given; only the apps with every module, with [everyModule]; and of
-/// those, the share of [shard], if given.
-List<(int, MatrixApp)> _selectedOf(
-  List<MatrixApp> apps, {
-  required Set<String>? only,
-  required bool everyModule,
-  required MatrixShard? shard,
-}) {
-  final selected = [
-    for (final (index, app) in apps.indexed)
-      if ((only == null || only.contains(app.name)) &&
-          (!everyModule || app.everyModuleWith != null))
-        (index, app),
-  ];
-  return shard?.of(selected) ?? selected;
-}
-
 /// Generates in [directory] the apps with every module of [modules] with
-/// [roleOptions], or those without the modules whose steps need an
-/// external service with [withoutExternalSteps] (see [everyModuleAppsOf]),
-/// for CI to build them for Android and iOS and to start them on devices:
-/// each as the [MatrixApp.packageName] of [name], such as `start_app` and
-/// `start_app_riverpod`, with the options of CI and then [options], such as
-/// `--org com.example`. It analyzes and tests none of them, which
-/// [runMatrix] does.
+/// [roleOptions], for CI to build them for Android and iOS and to start
+/// them on devices: each as the [MatrixApp.packageName] of [name], such as
+/// `start_app` and `start_app_riverpod`, with the options of CI and then
+/// [options], such as `--org com.example`. It analyzes and tests none of
+/// them, which [runMatrix] does.
 ///
 /// With `--explain` among the [options], `smf create` only prints for each
 /// app what it would generate and whether the machine is ready.
 ///
-/// The apps are those of [selection], such as a pairwise covering of the
-/// apps with every module, or one by the name that the plan of CI gives a
-/// job (see [matrixPlanOf]), whose absence is a problem.
+/// The apps are those of [apps], each app with every module by default,
+/// such as a pairwise covering of them, one by the name that the plan of CI
+/// gives a job, whose absence is a problem, or those without the modules
+/// whose steps need an external service (see [EveryModuleApps]).
 ///
 /// Returns the exit code: 0 if every app was generated with every module
 /// and every step that the options of CI do not leave for later, 1
@@ -1646,10 +1604,9 @@ Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
   required String directory,
   required String name,
-  bool withoutExternalSteps = false,
   List<String> options = const [],
   Map<String, String?> roleOptions = const {},
-  EveryModuleSelection selection = EveryModuleCombinations.all,
+  EveryModuleApps apps = const EveryModuleApps(),
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   // coverage:ignore-start
@@ -1666,16 +1623,16 @@ Future<int> createEveryModuleApps(
     );
     return 64;
   }
-  final (:apps, :failed) = await everyModuleAppsOf(
+  final (apps: every, :failed) = await everyModuleAppsOf(
     modules,
     roleOptions: roleOptions,
-    withoutExternalSteps: withoutExternalSteps,
+    withoutExternalSteps: apps.withoutExternalSteps,
   );
-  final selected = selection.select(apps, modules);
+  final selected = apps.selection.select(every, modules);
   final problems = [
     for (final result in failed)
       '${result.contractCase}: ${result.errors.join('; ')}',
-    ...selection.problemsOf(selected),
+    ...apps.selection.problemsOf(selected),
   ];
   for (final app in selected) {
     final packageName = app.packageName(name);

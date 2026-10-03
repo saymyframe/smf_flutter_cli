@@ -370,6 +370,90 @@ final class MatrixShard {
   String toString() => '$index/$count';
 }
 
+/// The apps of a matrix that a run of [runMatrix] checks: every app of the
+/// matrix, with each of its apps with every module, unless told otherwise.
+final class MatrixSelection {
+  /// Creates the selection of the apps named in [only], of only the apps
+  /// with every module with [everyModule], those of [everyModuleApps], and
+  /// of the share [shard] of them.
+  const MatrixSelection({
+    this.only,
+    this.everyModule = false,
+    this.everyModuleApps = EveryModuleCombinations.all,
+    this.shard,
+  });
+
+  /// The names of the apps of the matrix that the run checks, such as
+  /// `go_router with layout`, or `null` for all of them. A name that no app
+  /// of the matrix has is a problem.
+  final Set<String>? only;
+
+  /// Whether the run checks only the apps with every module, one for each
+  /// combination of the providers of the roles that take one (see
+  /// [everyModuleAppsOf]), which CI selects so rather than by their names:
+  /// the name of such an app names the provider of every role that has
+  /// several, so it changes when another role gets a second provider.
+  final bool everyModule;
+
+  /// The apps with every module of the matrix, such as a pairwise covering
+  /// of them, or one by the name of the plan of CI (see [matrixPlanOf]),
+  /// whose absence is a problem.
+  final EveryModuleSelection everyModuleApps;
+
+  /// The share of the apps that the run would check otherwise, so that jobs
+  /// of CI check the matrix side by side, or `null` for all of them.
+  final MatrixShard? shard;
+
+  /// The apps of [apps], the apps of the matrix, that the run checks, each
+  /// with its position in the matrix, from 0, which it keeps when only some
+  /// are checked.
+  List<(int, MatrixApp)> of(List<MatrixApp> apps) {
+    final only = this.only;
+    final selected = [
+      for (final (index, app) in apps.indexed)
+        if ((only == null || only.contains(app.name)) &&
+            (!everyModule || app.everyModuleWith != null))
+          (index, app),
+    ];
+    return shard?.of(selected) ?? selected;
+  }
+
+  /// The problems of the selection with [apps], the apps of the matrix: a
+  /// name of [only] that none of them has, and those of [everyModuleApps]
+  /// with the apps with every module among them.
+  List<String> problemsOf(List<MatrixApp> apps) => [
+        for (final name in only ?? const <String>{})
+          if (!apps.any((app) => app.name == name))
+            'No app of the matrix is $name.',
+        ...everyModuleApps.problemsOf([
+          for (final app in apps)
+            if (app.everyModuleWith != null) app,
+        ]),
+      ];
+}
+
+/// The apps with every module that [createEveryModuleApps] generates: those
+/// of [selection], each of them by default, among the apps with every
+/// module, or, with [withoutExternalSteps], among those without the modules
+/// whose steps need an external service (see [everyModuleAppsOf]).
+final class EveryModuleApps {
+  /// Creates the apps of [selection], with the modules whose steps need an
+  /// external service unless [withoutExternalSteps].
+  const EveryModuleApps({
+    this.selection = EveryModuleCombinations.all,
+    this.withoutExternalSteps = false,
+  });
+
+  /// The apps to take, such as a pairwise covering of the apps with every
+  /// module, or one by the name that the plan of CI gives a job (see
+  /// [matrixPlanOf]), whose absence is a problem.
+  final EveryModuleSelection selection;
+
+  /// Whether the apps leave out the modules whose steps need an external
+  /// service, so that they start as they are generated.
+  final bool withoutExternalSteps;
+}
+
 /// The options of a matrix tool that choose the apps of its run, which come
 /// before its directory: `--combinations <pairwise|3-wise|all>`, the apps
 /// with every module that a run checks or generates, a pairwise covering
