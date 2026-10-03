@@ -163,23 +163,9 @@ final class _Covering {
     List<SmfModule> modules,
     int strength,
   ) {
-    // The providers of each role that takes one, in the order in which the
-    // modules provide the roles.
-    final providersOf = <Role, Set<ModuleId>>{};
-    for (final module in modules) {
-      for (final role in module.descriptor.provides) {
-        if (role.cardinality.allowsMany) continue;
-        providersOf.putIfAbsent(role, () => {}).add(module.descriptor.id);
-      }
-    }
-    // The provider of each such role that each app has.
+    final providersOf = _providersOf(modules);
     final providers = [
-      for (final app in apps)
-        {
-          for (final MapEntry(key: role, value: ids) in providersOf.entries)
-            if (app.modules.where(ids.contains).firstOrNull case final id?)
-              role: id,
-        },
+      for (final app in apps) _providersIn(app, providersOf),
     ];
     // The roles with several providers among the apps.
     final roles = [
@@ -190,19 +176,52 @@ final class _Covering {
     final size = strength < roles.length ? strength : roles.length;
     return _Covering._([
       for (final (index, app) in apps.indexed)
-        {
-          for (final tuple in _subsets(
-            [
-              for (final role in roles)
-                if (providers[index][role] case final provider?)
-                  '${role.id}=$provider',
-            ],
-            size,
-          ))
-            if (tuple.isNotEmpty) tuple.join('+'),
-          for (final module in app.modules) 'module:$module',
-        },
+        _itemsOf(app, providers[index], roles, size),
     ]);
+  }
+
+  /// The providers of each role that takes one, in the order in which
+  /// [modules] provide the roles.
+  static Map<Role, Set<ModuleId>> _providersOf(List<SmfModule> modules) {
+    final providersOf = <Role, Set<ModuleId>>{};
+    for (final module in modules) {
+      for (final role in module.descriptor.provides) {
+        if (role.cardinality.allowsMany) continue;
+        providersOf.putIfAbsent(role, () => {}).add(module.descriptor.id);
+      }
+    }
+    return providersOf;
+  }
+
+  /// The provider that [app] has of each role of [providersOf], the
+  /// providers of each role.
+  static Map<Role, ModuleId> _providersIn(
+    MatrixApp app,
+    Map<Role, Set<ModuleId>> providersOf,
+  ) =>
+      {
+        for (final MapEntry(key: role, value: ids) in providersOf.entries)
+          if (app.modules.where(ids.contains).firstOrNull case final id?)
+            role: id,
+      };
+
+  /// What [app] has that a covering must have: the tuples of [size] of its
+  /// [providers] of [roles], and its modules.
+  static Set<String> _itemsOf(
+    MatrixApp app,
+    Map<Role, ModuleId> providers,
+    List<Role> roles,
+    int size,
+  ) {
+    final ofRoles = [
+      for (final role in roles)
+        if (providers[role] case final provider?) '${role.id}=$provider',
+    ];
+    return {
+      for (final tuple in _subsets(ofRoles, size))
+        if (tuple.isNotEmpty) tuple.join('+'),
+      for (final module in app.modules) 'module:$module',
+    };
   }
 
   /// What each app has that the covering must have: its tuples of
@@ -226,35 +245,48 @@ final class _Covering {
     final left = {for (final app in items) ...app};
     final taken = <int>[];
     while (left.isNotEmpty) {
-      final parts = <String, int>{};
-      if (byParts) {
-        for (final item in left) {
-          for (final part in item.split('+')) {
-            parts[part] = (parts[part] ?? 0) + 1;
-          }
-        }
-      }
-      var best = -1;
-      var bestNew = 0;
-      var bestParts = 0;
-      for (final (index, app) in items.indexed) {
-        final fresh = app.where(left.contains).length;
-        if (fresh == 0 || fresh < bestNew) continue;
-        final inParts = byParts
-            ? {for (final item in app) ...item.split('+')}
-                .map((part) => parts[part] ?? 0)
-                .fold(0, (sum, count) => sum + count)
-            : 0;
-        if (fresh > bestNew || inParts > bestParts) {
-          best = index;
-          bestNew = fresh;
-          bestParts = inParts;
-        }
-      }
+      final best = _bestOf(left, byParts ? _partsOf(left) : null);
       taken.add(best);
       left.removeAll(items[best]);
     }
     return taken;
+  }
+
+  /// The number of the items of [left] that each of their parts, a provider
+  /// or a module, is in.
+  static Map<String, int> _partsOf(Set<String> left) {
+    final parts = <String, int>{};
+    for (final item in left) {
+      for (final part in item.split('+')) {
+        parts[part] = (parts[part] ?? 0) + 1;
+      }
+    }
+    return parts;
+  }
+
+  /// The position of the app with the most items of [left], which is not
+  /// empty: on a tie the first, or, with [parts], the number of the items
+  /// of [left] that each part is in, the one whose parts are in the most
+  /// of them, and then the first.
+  int _bestOf(Set<String> left, Map<String, int>? parts) {
+    var best = -1;
+    var bestNew = 0;
+    var bestParts = 0;
+    for (final (index, app) in items.indexed) {
+      final fresh = app.where(left.contains).length;
+      if (fresh == 0 || fresh < bestNew) continue;
+      final inParts = parts == null
+          ? 0
+          : {for (final item in app) ...item.split('+')}
+              .map((part) => parts[part] ?? 0)
+              .fold(0, (sum, count) => sum + count);
+      if (fresh > bestNew || inParts > bestParts) {
+        best = index;
+        bestNew = fresh;
+        bestParts = inParts;
+      }
+    }
+    return best;
   }
 
   /// [taken] without each app whose items the others have too, the last
