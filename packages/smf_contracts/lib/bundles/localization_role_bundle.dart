@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final localizationRoleBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/l10n/app_locale.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvd2lkZ2V0cy5kYXJ0JzsKCi8vLyBUaGUgbGFuZ3VhZ2VzIG9mIHRoZSBhcHAuIFRoZSBhcHAgc2hvd3MgaXRzIHRleHRzIGluIHRoZSBsYW5ndWFnZSB0aGF0Ci8vLyB0aGUgZGV2aWNlIHByZWZlcnMgYW1vbmcgdGhlbSwgYW5kIGluIHRoZSBmaXJzdCBvZiB0aGUgbGlzdCB3aGVuIHRoZQovLy8gZGV2aWNlIGFza3MgZm9yIG5vbmUgb2YgdGhlbS4KY29uc3QgYXBwTG9jYWxlcyA9IDxMb2NhbGU+W3t7e2xvY2FsZXN9fX1dOwoKLy8vIFRoZSBsYW5ndWFnZSB0aGF0IHRoZSB1c2VyIGNob3NlIGZvciB0aGUgYXBwLCBvciBgbnVsbGAgd2hpbGUgdGhlIGFwcAovLy8gZm9sbG93cyB0aGUgbGFuZ3VhZ2VzIG9mIHRoZSBkZXZpY2UuCi8vLwovLy8gU2V0IGl0cyB2YWx1ZSB0byBvbmUgb2YgW2FwcExvY2FsZXNdLCBvciB0byBgbnVsbGAsIHRvIGNoYW5nZSB0aGUKLy8vIGxhbmd1YWdlOiB0aGUgcm9vdCBvZiB0aGUgYXBwLCB3aGljaCByZWFkcyBpdCB0aHJvdWdoIFtBcHBMb2NhbGVTY29wZV0sCi8vLyByZWJ1aWxkcyBpbiB0aGUgbmV3IGxhbmd1YWdlLgpmaW5hbCBhcHBMb2NhbGUgPSBWYWx1ZU5vdGlmaWVyPExvY2FsZT8+KG51bGwpOwoKLy8vIEdpdmVzIHRoZSByb290IG9mIHRoZSBhcHAgdGhlIGxhbmd1YWdlIHRoYXQgdGhlIHVzZXIgY2hvc2UsIGFuZCByZWJ1aWxkcwovLy8gdGhlIHJvb3Qgd2hlbiB0aGUgY2hvaWNlIGNoYW5nZXMuCmNsYXNzIEFwcExvY2FsZVNjb3BlIGV4dGVuZHMgSW5oZXJpdGVkTm90aWZpZXI8VmFsdWVOb3RpZmllcjxMb2NhbGU/Pj4gewogIC8vLyBDcmVhdGVzIHRoZSBzY29wZSBvZiBbbm90aWZpZXJdIGFyb3VuZCBbY2hpbGRdLgogIGNvbnN0IEFwcExvY2FsZVNjb3BlKHsKICAgIHJlcXVpcmVkIFZhbHVlTm90aWZpZXI8TG9jYWxlPz4gc3VwZXIubm90aWZpZXIsCiAgICByZXF1aXJlZCBzdXBlci5jaGlsZCwKICAgIHN1cGVyLmtleSwKICB9KTsKCiAgLy8vIFRoZSBsYW5ndWFnZSB0aGF0IHRoZSB1c2VyIGNob3NlLCBvciBgbnVsbGAgdG8gZm9sbG93IHRoZSBkZXZpY2U7IHRoZQogIC8vLyB3aWRnZXQgb2YgW2NvbnRleHRdIHJlYnVpbGRzIHdoZW4gdGhlIGNob2ljZSBjaGFuZ2VzLgogIHN0YXRpYyBMb2NhbGU/IG9mKEJ1aWxkQ29udGV4dCBjb250ZXh0KSA9PiBjb250ZXh0CiAgICAgIC5kZXBlbmRPbkluaGVyaXRlZFdpZGdldE9mRXhhY3RUeXBlPEFwcExvY2FsZVNjb3BlPigpIQogICAgICAubm90aWZpZXIhCiAgICAgIC52YWx1ZTsKfQo=",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "localization_role",
+  "description":
+      "The template of the localization role of SMF: the languages of the app and the language that the user chose.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

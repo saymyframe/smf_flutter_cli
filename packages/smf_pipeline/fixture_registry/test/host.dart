@@ -145,6 +145,9 @@ final class RecordingLogger implements SmfLogger {
   /// The errors, in the order they were reported.
   final List<String> errors = [];
 
+  /// The warnings, in the order they were reported.
+  final List<String> warnings = [];
+
   @override
   void info(String message) {}
 
@@ -152,7 +155,7 @@ final class RecordingLogger implements SmfLogger {
   void detail(String message) {}
 
   @override
-  void warn(String message) {}
+  void warn(String message) => warnings.add(message);
 
   @override
   void error(String message) => errors.add(message);

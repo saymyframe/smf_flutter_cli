@@ -507,6 +507,113 @@ void main() {
     });
   });
 
+  group('RequiredExtension', () {
+    const symbol = RequiredExtension(
+      'AppTexts',
+      path: 'lib/texts.dart',
+      on: 'BuildContext',
+      getters: ['l10n'],
+    );
+
+    List<String> problemsOf(IndexedDeclaration declaration) => [
+          for (final issue in symbol.checkIn({
+            'lib/texts.dart': DartFileIndex(
+              path: 'lib/texts.dart',
+              declarations: [declaration],
+            ),
+          }))
+            issue.message,
+        ];
+
+    const prefix = 'extension AppTexts in lib/texts.dart must';
+
+    test('is satisfied by an extension on the type with the getters', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            // As written, with any spaces.
+            type: ' BuildContext ',
+            members: [
+              IndexedMember('l10n', kind: MemberKind.getter),
+              IndexedMember('other', kind: MemberKind.method),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+      expect(symbol.importRef, const ImportRef.app('texts.dart'));
+      expect('$symbol', 'extension AppTexts');
+      expect(symbol.namedParameters, isEmpty);
+      expect(symbol.positionalArguments, 0);
+    });
+
+    test('reports a missing file or declaration', () {
+      expect(
+        symbol.checkIn(const {}).single.message,
+        'lib/texts.dart is missing, so it cannot declare extension AppTexts.',
+      );
+      expect(
+        symbol
+            .checkIn({
+              'lib/texts.dart': const DartFileIndex(path: 'lib/texts.dart'),
+            })
+            .single
+            .message,
+        'lib/texts.dart does not declare extension AppTexts.',
+      );
+    });
+
+    test('reports a declaration that is not an extension', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.classType,
+            members: [IndexedMember('l10n', kind: MemberKind.getter)],
+          ),
+        ),
+        ['$prefix be an extension, not a classType.'],
+      );
+    });
+
+    test('reports an extension on another type', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            type: 'State<StatefulWidget>',
+            members: [IndexedMember('l10n', kind: MemberKind.getter)],
+          ),
+        ),
+        ['$prefix be on BuildContext, not on State<StatefulWidget>.'],
+      );
+    });
+
+    test('takes neither a static getter nor a method or a setter for a getter',
+        () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            type: 'BuildContext',
+            members: [
+              IndexedMember('l10n', kind: MemberKind.getter, isStatic: true),
+              IndexedMember('l10n', kind: MemberKind.method),
+              IndexedMember('l10n', kind: MemberKind.setter),
+              // An extension has only static fields.
+              IndexedMember('l10n', kind: MemberKind.field, isStatic: true),
+            ],
+          ),
+        ),
+        ['$prefix declare the instance getter l10n.'],
+      );
+    });
+  });
+
   group('Role.checkStructure', () {
     const home = ModuleOrigin(ModuleId('home'));
     final role = TestRole<String>(

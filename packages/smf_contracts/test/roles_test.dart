@@ -10,6 +10,7 @@ const List<Role> _roles = [
   stateManagementRole,
   routerRole,
   layoutRole,
+  localizationRole,
   diRole,
   eventsRole,
   preferencesRole,
@@ -40,6 +41,7 @@ void main() {
       'state management role',
       'router role',
       'layout role',
+      'localization role',
       'dependency injection role',
       'events role',
       'preferences role',
@@ -69,6 +71,11 @@ void main() {
     expect(shape(layoutRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
+      'uses': <String>{},
+    });
+    expect(shape(localizationRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
       'uses': <String>{},
     });
     expect(shape(diRole), {
@@ -168,6 +175,7 @@ void main() {
         [
           'router',
           'layout',
+          'localization',
           'di',
           'events',
           'preferences',
@@ -201,9 +209,10 @@ void main() {
     });
 
     // A role's socket may also be tagged in its provider's files, as the
-    // observers of the router are.
+    // observers of the router are. The other names are the variables of the
+    // render hooks of the templates.
     test('have tags only of their own sockets, and no other mustache', () {
-      final known = {'facade'};
+      final known = {'facade', 'locales'};
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
         for (final brick in bricksOf(role)) {
