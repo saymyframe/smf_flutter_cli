@@ -447,6 +447,179 @@ void main() {
       ]);
     });
 
+    test('a variable that depends on a role names a role of its contributor',
+        () {
+      final nav = TestRole<NoDsl>('nav');
+      final other = TestRole<NoDsl>('other');
+      // The template of a role may name the roles that its role uses.
+      final shelf = TestRole<String>(
+        'shelf',
+        uses: {nav},
+        template: TestTemplate<String>(
+          contributions: [
+            BrickContribution(
+              bundle('shelf', paths: ['lib/shelf.dart']),
+              vars: {
+                'of_nav': RoleVar(nav, present: 'a', absent: 'b'),
+                'of_other': RoleVar(other, present: 'a', absent: 'b'),
+              },
+            ),
+          ],
+        ),
+      );
+      final result = _validate([
+        entry,
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('elsewhere', providers: [RoleProvider.plain(other)]),
+        TestModule('store', providers: [RoleProvider.plain(shelf)]),
+        TestModule(
+          'home',
+          uses: {nav},
+          contributions: [
+            BrickContribution(
+              bundle('home', paths: ['lib/home.dart']),
+              vars: {
+                'of_nav': RoleVar(nav, present: 'a', absent: 'b'),
+                'of_other': RoleVar(other, present: 'a', absent: 'b'),
+                // A role open to all modules gives every module its
+                // sockets and its presence flag, but a condition names
+                // only a role that the module lists.
+                'of_entry': const RoleVar(
+                  appEntryRole,
+                  present: 'a',
+                  absent: 'b',
+                ),
+              },
+            ),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'home: The variable of_other of the brick home of home depends on '
+          'the other role, but home does not provide, require or use it.',
+        ),
+        equals(
+          'home: The variable of_entry of the brick home of home depends on '
+          'the app entry role, but home does not provide, require or use it.',
+        ),
+        equals(
+          'role:shelf: The variable of_other of the brick shelf of '
+          'role:shelf depends on the other role, but role:shelf does not '
+          'provide, require or use it.',
+        ),
+      ]);
+      expect(
+        result.issues.first.hint,
+        'Add the role to the uses of the module.',
+      );
+    });
+
+    test(
+        'the values of a variable that depends on a role are code: fragments '
+        'or strings', () {
+      final nav = TestRole<NoDsl>('nav');
+      const zeta = ImportRef('package:zeta/zeta.dart');
+      final result = _validate([
+        entry,
+        TestModule(
+          'home',
+          uses: {nav},
+          contributions: [
+            BrickContribution(
+              bundle('home', paths: ['lib/a.dart']),
+              vars: {
+                // Code: a fragment, or a string that needs no imports.
+                'code': RoleVar(
+                  nav,
+                  present: const Fragment('Zeta()', imports: [zeta]),
+                  absent: "'none'",
+                ),
+                'fragments': RoleVar(
+                  nav,
+                  present: const Fragment('a();'),
+                  absent: const Fragment(''),
+                ),
+                'strings': RoleVar(nav, present: 'a();', absent: ''),
+                'has_x': RoleVar(nav, present: 'a', absent: 'b'),
+                'slash': RoleVar(
+                  nav,
+                  present: const Fragment('a\\\nb'),
+                  absent: 'c',
+                ),
+                'accent': RoleVar(nav, present: 'c', absent: r'caf\é'),
+                // Plain data that a template would test or iterate.
+                'flag': RoleVar(nav, present: true, absent: false),
+                'number': RoleVar(nav, present: 'a', absent: 1),
+                'list': RoleVar(nav, present: const ['a'], absent: 'a'),
+                'map': RoleVar(nav, present: 'a', absent: const {'k': 'v'}),
+                'object': RoleVar(nav, present: Object(), absent: 'a'),
+                'nested': RoleVar(
+                  nav,
+                  present: 'a',
+                  absent: RoleVar(nav, present: 'a', absent: 'b'),
+                ),
+                'wrapper': RoleVar(
+                  nav,
+                  present: const Fragment.wrap('Wrap(child: ', ')'),
+                  absent: '',
+                ),
+                'import': RoleVar(
+                  nav,
+                  present: '',
+                  absent: const Fragment('x', imports: [ImportRef('z.dart')]),
+                ),
+                // Only the whole value of a variable depends on a role.
+                'items': [RoleVar(nav, present: 'a', absent: 'b')],
+              },
+            ),
+          ],
+        ),
+      ]);
+
+      String notCode(String name, String state) =>
+          'home: The value of the variable $name of the brick home of home '
+          '$state the nav role is not code: give a fragment, or a string of '
+          'code that needs no imports.';
+      expect(_messages(result), [
+        equals(
+          'home: The brick home of home sets the variable has_x, which the '
+          'pipeline sets itself.',
+        ),
+        equals(
+          'home: The variable slash of the brick home of home has a backslash '
+          'before a line break or a non-ASCII character, which mason removes.',
+        ),
+        equals(
+          'home: The variable accent of the brick home of home has a '
+          'backslash before a line break or a non-ASCII character, which '
+          'mason removes.',
+        ),
+        equals(
+          'home: The variable items of the brick home of home is not plain '
+          'data: strings, numbers, booleans, and lists and maps of them.',
+        ),
+        notCode('flag', 'with'),
+        notCode('flag', 'without'),
+        notCode('number', 'without'),
+        notCode('list', 'with'),
+        notCode('map', 'without'),
+        notCode('object', 'with'),
+        notCode('nested', 'without'),
+        equals(
+          'home: The value of the variable wrapper of the brick home of home '
+          'with the nav role is a Fragment.wrap, but a variable takes a '
+          'Fragment of code.',
+        ),
+        startsWith(
+          'home: The value of the variable import of the brick home of home '
+          'without the nav role has an invalid import. The import "z.dart" '
+          'must be a dart: or package: URI',
+        ),
+      ]);
+    });
+
     test('files of one machine or build are errors', () {
       final result = _validate([
         entry,

@@ -1540,6 +1540,425 @@ flutter:
     });
   });
 
+  group('variables that depend on a role', () {
+    const zeta = ImportRef('package:zeta/zeta.dart', prefix: 'z');
+    final nav = TestRole<NoDsl>('nav');
+    final go = TestModule('go', providers: [RoleProvider.plain(nav)]);
+
+    /// A module that uses the nav role, with a brick of [files] and [vars].
+    TestModule homeWith(Map<String, Object?> vars, Map<String, String> files) =>
+        TestModule(
+          'home',
+          uses: {nav},
+          contributions: [_brick(files, vars: vars)],
+        );
+
+    test('take their code for an app with the role, or for one without it', () {
+      final home = homeWith(
+        {
+          'start': RoleVar(
+            nav,
+            present: const Fragment('z.Zeta().start', imports: [zeta]),
+            absent: "'/'",
+          ),
+          'run': RoleVar(
+            nav,
+            present: const Fragment(
+              'Timer.run(go);',
+              imports: [ImportRef('dart:async')],
+            ),
+            absent: const Fragment('print(1);'),
+          ),
+          'note': RoleVar(nav, present: 'routed & <b>', absent: 'plain'),
+        },
+        {
+          'lib/home/home.dart': 'final start = {{{start}}};\n'
+              'void run() {\n'
+              '  {{{run}}}\n'
+              '}\n',
+          // A file that is not Dart reads code without imports.
+          'NOTES.md': 'Note: "{{{note}}}"\n',
+        },
+      );
+
+      final withRole = _render([entry, go, home]);
+      final routed = withRole.files['lib/home/home.dart']!;
+      expect(
+        routed.text,
+        "import 'dart:async';\n"
+        '\n'
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        'final start = z.Zeta().start;\n'
+        'void run() {\n'
+        '  Timer.run(go);\n'
+        '}\n',
+      );
+      expect(
+        [
+          for (final added in routed.addedImports)
+            '${added.import.uri} ${added.contributor}',
+        ],
+        ['package:zeta/zeta.dart home', 'dart:async home'],
+      );
+      expect(withRole.files['NOTES.md']!.text, 'Note: "routed & <b>"\n');
+
+      final without = _render([entry, home]);
+      final plain = without.files['lib/home/home.dart']!;
+      expect(
+        plain.text,
+        "final start = '/';\n"
+        'void run() {\n'
+        '  print(1);\n'
+        '}\n',
+      );
+      expect(plain.addedImports, isEmpty);
+      expect(without.files['NOTES.md']!.text, 'Note: "plain"\n');
+    });
+
+    test(
+        'are read as fragment variables, in an app with the role and in one '
+        'without it', () {
+      final home = homeWith(
+        {
+          'code': RoleVar(
+            nav,
+            present: const Fragment('z.Zeta()', imports: [zeta]),
+            absent: "'none'",
+          ),
+          // Two strings are code too.
+          'text': RoleVar(nav, present: "'a'", absent: "'b'"),
+          'flag': true,
+        },
+        {
+          'lib/two.dart': '{{code}}\n',
+          'lib/lambda.dart': '{{{code.upperCase()}}}\n',
+          'lib/section.dart': '{{#flag}}\n{{{code}}}\n{{/flag}}\n',
+          'lib/over.dart': '{{#code}}x{{/code}}\n',
+          'lib/{{{code}}}.dart': '',
+          'NOTES.md': '{{{code}}}\n',
+          'lib/text.dart': '{{text}}\n',
+          'lib/{{{text}}}.dart': '',
+        },
+      );
+      final expected = [
+        equals(
+          'home: error [home] lib/two.dart: The template lib/two.dart in the '
+          'brick b of home reads the fragment variable code without three '
+          'braces at line 1; read a fragment of code as it is, {{{code}}}.',
+        ),
+        equals(
+          'home: error [home] lib/lambda.dart: The template lib/lambda.dart '
+          'in the brick b of home reads the fragment variable code as '
+          'code.upperCase() at line 1; read a fragment of code as it is, '
+          '{{{code}}}.',
+        ),
+        equals(
+          'home: error [home] lib/section.dart: The template '
+          'lib/section.dart in the brick b of home reads the fragment '
+          'variable code inside the mustache section flag at line 2; the '
+          'presence of the nav role alone decides what the variable holds, '
+          'so code that needs another role too goes into a brick of its '
+          'own, contributed with when.',
+        ),
+        equals(
+          'home: error [home] lib/over.dart: The template lib/over.dart in '
+          'the brick b of home opens a section over the fragment variable '
+          'code at line 1; read a fragment of code as it is, {{{code}}}.',
+        ),
+        equals(
+          'home: error [home] lib/{{{code}}}.dart: The path '
+          'lib/{{{code}}}.dart in the brick b of home reads the fragment '
+          'variable code, but a path takes plain values only. (Set every '
+          'variable a path reads, to "" when there is nothing.)',
+        ),
+        equals(
+          'home: error [home] NOTES.md: The template NOTES.md in the brick b '
+          'of home is not Dart, but it reads the fragment variable code, '
+          'whose imports can only go into a Dart file.',
+        ),
+        equals(
+          'home: error [home] lib/text.dart: The template lib/text.dart in '
+          'the brick b of home reads the fragment variable text without '
+          'three braces at line 1; read a fragment of code as it is, '
+          '{{{text}}}.',
+        ),
+        equals(
+          'home: error [home] lib/{{{text}}}.dart: The path '
+          'lib/{{{text}}}.dart in the brick b of home reads the fragment '
+          'variable text, but a path takes plain values only. (Set every '
+          'variable a path reads, to "" when there is nothing.)',
+        ),
+      ];
+
+      // A template reads the variable rightly in every app or in none.
+      expect(_failures([entry, go, home]), expected);
+      expect(_failures([entry, home]), expected);
+    });
+
+    test(
+        'are read outside the section of the presence flag of another role: '
+        'code that needs two roles has a brick of its own', () {
+      final texts = TestRole<NoDsl>('texts');
+      final translator =
+          TestModule('translator', providers: [RoleProvider.plain(texts)]);
+      final label = RoleVar(
+        texts,
+        present: const Fragment('z.label', imports: [zeta]),
+        absent: "'Label'",
+      );
+      TestModule homeOf(BrickContribution brick) => TestModule(
+            'home',
+            uses: {nav, texts},
+            contributions: [brick],
+          );
+      final apps = <List<SmfModule>>[
+        [go, translator],
+        [go],
+        [translator],
+        [],
+      ];
+
+      final inSection = homeOf(
+        _brick(
+          {
+            'lib/home.dart': '{{#has_nav}}\n'
+                'final label = {{{label}}};\n'
+                '{{/has_nav}}\n',
+          },
+          vars: {'label': label},
+        ),
+      );
+      for (final others in apps) {
+        expect(
+          _failures([entry, ...others, inSection]),
+          [
+            equals(
+              'home: error [home] lib/home.dart: The template lib/home.dart '
+              'in the brick b of home reads the fragment variable label '
+              'inside the mustache section has_nav at line 2; the presence '
+              'of the texts role alone decides what the variable holds, so '
+              'code that needs another role too goes into a brick of its '
+              'own, contributed with when.',
+            ),
+          ],
+        );
+      }
+
+      final ownBrick = homeOf(
+        _brick(
+          {'lib/home_nav.dart': 'final label = {{{label}}};\n'},
+          vars: {'label': label},
+          when: {nav},
+        ),
+      );
+      expect(
+        _render([entry, go, translator, ownBrick])
+            .files['lib/home_nav.dart']!
+            .text,
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        'final label = z.label;\n',
+      );
+      expect(
+        _render([entry, go, ownBrick]).files['lib/home_nav.dart']!.text,
+        "final label = 'Label';\n",
+      );
+      for (final others in apps.skip(2)) {
+        expect(
+          _render([entry, ...others, ownBrick]).files.keys,
+          isNot(contains('lib/home_nav.dart')),
+        );
+      }
+    });
+
+    test(
+        'with imports are read by a library, not by a part file, in an app '
+        'with the role and in one without it', () {
+      final home = homeWith(
+        {
+          'code': RoleVar(
+            nav,
+            present: const Fragment('final a = z.Zeta();', imports: [zeta]),
+            absent: 'final a = null;',
+          ),
+        },
+        {
+          'lib/home.dart': "part 'home_part.dart';\n",
+          'lib/home_part.dart': "part of 'home.dart';\n\n{{{code}}}\n",
+        },
+      );
+      final expected = [
+        equals(
+          'home: error [home] lib/home_part.dart: The imports of the '
+          'fragment variable code of home cannot go into '
+          'lib/home_part.dart, which reads it: it is a part of another '
+          'library. (Read the variable in the library file.)',
+        ),
+      ];
+
+      expect(_failures([entry, go, home]), expected);
+      // The app gets no import, but the app with the role would.
+      expect(_failures([entry, home]), expected);
+    });
+
+    test('leave no line behind in an app that has no code for them', () {
+      final home = homeWith(
+        {
+          'call': RoleVar(nav, present: const Fragment('go();'), absent: ''),
+          'other': RoleVar(nav, present: '', absent: const Fragment('stay();')),
+        },
+        {
+          'lib/home.dart': 'void run() {\n'
+              '  {{{call}}}\n'
+              '  {{{other}}}\n'
+              '}\n',
+        },
+      );
+
+      expect(
+        _render([entry, go, home]).files['lib/home.dart']!.text,
+        'void run() {\n  go();\n}\n',
+      );
+      expect(
+        _render([entry, home]).files['lib/home.dart']!.text,
+        'void run() {\n  stay();\n}\n',
+      );
+    });
+
+    test('need no template that reads them, like any variable of a brick', () {
+      final home = homeWith(
+        {
+          'code': RoleVar(
+            nav,
+            present: const Fragment('z.Zeta()', imports: [zeta]),
+            absent: "'none'",
+          ),
+        },
+        {'lib/home.dart': '// nothing\n'},
+      );
+
+      for (final app in [
+        _render([entry, go, home]),
+        _render([entry, home]),
+      ]) {
+        expect(app.files['lib/home.dart']!.text, '// nothing\n');
+        expect(app.files['lib/home.dart']!.addedImports, isEmpty);
+      }
+    });
+
+    test('that a render hook of their owner sets too are an error', () {
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(vars: {'title': 'hook'}),
+      );
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'store',
+            uses: {nav},
+            providers: [rendering.provider],
+            contributions: [
+              _brick(
+                {'lib/s.dart': '{{{title}}}'},
+                vars: {
+                  'title': RoleVar(
+                    nav,
+                    present: const Fragment('a'),
+                    absent: 'b',
+                  ),
+                },
+              ),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'store: error [store]: The brick b of store sets the variable '
+            'title, which a render hook of store sets too.',
+          ),
+        ],
+      );
+    });
+
+    test('of the brick of a variant bring their imports for the variant', () {
+      final state = TestRole<NoDsl>('state');
+      final app = _render(variants: {
+        'home': 'bloc',
+      }, [
+        entry,
+        go,
+        TestModule('bloc', providers: [RoleProvider.plain(state)]),
+        TestModule(
+          'home',
+          uses: {nav},
+          variants: Variants(
+            role: state,
+            byProvider: {
+              const ModuleId('bloc'): (context) => [
+                    _brick(
+                      {'lib/v.dart': '{{{code}}}\n'},
+                      vars: {
+                        'code': RoleVar(
+                          nav,
+                          present: const Fragment(
+                            'final zeta = z.Zeta();',
+                            imports: [zeta],
+                          ),
+                          absent: '',
+                        ),
+                      },
+                    ),
+                  ],
+            },
+          ),
+        ),
+      ]);
+
+      final variant = app.files['lib/v.dart']!;
+      expect(
+        variant.text,
+        "import 'package:zeta/zeta.dart' as z;\n"
+        '\n'
+        'final zeta = z.Zeta();\n',
+      );
+      expect(
+        variant.addedImports.single.contributor,
+        const ModuleOrigin(ModuleId('home'), variant: ModuleId('bloc')),
+      );
+    });
+
+    test(
+        'are no variables of a render hook, which asks for the roles of its '
+        'role itself', () {
+      final rendering = _Rendering(
+        providerOutput: RoleOutput(
+          vars: {'title': RoleVar(nav, present: 'a', absent: 'b')},
+        ),
+      );
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'store',
+            uses: {nav},
+            providers: [rendering.provider],
+            contributions: [
+              _brick({'lib/s.dart': '{{title}}'}),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'store: error [store]: The brick variable title of the render '
+            'hook of store is not plain data: strings, numbers, booleans, '
+            'and lists and maps of them, or a fragment of code.',
+          ),
+        ],
+      );
+    });
+  });
+
   group('fragment variables', () {
     const zeta = ImportRef('package:zeta/zeta.dart', prefix: 'z');
 

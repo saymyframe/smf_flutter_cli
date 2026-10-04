@@ -65,7 +65,8 @@ final class ModuleDescriptor {
   /// Roles the module works with when they are present.
   ///
   /// Contributions that refer to such a role set [Contribution.when], and
-  /// template code refers to its symbols only inside `{{#has_<role>}}`.
+  /// template code refers to its symbols only inside `{{#has_<role>}}`, or
+  /// through a variable whose code depends on the role (see [RoleVar]).
   final Set<Role> uses;
 
   /// The roles the module provides, one provider object per role.
