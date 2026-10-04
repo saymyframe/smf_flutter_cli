@@ -547,14 +547,17 @@ void main() {
           ),
         );
 
-    test('are called only by the DI container', () {
+    test(
+        'are called only by the DI container, and by the template of a role '
+        'but for the factory of the preferences', () {
       for (final (role, factory) in [
         (eventsRole, 'createCommunicationService'),
         (preferencesRole, 'createAppPreferences'),
         (analyticsRole, 'createAnalyticsService'),
         (crashReportingRole, 'createCrashReporter'),
       ]) {
-        final issue = check(role, factory).single;
+        final issues = check(role, factory);
+        final issue = issues.first;
 
         expect(issue.message, contains('calls $factory()'));
         expect(issue.path, 'lib/features/home/home_screen.dart');
@@ -566,6 +569,16 @@ void main() {
           identical(role, preferencesRole)
               ? startsWith('Put a function into PreferencesRole.restorers')
               : startsWith('Resolve the service in the composition file'),
+        );
+        // The file of the analytics role calls the factory too. The
+        // template of a role gets the preferences through the restorers,
+        // as a module does, and any other service from its factory.
+        expect(
+          [for (final other in issues.skip(1)) other.origin],
+          identical(role, preferencesRole)
+              ? [const RoleTemplateOrigin(analyticsRole)]
+              : isEmpty,
+          reason: '$role',
         );
       }
     });

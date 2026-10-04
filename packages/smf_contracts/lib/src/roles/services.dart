@@ -134,32 +134,40 @@ const _implementationsRule = ModuleRule<RoleImplementation>(
 ///
 /// Only the DI container creates the service; other code receives it through
 /// `resolve` in a composition file or through the dependencies of its own
-/// factory, so there is one way to get a service. [hint] tells a module
-/// what to do instead.
+/// factory, so there is one way to get a service. [hint] tells the owner of
+/// a file what to do instead.
+///
+/// With [templates], the files of the templates of other roles are checked
+/// too: for a role that gives them its service in a way of its own, as the
+/// preferences do with their restorers.
 List<SmfIssue> _checkFactoryCalls(
   StructuralRuleInput<RoleImplementation> input,
   String factory,
   String file, {
   String hint = 'Resolve the service in the composition file of a feature, '
       'or take it as a dependency of your own factory.',
+  bool templates = false,
 }) {
   final issues = <SmfIssue>[];
   for (final MapEntry(key: path, value: index) in input.files.entries) {
     final owner = input.owners[path];
-    if (owner is! ModuleOrigin) continue;
-    final uses = usesSymbols(index, {factory}, file);
-    final container =
-        input.module(owner.module)?.provides.contains(diRole) ?? false;
-    if (uses && !container) {
-      issues.add(
-        SmfIssue(
-          '$path calls $factory(), which only the DI container calls.',
-          hint: hint,
-          origin: owner,
-          path: path,
-        ),
-      );
-    }
+    final mayCall = switch (owner) {
+      ModuleOrigin(:final module) =>
+        input.module(module)?.provides.contains(diRole) ?? false,
+      // The template of the role itself declares the factory.
+      RoleTemplateOrigin(:final role) =>
+        !templates || identical(role, input.roleInput.role),
+      _ => true,
+    };
+    if (mayCall || !usesSymbols(index, {factory}, file)) continue;
+    issues.add(
+      SmfIssue(
+        '$path calls $factory(), which only the DI container calls.',
+        hint: hint,
+        origin: owner,
+        path: path,
+      ),
+    );
   }
   return issues;
 }

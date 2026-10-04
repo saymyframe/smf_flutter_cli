@@ -134,7 +134,9 @@ final class FakePreferences implements AppPreferences {
 ''';
 
 /// The restorers of the test app, which note what they read and the
-/// preferences they got, and throw after that when told.
+/// preferences they got, and throw after that when told: the first an
+/// error, as a bug of a restorer, and the second an exception, as a saved
+/// value that a restorer cannot read.
 const _restorersText = r'''
 import '../core/preferences/app_preferences.dart';
 
@@ -147,15 +149,21 @@ final List<AppPreferences> got = [];
 /// Whether the restorers throw once they noted what they read.
 bool restorersThrow = false;
 
-void restoreFirst(AppPreferences preferences) => _restore('first', preferences);
+void restoreFirst(AppPreferences preferences) {
+  _note('first', preferences);
+  if (restorersThrow) throw StateError('The first restorer throws.');
+}
 
-void restoreSecond(AppPreferences preferences) =>
-    _restore('second', preferences);
+void restoreSecond(AppPreferences preferences) {
+  _note('second', preferences);
+  if (restorersThrow) {
+    throw const FormatException('The second restorer throws.');
+  }
+}
 
-void _restore(String name, AppPreferences preferences) {
+void _note(String name, AppPreferences preferences) {
   restored.add('$name: ${preferences.getInt('fake.count')}');
   got.add(preferences);
-  if (restorersThrow) throw StateError('The $name restorer throws.');
 }
 ''';
 
@@ -218,10 +226,9 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// What the app prints when the restorer [name] of the test app throws.
-String _printedFor(String name) =>
-    'A restorer of the preferences failed: Bad state: The $name restorer '
-    'throws.';
+/// What the app prints when a restorer of the test app throws [thrown].
+String _printedFor(String thrown) =>
+    'A restorer of the preferences failed: $thrown';
 
 /// What [_script] sends back from the app of a template that works.
 final Map<String, Object?> _expected = {
@@ -230,14 +237,27 @@ final Map<String, Object?> _expected = {
   'the restorers got the preferences of the app': true,
   'the app has the same preferences each time': true,
   'opened at the start': 1,
-  // Both restorers throw, and each still ran, with what was saved.
+  // Both restorers throw, the first an error and the second an exception,
+  // and each still ran, with what was saved.
   'the next start': ['first: 2', 'second: 2'],
   'the restorers got the preferences opened anew': true,
   'opened at the next start': 2,
-  'printed': [_printedFor('first'), _printedFor('second')],
+  'printed': [
+    _printedFor('Bad state: The first restorer throws.'),
+    _printedFor('FormatException: The second restorer throws.'),
+  ],
   'a failed open': 'The preferences do not open.',
   'restored after a failed open': <Object?>[],
 };
+
+/// A provider of the DI role, whose module may call the factory of the
+/// preferences.
+final class _Container extends DiProvider {
+  const _Container();
+
+  @override
+  Set<DiCapability> get capabilities => const {};
+}
 
 /// The file of the role in the test app, rendered with an implementation
 /// that opens asynchronously, or one created with the app, and the
@@ -546,6 +566,163 @@ void main() {
         );
         expect(issue.hint, contains('RoleImplementation'));
         expect(issue.origin, const ModuleOrigin(ModuleId('vendor')));
+      }
+    });
+  });
+
+  group('the functions of the preferences role', () {
+    // A role whose template remembers a setting, as that of a theme does.
+    final theme = TestRole<NoDsl>('theme', requires: {preferencesRole});
+    const container = ModuleDescriptor(
+      id: ModuleId('get_it'),
+      description: 'DI',
+      kind: ModuleKinds.infrastructure,
+      providers: [_Container()],
+    );
+    const feature = ModuleDescriptor(
+      id: ModuleId('home'),
+      description: 'Home',
+      kind: ModuleKinds.feature,
+      uses: {preferencesRole},
+    );
+
+    /// The issues of the structural rules of the role in an app whose
+    /// files, the keys of [owners], each import the file of the role and
+    /// call [function] of it; a file without an owner has `null`.
+    List<SmfIssue> issuesOf(
+      String function,
+      Map<String, ContributionOrigin?> owners,
+    ) =>
+        preferencesRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {preferencesRole},
+              context: testContext,
+            ),
+            files: {
+              for (final path in owners.keys)
+                path: DartFileIndex(
+                  path: path,
+                  imports: const [
+                    IndexedImport(
+                      'package:my_app/core/preferences/app_preferences.dart',
+                    ),
+                  ],
+                  invocations: [IndexedInvocation(function)],
+                ),
+            },
+            owners: {
+              for (final MapEntry(key: path, value: owner) in owners.entries)
+                if (owner != null) path: owner,
+            },
+            modules: const [container, feature],
+          ),
+        );
+
+    test(
+        'createAppPreferences() is for the DI container: a file of a module, '
+        'or of the template of another role, that calls it is reported, with '
+        'the restorers as what to do', () {
+      final issues = issuesOf('createAppPreferences', {
+        'lib/core/di/dependencies.dart': const ModuleOrigin(ModuleId('get_it')),
+        'lib/features/home/home_screen.dart':
+            const ModuleOrigin(ModuleId('home')),
+        'lib/core/theme/theme_mode.dart': RoleTemplateOrigin(theme),
+        // Another file of the template of the role itself, and files that
+        // neither a module nor the template of a role owns.
+        'lib/core/preferences/more.dart':
+            const RoleTemplateOrigin(preferencesRole),
+        'lib/generated.dart': const PipelineOrigin(),
+        'lib/mine.dart': null,
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (
+            'lib/features/home/home_screen.dart',
+            const ModuleOrigin(ModuleId('home')),
+          ),
+          ('lib/core/theme/theme_mode.dart', RoleTemplateOrigin(theme)),
+        ],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} calls createAppPreferences(), which only the DI '
+          'container calls.',
+        );
+        expect(
+          issue.hint,
+          startsWith('Put a function into PreferencesRole.restorers'),
+        );
+      }
+    });
+
+    test(
+        'initPreferences() is for bootstrap(): any other file of the app '
+        'that calls it is reported, the file of the DI container too', () {
+      final issues = issuesOf('initPreferences', {
+        AppEntryRole.bootstrapFile:
+            const ModuleOrigin(ModuleId('flutter_core')),
+        'lib/core/di/dependencies.dart': const ModuleOrigin(ModuleId('get_it')),
+        'lib/features/home/home_screen.dart':
+            const ModuleOrigin(ModuleId('home')),
+        'lib/core/theme/theme_mode.dart': RoleTemplateOrigin(theme),
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (
+            'lib/core/di/dependencies.dart',
+            const ModuleOrigin(ModuleId('get_it')),
+          ),
+          (
+            'lib/features/home/home_screen.dart',
+            const ModuleOrigin(ModuleId('home')),
+          ),
+          ('lib/core/theme/theme_mode.dart', RoleTemplateOrigin(theme)),
+        ],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} calls initPreferences(), which only bootstrap() '
+          'calls.',
+        );
+        expect(issue.hint, contains('PreferencesRole.restorers'));
+      }
+    });
+
+    test('a function of the same name of another file is none of the role', () {
+      for (final function in ['createAppPreferences', 'initPreferences']) {
+        expect(
+          preferencesRole.checkStructure(
+            StructuralRuleRequest(
+              hook: const RoleHookRequest(
+                data: [],
+                presentRoles: {preferencesRole},
+                context: testContext,
+              ),
+              files: {
+                'lib/features/home/home_screen.dart': DartFileIndex(
+                  path: 'lib/features/home/home_screen.dart',
+                  imports: const [IndexedImport('home_preferences.dart')],
+                  invocations: [IndexedInvocation(function)],
+                ),
+              },
+              owners: const {
+                'lib/features/home/home_screen.dart':
+                    ModuleOrigin(ModuleId('home')),
+              },
+              modules: const [feature],
+            ),
+          ),
+          isEmpty,
+          reason: function,
+        );
       }
     });
   });
