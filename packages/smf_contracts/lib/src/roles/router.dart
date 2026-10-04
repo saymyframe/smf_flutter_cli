@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/router_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
+import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'router/router_dsl.dart';
 part 'router/router_facade.dart';
@@ -305,6 +306,14 @@ final class RouterRole extends Role<RoutesData> {
           check: _checkRoutes,
         ),
         ModuleRule(
+          id: 'router.guards',
+          description: 'The guards of a module have valid names and '
+              'functions of the app, and each shows a top-level route of '
+              'the module that needs no values, is outside the main '
+              'navigation, and has no start candidate in its flow.',
+          check: _checkGuards,
+        ),
+        ModuleRule(
           id: 'router.screen_sockets',
           description: 'The template of every screen has the tags of its '
               'annotation sockets, before the class and before each '
@@ -328,6 +337,19 @@ final class RouterRole extends Role<RoutesData> {
               'and takes each parameter of its route as a named parameter of '
               'the same name, and nothing else that is required.',
           check: _checkScreenConstructors,
+        ),
+        StructuralRule(
+          id: 'router.guard_functions',
+          description: 'The function of every guard is a top-level function '
+              'in its file that takes no arguments and returns a '
+              'ValueListenable<bool>.',
+          check: _checkGuardFunctions,
+        ),
+        StructuralRule(
+          id: 'router.guards_asked',
+          description: 'In an app with guards, the files of the provider of '
+              'the role call redirectOf() and read guardChanges.',
+          check: _checkGuardsAsked,
         ),
       ];
 
