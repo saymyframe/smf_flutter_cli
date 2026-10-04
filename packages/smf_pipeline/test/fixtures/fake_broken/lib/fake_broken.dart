@@ -405,6 +405,7 @@ final class _BrokenDiProvider extends DiProvider {
           imports: registrations.imports,
         ),
       },
+      files: output.files,
     );
   }
 }

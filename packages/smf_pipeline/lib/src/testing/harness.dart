@@ -956,10 +956,13 @@ final class ContractHarness {
     return [...issues, ..._structureIssues(result, indexes, files, owners)];
   }
 
-  /// Checks [app], the rendered app of [result]:
+  /// Checks [app], the rendered app of [result], the files that its render
+  /// hooks generated like those of its bricks:
   /// - the structural rules and symbols of the roles, see [checkStructure];
   /// - every import or export of a file of the app finds the file, or a
   ///   file that code generation or Flutter's localizations generate;
+  /// - no brick and no render hook generates a file where code generation
+  ///   or Flutter's localizations write theirs once the app is rendered;
   /// - `l10n.yaml`, when the pubspec has Flutter generate the
   ///   localizations, is what `flutter pub get` can read: YAML with a map
   ///   of options, each of the type that Flutter reads it as, and without
@@ -970,8 +973,9 @@ final class ContractHarness {
   ///   the app, in a template or for a fragment, only when it contributes
   ///   the package too, itself or in its variant, so that the pipeline
   ///   checks that it may take the package (see [casesOfModule]); a
-  ///   provider of a role may import it for a fragment when a module that
-  ///   gives the role data contributes it, as the data may need it;
+  ///   provider of a role may import it for a fragment, or in a file that
+  ///   its render hook generates, when a module that gives the role data
+  ///   contributes it, as the data may need it;
   /// - a file imports and exports only files that its owner may use, and
   ///   the pipeline added only imports that the contributors of the
   ///   fragments may use: their own files, the files of the modules they
@@ -1101,6 +1105,7 @@ final class ContractHarness {
     );
     return [
       ...localizations.issues,
+      ...check.overwrittenIssues(),
       for (final MapEntry(key: path, value: index) in indexes.entries)
         if (app.files[path] case final file?)
           ...check.issuesOf(path, file, index),
@@ -1120,8 +1125,13 @@ typedef _CheckedFile = ({
 
 /// Who uses an import or export of a file: the contributors of the
 /// fragments that need it, when the pipeline added it, or the owner of the
-/// file.
-typedef _Users = ({Set<ContributionOrigin> users, bool byPipeline});
+/// file, in the template of a brick or in a file that its render hook
+/// generated.
+typedef _Users = ({
+  Set<ContributionOrigin> users,
+  bool byPipeline,
+  bool inHookFile,
+});
 
 /// The checks of the imports and exports of the Dart files of a rendered
 /// app; see [ContractHarness.checkRendered].
@@ -1138,9 +1148,13 @@ final class _ImportCheck {
         devDependencies = {...?pubspec?.devDependencies.keys},
         dataContributors = _dataContributorsOf(collection),
         generated = {
-          ...localizations,
+          for (final output in localizations)
+            output: 'flutter pub get, which generates the localizations of '
+                'l10n.yaml,',
           for (final collected in collection.applyingOf<CodegenRequest>())
-            ...(collected.contribution as CodegenRequest).outputs,
+            for (final output
+                in (collected.contribution as CodegenRequest).outputs)
+              output: 'the code generation that ${collected.origin} asks for',
         },
         packageOwners = providerPackages(resolution, collection),
         contributed = _contributedPackagesOf(collection);
@@ -1160,8 +1174,9 @@ final class _ImportCheck {
   /// The owners of the files of those who contribute data to each role.
   final Map<Role, Set<ContributionOrigin>> dataContributors;
 
-  /// The files of the app that code generation or Flutter generate.
-  final Set<String> generated;
+  /// The files of the app that code generation or Flutter generate, each
+  /// with who writes it, as the subject of a sentence.
+  final Map<String, String> generated;
 
   /// The packages of the providers of roles in the app, each with the
   /// providers it belongs to; see [providerPackages].
@@ -1199,6 +1214,34 @@ final class _ImportCheck {
       }
     }
     return contributors;
+  }
+
+  /// The files of the app, of a brick or of a render hook, at a path where
+  /// code generation or Flutter write a file once the app is rendered, so
+  /// that what was rendered there is lost or stops the generation. The case
+  /// does not matter, as on the file systems of macOS and Windows.
+  List<SmfIssue> overwrittenIssues() {
+    final outputs = {
+      for (final output in generated.keys) output.toLowerCase(): output,
+    };
+    final issues = <SmfIssue>[];
+    for (final file in app.files.values) {
+      final output = outputs[file.path.toLowerCase()];
+      if (output == null) continue;
+      final who = file.fromHook ? 'A render hook' : 'A brick';
+      final written = output == file.path
+          ? 'that file'
+          : '$output, the same file where case does not matter,';
+      issues.add(
+        SmfIssue(
+          '$who of ${file.owner} generates ${file.path}, but '
+          '${generated[output]} writes $written once the app is rendered.',
+          origin: file.owner,
+          path: file.path,
+        ),
+      );
+    }
+    return issues;
   }
 
   /// The problems of the imports and exports of [file], the Dart file at
@@ -1242,7 +1285,7 @@ final class _ImportCheck {
     final users = _usersOf(checked, verb, directive);
     final target = _appPathOf(uri, path, appName);
     if (target == null) return _libraryIssues(checked, verb, uri, users);
-    if (generated.contains(target)) return const [];
+    if (generated.containsKey(target)) return const [];
     if (!app.files.containsKey(target)) {
       return [
         for (final who in users.users)
@@ -1277,15 +1320,23 @@ final class _ImportCheck {
     final uri = _packageUriOf(directive.uri, checked.path, appName);
     final contributors = checked.added['$uri as ${directive.prefix}'];
     if (verb == 'imports' && contributors != null) {
-      return (users: contributors, byPipeline: true);
+      return (users: contributors, byPipeline: true, inHookFile: false);
     }
-    return (users: {checked.file.owner}, byPipeline: false);
+    return (
+      users: {checked.file.owner},
+      byPipeline: false,
+      inHookFile: checked.file.fromHook,
+    );
   }
 
-  /// How [who], one of [users], uses a library: for a fragment, or in a
-  /// template.
-  static String _how(ContributionOrigin who, _Users users) =>
-      users.byPipeline ? 'for a fragment of $who' : 'in the template of $who';
+  /// How [who], one of [users], uses a library: for a fragment, in a
+  /// template, or in a file that its render hook generated.
+  static String _how(ContributionOrigin who, _Users users) {
+    if (users.byPipeline) return 'for a fragment of $who';
+    return users.inHookFile
+        ? 'in a file of the render hook of $who'
+        : 'in the template of $who';
+  }
 
   /// The problems of [uri], the `package:` URI of a library outside the app
   /// that [checked] uses as [verb] says, for its [users]: the file may not
@@ -1325,15 +1376,17 @@ final class _ImportCheck {
   /// Whether [who], one of [users], uses [package], the package of a
   /// provider of a role, without contributing it. An owner of the package
   /// contributes it too. A provider of a role renders the data that other
-  /// modules give the role, so it may use the package for a fragment when
-  /// one of them contributes it, as it may import their files.
+  /// modules give the role, so it may use the package for a fragment, or in
+  /// a file that its render hook generates, when one of them contributes
+  /// it, as it may import their files.
   bool _takesWithout(ContributionOrigin who, _Users users, String package) {
     final user = ownerOf(who);
     if (user is! ModuleOrigin ||
         (contributed[user.module]?.contains(package) ?? false)) {
       return false;
     }
-    if (!users.byPipeline) return true;
+    // A template of the module renders no data of a role.
+    if (!users.byPipeline && !users.inHookFile) return true;
     for (final role in resolution.presentRoles) {
       if (!resolution
           .providersOf(role)
