@@ -2,8 +2,10 @@
 // role, whichever module provides it: through the preferences of the role,
 // a value of each type is read back as it was saved, and as null by the
 // reads of the other types, which do not throw; a key that was removed has
-// no value; the preferences keep lists of their own; and the next start of
-// the app reads what was saved, and nothing that was removed.
+// no value; a write replaces what its key had, a value of another type
+// too; the preferences keep a copy of a list that they are given, and a
+// read returns a copy of it; and the next start of the app reads what was
+// saved, and nothing that was removed.
 //
 // It knows only the role, and writes only keys of its own. The start-up of
 // the app runs first, as on a device, since it opens the preferences, with
@@ -12,7 +14,8 @@
 // (flutter_test_config.dart). The next start is initPreferences() of the
 // role again, which opens the preferences anew. The probe of the role
 // (integration_test/preferences_role/probe.dart), which the start check
-// runs on a device, has the checks of one run. Each expectation gives its
+// runs on a device, has the checks of one run, and the last test runs the
+// probe itself, as the start check does. Each expectation gives its
 // reason, which a provider of the role with a known bug fails the test
 // with (brokenProviders of the fixture registry). Whether a number saved
 // as an int is read as a double, or the other way round, is up to the
@@ -152,20 +155,60 @@ void main() {
   );
 
   testWidgets(
-    'the preferences keep lists of their own',
+    'a write replaces what its key had, a value of another type too',
     (tester) async {
       await _startUp(tester);
       var problems = <String>[];
 
-      await _inRealTime(tester, 'saving and reading a list', () async {
-        problems = await problemsOfLists(createAppPreferences());
+      await _inRealTime(tester, 'saving twice under a key', () async {
+        problems = await problemsOfOverwriting(createAppPreferences());
       });
 
       expect(
         problems,
         isEmpty,
-        reason: 'A change of a list that was saved, or of one that was read, '
-            'changes nothing that the preferences have.',
+        reason: 'A key has one value: a write replaces what the key had, '
+            'whatever its type.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the preferences keep a copy of a list that they are given',
+    (tester) async {
+      await _startUp(tester);
+      var problems = <String>[];
+
+      await _inRealTime(tester, 'saving a list and changing it', () async {
+        problems = await problemsOfSavedLists(createAppPreferences());
+      });
+
+      expect(
+        problems,
+        isEmpty,
+        reason: 'A change of a list that was saved changes nothing that the '
+            'preferences have.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'a read returns a copy of the list that the preferences have',
+    (tester) async {
+      await _startUp(tester);
+      var problems = <String>[];
+
+      await _inRealTime(tester, 'reading a list and changing it', () async {
+        problems = await problemsOfReadLists(createAppPreferences());
+      });
+
+      expect(
+        problems,
+        isEmpty,
+        reason: 'A change of a list that was read changes nothing that the '
+            'preferences have.',
       );
     },
     timeout: timeout,
@@ -198,6 +241,27 @@ void main() {
         removed,
         isEmpty,
         reason: 'The next start reads nothing that was removed.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the probe of the role finds no problem',
+    (tester) async {
+      await _startUp(tester);
+      var problems = <String>[];
+
+      await _inRealTime(tester, 'the probe of the role', () async {
+        // As the start check runs it on a device; it waits for no screen.
+        problems = await probePreferences(() async {});
+      });
+
+      expect(
+        problems,
+        isEmpty,
+        reason: 'The probe finds no problem with preferences that keep the '
+            'contract of the role in one run of the app.',
       );
     },
     timeout: timeout,

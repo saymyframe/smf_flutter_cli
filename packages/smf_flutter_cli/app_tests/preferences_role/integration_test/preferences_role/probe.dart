@@ -4,7 +4,9 @@
 // real one, and whose checks the test of the role runs too
 // (preferences_role_test.dart): a value of each type is read back as it
 // was saved, and as null by the reads of the other types; a key that was
-// removed has no value; and the preferences keep lists of their own.
+// removed has no value; a write replaces what its key had, a value of
+// another type too; and the preferences keep a copy of a list that they
+// are given, and a read returns a copy of it.
 //
 // It uses no test framework. It writes only keys of its own, under the id
 // of the role, `preferences.`, which no module and no other role has, and
@@ -70,15 +72,18 @@ final List<PreferenceKind> preferenceKinds = [
 
 /// What is wrong with [preferences] within one run of the app: the
 /// problems of [problemsOfSavedValues] and [problemsOfOtherTypes] with the
-/// values of [saveValues], and those of [problemsOfRemoval] and
-/// [problemsOfLists], which leave no key of the probe behind.
+/// values of [saveValues], and those of [problemsOfRemoval],
+/// [problemsOfOverwriting], [problemsOfSavedLists] and
+/// [problemsOfReadLists], which leave no key of the probe behind.
 Future<List<String>> problemsOfOneRun(AppPreferences preferences) async {
   await saveValues(preferences);
   return [
     ...problemsOfSavedValues(preferences),
     ...problemsOfOtherTypes(preferences),
     ...await problemsOfRemoval(preferences),
-    ...await problemsOfLists(preferences),
+    ...await problemsOfOverwriting(preferences),
+    ...await problemsOfSavedLists(preferences),
+    ...await problemsOfReadLists(preferences),
   ];
 }
 
@@ -100,7 +105,7 @@ Future<void> removeValues(AppPreferences preferences) async {
 /// were saved, each with what its read returns or throws.
 List<String> problemsOfSavedValues(AppPreferences preferences) => [
       for (final kind in preferenceKinds)
-        switch (_reading(kind, preferences, kind.key)) {
+        switch (_reading(() => kind.read(preferences, kind.key))) {
           (value: _, :final String error) =>
             'The ${kind.name} that was saved is not read back: its read '
                 'threw $error.',
@@ -120,7 +125,7 @@ List<String> problemsOfOtherTypes(AppPreferences preferences) => [
       for (final saved in preferenceKinds)
         for (final read in preferenceKinds)
           if (read.name != saved.name && !(_isNumber(saved) && _isNumber(read)))
-            switch (_reading(read, preferences, saved.key)) {
+            switch (_reading(() => read.read(preferences, saved.key))) {
               (value: _, :final String error) =>
                 'The ${saved.name} that was saved, read as ${read.name}, '
                     'threw $error rather than returning null.',
@@ -135,7 +140,7 @@ List<String> problemsOfOtherTypes(AppPreferences preferences) => [
 /// each with what its read returns or throws.
 List<String> problemsOfRemovedValues(AppPreferences preferences) => [
       for (final kind in preferenceKinds)
-        switch (_reading(kind, preferences, kind.key)) {
+        switch (_reading(() => kind.read(preferences, kind.key))) {
           (value: _, :final String error) =>
             'The read of the ${kind.name} that was removed threw $error.',
           (:final Object value, error: _) =>
@@ -159,46 +164,99 @@ Future<List<String>> problemsOfRemoval(AppPreferences preferences) async {
   return problems;
 }
 
-/// What is wrong with the lists of [preferences]: a change of a list that
-/// was saved, or of one that was read, changes what a read returns.
-Future<List<String>> problemsOfLists(AppPreferences preferences) async {
-  const key = 'preferences.probe_own_list';
+/// What is wrong with a write of [preferences] to a key that has a value:
+/// a second value of a type that does not replace the first, and a value
+/// of another type that does not replace the one that the key had, whose
+/// read then still returns it, or throws.
+Future<List<String>> problemsOfOverwriting(AppPreferences preferences) async {
+  const key = 'preferences.probe_overwritten';
   final problems = <String>[];
-  final saved = ['a', 'b'];
-  await preferences.setStringList(key, saved);
-  saved.add('c');
-  final kept = preferences.getStringList(key);
-  if (!_same(kept, ['a', 'b'])) {
+  await preferences.setString(key, 'first');
+  await preferences.setString(key, 'second');
+  final second = _reading(() => preferences.getString(key));
+  if (second.error case final error?) {
+    problems.add('The read of a String saved over another threw $error.');
+  } else if (second.value != 'second') {
     problems.add(
-      'A change of the list that was saved changes what the preferences '
-      'have: they read $kept rather than [a, b].',
+      'A String saved over another under one key, second over first, is '
+      'read as ${second.value}.',
     );
   }
-  try {
-    preferences.getStringList(key)?.add('d');
-  } on UnsupportedError {
-    // A list that cannot be changed changes nothing either.
-  }
-  final after = preferences.getStringList(key);
-  if (!_same(after, kept)) {
+
+  await preferences.setInt(key, 7);
+  final number = _reading(() => preferences.getInt(key));
+  if (number.error case final error?) {
+    problems.add('The read of an int saved over a String threw $error.');
+  } else if (number.value != 7) {
     problems.add(
-      'A change of the list that was read changes what the preferences '
-      'have: they read $after rather than $kept.',
+      'An int saved over a String under one key, 7, is read as '
+      '${number.value}.',
+    );
+  }
+  final text = _reading(() => preferences.getString(key));
+  if (text.error case final error?) {
+    problems.add(
+      'The read of the String of a key that an int was saved over threw '
+      '$error rather than returning null.',
+    );
+  } else if (text.value != null) {
+    problems.add(
+      'The String of a key is still read, as ${text.value}, after an int '
+      'was saved over it.',
     );
   }
   await preferences.remove(key);
   return problems;
 }
 
-/// What the read of [kind] returns for [key] of [preferences], or the
-/// first line of what it throws.
-({Object? value, String? error}) _reading(
-  PreferenceKind kind,
-  AppPreferences preferences,
-  String key,
-) {
+/// What is wrong with the list that [preferences] keep of one that they
+/// are given: a later change of the list that was saved changes what a
+/// read returns.
+Future<List<String>> problemsOfSavedLists(AppPreferences preferences) async {
+  const key = 'preferences.probe_saved_list';
+  final problems = <String>[];
+  final saved = ['a', 'b'];
+  await preferences.setStringList(key, saved);
+  saved.add('c');
+  final read = preferences.getStringList(key);
+  if (!_same(read, const ['a', 'b'])) {
+    problems.add(
+      'A change of the list that was saved changes what the preferences '
+      'have: they read $read rather than [a, b].',
+    );
+  }
+  await preferences.remove(key);
+  return problems;
+}
+
+/// What is wrong with the list that a read of [preferences] returns: a
+/// change of it changes what the next read returns.
+Future<List<String>> problemsOfReadLists(AppPreferences preferences) async {
+  const key = 'preferences.probe_read_list';
+  final problems = <String>[];
+  // The probe keeps no list that it saved here, so only a change of the
+  // list that a read returned can change what the preferences have.
+  await preferences.setStringList(key, ['a', 'b']);
   try {
-    return (value: kind.read(preferences, key), error: null);
+    preferences.getStringList(key)?.add('c');
+  } on UnsupportedError {
+    // A list that cannot be changed changes nothing either.
+  }
+  final read = preferences.getStringList(key);
+  if (!_same(read, const ['a', 'b'])) {
+    problems.add(
+      'A change of the list that was read changes what the preferences '
+      'have: they read $read rather than [a, b].',
+    );
+  }
+  await preferences.remove(key);
+  return problems;
+}
+
+/// What [read] returns, or the first line of what it throws.
+({Object? value, String? error}) _reading(Object? Function() read) {
+  try {
+    return (value: read(), error: null);
   } on Object catch (error) {
     return (value: null, error: _firstLine(error));
   }

@@ -138,16 +138,18 @@ Future<MatrixAppTest> eventsRoleAppTest({
 /// module provides it, that [among] accepts, or all of them: once the
 /// start-up of the app opened the preferences, a value of each type is read
 /// back as it was saved, and as `null` by the reads of the other types,
-/// which do not throw; a key that was removed has no value; the preferences
-/// keep lists of their own; and the next start, `initPreferences()` again,
-/// reads what was saved and nothing that was removed.
+/// which do not throw; a key that was removed has no value; a write
+/// replaces what its key had, a value of another type too; the preferences
+/// keep a copy of a list that they are given, and a read returns a copy of
+/// it; and the next start, `initPreferences()` again, reads what was saved
+/// and nothing that was removed.
 ///
 /// The test knows only the role, and writes keys of its own. Its probe,
 /// `probePreferences()` of `integration_test/preferences_role/probe.dart`,
 /// runs the checks of one run on a device for the start check, where the
-/// platform side of the provider is the real one. The matrix of the
-/// fixtures runs the test too, only in the apps with every module, which
-/// run other tests already.
+/// platform side of the provider is the real one, and the test runs the
+/// probe too. The matrix of the fixtures runs the test only in its apps
+/// with every module, which run other tests already.
 Future<MatrixAppTest> preferencesRoleAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>

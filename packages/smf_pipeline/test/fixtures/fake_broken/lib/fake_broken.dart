@@ -162,14 +162,22 @@ final class BrokenModule extends SmfModule {
     [('    fixturePreferencesDisk[key] = _copyOf(value);\n', '')],
   );
 
-  /// The fixture preferences that keep the list they are given rather than
-  /// a copy of it: a later change of that list changes what they read.
-  static const preferencesKeepingTheGivenList = BrokenModule._(
+  /// The fixture preferences that never copy a list: they keep the list
+  /// that they are given, and a read returns the list that they keep. So a
+  /// later change of the list that was saved, or of one that was read,
+  /// changes what they read.
+  static const preferencesNeverCopyingLists = BrokenModule._(
     FakePreferencesModule(),
-    ModuleId('broken_preferences_keep_the_given_list'),
-    'Preferences in memory that keep the list they are given (fixture)',
+    ModuleId('broken_preferences_never_copy_lists'),
+    'Preferences in memory that never copy a list (fixture)',
     'lib/core/fixture_preferences/fixture_preferences.dart',
-    [('      _save(key, List.of(value));\n', '      _save(key, value);\n')],
+    [
+      ('      _save(key, List.of(value));\n', '      _save(key, value);\n'),
+      (
+        '    final List<String> list => List.of(list),\n',
+        '    final List<String> list => list,\n',
+      ),
+    ],
   );
 
   /// The fixture preferences whose reads cast the value of a key to the

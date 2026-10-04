@@ -11,7 +11,8 @@ AppPreferences createFixturePreferences() => FixturePreferences();
 
 /// The preferences of the fixture: the settings of the app that are no
 /// secret, in memory, over [fixturePreferencesDisk]. Nothing here is
-/// encrypted: never store a token, a password or a key in them.
+/// encrypted: never store a token, a password, an API key or an encryption
+/// key in them.
 final class FixturePreferences implements AppPreferences {
   /// Reads [fixturePreferencesDisk] into memory.
   FixturePreferences() {

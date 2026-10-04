@@ -288,17 +288,33 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenModule.preferencesKeepingTheGivenList,
+        BrokenModule.preferencesNeverCopyingLists,
         role: preferencesRole,
-        bug: 'It keeps the list that it is given rather than a copy of it, so '
-            'a later change of that list changes what it reads.',
+        bug: 'It never copies a list: it keeps the list that it is given, and '
+            'a read returns the list that it keeps. So a later change of the '
+            'list that was saved, or of one that was read, changes what it '
+            'reads.',
         app: [],
         failures: [
           MatrixExpectedFailure(
             'test/preferences_role_test.dart',
-            'the preferences keep lists of their own',
-            'A change of a list that was saved, or of one that was read, '
-                'changes nothing that the preferences have.',
+            'the preferences keep a copy of a list that they are given',
+            'A change of a list that was saved changes nothing that the '
+                'preferences have.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read returns a copy of the list that the preferences have',
+            'A change of a list that was read changes nothing that the '
+                'preferences have.',
+          ),
+          // The probe of the role, which the start check runs on a device,
+          // has the checks of the lists too.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
           ),
         ],
       ),
@@ -316,6 +332,20 @@ List<BrokenProvider> brokenProviders() => const [
                 'does not throw',
             'A read returns null when the key has no value of the type it '
                 'asks for, and never throws.',
+          ),
+          // A value saved over one of another type is read by the type that
+          // the key had too, which then throws.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a write replaces what its key had, a value of another type too',
+            'A key has one value: a write replaces what the key had, '
+                'whatever its type.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
           ),
         ],
       ),

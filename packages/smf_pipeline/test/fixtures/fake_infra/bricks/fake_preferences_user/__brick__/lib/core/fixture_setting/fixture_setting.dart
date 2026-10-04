@@ -33,11 +33,12 @@ final List<(String, int?)> fixtureRestored = [];
 
 /// Whether the restorers of the fixture throw once they did their work, as
 /// a test that a restorer that throws keeps no other from restoring sets
-/// it.
+/// it: the first an error, and the second an exception, as a restorer does
+/// that cannot read what is saved.
 bool fixtureRestorersThrow = false;
 
 /// The first restorer of the fixture, which only notes in [fixtureRestored]
-/// what is saved, and then throws if [fixtureRestorersThrow].
+/// what is saved, and then throws an error if [fixtureRestorersThrow].
 void noteFixtureSetting(AppPreferences preferences) {
   fixtureRestored.add(('note', preferences.getInt(fixtureSettingKey)));
   if (fixtureRestorersThrow) {
@@ -48,7 +49,7 @@ void noteFixtureSetting(AppPreferences preferences) {
 /// The restorer of the setting of the fixture: takes the number that is
 /// saved, or keeps the current one when nothing is saved, and keeps
 /// [preferences] for the writes of the setting. It notes in
-/// [fixtureRestored] what is saved, and then throws if
+/// [fixtureRestored] what is saved, and then throws an exception if
 /// [fixtureRestorersThrow].
 void restoreFixtureSetting(AppPreferences preferences) {
   final saved = preferences.getInt(fixtureSettingKey);
@@ -57,6 +58,8 @@ void restoreFixtureSetting(AppPreferences preferences) {
     .._preferences = preferences;
   fixtureRestored.add(('setting', saved));
   if (fixtureRestorersThrow) {
-    throw StateError('The restorer of the setting of the fixture throws.');
+    throw const FormatException(
+      'The restorer of the setting of the fixture throws.',
+    );
   }
 }{{/has_preferences}}
