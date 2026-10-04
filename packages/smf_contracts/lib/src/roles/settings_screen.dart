@@ -56,8 +56,9 @@ final class SettingsScreenRole extends Role<SettingsData> {
   List<ModuleRule<SettingsData>> get moduleRules => const [
         ModuleRule(
           id: 'settings_screen.entries',
-          description: 'The widget of every settings entry of a module is '
-              'in a file that the bricks of the module generate.',
+          description: 'The bricks of a module generate the file of the '
+              'widget of each of its settings entries, and only in an app '
+              'with a settings screen if the module only uses the role.',
           check: _checkEntries,
         ),
         ModuleRule(
@@ -159,7 +160,9 @@ sealed class SettingsData {
 /// The data needs no condition, since it applies only when the role is
 /// present. A module that only uses the role generates the file of the
 /// widget in a brick with `when: {settingsScreenRole}`, so that an app
-/// without a settings screen does not get it.
+/// without a settings screen does not get it; the module rule
+/// `settings_screen.entries` reports a brick without it. The template of a
+/// role that uses this role does the same for the widget of its entry.
 @immutable
 final class SettingsEntry extends SettingsData {
   /// Creates the entry that shows [widget].
@@ -297,23 +300,70 @@ FacadeRoute? _routeOf(
   return null;
 }
 
-/// The entries of the module of [input] whose widget is in a file that the
-/// bricks of the module, those that apply in the app, do not generate.
+/// The problems of the files of the widgets of the entries of the module
+/// of [input]: a file that the bricks of the module, those that apply in
+/// the app, do not generate, and a file that an app without a settings
+/// screen gets too.
 ///
 /// The template of the role reports an entry outside the app.
 List<SmfIssue> _checkEntries(ModuleRuleInput<SettingsData> input) {
-  final origin = ModuleOrigin(input.module.id);
-  final generated = textTemplatesOf(input.contributions);
+  final module = input.module;
+  final bricks = input.contributions.whereType<BrickContribution>();
+  // A module that provides or requires the role is only in apps with a
+  // settings screen, so its bricks need no condition.
+  final onlyUses = !module.provides.contains(settingsScreenRole) &&
+      !module.requires.contains(settingsScreenRole);
   return [
     for (final data in input.data)
-      if (data.value case SettingsEntry(:final widget, file: final path?)
-          when !generated.containsKey(path))
+      if (data.value case final SettingsEntry entry when entry.file != null)
+        ..._fileIssues(
+          entry,
+          ModuleOrigin(module.id),
+          [
+            for (final brick in bricks)
+              if (textTemplatesOf([brick]).containsKey(entry.file)) brick,
+          ],
+          conditional: onlyUses,
+        ),
+  ];
+}
+
+/// The problems of the file of the widget of [entry], an entry of the
+/// module [origin] in a file of the app, which [bricks] of the module
+/// generate: no brick, or, when the bricks are [conditional] on the role
+/// because the module only uses it, a brick without the role in its
+/// [Contribution.when].
+List<SmfIssue> _fileIssues(
+  SettingsEntry entry,
+  ModuleOrigin origin,
+  List<BrickContribution> bricks, {
+  required bool conditional,
+}) {
+  final path = entry.file;
+  final widget = entry.widget.name;
+  if (bricks.isEmpty) {
+    return [
+      SmfIssue(
+        'The widget $widget of a settings entry is in $path, which the '
+        'bricks of the module do not generate.',
+        hint: 'Generate the file in a brick of the module; with when: '
+            '{settingsScreenRole}, only an app with a settings screen gets '
+            'it.',
+        origin: origin,
+        path: path,
+      ),
+    ];
+  }
+  return [
+    for (final brick in bricks)
+      if (conditional && !brick.when.contains(settingsScreenRole))
         SmfIssue(
-          'The widget ${widget.name} of a settings entry is in $path, which '
-          'the bricks of the module do not generate.',
-          hint: 'Generate the file in a brick of the module; with when: '
-              '{settingsScreenRole}, only an app with a settings screen gets '
-              'it.',
+          'The brick ${brick.bundle.name} of the module generates $path, the '
+          'file of the widget $widget of a settings entry, in an app without '
+          'a settings screen too: the module only uses the '
+          '$settingsScreenRole, and the brick does not name it in its when.',
+          hint: 'Contribute the brick with when: {settingsScreenRole}, so '
+              'that only an app with a settings screen gets the file.',
           origin: origin,
           path: path,
         ),

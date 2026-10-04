@@ -565,9 +565,9 @@ void main() {
         _moduleIssues(_contributor, [
           settingsScreenRole.data(_theme),
           settingsScreenRole.data(_language),
-          _brick([_themePath]),
+          _brick([_themePath], when: {settingsScreenRole}),
           _brick(
-            ['lib/core/l10n/locale.dart', _languagePath],
+            ['lib/core/l10n/language_names.dart', _languagePath],
             when: {settingsScreenRole},
           ),
         ]),
@@ -579,7 +579,7 @@ void main() {
       final issue = _moduleIssues(_contributor, [
         settingsScreenRole.data(_theme),
         settingsScreenRole.data(_language),
-        _brick([_themePath]),
+        _brick([_themePath], when: {settingsScreenRole}),
       ]).single;
 
       expect(
@@ -601,7 +601,7 @@ void main() {
       );
       final contributions = [
         settingsScreenRole.data(_theme),
-        _brick([_themePath], when: {diRole}),
+        _brick([_themePath], when: {settingsScreenRole, diRole}),
       ];
 
       expect(
@@ -609,6 +609,74 @@ void main() {
         contains('which the bricks of the module do not generate'),
       );
       expect(_moduleIssues(module, contributions, present: {diRole}), isEmpty);
+    });
+
+    test(
+        'rejects a brick of a module that only uses the role which generates '
+        'the widget of an entry in an app without a settings screen', () {
+      const module = ModuleDescriptor(
+        id: ModuleId('appearance'),
+        description: 'Appearance',
+        kind: ModuleKinds.infrastructure,
+        uses: {settingsScreenRole, diRole},
+      );
+      final issues = _moduleIssues(
+        module,
+        [
+          settingsScreenRole.data(_theme),
+          settingsScreenRole.data(_language),
+          settingsScreenRole.data(_account),
+          _brick([_themePath], name: 'appearance'),
+          // A condition, but not the one of the settings screen.
+          _brick([_languagePath], name: 'appearance_services', when: {diRole}),
+          _brick(
+            [_accountPath],
+            name: 'appearance_settings',
+            when: {settingsScreenRole},
+          ),
+        ],
+        present: {diRole},
+      );
+
+      String message(String brick, String path, String widget) =>
+          'The brick $brick of the module generates $path, the file of the '
+          'widget $widget of a settings entry, in an app without a settings '
+          'screen too: the module only uses the settings screen role, and '
+          'the brick does not name it in its when.';
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          message('appearance', _themePath, 'ThemeSetting'),
+          message('appearance_services', _languagePath, 'LanguageSetting'),
+        ],
+      );
+      expect(
+        [for (final issue in issues) issue.path],
+        [_themePath, _languagePath],
+      );
+      expect(issues.map((issue) => issue.origin), everyElement(_appearance));
+      expect(issues.first.hint, contains('when: {settingsScreenRole}'));
+    });
+
+    test(
+        'asks no condition of the bricks of a module that is only in apps '
+        'with a settings screen', () {
+      // A module that requires the role, as the provider of the role, whose
+      // entries another test checks, is never in an app without it.
+      const module = ModuleDescriptor(
+        id: ModuleId('appearance'),
+        description: 'Appearance',
+        kind: ModuleKinds.infrastructure,
+        requires: {settingsScreenRole},
+      );
+
+      expect(
+        _moduleIssues(module, [
+          settingsScreenRole.data(_theme),
+          _brick([_themePath]),
+        ]),
+        isEmpty,
+      );
     });
 
     test('does not count the files of other contributors', () {
@@ -749,7 +817,7 @@ void main() {
           _contributor,
           [
             settingsScreenRole.data(_theme),
-            _brick([_themePath]),
+            _brick([_themePath], when: {settingsScreenRole}),
           ],
           others: [_routes, _screenRoute('settings')],
         ),
