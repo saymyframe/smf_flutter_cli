@@ -6,6 +6,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
@@ -29,6 +30,7 @@ const List<SmfModule> smfModules = [
   HomeModule(),
   SettingsModule(),
   BottomTabsModule(),
+  GenL10nModule(),
   GetItModule(),
   EventBusModule(),
   SharedPreferencesModule(),

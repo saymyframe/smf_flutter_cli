@@ -85,6 +85,36 @@ List<String> _dependentsNamedIn(
   return named;
 }
 
+/// The texts among [texts] that lack a translation into one of
+/// [languages], each as `<text> has no translation into <language>`.
+List<String> _untranslated(List<AppText> texts, List<String> languages) => [
+      for (final text in texts)
+        for (final language in languages)
+          if (text.text.textIn(language) == null)
+            '$text has no translation into $language',
+    ];
+
+/// A module [id] of the tests with [texts], which it gives the localization
+/// role.
+final class _TextsOwner extends SmfModule {
+  const _TextsOwner(this.id, this.texts);
+
+  final ModuleId id;
+  final List<LocalizedText> texts;
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'The module $id',
+        kind: ModuleKinds.infrastructure,
+        uses: const {localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      [localizationRole.data(TextsData(texts))];
+}
+
 /// A module [id] of the tests that depends on the modules [dependsOn].
 final class _Module extends SmfModule {
   const _Module(this.id, {this.dependsOn = const {}});
@@ -124,6 +154,75 @@ void main() {
       await ContractHarness(ModuleRegistry(smfModules)).uncheckedProviders(),
       isEmpty,
     );
+  });
+
+  group('the texts of the modules', () {
+    /// The languages that every text of a module of the CLI is in, besides
+    /// English, which a text always has.
+    const languages = ['uk'];
+
+    test(
+        'are in English and in Ukrainian, those of the templates of the '
+        'roles too, in each app with every module', () async {
+      final harness = ContractHarness(ModuleRegistry(smfModules));
+      final cases = harness.casesOfAll();
+
+      expect(cases, isNotEmpty);
+      for (final contractCase in cases) {
+        final result = await harness.check(contractCase);
+        // The app has a provider of the localization, so the role has the
+        // texts of every module of the app.
+        expect(
+          result.hook!.presentRoles,
+          contains(localizationRole),
+          reason: '$contractCase',
+        );
+        expect(
+          _untranslated(
+            localizationRole.textsIn(localizationRole.hookInput(result.hook!)),
+            languages,
+          ),
+          isEmpty,
+          reason: 'A text of a module that the CLI offers has a translation '
+              'into each of $languages ($contractCase).',
+        );
+      }
+    });
+
+    test('lack a translation only when their owner gave none', () async {
+      // The providers of the app entry and of the localization among the
+      // modules of the CLI, whichever they are.
+      final harness = ContractHarness(
+        ModuleRegistry([
+          for (final module in smfModules)
+            if (module.descriptor.provides
+                .any({appEntryRole, localizationRole}.contains))
+              module,
+          const _TextsOwner(ModuleId('cart'), [
+            LocalizedText(
+              'title',
+              en: 'Your cart',
+              translations: {'uk': 'Ваш кошик'},
+            ),
+            LocalizedText('empty', en: 'Nothing here'),
+            LocalizedText('pay', en: 'Pay', translations: {'de': 'Zahlen'}),
+          ]),
+        ]),
+      );
+      final result = await harness.check(harness.casesOfAll().single);
+
+      expect(result.errors, isEmpty);
+      expect(
+        _untranslated(
+          localizationRole.textsIn(localizationRole.hookInput(result.hook!)),
+          languages,
+        ),
+        [
+          'text empty of the module cart has no translation into uk',
+          'text pay of the module cart has no translation into uk',
+        ],
+      );
+    });
   });
 
   test(

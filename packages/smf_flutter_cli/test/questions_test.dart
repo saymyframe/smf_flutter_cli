@@ -181,6 +181,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['None'],
       'State management': ['bloc'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -195,6 +196,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Localization: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Preferences: which module provides it?',
@@ -259,6 +261,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['None'],
       'State management': ['riverpod'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -273,6 +276,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Localization: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Preferences: which module provides it?',
@@ -313,6 +317,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['settings'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -379,6 +384,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -419,6 +425,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['None'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -433,6 +440,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Localization: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Preferences: which module provides it?',
@@ -472,6 +480,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -487,6 +496,7 @@ void main() {
       'Settings screen: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
+      'Localization: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
       'Preferences: which module provides it?',
@@ -508,6 +518,91 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the localization after '
+      'the state management, and offers gen_l10n, which keeps the texts of '
+      'the app in ARB files', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['None'],
+      'State management': ['None'],
+      'Localization': ['gen_l10n'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Preferences': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final localization = messages.indexOf(
+      'Localization: which module provides it?',
+    );
+    // The roles come in the order of the list of modules, and gen_l10n is
+    // after the modules of the state management and before get_it.
+    expect(
+      localization,
+      messages.indexOf('State management: which module provides it?') + 1,
+    );
+    expect(
+      messages[localization + 1],
+      'Dependency injection: which module provides it?',
+    );
+    expect(run.asked[localization].shown, [
+      'gen_l10n — Texts in ARB files with gen-l10n of Flutter',
+      'None',
+    ]);
+    final app = run.files.directory('/work/my_app');
+    // No module of the app has texts yet, so the template of gen-l10n has
+    // none, and the app is in English.
+    expect(
+      app.childFile('lib/l10n/app_en.arb').readAsStringSync(),
+      '{\n  "@@locale": "en"\n}\n',
+    );
+    expect(
+      [
+        for (final file in app.childDirectory('lib/l10n').listSync())
+          file.basename,
+      ],
+      ['app_en.arb'],
+    );
+    expect(
+      app.childFile('l10n.yaml').readAsStringSync(),
+      contains('nullable-getter: false'),
+    );
+    expect(
+      app.childFile('lib/core/l10n/l10n.dart').readAsStringSync(),
+      contains('AppLocalizations get l10n => AppLocalizations.of(this);'),
+    );
+    expect(
+      app.childFile('lib/core/l10n/app_locale.dart').readAsStringSync(),
+      contains("const appLocales = <Locale>[Locale('en')];"),
+    );
+    expect(
+      app.childFile('lib/app.dart').readAsStringSync(),
+      allOf(
+        contains('locale: AppLocaleScope.of(context),'),
+        contains('AppLocalizations.delegate,'),
+        contains('supportedLocales: [...appLocales],'),
+      ),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(
+        contains('  generate: true'),
+        contains('  intl: "any"'),
+        contains('  flutter_localizations:\n    sdk: flutter'),
+      ),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      contains('\n## Languages\n'),
+    );
+  });
+
+  test(
       'a run in a terminal asks which module provides dependency injection '
       'after the state management, and offers get_it', () async {
     final run = await _create({
@@ -516,6 +611,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
       'Preferences': ['None'],
@@ -575,6 +671,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
       'Preferences': ['None'],
@@ -637,6 +734,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
+      'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
       'Preferences': ['shared_preferences'],
@@ -711,6 +809,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Preferences': ['None'],
@@ -774,6 +873,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
         'Preferences': ['None'],
@@ -878,6 +978,7 @@ void main() {
         'Layout': ['bottom_tabs'],
         'Settings screen': ['None'],
         'State management': ['None'],
+        'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Preferences': ['None'],
@@ -976,6 +1077,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
         'Preferences': ['None'],
