@@ -2207,8 +2207,9 @@ final class ThemeModeController extends ChangeNotifier {
   ThemeMode get mode => _mode;
 
   /// Makes [mode] the mode of the app at once, and saves it: the future
-  /// completes once the mode is saved. Before the app opened its
-  /// preferences, it changes only memory.
+  /// completes once the mode is saved. Until the app opened its preferences
+  /// for the first time, it changes only memory; from then on it saves
+  /// through the preferences that the app opened last.
   ///
   /// If the preferences fail to save the mode, the future completes with
   /// their error. The app is in [mode] by then and stays in it while it

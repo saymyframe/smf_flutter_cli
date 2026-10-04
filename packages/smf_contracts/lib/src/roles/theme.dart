@@ -38,8 +38,9 @@ const themeRole = ThemeRole._();
 /// The role requires the [PreferencesRole]: the mode is saved under the key
 /// [modeKey], as the name of the `ThemeMode`, such as `dark`. The restorer
 /// takes the mode that is saved, and keeps the current one when nothing is
-/// saved or when what is saved is no name of a mode. Before the preferences
-/// are open, `select` changes only memory.
+/// saved or when what is saved is no name of a mode. Until the preferences
+/// were opened for the first time, `select` changes only memory; from then
+/// on it saves through the preferences that were opened last.
 ///
 /// A write of the mode that fails is not caught: the future of `select`
 /// completes with the error of the preferences. The app is in the selected
@@ -65,9 +66,14 @@ const themeRole = ThemeRole._();
 /// provides the role. It shows that a mode is saved by reading [modeKey]
 /// from the preferences after a choice, and that it is remembered by
 /// writing [modeKey], running `initPreferences()` again and reading the
-/// mode (see [PreferencesRole.restorers]). The app has one controller,
-/// which keeps its mode from one test of a file to the next, so a test that
-/// selects a mode selects `ThemeMode.system` again when it ends.
+/// mode (see [PreferencesRole.restorers]).
+///
+/// The app has one controller, and two things of it outlive a test, into
+/// the next test of the same file: its mode, and the preferences of the
+/// last start, through which `select` saves from then on, also before the
+/// next start. So a test that selects a mode selects `ThemeMode.system`
+/// again when it ends. That choice saves `system`: a test that needs
+/// nothing saved removes [modeKey] from the preferences.
 final class ThemeRole extends Role<NoDsl> {
   const ThemeRole._();
 
