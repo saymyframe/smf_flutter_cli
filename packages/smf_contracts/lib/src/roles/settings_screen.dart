@@ -14,22 +14,30 @@ const settingsScreenRole = SettingsScreenRole._();
 /// [SettingsEntry], which names the widget of the setting in a file that
 /// the module generates; the template of a role that uses this role may
 /// contribute one too. The contributor knows nothing of the screen: its
-/// widget takes no arguments and gets nothing from the provider, which
-/// only shows it.
+/// widget requires no arguments, so it needs nothing from the provider,
+/// which only shows it.
 ///
 /// A provider is a module with a route that shows the screen, which it
 /// names with a [SettingsScreenRoute]; the role requires the router. The
 /// screen shows every entry of [entriesIn] once, in that order: the
 /// entries of the modules, in the order of the modules, and then those of
 /// the templates of roles. It shows them one below the other in a list
-/// that scrolls, on a `Material`, each as wide as the list and as tall as
-/// it takes. The provider imports the file of each entry with a prefix of
-/// its own, such as `entry0` for the first, so that the names of different
-/// contributors never collide with each other or with the names of its
-/// file, and creates the widget without arguments, as a constant. The
-/// contract harness checks that the files of the provider create the
-/// widget of every entry, so the tests of a module that contributes an
-/// entry check it through [entriesIn], not in the files of a provider.
+/// that scrolls, on a `Material`. The screen sets the width of each entry,
+/// the same for every entry, between the same left and right edges, and
+/// puts no limit on its height, so an entry is as tall as it takes. The
+/// entries need not reach the edges of the list, which may inset them.
+///
+/// The provider creates the widget of each entry in a file other than
+/// that of the widget, through an import of that file with a prefix that
+/// no import of another file has, such as `entry0` for the first. So
+/// widgets of the same name in the files of different contributors never
+/// clash with each other or with the names of the file of the provider.
+/// The contract harness checks those imports and creations (the rule
+/// `settings_screen.entries_rendered`), so the tests of a module that
+/// contributes an entry check it through [entriesIn], not in the files of
+/// a provider. What only a running app shows is for a test of the role in
+/// running apps: each entry once, their order, the list that scrolls, the
+/// `Material`, the width and the height of each.
 ///
 /// How the user gets to the screen is up to the provider and the rest of
 /// the app: a provider may make its route a destination of the main
@@ -93,10 +101,11 @@ final class SettingsScreenRole extends Role<SettingsData> {
   /// role, in the order the screen shows them.
   ///
   /// The order is part of the contract of the role, so that an app has its
-  /// settings in the same order whichever module provides the screen: the
-  /// entries of the modules, in the order the modules were selected, and
-  /// then those of the templates of roles, in the order of the roles of the
-  /// app. The entries of one contributor keep its order.
+  /// settings in the same order whichever module provides the screen. It is
+  /// the order of the data of the role ([RoleHookInput.data]): the entries
+  /// of the modules, in the order the modules were selected, and then those
+  /// of the templates of roles, in the order of the first provider of each
+  /// role. The entries of one contributor keep its order.
   List<SettingsEntry> entriesIn(RoleHookInput<Object> input) => [
         for (final data in dataIn(input))
           if (data.value case final SettingsEntry entry) entry,
@@ -107,6 +116,11 @@ final class SettingsScreenRole extends Role<SettingsData> {
   /// its [SettingsScreenRoute]. It is `null` if no module names one, or if
   /// the module that does has no route of that name, which the module rule
   /// `settings_screen.route` reports.
+  ///
+  /// The route is one of the routes of the app, which are data of the
+  /// router role. So a hook of another role reads it only if that role
+  /// requires or uses the router role too, besides this role; otherwise
+  /// this throws an [ArgumentError] once a module names the route.
   ///
   /// The hooks of a role see the data of the role but not its provider, so
   /// this route is how code that knows only the role finds the screen, such
@@ -140,11 +154,13 @@ sealed class SettingsData {
 ///
 /// The widget is a class in a file of the app that the contributor
 /// generates, with a `const` unnamed constructor that requires no
-/// arguments: the provider of the [SettingsScreenRole] creates it as
-/// `const ThemeSetting()`. The screen puts it on a `Material` and gives it
-/// the width of its list and the height it takes, so it may be a
-/// `ListTile`, or a column of them. The provider gives it nothing else:
-/// the widget reads and changes its setting itself.
+/// arguments, so that the provider of the [SettingsScreenRole], which
+/// knows nothing else of the widget, can create it, in a list of constants
+/// too, as `const ThemeSetting()`. The screen puts it on a `Material`,
+/// sets its width, the same as that of every other entry, and puts no
+/// limit on its height, so it may be a `ListTile`, or a column of them,
+/// as tall as it takes. The widget counts on nothing else from the
+/// screen: it reads and changes its setting itself.
 ///
 /// ```dart
 /// settingsScreenRole.data(
@@ -170,6 +186,11 @@ final class SettingsEntry extends SettingsData {
 
   /// The class of the widget, with the import of its file, a file of the
   /// app such as `ImportRef.app('core/theme/theme_setting.dart')`.
+  ///
+  /// The module rule `settings_screen.entries` looks for the file among
+  /// those of the bricks of the module by its path as text. So the import
+  /// spells the path as the brick does, without `.` or `..` segments, and
+  /// the brick has the file at a path without variables.
   ///
   /// The provider imports the file with a prefix of its own, so
   /// [ImportRef.prefix] and [ImportRef.show] do not apply.
@@ -469,8 +490,9 @@ List<SmfIssue> _checkEntryWidgets(StructuralRuleInput<SettingsData> input) {
         issues.add(
           SmfIssue(
             issue.message,
-            hint: 'The provider of the $settingsScreenRole creates the '
-                'widget of an entry as a constant, without arguments.',
+            hint: 'The provider of the $settingsScreenRole knows nothing '
+                'of the widget of an entry but its class, so the widget '
+                'requires no arguments and can be a constant.',
             origin: origin,
             path: path,
           ),

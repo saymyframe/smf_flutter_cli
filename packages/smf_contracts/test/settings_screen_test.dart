@@ -907,8 +907,9 @@ void main() {
       expect(issues.map((issue) => issue.origin), everyElement(_appearance));
       expect(
         issues.first.hint,
-        'The provider of the settings screen role creates the widget of an '
-        'entry as a constant, without arguments.',
+        'The provider of the settings screen role knows nothing of the '
+        'widget of an entry but its class, so the widget requires no '
+        'arguments and can be a constant.',
       );
     });
 
