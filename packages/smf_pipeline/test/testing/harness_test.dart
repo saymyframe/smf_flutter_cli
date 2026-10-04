@@ -1597,6 +1597,100 @@ void main() {
         );
       });
 
+      test(
+          'the rule of the localization role finds what a module reads from '
+          'the texts of the app in its code as the indexer indexes it',
+          () async {
+        const title = TextsData([LocalizedText('title', en: 'Title')]);
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'texts',
+              providers: [const RoleProvider.plain(localizationRole)],
+              contributions: [
+                dart(
+                  LocalizationRole.textsFile,
+                  "import 'package:flutter/widgets.dart';\n"
+                  '\n'
+                  'extension AppTexts on BuildContext {\n'
+                  '  Texts get l10n => const Texts();\n'
+                  '}\n'
+                  '\n'
+                  'class Texts {\n'
+                  '  const Texts();\n'
+                  '\n'
+                  "  String get homeTitle => 'Title';\n"
+                  "  String get feedTitle => 'Title';\n"
+                  '}\n',
+                ),
+              ],
+            ),
+            TestModule(
+              'home',
+              requires: {localizationRole},
+              contributions: [
+                localizationRole.data(title),
+                dart(
+                  'lib/home/home.dart',
+                  "import 'package:flutter/widgets.dart';\n"
+                      '\n'
+                      "import '../core/l10n/l10n.dart';\n"
+                      '\n'
+                      'String own(BuildContext context) =>\n'
+                      '    context.l10n.homeTitle;\n'
+                      '\n'
+                      'String other(BuildContext context) =>\n'
+                      '    context.l10n.feedTitle;\n'
+                      '\n'
+                      'String missing(BuildContext context) {\n'
+                      '  final l10n = context.l10n;\n'
+                      '  return l10n.homeTitel;\n'
+                      '}\n'
+                      '\n'
+                      'String called(BuildContext context) =>\n'
+                      '    context.l10n.toString();\n',
+                ),
+              ],
+            ),
+            TestModule(
+              'feed',
+              requires: {localizationRole},
+              contributions: [localizationRole.data(title)],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'texts',
+            requested: [ModuleId('home'), ModuleId('feed'), ModuleId('texts')],
+          ),
+        );
+
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'home: lib/home/home.dart reads context.l10n.feedTitle, the '
+              'text title of the module feed, but the module home may only '
+              'read its own texts and those of the modules it depends on.',
+            ),
+            equals(
+              'home: lib/home/home.dart reads l10n.homeTitel, but no text of '
+              'the app has the getter homeTitel.',
+            ),
+            equals(
+              'home: lib/home/home.dart calls context.l10n.toString(), but '
+              'the texts of the app are getters, each named by the role.',
+            ),
+          ],
+        );
+      });
+
       test('the files of render hooks are checked like the files of bricks',
           () async {
         final notes = TestRole<NoDsl>(
