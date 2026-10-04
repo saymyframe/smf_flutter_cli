@@ -18,6 +18,18 @@ abstract base class MergePolicy<V extends Object> {
   /// accepts every value.
   String? problemWith(String key, V value) => null;
 
+  /// Describes what is wrong with [value] for [key] as a contribution of
+  /// [origin], or returns `null` if the policy accepts it.
+  ///
+  /// The sockets ask this for every contributed value, with the contributor
+  /// that the pipeline recorded, or `null` for a contribution that it has
+  /// not collected. The default returns [problemWith], which does not look
+  /// at the contributor. A policy overrides it when what a value may be
+  /// depends on who contributes it, such as a value that only the template
+  /// of a role may give.
+  String? problemFrom(ContributionOrigin? origin, String key, V value) =>
+      problemWith(key, value);
+
   /// Merges [incoming] into [existing], the value merged from the earlier
   /// contributions for [key], and returns the result.
   ///

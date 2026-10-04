@@ -249,7 +249,7 @@ final class KeyedSocket<V extends Object> extends SocketKind {
       return ['$socket does not take $key: $reason.'];
     }
     return [
-      if (policy.problemWith(key, value) case final problem?) problem,
+      if (policy.problemFrom(c.origin, key, value) case final problem?) problem,
     ];
   }
 
@@ -328,7 +328,8 @@ final class ValueSocket<V extends Object> extends SocketKind {
     }
     if (value is! V) return ['$socket takes values of type $V, not $value.'];
     return [
-      if (policy.problemWith(socket.tag, value) case final problem?) problem,
+      if (policy.problemFrom(c.origin, socket.tag, value) case final problem?)
+        problem,
     ];
   }
 

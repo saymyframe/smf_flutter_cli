@@ -1046,23 +1046,40 @@ void main() {
     });
 
     test(
-        'names the commands that check a change, which format only the code '
-        'of the app', () {
-      final note = appEntryRole.template
-          .contribute(testContext)
-          .whereType<SocketContribution>()
-          .single
-          .entryValue! as AgentNote;
-      final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(note.text);
+        'a note of a role comes from the template of a role, not from a '
+        'module', () {
+      SocketContribution from(ContributionOrigin origin, AgentNote note) =>
+          socket.entry('Router', note).withOrigin(origin);
+      const module = ModuleOrigin(ModuleId('go_router'));
+      const template = RoleTemplateOrigin(appEntryRole);
 
-      // Not `dart format .`: after `flutter pub get` on macOS, `build/` has
-      // copies of the plugins that depend on other plugins, with their Dart
-      // files, which that command would format too.
-      expect(commands![1]!.trim().split('\n'), [
-        'dart format lib test',
-        'flutter analyze',
-        'flutter test',
-      ]);
+      expect(
+        socket.problemsWith(from(module, AgentNote.ofRole('Text.'))).single,
+        'The module go_router contributes a note of a role to the section '
+        '"Router" of the guide for coding agents. Only the template of a '
+        'role says what the role guarantees; a module contributes '
+        'AgentNote(text).',
+      );
+      expect(socket.problemsWith(from(module, AgentNote('Text.'))), isEmpty);
+      expect(
+        socket.problemsWith(from(template, AgentNote.ofRole('Text.'))),
+        isEmpty,
+      );
+      // A contribution that the pipeline has not collected has no
+      // contributor to check.
+      expect(
+        socket.problemsWith(socket.entry('Router', AgentNote.ofRole('Text.'))),
+        isEmpty,
+      );
+      // The other problems of a note do not depend on its contributor.
+      expect(
+        socket.problemsWith(from(module, AgentNote(''))).single,
+        endsWith('has no text.'),
+      );
+      expect(
+        socket.problemsWith(from(template, AgentNote.ofRole(''))).single,
+        endsWith('has no text.'),
+      );
     });
 
     test('renders with the section of the role after its introduction',
@@ -1127,6 +1144,16 @@ void main() {
               'A listener of the screen.',
         },
       );
+      // Notes that differ only in the spaces and the empty lines around
+      // them are one.
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('Same text.')),
+          ('Router', AgentNote('Same text.\n')),
+          ('Router', AgentNote('  Same text.')),
+        ]),
+        {socket.tag: '\n## Router\n\nSame text.'},
+      );
       // The same text as a note of a role and of a module is two notes.
       final united = socket.kind
           .merge([
@@ -1162,6 +1189,11 @@ void main() {
       expect(note.isOfRole, isFalse);
       expect(AgentNote.ofRole('Text.').isOfRole, isTrue);
       expect(AgentNote('\n Text.\n\n').text, 'Text.');
+      // The spaces and the empty lines around a text do not count.
+      expect(AgentNote('  Text.'), note);
+      expect(AgentNote('Text.\n'), note);
+      expect(AgentNote('Text.\n').hashCode, note.hashCode);
+      expect(AgentNote.ofRole('\nText.'), AgentNote.ofRole('Text.'));
       expect('$note', 'Text.');
     });
 
@@ -1188,19 +1220,29 @@ void main() {
       }
       // mason drops the backslash of a line break of Markdown, also the one
       // that ends a note or a heading, before the line break that follows.
-      for (final (heading, text) in [
-        ('Router', 'One line\\\nand another.'),
-        ('Router', r'It ends with a backslash\'),
-        (r'Rou\é', 'Text.'),
-        (r'Router\', 'Text.'),
+      for (final text in [
+        'One line\\\nand another.',
+        r'It ends with a backslash\',
+        // A command continued on the next line, in a fenced code block.
+        '```bash\nflutter build apk \\\n  --debug\n```',
       ]) {
         expect(
-          problemsOf(text, heading: heading).single,
-          'A note of the section "$heading" of the guide for coding agents '
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
           'has a backslash before a line break or a non-ASCII character, '
-          'which mason removes; for a line break in Markdown, end the line '
-          'with two spaces instead.',
-          reason: '$heading: $text',
+          'which mason removes. For a line break in Markdown, end the line '
+          'with two spaces, and write a command on one line rather than '
+          'continue it with a backslash.',
+          reason: text,
+        );
+      }
+      for (final heading in [r'Rou\é', r'Router\']) {
+        expect(
+          problemsOf('Text.', heading: heading).single,
+          'The heading "$heading" of a section of the guide for coding '
+          'agents has a backslash at its end or before a non-ASCII '
+          'character, which mason removes.',
+          reason: heading,
         );
       }
       expect(problemsOf(r'A path of Windows, C:\Users, in a line.'), isEmpty);
@@ -1234,6 +1276,38 @@ void main() {
         '~~~\n## In a block of tildes\n~~~',
         // A block ends with as many of its characters, or more.
         '````\n```\n# In the block still\n`````\nText.',
+        // A block in an item of a list, indented with the item.
+        '- Run:\n  ```bash\n  # A comment of a script\n  flutter test\n  ```',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
+      }
+    });
+
+    test(
+        'a note has no line of = or - that makes the line above it a title '
+        'or the heading of a section', () {
+      for (final text in [
+        'My own title\n============',
+        'Another section\n---',
+        'A title\n=   ',
+        'Text.\n\nA heading in the text\n  -\nMore text.',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'has a line of "=" or "-" under a line of text outside a fenced '
+          'code block, which makes that line a title or the heading of '
+          'another section; a note stays in its section.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        // A rule between two paragraphs, after an empty line.
+        'Text.\n\n---\n\nMore text.',
+        '- An item.\n- Another.',
+        'A table:\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
+        '```\nA title in a block\n=====\n```',
+        'Two signs == in a line, and a - too.',
       ]) {
         expect(problemsOf(text), isEmpty, reason: text);
       }
@@ -1247,6 +1321,8 @@ void main() {
         // A line with more than the characters of the block does not close
         // it.
         '```\ncode\n```dart',
+        // A block in an item of a list, indented with the item.
+        '- Run:\n  ```bash\n  flutter test',
       ]) {
         expect(
           problemsOf(text).single,
@@ -1361,29 +1437,67 @@ The screens are in `lib/liar/missing.dart`, next to `lib/core/missing/`.
       }
     });
 
-    test('of Dart files start at the root of the app', () {
+    test(
+        'below a directory of a Flutter project that the app is without are '
+        'reported too', () {
       final issues = check('''
-## Router
+## Liar
 
-The routes are in `core/router/navigation.dart`, and `main()` in `main.dart`
-or `./lib/main.dart`.
+The icon is `assets/icons/home.png` and the page `web/index.html`. The tests
+are in `test/` and `integration_test/app_test.dart`, and the app runs on
+`macos/`.
 ''');
 
       expect(messages(issues), [
         for (final path in [
-          'core/router/navigation.dart',
-          'main.dart',
-          './lib/main.dart',
+          'assets/icons/home.png',
+          'web/index.html',
+          'test/',
+          'integration_test/app_test.dart',
+          'macos/',
         ])
           equals(
-            'The section "Router" of AGENTS.md names the Dart file `$path` '
-            'without its path from the root of the app.',
+            'The section "Liar" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
           ),
       ]);
+    });
+
+    test(
+        'to Dart files are paths of the app whatever they start with, and '
+        'the name of a Dart file alone is no path', () {
+      final issues = check('''
+## Router
+
+The routes are in `core/router/navigation.dart`, and `main()` in `main.dart`
+or `./lib/main.dart`. The tests end with `_test.dart`.
+''');
+
+      expect(messages(issues), [
+        equals(
+          'The section "Router" of AGENTS.md names '
+          '`core/router/navigation.dart`, but the app has no such file or '
+          'directory.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names the Dart file `main.dart` '
+          'without its path from the root of the app.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names `./lib/main.dart`, but '
+          'the app has no such file or directory.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names the Dart file '
+          '`_test.dart` without its path from the root of the app.',
+        ),
+      ]);
       expect(
-        issues.first.hint,
-        'Write the path from the root of the app, such as lib/main.dart.',
+        issues[1].hint,
+        'Write the path from the root of the app, such as lib/main.dart, or, '
+        'for the files of a kind, a pattern with *, such as *_test.dart.',
       );
+      expect(issues.last.hint, issues[1].hint);
       expect(issues.first.origin, const RoleTemplateOrigin(appEntryRole));
     });
 
@@ -1392,7 +1506,8 @@ or `./lib/main.dart`.
         check('''
 ## Router
 
-- A pattern: `lib/features/<feature>/`, `lib/core/*/`, `test/<path>_test.dart`.
+- A pattern: `lib/features/<feature>/`, `lib/core/*/`, `test/<path>_test.dart`,
+  `*_test.dart`.
 - A route: `/home`, `/home/details/:id`, `home.details`.
 - A library: `package:flutter/material.dart`.
 - A command: `dart format .`, `flutter build ipa`.
@@ -1421,6 +1536,33 @@ The next paragraph has `lib/next.dart`, which the one before does not reach.
 
       expect(messages(issues), [
         for (final path in ['lib/two.dart', 'lib/after.dart', 'lib/next.dart'])
+          equals(
+            'The section "Router" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
+          ),
+      ]);
+    });
+
+    test('are read in each item of a list on its own', () {
+      final issues = check('''
+## Router
+
+- This item has a ` alone.
+- The next names `lib/missing.dart`,
+  and goes on in `lib/another.dart`.
+1. A numbered item with a ` alone.
+2. The next names `lib/numbered.dart`.
+   * And an item below it has a ` alone.
+   * Its next names `lib/below.dart`.
+''');
+
+      expect(messages(issues), [
+        for (final path in [
+          'lib/missing.dart',
+          'lib/another.dart',
+          'lib/numbered.dart',
+          'lib/below.dart',
+        ])
           equals(
             'The section "Router" of AGENTS.md names `$path`, but the app has '
             'no such file or directory.',
