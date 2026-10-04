@@ -9,7 +9,46 @@ import 'support.dart';
 /// The file of the provider with the root widget of the app.
 const _appFile = 'lib/app.dart';
 
-/// Indexes of a minimal app that satisfies the app entry role.
+/// A method `build` with [parameters], each a name and a type: by default
+/// `build(BuildContext context)`, as that of a widget.
+IndexedMember _build([
+  List<(String, String)> parameters = const [('context', 'BuildContext')],
+]) =>
+    IndexedMember(
+      'build',
+      kind: MemberKind.method,
+      parameters: [
+        for (final (name, type) in parameters)
+          IndexedParameter(
+            name,
+            kind: ParameterKind.requiredPositional,
+            type: type,
+          ),
+      ],
+    );
+
+/// The root widget `App` of the provider, a class with [members]: by
+/// default, with `build(BuildContext context)`.
+IndexedDeclaration _appWidget([List<IndexedMember>? members]) =>
+    IndexedDeclaration(
+      name: 'App',
+      kind: DeclarationKind.classType,
+      members: members ?? [_build()],
+    );
+
+/// A creation of a `MaterialApp`, or of a `MaterialApp.router` if [router],
+/// in the method [member] of `App`.
+IndexedInvocation _root({bool router = false, String? member = 'build'}) =>
+    IndexedInvocation(
+      router ? 'router' : 'MaterialApp',
+      target: router ? 'MaterialApp' : null,
+      enclosingDeclaration: 'App',
+      enclosingMember: member,
+    );
+
+/// Indexes of a minimal app that satisfies the app entry role: its root
+/// widget, `App` unless [appDeclarations] says otherwise, creates a
+/// `MaterialApp.router` in its `build`, unless [appCalls] says otherwise.
 Map<String, DartFileIndex> _app({
   List<IndexedImport> bootstrapImports = const [
     IndexedImport('package:flutter/foundation.dart'),
@@ -29,16 +68,15 @@ Map<String, DartFileIndex> _app({
     ),
     IndexedInvocation('runApp', enclosingDeclaration: 'main', offset: 30),
   ],
-  List<IndexedInvocation> appCalls = const [
-    IndexedInvocation(
-      'router',
-      target: 'MaterialApp',
-      enclosingDeclaration: 'App',
-    ),
-  ],
+  List<IndexedInvocation>? appCalls,
+  List<IndexedDeclaration>? appDeclarations,
 }) {
   return {
-    _appFile: DartFileIndex(path: _appFile, invocations: appCalls),
+    _appFile: DartFileIndex(
+      path: _appFile,
+      declarations: appDeclarations ?? [_appWidget()],
+      invocations: appCalls ?? [_root(router: true)],
+    ),
     AppEntryRole.mainFile: DartFileIndex(
       path: AppEntryRole.mainFile,
       declarations: const [
@@ -82,6 +120,15 @@ Map<String, DartFileIndex> _app({
     ),
   };
 }
+
+/// The indexes of [_app] whose root widget has a `build` with [parameters],
+/// each a name and a type.
+Map<String, DartFileIndex> _appWithBuildOf(List<(String, String)> parameters) =>
+    _app(
+      appDeclarations: [
+        _appWidget([_build(parameters)]),
+      ],
+    );
 
 /// Checks [files] of an app whose app entry flutter_core provides; it owns
 /// each file, unless [owners] names another owner.
@@ -208,6 +255,7 @@ void main() {
           'app_entry.bootstrap_without_material',
           'app_entry.main_sequence',
           'app_entry.material_root',
+          'app_entry.root_in_build',
           'app_entry.native_keys',
         ],
       );
@@ -357,21 +405,9 @@ void main() {
     });
 
     test('accept a MaterialApp or a MaterialApp.router at the root', () {
-      expect(
-        _check(_app(appCalls: const [IndexedInvocation('MaterialApp')])),
-        isEmpty,
-      );
+      expect(_check(_app(appCalls: [_root()])), isEmpty);
       // The index records MaterialApp.router() as router() on MaterialApp.
-      expect(
-        _check(
-          _app(
-            appCalls: const [
-              IndexedInvocation('router', target: 'MaterialApp'),
-            ],
-          ),
-        ),
-        isEmpty,
-      );
+      expect(_check(_app(appCalls: [_root(router: true)])), isEmpty);
     });
 
     test('count only a MaterialApp that the provider creates in lib/', () {
@@ -404,6 +440,113 @@ void main() {
       expect(issues.map((issue) => issue.message), [
         contains('must be a MaterialApp'),
       ]);
+    });
+
+    test(
+        'accept the root in the build(BuildContext context) of a class, '
+        'among its other members and the other declarations of its file', () {
+      expect(
+        _check(
+          _app(
+            appDeclarations: [
+              const IndexedDeclaration(
+                name: 'createTitle',
+                kind: DeclarationKind.function,
+              ),
+              _appWidget([
+                const IndexedMember('title', kind: MemberKind.field),
+                _build(),
+              ]),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+      // A build() may take more after its context.
+      expect(
+        _check(
+          _appWithBuildOf(const [
+            ('context', 'BuildContext'),
+            ('child', 'Widget'),
+          ]),
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'require the root MaterialApp in a build(BuildContext context) of a '
+        'class, where the arguments of the modules read its context', () {
+      final apps = {
+        'in another method of the widget': _app(
+          appCalls: [_root(member: '_root')],
+        ),
+        'in a top-level function': _app(
+          appCalls: const [
+            IndexedInvocation('MaterialApp', enclosingDeclaration: 'createApp'),
+          ],
+        ),
+        'in the build of a declaration without members, such as a mixin': _app(
+          appDeclarations: const [
+            IndexedDeclaration(name: 'App', kind: DeclarationKind.mixinType),
+          ],
+        ),
+        'in a build without parameters': _appWithBuildOf(const []),
+        'in a build whose context has another name': _appWithBuildOf(
+          const [('ctx', 'BuildContext')],
+        ),
+        'in a build whose context is of another type': _appWithBuildOf(
+          const [('context', 'Object')],
+        ),
+      };
+      for (final MapEntry(key: reason, value: files) in apps.entries) {
+        final issues = _check(files);
+
+        expect(
+          issues.map((issue) => issue.message),
+          [
+            equals(
+              'lib/app.dart creates the root MaterialApp outside a method '
+              'build(BuildContext context) of a class, so the arguments '
+              'that the modules give the root cannot read its context.',
+            ),
+          ],
+          reason: reason,
+        );
+        expect(issues.single.path, _appFile, reason: reason);
+        expect(
+          issues.single.origin,
+          const ModuleOrigin(ModuleId('flutter_core')),
+          reason: reason,
+        );
+        expect(
+          issues.single.hint,
+          contains('in the build of a widget'),
+          reason: reason,
+        );
+      }
+    });
+
+    test(
+        'check where the provider creates a MaterialApp in lib/ only, not '
+        'where other modules or its tests do', () {
+      const elsewhere = [IndexedInvocation('MaterialApp')];
+      const screen = 'lib/features/home/home_screen.dart';
+
+      expect(
+        _check(
+          {
+            ..._app(),
+            'test/app_test.dart': const DartFileIndex(
+              path: 'test/app_test.dart',
+              invocations: elsewhere,
+            ),
+            screen: const DartFileIndex(path: screen, invocations: elsewhere),
+          },
+          owners: {screen: const ModuleOrigin(ModuleId('home'))},
+        ),
+        isEmpty,
+      );
     });
   });
 

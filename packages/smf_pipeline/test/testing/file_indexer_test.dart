@@ -587,6 +587,100 @@ class App extends StatelessWidget {
       }
     });
 
+    test(
+        'app entry: the root MaterialApp is created in a method '
+        'build(BuildContext context) of a class', () {
+      const provider = ModuleOrigin(ModuleId('scaffold'));
+      const outside = 'lib/app.dart creates the root MaterialApp outside a '
+          'method build(BuildContext context) of a class, so the arguments '
+          'that the modules give the root cannot read its context.';
+      List<SmfIssue> issuesOf(String app) => appEntryIssues(
+            {'lib/app.dart': "import 'package:flutter/material.dart';\n\n$app"},
+            owners: const {'lib/app.dart': provider},
+            modules: [scaffold().descriptor],
+          );
+
+      for (final app in [
+        // In the build() of a widget.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(title: 'My App');
+}
+''',
+        // In a closure of it, whose own context rebuilds too.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(builder: (context) => const MaterialApp(title: 'My App'));
+  }
+}
+''',
+        // In the build() of the state of a widget.
+        '''
+class App extends StatefulWidget {
+  const App({super.key});
+
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+''',
+      ]) {
+        expect(issuesOf(app), isEmpty, reason: app);
+      }
+
+      for (final app in [
+        // In another method of the widget, which has no context.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => _root();
+
+  Widget _root() => MaterialApp(title: 'My App');
+}
+''',
+        // In a function, a variable or a field, outside any widget.
+        "Widget createApp() => MaterialApp(title: 'My App');\n",
+        "final app = MaterialApp.router(title: 'My App');\n",
+        '''
+class App {
+  final root = const MaterialApp(title: 'My App');
+}
+''',
+        // In a build() whose context has another name, or none.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext ctx) => MaterialApp(title: 'My App');
+}
+''',
+        '''
+class App {
+  Widget build() => MaterialApp(title: 'My App');
+}
+''',
+      ]) {
+        final issues = issuesOf(app);
+        expect(issues.map((issue) => issue.message), [outside], reason: app);
+        expect(issues.single.origin, provider, reason: app);
+        expect(issues.single.path, 'lib/app.dart', reason: app);
+      }
+    });
+
     test('app entry: the required symbols are checked', () {
       final files = {
         'lib/main.dart': DartFileIndexer.index(

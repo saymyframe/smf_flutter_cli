@@ -33,7 +33,9 @@ const appEntryRole = AppEntryRole._();
 /// evaluates the expressions of the [appArgs] there. So `context` in such
 /// an expression is the `BuildContext` of that widget, which is below the
 /// [rootWrappers], and the root rebuilds when an inherited widget that the
-/// expression read notifies.
+/// expression read notifies. The structural rules of the role check that
+/// the provider creates a `MaterialApp`, and only in a method
+/// `build(BuildContext context)` of a class.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -398,6 +400,13 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkMaterialRoot,
         ),
         StructuralRule(
+          id: 'app_entry.root_in_build',
+          description: 'The provider creates the root MaterialApp in a '
+              'method build(BuildContext context) of a class, so the '
+              'arguments that the modules give the root read its context.',
+          check: _checkRootInBuild,
+        ),
+        StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
               'the top-level dictionary of Info.plist, the permissions and '
@@ -604,16 +613,26 @@ bool _createsMaterialApp(IndexedInvocation invocation) =>
       _ => false,
     };
 
-List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
-  ModuleId? provider;
+/// The Dart files in `lib/` of the provider of the app entry among the files
+/// of [input], each with its path and the id of the provider: the root is
+/// in the code of the app, not in its tests.
+Iterable<(String, DartFileIndex, ModuleId)> _filesOfProvider(
+  StructuralRuleInput<NoDsl> input,
+) sync* {
   for (final MapEntry(key: path, value: file) in input.files.entries) {
     final owner = input.owners[path];
-    // The root is in the code of the app, not in its tests.
     if (owner is! ModuleOrigin || !path.startsWith('lib/')) continue;
     final module = input.module(owner.module);
     if (!(module?.provides.contains(appEntryRole) ?? false)) continue;
+    yield (path, file, owner.module);
+  }
+}
+
+List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
+  ModuleId? provider;
+  for (final (_, file, module) in _filesOfProvider(input)) {
     if (file.invocations.any(_createsMaterialApp)) return const [];
-    provider = owner.module;
+    provider = module;
   }
   // The required symbols report the files of a provider that are missing.
   if (provider == null) return const [];
@@ -628,3 +647,39 @@ List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
     ),
   ];
 }
+
+List<SmfIssue> _checkRootInBuild(StructuralRuleInput<NoDsl> input) => [
+      for (final (path, file, provider) in _filesOfProvider(input))
+        for (final invocation in file.invocations)
+          if (_createsMaterialApp(invocation) && !_inBuild(file, invocation))
+            SmfIssue(
+              '$path creates the root MaterialApp outside a method '
+              'build(BuildContext context) of a class, so the arguments that '
+              'the modules give the root cannot read its context.',
+              hint: 'Create it in the build of a widget that main() runs '
+                  'inside the root wrappers: the expression of an argument '
+                  'of the root may read the BuildContext of that widget as '
+                  'context.',
+              origin: ModuleOrigin(provider),
+              path: path,
+            ),
+    ];
+
+/// Whether [invocation] of [file] is in a method `build` of a class whose
+/// first parameter is `BuildContext context`.
+bool _inBuild(DartFileIndex file, IndexedInvocation invocation) =>
+    invocation.enclosingMember == 'build' &&
+    file.declarations.any(
+      (declaration) =>
+          declaration.name == invocation.enclosingDeclaration &&
+          declaration.members.any(_isBuildWithContext),
+    );
+
+/// Whether [member] is a `build` whose first parameter is
+/// `BuildContext context`.
+bool _isBuildWithContext(IndexedMember member) =>
+    member.name == 'build' &&
+    switch (member.parameters) {
+      [IndexedParameter(name: 'context', type: 'BuildContext'), ...] => true,
+      _ => false,
+    };
