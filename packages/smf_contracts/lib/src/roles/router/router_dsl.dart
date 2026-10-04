@@ -8,8 +8,9 @@ part of '../router.dart';
 /// its route `/settings` is `/home/settings`.
 @immutable
 final class RoutesData {
-  /// Creates the data with the top-level [routes] of a module.
-  const RoutesData(this.routes);
+  /// Creates the data with the top-level [routes] of a module and its
+  /// [guards].
+  const RoutesData(this.routes, {this.guards = const []});
 
   /// The top-level routes of the module, in the order the app lists them.
   ///
@@ -24,6 +25,88 @@ final class RoutesData {
   /// navigation either. The module rule `router.routes` reports a route
   /// that another leaves unreachable in either order.
   final List<Route> routes;
+
+  /// The guards of the module, in the order the app asks them; see
+  /// [RouteGuard].
+  final List<RouteGuard> guards;
+}
+
+/// A condition without which the user sees a route of the module in place
+/// of the other screens of the app, such as the onboarding until the user
+/// went through it.
+///
+/// While the guard does not allow, the router shows the route [redirectTo]
+/// of the module, the target of the guard, in place of every location
+/// outside its flow: the target and the routes below it. That holds for the
+/// location the app starts on, for every location that `go()`, `push()` or
+/// `replace()` is asked to show, and for the routes of every module, which
+/// know nothing of the guard. Once the guard allows, the router shows the
+/// first location that the guards kept the user from, so the screens of
+/// the flow only change what the guard reads: the router leaves them. See
+/// [RouterRole] for what every router does with the guards.
+///
+/// The app asks the guards of all modules in the order of the modules and
+/// of [RoutesData.guards]. The first one that does not allow decides, and
+/// no later one is asked, so the flows of the guards show one after
+/// another.
+///
+/// ```dart
+/// RoutesData(
+///   [Route('/', name: 'intro', screen: ScreenRef('IntroScreen', ...))],
+///   guards: [
+///     RouteGuard(
+///       name: 'firstRun',
+///       allows: FunctionRef(
+///         'introSeen',
+///         import: ImportRef.app('features/intro/intro_status.dart'),
+///       ),
+///       redirectTo: 'intro',
+///     ),
+///   ],
+/// )
+/// ```
+@immutable
+final class RouteGuard {
+  /// Creates the guard [name], which shows the route [redirectTo] of its
+  /// module until [allows] says otherwise.
+  const RouteGuard({
+    required this.name,
+    required this.allows,
+    required this.redirectTo,
+  });
+
+  /// The name of the guard in its module, a lowerCamelCase identifier such
+  /// as `firstRun`; the full name is `<module id>.<name>`.
+  final String name;
+
+  /// A top-level function of a file of the app, without parameters, that
+  /// returns a `ValueListenable<bool>` of `package:flutter/foundation.dart`:
+  /// whether the guard allows, which notifies its listeners when that
+  /// changes.
+  ///
+  /// The app calls the function once, when its router first asks the
+  /// guards, which is after `bootstrap()`, and then reads the value whenever
+  /// it asks the guard. So the value is known without waiting: a guard that
+  /// depends on something that loads, such as a setting on the device,
+  /// loads it in `bootstrap()`. The value changes outside the build of a
+  /// frame, such as in the handler of a tap, since the router navigates
+  /// when it does.
+  ///
+  /// The router role imports the file with a prefix of its own, so
+  /// [ImportRef.prefix] and [ImportRef.show] do not apply. A feature whose
+  /// guard needs a service keeps the function in its composition file,
+  /// which may resolve services (see [CompositionFile]).
+  final FunctionRef allows;
+
+  /// The name of the route of the module that the router shows while the
+  /// guard does not allow, such as `intro`: its target.
+  ///
+  /// It is a top-level route that needs no values and is outside the main
+  /// navigation. Neither it nor a route below it can start the app.
+  final String redirectTo;
+
+  @override
+  String toString() => 'guard $name';
 }
 
 /// A page of the app: where it is, the screen it shows and the values it

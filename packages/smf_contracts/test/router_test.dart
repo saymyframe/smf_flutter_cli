@@ -85,6 +85,66 @@ final List<RoleData<Object>> _data = [
   dataOf(routerRole, _settingsRoutes, module: 'settings'),
 ];
 
+/// The file of the functions of the guards of the feature `intro`.
+const _introFile = ImportRef.app('features/intro/intro_status.dart');
+
+/// The file of the function of the guard of the feature `account`.
+const _accountFile = ImportRef.app('features/account/account_composition.dart');
+
+/// The routes of a feature with two guards: one shows its first route,
+/// which has a child, and the other its second top-level route.
+final _introRoutes = RoutesData(
+  [
+    Route(
+      '/',
+      name: 'intro',
+      screen: _screen('IntroScreen', 'intro'),
+      children: [
+        Route('terms', name: 'terms', screen: _screen('TermsScreen', 'intro')),
+      ],
+    ),
+    Route(
+      '/paywall',
+      name: 'paywall',
+      screen: _screen('PaywallScreen', 'intro'),
+      params: const [RouteParam.query('plan', type: String, optional: true)],
+    ),
+  ],
+  guards: const [
+    RouteGuard(
+      name: 'firstRun',
+      allows: FunctionRef('introSeen', import: _introFile),
+      redirectTo: 'intro',
+    ),
+    RouteGuard(
+      name: 'premium',
+      allows: FunctionRef('isPremium', import: _introFile),
+      redirectTo: 'paywall',
+    ),
+  ],
+);
+
+/// The routes of a feature with one guard, which shows its only route.
+final _accountRoutes = RoutesData(
+  [Route('/login', name: 'login', screen: _screen('LoginScreen', 'account'))],
+  guards: const [
+    RouteGuard(
+      name: 'signedIn',
+      allows: FunctionRef('isSignedIn', import: _accountFile),
+      redirectTo: 'login',
+    ),
+  ],
+);
+
+/// The routes of an app with guards: a feature without one, which can
+/// start the app, and then the features with guards, in the order the app
+/// asks them.
+final List<RoleData<Object>> _guardedData = [
+  dataOf(routerRole, _homeRoutes),
+  dataOf(routerRole, _introRoutes, module: 'intro'),
+  dataOf(routerRole, _accountRoutes, module: 'account'),
+];
+
 RouterFacade _facade([List<RoleData<Object>>? data]) =>
     routerRole.facadeOf(inputOf(routerRole, data: data ?? _data));
 
@@ -216,6 +276,14 @@ void main() {
       expect('$optional', '?q');
     });
 
+    test('a module has no guards unless it declares some', () {
+      expect(_homeRoutes.guards, isEmpty);
+      expect(
+        [for (final guard in _introRoutes.guards) '$guard'],
+        ['guard firstRun', 'guard premium'],
+      );
+    });
+
     test('ScreenRef knows the file of a screen of the app', () {
       final screen = _screen('HomeScreen', 'home');
 
@@ -335,6 +403,91 @@ void main() {
         [for (final route in _facade().destinations) route.fullPath],
         ['/home', '/settings'],
       );
+    });
+
+    test(
+        'resolves the guards in the order of the features and of their '
+        'guards, each with its full name, its target and its flow', () {
+      final facade = _facade(_guardedData);
+
+      expect(
+        [for (final guard in facade.guards) guard.fullName],
+        ['intro.firstRun', 'intro.premium', 'account.signedIn'],
+      );
+      expect(
+        [for (final guard in facade.guards) guard.target.fullPath],
+        ['/intro', '/intro/paywall', '/account/login'],
+      );
+      // The target and the routes below it, parents first.
+      expect(
+        [
+          for (final guard in facade.guards)
+            [for (final route in guard.flow) route.fullName],
+        ],
+        [
+          ['intro.intro', 'intro.terms'],
+          ['intro.paywall'],
+          ['account.login'],
+        ],
+      );
+      final firstRun = facade.guards.first;
+      expect(firstRun.guard, same(_introRoutes.guards.first));
+      expect('${firstRun.feature.module}', 'intro');
+      expect(firstRun.feature.guards, facade.guards.take(2));
+      expect(firstRun.flow.first, same(facade.routeAt('/intro')));
+      expect('$firstRun', 'guard intro.firstRun');
+      expect(_facade().guards, isEmpty);
+    });
+
+    test(
+        'merges the guards of the data of a module, and leaves out a guard '
+        'whose target is no top-level route of its module', () {
+      const guard = RouteGuard(
+        name: 'premium',
+        allows: FunctionRef('isPremium', import: _introFile),
+        redirectTo: 'paywall',
+      );
+      RouteGuard to(String route) => RouteGuard(
+            name: route,
+            allows: const FunctionRef('isOpen', import: _introFile),
+            redirectTo: route,
+          );
+      final facade = _facade([
+        dataOf(
+          routerRole,
+          RoutesData(_introRoutes.routes, guards: [_introRoutes.guards.first]),
+          module: 'intro',
+        ),
+        // A route of another module, a child and a route that is not there.
+        dataOf(
+          routerRole,
+          RoutesData(
+            _homeRoutes.routes,
+            guards: [to('intro'), to('details'), to('nowhere')],
+          ),
+        ),
+        dataOf(
+          routerRole,
+          const RoutesData([], guards: [guard]),
+          module: 'intro',
+        ),
+        // A module without routes has no feature for its guards.
+        dataOf(
+          routerRole,
+          const RoutesData([], guards: [guard]),
+          module: 'empty',
+        ),
+        // Data that does not come from a module.
+        routerRole
+            .data(_accountRoutes)
+            .withOrigin(const RoleTemplateOrigin(layoutRole)),
+      ]);
+
+      expect(
+        [for (final guard in facade.guards) guard.fullName],
+        ['intro.firstRun', 'intro.premium'],
+      );
+      expect(facade.features.last.guards, isEmpty);
     });
 
     test('leaves out routes that do not come from a module', () {

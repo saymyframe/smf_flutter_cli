@@ -34,7 +34,8 @@ final class RouterChoice {
 }
 
 /// The routes of all modules of an app with their full paths, names and
-/// classes, from which the router role generates the navigation facade.
+/// classes, from which the router role generates the navigation facade,
+/// and the guards of the modules.
 ///
 /// The template of the router renders the facade from it and providers
 /// render their routes from it, so both agree on every path and name.
@@ -42,22 +43,25 @@ final class RouterChoice {
 final class RouterFacade {
   RouterFacade._(this.features);
 
-  /// Resolves [data], the routes of the modules in the order the modules
-  /// were selected; data of the same module is merged.
+  /// Resolves [data], the routes and the guards of the modules in the order
+  /// the modules were selected; data of the same module is merged.
   ///
   /// Routes live under the namespace of their module, so data without a
   /// module as its origin is left out; the router's template reports it.
   factory RouterFacade.of(Iterable<RoleData<RoutesData>> data) {
     final routes = <ModuleId, List<Route>>{};
+    final guards = <ModuleId, List<RouteGuard>>{};
     for (final entry in data) {
       if (entry.origin case ModuleOrigin(:final module)) {
         routes.putIfAbsent(module, () => []).addAll(entry.value.routes);
+        guards.putIfAbsent(module, () => []).addAll(entry.value.guards);
       }
     }
     return RouterFacade._(
       List.unmodifiable([
         for (final MapEntry(key: module, value: moduleRoutes) in routes.entries)
-          if (moduleRoutes.isNotEmpty) FacadeFeature._(module, moduleRoutes),
+          if (moduleRoutes.isNotEmpty)
+            FacadeFeature._(module, moduleRoutes, guards[module]!),
       ]),
     );
   }
@@ -69,6 +73,11 @@ final class RouterFacade {
   /// the features and their routes.
   List<FacadeRoute> get routes =>
       [for (final feature in features) ...feature.allRoutes];
+
+  /// The guards of the app, in the order the app asks them: that of the
+  /// features and of their guards; see [FacadeFeature.guards].
+  List<FacadeGuard> get guards =>
+      [for (final feature in features) ...feature.guards];
 
   /// The top-level routes that are destinations of the main navigation, in
   /// the order of the features and their routes.
@@ -158,11 +167,16 @@ String _withQuery(String path, Map<String, String?> query) {
 ''';
 }
 
-/// The routes of one module in a [RouterFacade].
+/// The routes of one module in a [RouterFacade], and its guards.
 final class FacadeFeature {
-  FacadeFeature._(this.module, List<Route> routes) {
+  FacadeFeature._(this.module, List<Route> routes, List<RouteGuard> guards) {
     this.routes = List.unmodifiable([
       for (final route in routes) FacadeRoute._(this, route, null),
+    ]);
+    this.guards = List.unmodifiable([
+      for (final guard in guards)
+        if (_topLevel(guard.redirectTo) case final target?)
+          FacadeGuard._(this, guard, target),
     ]);
   }
 
@@ -171,6 +185,21 @@ final class FacadeFeature {
 
   /// The top-level routes of the module, in order.
   late final List<FacadeRoute> routes;
+
+  /// The guards of the module, in order, each with its target.
+  ///
+  /// A guard whose [RouteGuard.redirectTo] names no top-level route of the
+  /// module is left out; the module rule `router.guards` reports it.
+  late final List<FacadeGuard> guards;
+
+  /// The first top-level route of the module named [name], or `null` if it
+  /// has none.
+  FacadeRoute? _topLevel(String name) {
+    for (final route in routes) {
+      if (route.route.name == name) return route;
+    }
+    return null;
+  }
 
   /// The name of the feature in `context.nav`, such as `home`.
   String get accessor => module.lowerCamelCase;
@@ -218,6 +247,32 @@ final class FacadeFeature {
 
   @override
   String toString() => 'routes of $module';
+}
+
+/// A guard of a [RouterFacade]: a [RouteGuard] of a module with its full
+/// name, its target and its flow.
+final class FacadeGuard {
+  FacadeGuard._(this.feature, this.guard, this.target);
+
+  /// The feature that declares the guard.
+  final FacadeFeature feature;
+
+  /// The guard as the module declared it.
+  final RouteGuard guard;
+
+  /// The route that the router shows while the guard does not allow: the
+  /// top-level route of the module that [RouteGuard.redirectTo] names.
+  final FacadeRoute target;
+
+  /// The full name of the guard, such as `intro.firstRun`.
+  String get fullName => '${feature.module}.${guard.name}';
+
+  /// The routes that the user may see while the guard does not allow:
+  /// [target] and the routes below it, parents first.
+  List<FacadeRoute> get flow => target.withDescendants;
+
+  @override
+  String toString() => 'guard $fullName';
 }
 
 /// The annotation of a member of a location class that overrides one of
