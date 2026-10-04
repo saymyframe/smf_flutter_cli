@@ -33,6 +33,9 @@ dependencies:
   # The settings screen of the CLI, for its app tests in the app of several
   # providers.
   smf_settings: ^0.3.0
+  # The provider of the preferences role in the registry of several
+  # providers, for the test of the role that the CLI keeps.
+  smf_shared_preferences: ^0.3.0
 
 dev_dependencies:
   analyzer: ^14.4.0

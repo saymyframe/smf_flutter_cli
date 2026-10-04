@@ -216,9 +216,10 @@ void main() {
         severalProviders.tests.singleWhere((test) => nameOf(test) == name);
 
     test(
-        'gets the app tests of the modules of the CLI, the test of the DI '
-        'role, the mocks of the fixture providers and the tests of the roles '
-        'of several providers, which all apply to it', () {
+        'gets the app tests of the modules of the CLI, the tests of the DI '
+        'role, of the events role and of the preferences role, the mocks of '
+        'the fixture providers and the tests of the roles of several '
+        'providers, which all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -227,8 +228,10 @@ void main() {
           'firebase_analytics',
           'screen_views',
           'settings',
+          'shared_preferences',
           'di_role',
           'events_role',
+          'preferences_role',
           'router_walk',
           'settings_screen_role',
           'fake_crash',

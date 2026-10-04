@@ -134,6 +134,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it, the test that the CLI keeps: only in the apps
       // with every module, which run flutter test for other tests already.
+      // There the fixture preferences provide the role.
       await preferencesRoleAppTest(
         among: (app) => app.everyModuleWith != null,
       ),

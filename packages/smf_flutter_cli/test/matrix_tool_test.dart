@@ -1,8 +1,10 @@
 // Tests --add-app-tests of tool/matrix.dart, which CI runs in the jobs
 // that start an app with every module on a device: with --app, the tool
 // adds the start check to the app that --create --app generated as the app
-// of that name, with the probes of the tests of the roles of the app and
-// the files that those tests generate for it.
+// of that name, with the probes of the tests of the app, the files that
+// those tests generate for it, and their dev dependencies, which it adds
+// with flutter. A command that stands in for flutter is first on the path
+// of the tool here, so the tests need no Flutter SDK.
 @TestOn('vm')
 library;
 
@@ -16,16 +18,44 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:test/test.dart';
 
+/// Writes a command that stands in for `flutter` into [bin]: it writes its
+/// arguments and its working directory to `calls.log` next to it, and
+/// succeeds. On Windows it is a batch file, `flutter.bat`, as in a Flutter
+/// SDK there.
+void _fakeFlutter(String bin) {
+  Directory(bin).createSync(recursive: true);
+  if (Platform.isWindows) {
+    File(p.join(bin, 'flutter.bat')).writeAsStringSync(
+      '@echo off\r\n>> "%~dp0calls.log" echo flutter %* in %CD%\r\n',
+    );
+    return;
+  }
+  final file = File(p.join(bin, 'flutter'))
+    ..writeAsStringSync(
+      '#!/bin/sh\n'
+      'echo "flutter \$* in \$PWD" >> "${p.join(bin, 'calls.log')}"\n',
+    );
+  Process.runSync('chmod', ['+x', file.path]);
+}
+
+/// The directory [path] with links resolved, as the stand-in for flutter
+/// names its working directory: the shell of macOS resolves them, and
+/// Windows may name a directory by its short name, such as `RUNNER~1`.
+String _resolved(String path) => Directory(path).resolveSymbolicLinksSync();
+
 void main() {
   late Directory temp;
   late String kernel;
   late String packages;
+  late String bin;
   late List<MatrixAppTest> appTests;
 
   // The kernel of the tool, compiled once for the runs of the tests.
   setUpAll(() async {
     temp = Directory.systemTemp.createTempSync('matrix_tool_');
     kernel = p.join(temp.path, 'matrix.dill');
+    bin = p.join(temp.path, 'bin');
+    _fakeFlutter(bin);
     packages = (await Isolate.packageConfig)!.toFilePath();
     appTests = (await smfAppTests()).tests;
     final result = await Process.run(Platform.resolvedExecutable, [
@@ -42,12 +72,37 @@ void main() {
   });
   tearDownAll(() => temp.deleteSync(recursive: true));
 
-  Future<ProcessResult> run(List<String> arguments) => Process.run(
-        Platform.resolvedExecutable,
-        ['--packages=$packages', kernel, ...arguments],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
+  /// Runs the tool with the stand-in for flutter before the commands of
+  /// the machine on its path.
+  Future<ProcessResult> run(List<String> arguments) {
+    // The name of the variable as the machine has it: `Path` on Windows.
+    final path = Platform.environment.keys.firstWhere(
+      (name) => name.toUpperCase() == 'PATH',
+      orElse: () => 'PATH',
+    );
+    final separator = Platform.isWindows ? ';' : ':';
+    return Process.run(
+      Platform.resolvedExecutable,
+      ['--packages=$packages', kernel, ...arguments],
+      environment: {
+        path: '$bin$separator${Platform.environment[path] ?? ''}',
+      },
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+  }
+
+  /// What the tool ran flutter with, and where, since [clearCalls].
+  List<String> calls() {
+    final log = File(p.join(bin, 'calls.log'));
+    return log.existsSync() ? log.readAsLinesSync() : const [];
+  }
+
+  /// Forgets the calls of flutter so far.
+  void clearCalls() {
+    final log = File(p.join(bin, 'calls.log'));
+    if (log.existsSync()) log.deleteSync();
+  }
 
   /// The directory of a new app of `smf create` whose package is
   /// start_app, as far as the tool reads it.
@@ -71,7 +126,8 @@ void main() {
       'with --app, adds the start check to the app with every module of '
       'that name, one without the modules whose steps need an external '
       'service with --without-external-steps, with the probes of the tests '
-      'of its roles and the files that they generate for it', () async {
+      'of the app, the files that they generate for it and their dev '
+      'dependencies', () async {
     final generated = <bool, Map<String, String>>{};
     for (final withoutExternalSteps in [true, false]) {
       final (:apps, :failed) = await everyModuleAppsOf(
@@ -81,6 +137,7 @@ void main() {
       expect(failed, isEmpty);
       final matrixApp = apps.last;
       final app = newApp();
+      clearCalls();
 
       final result = await run([
         '--add-app-tests',
@@ -97,9 +154,37 @@ void main() {
         read(app, 'integration_test/start_check.dart'),
         contains("import 'package:start_app/main.dart' as app;"),
       );
+      // The probes of the tests of the app, those of the preferences among
+      // them: the apps without external steps have their provider too.
       final list = read(app, startProbesFile);
-      expect(list, contains("('di_role', probe0.probeServices),"));
-      expect(list, contains("('router_walk', probe1.probeRoutes),"));
+      expect(
+        list,
+        contains("('shared_preferences', probe0.probeSharedPreferences),"),
+      );
+      expect(list, contains("('di_role', probe1.probeServices),"));
+      expect(
+        list,
+        contains("('preferences_role', probe2.probePreferences),"),
+      );
+      expect(list, contains("('router_walk', probe3.probeRoutes),"));
+      expect(
+        read(app, 'integration_test/preferences_role/probe.dart'),
+        contains(
+          "import 'package:start_app/core/preferences/app_preferences.dart';",
+        ),
+      );
+      const implementation = 'core/preferences/shared_app_preferences.dart';
+      expect(
+        read(app, 'integration_test/shared_preferences/probe.dart'),
+        contains("import 'package:start_app/$implementation';"),
+      );
+      // The test of shared_preferences, which comes with its probe, needs a
+      // dev dependency, which the tool adds with flutter in the app.
+      const pubAdd =
+          'flutter pub add dev:shared_preferences_platform_interface in ';
+      final call = calls().single;
+      expect(call, startsWith(pubAdd), reason: reason);
+      expect(_resolved(call.substring(pubAdd.length).trim()), _resolved(app));
       final files = generated[withoutExternalSteps] = {
         for (final test in [named('di_role'), named('router_walk')])
           ...test.generatedFiles!(matrixApp, 'start_app'),

@@ -16,8 +16,8 @@
 //   Flutter SDK, such as integration_test, come with the SDK, and the caches
 //   are for every version of Flutter, so they are left out, as the version
 //   of Flutter is. Flutter writes no .flutter-plugins-dependencies for an
-//   app without plugins of its own, such as the app of the start check
-//   without Firebase, which then has none.
+//   app without any plugin, such as an app of modules that bring none,
+//   which then has none.
 // - For Android, the Gradle files of the Android project, which name the
 //   versions of Gradle, of its plugins and of the dependencies of the app,
 //   without the lines that set the ids of the app, namespace and
@@ -30,10 +30,14 @@
 // something else, such as another plugin, another version of one, or
 // another version of Gradle, gets a cache of its own. The file must be in
 // the workspace, where hashFiles of GitHub Actions finds it, and the tool
-// prints what it wrote, for the log of the job. When the apps download
-// nothing for the platform, as an app without plugins with iOS code, the
+// prints what it wrote, for the log of the job. When the apps have nothing
+// of this for the platform, as an app without plugins with iOS code, the
 // tool writes no file and removes the one there, so hashFiles of it is
-// empty and the job has no cache to restore or save. It fails when the
+// empty and the job has no cache to restore or save. The tool lists every
+// plugin with native code, and cannot tell one whose build downloads
+// nothing, such as a plugin for iOS whose Swift package names no remote
+// package: an app with only such plugins gets a file too, and its job a
+// key under which it never saves a cache. It fails when the
 // directory has no app, when pub did not resolve an app, which then has no
 // pubspec.lock or no .dart_tool/package_config.json, and when an app has
 // no project for the platform. tools/workflow_apps_test.dart checks that
@@ -97,10 +101,9 @@ Map<String, String> nativeBuildsOf(Directory directory, String platform) {
 ///   XCRemoteSwiftPackageReference section, trimmed and indented by two
 ///   spaces.
 ///
-/// An app that pub resolved without a .flutter-plugins-dependencies, which
-/// Flutter writes only for an app with plugins of its own, has no plugins:
-/// such as the app of the start check without Firebase, whose only plugin,
-/// integration_test, is a dev dependency from the Flutter SDK.
+/// An app that pub resolved without a .flutter-plugins-dependencies has no
+/// plugins, such as an app of modules that bring none: Flutter writes the
+/// file for an app with a plugin, one of the Flutter SDK too.
 ///
 /// Throws a [NativeBuildException] when pub did not resolve the app, which
 /// then has no pubspec.lock or no .dart_tool/package_config.json, when the

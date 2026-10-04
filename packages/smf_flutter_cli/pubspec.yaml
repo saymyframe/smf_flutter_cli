@@ -40,6 +40,7 @@ dependencies:
   smf_pipeline: ^0.3.0
   smf_riverpod: ^0.3.0
   smf_settings: ^0.3.0
+  smf_shared_preferences: ^0.3.0
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.

@@ -9,6 +9,7 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -25,6 +26,9 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final settings = await appTestsDirectoryOf('smf_settings');
+  final sharedPreferences = await appTestsDirectoryOf(
+    'smf_shared_preferences',
+  );
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -96,12 +100,36 @@ Future<MatrixAppTests> smfAppTests() async {
       // what the app is: it opens the about dialog of Flutter with the name
       // of the app, and the dialog the licenses of its packages.
       MatrixAppTest('$settings/settings', appliesTo: _has(SettingsModule.id)),
+      // The preferences of the module reach shared_preferences, and read
+      // what it has when they are opened, lists in the form that each
+      // platform returns them in. The mocks keep the platform side of the
+      // package in memory, and the matrix sets them up for the tests of
+      // every module of the app, since the start-up of the app opens the
+      // preferences. Its probe opens the preferences again on a device,
+      // where the platform side is the real one, and reads back what it
+      // saved.
+      MatrixAppTest(
+        '$sharedPreferences/shared_preferences',
+        appliesTo: _has(SharedPreferencesModule.id),
+        devDependencies: const ['shared_preferences_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/shared_preferences_mocks.dart',
+          'mockSharedPreferences',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/shared_preferences/probe.dart',
+          'probeSharedPreferences',
+        ),
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
       // The events of the apps with the events role, whichever module
       // provides it.
       await eventsRoleAppTest(),
+      // The preferences of the apps with the preferences role, whichever
+      // module provides it.
+      await preferencesRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -120,9 +148,15 @@ Future<MatrixAppTests> smfAppTests() async {
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
-    // provider of the DI role, of the events role and of the settings
-    // screen role gets the tests of its role.
-    testedRoles: {routerRole, diRole, eventsRole, settingsScreenRole},
+    // provider of the DI role, of the events role, of the preferences role
+    // and of the settings screen role gets the tests of its role.
+    testedRoles: {
+      routerRole,
+      diRole,
+      eventsRole,
+      preferencesRole,
+      settingsScreenRole,
+    },
   );
 }
 

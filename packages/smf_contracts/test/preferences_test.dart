@@ -298,6 +298,28 @@ List<String> _statementsOf(FunctionDeclaration function) => [
         '$statement',
     ];
 
+/// What the template puts into the platform phase of `bootstrap()`, among
+/// what it contributes to the sockets of the app entry in [rendered].
+List<SocketContribution> _startUpOf(RenderedTemplate rendered) => [
+      for (final contribution in rendered.elsewhere)
+        if (contribution.socket == AppEntryRole.bootstrapPlatform) contribution,
+    ];
+
+/// The notes that the template of the role contributes to the guide for
+/// coding agents of the app.
+List<SocketContribution> _agentNotes() => [
+      for (final contribution
+          in preferencesRole.template.contribute(testContext))
+        if (contribution is SocketContribution &&
+            contribution.socket == AppEntryRole.agentSections)
+          contribution,
+    ];
+
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
 void main() {
   group('the preferences role', () {
     test(
@@ -400,8 +422,7 @@ void main() {
           "import 'package:my_app/fakes/fake_preferences.dart' as impl0;",
         ),
       );
-      final start = rendered.elsewhere.single;
-      expect(start.socket, AppEntryRole.bootstrapPlatform);
+      final start = _startUpOf(rendered).single;
       expect(start.fragment!.code, 'await initPreferences();');
       expect(start.fragment!.imports, [
         const ImportRef.app('core/preferences/app_preferences.dart'),
@@ -427,8 +448,7 @@ void main() {
         _variablesOf(unit)['_appPreferences'],
         'late AppPreferences _appPreferences;',
       );
-      final start = rendered.elsewhere.single;
-      expect(start.socket, AppEntryRole.bootstrapPlatform);
+      final start = _startUpOf(rendered).single;
       expect(start.fragment!.code, 'await initPreferences();');
     });
 
@@ -500,6 +520,117 @@ void main() {
         'the next start': <Object?>[],
         'printed': <Object?>[],
       });
+    });
+  });
+
+  group('the note of the preferences role for coding agents', () {
+    test(
+        'is a note of the role in the section of the preferences of every '
+        'app with the role, which the guide takes as it is', () {
+      final note = _agentNotes().single;
+      final value = note.entryValue! as AgentNote;
+
+      expect(note.entryKey, preferencesRole.description);
+      expect(value.isOfRole, isTrue);
+      expect(note.when, isEmpty);
+      expect(
+        AppEntryRole.agentSections.kind.policy.problemFrom(
+          const RoleTemplateOrigin(preferencesRole),
+          note.entryKey!,
+          value,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+        'names what the file of the role declares, and no file of the app '
+        'but that of the role', () async {
+      final text = (_agentNotes().single.entryValue! as AgentNote).text;
+      final code = _codeOf(text);
+      final rendered = await _rendered(async: true);
+      final unit = parseString(
+        content: rendered.files[PreferencesRole.file]!,
+      ).unit;
+
+      expect(
+        code,
+        containsAll([
+          PreferencesRole.file,
+          'AppPreferences',
+          '_restorers',
+          'createAppPreferences()',
+          'initPreferences()',
+          '${AppEntryRole.bootstrap.name}()',
+        ]),
+      );
+      // The file of the role declares each as what the note takes it for.
+      expect(
+        unit.declarations
+            .whereType<ClassDeclaration>()
+            .single
+            .namePart
+            .typeName
+            .lexeme,
+        'AppPreferences',
+      );
+      expect(
+        _variablesOf(unit)['_restorers'],
+        startsWith(
+          'final List<void Function(AppPreferences preferences)> _restorers',
+        ),
+      );
+      expect(
+        _functionsOf(unit).keys,
+        containsAll(['createAppPreferences', 'initPreferences']),
+      );
+      // Anything else with a slash would be a path that an app may lack,
+      // since the provider of the role is up to the app.
+      expect(
+        [
+          for (final span in code)
+            if (span.contains('/')) span,
+        ],
+        [PreferencesRole.file],
+      );
+    });
+
+    test(
+        'tells what never goes into the preferences, how code remembers a '
+        'setting, how a key is named, and not to call the functions of the '
+        'role', () async {
+      final text = (_agentNotes().single.entryValue! as AgentNote).text;
+
+      expect(
+        text,
+        contains(
+          'never save a token, a password, an API key or an encryption key '
+          'in it',
+        ),
+      );
+      expect(
+        text,
+        contains(
+          'write a function that takes the `AppPreferences` and add it to '
+          '`_restorers` in that file',
+        ),
+      );
+      // The form of a key, as the file of the role gives it.
+      expect(text, contains('Name a key `<owner id>.<setting>`'));
+      expect(
+        (await _rendered(async: true)).files[PreferencesRole.file],
+        contains('A key is `<owner id>.<setting>`'),
+      );
+      expect(
+        text,
+        contains(
+          'Do not call `createAppPreferences()` or `initPreferences()`',
+        ),
+      );
+      expect(
+        text,
+        contains('Widgets use the state and do not touch the preferences.'),
+      );
     });
   });
 
