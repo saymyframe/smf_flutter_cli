@@ -2,7 +2,7 @@
 
 The SMF module that routes the app with [go_router](https://pub.dev/packages/go_router) 17. It provides the router role of SMF.
 
-The features of the app declare their routes, and the router role gives the app a typed navigation facade, `context.nav`, with `go()`, `push()` and `replace()` for every route. This module turns the routes into the `GoRouter` of the app. With a layout, such as tabs at the bottom, it builds the main navigation of the app around it. It tells the listeners of the screen, such as analytics, about each screen the user sees.
+The features of the app declare their routes, and the router role gives the app a typed navigation facade, `context.nav`, with `go()`, `push()` and `replace()` for every route. This module turns the routes into the `GoRouter` of the app. With a layout, such as tabs at the bottom, it builds the main navigation of the app around it. It tells the listeners of the screen, such as analytics, about each screen the user sees. When a module keeps the user from the screens of the app with a guard until a condition holds, it shows the screen of the guard in their place, and the screen that the user wanted once the guard allows.
 
 ## Use with the SMF CLI
 
