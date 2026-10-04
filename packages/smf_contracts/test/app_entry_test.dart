@@ -694,6 +694,26 @@ void main() {
       expect(socket.problemsWith(note), isEmpty);
     });
 
+    test(
+        'names the commands that check a change, which format only the code '
+        'of the app', () {
+      final note = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .single
+          .entryValue! as AgentNote;
+      final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(note.text);
+
+      // Not `dart format .`: after `flutter pub get` on macOS, `build/` has
+      // copies of the plugins that depend on other plugins, with their Dart
+      // files, which that command would format too.
+      expect(commands![1]!.trim().split('\n'), [
+        'dart format lib test',
+        'flutter analyze',
+        'flutter test',
+      ]);
+    });
+
     test('renders with the section of the role after its introduction',
         () async {
       final rendered = await renderTemplate(appEntryRole);
