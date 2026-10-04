@@ -1,3 +1,4 @@
+import 'package:smf_bloc/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// The module that manages the state of screens with BLoC, and so provides
@@ -9,6 +10,10 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// the Cubits and Blocs of their screens and provides them where the screens
 /// need them. A variant depends on `flutter_bloc` with the constraint `any`,
 /// so the version is the one of this module.
+///
+/// The section of the state management in the guide for coding agents of
+/// the app is the note of the module: where the state of a screen lives,
+/// and that a widget talks only to it.
 final class BlocModule extends SmfModule {
   /// Creates the module.
   const BlocModule();
@@ -26,6 +31,11 @@ final class BlocModule extends SmfModule {
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      const [PubspecContribution.hosted('flutter_bloc', '^9.1.1')];
+  List<Contribution> contribute(ModuleContext context) => [
+        const PubspecContribution.hosted('flutter_bloc', '^9.1.1'),
+        AppEntryRole.agentSections.entry(
+          stateManagementRole.description,
+          AgentNote(agentNote),
+        ),
+      ];
 }

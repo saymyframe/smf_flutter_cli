@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_get_it/bundles/get_it_bundle.dart';
+import 'package:smf_get_it/src/agents.dart';
 import 'package:smf_get_it/src/registrations.dart';
 
 /// The module that provides dependency injection with get_it, and so the DI
@@ -30,6 +31,9 @@ import 'package:smf_get_it/src/registrations.dart';
 ///
 /// The file imports the file of every type and function it names with a
 /// prefix of its own, so their names never clash.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// dependency injection how a service is registered in get_it by hand.
 final class GetItModule extends SmfModule {
   /// Creates the module.
   const GetItModule();
@@ -49,6 +53,10 @@ final class GetItModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(getItBundle),
         const PubspecContribution.hosted('get_it', '^9.3.0'),
+        AppEntryRole.agentSections.entry(
+          diRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 

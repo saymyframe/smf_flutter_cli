@@ -31,6 +31,10 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
 - The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
 - Use events between parts of the app that do not import each other.
+
+With `event_bus`:
+
+- A listener gets an event once the code that fired it reaches its next `await` or returns, not inside `fire()`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

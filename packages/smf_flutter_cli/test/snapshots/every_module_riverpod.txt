@@ -44,11 +44,21 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Only the composition file of a feature, `lib/features/<feature>/<feature>_composition.dart`, calls `resolve<T>()` of `lib/core/di/service_locator.dart`, to create what the screens of the feature need, such as the object that holds their state.
 - A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
 
+With `get_it`:
+
+- `registerDependencies()` registers the services in `getIt`, a local name for `GetIt.instance`, with `registerLazySingleton`, `registerSingleton` or `registerFactory`. The function that creates a service gets each service it takes as `getIt<Type>()`, and one that disposes of it goes into `dispose:`.
+- A singleton created asynchronously takes `registerSingletonAsync`, and one that waits for such a service `registerSingletonWithDependencies`. `await getIt.allReady()` then ends the function.
+- No other file in `lib/` imports `get_it`. A test may import it to register its fakes in `GetIt.instance`.
+
 ## Events
 
 - An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
 - The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
 - Use events between parts of the app that do not import each other.
+
+With `event_bus`:
+
+- A listener gets an event once the code that fired it reaches its next `await` or returns, not inside `fire()`.
 
 ## Home
 
@@ -92,6 +102,14 @@ With `go_router`:
 - To follow the screen that the user sees, add a function to `_screenListeners`.
 
 - The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of the `destinations` of `AppShell`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index. A route outside the main navigation goes after the shell route.
+
+## State management
+
+With `flutter_riverpod`:
+
+- The state of a screen is a provider in the directory of its feature, such as a `NotifierProvider` with its `Notifier`. Write it by hand: the app has no code generation for providers.
+- A widget talks only to providers, never to a service. A provider gets a service through another provider.
+- `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
