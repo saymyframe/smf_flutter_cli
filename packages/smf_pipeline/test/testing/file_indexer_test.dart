@@ -673,6 +673,34 @@ class App {
   Widget build() => MaterialApp(title: 'My App');
 }
 ''',
+        // In such a build(), next to the build(BuildContext context) of
+        // another class of the file.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _Root().build();
+}
+
+class _Root {
+  const _Root();
+
+  Widget build() => MaterialApp(title: 'My App');
+}
+''',
+        // In a function, next to the root in the build() of a widget: every
+        // MaterialApp of the provider counts.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+
+Widget preview() => MaterialApp(title: 'Preview');
+''',
       ]) {
         final issues = issuesOf(app);
         expect(issues.map((issue) => issue.message), [outside], reason: app);

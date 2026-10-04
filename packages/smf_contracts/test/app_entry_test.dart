@@ -130,6 +130,13 @@ Map<String, DartFileIndex> _appWithBuildOf(List<(String, String)> parameters) =>
       ],
     );
 
+/// What the rule of the role says of a `MaterialApp` that the provider
+/// creates in the file at [path] outside a `build(BuildContext context)`.
+String _outsideBuild(String path) =>
+    '$path creates the root MaterialApp outside a method '
+    'build(BuildContext context) of a class, so the arguments that the '
+    'modules give the root cannot read its context.';
+
 /// Checks [files] of an app whose app entry flutter_core provides; it owns
 /// each file, unless [owners] names another owner.
 List<SmfIssue> _check(
@@ -504,13 +511,7 @@ void main() {
 
         expect(
           issues.map((issue) => issue.message),
-          [
-            equals(
-              'lib/app.dart creates the root MaterialApp outside a method '
-              'build(BuildContext context) of a class, so the arguments '
-              'that the modules give the root cannot read its context.',
-            ),
-          ],
+          [_outsideBuild(_appFile)],
           reason: reason,
         );
         expect(issues.single.path, _appFile, reason: reason);
@@ -525,6 +526,63 @@ void main() {
           reason: reason,
         );
       }
+    });
+
+    test(
+        'require every MaterialApp of the provider in such a build, not '
+        'only one of them', () {
+      const helpers = 'lib/testing/pump_app.dart';
+      final issues = _check({
+        // Next to the root in the build of App, one in a function.
+        ..._app(
+          appCalls: [
+            _root(router: true),
+            const IndexedInvocation(
+              'MaterialApp',
+              enclosingDeclaration: 'createPreview',
+            ),
+          ],
+        ),
+        // And one in another file of the provider in lib/.
+        helpers: const DartFileIndex(
+          path: helpers,
+          invocations: [
+            IndexedInvocation('MaterialApp', enclosingDeclaration: 'pumpApp'),
+          ],
+        ),
+      });
+
+      expect(
+        issues.map((issue) => issue.message),
+        [_outsideBuild(_appFile), _outsideBuild(helpers)],
+      );
+      expect(issues.map((issue) => issue.path), [_appFile, helpers]);
+    });
+
+    test(
+        'look for the build(BuildContext context) in the class that creates '
+        'the MaterialApp, not in another class of its file', () {
+      final issues = _check(
+        _app(
+          appDeclarations: [
+            _appWidget(),
+            IndexedDeclaration(
+              name: '_Root',
+              kind: DeclarationKind.classType,
+              members: [_build(const [])],
+            ),
+          ],
+          appCalls: const [
+            IndexedInvocation(
+              'MaterialApp',
+              enclosingDeclaration: '_Root',
+              enclosingMember: 'build',
+            ),
+          ],
+        ),
+      );
+
+      expect(issues.map((issue) => issue.message), [_outsideBuild(_appFile)]);
     });
 
     test(
