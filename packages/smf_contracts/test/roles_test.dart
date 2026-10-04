@@ -15,6 +15,7 @@ const List<Role> _roles = [
   preferencesRole,
   analyticsRole,
   crashReportingRole,
+  settingsScreenRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -44,6 +45,7 @@ void main() {
       'preferences role',
       'analytics role',
       'crash reporting role',
+      'settings screen role',
     ]);
   });
 
@@ -93,6 +95,11 @@ void main() {
       'cardinality': RoleCardinality.many,
       'requires': <String>{},
       'uses': {'di'},
+    });
+    expect(shape(settingsScreenRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'router'},
+      'uses': <String>{},
     });
   });
 
@@ -147,7 +154,15 @@ void main() {
         if (role.template != null) role,
     ];
 
-    test('exist for every role that generates files', () {
+    /// The bricks of the template of [role].
+    List<BrickContribution> bricksOf(Role role) => role.template!
+        .contribute(testContext)
+        .whereType<BrickContribution>()
+        .toList();
+
+    test(
+        'exist for every role that generates files, or that checks the data '
+        'of all its contributors', () {
       expect(
         [for (final role in withTemplates) role.id],
         [
@@ -158,24 +173,30 @@ void main() {
           'preferences',
           'analytics',
           'crash_reporting',
+          'settings_screen',
         ],
       );
     });
 
     test('generate exactly the files of their interfaces', () {
       for (final role in withTemplates) {
-        final bricks = role.template!
-            .contribute(testContext)
-            .whereType<BrickContribution>()
-            .toList();
+        final bricks = bricksOf(role);
 
-        expect(bricks, hasLength(1), reason: role.id);
-        expect(bricks.single.bundle.hooks, isEmpty, reason: role.id);
+        // One brick, or none for a role that guarantees no file, such as
+        // the settings screen, whose template only checks its data.
         expect(
-          templatesOf(bricks.single.bundle).keys.toSet(),
-          role.interface.files.toSet(),
+          bricks,
+          hasLength(role.interface.files.isEmpty ? 0 : 1),
           reason: role.id,
         );
+        for (final brick in bricks) {
+          expect(brick.bundle.hooks, isEmpty, reason: role.id);
+          expect(
+            templatesOf(brick.bundle).keys.toSet(),
+            role.interface.files.toSet(),
+            reason: role.id,
+          );
+        }
       }
     });
 
@@ -184,22 +205,20 @@ void main() {
     test('have tags only of their own sockets, and no other mustache', () {
       final known = {'facade'};
       for (final role in withTemplates) {
-        final brick = role.template!
-            .contribute(testContext)
-            .whereType<BrickContribution>()
-            .single;
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
-        for (final MapEntry(key: path, value: text)
-            in templatesOf(brick.bundle).entries) {
-          for (final match in _mustache.allMatches(text)) {
-            final name = match.group(1)!;
-            final triple = match.group(0)!.startsWith('{{{');
-            expect(triple, isTrue, reason: '$path: ${match.group(0)}');
-            expect(
-              ownTags.contains(name) || known.contains(name),
-              isTrue,
-              reason: '$path: unknown {{{$name}}}',
-            );
+        for (final brick in bricksOf(role)) {
+          for (final MapEntry(key: path, value: text)
+              in templatesOf(brick.bundle).entries) {
+            for (final match in _mustache.allMatches(text)) {
+              final name = match.group(1)!;
+              final triple = match.group(0)!.startsWith('{{{');
+              expect(triple, isTrue, reason: '$path: ${match.group(0)}');
+              expect(
+                ownTags.contains(name) || known.contains(name),
+                isTrue,
+                reason: '$path: unknown {{{$name}}}',
+              );
+            }
           }
         }
       }

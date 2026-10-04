@@ -13,4 +13,5 @@ export 'src/roles/di.dart';
 export 'src/roles/layout.dart';
 export 'src/roles/router.dart';
 export 'src/roles/services.dart';
+export 'src/roles/settings_screen.dart';
 export 'src/roles/state_management.dart';
