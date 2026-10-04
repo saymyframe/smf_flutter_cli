@@ -15,7 +15,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
 
-The assets of the fixture are in `assets/fixture/`, and its theme mode in `lib/core/fixture_theme_mode/fixture_theme_mode.dart`, one of the directories `lib/core/fixture_*/`.
+The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/readme.txt`, and the Dart files of the fixtures in the directories `lib/core/fixture_*/`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -252,7 +252,6 @@ IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 </dict>
 </plist>
 === lib/app.dart (flutter_core) ===
-import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -266,9 +265,6 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Fixture App',
-    theme: ThemeData(fontFamily: "FixtureSans"),
-    darkTheme: ThemeData.dark(),
-    themeMode: FixtureThemeMode.of(context),
     localizationsDelegates: [GlobalMaterialLocalizations.delegate],
     home: const FallbackStartScreen(),
     builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
@@ -643,28 +639,7 @@ final class FixtureSetting {
     _value = value;
   }
 }
-=== lib/core/fixture_theme_mode/fixture_theme_mode.dart (fake_sockets) ===
-import 'package:flutter/material.dart';
-
-/// The theme mode of the fixture, which the fixture puts around the root of
-/// the app: the root reads it from its context.
-class FixtureThemeMode extends InheritedWidget {
-  /// Gives [mode] to the widgets below.
-  const FixtureThemeMode({required this.mode, required super.child, super.key});
-
-  /// The theme mode.
-  final ThemeMode mode;
-
-  /// The theme mode of the fixture around [context], which rebuilds when
-  /// the mode changes.
-  static ThemeMode of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<FixtureThemeMode>()!.mode;
-
-  @override
-  bool updateShouldNotify(FixtureThemeMode oldWidget) => mode != oldWidget.mode;
-}
 === lib/main.dart (flutter_core) ===
-import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -674,7 +649,7 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(FixtureThemeMode(mode: ThemeMode.system, child: const App()));
+  runApp(RepaintBoundary(child: const App()));
 }
 === pubspec.yaml (flutter_core) ===
 name: fixture_app

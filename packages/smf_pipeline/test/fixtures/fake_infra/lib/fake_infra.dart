@@ -16,6 +16,7 @@ import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 const _material = ImportRef('package:flutter/material.dart');
@@ -44,17 +45,15 @@ const _agentNote = 'The modules of the fixture fill the sockets of the app '
 /// The note for coding agents of [FakeSocketsModule] alone: its files by
 /// their paths, and the directories of the fixtures as a pattern.
 const _filesAgentNote = 'The assets of the fixture are in `assets/fixture/`, '
-    'and its theme mode in '
-    '`lib/core/fixture_theme_mode/fixture_theme_mode.dart`, one of the '
-    'directories `lib/core/fixture_*/`.';
+    'such as `assets/fixture/readme.txt`, and the Dart files of the fixtures '
+    'in the directories `lib/core/fixture_*/`.';
 
 /// A module that puts something into every socket of the app entry that no
 /// real module uses yet, and into the `flutter:` section of the pubspec.
 ///
-/// Its root wrapper is an inherited widget with a theme mode, and the theme
-/// mode that it gives the root of the app reads that widget from the
-/// context of the root: an argument of the root that depends on a widget
-/// among the root wrappers.
+/// It gives the root of the app no theme and no theme mode: each takes one
+/// value, which the theme role gives in an app with a provider of it, so a
+/// module that set one could not be in such an app.
 ///
 /// The delegate that it gives the root has no texts of the module: a module
 /// gives its texts to the localization role, whose provider knows the
@@ -65,10 +64,6 @@ final class FakeSocketsModule extends SmfModule {
 
   /// The id of the module.
   static const id = ModuleId('fake_sockets');
-
-  static const _themeMode = ImportRef.app(
-    'core/fixture_theme_mode/fixture_theme_mode.dart',
-  );
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -115,28 +110,10 @@ final class FakeSocketsModule extends SmfModule {
         const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(
-            'FixtureThemeMode(mode: ThemeMode.system, child: ',
+            'RepaintBoundary(child: ',
             ')',
-            imports: [_material, _themeMode],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'theme',
-          Fragment(
-            'ThemeData(fontFamily: "FixtureSans")',
             imports: [_material],
           ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'darkTheme',
-          Fragment('ThemeData.dark()', imports: [_material]),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'themeMode',
-          Fragment('FixtureThemeMode.of(context)', imports: [_themeMode]),
         ),
         const SocketContribution.arg(
           AppEntryRole.appArgs,
@@ -668,6 +645,35 @@ final class FakePreferencesUserModule extends SmfModule {
           Fragment('restoreFixtureSetting', imports: [_file]),
           when: {preferencesRole},
         ),
+      ];
+}
+
+/// A provider of the theme role, which has at most one provider: its light
+/// theme and its dark theme derive their colours from a colour of the
+/// fixture, so they differ from the themes that Flutter gives an app
+/// without a theme.
+///
+/// The template of the role does the rest in an app with it: the theme mode
+/// that the user selects, which the preferences of the app remember, and
+/// the entry of the settings screen that selects it.
+final class FakeThemeModule extends SmfModule {
+  /// Creates the module.
+  const FakeThemeModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_theme');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A light and a dark theme of its own colours (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(themeRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeThemeBundle),
       ];
 }
 
