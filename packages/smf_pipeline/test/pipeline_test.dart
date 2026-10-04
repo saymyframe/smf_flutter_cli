@@ -601,6 +601,108 @@ void main() {
     expect(host.prompter.done, isTrue);
   });
 
+  group('a module that generates the guide for coding agents itself', () {
+    for (final file in [AppEntryRole.agentsFile, AppEntryRole.claudeFile]) {
+      List<SmfModule> modules() => [
+            scaffold(),
+            TestModule(
+              'own_guide',
+              contributions: [
+                BrickContribution(
+                  bundle('own_guide', files: {file: 'My own guide.\n'}),
+                ),
+              ],
+            ),
+            TestModule('fine'),
+          ];
+
+      test('stops generation in strict mode, as the one at fault: $file',
+          () async {
+        await expectLater(
+          pipeline(modules(), FakeHost())
+              .plan(request(['own_guide', 'fine'], strict: true)),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [
+                for (final issue in e.issues)
+                  '${issue.origin}: ${issue.message}',
+              ],
+              'issues',
+              [
+                equals(
+                  'own_guide: Both own_guide and role:app_entry generate '
+                  '$file; every file has one brick.',
+                ),
+              ],
+            ),
+          ),
+        );
+      });
+
+      test('is left out in lenient mode, and the app has the guide: $file',
+          () async {
+        final host = FakeHost();
+
+        final plan = (await pipeline(modules(), host)
+            .plan(request(['own_guide', 'fine'])))!;
+
+        expect(plan.leftOut.single.module, const ModuleId('own_guide'));
+        expect(
+          plan.leftOut.single.reason,
+          'Both own_guide and role:app_entry generate $file; every file has '
+          'one brick.',
+        );
+        expect(
+          plan.resolution.modules.map((module) => module.id.value),
+          ['fine', 'scaffold'],
+        );
+      });
+    }
+  });
+
+  group('a module that contributes a note of a role to the guide', () {
+    List<SmfModule> modules() => [
+          scaffold(),
+          TestModule(
+            'as_a_role',
+            contributions: [
+              AppEntryRole.agentSections.entry(
+                'App entry',
+                AgentNote.ofRole('What only the role may say.'),
+              ),
+            ],
+          ),
+        ];
+    const problem = 'The module as_a_role contributes a note of a role to '
+        'the section "App entry" of the guide for coding agents. Only the '
+        'template of a role says what the role guarantees; a module '
+        'contributes AgentNote(text).';
+
+    test('stops generation in strict mode', () async {
+      await expectLater(
+        pipeline(modules(), FakeHost())
+            .plan(request(['as_a_role'], strict: true)),
+        throwsA(
+          isA<GenerationFailedException>().having(
+            (e) => [
+              for (final issue in e.issues) '${issue.origin}: ${issue.message}',
+            ],
+            'issues',
+            ['as_a_role: $problem'],
+          ),
+        ),
+      );
+    });
+
+    test('is left out in lenient mode', () async {
+      final plan =
+          (await pipeline(modules(), FakeHost()).plan(request(['as_a_role'])))!;
+
+      expect(plan.leftOut.single.module, const ModuleId('as_a_role'));
+      expect(plan.leftOut.single.reason, problem);
+    });
+  });
+
   test('strict mode fails on every error', () async {
     final modules = [
       scaffold(),
