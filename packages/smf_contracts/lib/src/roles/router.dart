@@ -127,8 +127,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   at once;
   /// - never builds the screen of the other location, and the listeners of
   ///   [screenListeners] never hear of it;
-  /// - remembers the other location, unless it remembers one already, to
-  ///   show it once the guards allow it (see [guardChanges]).
+  /// - remembers the other location, to show it once the guards allow it
+  ///   (see [guardChanges]).
   static const redirectOf = 'redirectOf';
 
   /// The name of the listenable that notifies its listeners when a guard
@@ -139,14 +139,18 @@ final class RouterRole extends Role<RoutesData> {
   /// In an app with guards, a provider listens to it, and asks [redirectOf]
   /// again each time it notifies:
   /// - about the pages of its stack, the one on top first. When the answer
-  ///   for a page is a location, the provider shows that location, as `go()`
-  ///   to it does, so that no page that a guard keeps the user from stays
-  ///   in the stack, and remembers the location of the page, unless it
-  ///   remembers one already;
-  /// - otherwise about the location it remembers: the first one that the
-  ///   guards kept the user from since it last showed such a location.
-  ///   Once the answer is to show it, the provider shows it, as `go()` to
-  ///   it does, and forgets it.
+  ///   for a page is a location, the provider remembers the location of
+  ///   that page and shows the answer, as `go()` to it does, so that no
+  ///   page that a guard keeps the user from stays in the stack;
+  /// - otherwise about the location it remembers. Once the answer is to
+  ///   show it, the provider shows it, as `go()` to it does.
+  ///
+  /// The provider remembers one location: the first that the guards kept
+  /// the user from, whether it was asked to show the location or the
+  /// location was that of a page of its stack, and no other until it has
+  /// shown that one. It forgets the location when it shows it, and at no
+  /// other time: while it remembers one, a guard does not allow, and the
+  /// user can go nowhere but to the flow of that guard.
   ///
   /// A notification that changes none of these answers leaves everything
   /// as it is: the stack stays, the listeners of [screenListeners] hear
