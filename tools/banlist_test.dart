@@ -169,7 +169,13 @@ void main() {
             '  LayoutRole.appShellFile : [\n'
             "  'lib/core/router/app_router_factory.dart': '',\n"
             'final other = RouterRole.appRouterFactoryFileOf(app);\n'
-            'final named = MyDiRole.dependenciesFile;\n',
+            'final named = MyDiRole.dependenciesFile;\n'
+            'final texts = app.files[LocalizationRole.textsFile]!;\n'
+            "import 'package:contract_app/core/l10n/l10n.dart';\n"
+            // The file of the template of the role, and the import of the
+            // extension of the provider as the role gives it.
+            "const locale = 'lib/core/l10n/app_locale.dart';\n"
+            'final import = LocalizationRole.appTexts.importRef;\n',
         router: 'const factory = RouterRole.appRouterFactoryFile;\n'
             'final shell = app.files[LayoutRole.appShellFile]!;\n',
         'packages/smf_modules/smf_get_it/test/get_it_test.dart':
@@ -189,6 +195,8 @@ void main() {
         '$home:2: DiRole.dependenciesFile',
         '$home:3: LayoutRole.appShellFile',
         '$home:4: DiRole.dependenciesFile',
+        '$home:10: LocalizationRole.textsFile',
+        '$home:11: LocalizationRole.textsFile',
         '$router:2: LayoutRole.appShellFile',
         '$tabs:2: RouterRole.appRouterFactoryFile',
       ],
