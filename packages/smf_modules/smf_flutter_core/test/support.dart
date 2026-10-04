@@ -120,7 +120,18 @@ final class EverySocketModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('every_socket');
 
+  /// The theme mode that the module gives the root of the app, an
+  /// expression that reads the context of the root.
+  static const themeMode =
+      'MediaQuery.platformBrightnessOf(context) == Brightness.dark '
+      '? ThemeMode.dark : ThemeMode.light';
+
+  /// The locale that the module gives the root of the app, an expression
+  /// that reads the context of the root.
+  static const locale = 'Localizations.maybeLocaleOf(context)';
+
   static const _foundation = ImportRef('package:flutter/foundation.dart');
+  static const _material = ImportRef('package:flutter/material.dart');
   static const _widgets = ImportRef('package:flutter/widgets.dart');
 
   @override
@@ -158,6 +169,16 @@ final class EverySocketModule extends SmfModule {
           AppEntryRole.appArgs,
           'supportedLocales',
           Fragment("Locale('en')", imports: [_widgets]),
+        ),
+        const SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'locale',
+          Fragment(locale, imports: [_widgets]),
+        ),
+        const SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'themeMode',
+          Fragment(themeMode, imports: [_material]),
         ),
         const SocketContribution.wrap(
           AppEntryRole.appBuilder,
