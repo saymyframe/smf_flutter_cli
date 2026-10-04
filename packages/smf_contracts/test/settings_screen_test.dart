@@ -996,14 +996,23 @@ void main() {
         ]),
         isEmpty,
       );
-      // In any of its files, however the file imports that of the entry.
+      // In any of its files, by a relative URI too, under any prefix that
+      // only the import of the file of the entry has.
       expect(
         check([
           screen(const [IndexedInvocation('ThemeSetting', target: 'entry0')]),
           const DartFileIndex(
             path: helpersPath,
-            imports: [IndexedImport('../../core/l10n/language_setting.dart')],
-            invocations: [IndexedInvocation('LanguageSetting')],
+            imports: [
+              IndexedImport('package:flutter/material.dart'),
+              IndexedImport(
+                '../../core/l10n/language_setting.dart',
+                prefix: 'language',
+              ),
+            ],
+            invocations: [
+              IndexedInvocation('LanguageSetting', target: 'language'),
+            ],
           ),
         ]),
         isEmpty,
@@ -1019,12 +1028,177 @@ void main() {
         issue.message,
         'The provider of the settings screen role does not render the '
         'settings entry LanguageSetting: none of its files creates '
-        'LanguageSetting of $_languagePath.',
+        'LanguageSetting through an import of $_languagePath with a prefix '
+        'of its own.',
       );
       expect(issue.hint, contains('SettingsScreenRole.entriesIn()'));
+      expect(issue.hint, contains('a prefix that no import of another file'));
       // The contributor of the entry, which the app would not show.
       expect(issue.origin, _appearance);
       expect(issue.path, _screenPath);
+    });
+
+    test(
+        'reports an entry that is created through an import without a prefix '
+        'of its own', () {
+      List<String> entriesOf(List<DartFileIndex> files) => [
+            for (final issue in check(files))
+              RegExp(r'the settings entry (\w+):')
+                  .firstMatch(issue.message)!
+                  .group(1)!,
+          ];
+
+      // Without a prefix, a widget of the same name in the file of another
+      // entry would make the name ambiguous, and the app would not compile.
+      expect(
+        entriesOf([
+          screen(const [IndexedInvocation('ThemeSetting', target: 'entry0')]),
+          const DartFileIndex(
+            path: helpersPath,
+            imports: [IndexedImport('../../core/l10n/language_setting.dart')],
+            invocations: [IndexedInvocation('LanguageSetting')],
+          ),
+        ]),
+        ['LanguageSetting'],
+      );
+      // So would one prefix for the files of two entries.
+      expect(
+        entriesOf([
+          const DartFileIndex(
+            path: _screenPath,
+            imports: [
+              IndexedImport(
+                'package:my_app/core/theme/theme_setting.dart',
+                prefix: 'entries',
+              ),
+              IndexedImport(
+                'package:my_app/core/l10n/language_setting.dart',
+                prefix: 'entries',
+              ),
+            ],
+            invocations: [
+              IndexedInvocation('ThemeSetting', target: 'entries'),
+              IndexedInvocation('LanguageSetting', target: 'entries'),
+            ],
+          ),
+        ]),
+        ['ThemeSetting', 'LanguageSetting'],
+      );
+      // And a prefix that the import of a library of a package shares.
+      expect(
+        entriesOf([
+          const DartFileIndex(
+            path: _screenPath,
+            imports: [
+              IndexedImport('package:flutter/material.dart', prefix: 'entry0'),
+              IndexedImport(
+                'package:my_app/core/theme/theme_setting.dart',
+                prefix: 'entry0',
+              ),
+              IndexedImport(
+                'package:my_app/core/l10n/language_setting.dart',
+                prefix: 'entry1',
+              ),
+            ],
+            invocations: [
+              IndexedInvocation('ThemeSetting', target: 'entry0'),
+              IndexedInvocation('LanguageSetting', target: 'entry1'),
+            ],
+          ),
+        ]),
+        ['ThemeSetting'],
+      );
+    });
+
+    test('counts a creation of the widget, not a mention of its name', () {
+      final issues = check([
+        DartFileIndex(
+          path: _screenPath,
+          imports: screen(const []).imports,
+          // The types of the widgets, which the file reads and never
+          // creates.
+          memberAccesses: const [
+            IndexedMemberAccess('entry0', 'ThemeSetting'),
+            IndexedMemberAccess('entry1', 'LanguageSetting'),
+          ],
+        ),
+      ]);
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          contains('the settings entry ThemeSetting'),
+          contains('the settings entry LanguageSetting'),
+        ],
+      );
+    });
+
+    test(
+        'takes a creation for the entry of its file alone, among widgets of '
+        'one name', () {
+      const otherPath = 'lib/features/account/theme_setting.dart';
+      const account = ModuleOrigin(ModuleId('account'));
+      List<SmfIssue> issues(List<IndexedInvocation> created) =>
+          _structureIssues(
+            [
+              _routes,
+              _screenRoute('settings'),
+              _entryOf(_theme, module: 'appearance'),
+              _entryOf(
+                const SettingsEntry(
+                  widget: TypeRef(
+                    'ThemeSetting',
+                    import:
+                        ImportRef.app('features/account/theme_setting.dart'),
+                  ),
+                ),
+                module: 'account',
+              ),
+            ],
+            files: [
+              _widgetFile(_themePath, 'ThemeSetting'),
+              _widgetFile(otherPath, 'ThemeSetting'),
+              DartFileIndex(
+                path: _screenPath,
+                imports: const [
+                  IndexedImport(
+                    'package:my_app/core/theme/theme_setting.dart',
+                    prefix: 'entry0',
+                  ),
+                  IndexedImport(
+                    'package:my_app/features/account/theme_setting.dart',
+                    prefix: 'entry1',
+                  ),
+                ],
+                invocations: created,
+              ),
+            ],
+            owners: const {
+              _themePath: _appearance,
+              otherPath: account,
+              _screenPath: _settings,
+            },
+            modules: const [_provider, _contributor],
+          );
+
+      // The widget of one file, twice: the entry of the other file is not
+      // on the screen.
+      final issue = issues(const [
+        IndexedInvocation('ThemeSetting', target: 'entry0'),
+        IndexedInvocation('ThemeSetting', target: 'entry0'),
+      ]).single;
+      expect(
+        issue.message,
+        contains('creates ThemeSetting through an import of $otherPath'),
+      );
+      expect(issue.origin, account);
+      expect(
+        issues(const [
+          IndexedInvocation('ThemeSetting', target: 'entry0'),
+          IndexedInvocation('ThemeSetting', target: 'entry1'),
+        ]),
+        isEmpty,
+      );
     });
 
     test('counts only the widgets of the files that the entries name', () {

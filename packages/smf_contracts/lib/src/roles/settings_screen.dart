@@ -81,7 +81,8 @@ final class SettingsScreenRole extends Role<SettingsData> {
         StructuralRule(
           id: 'settings_screen.entries_rendered',
           description: 'The files of the provider of the role create the '
-              'widget of every settings entry.',
+              'widget of every settings entry, through an import of its file '
+              'with a prefix of its own.',
           check: _checkEntriesRendered,
         ),
       ];
@@ -431,14 +432,17 @@ List<SmfIssue> _checkEntryWidgets(StructuralRuleInput<SettingsData> input) {
 }
 
 /// The entries that the provider of the role does not render: those whose
-/// widget none of the files of the provider creates, through an import of
-/// the file of the widget.
+/// widget none of the files of the provider creates through an import of
+/// the file of the widget with a prefix of its own, one that no import of
+/// another file has.
 ///
-/// So no provider leaves out an entry that a module declares, and the
-/// tests of the modules need not look into the files of any provider.
-/// Without the descriptor of a provider in [input], no file renders the
-/// entries and there is nothing to check. The template of the role reports
-/// an entry outside the app.
+/// So no provider leaves out an entry that a module declares, or takes the
+/// widget of one entry for that of another of the same name, and the tests
+/// of the modules need not look into the files of any provider. A file
+/// does not import itself, so the widget of an entry is in a file other
+/// than the one that creates it. Without the descriptor of a provider in
+/// [input], no file renders the entries and there is nothing to check. The
+/// template of the role reports an entry outside the app.
 List<SmfIssue> _checkEntriesRendered(StructuralRuleInput<SettingsData> input) {
   final providers = {
     for (final module in input.modules)
@@ -455,16 +459,17 @@ List<SmfIssue> _checkEntriesRendered(StructuralRuleInput<SettingsData> input) {
   return [
     for (final data in input.roleInput.data)
       if (data.value
-          case SettingsEntry(
-            widget: TypeRef(:final name, :final import?),
-            file: final path?,
-          ) when !files.any((file) => usesImported(file, name, import)))
+          case SettingsEntry(widget: TypeRef(:final name), file: final path?)
+          when !files.any((file) => invokesThroughOwnPrefix(file, name, path)))
         SmfIssue(
           'The provider of the $settingsScreenRole does not render the '
-          'settings entry $name: none of its files creates $name of $path.',
+          'settings entry $name: none of its files creates $name through an '
+          'import of $path with a prefix of its own.',
           hint: 'Create the widget of every entry of '
-              'SettingsScreenRole.entriesIn(), through an import of its '
-              'file.',
+              'SettingsScreenRole.entriesIn() through an import of its file '
+              'with a prefix that no import of another file has, such as '
+              'entry0, so that widgets of the same name in different files '
+              'do not clash.',
           origin: data.origin,
           path: screen?.route.screen.file,
         ),
