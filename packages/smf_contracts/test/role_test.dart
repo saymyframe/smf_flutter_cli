@@ -362,6 +362,7 @@ void main() {
       final output = template.render(input);
       expect(output.fragments, isEmpty);
       expect(output.vars, isEmpty);
+      expect(output.files, isEmpty);
     });
 
     test('a plain provider only names its role', () {
@@ -370,7 +371,23 @@ void main() {
       expect(provider.role, same(role));
       expect(provider.validate(input), isEmpty);
       expect(provider.render(input).fragments, isEmpty);
+      expect(provider.render(input).files, isEmpty);
     });
+  });
+
+  test('RoleOutput holds the text of each file of a hook by its path', () {
+    final output = RoleOutput(
+      files: {
+        for (final item in ['a', 'b']) 'lib/items/$item.txt': 'The item $item',
+      },
+    );
+
+    expect(output.files, {
+      'lib/items/a.txt': 'The item a',
+      'lib/items/b.txt': 'The item b',
+    });
+    expect(output.fragments, isEmpty);
+    expect(output.vars, isEmpty);
   });
 
   test('RoleOption describes a command line option', () {

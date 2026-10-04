@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file/file.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -18,6 +20,19 @@ final class _Missing extends PreflightCheck {
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async =>
       const PreflightMissing(instructions: 'Install the tool.');
+}
+
+/// A provider whose render hook generates [files].
+final class _FilesProvider extends RoleProvider<NoDsl> {
+  _FilesProvider(this.role, this.files);
+
+  @override
+  final Role<NoDsl> role;
+
+  final Map<String, String> files;
+
+  @override
+  RoleOutput render(RoleHookInput<NoDsl> input) => RoleOutput(files: files);
 }
 
 void main() {
@@ -111,6 +126,33 @@ void main() {
     expect(
       files.directory(temporaryOf(runner.calls.first)).existsSync(),
       isFalse,
+    );
+  });
+
+  test('writes the files of the render hooks as they are', () async {
+    // mason would render the tag and remove the backslashes.
+    const notes = '{{app_name}}\r\na\\\nb caf\\é\n';
+    await pipeline([
+      scaffold(),
+      TestModule(
+        'extra',
+        providers: [
+          _FilesProvider(
+            TestRole<NoDsl>('notes'),
+            const {'notes/first.txt': notes, 'notes/second.txt': ''},
+          ),
+        ],
+      ),
+    ]).run(request());
+
+    final files = host.fileSystem;
+    expect(
+      files.file('/work/my_app/notes/first.txt').readAsBytesSync(),
+      utf8.encode(notes),
+    );
+    expect(
+      files.file('/work/my_app/notes/second.txt').readAsStringSync(),
+      isEmpty,
     );
   });
 

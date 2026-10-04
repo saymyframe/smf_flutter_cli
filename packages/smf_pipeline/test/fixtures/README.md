@@ -16,7 +16,7 @@ A test of a role that passes whatever the provider of the role does checks nothi
 | Package | What it has |
 | --- | --- |
 | `fake_state` | Two providers of the state management role. |
-| `fake_roles` | Two roles defined outside `smf_contracts` with the same data type, one module that provides both, and a module that uses them under `when` and inside `{{#has_badge}}`. |
+| `fake_roles` | Two roles defined outside `smf_contracts` with the same data type; one module that provides both, whose render hook generates a file for each time zone that the modules ask the clock for; and a module that uses them under `when` and inside `{{#has_badge}}`. |
 | `fake_di` | A DI container whose capabilities each test sets, which renders the registrations with the imports of their files as a variable of its render hook. |
 | `fake_router` | A router with navigator observers, listeners of the screen, the main navigation of a layout and annotations on screens, which renders the screens with the imports of their files as a variable of its render hook. |
 | `fake_feature` | A feature with a variant per state manager, a composition file and the navigation facade; a second feature whose start screen is a destination of the main navigation too, so an app with both has two screens that can start it, and whose other screen is outside the main navigation, so a router shows its page over it. |

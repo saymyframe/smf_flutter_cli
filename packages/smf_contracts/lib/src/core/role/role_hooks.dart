@@ -155,7 +155,11 @@ final class RoleChoiceContext<D extends Object> {
 /// app.
 final class RoleOutput {
   /// Creates the output of a render hook.
-  const RoleOutput({this.fragments = const [], this.vars = const {}});
+  const RoleOutput({
+    this.fragments = const [],
+    this.vars = const {},
+    this.files = const {},
+  });
 
   /// Code and values for sockets, with the same access rules as the
   /// contributions of the hook's owner.
@@ -186,4 +190,47 @@ final class RoleOutput {
   ///   bricks of the variants of the owner for other providers do not
   ///   count.
   final Map<String, Object?> vars;
+
+  /// Text files of the hook's owner, the role's template or the provider's
+  /// module: the text of each by its path relative to the root of the app,
+  /// with forward slashes, such as `lib/core/clock/zones/zone_1.dart`.
+  ///
+  /// A brick has the same files in every app, so the files whose number or
+  /// paths depend on the data of the role or on its choice come from the
+  /// hook, such as one file for each item that the modules of the app give
+  /// the role. What every app of the owner has stays in a brick.
+  ///
+  /// The pipeline takes each file as it is, text and path: it renders no
+  /// mustache, fills no tag of a socket and adds no import, and mason,
+  /// which removes a backslash before a line break or a non-ASCII character
+  /// from what it renders, does not read it. Once the app is written,
+  /// `dart fix` and `dart format` go over a Dart file among them as over
+  /// the rest of the app. Otherwise it is a file of the app like those of
+  /// the bricks, and follows their rules:
+  /// - the path is inside the app, and is not of a file that belongs to one
+  ///   machine or one build, such as `.dart_tool/` or `pubspec.lock`;
+  /// - the file of a provider is where the kind of its module may generate
+  ///   files (see [ModuleKind.allowsFile]);
+  /// - every file of the app is generated once: a path that a brick or
+  ///   another hook generates too is an error, also when the paths differ
+  ///   only in case.
+  ///
+  /// The path comes from the data of the role, which the author of the
+  /// hook does not see as the author of a brick sees its paths, so two
+  /// more rules hold:
+  /// - every machine can write the file: the path has no control character
+  ///   or line break and none of `< > : " | ? *`, which Windows allows in
+  ///   no name of a file, and no segment of it ends with a dot or a space,
+  ///   which Windows removes;
+  /// - a path of the app is a file or a directory, not both: a file where
+  ///   another file of the app has a directory, or in what is a file of the
+  ///   app, is an error, whatever the case of the paths.
+  ///
+  /// The contract harness checks such a file like any other. A Dart file
+  /// among them parses and imports only what its owner may use: for a
+  /// provider, as for its fragments, also the files and the packages of the
+  /// modules whose data it renders. No file of the app, of a hook or of a
+  /// brick, is at a path where code generation or the localizations of
+  /// Flutter write theirs once the app is rendered.
+  final Map<String, String> files;
 }

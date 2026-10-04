@@ -35,6 +35,7 @@ final class RenderedFile {
     required this.bytes,
     required this.owner,
     this.isText = true,
+    this.fromHook = false,
     this.addedImports = const [],
   });
 
@@ -44,11 +45,16 @@ final class RenderedFile {
   /// The content.
   final List<int> bytes;
 
-  /// Whether the file is text, which mason renders, or binary, which it
-  /// copies.
+  /// Whether the file is text, which mason renders in the file of a brick,
+  /// or binary, which it copies.
   final bool isText;
 
-  /// Who generated the file: the owner of its brick.
+  /// Whether a render hook generated the file ([RoleOutput.files]), as it
+  /// is, rather than a brick.
+  final bool fromHook;
+
+  /// Who generated the file: the owner of its brick, or of the render hook
+  /// that generated it.
   final ContributionOrigin owner;
 
   /// The imports the pipeline added to the file for the fragments of the
@@ -66,6 +72,7 @@ final class RenderedFile {
         bytes: utf8.encode(text),
         owner: owner,
         isText: isText,
+        fromHook: fromHook,
         addedImports: addedImports,
       );
 }
@@ -83,7 +90,8 @@ final class RenderedApp {
         }),
         socketOrders = Map.unmodifiable(socketOrders);
 
-  /// The files by path, relative to the root of the app, sorted by path.
+  /// The files by path, relative to the root of the app, sorted by path:
+  /// those of the bricks, and those that the render hooks generated.
   final Map<String, RenderedFile> files;
 
   /// The contributions of every socket that got any, in the order that the
@@ -120,6 +128,10 @@ final class _HookOutput {
 
   /// The brick variables of each owner that are fragments of code, by name.
   final Map<ContributionOrigin, Map<String, Fragment>> fragmentVars = {};
+
+  /// The files that the hooks generate, each with the owner of its hook,
+  /// in the order of the hooks.
+  final List<RenderedFile> files = [];
 }
 
 /// The imports of the fragment variables that the templates of the bricks
@@ -142,7 +154,11 @@ final class _VariableImports {
 ///    roles, with the results of [choices]. Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
 ///    not be reserved (see [isReservedVar]) or set twice for one owner. A
-///    variable may be a [Fragment] of code, see [RoleOutput.vars].
+///    variable may be a [Fragment] of code, see [RoleOutput.vars]. The path
+///    of a file that a hook generates ([RoleOutput.files]) must be one
+///    inside the app that is not of a file of one machine, that every
+///    machine can write, and where the kind of the module of a provider
+///    may generate files.
 /// 2. Orders the contributions of every socket, those of the render hooks
 ///    included (see [orderContributions]), and renders each socket into the
 ///    text of its tags. A socket that gets contributions but has no tag in
@@ -162,7 +178,11 @@ final class _VariableImports {
 ///    fragment variable that no template of its owner reads is an error,
 ///    since its code would be lost, unless a brick of the owner that the
 ///    app leaves out reads it.
-/// 4. Adds the imports of each socket's fragments to the Dart file that
+/// 4. Adds the files of the render hooks to those of the bricks, each as it
+///    is. A file that a brick or another hook generates too is an error,
+///    and so is one at a path that is a directory of another file of the
+///    app, or in what is a file of the app.
+/// 5. Adds the imports of each socket's fragments to the Dart file that
 ///    holds its tag, and those of each fragment variable to every Dart file
 ///    of its owner that reads it; see [addImports].
 ///
@@ -214,6 +234,7 @@ RenderedApp renderApp({
   );
   collection.applyingOf<BrickContribution>().forEach(bricks.render);
   issues.addAll(_unreadVariableIssues(hooks, bricks.variables, collection));
+  hooks.files.forEach(bricks.addHookFile);
   _stopOnErrors(issues);
 
   final files = bricks.files;
@@ -446,6 +467,38 @@ final class _RenderHooks {
     }
     _addVars(origin, result);
     _addFragments(origin, result);
+    _addFiles(origin, result);
+  }
+
+  /// Records the files of [result], what the render hook of [origin]
+  /// returned, each as it is, and reports those whose path cannot be that
+  /// of a file of the app, is one that some machine cannot write, or is
+  /// where the kind of the module of [origin] generates no files.
+  void _addFiles(ContributionOrigin origin, RoleOutput result) {
+    for (final MapEntry(key: path, value: text) in result.files.entries) {
+      if (_pathProblem(path) ?? _unwritableProblem(path) case final problem?) {
+        issues.add(
+          SmfIssue(
+            'The render hook of $origin generates a file at '
+            '"${_shown(path)}", which $problem.',
+            origin: origin,
+          ),
+        );
+        continue;
+      }
+      if (_kindIssue(origin, path, resolution) case final issue?) {
+        issues.add(issue);
+        continue;
+      }
+      output.files.add(
+        RenderedFile(
+          path: path,
+          bytes: utf8.encode(text),
+          owner: origin,
+          fromHook: true,
+        ),
+      );
+    }
   }
 
   void _addVars(ContributionOrigin origin, RoleOutput result) {
@@ -668,14 +721,13 @@ Map<String, String>? _renderSocket(
 }
 
 /// A brick that [_BrickRenderer] renders: who contributed it, its owner,
-/// its variables, and the fragment variables and module kind of its owner.
+/// its variables, and the fragment variables of its owner.
 final class _Brick {
   _Brick({
     required this.origin,
     required this.name,
     required this.vars,
     required this.fragments,
-    required this.kind,
   }) : owner = ownerOf(origin);
 
   final ContributionOrigin origin;
@@ -687,14 +739,11 @@ final class _Brick {
   final String name;
   final Map<String, Object?> vars;
   final Map<String, Fragment> fragments;
-
-  /// The kind of the module of the brick, if it has one.
-  final ModuleKind? kind;
 }
 
 /// Renders the bricks of an app into [files], with the text of every tag
-/// and the variables of the render hooks, and reports the problems to
-/// [issues].
+/// and the variables of the render hooks, takes the files of the render
+/// hooks among them, and reports the problems to [issues].
 final class _BrickRenderer {
   _BrickRenderer({
     required this.registry,
@@ -768,11 +817,6 @@ final class _BrickRenderer {
       name: name,
       vars: vars,
       fragments: hooks.fragmentVars[owner] ?? const <String, Fragment>{},
-      kind: switch (origin) {
-        ModuleOrigin(:final module) =>
-          resolution.module(module)?.descriptor.kind,
-        _ => null,
-      },
     );
   }
 
@@ -828,7 +872,7 @@ final class _BrickRenderer {
       );
       return null;
     }
-    if (_pathProblem(path) case final problem?) {
+    if (_pathProblem(path) ?? _entityProblem(path) case final problem?) {
       issues.add(
         SmfIssue(
           'The path $template in the brick $name of $origin renders to '
@@ -839,17 +883,8 @@ final class _BrickRenderer {
       );
       return null;
     }
-    final kind = brick.kind;
-    if (origin case ModuleOrigin(:final module)
-        when kind != null && !kind.allowsFile(module, path)) {
-      issues.add(
-        SmfIssue(
-          'The module $module generates $path, where modules of the '
-          '${kind.id} kind may not.',
-          origin: origin,
-          path: path,
-        ),
-      );
+    if (_kindIssue(origin, path, resolution) case final issue?) {
+      issues.add(issue);
       return null;
     }
     return path;
@@ -904,14 +939,39 @@ final class _BrickRenderer {
     return (bytes: utf8.encode(rendered), isText: true);
   }
 
+  /// Adds [file], which a render hook generated, to [files], unless a file
+  /// of a brick or of another hook is in its way, which it reports; see
+  /// [_clashOf].
+  void addHookFile(RenderedFile file) {
+    final RenderedFile(:path, owner: origin) = file;
+    for (final other in files.values) {
+      if (_clashOf(path, other) case final clash?) {
+        issues.add(
+          SmfIssue(
+            'The render hook of $origin generates $clash',
+            origin: origin,
+            path: path,
+          ),
+        );
+        return;
+      }
+    }
+    files[path] = file;
+  }
+
+  /// The file among [files] that is the file at [path] of the app, if there
+  /// is one.
+  ///
+  /// File systems that ignore case, as macOS and Windows do by default,
+  /// take paths that differ only in case for one file.
+  RenderedFile? _fileAt(String path) => files.values
+      .where((file) => file.path.toLowerCase() == path.toLowerCase())
+      .firstOrNull;
+
   /// Whether [origin] generates [path] although another file of the app
   /// already has it, which it reports.
   bool _isGeneratedTwice(ContributionOrigin origin, String path) {
-    // File systems that ignore case, as macOS and Windows do by default,
-    // take paths that differ only in case for one file.
-    final same = files.values
-        .where((file) => file.path.toLowerCase() == path.toLowerCase())
-        .firstOrNull;
+    final same = _fileAt(path);
     if (same == null) return false;
     final what = same.path == path
         ? path
@@ -1101,8 +1161,10 @@ Set<String> _namesReadIn(BrickContribution brick) => {
   return (names: names, problems: problems);
 }
 
-/// What is wrong with [path], a rendered path of a file of the app, or
-/// `null` if it is a path inside the app.
+/// What is wrong with [path], the path of a file of the app, or `null` if
+/// it is a path inside the app that a file of every app may have: the
+/// rendered path of a file of a brick, or the path of a file of a render
+/// hook.
 String? _pathProblem(String path) {
   if (path.isEmpty) return 'is empty';
   if (path.startsWith('/') ||
@@ -1115,10 +1177,117 @@ String? _pathProblem(String path) {
     return 'has an empty or "." segment';
   }
   if (segments.contains('..')) return 'leaves the directory of the app';
-  if (machineFileProblem(path) case final problem?) return problem;
-  if (_entity.hasMatch(path)) {
-    return 'has an HTML entity: mustache escapes variables in two braces, '
-        'so a variable with a slash needs three';
+  return machineFileProblem(path);
+}
+
+/// Why the file system of some machine cannot write a file at [path], the
+/// path of a file that a render hook generates, or `null` if each can. Such
+/// a path comes from the data of a role, and the app must be the same on
+/// every system: Windows allows no control character and none of
+/// `< > : " | ? *` in the name of a file, and removes a dot or a space at
+/// its end.
+String? _unwritableProblem(String path) {
+  if (_control.hasMatch(path)) return 'has a control character or a line break';
+  if (_forbiddenOnWindows.hasMatch(path)) {
+    return 'has a character that Windows allows in no name of a file: '
+        '< > : " | ? or *';
+  }
+  final segments = path.split('/');
+  if (segments.any((name) => name.endsWith('.') || name.endsWith(' '))) {
+    return 'has a segment that ends with a dot or a space, which Windows '
+        'removes';
+  }
+  return null;
+}
+
+/// A control character or a line break.
+final RegExp _control = RegExp(r'[\x00-\x1F\x7F-\x9F\u2028\u2029]');
+
+/// A character that Windows allows in no name of a file, besides the
+/// slashes and the control characters.
+final RegExp _forbiddenOnWindows = RegExp('[<>:"|?*]');
+
+/// [path] as a message shows it: a control character or a line break as
+/// its escape, such as `\u{a}`.
+String _shown(String path) => path.replaceAllMapped(
+      _control,
+      (match) => '\\u{${match[0]!.codeUnitAt(0).toRadixString(16)}}',
+    );
+
+/// Why the file at [path], which a render hook generates, cannot be in one
+/// app with [other], a file of a brick or of another hook, as the end of
+/// "The render hook of … generates"; `null` if it can:
+/// - they are one file;
+/// - [path] is a directory of [other], or a directory of [path] is the
+///   file [other]: a path of the app is a file or a directory, not both.
+///
+/// File systems that ignore case, as macOS and Windows do by default, take
+/// paths that differ only in case for one path, so the case does not
+/// matter.
+String? _clashOf(String path, RenderedFile other) {
+  final ours = path.toLowerCase();
+  final theirs = other.path.toLowerCase();
+  final who =
+      '${other.fromHook ? 'a render hook' : 'a brick'} of ${other.owner}';
+  if (ours == theirs) {
+    final what = other.path == path
+        ? path
+        : '$path, one file with ${other.path} where case does not matter';
+    return '$what, which $who generates too; every file of the app is '
+        'generated once.';
+  }
+  const either = 'a path of the app is a file or a directory, not both.';
+  // The same number of segments of each is the path that both have.
+  String start(String of, String like) =>
+      of.split('/').take(like.split('/').length).join('/');
+  if (theirs.startsWith('$ours/')) {
+    final directory = _spelled(start(other.path, path), path);
+    return '$path, but $directory is a directory of the app, in which $who '
+        'generates ${other.path}; $either';
+  }
+  if (ours.startsWith('$theirs/')) {
+    final file = _spelled(other.path, start(path, other.path));
+    return '$path, but $file is a file of the app, which $who generates; '
+        '$either';
+  }
+  return null;
+}
+
+/// [theirs], a path as a file of the app has it, as a message names it
+/// next to [ours], the same path as another file has it: with what makes
+/// them one path when they differ in case.
+String _spelled(String theirs, String ours) => theirs == ours
+    ? theirs
+    : '$theirs, one path with $ours where case does not matter,';
+
+/// What is wrong with [path], which mustache rendered from the path of a
+/// file of a brick, if it has an entity that mustache wrote for a character
+/// of a variable; otherwise `null`.
+String? _entityProblem(String path) => _entity.hasMatch(path)
+    ? 'has an HTML entity: mustache escapes variables in two braces, so a '
+        'variable with a slash needs three'
+    : null;
+
+/// The issue of [origin] if it generates the file at [path] where the kind
+/// of its module generates no files, as [resolution] tells; the template of
+/// a role has no kind.
+SmfIssue? _kindIssue(
+  ContributionOrigin origin,
+  String path,
+  Resolution resolution,
+) {
+  final kind = switch (origin) {
+    ModuleOrigin(:final module) => resolution.module(module)?.descriptor.kind,
+    _ => null,
+  };
+  if (origin case ModuleOrigin(:final module)
+      when kind != null && !kind.allowsFile(module, path)) {
+    return SmfIssue(
+      'The module $module generates $path, where modules of the ${kind.id} '
+      'kind may not.',
+      origin: origin,
+      path: path,
+    );
   }
   return null;
 }

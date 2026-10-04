@@ -492,6 +492,8 @@ void tick() {
   debugPrint('tick');
 }
 === lib/core/clock/clock_factory.dart (fake_clock_badge) ===
+import 'package:fixture_app/core/clock/zones/zone_1.dart';
+
 import 'clock.dart';
 
 /// Creates the clock of the app.
@@ -500,9 +502,13 @@ Clock createClock() => const _FixedClock();
 final class _FixedClock implements Clock {
   const _FixedClock();
 
+  // Each zone is a constant of a file of its own.
   @override
-  List<String> get zones => clockZones;
+  List<String> get zones => const [clockZone1];
 }
+=== lib/core/clock/zones/zone_1.dart (fake_clock_badge) ===
+/// A time zone that a module of the app asked for (fixture).
+const clockZone1 = 'Europe/Kyiv\'s zone';
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
 import '../badge/badge_factory.dart';
 

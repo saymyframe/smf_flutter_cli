@@ -53,7 +53,7 @@ abstract base class RoleTemplate<D extends Object> {
   /// It returns no values by default, for a role that asks nothing.
   Map<String, String> optionsOf(Object? choice) => const {};
 
-  /// Returns the fragments and brick variables that depend on the data,
-  /// such as a composite of all analytics services.
+  /// Returns the fragments, brick variables and files that depend on the
+  /// data, such as a composite of all analytics services.
   RoleOutput render(RoleHookInput<D> input) => const RoleOutput();
 }

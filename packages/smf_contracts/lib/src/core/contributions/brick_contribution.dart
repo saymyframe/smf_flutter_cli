@@ -16,13 +16,16 @@ part of '../contributions.dart';
 /// Paths are relative to the root of the app. A path may use variables,
 /// such as the directory of the app's Kotlin package, but no mustache
 /// sections, partials or includes: files that only some apps have go into a
-/// brick of their own, contributed with [when]. Mustache escapes a variable
-/// in two braces for HTML, so a variable that holds code, or a path with a
-/// slash, takes three: `{{{name}}}`.
+/// brick of their own, contributed with [when], and files whose number or
+/// paths depend on the data of a role come from the render hook of the
+/// role's template or provider (see [RoleOutput.files]). Mustache escapes a
+/// variable in two braces for HTML, so a variable that holds code, or a
+/// path with a slash, takes three: `{{{name}}}`.
 ///
 /// A bundle with mason hooks is rejected: what hooks used to do is part of
 /// the pipeline, [Preflight] and [PostGenStep]. Every generated file has
-/// exactly one owner, so two bricks must not produce the same path.
+/// exactly one owner, so two bricks, or a brick and a render hook, must not
+/// produce the same path.
 final class BrickContribution extends Contribution {
   /// Creates a contribution of the files of [bundle].
   const BrickContribution(this.bundle, {this.vars = const {}, super.when});
