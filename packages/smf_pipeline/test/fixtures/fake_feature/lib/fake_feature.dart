@@ -104,14 +104,15 @@ final class FakeSecondModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('fake_second');
 
-  /// The texts of the screens: one in English and in Ukrainian, and one
-  /// without a translation, which reads in English in every language, with
-  /// a quote that the code of its text escapes.
+  /// The texts of the screens: one in English, in Ukrainian and in Maltese,
+  /// a language in which Flutter has no texts for its own widgets, so that
+  /// no app is in it; and one without a translation, which reads in English
+  /// in every language, with a quote that the code of its text escapes.
   static const texts = TextsData([
     LocalizedText(
       'title',
       en: 'Second screen',
-      translations: {'uk': 'Другий екран'},
+      translations: {'uk': 'Другий екран', 'mt': 'It-tieni skrin'},
     ),
     LocalizedText('outside', en: "Outside the app's main navigation"),
   ]);

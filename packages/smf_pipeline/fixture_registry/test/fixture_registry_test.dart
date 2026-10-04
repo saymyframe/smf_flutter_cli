@@ -700,6 +700,12 @@ void main() {
           'fakeSecondOutside: text outside of the module fake_second',
         ],
       );
+      // The app is in no language in which Flutter has no texts for its
+      // own widgets, such as the Maltese of the title.
+      expect(
+        localizationRole.textsIn(input).first.text.languages,
+        ['en', 'uk', 'mt'],
+      );
       expect(localizationRole.localesIn(input), ['en', 'uk']);
       expect(result.answers, isEmpty);
     });
@@ -710,10 +716,13 @@ void main() {
         () async {
       final result = await checked(withRole);
 
-      expect(textsOf(result, 'fakeSecondTitle', ['en', 'uk', 'de']), {
+      expect(textsOf(result, 'fakeSecondTitle', ['en', 'uk', 'de', 'mt']), {
         'en': 'Second screen',
         'uk': 'Другий екран',
         'de': 'Second screen',
+        // The translation into a language that no app can be in is left
+        // out.
+        'mt': 'Second screen',
       });
       // A text without a translation reads in English in every language;
       // the code of its text escapes the quote.
@@ -851,6 +860,84 @@ void main() {
       expect(
         files.file('/work/fixture_app/pubspec.yaml').readAsStringSync(),
         contains('build_runner: "^2.10.0"'),
+      );
+    });
+
+    test(
+        'warns of a language of a text that no app can be in, and of a text '
+        'without a translation into a language of the app', () async {
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+              .join(','),
+          '--no-input',
+          '--skip-external-setup',
+          '--strict',
+        ],
+        modules: fixtureModules(),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
+      expect(logger.warnings, hasLength(2));
+      expect(
+        logger.warnings.first,
+        'The app is not in mt, which the text title of the module '
+        'fake_second has a translation into: Flutter has no texts for its '
+        'own widgets in that language.',
+      );
+      expect(
+        logger.warnings.last,
+        'No translation into uk of the text outside of the module '
+        'fake_second: the app shows it in English there.',
+      );
+      expect(
+        host.fileSystem
+            .file('/work/fixture_app/${LocalizationRole.appLocaleFile}')
+            .readAsStringSync(),
+        contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
+      );
+    });
+
+    test('refuses in --locales a language that no app can be in', () async {
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+              .join(','),
+          '--locales',
+          'en,mt',
+          '--no-input',
+          '--skip-external-setup',
+          '--strict',
+        ],
+        modules: fixtureModules(),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.usage);
+      expect(
+        logger.errors,
+        contains(
+          'The app cannot be in mt, which --locales names: Flutter has no '
+          'texts for its own widgets in such a language. The app can be in '
+          'en, uk.',
+        ),
+      );
+      expect(
+        host.fileSystem.directory('/work/fixture_app').existsSync(),
+        isFalse,
       );
     });
 
