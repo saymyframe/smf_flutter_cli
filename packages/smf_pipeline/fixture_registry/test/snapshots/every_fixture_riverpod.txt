@@ -18,6 +18,12 @@ The app as generated is formatted, and `flutter analyze` finds no issue in it.
 - `lib/main.dart`: `main()` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order, and does nothing else. Start-up code goes into `bootstrap()`.
 - `lib/bootstrap.dart`: `bootstrap()` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the registration of the services of the app, then what needs these services. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, a directory for each concern, and a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+## Fixture
+
+The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
+
+The assets of the fixture are in `assets/fixture/`, and its texts in `lib/l10n/app_en.arb`, from which `flutter pub get` writes `lib/l10n/app_localizations*.dart`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

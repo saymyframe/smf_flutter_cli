@@ -388,6 +388,18 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // The notes for coding agents of both modules make one section of the
+      // guide, with the note that both have once.
+      final guide = rendered(result, AppEntryRole.agentSections).values.single;
+      expect('## Fixture'.allMatches(guide), hasLength(1));
+      expect(
+        'The modules of the fixture fill the sockets'.allMatches(guide),
+        hasLength(1),
+      );
+      expect(
+        guide,
+        contains('the sockets got.\n\nThe assets of the fixture are in '),
+      );
     });
 
     test('a module that depends on another fills its sockets', () async {
