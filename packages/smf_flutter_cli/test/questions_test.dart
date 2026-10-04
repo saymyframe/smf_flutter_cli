@@ -320,8 +320,10 @@ void main() {
     final settings = messages.indexOf(
       'Settings screen: which module provides it?',
     );
-    // The roles that require the router come before it, in the order of the
-    // list of modules: the layout, and then the settings screen.
+    // Both roles require the router, so their questions come before its
+    // own, in the order of the roles of the registry: the layout first,
+    // which the router role uses, so it comes with the router, and then the
+    // settings screen, which comes with the settings module.
     expect(settings, messages.indexOf('Layout: which module provides it?') + 1);
     expect(run.asked[settings].shown, [
       'settings — Settings screen with the settings of the modules',
