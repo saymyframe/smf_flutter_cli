@@ -136,6 +136,15 @@ void main() {
           reason: '$contractCase',
         );
         expect(result.app, isNotNull, reason: '$contractCase');
+        // The guide for coding agents has the section of the role, and the
+        // harness found every file that the section names in the app.
+        expect(
+          '\n## ${themeRole.description}\n'.allMatches(
+            result.app!.files[AppEntryRole.agentsFile]!.text,
+          ),
+          hasLength(1),
+          reason: '$contractCase',
+        );
       }
     });
 

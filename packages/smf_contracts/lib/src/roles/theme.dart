@@ -196,16 +196,31 @@ const Map<String, LocalizedText> _texts = {
   'text_dark': _dark,
 };
 
+/// The note of the theme role in the guide for coding agents: where the
+/// look and the theme mode of the app are and how code changes each,
+/// whichever module provides the role. It names the two files that every
+/// app with the role has, and not the entry of the settings screen, which
+/// only some have.
+final String _agentNote = '''
+- `${ThemeRole.createLightTheme.name}(context)` and `${ThemeRole.createDarkTheme.name}(context)` in `${ThemeRole.appThemeFile}` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
+- The theme mode is in `${ThemeRole.themeModeFile}`. Change it only with `themeModeController.select(mode)`, which also saves it in the preferences, and write nothing under the key `${ThemeRole.modeKey}` yourself. A widget reads the mode with `ThemeModeScope.of(context).mode` and rebuilds when it changes.
+- Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
+''';
+
 /// The template of the [ThemeRole]: the theme mode that the user selected,
 /// what the root of the app needs to follow it, the restorer that takes it
-/// from the preferences, and the entry of the settings screen that selects
-/// it.
+/// from the preferences, the entry of the settings screen that selects it,
+/// and the note of the role for coding agents.
 final class _ThemeTemplate extends RoleTemplate<NoDsl> {
   const _ThemeTemplate();
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(themeRoleBundle),
+        AppEntryRole.agentSections.entry(
+          themeRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
         const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(

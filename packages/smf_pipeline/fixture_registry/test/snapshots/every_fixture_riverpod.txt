@@ -16,6 +16,12 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
 
 The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/readme.txt`, and the Dart files of the fixtures in the directories `lib/core/fixture_*/`.
+
+## Theme
+
+- `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
+- The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `themeModeController.select(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `ThemeModeScope.of(context).mode` and rebuilds when it changes.
+- Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

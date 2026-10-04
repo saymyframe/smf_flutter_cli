@@ -362,6 +362,11 @@ Map<String, String> _argumentsOf(MethodInvocation call) => {
           name.lexeme: argumentExpression.toSource(),
     };
 
+/// The code that [markdown] has between backticks, in its order.
+List<String> _codeSpansOf(String markdown) => [
+      for (final span in RegExp('`([^`]+)`').allMatches(markdown)) span[1]!,
+    ];
+
 /// Whether [node] is inside a constant: a creation, a list, a set or a map
 /// with `const`, or a constant variable.
 bool _inConstant(AstNode node) {
@@ -573,8 +578,91 @@ void main() {
       expect(restorer.when, isEmpty);
     });
 
+    test(
+        'tells coding agents where the look and the mode of the app are and '
+        'how code changes each, in a note of the role that names only what '
+        'every app with the role has', () async {
+      final entry = _contributions()
+          .whereType<SocketContribution>()
+          .singleWhere((socket) => socket.socket == AppEntryRole.agentSections);
+
+      // The section of the role, whichever module provides the role.
+      expect(entry.entryKey, themeRole.description);
+      expect(entry.when, isEmpty);
+      final note = entry.entryValue! as AgentNote;
+      expect(note.isOfRole, isTrue);
+
+      final spans = _codeSpansOf(note.text);
+      // The files that it names: the one of the provider and the one of
+      // the template that every app with the role has.
+      expect(
+        {
+          for (final span in spans)
+            if (span.endsWith('.dart')) span,
+        },
+        {ThemeRole.appThemeFile, ThemeRole.themeModeFile},
+      );
+      expect(
+        spans,
+        containsAll([
+          '${ThemeRole.createLightTheme.name}(context)',
+          '${ThemeRole.createDarkTheme.name}(context)',
+          'themeModeController.select(mode)',
+          'ThemeModeScope.of(context).mode',
+          ThemeRole.modeKey,
+        ]),
+      );
+
+      // What it names of the file of the mode is what that file declares.
+      final rendered = await renderTemplate(
+        themeRole,
+        present: _rolesOf(settings: false, localized: false),
+      );
+      final unit = parseString(
+        content: rendered.files[ThemeRole.themeModeFile]!,
+      ).unit;
+      final declared = {
+        for (final declaration in unit.declarations)
+          ...switch (declaration) {
+            TopLevelVariableDeclaration(:final variables) => [
+                for (final variable in variables.variables)
+                  variable.name.lexeme,
+              ],
+            ClassDeclaration(:final namePart, :final body) => [
+                for (final member in body.members)
+                  if (member is MethodDeclaration)
+                    '${namePart.typeName.lexeme}.${member.name.lexeme}',
+              ],
+            _ => const <String>[],
+          },
+      };
+      expect(
+        declared,
+        containsAll([
+          'themeModeController',
+          'ThemeModeController.select',
+          'ThemeModeController.mode',
+          'ThemeModeScope.of',
+        ]),
+      );
+    });
+
     test('puts nothing else into a socket, and adds no package to the app', () {
-      expect(_contributions().whereType<SocketContribution>(), hasLength(5));
+      expect(
+        [
+          for (final contribution
+              in _contributions().whereType<SocketContribution>())
+            contribution.socket,
+        ],
+        unorderedEquals([
+          AppEntryRole.agentSections,
+          AppEntryRole.rootWrappers,
+          AppEntryRole.appArgs,
+          AppEntryRole.appArgs,
+          AppEntryRole.appArgs,
+          PreferencesRole.restorers,
+        ]),
+      );
       expect(_contributions().whereType<PubspecContribution>(), isEmpty);
     });
 
