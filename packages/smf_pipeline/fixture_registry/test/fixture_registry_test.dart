@@ -606,8 +606,8 @@ void main() {
 
     test(
         'give the settings screen role an entry each, in the order of the '
-        'modules, and generate its widget, in an app with a settings screen',
-        () async {
+        'modules, and generate its widget, of the same name in a file of '
+        'its own, in an app with a settings screen', () async {
       // No fixture provides the settings screen role in an app that must
       // work, so the app has the provider with a known bug.
       final result = await ContractHarness(
@@ -625,16 +625,16 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
+      // The two widgets have one name, so that an app with both analyzes
+      // only if the screen imports the file of each with a prefix of its
+      // own, whichever module provides the screen.
       expect(
         [
           for (final entry in settingsScreenRole
               .entriesIn(settingsScreenRole.hookInput(result.hook!)))
             '${entry.widget.name} of ${entry.file}',
         ],
-        [
-          'FixtureSecondSetting of $second',
-          'FixtureScreenLogSetting of $screenLog',
-        ],
+        ['FixtureSetting of $second', 'FixtureSetting of $screenLog'],
       );
       expect(
         {

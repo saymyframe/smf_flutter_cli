@@ -302,8 +302,12 @@ final class FakeAnalyticsModule extends SmfModule {
 /// app with it and without routes to start on starts on the fallback screen
 /// of the app entry, and an app with it and the fixture analytics has two
 /// listeners of the screen. It uses the settings screen role: in an app
-/// with a settings screen, it generates the widget of a setting and gives
-/// the role an entry for it.
+/// with a settings screen, it generates the widget of its settings, two
+/// rows that belong together, and gives the role an entry for it. The
+/// widget has the class name of the setting of the second fixture feature,
+/// `FixtureSetting`, in a file of its own: an app with both analyzes only
+/// if the screen imports the file of each with a prefix of its own, as the
+/// role asks of every provider.
 final class FakeScreenLogModule extends SmfModule {
   /// Creates the module.
   const FakeScreenLogModule();
@@ -340,7 +344,7 @@ final class FakeScreenLogModule extends SmfModule {
         settingsScreenRole.data(
           const SettingsEntry(
             widget: TypeRef(
-              'FixtureScreenLogSetting',
+              'FixtureSetting',
               import: ImportRef.app(
                 'core/fixture_screen_log/fixture_screen_log_setting.dart',
               ),

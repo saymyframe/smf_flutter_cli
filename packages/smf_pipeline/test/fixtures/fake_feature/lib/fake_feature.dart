@@ -96,7 +96,10 @@ final class FakeFeatureModule extends SmfModule {
 /// navigation, and a screen outside the main navigation, which a router
 /// shows over it. It uses the settings screen role: in an app with a
 /// settings screen, it generates the widget of a setting and gives the role
-/// an entry for it.
+/// an entry for it. The widget has the class name of the setting of the
+/// fixture screen log, `FixtureSetting`, in a file of its own: an app with
+/// both analyzes only if the screen imports the file of each with a prefix
+/// of its own, as the role asks of every provider.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -156,7 +159,7 @@ final class FakeSecondModule extends SmfModule {
         settingsScreenRole.data(
           const SettingsEntry(
             widget: TypeRef(
-              'FixtureSecondSetting',
+              'FixtureSetting',
               import: ImportRef.app('$_folder/fixture_second_setting.dart'),
             ),
           ),
