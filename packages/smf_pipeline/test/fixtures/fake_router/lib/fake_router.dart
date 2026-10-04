@@ -11,7 +11,11 @@
 /// of the system the route on top of the innermost navigator that the user
 /// sees, such as a dialog, and annotates every screen and parameter with
 /// annotations restricted by `@Target`, so a misplaced tag of an annotation
-/// socket fails `flutter analyze`.
+/// socket fails `flutter analyze`. In an app with guards, it asks them
+/// through the `GuardedNavigation` of the router role, which keeps what the
+/// router comes back to: about the screen it starts on and about each
+/// location that it is asked to show, and it tells them of the pages of its
+/// stack when one of them changes, and shows the location that they answer.
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';
@@ -122,6 +126,9 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
           for (final route in destinations) '${route.locationClass}()',
         ].join(', '),
         'shell': _shellOf(destinations),
+        // Whether the modules of the app declare guards, which the router
+        // then asks.
+        'guards': facade.guards.isNotEmpty,
       },
     );
   }

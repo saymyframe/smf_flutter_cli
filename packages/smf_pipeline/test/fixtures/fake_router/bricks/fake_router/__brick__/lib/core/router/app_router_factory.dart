@@ -45,7 +45,13 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   _FixtureDelegate() {
     for (final location in <AppLocation>[{{{start}}}]) {
       _show(location);
-    }
+    }{{#guards}}
+    // The guards are asked about the screen that the app starts on before
+    // the router builds it, and told of its pages when one of them changes.
+    final start = _guards.start;
+    final guarded = _guards.asked(start?.routeName, start);
+    if (guarded != null) _go(guarded.location);
+    guardChanges.addListener(_guardsChanged);{{/guards}}
   }
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey();
@@ -79,7 +85,64 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// `null` before the first screen; see [_top].
   (int, AppLocation?)? _shown;
 
-  /// The page on top: the branch it is in, or -1 for the root navigator,
+{{#guards}}  /// The guards of the app as the router asks them, which keep the location
+  /// that the user comes back to once they allow it. The router knows a
+  /// location as an [AppLocation], and the fallback screen, which has none,
+  /// as `null`: the screen that the app starts on is its start route, or
+  /// the fallback screen.
+  final GuardedNavigation<AppLocation?> _guards = GuardedNavigation(
+    start: <AppLocation>[{{{start}}}].firstOrNull,
+    locationOf: (location) => location,
+  );
+
+  /// The pages that the user can get back to, the one on top first: those
+  /// of the root navigator and, in place of the main navigation, those of
+  /// its selected branch, or the fallback screen alone. A page is one that
+  /// a push showed while its push waits for the value that it closes with.
+  List<({String? route, AppLocation? location, bool pushed})> get _pages => [
+        if (_stack.isEmpty) (route: null, location: null, pushed: false),
+        for (final entry in _stack.reversed)
+          for (final location in entry is AppLocation
+              ? [entry]
+              : _branches[_selected].reversed)
+            (
+              route: location.routeName,
+              location: location,
+              pushed: _results.containsKey(location),
+            ),
+      ];
+
+  /// Shows [location] in place of the whole stack and of the stacks of
+  /// every branch of the main navigation, each of which is back on its
+  /// destination; `null` is the fallback screen.
+  void _go(AppLocation? location) {
+    _stack.clear();
+    for (final (index, branch) in _branches.indexed) {
+      branch
+        ..clear()
+        ..add(_destinations[index]);
+    }
+    if (location != null) _show(location);
+    notifyListeners();
+  }
+
+  /// Shows what the guards show in place of [location], as [go] to it
+  /// does; `false` if the guards let the user see [location].
+  bool _redirected(AppLocation location) {
+    final guarded = _guards.asked(location.routeName, location);
+    if (guarded == null) return false;
+    _go(guarded.location);
+    return true;
+  }
+
+  /// Tells the guards of the pages of the router, as when one of them
+  /// starts or stops allowing, and shows the location that they answer.
+  void _guardsChanged() {
+    final shown = _guards.changed(_pages);
+    if (shown != null) _go(shown.location);
+  }
+
+{{/guards}}  /// The page on top: the branch it is in, or -1 for the root navigator,
   /// and its location, or `null` for the fallback screen.
   (int, AppLocation?) get _top {
     final top = _stack.lastOrNull;
@@ -252,13 +315,15 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
-    _show(location);
+    {{#guards}}if (_redirected(location)) return;
+    {{/guards}}_show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
-    final branch = _branchOf(location);
+    {{#guards}}if (_redirected(location)) return Future.value();
+    {{/guards}}final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
       _stack.add(location);
@@ -275,7 +340,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
-    final branch = _branchOf(location);
+    {{#guards}}if (_redirected(location)) return;
+    {{/guards}}final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
     if (branch != null && _onMainNavigation) {
       _branches[_selected]
