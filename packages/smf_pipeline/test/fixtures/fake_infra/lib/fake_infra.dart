@@ -24,12 +24,21 @@ const _readmeSection = 'The app has something in every socket of its entry, '
 
 /// A module that puts something into every socket of the app entry that no
 /// real module uses yet, and into the `flutter:` section of the pubspec.
+///
+/// Its root wrapper is an inherited widget with a theme mode, and the theme
+/// mode that it gives the root of the app reads that widget from the
+/// context of the root: an argument of the root that depends on a widget
+/// among the root wrappers.
 final class FakeSocketsModule extends SmfModule {
   /// Creates the module.
   const FakeSocketsModule();
 
   /// The id of the module.
   static const id = ModuleId('fake_sockets');
+
+  static const _themeMode = ImportRef.app(
+    'core/fixture_theme_mode/fixture_theme_mode.dart',
+  );
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -78,9 +87,9 @@ final class FakeSocketsModule extends SmfModule {
         const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(
-            'RepaintBoundary(child: ',
+            'FixtureThemeMode(mode: ThemeMode.system, child: ',
             ')',
-            imports: [_material],
+            imports: [_material, _themeMode],
           ),
         ),
         const SocketContribution.arg(
@@ -95,6 +104,11 @@ final class FakeSocketsModule extends SmfModule {
           AppEntryRole.appArgs,
           'darkTheme',
           Fragment('ThemeData.dark()', imports: [_material]),
+        ),
+        const SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'themeMode',
+          Fragment('FixtureThemeMode.of(context)', imports: [_themeMode]),
         ),
         const SocketContribution.arg(
           AppEntryRole.appArgs,
