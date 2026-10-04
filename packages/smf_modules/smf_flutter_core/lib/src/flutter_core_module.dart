@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
+import 'package:smf_flutter_core/src/agents.dart';
 
 /// The module that creates the app itself, and so provides the app entry
 /// role.
@@ -24,6 +25,10 @@ import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 /// of the role. The native projects follow `flutter create` of Flutter 3.44,
 /// so the app needs Flutter 3.44 or newer, and iOS [minimumIosVersion] or
 /// newer.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// app entry what its files bring: the root widget and where its arguments
+/// go, where the tests are and the platforms of the app.
 final class FlutterCoreModule extends SmfModule {
   /// Creates the module.
   const FlutterCoreModule();
@@ -72,6 +77,10 @@ final class FlutterCoreModule extends SmfModule {
       const PubspecContribution.sdk('flutter_test', dev: true),
       const PubspecContribution.hosted('flutter_lints', '^6.0.0', dev: true),
       const PubspecContribution.flutter(usesMaterialDesign: true),
+      AppEntryRole.agentSections.entry(
+        appEntryRole.description,
+        AgentNote(agentNote),
+      ),
     ];
   }
 }

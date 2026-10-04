@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/home_bundle.dart';
+import 'package:smf_home_flutter/src/agents.dart';
 
 /// The module of the start screen of the app: a feature with one route,
 /// whose screen, `HomeScreen`, shows the name of the app in its app bar and
@@ -15,6 +16,10 @@ import 'package:smf_home_flutter/bundles/home_bundle.dart';
 /// provides it, and keeps its file in `lib/features/home/`. The screen has
 /// no state, so the module has no variants for the modules that manage
 /// state.
+///
+/// The guide for coding agents of the app has a section of the module,
+/// which says that the screen is a place to start from, whose content the
+/// app replaces.
 final class HomeModule extends SmfModule {
   /// Creates the module.
   const HomeModule();
@@ -54,5 +59,6 @@ final class HomeModule extends SmfModule {
             ),
           ]),
         ),
+        AppEntryRole.agentSections.entry(agentHeading, AgentNote(agentNote)),
       ];
 }

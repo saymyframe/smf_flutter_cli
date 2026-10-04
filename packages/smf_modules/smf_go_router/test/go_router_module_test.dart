@@ -4,6 +4,7 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_go_router/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -204,6 +205,13 @@ class _GoAppRouter {
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
+/// The owners of the code of the router: the template of the role and this
+/// module.
+final Set<ContributionOrigin> _router = {
+  const RoleTemplateOrigin(routerRole),
+  const ModuleOrigin(GoRouterModule.id),
+};
+
 /// The pubspec of [app] as plain maps and lists.
 Map<String, Object?> _pubspecOf(RenderedApp app) {
   Object? plain(Object? node) => switch (node) {
@@ -217,6 +225,16 @@ Map<String, Object?> _pubspecOf(RenderedApp app) {
   return plain(loadYaml(app.files['pubspec.yaml']!.text))!
       as Map<String, Object?>;
 }
+
+/// The notes of this module in the guide for coding agents of [app], in
+/// the order of the guide.
+List<AgentNote> _notesOfModule(RenderedApp app) => [
+      for (final (origin, heading, note)
+          in app.entriesOf(AppEntryRole.agentSections))
+        if (origin == const ModuleOrigin(GoRouterModule.id) &&
+            heading == routerRole.description)
+          note,
+    ];
 
 /// The parsed file of `createAppRouter()` of [app].
 CompilationUnit _factoryOf(RenderedApp app) =>
@@ -623,20 +641,27 @@ void main() {
       without = resultWithout.app!;
     });
 
-    test('gets go_router and the brick of the router, and nothing else', () {
+    test(
+        'gets go_router, the brick of the router and its note for coding '
+        'agents, and nothing else', () {
       final contributions = [
         for (final collected
             in result.collection!.ofModule(module.descriptor.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       final brick = contributions.first as BrickContribution;
       expect(brick.bundle.name, 'go_router');
-      final dependency = contributions.last as PubspecDependency;
+      final dependency = contributions[1] as PubspecDependency;
       expect(dependency.package, 'go_router');
       expect(dependency.constraint, '^17.5.0');
       expect(dependency.dev, isFalse);
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, routerRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       expect(_pubspecOf(withRouter)['dependencies'], {
         'flutter': {'sdk': 'flutter'},
         'go_router': '^17.5.0',
@@ -688,7 +713,9 @@ void main() {
       expect(_runningTheRouter(resultWithout), isEmpty);
     });
 
-    test('is the app without a router but for the router', () {
+    test(
+        'is the app without a router but for the router and its section in '
+        'the guide for coding agents', () {
       const routerFiles = {
         RouterRole.appRouterFile,
         RouterRole.navigationFile,
@@ -705,7 +732,11 @@ void main() {
       // The files of the app entry that run the router change with it.
       final running = _runningTheRouter(result);
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (path == 'pubspec.yaml' || running.contains(path)) continue;
+        if (path == 'pubspec.yaml' ||
+            path == AppEntryRole.agentsFile ||
+            running.contains(path)) {
+          continue;
+        }
         expect(withRouter.files[path]!.bytes, file.bytes, reason: path);
       }
       final pubspec = _pubspecOf(withRouter);
@@ -713,6 +744,28 @@ void main() {
         ...pubspec['dependencies']! as Map<String, Object?>,
       }..remove('go_router');
       expect({...pubspec, 'dependencies': dependencies}, _pubspecOf(without));
+      // The guide has the notes of the app without a router, and those of
+      // the router under the heading of the role.
+      final notes = withRouter.entriesOf(AppEntryRole.agentSections);
+      expect(
+        notes.where((note) => !_router.contains(note.$1)),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        [
+          for (final (origin, heading, note) in notes)
+            if (_router.contains(origin)) (origin, heading, note.isOfRole),
+        ],
+        [
+          (
+            const ModuleOrigin(GoRouterModule.id),
+            routerRole.description,
+            false,
+          ),
+          (const RoleTemplateOrigin(routerRole), routerRole.description, true),
+        ],
+      );
+      expect(_notesOfModule(withRouter), [AgentNote(agentNote)]);
     });
   });
 
@@ -929,6 +982,79 @@ void main() {
       expect(
         app.files[_factory]!.addedImports.map((added) => added.import.uri),
         isNot(contains(contains('/core/layout/'))),
+      );
+      // Nor a note of the module about its destinations.
+      expect(_notesOfModule(app), [AgentNote(agentNote)]);
+    });
+
+    test(
+        'has what the note of the module for coding agents names: the '
+        'router, its routes and the listeners of the screen', () {
+      final index = DartFileIndexer.index(_factory, app.files[_factory]!.text);
+      bool calls(String name, List<String> arguments) => index
+          .invocationsOf(name)
+          .any((call) => arguments.every(call.namedArguments.contains));
+
+      // The one GoRouter, the config of the router of the app.
+      expect(index.invocationsOf('GoRouter'), hasLength(1));
+      expect(calls('GoRouter', ['initialLocation', 'routes']), isTrue);
+      expect(
+        index.declaration('_GoAppRouter')!.members.map((member) => member.name),
+        contains('config'),
+      );
+      // A route, with its children in its routes.
+      expect(calls('GoRoute', ['path', 'name', 'builder']), isTrue);
+      expect(calls('GoRoute', ['path', 'name', 'builder', 'routes']), isTrue);
+      expect(index.imports.map((import) => import.prefix), contains('screen0'));
+      // The values of a route.
+      expect(
+        [
+          for (final access in index.memberAccesses)
+            '${access.target}.${access.name}',
+        ],
+        containsAll(['state.pathParameters', 'state.uri.queryParameters']),
+      );
+      expect(index.invocationsOf('tryParse'), isNotEmpty);
+      // A required value that is missing or does not parse: the redirect of
+      // the route throws a GoException.
+      expect(calls('GoRoute', ['path', 'name', 'builder', 'redirect']), isTrue);
+      expect(
+        {
+          for (final call in index.invocationsOf('GoException'))
+            call.enclosingDeclaration,
+        },
+        {'_checkValues'},
+      );
+      expect(
+        index.declaration('_screenListeners')?.kind,
+        DeclarationKind.variable,
+      );
+      for (final name in const [
+        'GoRouter',
+        'GoRoute',
+        'routes',
+        'path',
+        'name',
+        'state.pathParameters',
+        'state.uri.queryParameters',
+        'tryParse',
+        'GoException',
+        'redirect',
+        'initialLocation',
+        '_screenListeners',
+      ]) {
+        expect(agentNote, contains('`$name`'), reason: name);
+      }
+      expect(agentNote, contains('`${RouterRole.appRouterFactoryFile}`'));
+      // Only the file of the router imports go_router, as the note of the
+      // role asks of the code of the app.
+      expect(
+        [
+          for (final file in app.files.values)
+            if (file.isText && file.text.contains('package:go_router/'))
+              file.path,
+        ],
+        [_factory],
       );
     });
 
@@ -1176,6 +1302,104 @@ void main() {
       );
     });
 
+    test(
+        'tells coding agents where the destinations are, with the names '
+        'that its file has', () {
+      expect(
+        _notesOfModule(app),
+        [AgentNote(agentNote), AgentNote(mainNavigationAgentNote)],
+      );
+      // The second is a note of the render hook of the module: in the
+      // guide, it follows the first in the section of the router.
+      expect(
+        app.files[AppEntryRole.agentsFile]!.text,
+        contains('${agentNote.trim()}\n\n${mainNavigationAgentNote.trim()}\n'),
+      );
+
+      final index = DartFileIndexer.index(_factory, app.files[_factory]!.text);
+      final shellCall = index.invocationsOf('indexedStack').single;
+      expect(shellCall.target, 'StatefulShellRoute');
+      final branches = index.invocationsOf('StatefulShellBranch');
+      expect(branches, hasLength(_branchesOf(shell).length));
+      for (final branch in branches) {
+        expect(branch.namedArguments, contains('observers'));
+      }
+      expect(index.declaration('_observers')?.kind, DeclarationKind.function);
+      // The shell and the destinations of the layout role, in the order of
+      // the branches.
+      final appShell = index.invocationsOf(LayoutRole.appShell.name).single;
+      expect(appShell.namedArguments, contains('destinations'));
+      expect(
+        index.invocationsOf(LayoutRole.destination.name),
+        hasLength(branches.length),
+      );
+      for (final name in [
+        'StatefulShellRoute.indexedStack',
+        'StatefulShellBranch',
+        'observers: _observers()',
+        'destinations',
+        LayoutRole.appShell.name,
+        LayoutRole.destination.name,
+      ]) {
+        expect(mainNavigationAgentNote, contains('`$name`'), reason: name);
+      }
+    });
+
+    test(
+        'has the main navigation that the note for an app without a '
+        'destination tells to write for the first one', () {
+      // This app has destinations, so it has no such note.
+      expect(
+        _notesOfModule(app),
+        isNot(contains(AgentNote(firstDestinationAgentNote))),
+      );
+      final index = DartFileIndexer.index(_factory, app.files[_factory]!.text);
+      final shellCall = index.invocationsOf('indexedStack').single;
+      expect(shellCall.target, 'StatefulShellRoute');
+      expect(
+        shellCall.namedArguments,
+        containsAll(['notifyRootObserver', 'builder', 'branches']),
+      );
+      expect(
+        index.invocationsOf('StatefulShellBranch').first.namedArguments,
+        contains('observers'),
+      );
+      expect(
+        index.invocationsOf(LayoutRole.appShell.name).single.namedArguments,
+        LayoutRole.appShell.namedParameters,
+      );
+      final text = app.files[_factory]!.text;
+      expect(text, contains('currentIndex: shell.currentIndex,'));
+      expect(text, contains('onSelect: shell.goBranch,'));
+      expect(text, contains('body: shell,'));
+      // push() and replace() check the main navigation, and the check
+      // throws the error that the layout role names.
+      expect(
+        [
+          for (final call in index.invocationsOf('_checkMainNavigation'))
+            call.enclosingMember,
+        ],
+        ['push', 'replace'],
+      );
+      expect(text, contains('throw StateError('));
+      for (final name in [
+        'StatefulShellRoute.indexedStack',
+        'notifyRootObserver: false',
+        'StatefulShellBranch',
+        'observers: _observers()',
+        'builder',
+        LayoutRole.appShell.name,
+        'shell.currentIndex',
+        'shell.goBranch',
+        'body',
+        'push()',
+        'replace()',
+        'StateError',
+      ]) {
+        expect(firstDestinationAgentNote, contains('`$name`'), reason: name);
+      }
+    });
+
     test('has a branch for each destination, with the routes below it', () {
       final branches = _branchesOf(shell);
 
@@ -1391,6 +1615,20 @@ void main() {
       final unit = _factoryOf(result.app!);
 
       expect(_shellOf(unit), isNull);
+      // The file has no main navigation to add a destination to, and no
+      // check of it in push() and replace(), so the module tells in the
+      // guide what the first destination needs.
+      expect(
+        _notesOfModule(result.app!),
+        [AgentNote(agentNote), AgentNote(firstDestinationAgentNote)],
+      );
+      final index = DartFileIndexer.index(
+        _factory,
+        result.app!.files[_factory]!.text,
+      );
+      expect(index.invocationsOf('indexedStack'), isEmpty);
+      expect(index.invocationsOf('_checkMainNavigation'), isEmpty);
+      expect(index.declaration('_observers')?.kind, DeclarationKind.function);
       expect(_routesOf(unit).map((route) => route.path), ['/']);
       expect(
         result.app!.files[_factory]!.addedImports.map(

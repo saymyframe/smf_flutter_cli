@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_go_router/bundles/go_router_bundle.dart';
+import 'package:smf_go_router/src/agents.dart';
 import 'package:smf_go_router/src/go_routes.dart';
 
 /// The module that routes the app with go_router, and so provides the
@@ -84,6 +85,10 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// each listener on its own: what one throws keeps no other listener from
 /// hearing the screen, and reaches neither the router nor the handlers of
 /// the errors of the app; in debug mode it is printed.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// router how its file writes a route, and, in an app with a main
+/// navigation, where the destinations are among the routes.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();
@@ -103,6 +108,10 @@ final class GoRouterModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(goRouterBundle),
         const PubspecContribution.hosted('go_router', '^17.5.0'),
+        AppEntryRole.agentSections.entry(
+          routerRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 
@@ -122,6 +131,18 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
       mainNavigation: input.has(layoutRole),
     );
     return RoleOutput(
+      fragments: [
+        if (routes.hasMainNavigation)
+          AppEntryRole.agentSections.entry(
+            routerRole.description,
+            AgentNote(mainNavigationAgentNote),
+          )
+        else if (input.has(layoutRole))
+          AppEntryRole.agentSections.entry(
+            routerRole.description,
+            AgentNote(firstDestinationAgentNote),
+          ),
+      ],
       vars: {
         'initial_location': routes.initialLocation,
         'main_navigation': routes.hasMainNavigation,

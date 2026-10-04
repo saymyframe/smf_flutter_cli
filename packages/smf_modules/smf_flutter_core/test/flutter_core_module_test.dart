@@ -2,6 +2,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_flutter_core/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -52,6 +53,44 @@ List<String> _namedOf(MethodInvocation call) => [
         if (argument case NamedArgument(:final name, :final argumentExpression))
           '${name.lexeme}: ${argumentExpression.toSource()}',
     ];
+
+/// A module that gives the root of the app every argument that the app
+/// entry role takes from the modules.
+final class _RootArgumentsModule extends SmfModule {
+  const _RootArgumentsModule();
+
+  static const id = ModuleId('root_arguments');
+
+  /// An expression for each argument, or for an item of its list.
+  static const arguments = {
+    'theme': 'ThemeData.light()',
+    'darkTheme': 'ThemeData.dark()',
+    'themeMode': 'ThemeMode.system',
+    'locale': "const Locale('en')",
+    'localizationsDelegates': 'DefaultMaterialLocalizations.delegate',
+    'supportedLocales': "const Locale('en')",
+  };
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Every argument of the root of the app',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        for (final MapEntry(key: name, value: expression) in arguments.entries)
+          SocketContribution.arg(
+            AppEntryRole.appArgs,
+            name,
+            Fragment(
+              expression,
+              imports: const [ImportRef('package:flutter/material.dart')],
+            ),
+          ),
+      ];
+}
 
 void main() {
   const module = FlutterCoreModule();
@@ -249,6 +288,114 @@ void main() {
         [appEntryRole.description],
       );
     });
+
+    test(
+        'adds its note to the section of the app entry in the guide, after '
+        'that of the role', () {
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+
+      // The socket takes its contributors by their ids.
+      expect(
+        [
+          for (final (origin, heading, note) in notes)
+            (origin, heading, note.isOfRole),
+        ],
+        [
+          (
+            const ModuleOrigin(FlutterCoreModule.id),
+            appEntryRole.description,
+            false,
+          ),
+          (
+            const RoleTemplateOrigin(appEntryRole),
+            appEntryRole.description,
+            true,
+          ),
+        ],
+      );
+      expect(notes.first.$3, AgentNote(agentNote));
+      // The section has what the role says first, then the note of the
+      // module.
+      expect(
+        texts[AppEntryRole.agentsFile],
+        endsWith('\n\n${notes.last.$3.text}\n\n${agentNote.trim()}\n'),
+      );
+    });
+
+    test(
+        'names in its note the root widget, the tests and the platforms that '
+        'the app has', () {
+      // The root widget, which creates the one MaterialApp of lib/.
+      const root = 'lib/app.dart';
+      final creating = [
+        for (final MapEntry(key: path, value: text) in texts.entries)
+          if (path.startsWith('lib/') && path.endsWith('.dart'))
+            for (final call in DartFileIndexer.index(path, text).invocations)
+              if (call.name == 'MaterialApp') path,
+      ];
+      expect(creating, [root]);
+      expect(
+        DartFileIndexer.index(root, texts[root]!).declaration('App')?.kind,
+        DeclarationKind.classType,
+      );
+      // The test of a file of lib/ has its path in test/.
+      final tests = texts.keys.where((path) => path.startsWith('test/'));
+      expect(tests, isNotEmpty);
+      for (final path in tests) {
+        final tested = path
+            .replaceFirst('test/', 'lib/')
+            .replaceFirst(RegExp(r'_test\.dart$'), '.dart');
+        expect(texts.keys, contains(tested), reason: path);
+      }
+      // Android and iOS, and no other platform.
+      expect(
+        {
+          for (final path in app.files.keys)
+            if (path.contains('/')) path.split('/').first,
+        },
+        {'android', 'ios', 'lib', 'test'},
+      );
+      for (final given in const [
+        '`lib/app.dart`',
+        '`App`',
+        '`MaterialApp`',
+        '`lib/<path>.dart`',
+        '`test/<path>_test.dart`',
+        '`android/`',
+        '`ios/`',
+      ]) {
+        expect(agentNote, contains(given), reason: given);
+      }
+    });
+
+    test(
+        'names in its note the commands that check a change, which format '
+        'only the code of the app and run its tests', () {
+      final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(agentNote);
+
+      // Not `dart format .`: after `flutter pub get` on macOS, `build/` has
+      // copies of the plugins that depend on other plugins, with their Dart
+      // files, which that command would format too.
+      expect(commands![1]!.trim().split('\n'), [
+        'dart format lib test',
+        'flutter analyze',
+        'flutter test',
+      ]);
+      // The two directories with the Dart code of the app, and a test for
+      // `flutter test` to run: what the role does not guarantee, and so
+      // does not say.
+      expect(
+        {
+          for (final path in texts.keys)
+            if (path.endsWith('.dart')) path.split('/').first,
+        },
+        {'lib', 'test'},
+      );
+      expect(
+        texts.keys.where((path) => path.startsWith('test/')),
+        isNotEmpty,
+      );
+    });
   });
 
   group('an app of flutter_core with a router', () {
@@ -389,5 +536,46 @@ void main() {
         );
       });
     }
+
+    test(
+        'are each named in the note of the module for coding agents, which '
+        'tells that they are arguments of that MaterialApp', () async {
+      // An app whose module gives the root every argument that the role
+      // takes from the modules.
+      final result = await ContractHarness(
+        ModuleRegistry(const [FlutterCoreModule(), _RootArgumentsModule()]),
+      ).check(
+        const ContractCase(
+          'every argument of the root',
+          requested: [FlutterCoreModule.id, _RootArgumentsModule.id],
+        ),
+      );
+      expect(result.errors, isEmpty);
+      final build = _buildOfApp(result.app!.texts['lib/app.dart']!);
+      final body = build.body as ExpressionFunctionBody;
+      final root = body.expression as MethodInvocation;
+      final named = [
+        for (final argument in root.argumentList.arguments)
+          if (argument case NamedArgument(:final name)) name.lexeme,
+      ];
+
+      expect(root.methodName.name, 'MaterialApp');
+      final arguments = AppEntryRole.appArgs.kind.args;
+      expect(_RootArgumentsModule.arguments.keys, arguments.keys);
+      expect(named, containsAll(arguments.keys));
+      for (final MapEntry(key: name, value: shape) in arguments.entries) {
+        if (shape == ArgShape.scalar) {
+          expect(agentNote, contains('`$name`'), reason: name);
+        } else {
+          // The lists are those of the localizations, which the note names
+          // as what they are.
+          expect(
+            ['localizationsDelegates', 'supportedLocales'],
+            contains(name),
+          );
+        }
+      }
+      expect(agentNote, contains('localizations of the app'));
+    });
   });
 }

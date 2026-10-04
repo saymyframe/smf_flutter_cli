@@ -1,4 +1,5 @@
 import 'package:smf_bottom_tabs/bundles/bottom_tabs_bundle.dart';
+import 'package:smf_bottom_tabs/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// The module of the main navigation of the app as tabs in a bar at the
@@ -16,7 +17,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// each tab; an app without destinations has no shell. The bar shows at
 /// most [maxDestinations]. With more, `smf create` leaves out the features
 /// of the destinations that do not fit, each with a warning, and generates
-/// the app without them; with `--strict`, it stops instead.
+/// the app without them; with `--strict`, it stops instead. The section of
+/// the layout in the guide for coding agents says so for the destinations
+/// that are added by hand.
 final class BottomTabsModule extends SmfModule {
   /// Creates the module.
   const BottomTabsModule();
@@ -37,8 +40,13 @@ final class BottomTabsModule extends SmfModule {
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      [BrickContribution(bottomTabsBundle)];
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(bottomTabsBundle),
+        AppEntryRole.agentSections.entry(
+          layoutRole.description,
+          AgentNote(agentNote),
+        ),
+      ];
 }
 
 /// Provides the layout role with at most [BottomTabsModule.maxDestinations].
