@@ -186,7 +186,8 @@ final class _FakeClockProvider extends RoleProvider<String> {
 /// A module that works with the clock and the badge when they are present:
 /// it contributes data to both roles, and code that refers to their
 /// symbols only under `when` or, in its brick, under the presence flag
-/// `{{#has_badge}}`.
+/// `{{#has_badge}}` or as the value of a variable for an app with the
+/// clock.
 final class FakeClockUserModule extends SmfModule {
   /// Creates the module.
   const FakeClockUserModule();
@@ -204,7 +205,21 @@ final class FakeClockUserModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(fakeClockUserBundle),
+        BrickContribution(
+          fakeClockUserBundle,
+          vars: {
+            // One line of the template for the apps with the clock and for
+            // those without it; only the first get the import.
+            'clock_zones': RoleVar(
+              clockRole,
+              present: Fragment(
+                'createClock().zones',
+                imports: [ClockRole.createClock.importRef],
+              ),
+              absent: 'const <String>[]',
+            ),
+          },
+        ),
         clockRole.data("Europe/Kyiv's zone"),
         badgeRole.data('New'),
         const SocketContribution.code(

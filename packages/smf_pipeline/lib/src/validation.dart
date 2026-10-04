@@ -126,6 +126,17 @@ List<String> strippedVars(Map<String, Object?> vars) {
   ];
 }
 
+/// What is wrong with [fragment], the value of a brick variable, besides
+/// what [strippedVars] finds in its code: a wrapper, and imports that are
+/// not valid.
+List<String> fragmentVarProblems(Fragment fragment) => [
+      if (fragment.isWrapper)
+        'is a Fragment.wrap, but a variable takes a Fragment of code.',
+      for (final import in fragment.imports)
+        for (final problem in import.problems())
+          'has an invalid import. $problem',
+    ];
+
 /// The issues of the contributions of [collection] that break a rule of
 /// the pipeline (see [contributionIssues]), and the sockets with such a
 /// contribution.
@@ -167,7 +178,8 @@ List<Collected> _boundSteps(List<Collected> steps) {
 /// - the rules of the pipeline for each contribution: who may use which
 ///   socket, role and [Contribution.when], bricks without hooks and with one
 ///   owner per file, brick variables that are not reserved and that mason
-///   renders as they are;
+///   renders as they are, and those among them that depend on a role
+///   ([RoleVar]), which name a role of their contributor and hold code;
 /// - the rules of each module's kind;
 /// - that a module contributes the package of a provider of a role only in
 ///   its variant for the provider or when it depends on the provider;
@@ -416,7 +428,7 @@ Iterable<SmfIssue> contributionIssues(
     case final SocketContribution socket:
       yield* _socketIssues(socket, origin, roles.access, resolution);
     case final BrickContribution brick:
-      yield* _brickIssues(brick, origin, resolution);
+      yield* _brickIssues(brick, origin, roles.when, resolution);
     case CodegenRequest(:final outputs):
       for (final output in outputs) {
         if (!_isDartPathInApp(output)) {
@@ -458,11 +470,12 @@ Iterable<SmfIssue> _roleDataIssues(
   }
 }
 
-/// The problems of [brick] of [origin]: its hooks, its variables and its
-/// files.
+/// The problems of [brick] of [origin], whose conditions may name the
+/// [roles]: its hooks, its variables and its files.
 Iterable<SmfIssue> _brickIssues(
   BrickContribution brick,
   ContributionOrigin origin,
+  Set<Role> roles,
   Resolution resolution,
 ) sync* {
   if (brick.bundle.hooks.isNotEmpty) {
@@ -473,15 +486,18 @@ Iterable<SmfIssue> _brickIssues(
       origin: origin,
     );
   }
-  yield* _brickVarIssues(brick, origin);
+  yield* _brickVarIssues(brick, origin, roles);
   yield* _brickFileIssues(brick, origin, resolution);
 }
 
-/// The problems of the variables of [brick] of [origin]: reserved names,
-/// and values that mason would change or cannot take.
+/// The problems of the variables of [brick] of [origin], whose conditions
+/// may name the [roles]: reserved names, values that mason would change or
+/// cannot take, and for a variable that depends on a role, what
+/// [_roleVarIssues] finds.
 Iterable<SmfIssue> _brickVarIssues(
   BrickContribution brick,
   ContributionOrigin origin,
+  Set<Role> roles,
 ) sync* {
   for (final name in brick.vars.keys) {
     if (isReservedVar(name)) {
@@ -492,7 +508,15 @@ Iterable<SmfIssue> _brickVarIssues(
       );
     }
   }
-  for (final name in strippedVars(brick.vars)) {
+  // What mason renders of each variable in any app: of one that depends on
+  // a role, both of its values.
+  final rendered = {
+    for (final MapEntry(:key, :value) in brick.vars.entries)
+      key: value is RoleVar
+          ? [_renderedOf(value.present), _renderedOf(value.absent)]
+          : value,
+  };
+  for (final name in strippedVars(rendered)) {
     yield SmfIssue(
       'The variable $name of the brick ${brick.bundle.name} of $origin '
       'has a backslash before a line break or a non-ASCII character, '
@@ -500,13 +524,66 @@ Iterable<SmfIssue> _brickVarIssues(
       origin: origin,
     );
   }
-  for (final name in nonPlainVars(brick.vars)) {
+  for (final name in nonPlainVars({
+    for (final MapEntry(:key, :value) in brick.vars.entries)
+      if (value is! RoleVar) key: value,
+  })) {
     yield SmfIssue(
       'The variable $name of the brick ${brick.bundle.name} of $origin '
       'is not plain data: strings, numbers, booleans, and lists and maps '
       'of them.',
       origin: origin,
     );
+  }
+  for (final MapEntry(key: name, :value) in brick.vars.entries) {
+    if (value is RoleVar) {
+      yield* _roleVarIssues(name, value, brick.bundle.name, origin, roles);
+    }
+  }
+}
+
+/// What mason renders of [value], a value of a variable that depends on a
+/// role: the code of a fragment, or the string of code itself.
+Object _renderedOf(Object value) => value is Fragment ? value.code : value;
+
+/// The problems of [variable], the variable [name] of the brick [brick] of
+/// [origin], whose code depends on a role:
+/// - the role is one of [roles], those that the conditions of [origin] may
+///   name;
+/// - each value is code: a fragment with valid imports, or a string.
+Iterable<SmfIssue> _roleVarIssues(
+  String name,
+  RoleVar variable,
+  String brick,
+  ContributionOrigin origin,
+  Set<Role> roles,
+) sync* {
+  final role = variable.role;
+  if (!roles.contains(role)) {
+    yield SmfIssue(
+      'The variable $name of the brick $brick of $origin depends on the '
+      '$role, but $origin does not provide, require or use it.',
+      hint: 'Add the role to the uses of the module.',
+      origin: origin,
+    );
+  }
+  for (final (value, state) in [
+    (variable.present, 'with'),
+    (variable.absent, 'without'),
+  ]) {
+    final what = 'The value of the variable $name of the brick $brick of '
+        '$origin $state the $role';
+    if (value is Fragment) {
+      for (final problem in fragmentVarProblems(value)) {
+        yield SmfIssue('$what $problem', origin: origin);
+      }
+    } else if (value is! String) {
+      yield SmfIssue(
+        '$what is not code: give a fragment, or a string of code that needs '
+        'no imports.',
+        origin: origin,
+      );
+    }
   }
 }
 

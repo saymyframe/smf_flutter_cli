@@ -331,6 +331,10 @@ class FallbackStartScreen extends StatelessWidget {
 String clockUserText() {
   return 'No badge';
 }
+
+/// The time zones that the clock user shows: those of the clock when the
+/// app has one.
+List<String> clockUserZones() => const <String>[];
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
