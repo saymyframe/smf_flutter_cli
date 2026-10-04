@@ -222,11 +222,14 @@ String _getterOf(ContributionOrigin owner, String name) {
 /// [LocalizationRole.varsOf].
 String _variableOf(String name) => 'text_${SmfNames.snakeCaseOf(name)}';
 
-/// The codes of the languages that [texts] are in: English first, and then
-/// the others in the order the texts name them.
+/// The codes of the languages that [texts] are in and that an app can be in
+/// (see [LocalizationRole.supportedLanguages]): English first, and then the
+/// others in the order the texts name them.
 List<String> _languagesOf(Iterable<AppText> texts) => {
       _english,
-      for (final text in texts) ...text.text.translations.keys,
+      for (final text in texts)
+        for (final language in text.text.translations.keys)
+          if (LocalizationRole.supportedLanguages.contains(language)) language,
     }.toList();
 
 /// The problems of [texts], the texts of one owner: those of each text, two

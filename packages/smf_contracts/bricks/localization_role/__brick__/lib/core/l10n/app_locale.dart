@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-/// The languages of the app. The app shows its texts in the first of them
-/// that the device asks for, and in the first of the list when the device
-/// asks for none of them.
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
 const appLocales = <Locale>[{{{locales}}}];
 
 /// The language that the user chose for the app, or `null` while the app

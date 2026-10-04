@@ -97,16 +97,22 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   }
 
   /// Chooses the languages of the app: those of `--locales`, or every
-  /// language that a text of the app is in, English first. It asks
-  /// nothing, and warns of the texts that have no translation into a
-  /// language of the app.
+  /// language that a text of the app is in and that an app can be in (see
+  /// [LocalizationRole.supportedLanguages]), English first. It asks
+  /// nothing, and warns of the languages of the texts that it leaves out
+  /// because no app can be in them, and of the texts that have no
+  /// translation into a language of the app.
   @override
   Future<Object?> choose(RoleChoiceContext<TextsData> context) async {
     final texts = _textsOf(context.data);
     final available = _languagesOf(texts);
     final option = context.option(LocalizationRole.localesOption.name);
-    final locales = option == null ? available : _chosen(option, available);
+    final locales =
+        option == null ? available : _chosen(option, available, texts);
     final warnings = [
+      // With the option, the user chose the languages, and the option
+      // takes none that an app cannot be in.
+      if (option == null) ..._leftOut(texts),
       for (final language in locales) ..._untranslated(texts, language),
     ];
     if (warnings.isNotEmpty) {
@@ -116,24 +122,44 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   }
 
   /// The languages that [option], the value of `--locales`, names among
-  /// the [available] ones, in its order.
-  List<String> _chosen(String option, List<String> available) {
+  /// the [available] ones, those of [texts] that an app can be in, in its
+  /// order.
+  List<String> _chosen(
+    String option,
+    List<String> available,
+    List<AppText> texts,
+  ) {
     const name = '--locales';
     final codes = [for (final code in option.split(',')) code.trim()];
-    final languages = 'The texts of the app are in ${available.join(', ')}.';
+    final languages = 'The app can be in ${available.join(', ')}.';
     if (codes.any((code) => code.isEmpty)) {
       throw SmfUsageException(
         '$name takes the codes of languages with commas between them, such '
         'as en,uk, not "$option". $languages',
       );
     }
+    final ofTexts = {
+      _english,
+      for (final text in texts) ...text.text.translations.keys,
+    };
     final unknown = [
       for (final code in codes)
-        if (!available.contains(code)) code,
+        if (!ofTexts.contains(code)) code,
     ];
     if (unknown.isNotEmpty) {
       throw SmfUsageException(
         'No text of the app is in ${unknown.join(', ')}, which $name names. '
+        '$languages',
+      );
+    }
+    final unsupported = [
+      for (final code in codes)
+        if (!available.contains(code)) code,
+    ];
+    if (unsupported.isNotEmpty) {
+      throw SmfUsageException(
+        'The app cannot be in ${unsupported.join(', ')}, which $name names: '
+        'Flutter has no texts for its own widgets in such a language. '
         '$languages',
       );
     }
@@ -147,6 +173,35 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
       );
     }
     return codes;
+  }
+
+  /// A warning for each owner and each language of its texts among [texts]
+  /// that no app can be in, which names the texts.
+  List<String> _leftOut(List<AppText> texts) {
+    final byOwner = <(ContributionOrigin, String), List<String>>{};
+    for (final text in texts) {
+      for (final language in text.text.translations.keys) {
+        if (!LocalizationRole.supportedLanguages.contains(language)) {
+          final key = (text.owner, language);
+          byOwner.putIfAbsent(key, () => []).add(text.text.name);
+        }
+      }
+    }
+    String warning(
+      ContributionOrigin owner,
+      String language,
+      List<String> names,
+    ) =>
+        'The app is not in $language, which '
+        '${names.length == 1 ? 'the text' : 'the texts'} ${names.join(', ')} '
+        'of ${_named(owner)} '
+        '${names.length == 1 ? 'has a translation' : 'have translations'} '
+        'into: Flutter has no texts for its own widgets in that language.';
+    return [
+      for (final MapEntry(key: (owner, language), value: names)
+          in byOwner.entries)
+        warning(owner, language, names),
+    ];
   }
 
   /// A warning for each owner with texts among [texts] that have no

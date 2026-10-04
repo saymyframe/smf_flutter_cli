@@ -22,7 +22,10 @@ const localizationRole = LocalizationRole._();
 /// The languages of the app are those of [localesIn]: every language that a
 /// text of the app is in, English first, or those of the option
 /// [localesOption]. English is always one of them, since a text reads in
-/// English wherever it has no translation.
+/// English wherever it has no translation. An app can be only in a language
+/// in which Flutter has the texts of its own widgets (see
+/// [supportedLanguages]), so the role leaves any other language of a text
+/// out of the app, and tells whose text it is.
 ///
 /// The role's template generates [appLocaleFile], whichever provider is
 /// selected, with:
@@ -43,8 +46,14 @@ const localizationRole = LocalizationRole._();
 /// [textsIn], named by its [AppText.getter]. Such a getter returns the text
 /// in the language of the context, or in English when the text has no
 /// translation into that language. The provider renders the texts in the
-/// languages of [localesIn] only, and adds the delegate of its texts to the
-/// `localizationsDelegates` of the root.
+/// languages of [localesIn] only, each under the name of its getter in a
+/// file of its own, and its texts follow the locale of the root of the
+/// app: `context.l10n` works in every context below the root, in the
+/// language that the root is in, also once that language changes. How its
+/// texts get there is the provider's choice. One that loads them with a
+/// delegate, written by hand or by a tool, adds the delegate to the
+/// `localizationsDelegates` of the root, and one that reads the locale of
+/// the context itself needs none.
 ///
 /// Every delegate among the `localizationsDelegates` of the root supports
 /// each language of the app, and the `supportedLocales` of the root are
@@ -77,6 +86,28 @@ final class LocalizationRole extends Role<TextsData> {
     on: 'BuildContext',
     getters: ['l10n'],
   );
+
+  /// The codes of the languages that an app can be in: those in which
+  /// Flutter has the texts of its own widgets. The template of the role
+  /// gives the root of the app the three delegates of those texts, and in a
+  /// language that one of them lacks the Material widgets that need their
+  /// texts throw.
+  ///
+  /// It is the set of Flutter 3.44, the oldest Flutter that SMF generates
+  /// apps for: the languages that `kMaterialSupportedLanguages`,
+  /// `kCupertinoSupportedLanguages` and `kWidgetsSupportedLanguages` of its
+  /// `flutter_localizations` all have. A later Flutter has each of them
+  /// too. `Locale` keeps the code of each as it is, which it does not for a
+  /// code that it replaces, such as `iw`, which it reads as `he`.
+  static const Set<String> supportedLanguages = {
+    'af', 'am', 'ar', 'as', 'az', 'be', 'bg', 'bn', 'bo', 'bs', 'ca', 'cs', //
+    'cy', 'da', 'de', 'el', 'en', 'es', 'et', 'eu', 'fa', 'fi', 'fil', 'fr',
+    'ga', 'gl', 'gsw', 'gu', 'he', 'hi', 'hr', 'hu', 'hy', 'id', 'is', 'it',
+    'ja', 'ka', 'kk', 'km', 'kn', 'ko', 'ky', 'lo', 'lt', 'lv', 'mk', 'ml',
+    'mn', 'mr', 'ms', 'my', 'nb', 'ne', 'nl', 'no', 'or', 'pa', 'pl', 'pt',
+    'ro', 'ru', 'si', 'sk', 'sl', 'sq', 'sr', 'sv', 'sw', 'ta', 'te', 'th',
+    'tl', 'tr', 'ug', 'uk', 'ur', 'uz', 'vi', 'zh', 'zu',
+  };
 
   /// `--locales`, the codes of the languages of the app with commas between
   /// them, such as `en,uk`.
@@ -115,7 +146,9 @@ final class LocalizationRole extends Role<TextsData> {
           id: 'localization.texts',
           description: 'The texts of a module have lowerCamelCase names that '
               'differ, an English text, translations by the code of their '
-              'language, and no braces.',
+              'language, and no braces. A variable of a brick of the module '
+              'that reads a text of the app reads one that the app has, and '
+              'is its English text in an app without the role.',
           check: _checkTexts,
         ),
       ];
@@ -124,11 +157,20 @@ final class LocalizationRole extends Role<TextsData> {
   List<StructuralRule<TextsData>> get structuralRules => const [
         StructuralRule(
           id: 'localization.text_access',
-          description: 'Code of a module reads only its own texts and those '
-              'of the modules it depends on, and code of the template of a '
-              'role only the texts of that template, each through its '
-              'getter.',
+          description: 'Code of a module with the role among its roles '
+              'reads only its own texts and those of the modules it depends '
+              'on, and code of the template of a role that requires or uses '
+              'the role only the texts of that template, each through its '
+              'getter. The rule sees a text that code reads from context.l10n '
+              'or from a variable called l10n, and no text that it reads '
+              'through another expression.',
           check: _checkTextAccess,
+        ),
+        StructuralRule(
+          id: 'localization.texts_rendered',
+          description: 'A file of the provider of the role names the getter '
+              'of every text of the app.',
+          check: _checkTextsRendered,
         ),
       ];
 
@@ -140,8 +182,8 @@ final class LocalizationRole extends Role<TextsData> {
 
   /// The codes of the languages of the app in [input], the input of a hook
   /// of this role or of its provider, such as `en` and `uk`: the languages
-  /// that the template chose, or, before the choice, every language that a
-  /// text of the app is in, English first.
+  /// that the template chose, or, before the choice, every language of
+  /// [supportedLanguages] that a text of the app is in, English first.
   List<String> localesIn(RoleHookInput<TextsData> input) =>
       switch (input.choice) {
         LocalizationChoice(:final locales) => locales,
@@ -156,16 +198,21 @@ final class LocalizationRole extends Role<TextsData> {
   ///
   /// The template of a role gives its brick the code as a fragment variable
   /// of its render hook, where its brick has a `BuildContext context` below
-  /// the root `MaterialApp`. The owner gives the role the text as data too,
-  /// or the provider has no getter for it.
+  /// the root `MaterialApp`, and not inside a `const` expression, since the
+  /// code of an app with the role is no constant. The owner gives the role
+  /// the text as data too, or the provider has no getter for it.
   ///
   /// Throws an [ArgumentError] if the role of [input] neither requires nor
-  /// uses this role, or if [owner] is the pipeline, which has no texts.
+  /// uses this role, if [owner] is the pipeline, which has no texts, or
+  /// with the problems of [text], if it has any, so that the hook fails in
+  /// every app, with or without this role.
   Fragment expressionOf(
     RoleHookInput<Object> input,
     ContributionOrigin owner,
     LocalizedText text,
   ) {
+    final problems = text.problems();
+    if (problems.isNotEmpty) throw ArgumentError(problems.join(' '));
     final getter = _getterOf(owner, text.name);
     return input.has(this)
         ? _read(getter)
@@ -181,8 +228,11 @@ final class LocalizationRole extends Role<TextsData> {
   /// a literal in an app without it. So a template reads `{{{text_title}}}`
   /// where its code has a `BuildContext context` below the root
   /// `MaterialApp`, as in `Text({{{text_title}}})`, outside mustache
-  /// sections. The module lists this role among its roles and gives it the
-  /// same [texts] as data.
+  /// sections and not inside a `const` expression, since the code of an app
+  /// with the role is no constant. The module lists this role among its
+  /// roles and gives it the same [texts] as data: the rule
+  /// `localization.texts` reports a variable whose text the app lacks, or
+  /// whose English text differs from that of the data.
   ///
   /// Throws an [ArgumentError] with the problems of [texts], if they have
   /// any, so that the module fails to contribute in every app, with or

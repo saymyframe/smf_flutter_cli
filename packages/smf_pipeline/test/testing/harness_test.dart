@@ -1658,13 +1658,36 @@ void main() {
               requires: {localizationRole},
               contributions: [localizationRole.data(title)],
             ),
+            // A module without the role, whose l10n is something of its own.
+            TestModule(
+              'labels',
+              contributions: [
+                dart(
+                  'lib/labels/labels.dart',
+                  'class Labels {\n'
+                      '  const Labels();\n'
+                      '\n'
+                      "  String get name => 'Name';\n"
+                      '}\n'
+                      '\n'
+                      'const l10n = Labels();\n'
+                      '\n'
+                      'String name() => l10n.name;\n',
+                ),
+              ],
+            ),
           ]),
         );
 
         final result = await harness.check(
           const ContractCase(
             'texts',
-            requested: [ModuleId('home'), ModuleId('feed'), ModuleId('texts')],
+            requested: [
+              ModuleId('home'),
+              ModuleId('feed'),
+              ModuleId('texts'),
+              ModuleId('labels'),
+            ],
           ),
         );
 
@@ -1689,6 +1712,154 @@ void main() {
             ),
           ],
         );
+      });
+
+      test(
+          'the rule of the localization role finds the texts of the app '
+          'that no file of the provider names', () async {
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            // The extension of the role, and a getter for one text only.
+            TestModule(
+              'texts',
+              providers: [const RoleProvider.plain(localizationRole)],
+              contributions: [
+                dart(
+                  LocalizationRole.textsFile,
+                  "import 'package:flutter/widgets.dart';\n"
+                  '\n'
+                  'extension AppTexts on BuildContext {\n'
+                  '  Texts get l10n => const Texts();\n'
+                  '}\n'
+                  '\n'
+                  'class Texts {\n'
+                  '  const Texts();\n'
+                  '\n'
+                  "  String get homeTitle => 'Title';\n"
+                  '}\n',
+                ),
+              ],
+            ),
+            TestModule(
+              'home',
+              requires: {localizationRole},
+              contributions: [
+                localizationRole.data(
+                  const TextsData([
+                    LocalizedText('title', en: 'Title'),
+                    LocalizedText('subtitle', en: 'Subtitle'),
+                  ]),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'texts',
+            requested: [ModuleId('home'), ModuleId('texts')],
+          ),
+        );
+
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'home: The provider of the localization role does not render '
+              'the text subtitle of the module home: none of its files names '
+              'the getter homeSubtitle.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'the rule of the localization role reports a variable of a brick '
+          'whose text the module did not give the role, or gave with another '
+          'English text, before anything is rendered', () async {
+        const given = TextsData([LocalizedText('title', en: 'Home')]);
+        const read = TextsData([
+          LocalizedText('title', en: 'Start'),
+          LocalizedText('subtitle', en: 'Subtitle'),
+        ]);
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'texts',
+              providers: [const RoleProvider.plain(localizationRole)],
+              contributions: [
+                dart(
+                  LocalizationRole.textsFile,
+                  "import 'package:flutter/widgets.dart';\n"
+                  '\n'
+                  'extension AppTexts on BuildContext {\n'
+                  '  Texts get l10n => const Texts();\n'
+                  '}\n'
+                  '\n'
+                  'class Texts {\n'
+                  '  const Texts();\n'
+                  '\n'
+                  "  String get homeTitle => 'Home';\n"
+                  '}\n',
+                ),
+              ],
+            ),
+            TestModule(
+              'home',
+              uses: {localizationRole},
+              contributions: [
+                localizationRole.data(given),
+                BrickContribution(
+                  bundle(
+                    'home',
+                    files: {
+                      'lib/home/home.dart':
+                          "import 'package:flutter/widgets.dart';\n"
+                              '\n'
+                              'List<String> texts(BuildContext context) =>\n'
+                              '    [{{{text_title}}}, {{{text_subtitle}}}];\n',
+                    },
+                  ),
+                  vars: localizationRole.varsOf(const ModuleId('home'), read),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final withRole = await harness.check(
+          const ContractCase(
+            'texts',
+            requested: [ModuleId('home'), ModuleId('texts')],
+          ),
+        );
+
+        expect(
+          [
+            for (final issue in withRole.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              "home: The variable text_title of the brick home is 'Start' in "
+              'an app without the localization role, but the text title of '
+              "the module home is 'Home' in English.",
+            ),
+            equals(
+              'home: The variable text_subtitle of the brick home reads '
+              'context.l10n.homeSubtitle, but no text of the app has the '
+              'getter homeSubtitle.',
+            ),
+          ],
+        );
+        // Validation stops the app, as it does in smf create.
+        expect(withRole.app, isNull);
       });
 
       test('the files of render hooks are checked like the files of bricks',

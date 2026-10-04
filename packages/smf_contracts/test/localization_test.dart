@@ -1,5 +1,6 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:mason/mason.dart' show MasonBundle;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
@@ -199,6 +200,35 @@ void main() {
       );
       expect(LocalizationRole.localesOption.allowed, isNull);
     });
+
+    test(
+        'knows the languages in which Flutter has the texts of its own '
+        'widgets, by the codes that a text names them with', () {
+      const languages = LocalizationRole.supportedLanguages;
+
+      // The languages that the Material, Cupertino and widgets delegates
+      // of Flutter 3.44 all support.
+      expect(languages, hasLength(81));
+      expect(
+        languages,
+        containsAll(['en', 'uk', 'de', 'he', 'fil', 'gsw', 'nb', 'no', 'zh']),
+      );
+      // Each is a code that a text names a translation with.
+      for (final language in languages.difference({'en'})) {
+        expect(
+          LocalizedText('title', en: 'Title', translations: {language: 'T'})
+              .problems(),
+          isEmpty,
+          reason: language,
+        );
+      }
+      // Pashto has no Cupertino texts, Maltese none at all; a code of three
+      // letters where Flutter has two; and a code that Locale replaces, so
+      // that no text of a provider would match it.
+      for (final language in ['ps', 'mt', 'ukr', 'xx', 'iw', 'in', 'ji']) {
+        expect(languages, isNot(contains(language)), reason: language);
+      }
+    });
   });
 
   group('the texts of an app', () {
@@ -256,6 +286,28 @@ void main() {
         ['en', 'uk', 'de'],
       );
       expect(localizationRole.localesIn(inputOf(localizationRole)), ['en']);
+    });
+
+    test('are not in a language that no app can be in', () {
+      final input = inputOf(
+        localizationRole,
+        data: [
+          _of('home', const [
+            LocalizedText(
+              'title',
+              en: 'Home',
+              translations: {'mt': 'Dar', 'uk': 'Головна', 'ps': 'کور'},
+            ),
+          ]),
+        ],
+      );
+
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+      // The text keeps what its owner gave.
+      expect(
+        localizationRole.textsIn(input).single.text.languages,
+        ['en', 'mt', 'uk', 'ps'],
+      );
     });
 
     test('are in the languages that the template chose', () {
@@ -369,8 +421,8 @@ void main() {
           () => choose(data, locales: option),
           failsWith(
             '--locales takes the codes of languages with commas between '
-            'them, such as en,uk, not "$option". The texts of the app are in '
-            'en, uk, de.',
+            'them, such as en,uk, not "$option". The app can be in en, uk, '
+            'de.',
           ),
           reason: '"$option"',
         );
@@ -381,10 +433,94 @@ void main() {
       expect(
         () => choose(data, locales: 'en,fr,uk,pl'),
         failsWith(
-          'No text of the app is in fr, pl, which --locales names. The texts '
-          'of the app are in en, uk, de.',
+          'No text of the app is in fr, pl, which --locales names. The app '
+          'can be in en, uk, de.',
         ),
       );
+    });
+
+    group('with texts in a language that no app can be in', () {
+      final data = [
+        _of('home', const [
+          LocalizedText(
+            'title',
+            en: 'Home',
+            translations: {'mt': 'Dar', 'uk': 'Головна'},
+          ),
+          LocalizedText('back', en: 'Back', translations: {'mt': 'Lura'}),
+        ]),
+        _of('feed', const [
+          LocalizedText(
+            'empty',
+            en: 'Nothing here',
+            translations: {'uk': 'Порожньо', 'ps': 'هیڅ', 'mt': 'Xejn'},
+          ),
+        ]),
+      ];
+
+      test('leaves the language out, and tells whose texts are in it',
+          () async {
+        final environment = PromptingEnvironment();
+
+        expect(
+          await choose(data, environment: environment),
+          const LocalizationChoice(['en', 'uk']),
+        );
+        expect(environment.warnings, hasLength(4));
+        expect(
+          environment.warnings[0],
+          'The app is not in mt, which the texts title, back of the module '
+          'home have translations into: Flutter has no texts for its own '
+          'widgets in that language.',
+        );
+        expect(
+          environment.warnings[1],
+          'The app is not in ps, which the text empty of the module feed has '
+          'a translation into: Flutter has no texts for its own widgets in '
+          'that language.',
+        );
+        expect(
+          environment.warnings[2],
+          'The app is not in mt, which the text empty of the module feed has '
+          'a translation into: Flutter has no texts for its own widgets in '
+          'that language.',
+        );
+        // The module still works in the languages that the app is in.
+        expect(
+          environment.warnings[3],
+          'No translation into uk of the text back of the module home: the '
+          'app shows it in English there.',
+        );
+      });
+
+      test('refuses the language in --locales', () {
+        expect(
+          () => choose(data, locales: 'en,mt,uk,ps'),
+          failsWith(
+            'The app cannot be in mt, ps, which --locales names: Flutter has '
+            'no texts for its own widgets in such a language. The app can be '
+            'in en, uk.',
+          ),
+        );
+        // A language that no text is in comes first.
+        expect(
+          () => choose(data, locales: 'en,mt,fr'),
+          failsWith(
+            'No text of the app is in fr, which --locales names. The app can '
+            'be in en, uk.',
+          ),
+        );
+      });
+
+      test('says nothing of it when --locales names the languages', () async {
+        final environment = PromptingEnvironment();
+
+        expect(
+          await choose(data, locales: 'en', environment: environment),
+          const LocalizationChoice(['en']),
+        );
+        expect(environment.warnings, isEmpty);
+      });
     });
 
     test('takes a language once', () {
@@ -473,6 +609,33 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('the code that reads a text with problems', () {
+    const bad = LocalizedText('Label', en: 'Hello, {name}');
+    const message = 'The text "Label" needs a name that is a lowerCamelCase '
+        'identifier, such as title. '
+        'The text "Label" has a brace in its text in en; a text takes no '
+        'parameters, so it has neither { nor }.';
+
+    test('is refused in an app with the role and in one without it', () {
+      for (final input in [
+        inputOf(_themeRole, present: {localizationRole}),
+        inputOf(_themeRole),
+        inputOf(localizationRole),
+      ]) {
+        expect(
+          () => localizationRole.expressionOf(
+            input,
+            RoleTemplateOrigin(_themeRole),
+            bad,
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.message, 'message', message),
+          ),
+        );
+      }
     });
   });
 
@@ -619,6 +782,147 @@ void main() {
     });
   });
 
+  group('the rule localization.texts, for the variables of the bricks', () {
+    const home = ModuleId('home');
+    const texts = TextsData([_title, _openDetails]);
+
+    List<SmfIssue> check(
+      List<RoleData<Object>> data,
+      Map<String, Object?> vars,
+    ) =>
+        localizationRole.checkModule(
+          ModuleRuleRequest(
+            hook: RoleHookRequest(
+              data: data,
+              presentRoles: {localizationRole},
+              context: testContext,
+            ),
+            module: const ModuleDescriptor(
+              id: home,
+              description: 'Home',
+              kind: plainKind,
+              uses: {localizationRole},
+              dependsOn: {ModuleId('shared')},
+            ),
+            contributions: [
+              BrickContribution(
+                const MasonBundle(
+                  name: 'home_screen',
+                  description: 'home',
+                  version: '0.1.0',
+                ),
+                vars: vars,
+              ),
+            ],
+          ),
+        );
+
+    test('passes the variables of the texts that the module gave the role', () {
+      expect(
+        check(
+          [
+            _of('home', texts.texts),
+          ],
+          localizationRole.varsOf(home, texts),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('reports a variable whose text the module did not give the role', () {
+      final issues = check(
+        [
+          _of('home', const [_title]),
+        ],
+        localizationRole.varsOf(home, texts),
+      );
+
+      expect(
+        issues.single.message,
+        'The variable text_open_details of the brick home_screen reads '
+        'context.l10n.homeOpenDetails, but no text of the app has the getter '
+        'homeOpenDetails.',
+      );
+      expect(issues.single.origin, const ModuleOrigin(home));
+      expect(issues.single.hint, contains('localizationRole.data(texts)'));
+    });
+
+    test(
+        'reports a variable whose English text differs from that of the '
+        'text, so that the app would read otherwise without the role', () {
+      final issues = check(
+        [
+          _of('home', const [
+            LocalizedText('title', en: "The app's start"),
+            _openDetails,
+          ]),
+        ],
+        localizationRole.varsOf(home, texts),
+      );
+
+      expect(
+        issues.single.message,
+        "The variable text_title of the brick home_screen is 'Settings' in "
+        'an app without the localization role, but the text title of the '
+        r"module home is 'The app\'s start' in English.",
+      );
+      expect(issues.single.origin, const ModuleOrigin(home));
+      expect(issues.single.hint, contains('localizationRole.varsOf()'));
+    });
+
+    test('compares a variable that reads the text of another module too', () {
+      final data = [
+        _of('home', const [_title]),
+        _of('shared', const [LocalizedText('ok', en: 'OK')]),
+      ];
+      RoleVar reading(String english) => RoleVar(
+            localizationRole,
+            present: 'context.l10n.sharedOk',
+            absent: english,
+          );
+
+      expect(check(data, {'ok': reading("'OK'")}), isEmpty);
+      expect(
+        check(data, {'ok': reading("'Fine'")}).single.message,
+        "The variable ok of the brick home_screen is 'Fine' in an app "
+        'without the localization role, but the text ok of the module shared '
+        "is 'OK' in English.",
+      );
+    });
+
+    test('leaves other variables alone', () {
+      expect(
+        check(
+          [
+            _of('home', const [_title]),
+          ],
+          {
+            // Plain data, code of another role, and code of this role that
+            // reads no text.
+            'count': 3,
+            'label': "'Home'",
+            'zones': RoleVar(
+              _themeRole,
+              present: 'context.l10n.nothing',
+              absent: "'None'",
+            ),
+            'picker': const RoleVar(
+              localizationRole,
+              present: Fragment('LanguagePicker()'),
+              absent: 'SizedBox()',
+            ),
+            'upper': const RoleVar(
+              localizationRole,
+              present: 'context.l10n.homeTitle.toUpperCase()',
+              absent: "'SETTINGS'",
+            ),
+          },
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('the template checks the texts of all owners', () {
     List<String> validate(List<RoleData<Object>> data) => [
           for (final issue in localizationRole.template
@@ -727,15 +1031,24 @@ void main() {
       description: 'Home',
       kind: plainKind,
       dependsOn: {ModuleId('shared')},
+      uses: {localizationRole},
     );
     const shared = ModuleDescriptor(
       id: ModuleId('shared'),
       description: 'Shared',
       kind: plainKind,
+      uses: {localizationRole},
     );
     const feed = ModuleDescriptor(
       id: ModuleId('feed'),
       description: 'Feed',
+      kind: plainKind,
+      requires: {localizationRole},
+    );
+    // A module without the role among its roles.
+    const plain = ModuleDescriptor(
+      id: ModuleId('plain'),
+      description: 'Plain',
       kind: plainKind,
     );
     const provider = ModuleDescriptor(
@@ -743,6 +1056,13 @@ void main() {
       description: 'Texts',
       kind: plainKind,
       providers: [RoleProvider.plain(localizationRole)],
+    );
+    // A provider of another role, which uses the localization role.
+    final settings = ModuleDescriptor(
+      id: const ModuleId('settings'),
+      description: 'Settings',
+      kind: plainKind,
+      providers: [RoleProvider.plain(_themeRole)],
     );
     final data = [
       _of('home', const [_title]),
@@ -772,18 +1092,33 @@ void main() {
                 invocations: invocations,
               ),
             },
-            owners: {if (owner != null) 'lib/file.dart': owner},
-            modules: const [home, shared, feed, provider],
+            // The provider renders every text, as the other rule of the
+            // role asks.
+            texts: const {
+              LocalizationRole.textsFile:
+                  'homeTitle sharedOk feedEmpty appThemeMode',
+            },
+            owners: {
+              if (owner != null) 'lib/file.dart': owner,
+              LocalizationRole.textsFile: const ModuleOrigin(ModuleId('texts')),
+            },
+            modules: [home, shared, feed, plain, provider, settings],
           ),
         );
 
     const ofHome = ModuleOrigin(ModuleId('home'));
 
-    test('has the id and a description', () {
-      final rule = localizationRole.structuralRules.single;
+    test('has the id, and a description that says what it does not see', () {
+      final rule = localizationRole.structuralRules.first;
 
       expect(rule.id, 'localization.text_access');
-      expect(rule.description, isNotEmpty);
+      expect(
+        rule.description,
+        allOf(
+          contains('context.l10n or from a variable called l10n'),
+          contains('no text that it reads through another expression'),
+        ),
+      );
     });
 
     test('lets a module read its texts and those of its dependencies', () {
@@ -940,17 +1275,179 @@ void main() {
       );
     });
 
-    test('takes a module that is not in the app for one that depends on none',
-        () {
+    test(
+        'leaves a module without the role among its roles alone, whose '
+        'variable called l10n is something else', () {
+      for (final module in ['plain', 'gone']) {
+        expect(
+          check(
+            ModuleOrigin(ModuleId(module)),
+            accesses: const [
+              IndexedMemberAccess('l10n', 'name'),
+              IndexedMemberAccess('context.l10n', 'homeTitle'),
+            ],
+            invocations: const [IndexedInvocation('load', target: 'l10n')],
+          ),
+          isEmpty,
+          reason: module,
+        );
+      }
+    });
+
+    test(
+        'leaves the template of a role alone that neither requires nor uses '
+        'the role', () {
       expect(
         check(
-          const ModuleOrigin(ModuleId('gone')),
+          const RoleTemplateOrigin(routerRole),
+          accesses: const [IndexedMemberAccess('l10n', 'name')],
+        ),
+        isEmpty,
+      );
+      // The template of the role itself reads its own texts.
+      expect(
+        check(
+          const RoleTemplateOrigin(localizationRole),
           accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
         ).single.message,
         'lib/file.dart reads context.l10n.homeTitle, the text title of the '
-        'module home, but the module gone may only read its own texts and '
-        'those of the modules it depends on.',
+        'module home, but the template of the localization role may only '
+        'read its own texts.',
       );
+    });
+
+    test(
+        'checks a module that provides another role, as it does any module '
+        'with the role among its roles', () {
+      expect(
+        check(
+          const ModuleOrigin(ModuleId('settings')),
+          accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+        ).single.message,
+        'lib/file.dart reads context.l10n.homeTitle, the text title of the '
+        'module home, but the module settings may only read its own texts '
+        'and those of the modules it depends on.',
+      );
+      // The module that requires the role is checked too.
+      expect(
+        check(
+          const ModuleOrigin(ModuleId('feed')),
+          accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+        ),
+        hasLength(1),
+      );
+    });
+  });
+
+  group('the rule localization.texts_rendered', () {
+    const provider = ModuleDescriptor(
+      id: ModuleId('texts'),
+      description: 'Texts',
+      kind: plainKind,
+      providers: [RoleProvider.plain(localizationRole)],
+    );
+    const home = ModuleDescriptor(
+      id: ModuleId('home'),
+      description: 'Home',
+      kind: plainKind,
+      uses: {localizationRole},
+    );
+    const ofProvider = ModuleOrigin(ModuleId('texts'));
+    const ofHome = ModuleOrigin(ModuleId('home'));
+    final data = [
+      _of('home', const [_title, _openDetails]),
+      _ofTemplate(_themeRole, const [LocalizedText('mode', en: 'Theme')]),
+    ];
+
+    /// The issues of an app with the text files [texts], by path, each
+    /// generated by its owner among [owners].
+    List<SmfIssue> check(
+      Map<String, String> texts,
+      Map<String, ContributionOrigin> owners, {
+      List<ModuleDescriptor> modules = const [provider, home],
+    }) =>
+        localizationRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: data,
+              presentRoles: {localizationRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: texts,
+            owners: owners,
+            modules: modules,
+          ),
+        );
+
+    test('has the id and a description', () {
+      final rule = localizationRole.structuralRules.last;
+
+      expect(rule.id, 'localization.texts_rendered');
+      expect(rule.description, isNotEmpty);
+      expect(localizationRole.structuralRules, hasLength(2));
+    });
+
+    test(
+        'passes a provider whose files name the getter of every text, as '
+        'the key of a file of translations or as a getter in code', () {
+      expect(
+        check(
+          {
+            'lib/l10n/app_en.arb': '{"homeTitle": "Settings", '
+                '"appThemeMode": "Theme"}',
+            LocalizationRole.textsFile: "String get homeOpenDetails => 'Open';",
+          },
+          {
+            'lib/l10n/app_en.arb': ofProvider,
+            LocalizationRole.textsFile: ofProvider,
+          },
+        ),
+        isEmpty,
+      );
+    });
+
+    test('reports each text that no file of the provider names', () {
+      final issues = check(
+        {
+          // The getter is a part of a longer name, and a name of the text
+          // of another owner.
+          LocalizationRole.textsFile: 'String get homeTitleLong => "";\n'
+              r'String get $homeOpenDetails => "";'
+              '\nObject get l10n => const Object();',
+          // A file of a module names the getters too.
+          'lib/home.dart': 'context.l10n.homeTitle context.l10n.appThemeMode',
+        },
+        {LocalizationRole.textsFile: ofProvider, 'lib/home.dart': ofHome},
+      );
+
+      expect(issues, hasLength(3));
+      expect(
+        issues[0].message,
+        'The provider of the localization role does not render the text '
+        'title of the module home: none of its files names the getter '
+        'homeTitle.',
+      );
+      expect(
+        issues[1].message,
+        'The provider of the localization role does not render the text '
+        'openDetails of the module home: none of its files names the getter '
+        'homeOpenDetails.',
+      );
+      expect(
+        issues[2].message,
+        'The provider of the localization role does not render the text '
+        'mode of the template of the app_theme role: none of its files names '
+        'the getter appThemeMode.',
+      );
+      expect(issues.first.origin, ofHome);
+      expect(issues.last.origin, RoleTemplateOrigin(_themeRole));
+      expect(issues.first.path, LocalizationRole.textsFile);
+      expect(issues.first.hint, contains('LocalizationRole.textsIn()'));
+    });
+
+    test('has nothing to check without the descriptor of a provider', () {
+      expect(check(const {}, const {}, modules: const [home]), isEmpty);
     });
   });
 
