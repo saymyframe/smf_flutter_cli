@@ -55,6 +55,26 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the key and the location of the page. Once go_router keeps the
 /// completers of its pages, the router can leave this out.
 ///
+/// In an app whose modules declare guards, the router asks them as the
+/// router role says, through the `GuardedNavigation` of the role, which
+/// keeps the location that the user comes back to: the router remembers
+/// nothing of the guards itself. It knows a location by its URI. The
+/// top-level `redirect` of go_router asks about every location that
+/// go_router parses, such as the one the app starts on, those of `go()` and
+/// those of the platform, and sends the user to the target of the guard
+/// that keeps them from it. `push()` and `replace()` ask before they hand a
+/// location to go_router, which would put the target on top of the stack:
+/// they go to the target instead, and `push()` completes with `null`. The
+/// router listens to `guardChanges` itself. When a guard starts or stops
+/// allowing, it tells the role of the pages that pushes showed, the one on
+/// top first, and of the location below them, or of no pages before it
+/// showed its first location, and goes to the location that the role
+/// answers. A page that `replace()` showed over other pages
+/// counts as one that a push showed, as it is one to go_router. The router
+/// does not hand `guardChanges` to go_router as its `refreshListenable`: a
+/// refresh asks only about the location below the pushed pages, and gives
+/// each of those pages a new completer.
+///
 /// The router tells the listeners of the screen of the router role about
 /// the page on top of the app: the delegate of go_router hears of every
 /// change of its stacks, a switch of branches included, and the router
@@ -95,8 +115,9 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
 
   @override
   RoleOutput render(RoleHookInput<RoutesData> input) {
+    final facade = routerRole.facadeOf(input);
     final routes = GoRoutes.of(
-      routerRole.facadeOf(input),
+      facade,
       start: routerRole.startIn(input),
       mainNavigation: input.has(layoutRole),
     );
@@ -106,6 +127,9 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
         'main_navigation': routes.hasMainNavigation,
         'routes': routes.routes,
         'value_checks': routes.valueChecks,
+        // Whether the modules of the app declare guards, which the router
+        // then asks.
+        'guards': facade.guards.isNotEmpty,
       },
     );
   }

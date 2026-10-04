@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
-import 'app_router.dart' show AppNavigator, AppRouter;
+import 'app_router.dart' show AppNavigator, AppRouter{{#guards}}, GuardedNavigation, guardChanges{{/guards}};
 import 'navigation.dart' show AppLocation;
 
 /// Creates the router of the app: a [GoRouter] with the routes of the
@@ -15,13 +15,21 @@ AppRouter createAppRouter() => _GoAppRouter();
 /// locations of the app too, and tells the listeners of the screen the user
 /// sees when it changes.
 final class _GoAppRouter implements AppRouter, AppNavigator {
-  /// The router, created once, on first use. Navigation goes through it
+{{#guards}}  /// Creates the router, which tells the guards of the app of its pages
+  /// when one of them starts or stops allowing.
+  _GoAppRouter() {
+    guardChanges.addListener(_guardsChanged);
+  }
+
+{{/guards}}  /// The router, created once, on first use. Navigation goes through it
   /// rather than through the router above a context, so that any context
   /// can navigate, even one above the router.
   @override
   late final GoRouter config = GoRouter(
     initialLocation: {{{initial_location}}},
-    observers: _observers(),
+    observers: _observers(),{{#guards}}
+    redirect: (context, state) =>
+        _guards.asked(state.topRoute?.name, '${state.uri}')?.location,{{/guards}}
     routes: [
 {{{routes}}}
     ],
@@ -37,7 +45,21 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   /// For each completer that go_router gave a pushed page anew, the
   /// completer of the push that showed the page.
-  final Expando<Completer<Object?>> _pushes = Expando();
+  final Expando<Completer<Object?>> _pushes = Expando();{{#guards}}
+
+  /// The guards of the app as the router asks them, which keep the location
+  /// that the user comes back to once they allow it. The router knows a
+  /// location by its URI, and `/` is the screen that the app starts on.
+  ///
+  /// go_router asks them about every location that it parses, in its
+  /// `redirect`: the one the app starts on, those of [go] and those of the
+  /// platform, and goes to the location that they answer. [push] and
+  /// [replace] ask them before they hand a location to go_router, which
+  /// would put the target of the guard on top of the stack.
+  final GuardedNavigation<String> _guards = GuardedNavigation(
+    start: '/',
+    locationOf: (location) => location.path,
+  );{{/guards}}
 
   @override
   AppNavigator navigatorOf(BuildContext context) => this;
@@ -47,15 +69,55 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
-    {{#main_navigation}}_checkMainNavigation(location, 'push');
+    {{#guards}}final guarded = _guards.asked(location.routeName, location.path);
+    if (guarded != null) {
+      config.go(guarded.location);
+      return Future.value();
+    }
+    {{/guards}}{{#main_navigation}}_checkMainNavigation(location, 'push');
     {{/main_navigation}}return config.push<T>(location.path);
   }
 
   @override
   void replace(AppLocation location) {
-    {{#main_navigation}}_checkMainNavigation(location, 'replace');
+    {{#guards}}final guarded = _guards.asked(location.routeName, location.path);
+    if (guarded != null) return config.go(guarded.location);
+    {{/guards}}{{#main_navigation}}_checkMainNavigation(location, 'replace');
     {{/main_navigation}}config.pushReplacement<Object?>(location.path);
-  }
+  }{{#guards}}
+
+  /// Tells the guards of the pages of the router when one of them starts
+  /// or stops allowing, and goes to the location that they answer: the
+  /// target of the guard that keeps the user from one of the pages, or the
+  /// location that the user comes back to once the guards allow it.
+  ///
+  /// The pages of the router are those that pushes showed, the one on top
+  /// first, and, below them, the location that go_router went to last. A
+  /// page that [replace] showed over other pages is one that a push showed
+  /// to go_router. The router listens to the guards itself rather than
+  /// through the `refreshListenable` of go_router, whose refresh asks only
+  /// about the location below the pushed pages.
+  void _guardsChanged() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    // Before its first location, the router has no page to tell of. The
+    // guards still take note of what they allow, so that a notification
+    // without a change does not look like one later.
+    if (configuration.isEmpty && !configuration.isError) {
+      _guards.changed(const []);
+      return;
+    }
+    final below = config.configuration.findMatch(configuration.uri);
+    final shown = _guards.changed([
+      for (final page in _pushedPages(configuration.matches).toList().reversed)
+        (route: page.route.name, location: '${page.matches.uri}', pushed: true),
+      (
+        route: below.lastOrNull?.route.name,
+        location: '${configuration.uri}',
+        pushed: false,
+      ),
+    ]);
+    if (shown != null) config.go(shown.location);
+  }{{/guards}}
 
   /// Follows the pages of go_router, whose delegate notifies its listeners
   /// of each change of them: keeps each push completing with the value of

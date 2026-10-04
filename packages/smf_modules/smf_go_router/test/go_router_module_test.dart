@@ -161,6 +161,46 @@ class _GoAppRouter {
     _nameOf(member)!: member.toSource(),
 };
 
+/// The members of the router that ask the guards of the app, as the
+/// analyzer prints their declarations, by name; the constructor is under
+/// the name of its class.
+final Map<String, String> _expectedGuardMembers = {
+  for (final member in parseString(
+    content: r'''
+class _GoAppRouter {
+  _GoAppRouter() {
+    guardChanges.addListener(_guardsChanged);
+  }
+
+  final GuardedNavigation<String> _guards = GuardedNavigation(
+    start: '/',
+    locationOf: (location) => location.path,
+  );
+
+  void _guardsChanged() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    if (configuration.isEmpty && !configuration.isError) {
+      _guards.changed(const []);
+      return;
+    }
+    final below = config.configuration.findMatch(configuration.uri);
+    final shown = _guards.changed([
+      for (final page in _pushedPages(configuration.matches).toList().reversed)
+        (route: page.route.name, location: '${page.matches.uri}', pushed: true),
+      (
+        route: below.lastOrNull?.route.name,
+        location: '${configuration.uri}',
+        pushed: false,
+      ),
+    ]);
+    if (shown != null) config.go(shown.location);
+  }
+}
+''',
+  ).unit.declarations.whereType<ClassDeclaration>().single.body.members)
+    _nameOf(member)!: member.toSource(),
+};
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -320,13 +360,24 @@ List<String> _listenersOf(CompilationUnit unit) => [
         element.toSource(),
     ];
 
-/// The name of [member] of a class if it is a field or a method, or
-/// `null`.
+/// The name of [member] of a class if it is a field or a method, the name
+/// of the class for its unnamed constructor, or `null`.
 String? _nameOf(ClassMember member) => switch (member) {
       FieldDeclaration(:final fields) => fields.variables.single.name.lexeme,
       MethodDeclaration(:final name) => name.lexeme,
+      ConstructorDeclaration(:final typeName?, name: null) => typeName.name,
       _ => null,
     };
+
+/// What the file of the router in [unit] imports of the file of the router
+/// role: the names of its `show`.
+List<String> _shownOfTheRole(CompilationUnit unit) => [
+      for (final directive in unit.directives.whereType<ImportDirective>())
+        if (directive.uri.stringValue == 'app_router.dart')
+          for (final combinator
+              in directive.combinators.whereType<ShowCombinator>())
+            for (final name in combinator.shownNames) name.name,
+    ];
 
 /// Checks that the delegate of the router of [unit], created once, tells
 /// the router of every change of its configuration, which then keeps the
@@ -531,6 +582,7 @@ void main() {
         'catalog',
         'settings',
         'profile',
+        'intro',
         'observing with router',
         'observing',
       ]);
@@ -907,6 +959,177 @@ void main() {
       expect(
         app.files[_factory]!.text,
         isNot(contains('_checkMainNavigation')),
+      );
+    });
+
+    test('asks no guards in an app without guards', () {
+      final router = _routerClassOf(unit);
+
+      expect(_argument(_goRouterOf(unit), 'redirect'), isNull);
+      expect(
+        router.body.members.map(_nameOf),
+        isNot(containsAll(_expectedGuardMembers.keys)),
+      );
+      for (final name in _expectedGuardMembers.keys) {
+        expect(router.body.members.map(_nameOf), isNot(contains(name)));
+      }
+      expect(_shownOfTheRole(unit), ['AppNavigator', 'AppRouter']);
+      for (final name in [
+        RouterRole.guardedNavigation,
+        RouterRole.redirectOf,
+        RouterRole.guardChanges,
+      ]) {
+        expect(app.files[_factory]!.text, isNot(contains(name)));
+      }
+    });
+  });
+
+  group('an app with guards', () {
+    late ContractResult result;
+    late RenderedApp app;
+    late CompilationUnit unit;
+
+    setUpAll(() async {
+      result = await renderedApp(const [CatalogFeature.id, IntroFeature.id]);
+      app = result.app!;
+      unit = _factoryOf(app);
+    });
+
+    test('has the guards of its features, which the router role generates', () {
+      final facade = routerRole.facadeOf(routerRole.hookInput(result.hook!));
+
+      expect(
+        [for (final guard in facade.guards) guard.fullName],
+        ['intro.firstRun'],
+      );
+      expect(
+        _shownOfTheRole(unit),
+        [
+          'AppNavigator',
+          'AppRouter',
+          RouterRole.guardedNavigation,
+          RouterRole.guardChanges,
+        ],
+      );
+    });
+
+    test(
+        'asks the guards about the location it starts on, the locations of '
+        'go() and those of the platform, in the redirect of go_router', () {
+      final router = _goRouterOf(unit);
+
+      expect(
+        _argument(router, 'redirect')!.toSource(),
+        '(context, state) => '
+        r"_guards.asked(state.topRoute?.name, '${state.uri}')?.location",
+      );
+      expect(
+        _bodyOf(_routerClassOf(unit), 'go'),
+        '=> config.go(location.path);',
+      );
+      // The location that the app opens with is the start route, which the
+      // redirect is asked about like any other.
+      expect(
+        (_argument(router, 'initialLocation')! as StringLiteral).stringValue,
+        '/catalog',
+      );
+    });
+
+    test(
+        'asks the guards before push() and replace() hand a location to '
+        'go_router, which would put the target of a guard on top', () {
+      final router = _routerClassOf(unit);
+
+      expect(
+        _bodyOf(router, 'push'),
+        '{final guarded = _guards.asked(location.routeName, location.path); '
+        'if (guarded != null) {config.go(guarded.location); return '
+        'Future.value();} return config.push<T>(location.path);}',
+      );
+      expect(
+        _bodyOf(router, 'replace'),
+        '{final guarded = _guards.asked(location.routeName, location.path); '
+        'if (guarded != null) return config.go(guarded.location); '
+        'config.pushReplacement<Object?>(location.path);}',
+      );
+    });
+
+    test(
+        'listens to the guards itself, tells the role of its pages, of none '
+        'before its first location, and goes to the location that the role '
+        'answers', () {
+      final router = _routerClassOf(unit);
+      final members = {
+        for (final member in router.body.members)
+          _nameOf(member): member.toSource(),
+      };
+
+      expect(_expectedGuardMembers.keys, [
+        '_GoAppRouter',
+        '_guards',
+        '_guardsChanged',
+      ]);
+      for (final MapEntry(key: name, value: source)
+          in _expectedGuardMembers.entries) {
+        expect(members[name], source, reason: name);
+      }
+      // A refresh of go_router asks only about the location below the
+      // pushed pages, and gives each pushed page a new completer, so the
+      // router does not hand the guards to go_router to listen to.
+      expect(_argument(_goRouterOf(unit), 'refreshListenable'), isNull);
+    });
+
+    test('still lets each push complete with the value of its page', () {
+      _expectPushResults(unit);
+    });
+
+    test('renders code that type-checks, with a main navigation too', () async {
+      expect(await analysisProblems(app), isEmpty);
+
+      final withLayout = await renderedApp(const [
+        CatalogFeature.id,
+        SettingsFeature.id,
+        IntroFeature.id,
+        TabsLayout.id,
+      ]);
+      final router = _routerClassOf(_factoryOf(withLayout.app!));
+      // The guards come first: while one keeps the user out, the main
+      // navigation is not shown.
+      expect(
+        _bodyOf(router, 'push'),
+        '{final guarded = _guards.asked(location.routeName, location.path); '
+        'if (guarded != null) {config.go(guarded.location); return '
+        "Future.value();} _checkMainNavigation(location, 'push'); return "
+        'config.push<T>(location.path);}',
+      );
+      expect(
+        _bodyOf(router, 'replace'),
+        '{final guarded = _guards.asked(location.routeName, location.path); '
+        'if (guarded != null) return config.go(guarded.location); '
+        "_checkMainNavigation(location, 'replace'); "
+        'config.pushReplacement<Object?>(location.path);}',
+      );
+      expect(await analysisProblems(withLayout.app!), isEmpty);
+    });
+
+    test('keeps the target of a guard outside the main navigation', () async {
+      final withLayout = await renderedApp(const [
+        CatalogFeature.id,
+        IntroFeature.id,
+        TabsLayout.id,
+      ]);
+      final unit = _factoryOf(withLayout.app!);
+
+      expect(
+        [
+          for (final branch in _branchesOf(_shellOf(unit)!))
+            branch.initialLocation,
+        ],
+        ['/catalog'],
+      );
+      expect(
+        [for (final route in _routesOf(unit)) route.path],
+        containsAllInOrder(['/', '/intro']),
       );
     });
   });
