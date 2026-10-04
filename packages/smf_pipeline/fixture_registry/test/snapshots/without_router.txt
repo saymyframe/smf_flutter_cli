@@ -15,7 +15,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
 
-The assets of the fixture are in `assets/fixture/`, and its texts in `lib/l10n/app_en.arb`, from which `flutter pub get` writes `lib/l10n/app_localizations*.dart`.
+The assets of the fixture are in `assets/fixture/`, and its theme mode in `lib/core/fixture_theme_mode/fixture_theme_mode.dart`, one of the directories `lib/core/fixture_*/`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -251,13 +251,8 @@ IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 	</array>
 </dict>
 </plist>
-=== l10n.yaml (fake_sockets) ===
-arb-dir: lib/l10n
-template-arb-file: app_en.arb
-output-localization-file: app_localizations.dart
 === lib/app.dart (flutter_core) ===
 import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
-import 'package:fixture_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -274,11 +269,7 @@ class App extends StatelessWidget {
     theme: ThemeData(fontFamily: "FixtureSans"),
     darkTheme: ThemeData.dark(),
     themeMode: FixtureThemeMode.of(context),
-    localizationsDelegates: [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-    ],
-    supportedLocales: [Locale('en')],
+    localizationsDelegates: [GlobalMaterialLocalizations.delegate],
     home: const FallbackStartScreen(),
     builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
   );
@@ -672,14 +663,6 @@ class FixtureThemeMode extends InheritedWidget {
   @override
   bool updateShouldNotify(FixtureThemeMode oldWidget) => mode != oldWidget.mode;
 }
-=== lib/l10n/app_en.arb (fake_sockets) ===
-{
-  "@@locale": "en",
-  "fixtureTitle": "Fixture",
-  "@fixtureTitle": {
-    "description": "A string of the fixture that uses every socket."
-  }
-}
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
 import 'package:flutter/material.dart';
@@ -708,7 +691,6 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  intl: "any"
   json_annotation: "^4.9.0"
 
 dev_dependencies:
@@ -720,7 +702,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  generate: true
   assets:
     - "assets/fixture/"
   fonts:

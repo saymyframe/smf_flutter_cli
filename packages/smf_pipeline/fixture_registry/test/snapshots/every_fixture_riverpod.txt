@@ -15,7 +15,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
 
-The assets of the fixture are in `assets/fixture/`, and its texts in `lib/l10n/app_en.arb`, from which `flutter pub get` writes `lib/l10n/app_localizations*.dart`.
+The assets of the fixture are in `assets/fixture/`, and its theme mode in `lib/core/fixture_theme_mode/fixture_theme_mode.dart`, one of the directories `lib/core/fixture_*/`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -249,15 +249,17 @@ IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 	<array>
 		<string>fixture</string>
 	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
 </dict>
 </plist>
-=== l10n.yaml (fake_sockets) ===
-arb-dir: lib/l10n
-template-arb-file: app_en.arb
-output-localization-file: app_localizations.dart
 === lib/app.dart (flutter_core) ===
 import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
-import 'package:fixture_app/l10n/app_localizations.dart';
+import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -274,11 +276,14 @@ class App extends StatelessWidget {
     theme: ThemeData(fontFamily: "FixtureSans"),
     darkTheme: ThemeData.dark(),
     themeMode: FixtureThemeMode.of(context),
+    locale: AppLocaleScope.of(context),
     localizationsDelegates: [
-      AppLocalizations.delegate,
+      FixtureTexts.delegate,
       GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
     ],
-    supportedLocales: [Locale('en')],
+    supportedLocales: [...appLocales],
     routerConfig: appRouter.config,
     builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
   );
@@ -1419,6 +1424,91 @@ class FixtureThemeMode extends InheritedWidget {
   @override
   bool updateShouldNotify(FixtureThemeMode oldWidget) => mode != oldWidget.mode;
 }
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The language that the user chose for the app, or `null` while the app
+/// follows the languages of the device.
+///
+/// Set its value to one of [appLocales], or to `null`, to change the
+/// language: the root of the app, which reads it through [AppLocaleScope],
+/// rebuilds in the new language.
+final appLocale = ValueNotifier<Locale?>(null);
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<ValueNotifier<Locale?>> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required ValueNotifier<Locale?> super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (fake_l10n) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'app_locale.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  FixtureTexts get l10n => Localizations.of<FixtureTexts>(this, FixtureTexts)!;
+}
+
+/// The texts of the app in one language, each written out in this file: no
+/// tool generates them.
+class FixtureTexts {
+  /// Creates the texts in the language of the code [language].
+  const FixtureTexts(this.language);
+
+  /// The delegate that loads the texts for the root of the app, in each
+  /// language of the app.
+  static const LocalizationsDelegate<FixtureTexts> delegate =
+      _FixtureTextsDelegate();
+
+  /// The code of the language of the texts, such as `uk`.
+  final String language;
+
+  /// The text title of the module fake_second.
+  String get fakeSecondTitle => switch (language) {
+    'uk' => 'Другий екран',
+    _ => 'Second screen',
+  };
+
+  /// The text outside of the module fake_second.
+  String get fakeSecondOutside => 'Outside the app\'s main navigation';
+}
+
+class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
+  const _FixtureTextsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => appLocales.any(
+    (supported) => supported.languageCode == locale.languageCode,
+  );
+
+  @override
+  Future<FixtureTexts> load(Locale locale) =>
+      SynchronousFuture(FixtureTexts(locale.languageCode));
+
+  @override
+  bool shouldReload(_FixtureTextsDelegate old) => false;
+}
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:fixture_app/core/fixture_preferences/fixture_preferences.dart'
     as impl0;
@@ -2195,42 +2285,41 @@ class FixtureHomeScreen extends StatelessWidget {
   );
 }
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
-/// whose page a router shows over the main navigation.
+/// whose page a router shows over the main navigation, with a text of the
+/// feature that has no translation.
 @FixtureScreen('fake_second.outside')
 class FixtureOutsideScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureOutsideScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondOutside)));
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
 import 'package:flutter/material.dart';
 
-/// The screen of the second fixture feature, which can start the app too.
+/// The screen of the second fixture feature, which can start the app too,
+/// with a text of the feature in the language of the app.
 @FixtureScreen('fake_second.second')
 class FixtureSecondScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureSecondScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
-}
-=== lib/l10n/app_en.arb (fake_sockets) ===
-{
-  "@@locale": "en",
-  "fixtureTitle": "Fixture",
-  "@fixtureTitle": {
-    "description": "A string of the fixture that uses every socket."
-  }
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondTitle)));
 }
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
+import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
@@ -2243,7 +2332,10 @@ Future<void> main() async {
   await bootstrap();
   runApp(
     ProviderScope(
-      child: FixtureThemeMode(mode: ThemeMode.system, child: const App()),
+      child: FixtureThemeMode(
+        mode: ThemeMode.system,
+        child: AppLocaleScope(notifier: appLocale, child: const App()),
+      ),
     ),
   );
 }
@@ -2263,7 +2355,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_riverpod: "^3.0.0"
-  intl: "any"
   json_annotation: "^4.9.0"
   meta: "any"
 
@@ -2276,7 +2367,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  generate: true
   assets:
     - "assets/fixture/"
   fonts:

@@ -36,17 +36,19 @@ void main() {
   });
 
   test(
-      'the app tests check the contract of the router role, of the DI role '
-      'and of the events role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'the app tests check the contract of the router role, of the DI role, '
+      'of the events role and of the settings screen role with every '
+      'provider of each, which they tell apart by the roles of the app only',
+      () {
     expect(
       appTests.testedRoles,
-      containsAll([routerRole, diRole, eventsRole]),
+      containsAll([routerRole, diRole, eventsRole, settingsScreenRole]),
     );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('router_walk').roles, {routerRole});
+    expect(named('settings_screen_role').roles, {settingsScreenRole});
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
@@ -570,6 +572,194 @@ void main() {
     );
     expect(list, contains("('di_role', probe0.probeServices),"));
     expect(list, contains("('router_walk', probe1.probeRoutes),"));
+  });
+
+  test(
+      'the tests of the settings screen role apply to the apps with the '
+      'role, and get the location and the type of the screen, and the types '
+      'of the entries, from the data of the role', () {
+    final settings = named('settings_screen_role');
+
+    expect(
+      [
+        for (final app in apps)
+          if (settings.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(settingsScreenRole)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (settings.appliesTo(app)) app.name,
+      ],
+      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+    );
+    // They run in a test of the app only, so they have no probe for a
+    // check on a device, where the walk of the routes goes to the screen.
+    expect(settings.startProbe, isNull);
+
+    for (final app in apps.where(settings.appliesTo)) {
+      final files = settings.generatedFiles!(app, 'my_app');
+      expect(files.keys, [settingsScreenFile]);
+      final text = files[settingsScreenFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(settingsScreenFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      // The screen of the provider, as the role finds it.
+      final screen =
+          settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
+      expect(
+        [for (final import in index.imports) '${import.uri} ${import.prefix}'],
+        [
+          'package:my_app/core/router/navigation.dart null',
+          '${screen.route.screen.import.resolveUri('my_app')} screen',
+        ],
+        reason: app.name,
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['settingsLocation', 'settingsScreen', 'settingsEntries'],
+        reason: app.name,
+      );
+      expect(
+        text,
+        allOf(
+          contains(
+            'const AppLocation settingsLocation = ${screen.locationClass}();',
+          ),
+          contains(
+            'const Type settingsScreen = '
+            'screen.${screen.route.screen.className};',
+          ),
+          // No module of the CLI has a setting yet.
+          contains('const List<Type> settingsEntries = [\n];'),
+        ),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the file of the tests of the settings screen role names the widget '
+      'of each entry in the order of the role, through an import of its '
+      'file with a prefix of its own, and needs the route of the screen', () {
+    const routes = RoutesData([
+      Route(
+        '/',
+        name: 'options',
+        screen: ScreenRef(
+          'OptionsScreen',
+          import: ImportRef.app('features/options/options_screen.dart'),
+        ),
+        children: [
+          Route(
+            'all',
+            name: 'all',
+            screen: ScreenRef(
+              'AllOptionsScreen',
+              import: ImportRef.app('features/options/all_screen.dart'),
+            ),
+          ),
+        ],
+      ),
+    ]);
+    SettingsEntry entry(String widget, String file) =>
+        SettingsEntry(widget: TypeRef(widget, import: ImportRef.app(file)));
+    const options = ModuleOrigin(ModuleId('options'));
+    const look = ModuleOrigin(ModuleId('look'));
+    MatrixApp appOf(List<RoleData<Object>> data) => MatrixApp(
+          'options',
+          const [ModuleId('options'), ModuleId('look')],
+          hook: RoleHookRequest(
+            data: data,
+            presentRoles: {routerRole, settingsScreenRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final entries = [
+      for (final (origin, widget, file) in [
+        (look, 'ThemeSetting', 'core/look/look_settings.dart'),
+        (look, 'FontSetting', 'core/look/look_settings.dart'),
+        // A row of the provider itself, in the file of the screen.
+        (options, 'ResetOptions', 'features/options/all_screen.dart'),
+        (
+          const RoleTemplateOrigin(diRole),
+          'ServicesSetting',
+          'core/di/services_setting.dart',
+        ),
+      ])
+        settingsScreenRole.data(entry(widget, file)).withOrigin(origin),
+    ];
+    final settings = named('settings_screen_role');
+
+    final text = settings.generatedFiles!(
+      appOf([
+        routerRole.data(routes).withOrigin(options),
+        settingsScreenRole
+            .data(const SettingsScreenRoute('all'))
+            .withOrigin(options),
+        ...entries,
+      ]),
+      'my_app',
+    )[settingsScreenFile]!;
+
+    final (:index, :errors) = DartFileIndexer.parse(settingsScreenFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      [
+        'package:my_app/core/di/services_setting.dart as entry1',
+        'package:my_app/core/look/look_settings.dart as entry0',
+        'package:my_app/core/router/navigation.dart as null',
+        'package:my_app/features/options/all_screen.dart as screen',
+      ],
+    );
+    expect(
+      text,
+      allOf(
+        contains('const AppLocation settingsLocation = OptionsAllLocation();'),
+        contains('const Type settingsScreen = screen.AllOptionsScreen;'),
+        contains(
+          'const List<Type> settingsEntries = [\n'
+          '  entry0.ThemeSetting,\n'
+          '  entry0.FontSetting,\n'
+          '  screen.ResetOptions,\n'
+          '  entry1.ServicesSetting,\n'
+          '];\n',
+        ),
+      ),
+    );
+
+    // An app whose provider names no route of its own is no app of the
+    // matrix: the rules of the role report it first.
+    expect(
+      () => settings.generatedFiles!(
+        appOf([routerRole.data(routes).withOrigin(options), ...entries]),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of options names a route of its own as the settings '
+              'screen.',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'the test of the settings module applies to the apps with the module, '
+      'whatever else they have', () {
+    expect(
+      [
+        for (final app in apps)
+          if (named('settings').appliesTo(app)) app.name,
+      ],
+      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+    );
   });
 
   test(
