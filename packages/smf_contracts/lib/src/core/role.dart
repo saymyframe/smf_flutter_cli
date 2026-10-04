@@ -268,6 +268,7 @@ abstract base class Role<D extends Object> {
         for (final data in request.data)
           if (identical(data.role, this) && applies(data)) _typed(data),
       ]),
+      present: request.presentRoles,
       optionValues: {
         for (final option in options)
           option.name: request.optionValues[option.name],
