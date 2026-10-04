@@ -254,6 +254,21 @@ class Shell {
         'raw getter',
       ],
     );
+    // A method, a setter and an operator have their parameters.
+    expect(
+      [
+        for (final m in shell.members)
+          if (m.parameters.isNotEmpty)
+            '${m.name} ${m.kind.name}: ${[
+              for (final p in m.parameters) '${p.type} ${p.name}',
+            ].join(', ')}',
+      ],
+      [
+        'count setter: int value',
+        'select method: int index',
+        '== method: Object other',
+      ],
+    );
   });
 
   test('an initializing formal of a field without a type has no type', () {
@@ -292,6 +307,102 @@ extension on String {
           '${i.name} in ${i.enclosingDeclaration}',
       ],
       ['double in Twice', 'shout in null'],
+    );
+  });
+
+  test(
+      'names the method, getter, setter or operator around an invocation, '
+      'and none outside the members of a declaration', () {
+    final index = DartFileIndexer.index('lib/panel.dart', '''
+class Panel {
+  Panel() : created = stamp();
+
+  final Object created;
+  final label = describe();
+
+  Widget build(BuildContext context) => Builder(builder: (context) => text());
+  int get size => measure();
+  set size(int value) => resize(value);
+  static Panel create() => const Panel();
+
+  void refresh() {
+    void later() => schedule();
+    later();
+  }
+
+  Panel operator -() => negate();
+  Panel operator -(Panel other) => subtract(other);
+}
+
+mixin Loud {
+  void shout() => print('loud');
+}
+
+enum Mode {
+  on;
+
+  Mode toggled() => flip(this);
+}
+
+extension Twice on int {
+  int twice() => double(this);
+}
+
+extension on String {
+  String loud() => upper(this);
+}
+
+extension type Meters(double value) {
+  Meters doubled() => scale(value);
+}
+
+final panel = Panel.create();
+
+void main() => run();
+''');
+
+    expect(
+      [
+        for (final i in index.invocations)
+          '${i.name} in ${i.enclosingDeclaration}, ${i.enclosingMember}',
+      ],
+      [
+        // In a constructor and in the initializer of a field.
+        'stamp in Panel, null',
+        'describe in Panel, null',
+        // In a method, also in a closure of it.
+        'Builder in Panel, build',
+        'text in Panel, build',
+        // A getter and its setter have one name.
+        'measure in Panel, size',
+        'resize in Panel, size',
+        'Panel in Panel, create',
+        // In a local function of a method, as the call of that function.
+        'schedule in Panel, refresh',
+        'later in Panel, refresh',
+        // An operator has its symbol for a name, the unary one as the
+        // binary one.
+        'negate in Panel, -',
+        'subtract in Panel, -',
+        // In the members of a mixin, an enum, an extension and an
+        // extension type, and of an extension without a name.
+        'print in Loud, shout',
+        'flip in Mode, toggled',
+        'double in Twice, twice',
+        'upper in null, loud',
+        'scale in Meters, doubled',
+        // In a top-level variable and in a top-level function.
+        'create in panel, null',
+        'run in main, null',
+      ],
+    );
+    // The index lists the members of classes only.
+    for (final name in ['Loud', 'Mode', 'Twice', 'Meters']) {
+      expect(index.declaration(name)!.members, isEmpty, reason: name);
+    }
+    expect(
+      [for (final member in index.declaration('Panel')!.members) member.name],
+      containsAll(['build', 'size', 'create', 'refresh', '-']),
     );
   });
 
@@ -517,6 +628,196 @@ class App extends StatelessWidget {
         );
         expect(issues.single.origin, provider, reason: root);
       }
+    });
+
+    test(
+        'app entry: every MaterialApp of the provider is created in a method '
+        'build(BuildContext context) of a class', () {
+      const provider = ModuleOrigin(ModuleId('scaffold'));
+      String outside(String path) =>
+          '$path creates a MaterialApp outside a method build(BuildContext '
+          'context) of a class. Every MaterialApp that the provider creates '
+          'in lib/ counts, since each may be the root of the app, whose '
+          'arguments from the modules read the context of such a build.';
+      List<SmfIssue> issuesOf(String app) => appEntryIssues(
+            {'lib/app.dart': "import 'package:flutter/material.dart';\n\n$app"},
+            owners: const {'lib/app.dart': provider},
+            modules: [scaffold().descriptor],
+          );
+
+      for (final app in [
+        // In the build() of a widget.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(title: 'My App');
+}
+''',
+        // In a closure of it, whose own context rebuilds too.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(builder: (context) => const MaterialApp(title: 'My App'));
+  }
+}
+''',
+        // In the build() of the state of a widget.
+        '''
+class App extends StatefulWidget {
+  const App({super.key});
+
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+''',
+      ]) {
+        expect(issuesOf(app), isEmpty, reason: app);
+      }
+
+      for (final app in [
+        // In another method of the widget, which has no context.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => _root();
+
+  Widget _root() => MaterialApp(title: 'My App');
+}
+''',
+        // In a helper that build() calls with its context: the rule asks
+        // for the build itself.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => _root(context);
+
+  Widget _root(BuildContext context) => MaterialApp(title: 'My App');
+}
+''',
+        // In a function, a variable or a field, outside any widget.
+        "Widget createApp() => MaterialApp(title: 'My App');\n",
+        "final app = MaterialApp.router(title: 'My App');\n",
+        '''
+class App {
+  final root = const MaterialApp(title: 'My App');
+}
+''',
+        // In a build() whose context has another name, or none.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext ctx) => MaterialApp(title: 'My App');
+}
+''',
+        '''
+class App {
+  Widget build() => MaterialApp(title: 'My App');
+}
+''',
+        // In a build() whose context is a named parameter.
+        '''
+class App {
+  Widget build({required BuildContext context}) =>
+      MaterialApp(title: 'My App');
+}
+''',
+        // In a getter or a setter named build, which is no method.
+        '''
+class App {
+  Widget get build => MaterialApp(title: 'My App');
+
+  set build(BuildContext context) {}
+}
+''',
+        '''
+class App {
+  set build(BuildContext context) {
+    runApp(MaterialApp(title: 'My App'));
+  }
+}
+''',
+        // In such a build(), next to the build(BuildContext context) of
+        // another class of the file.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _Root().build();
+}
+
+class _Root {
+  const _Root();
+
+  Widget build() => MaterialApp(title: 'My App');
+}
+''',
+        // In a function, next to the root in the build() of a widget: every
+        // MaterialApp of the provider counts.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+
+Widget preview() => MaterialApp(title: 'Preview');
+''',
+      ]) {
+        final issues = issuesOf(app);
+        expect(
+          issues.map((issue) => issue.message),
+          [outside('lib/app.dart')],
+          reason: app,
+        );
+        expect(issues.single.origin, provider, reason: app);
+        expect(issues.single.path, 'lib/app.dart', reason: app);
+      }
+
+      // A MaterialApp in another file of the provider in lib/ counts too,
+      // such as one for the tests of the app, and one outside lib/ does not.
+      const pumpApp = "Widget pumpApp() => MaterialApp(title: 'Test');\n";
+      final issues = appEntryIssues(
+        {
+          'lib/app.dart': '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+''',
+          'lib/testing/pump_app.dart': pumpApp,
+          'test/pump_app.dart': pumpApp,
+        },
+        owners: const {
+          'lib/app.dart': provider,
+          'lib/testing/pump_app.dart': provider,
+          'test/pump_app.dart': provider,
+        },
+        modules: [scaffold().descriptor],
+      );
+      expect(
+        issues.map((issue) => issue.message),
+        [outside('lib/testing/pump_app.dart')],
+      );
     });
 
     test('app entry: the required symbols are checked', () {

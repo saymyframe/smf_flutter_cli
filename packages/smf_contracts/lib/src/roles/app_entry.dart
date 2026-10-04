@@ -33,7 +33,13 @@ const appEntryRole = AppEntryRole._();
 /// evaluates the expressions of the [appArgs] there. So `context` in such
 /// an expression is the `BuildContext` of that widget, which is below the
 /// [rootWrappers], and the root rebuilds when an inherited widget that the
-/// expression read notifies.
+/// expression read notifies. The rules of the role check both places. Its
+/// module rules check that the tags of the [rootWrappers] are in the body
+/// of `main()` in [mainFile], which runs the root widget inside them. Its
+/// structural rules check that the provider creates a `MaterialApp`, and
+/// every one of its code in `lib/` in a method
+/// `build(BuildContext context)` of a class, since they cannot tell which
+/// of them is the root.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -134,8 +140,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// Widgets around the root widget in `runApp()`, such as Riverpod's
   /// `ProviderScope(child: ` and `)`; the first contribution is outermost.
   ///
-  /// The expressions of the [appArgs] can read an inherited widget among
-  /// them from `context`.
+  /// The provider has the tags of the socket in the body of `main()` in
+  /// [mainFile], around the root widget that `main()` runs. So the widget
+  /// that creates the root `MaterialApp` is below the wrappers, and the
+  /// expressions of the [appArgs] can read an inherited widget among them
+  /// from `context`.
   static const rootWrappers = SocketRef<WrapperSocket>.role(
     appEntryRole,
     'root_wrappers',
@@ -367,6 +376,14 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkBootstrapPhases,
         ),
         ModuleRule(
+          id: 'app_entry.root_wrappers_in_main',
+          description: 'The tags of the root wrappers are in the body of '
+              'main() in lib/main.dart, which runs the root widget inside '
+              'them, so the widget that creates the root MaterialApp is '
+              'below the widgets that the modules put around the root.',
+          check: _checkRootWrappersInMain,
+        ),
+        ModuleRule(
           id: 'app_entry.tag_lines',
           description: 'The tags of the sockets that render lines of a file, '
               'such as a native file or the README, stand alone at the start '
@@ -396,6 +413,15 @@ final class AppEntryRole extends Role<NoDsl> {
           description: 'The provider builds the root of the app as a '
               'MaterialApp, or a MaterialApp.router with a router.',
           check: _checkMaterialRoot,
+        ),
+        StructuralRule(
+          id: 'app_entry.root_in_build',
+          description: 'The provider creates every MaterialApp of lib/, one '
+              'of which is the root of the app, in a method '
+              'build(BuildContext context) of a class, so the arguments '
+              'that the modules give the root read the context of that '
+              'build.',
+          check: _checkRootInBuild,
         ),
         StructuralRule(
           id: 'app_entry.native_keys',
@@ -438,48 +464,70 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
   final templates = _templatesOf(input.contributions);
   final text = templates[path] ?? '';
   final tags = [for (final socket in phases) '{{{${socket.tag}}}}'];
-  final issues = <SmfIssue>[
-    for (final tag in tags)
-      if (!text.contains(tag) &&
-          templates.values.any((template) => template.contains(tag)))
-        SmfIssue(
-          'The tag $tag is not in $path, where bootstrap() runs the phases '
-          'of start-up.',
-          origin: origin,
-          path: path,
-        ),
-  ];
   final offsets = [
     for (final tag in tags)
       if (text.indexOf(tag) case final offset when offset >= 0) offset,
   ];
-  final body = _bodyOf(text, AppEntryRole.bootstrap.name);
-  for (final tag in tags) {
-    final offset = text.indexOf(tag);
-    if (offset < 0 ||
-        (body != null && offset > body.start && offset < body.end)) {
-      continue;
-    }
-    issues.add(
-      SmfIssue(
-        'The tag $tag is in $path, but not in the body of bootstrap(), which '
-        'runs the phases of start-up.',
-        origin: origin,
-        path: path,
-      ),
-    );
-  }
-  if (!_ascending(offsets)) {
-    issues.add(
+  return [
+    ..._tagsOutsideBodyOf(
+      AppEntryRole.bootstrap.name,
+      path: path,
+      does: 'runs the phases of start-up',
+      tags: tags,
+      templates: templates,
+      origin: origin,
+    ),
+    if (!_ascending(offsets))
       SmfIssue(
         'The tags of the phases of start-up in $path are not in the order '
         'early, platform, di, late.',
         origin: origin,
         path: path,
       ),
+  ];
+}
+
+List<SmfIssue> _checkRootWrappersInMain(ModuleRuleInput<NoDsl> input) =>
+    _tagsOutsideBodyOf(
+      AppEntryRole.main.name,
+      path: AppEntryRole.mainFile,
+      does: 'runs the root widget inside the root wrappers',
+      tags: [for (final tag in AppEntryRole.rootWrappers.tags) '{{{$tag}}}'],
+      templates: _templatesOf(input.contributions),
+      origin: ModuleOrigin(input.module.id),
     );
-  }
-  return issues;
+
+/// The problems of [tags], the tags of sockets that belong in the body of
+/// the function [function] of the template at [path], among the [templates]
+/// of a module: first each tag that the module has in another template
+/// only, then each that is in that template outside the body. [does] says
+/// what the function does there, such as `runs the phases of start-up`.
+List<SmfIssue> _tagsOutsideBodyOf(
+  String function, {
+  required String path,
+  required String does,
+  required List<String> tags,
+  required Map<String, String> templates,
+  required ContributionOrigin origin,
+}) {
+  final text = templates[path] ?? '';
+  final body = _bodyOf(text, function);
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: origin, path: path);
+  return [
+    for (final tag in tags)
+      if (!text.contains(tag) &&
+          templates.values.any((template) => template.contains(tag)))
+        issue('The tag $tag is not in $path, where $function() $does.'),
+    for (final tag in tags)
+      if (text.indexOf(tag) case final offset
+          when offset >= 0 &&
+              (body == null || offset <= body.start || offset >= body.end))
+        issue(
+          'The tag $tag is in $path, but not in the body of $function(), '
+          'which $does.',
+        ),
+  ];
 }
 
 /// Whether none of [offsets] is before the one in front of it.
@@ -604,16 +652,26 @@ bool _createsMaterialApp(IndexedInvocation invocation) =>
       _ => false,
     };
 
-List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
-  ModuleId? provider;
+/// The Dart files in `lib/` of the provider of the app entry among the files
+/// of [input], each with its path and the id of the provider: the root is
+/// in the code of the app, not in its tests.
+Iterable<(String, DartFileIndex, ModuleId)> _filesOfProvider(
+  StructuralRuleInput<NoDsl> input,
+) sync* {
   for (final MapEntry(key: path, value: file) in input.files.entries) {
     final owner = input.owners[path];
-    // The root is in the code of the app, not in its tests.
     if (owner is! ModuleOrigin || !path.startsWith('lib/')) continue;
     final module = input.module(owner.module);
     if (!(module?.provides.contains(appEntryRole) ?? false)) continue;
+    yield (path, file, owner.module);
+  }
+}
+
+List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
+  ModuleId? provider;
+  for (final (_, file, module) in _filesOfProvider(input)) {
     if (file.invocations.any(_createsMaterialApp)) return const [];
-    provider = owner.module;
+    provider = module;
   }
   // The required symbols report the files of a provider that are missing.
   if (provider == null) return const [];
@@ -628,3 +686,53 @@ List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
     ),
   ];
 }
+
+/// The index cannot tell which `MaterialApp` of the provider is the root of
+/// the app, so the rule asks the same of every one that the provider
+/// creates in `lib/`: one in a helper of a widget or in a function, such as
+/// an app for tests, is reported too.
+List<SmfIssue> _checkRootInBuild(StructuralRuleInput<NoDsl> input) => [
+      for (final (path, file, provider) in _filesOfProvider(input))
+        for (final invocation in file.invocations)
+          if (_createsMaterialApp(invocation) && !_inBuild(file, invocation))
+            SmfIssue(
+              '$path creates a MaterialApp outside a method '
+              'build(BuildContext context) of a class. Every MaterialApp '
+              'that the provider creates in lib/ counts, since each may be '
+              'the root of the app, whose arguments from the modules read '
+              'the context of such a build.',
+              hint: 'Create it in the build(BuildContext context) of a '
+                  'widget. main() runs the widget that creates the root '
+                  'inside the root wrappers.',
+              origin: ModuleOrigin(provider),
+              path: path,
+            ),
+    ];
+
+/// Whether [invocation] of [file] is in a method `build` of a class whose
+/// first parameter is `BuildContext context`.
+bool _inBuild(DartFileIndex file, IndexedInvocation invocation) =>
+    invocation.enclosingMember == 'build' &&
+    file.declarations.any(
+      (declaration) =>
+          declaration.name == invocation.enclosingDeclaration &&
+          declaration.members.any(_isBuildWithContext),
+    );
+
+/// Whether [member] is a method `build`, not a getter or a setter of that
+/// name, whose first parameter is the positional `BuildContext context`.
+bool _isBuildWithContext(IndexedMember member) =>
+    member.name == 'build' &&
+    member.kind == MemberKind.method &&
+    switch (member.parameters) {
+      [
+        IndexedParameter(
+          name: 'context',
+          type: 'BuildContext',
+          kind: ParameterKind(isNamed: false),
+        ),
+        ...,
+      ] =>
+        true,
+      _ => false,
+    };
