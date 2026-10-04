@@ -174,9 +174,10 @@ final List<_Ban> _bans = [
   // what it gives the role through the data and the sockets of the role,
   // not in the files that the provider of the role renders: the file of
   // createAppRouter() of the router, of registerDependencies() of the DI
-  // container, or of AppShell of the layout; and the files of the app
-  // entry into which its provider renders the sockets of start-up, those
-  // of bootstrap() and main(), and lib/app.dart, which no role guarantees.
+  // container, of AppShell of the layout, or of the texts of the
+  // localization; and the files of the app entry into which its provider
+  // renders the sockets of start-up, those of bootstrap() and main(), and
+  // lib/app.dart, which no role guarantees.
   // A test may name such a file by its constant or its path only as the
   // key of a map, for the files of a provider of its own, and the package
   // of a provider tests its own files. The contribution engine is no
@@ -188,6 +189,7 @@ final List<_Ban> _bans = [
     ),
     ('DiRole.dependenciesFile', r'core/di/dependencies\.dart'),
     ('LayoutRole.appShellFile', r'core/layout/app_shell\.dart'),
+    ('LocalizationRole.textsFile', r'core/l10n/l10n\.dart'),
     ('AppEntryRole.bootstrapFile', r'(?:lib|package:\w+)/bootstrap\.dart'),
     ('AppEntryRole.mainFile', r'(?:lib|package:\w+)/main\.dart'),
     ('lib/app.dart', r'(?:lib|package:\w+)/app\.dart'),

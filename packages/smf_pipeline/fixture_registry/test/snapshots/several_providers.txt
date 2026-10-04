@@ -1638,24 +1638,28 @@ final class SettingsRoutes {
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
-/// whose page a router shows over the main navigation.
+/// whose page a router shows over the main navigation, with a text of the
+/// feature that has no translation.
 class FixtureOutsideScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureOutsideScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text('Outside the app\'s main navigation')));
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
 import 'package:flutter/material.dart';
 
-/// The screen of the second fixture feature, which can start the app too.
+/// The screen of the second fixture feature, which can start the app too,
+/// with a text of the feature in the language of the app.
 class FixtureSecondScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureSecondScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text('Second screen')));
 }
 === lib/features/fake_second/fixture_second_setting.dart (fake_second) ===
 import 'package:flutter/material.dart';

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// The screen of the second fixture feature, which can start the app too.
+/// The screen of the second fixture feature, which can start the app too,
+/// with a text of the feature in the language of the app.
 {{{smf_router__screen_annotations__fake_second__fixture_second_screen}}}
 class FixtureSecondScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureSecondScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text({{{text_title}}})));
 }

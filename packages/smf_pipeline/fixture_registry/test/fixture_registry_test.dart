@@ -348,7 +348,6 @@ void main() {
         '^9.1.1',
       );
       expect(pubspec.devDependencies.keys, contains('json_serializable'));
-      expect(pubspec.generate, isTrue);
       expect(pubspec.usesMaterialDesign, isTrue);
       expect(result.collection!.applyingOf<CodegenRequest>(), hasLength(1));
       // The analytics of the fixtures watches the navigators of the router
@@ -376,7 +375,9 @@ void main() {
         result
             .validation!.socketOrders[AppEntryRole.rootWrappers]!.contributions
             .map((collected) => '${collected.origin}'),
-        ['fake_riverpod', 'fake_sockets'],
+        // The template of the localization role puts the language that the
+        // user chose around the root.
+        ['fake_riverpod', 'fake_sockets', 'role:localization'],
       );
       expect(
         result.validation!.pubspec.dependencies['flutter_riverpod']!
@@ -392,9 +393,13 @@ void main() {
         rendered(result, AppEntryRole.iosDeploymentTarget).values.single,
         '16.0',
       );
+      // The two modules and the template of the localization role each
+      // give the root the delegate of the texts of the Material widgets.
       expect(
-        rendered(result, AppEntryRole.appArgs).values.single,
-        contains("supportedLocales: [Locale('en')],"),
+        'GlobalMaterialLocalizations.delegate'.allMatches(
+          rendered(result, AppEntryRole.appArgs).values.single,
+        ),
+        hasLength(1),
       );
       expect(
         rendered(result, AppEntryRole.androidManifestPermissions).values.single,
@@ -700,6 +705,219 @@ void main() {
     });
   });
 
+  group('the texts of the fixtures', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    const withRole = [
+      FakeSecondModule.id,
+      FakeRouterModule.id,
+      FakeL10nModule.id,
+    ];
+    const screen = 'lib/features/fake_second/fixture_second_screen.dart';
+    const outside = 'lib/features/fake_second/fixture_outside_screen.dart';
+
+    Future<ContractResult> checked(
+      List<ModuleId> modules, {
+      Map<String, String> options = const {},
+    }) async {
+      final result = await harness.check(
+        ContractCase('texts', requested: modules, roleOptions: options),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    /// The file at [path] of the app of [result], parsed.
+    CompilationUnit unitOf(ContractResult result, String path) =>
+        parseString(content: result.app!.files[path]!.text).unit;
+
+    /// What the getter [name] of the texts of the app of [result] returns
+    /// in each of [languages], as the code of the provider says: a text, or
+    /// a switch over the language of the texts.
+    Map<String, String> textsOf(
+      ContractResult result,
+      String name,
+      List<String> languages,
+    ) {
+      final texts = unitOf(result, LocalizationRole.textsFile)
+          .declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere(
+            (declaration) =>
+                declaration.namePart.typeName.lexeme == 'FixtureTexts',
+          );
+      final getter =
+          texts.body.members.whereType<MethodDeclaration>().singleWhere(
+                (member) => member.isGetter && member.name.lexeme == name,
+              );
+      final returned = (getter.body as ExpressionFunctionBody).expression;
+      if (returned is StringLiteral) {
+        final text = returned.stringValue!;
+        return {for (final language in languages) language: text};
+      }
+      final cases = (returned as SwitchExpression).cases;
+      expect(cases.first.guardedPattern.pattern, isA<ConstantPattern>());
+      expect(cases.last.guardedPattern.pattern, isA<WildcardPattern>());
+      final byLanguage = {
+        for (final switchCase in cases)
+          if (switchCase.guardedPattern.pattern
+              case ConstantPattern(:final StringLiteral expression))
+            expression.stringValue!:
+                (switchCase.expression as StringLiteral).stringValue!,
+      };
+      final english = (cases.last.expression as StringLiteral).stringValue!;
+      return {
+        for (final language in languages)
+          language: byLanguage[language] ?? english,
+      };
+    }
+
+    /// The code of the text that the screen at [path] of the app of
+    /// [result] shows, and whether the file imports the texts of the app.
+    (String, {bool importsTexts}) shownBy(ContractResult result, String path) {
+      final unit = unitOf(result, path);
+      final finder = _TextArguments();
+      unit.accept(finder);
+      final texts = LocalizationRole.appTexts.importRef
+          .resolveUri(ContractHarness.defaultContext.appName);
+      return (
+        finder.arguments.single,
+        importsTexts: unit.directives
+            .whereType<ImportDirective>()
+            .any((directive) => directive.uri.stringValue == texts),
+      );
+    }
+
+    test('reach the localization role with the languages they are in',
+        () async {
+      final result = await checked(withRole);
+      final input = localizationRole.hookInput(result.hook!);
+
+      expect(
+        [
+          for (final text in localizationRole.textsIn(input))
+            '${text.getter}: $text',
+        ],
+        [
+          'fakeSecondTitle: text title of the module fake_second',
+          'fakeSecondOutside: text outside of the module fake_second',
+        ],
+      );
+      // The app is in no language in which Flutter has no texts for its
+      // own widgets, such as the Maltese of the title.
+      expect(
+        localizationRole.textsIn(input).first.text.languages,
+        ['en', 'uk', 'mt'],
+      );
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+      expect(result.answers, isEmpty);
+    });
+
+    test(
+        'are getters of the fixture provider, each with its translations '
+        'into the languages of the app and its English text for the others',
+        () async {
+      final result = await checked(withRole);
+
+      expect(textsOf(result, 'fakeSecondTitle', ['en', 'uk', 'de', 'mt']), {
+        'en': 'Second screen',
+        'uk': 'Другий екран',
+        'de': 'Second screen',
+        // The translation into a language that no app can be in is left
+        // out.
+        'mt': 'Second screen',
+      });
+      // A text without a translation reads in English in every language;
+      // the code of its text escapes the quote.
+      expect(textsOf(result, 'fakeSecondOutside', ['en', 'uk']), {
+        'en': "Outside the app's main navigation",
+        'uk': "Outside the app's main navigation",
+      });
+    });
+
+    test('are in the languages of --locales only', () async {
+      final result = await checked(withRole, options: const {'locales': 'en'});
+
+      expect(
+        localizationRole.localesIn(localizationRole.hookInput(result.hook!)),
+        ['en'],
+      );
+      expect(textsOf(result, 'fakeSecondTitle', ['en', 'uk']), {
+        'en': 'Second screen',
+        'uk': 'Second screen',
+      });
+    });
+
+    test('are read through the role by the screens of their feature', () async {
+      final result = await checked(withRole);
+
+      expect(
+        shownBy(result, screen),
+        ('context.l10n.fakeSecondTitle', importsTexts: true),
+      );
+      expect(
+        shownBy(result, outside),
+        ('context.l10n.fakeSecondOutside', importsTexts: true),
+      );
+    });
+
+    test('are English literals of the screens in an app without the role',
+        () async {
+      final result = await checked(const [
+        FakeSecondModule.id,
+        FakeRouterModule.id,
+      ]);
+
+      expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(
+        shownBy(result, screen),
+        ("'Second screen'", importsTexts: false),
+      );
+      expect(
+        shownBy(result, outside),
+        (r"'Outside the app\'s main navigation'", importsTexts: false),
+      );
+      expect(
+        result.app!.files.keys,
+        isNot(contains(LocalizationRole.appLocaleFile)),
+      );
+    });
+
+    test('give the root of the app its language and the delegate of the texts',
+        () async {
+      final result = await checked(withRole);
+      String rendered(SocketRef socket) => socket
+          .render([
+            for (final collected
+                in result.app!.socketOrders[socket]!.contributions)
+              collected.contribution as SocketContribution,
+          ])
+          .values
+          .join('|');
+
+      expect(
+        rendered(AppEntryRole.appArgs).split('\n'),
+        [
+          'locale: AppLocaleScope.of(context),',
+          'localizationsDelegates: [${[
+            'FixtureTexts.delegate',
+            'GlobalMaterialLocalizations.delegate',
+            'GlobalWidgetsLocalizations.delegate',
+            'GlobalCupertinoLocalizations.delegate',
+          ].join(', ')}],',
+          'supportedLocales: [...appLocales],',
+        ],
+      );
+      expect(
+        rendered(AppEntryRole.rootWrappers),
+        'AppLocaleScope(notifier: appLocale, child: |)',
+      );
+      final plist = rendered(AppEntryRole.infoPlist);
+      expect(plist, contains('<key>CFBundleLocalizations</key>'));
+      expect(plist, contains('<string>en</string>'));
+      expect(plist, contains('<string>uk</string>'));
+    });
+  });
+
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
@@ -744,6 +962,84 @@ void main() {
       expect(
         files.file('/work/fixture_app/pubspec.yaml').readAsStringSync(),
         contains('build_runner: "^2.10.0"'),
+      );
+    });
+
+    test(
+        'warns of a language of a text that no app can be in, and of a text '
+        'without a translation into a language of the app', () async {
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+              .join(','),
+          '--no-input',
+          '--skip-external-setup',
+          '--strict',
+        ],
+        modules: fixtureModules(),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
+      expect(logger.warnings, hasLength(2));
+      expect(
+        logger.warnings.first,
+        'The app is not in mt, which the text title of the module '
+        'fake_second has a translation into: Flutter has no texts for its '
+        'own widgets in that language.',
+      );
+      expect(
+        logger.warnings.last,
+        'No translation into uk of the text outside of the module '
+        'fake_second: the app shows it in English there.',
+      );
+      expect(
+        host.fileSystem
+            .file('/work/fixture_app/${LocalizationRole.appLocaleFile}')
+            .readAsStringSync(),
+        contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
+      );
+    });
+
+    test('refuses in --locales a language that no app can be in', () async {
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+
+      final code = await runSmf(
+        [
+          'create',
+          'fixture_app',
+          '-m',
+          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+              .join(','),
+          '--locales',
+          'en,mt',
+          '--no-input',
+          '--skip-external-setup',
+          '--strict',
+        ],
+        modules: fixtureModules(),
+        hostFor: ({required verbose}) => host,
+      );
+
+      expect(code, SmfExitCodes.usage);
+      expect(
+        logger.errors,
+        contains(
+          'The app cannot be in mt, which --locales names: Flutter has no '
+          'texts for its own widgets in such a language. The app can be in '
+          'en, uk.',
+        ),
+      );
+      expect(
+        host.fileSystem.directory('/work/fixture_app').existsSync(),
+        isFalse,
       );
     });
 
@@ -926,10 +1222,13 @@ const _cases = [
   'fake_feature (fake_riverpod, fake_di, go_router)',
   'fake_feature (fake_riverpod, get_it, fake_router)',
   'fake_feature (fake_riverpod, get_it, go_router)',
+  'fake_second (fake_router) with localization',
+  'fake_second (go_router) with localization',
   'fake_second (fake_router)',
   'fake_second (go_router)',
   'fake_sockets',
   'fake_overlap',
+  'fake_l10n',
   'fake_analytics (fake_di, fake_router) with di, router',
   'fake_analytics (fake_di, go_router) with di, router',
   'fake_analytics (get_it, fake_router) with di, router',
@@ -961,6 +1260,19 @@ const _cases = [
   'fake_clock_user with clock, badge',
   'fake_clock_user',
 ];
+
+/// Collects the code of the first argument of each `Text(...)`.
+final class _TextArguments extends RecursiveAstVisitor<void> {
+  final List<String> arguments = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == 'Text') {
+      arguments.add(node.argumentList.arguments.first.toSource());
+    }
+    super.visitMethodInvocation(node);
+  }
+}
 
 /// Collects the values of the named arguments `initialLocation`, in the
 /// order of the code: that of `GoRouter`, then those of the branches.

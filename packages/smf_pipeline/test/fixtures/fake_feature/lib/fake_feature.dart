@@ -8,7 +8,9 @@
 /// with a destination, so an app with both has two screens that can start
 /// it and two destinations, a route outside the main navigation, whose
 /// page a router shows over it, and a setting for the settings screen of
-/// an app that has one.
+/// an app that has one. Its screens and its setting show texts of the
+/// module, which it gives the localization role: in the language of the
+/// app with the role, and in English without it.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
@@ -94,18 +96,36 @@ final class FakeFeatureModule extends SmfModule {
 
 /// A second feature with a start screen that is a destination of the main
 /// navigation, and a screen outside the main navigation, which a router
-/// shows over it. It uses the settings screen role: in an app with a
-/// settings screen, it generates the widget of a setting and gives the role
-/// an entry for it. The widget has the class name of the setting of the
-/// fixture screen log, `FixtureSetting`, in a file of its own: an app with
-/// both analyzes only if the screen imports the file of each with a prefix
-/// of its own, as the role asks of every provider.
+/// shows over it.
+///
+/// It uses the localization role: each screen shows a text of the module.
+///
+/// It uses the settings screen role too: in an app with a settings screen,
+/// it generates the widget of a setting, which shows a text of the module
+/// as well, and gives the role an entry for it. The widget has the class
+/// name of the setting of the fixture screen log, `FixtureSetting`, in a
+/// file of its own: an app with both analyzes only if the screen imports
+/// the file of each with a prefix of its own, as the role asks of every
+/// provider.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
 
   /// The id of the module.
   static const id = ModuleId('fake_second');
+
+  /// The texts of the screens: one in English, in Ukrainian and in Maltese,
+  /// a language in which Flutter has no texts for its own widgets, so that
+  /// no app is in it; and one without a translation, which reads in English
+  /// in every language, with a quote that the code of its text escapes.
+  static const texts = TextsData([
+    LocalizedText(
+      'title',
+      en: 'Second screen',
+      translations: {'uk': 'Другий екран', 'mt': 'It-tieni skrin'},
+    ),
+    LocalizedText('outside', en: "Outside the app's main navigation"),
+  ]);
 
   static const _folder = 'features/fake_second';
 
@@ -114,12 +134,16 @@ final class FakeSecondModule extends SmfModule {
         id: id,
         description: 'A second start screen (fixture)',
         kind: ModuleKinds.feature,
-        uses: {settingsScreenRole},
+        uses: {localizationRole, settingsScreenRole},
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(fakeSecondBundle),
+        BrickContribution(
+          fakeSecondBundle,
+          vars: localizationRole.varsOf(id, texts),
+        ),
+        localizationRole.data(texts),
         routerRole.data(
           const RoutesData([
             Route(
