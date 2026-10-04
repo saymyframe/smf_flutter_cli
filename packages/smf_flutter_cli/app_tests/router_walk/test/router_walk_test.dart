@@ -7,6 +7,14 @@
 // on the screen, named after the route, and the screen of the route, with no
 // ErrorWidget on the screen and no error of Flutter.
 //
+// The guards of the routes of the app must allow, so that the walk reaches
+// every route: the test fails on each guard that does not, by its name.
+// The module of a guard opens it for the tests of the app in the mocks of
+// its app test (MatrixAppTest.mocks), which the matrix sets up before the
+// tests of each test file. On a device, where no test opens a guard, the
+// walk expects the target of the guard in place of each location that the
+// guard keeps the user from.
+//
 // It knows only the role. The matrix writes the locations of the app next
 // to the walk, from the data of its router role, and sets up the mocks of
 // the platform side of every module of the app before the tests of each
@@ -16,6 +24,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
+import '../integration_test/router_walk/locations.dart';
 import '../integration_test/router_walk/walk.dart';
 
 /// Starts the app as on a device, with what its main() puts around it, and
@@ -62,6 +71,17 @@ void main() {
     'its route',
     (tester) async {
       await _startApp(tester);
+
+      expect(
+        closedGuards(),
+        isEmpty,
+        reason: 'These guards of the routes do not allow, so the walk cannot '
+            'reach the routes outside their flows, and the tests of the '
+            'other modules of the app do not see the screens that they '
+            'expect. The module of a guard opens it for the tests of the app '
+            'in the mocks of its app test (MatrixAppTest.mocks), before the '
+            'app starts.',
+      );
 
       final walk = await walkRoutes(tester.pumpAndSettle);
 

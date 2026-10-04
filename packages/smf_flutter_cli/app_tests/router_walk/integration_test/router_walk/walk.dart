@@ -7,22 +7,28 @@
 // (router_walk_test.dart), and a check that runs on a device can run it
 // too: it uses no test framework, and takes the function that waits until
 // the screen settles. The matrix writes locations.dart next to it, with the
-// locations of the app from the data of its router role.
+// locations of the app from the data of its router role, and with what the
+// guards of its routes show in their place: while a guard does not allow,
+// as on a device, where no test opens it, the walk expects the target of
+// the guard for each location that the guard keeps the user from.
 import 'package:flutter/widgets.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 
 import 'locations.dart';
 
 /// What the walk of the routes found wrong, as text, each problem as
-/// `<route> (<path>): <problem>`.
+/// `<route> (<path>): <problem>`, and for a location that a guard keeps the
+/// user from, as
+/// `<route> (<path>), in place of which a guard shows <route>: <problem>`.
 final class WalkProblems {
   /// The locations after which the page on top of the innermost navigator
   /// on the screen, the one that shows the page the user sees, is not named
-  /// after the route of the location, as the router role names the page of
-  /// each route, or no navigator is on the screen.
+  /// after the route that the router shows for the location, as the router
+  /// role names the page of each route, or no navigator is on the screen.
   final List<String> pages = [];
 
-  /// The locations after which the screen of their route is not shown.
+  /// The locations after which the screen of the route that the router
+  /// shows for them is not shown.
   final List<String> screens = [];
 
   /// The locations after which an `ErrorWidget` is on the screen, or while
@@ -37,6 +43,15 @@ final class WalkProblems {
 /// The probe of the start check, which it runs on a device once the first
 /// screen settled: walks the routes of the app with [settle] and returns
 /// every problem; see [walkRoutes].
+///
+/// It holds whichever guards of the routes allow, and whatever screen the
+/// app shows when it starts, so it depends on no probe that ran before it.
+/// While a guard does not allow, it checks that the router keeps the user
+/// in the flow of the guard: each location outside the flow shows the
+/// target, so the walk sees the page and the screen of the routes of the
+/// flow only, and with a flow of one route, the screen that is shown
+/// already. The other routes get their walk under `flutter test`, where
+/// the guards allow.
 Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
     (await walkRoutes(settle)).all;
 
@@ -44,6 +59,10 @@ Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
 /// router of the app, from the navigator of the page that the user sees,
 /// waits with [settle] until the screen settles, and returns what is wrong
 /// after each; see [WalkProblems].
+///
+/// After each, the router shows the location, or the target of the guard
+/// that keeps the user from it, as the router role says: [shownFor], which
+/// the walk asks before it goes to the location, as the router does.
 ///
 /// The errors that Flutter reports while it walks come to it; it puts back
 /// the handler of the errors of Flutter that it found when it returns.
@@ -55,7 +74,12 @@ Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {
       (details) => reported.add(_firstLine(details.exceptionAsString()));
   try {
     for (final walked in walkedLocations) {
-      final label = '${walked.route} (${walked.location.path})';
+      final shown = shownFor(walked);
+      final label = [
+        '${walked.route} (${walked.location.path})',
+        if (shown.route != walked.route)
+          ', in place of which a guard shows ${shown.route}',
+      ].join();
       reported.clear();
       // Without a navigator on the screen to go from, what is on the
       // screen tells why, such as an ErrorWidget in place of the router.
@@ -68,7 +92,7 @@ Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {
           continue;
         }
       }
-      _checkScreen(walked, label, problems);
+      _checkScreen(shown, label, problems);
       problems.errors.addAll([
         for (final error in reported) '$label: Flutter reported $error',
       ]);
@@ -79,10 +103,10 @@ Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {
   return problems;
 }
 
-/// Adds to [problems] what is wrong on the screen for [walked], the
-/// location that the walk went to, named [label].
+/// Adds to [problems] what is wrong on the screen for [shown], the location
+/// that the router shows once the walk went to the location named [label].
 void _checkScreen(
-  WalkedLocation walked,
+  WalkedLocation shown,
   String label,
   WalkProblems problems,
 ) {
@@ -90,16 +114,16 @@ void _checkScreen(
   if (navigator == null) {
     problems.pages.add('$label: no navigator is on the screen');
   } else if (_topOf(navigator)?.settings.name case final name
-      when name != walked.route) {
+      when name != shown.route) {
     problems.pages.add(
       '$label: the page on top of the innermost navigator on the screen is '
       '${name == null ? 'unnamed' : 'named $name'}',
     );
   }
-  final shown = <Type>{};
+  final onScreen = <Type>{};
   _visitOnScreen((element, depth) {
     final widget = element.widget;
-    shown.add(widget.runtimeType);
+    onScreen.add(widget.runtimeType);
     if (widget is ErrorWidget) {
       problems.errors.add(
         '$label: the screen shows an ErrorWidget: '
@@ -107,9 +131,9 @@ void _checkScreen(
       );
     }
   });
-  if (!shown.contains(walked.screen)) {
+  if (!onScreen.contains(shown.screen)) {
     problems.screens.add(
-      '$label: the screen ${walked.screen} of the route is not shown',
+      '$label: the screen ${shown.screen} of ${shown.route} is not shown',
     );
   }
 }

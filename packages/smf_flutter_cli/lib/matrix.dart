@@ -797,6 +797,14 @@ final class MatrixAppTest {
   /// up mocks of its own after them, in its `setUpAll`, its `setUp` or its
   /// tests rather than while its `main()` declares them, such as mocks that
   /// record what reaches the platform side of its module.
+  ///
+  /// The mocks also put the app into the state that the tests of the other
+  /// modules expect when they start it. So a module with a guard of the
+  /// routes, which keeps the user from the screens of the app until a
+  /// condition holds, opens the guard there: the tests of the other modules
+  /// expect those screens, and the test of the walk of the routes fails on
+  /// each guard that does not allow, by its name. A test of the module that
+  /// needs the guard closed closes it again itself.
   final MatrixMocks? mocks;
 
   /// The probe of the tests for a check that runs on a device, such as the
@@ -806,6 +814,12 @@ final class MatrixAppTest {
   ///
   /// The matrix lists the probes of the tests that it adds to an app with a
   /// test that runs them ([readsStartProbes]); see [addAppTests].
+  ///
+  /// A probe depends on no other probe. It holds whichever probes ran
+  /// before it, on whatever screen they left the app, and whichever guards
+  /// of the routes allow on the device, where no mocks open one: the walk of
+  /// the routes expects the target of a guard in place of each location
+  /// that the guard keeps the user from.
   final MatrixStartProbe? startProbe;
 
   /// Whether the tests run the probes of the tests of the app
