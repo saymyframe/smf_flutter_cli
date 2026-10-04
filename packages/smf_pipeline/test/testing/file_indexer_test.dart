@@ -271,6 +271,105 @@ class Shell {
     );
   });
 
+  test('indexes the type that an extension is on, and its members', () {
+    final extensions = DartFileIndexer.index('lib/extensions.dart', '''
+extension AppTexts on BuildContext {
+  static const fallback = 'en';
+
+  Texts get l10n => Texts.of(this);
+  set tone(String value) {}
+  String shout(String text) => text.toUpperCase();
+  static Texts create() => Texts();
+}
+
+extension Pairs<K, V> on Map<K, List<V>> {
+  int get total => 0;
+}
+
+extension on String {
+  int get size => length;
+}
+''');
+
+    final texts = extensions.declaration('AppTexts')!;
+    expect(texts.kind, DeclarationKind.extension);
+    expect(texts.type, 'BuildContext');
+    expect(
+      [
+        for (final m in texts.members)
+          '${m.name} ${m.kind.name}${m.isStatic ? ' static' : ''}',
+      ],
+      [
+        'fallback field static',
+        'l10n getter',
+        'tone setter',
+        'shout method',
+        'create method static',
+      ],
+    );
+    expect(
+      [
+        for (final m in texts.members)
+          if (m.parameters.isNotEmpty)
+            '${m.name}: ${[
+              for (final p in m.parameters) '${p.type} ${p.name}',
+            ].join(', ')}',
+      ],
+      ['tone: String value', 'shout: String text'],
+    );
+
+    // The type is as written, with its type arguments.
+    final pairs = extensions.declaration('Pairs')!;
+    expect(pairs.type, 'Map<K, List<V>>');
+    expect([for (final m in pairs.members) m.name], ['total']);
+    // An extension without a name is no declaration that other code names.
+    expect(
+      [for (final d in extensions.declarations) d.name],
+      ['AppTexts', 'Pairs'],
+    );
+  });
+
+  test('a role can require an extension of the parsed code', () {
+    const required = RequiredExtension(
+      'AppTexts',
+      path: 'lib/core/l10n/l10n.dart',
+      on: 'BuildContext',
+      getters: ['l10n'],
+    );
+    List<String> problemsOf(String code) => [
+          for (final issue in required.checkIn({
+            required.path: DartFileIndexer.index(required.path, code),
+          }))
+            issue.message,
+        ];
+
+    expect(
+      problemsOf('''
+extension AppTexts on BuildContext {
+  Texts get l10n => Texts.of(this);
+}
+'''),
+      isEmpty,
+    );
+    expect(
+      problemsOf('''
+extension AppTexts on State {
+  Texts l10n() => Texts.of(context);
+}
+'''),
+      [
+        equals(
+          'extension AppTexts in lib/core/l10n/l10n.dart must be on '
+          'BuildContext, not on State.',
+        ),
+        equals(
+          'extension AppTexts in lib/core/l10n/l10n.dart must declare the '
+          'instance getter l10n.',
+        ),
+      ],
+    );
+  });
+
   test('an initializing formal of a field without a type has no type', () {
     final counter = DartFileIndexer.index('lib/counter.dart', '''
 class Counter {
@@ -396,10 +495,14 @@ void main() => run();
         'run in main, null',
       ],
     );
-    // The index lists the members of classes only.
-    for (final name in ['Loud', 'Mode', 'Twice', 'Meters']) {
+    // The index lists the members of classes and of extensions only.
+    for (final name in ['Loud', 'Mode', 'Meters']) {
       expect(index.declaration(name)!.members, isEmpty, reason: name);
     }
+    expect(
+      [for (final member in index.declaration('Twice')!.members) member.name],
+      ['twice'],
+    );
     expect(
       [for (final member in index.declaration('Panel')!.members) member.name],
       containsAll(['build', 'size', 'create', 'refresh', '-']),

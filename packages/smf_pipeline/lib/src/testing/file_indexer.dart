@@ -116,10 +116,12 @@ Iterable<IndexedDeclaration> _declarations(
         annotations: annotations,
         offset: offset,
       );
-    case ExtensionDeclaration(:final name?):
+    case ExtensionDeclaration(:final name?, :final onClause, :final body):
       yield IndexedDeclaration(
         name: name.lexeme,
         kind: DeclarationKind.extension,
+        type: onClause?.extendedType.toSource(),
+        members: _members(body.members),
         annotations: annotations,
         offset: offset,
       );

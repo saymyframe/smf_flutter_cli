@@ -171,6 +171,56 @@ final class RequiredClass extends RequiredSymbol {
   String toString() => 'class $name';
 }
 
+/// An extension that a provider must generate, such as the one that gives
+/// every `BuildContext` the texts of the app; the [getters] are what other
+/// code reads from an instance of the type it is [on].
+///
+/// Other code never calls an extension, so it has no parameters. It names
+/// the extension only to show or to hide it in an import, and reads its
+/// getters from the objects it extends, as in `context.l10n`.
+final class RequiredExtension extends RequiredSymbol {
+  /// Requires the extension [name] in [path] on the type [on], which
+  /// declares [getters].
+  const RequiredExtension(
+    super.name, {
+    required super.path,
+    required this.on,
+    this.getters = const [],
+  }) : super(namedParameters: const [], positionalArguments: 0);
+
+  /// The type that the extension is on, as written, such as `BuildContext`.
+  final String on;
+
+  /// The names that other code reads from an instance of [on] through the
+  /// extension, such as `l10n` in `context.l10n`.
+  ///
+  /// The extension must declare each of them as an instance getter.
+  final List<String> getters;
+
+  @override
+  List<String> _problemsOf(IndexedDeclaration declaration) {
+    if (declaration.kind != DeclarationKind.extension) {
+      return ['must be an extension, not a ${declaration.kind.name}'];
+    }
+    final type = declaration.type;
+    return [
+      if (type == null || _normalized(type) != _normalized(on))
+        'must be on $on, not on ${type?.trim() ?? 'an undeclared type'}',
+      for (final getter in getters)
+        if (!declaration.members.any(
+          (member) =>
+              member.name == getter &&
+              !member.isStatic &&
+              member.kind == MemberKind.getter,
+        ))
+          'must declare the instance getter $getter',
+    ];
+  }
+
+  @override
+  String toString() => 'extension $name';
+}
+
 /// Whether other code reads [name] from an instance as [member]: an
 /// instance field or getter of that name.
 bool _reads(IndexedMember member, String name) =>
