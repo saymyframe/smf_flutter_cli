@@ -136,6 +136,70 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that asks the guards of the routes about the screen
+  /// that the app starts on, and again when one of them starts or stops
+  /// allowing, but not about the locations that `go()`, `push()` and
+  /// `replace()` are asked to show: it shows a location that a guard keeps
+  /// the user from.
+  static const routerAskingGuardsOnlyAtStart = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_asks_guards_at_start'),
+    'A plain navigator that asks the guards only as it starts (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '  bool _redirected(AppLocation location) {\n'
+            '    final guarded = _guards.asked(location.routeName, location);\n'
+            '    if (guarded == null) return false;\n'
+            '    _go(guarded.location);\n'
+            '    return true;\n'
+            '  }\n',
+        '  bool _redirected(AppLocation location) => false;\n',
+      ),
+    ],
+  );
+
+  /// The fake router that tells the guards of the routes of its pages when
+  /// one of them starts or stops allowing, and does not show what they
+  /// answer. So the target of a guard stays once the guard allows, and the
+  /// pages of the stack stay when a guard stops allowing.
+  static const routerIgnoringGuardChanges = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_ignores_guard_changes'),
+    'A plain navigator that ignores the changes of the guards (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    final shown = _guards.changed(_pages);\n'
+            '    if (shown != null) _go(shown.location);\n',
+        '    _guards.changed(_pages);\n',
+      ),
+    ],
+  );
+
+  /// The fake router whose `replace()` asks the guards of the routes about
+  /// its location, and leaves the stack as it is when a guard keeps the
+  /// user from the location, rather than showing the target of the guard
+  /// in place of the whole stack: from a page of the flow that is not the
+  /// target, the user stays on that page.
+  static const routerKeepingPageOnGuardedReplace = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_page_on_guarded_replace'),
+    'A plain navigator whose guarded replace() shows nothing (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    {{#guards}}if (_redirected(location)) return;\n'
+            '    {{/guards}}final branch = _branchOf(location);\n'
+            "    _checkMainNavigation(location, branch, 'replace');\n",
+        '    {{#guards}}if (_guards.asked(location.routeName, location) != '
+            'null) return;\n'
+            '    {{/guards}}final branch = _branchOf(location);\n'
+            "    _checkMainNavigation(location, branch, 'replace');\n",
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.
