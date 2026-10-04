@@ -165,6 +165,42 @@ void main() {
         ]),
       ]);
     });
+
+    test(
+        'has contributors of settings entries next to the settings module of '
+        'the CLI, two of them with a widget of one name, so that the tests of '
+        'the settings screen role check a screen with entries on a provider '
+        'that must work', () async {
+      final (:apps, :failed) = await everyModuleAppsOf(
+        severalProvidersModules(),
+      );
+
+      expect(failed, isEmpty);
+      final hook = apps.single.hook!;
+      expect(hook.presentRoles, contains(settingsScreenRole));
+      final entries = settingsScreenRole.entriesIn(
+        settingsScreenRole.hookInput(hook),
+      );
+      expect(
+        entries.length,
+        greaterThan(1),
+        reason: 'With fewer than two entries, the tests of the settings '
+            'screen role show neither their order nor that the list scrolls '
+            'to the last one: add modules with a setting to '
+            'severalProvidersModules().',
+      );
+      final files = <String, Set<String?>>{};
+      for (final entry in entries) {
+        files.putIfAbsent(entry.widget.name, () => {}).add(entry.file);
+      }
+      expect(
+        files.values.where((paths) => paths.length > 1),
+        isNotEmpty,
+        reason: 'With two widgets of one name in different files, the app '
+            'analyzes only if the screen imports the file of each entry with '
+            'a prefix of its own.',
+      );
+    });
   });
 
   group('the contract harness', () {
