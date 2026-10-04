@@ -658,6 +658,38 @@ void main() {
         expect(shell, 'body', reason: '$modules');
       }
     });
+
+    test(
+        'asks the guards of the routes in an app whose modules declare '
+        'some, and names nothing of them in an app without guards, which '
+        'does not have what the role generates for them', () async {
+      /// The names that the code of the router of the app of [modules]
+      /// uses.
+      Future<Set<String>> namesIn(List<ModuleId> modules) async {
+        final result = await harness.check(
+          ContractCase('fixture router', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final names = _Names();
+        parseString(
+          content: result.app!.files[RouterRole.appRouterFactoryFile]!.text,
+        ).unit.accept(names);
+        return names.names;
+      }
+
+      const ofGuards = {
+        RouterRole.guardedNavigation,
+        RouterRole.guardChanges,
+      };
+
+      // The fixture gates are among the fixtures, and have two guards.
+      expect(await namesIn(everyFixture()), containsAll(ofGuards));
+      expect(
+        (await namesIn(const [FakeRouterModule.id, ModuleId('fake_second')]))
+            .intersection(ofGuards),
+        isEmpty,
+      );
+    });
   });
 
   group('the fixtures with a setting', () {
@@ -1303,6 +1335,8 @@ const _cases = [
   'fake_second (go_router) with localization',
   'fake_second (fake_router)',
   'fake_second (go_router)',
+  'fake_gate (fake_router)',
+  'fake_gate (go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_l10n',
@@ -1350,6 +1384,17 @@ final class _TextArguments extends RecursiveAstVisitor<void> {
       arguments.add(node.argumentList.arguments.first.toSource());
     }
     super.visitMethodInvocation(node);
+  }
+}
+
+/// Collects the names that a file uses: its simple identifiers.
+final class _Names extends RecursiveAstVisitor<void> {
+  final Set<String> names = {};
+
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    names.add(node.name);
+    super.visitSimpleIdentifier(node);
   }
 }
 
