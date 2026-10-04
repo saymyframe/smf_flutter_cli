@@ -4,7 +4,9 @@ The SMF module of the settings screen of the app. It is a feature: a screen with
 
 It generates `SettingsScreen`, a list at `/settings` with a row for each setting that the modules of the app have. A module with a setting gives the settings screen role the widget of its row, and this module only shows the rows, in the order of the role: those of the modules in the order of the modules, then those that the roles of the app add themselves. The last row is About with the name of the app, which opens the about dialog of Flutter, and from there the licenses of the packages of the app. The module adds no package to the app and works with any module that manages state, or with none. In an app whose modules have no settings, the screen has the About row alone.
 
-The main navigation of the app, when there is one, shows the screen as Settings with the settings icon. Without a main navigation, nothing that SMF generates opens the screen: go there from your own code with `context.nav.settings.settings().go()`. The app does not start on the screen.
+The main navigation of the app, when there is one, shows the screen as Settings with the settings icon. Without a main navigation, nothing that SMF generates opens the screen. Open it from your own code with `context.nav.settings.settings().push<void>()`, which puts the screen on top of the current one, so its back button leads back. `go()` would replace the stack with the settings screen alone, and nothing would lead back from it.
+
+The screen is not a start screen: the app starts on it only if you name it with `--start /settings`. So an app whose only screen is this one starts on the fallback screen, even with a layout: with `-m settings,bottom_tabs` the fallback screen is outside the main navigation, and `bottom_tabs` shows no bar for a single destination, so nothing opens the settings screen there either. Add a feature with a start screen, such as `home`.
 
 ## Use with the SMF CLI
 

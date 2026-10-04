@@ -18,8 +18,16 @@ import 'package:smf_settings/bundles/settings_bundle.dart';
 /// main navigation of the app, when a module provides it, shows the route
 /// as Settings with the settings icon, after the destinations of the
 /// features before it. Without a main navigation, nothing that SMF
-/// generates opens the screen: code of the app goes there with
-/// `context.nav.settings.settings().go()`. The app does not start on it.
+/// generates opens the screen: code of the app shows it on top of the
+/// current screen with `context.nav.settings.settings().push<void>()`, so
+/// that its back button leads back. `go()` would replace the stack with
+/// the screen alone, and nothing would lead back from it.
+///
+/// The route is not a start candidate, so the app starts on the screen
+/// only when it is chosen as the start, as `--start /settings` does. An
+/// app with no other screen starts on the fallback screen of the app
+/// entry, also when it has a main navigation, which that screen is outside
+/// of.
 ///
 /// As a feature, the module requires the router role, whichever module
 /// provides it, and keeps its file in `lib/features/settings/`. The screen

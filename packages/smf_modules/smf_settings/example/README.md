@@ -40,6 +40,6 @@ class SettingsScreen extends StatelessWidget {
 }
 ```
 
-The screen is at `/settings`, and it is the second tab of this app, after Home. No module of this app has a setting, so the list has the About row alone; a module with a setting puts its row before it. Without a layout such as `bottom_tabs`, nothing opens the screen: code of the app goes there with `context.nav.settings.settings().go()`, which does not name go_router.
+The screen is at `/settings`, and it is the second tab of this app, after Home. No module of this app has a setting, so the list has the About row alone; a module with a setting puts its row before it. Without a layout such as `bottom_tabs`, nothing opens the screen: code of the app shows it on top of the current screen with `context.nav.settings.settings().push<void>()`, so that its back button leads back. The call does not name go_router.
 
 The documentation has more on [the settings module](https://doc.saymyframe.com/modules/settings) and on [navigation in the generated app](https://doc.saymyframe.com/guides/navigation).

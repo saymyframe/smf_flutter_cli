@@ -340,6 +340,21 @@ void main() {
       expect(result.answers, isEmpty);
     });
 
+    test('starts on the settings screen only when the app is asked to',
+        () async {
+      // As `--start /settings` asks on the command line.
+      final asked = await ContractHarness(ModuleRegistry(_modules)).check(
+        const ContractCase(
+          'settings as the start',
+          requested: [SettingsModule.id],
+          roleOptions: {'start': '/settings'},
+        ),
+      );
+
+      expect(asked.errors.map((issue) => '$issue'), isEmpty);
+      expect(_startRouteOf(asked)!.fullPath, '/settings');
+    });
+
     test('tells the role where the screen is: at /settings', () {
       final screen = settingsScreenRole
           .screenIn(settingsScreenRole.hookInput(result.hook!))!;
@@ -506,6 +521,15 @@ void main() {
       );
       expect(_labelsOf(reversed), ['Settings', 'Feed']);
       expect(_startRouteOf(reversed)!.fullPath, '/feed');
+    });
+
+    test(
+        'has the screen as its only destination in an app with no other '
+        'screen, which still starts on the fallback screen', () async {
+      final result = await _rendered([SettingsModule.id, BottomTabsModule.id]);
+
+      expect(_labelsOf(result), ['Settings']);
+      expect(_startRouteOf(result), isNull);
     });
 
     test('is not there without a layout, and the screen stays a route',
