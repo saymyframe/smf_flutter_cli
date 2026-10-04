@@ -31,6 +31,7 @@ import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_settings/smf_settings.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -103,9 +104,10 @@ List<ModuleId> everyFixture({
 /// a fixture module whose start-up waits for a timer; flutter_core and
 /// go_router, the app entry and a router, for the screens that Firebase
 /// Analytics logs; get_it, a DI container, in which those roles register
-/// their services, for the test of the DI role that the CLI keeps; and the
+/// their services, for the test of the DI role that the CLI keeps; the
 /// fixture events, whose channel opens in the start-up, for the test of the
-/// events role that the CLI keeps.
+/// events role that the CLI keeps; and the settings module of the CLI, for
+/// the app test that it keeps for its screen.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -125,4 +127,5 @@ List<SmfModule> severalProvidersModules() => const [
       FakeServiceLogModule(),
       FakeEventsModule(),
       FakeSlowStartModule(),
+      SettingsModule(),
     ];

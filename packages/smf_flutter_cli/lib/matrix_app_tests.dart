@@ -8,6 +8,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_settings/smf_settings.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -23,6 +24,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final settings = await appTestsDirectoryOf('smf_settings');
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -90,6 +92,10 @@ Future<MatrixAppTests> smfAppTests() async {
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
       ),
+      // The last row of the settings screen of the module, which tells
+      // what the app is: it opens the about dialog of Flutter with the name
+      // of the app, and the dialog the licenses of its packages.
+      MatrixAppTest('$settings/settings', appliesTo: _has(SettingsModule.id)),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),

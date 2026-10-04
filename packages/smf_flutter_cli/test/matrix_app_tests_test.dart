@@ -573,6 +573,18 @@ void main() {
   });
 
   test(
+      'the test of the settings module applies to the apps with the module, '
+      'whatever else they have', () {
+    expect(
+      [
+        for (final app in apps)
+          if (named('settings').appliesTo(app)) app.name,
+      ],
+      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+    );
+  });
+
+  test(
       'the test of the screen views expects the screen that the router role '
       'chose for the app to start on', () {
     final screenViews = named('screen_views');

@@ -8,6 +8,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_go_router` | `go_router`, routes and navigation with go_router |
 | `smf_bottom_tabs` | `bottom_tabs`, tabs in a bar at the bottom |
 | `smf_home_flutter` | `home`, a start screen |
+| `smf_settings` | `settings`, a settings screen |
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
 | `smf_get_it` | `get_it`, dependency injection |
 | `smf_event_bus` | `event_bus`, events |

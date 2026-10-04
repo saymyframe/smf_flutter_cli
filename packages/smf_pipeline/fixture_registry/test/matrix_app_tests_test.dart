@@ -226,6 +226,7 @@ void main() {
           'firebase_crashlytics',
           'firebase_analytics',
           'screen_views',
+          'settings',
           'di_role',
           'events_role',
           'router_walk',
