@@ -60,6 +60,10 @@ final class LocalizedText {
 
   /// The text in other languages, by the code of each: two or three
   /// lowercase letters, such as `uk`, without a region.
+  ///
+  /// An app is in a language only if Flutter has the texts of its own
+  /// widgets in it (see [LocalizationRole.supportedLanguages]), so the role
+  /// leaves a translation into any other language out of the app.
   final Map<String, String> translations;
 
   /// The codes of the languages that the text is in, English first.
