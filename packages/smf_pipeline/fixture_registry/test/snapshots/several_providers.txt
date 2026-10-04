@@ -32,11 +32,20 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
 - A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
 
+With `firebase_analytics`:
+
+- Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
+
 ## Crash reporting
 
 - `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
 - Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
 - A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+With `firebase_crashlytics`:
+
+- Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
+- After `flutterfire configure` runs on macOS, `flutter build ipa` needs the fix of the section Crashlytics of `README.md`.
 
 ## Dependency injection
 
@@ -55,6 +64,12 @@ With `get_it`:
 - An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
 - The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
 - Use events between parts of the app that do not import each other.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
+- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
+- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
 
 ## Preferences
 

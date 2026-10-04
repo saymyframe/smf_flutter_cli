@@ -32,6 +32,16 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
 - A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
 
+With `firebase_analytics`:
+
+- Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
+- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
+- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+
 ## Router
 
 - Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.

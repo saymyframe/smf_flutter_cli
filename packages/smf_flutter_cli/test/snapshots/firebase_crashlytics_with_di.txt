@@ -32,6 +32,11 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
 - A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
 
+With `firebase_crashlytics`:
+
+- Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
+- After `flutterfire configure` runs on macOS, `flutter build ipa` needs the fix of the section Crashlytics of `README.md`.
+
 ## Dependency injection
 
 - A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `registerDependencies()` in `lib/core/di/dependencies.dart` registers every service, and `bootstrap()` awaits it: a new service gets its line there.
@@ -43,6 +48,12 @@ With `get_it`:
 - `registerDependencies()` registers the services in `getIt`, a local name for `GetIt.instance`, with `registerLazySingleton`, `registerSingleton` or `registerFactory`. The function that creates a service gets each service it takes as `getIt<Type>()`, and one that disposes of it goes into `dispose:`.
 - A singleton created asynchronously takes `registerSingletonAsync`, and one that waits for such a service `registerSingletonWithDependencies`. `await getIt.allReady()` then ends the function.
 - No other file in `lib/` imports `get_it`. A test may import it to register its fakes in `GetIt.instance`.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
+- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
+- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
