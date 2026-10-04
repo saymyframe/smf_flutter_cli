@@ -673,6 +673,28 @@ class App {
   Widget build() => MaterialApp(title: 'My App');
 }
 ''',
+        // In a build() whose context is a named parameter.
+        '''
+class App {
+  Widget build({required BuildContext context}) =>
+      MaterialApp(title: 'My App');
+}
+''',
+        // In a getter or a setter named build, which is no method.
+        '''
+class App {
+  Widget get build => MaterialApp(title: 'My App');
+
+  set build(BuildContext context) {}
+}
+''',
+        '''
+class App {
+  set build(BuildContext context) {
+    runApp(MaterialApp(title: 'My App'));
+  }
+}
+''',
         // In such a build(), next to the build(BuildContext context) of
         // another class of the file.
         '''

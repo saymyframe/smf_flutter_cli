@@ -675,11 +675,20 @@ bool _inBuild(DartFileIndex file, IndexedInvocation invocation) =>
           declaration.members.any(_isBuildWithContext),
     );
 
-/// Whether [member] is a `build` whose first parameter is
-/// `BuildContext context`.
+/// Whether [member] is a method `build`, not a getter or a setter of that
+/// name, whose first parameter is the positional `BuildContext context`.
 bool _isBuildWithContext(IndexedMember member) =>
     member.name == 'build' &&
+    member.kind == MemberKind.method &&
     switch (member.parameters) {
-      [IndexedParameter(name: 'context', type: 'BuildContext'), ...] => true,
+      [
+        IndexedParameter(
+          name: 'context',
+          type: 'BuildContext',
+          kind: ParameterKind(isNamed: false),
+        ),
+        ...,
+      ] =>
+        true,
       _ => false,
     };

@@ -9,14 +9,22 @@ import 'support.dart';
 /// The file of the provider with the root widget of the app.
 const _appFile = 'lib/app.dart';
 
-/// A method `build` with [parameters], each a name and a type: by default
-/// `build(BuildContext context)`, as that of a widget.
+/// A method `build` with the positional [parameters], each a name and a
+/// type: by default `build(BuildContext context)`, as that of a widget.
 IndexedMember _build([
+  List<(String, String)> parameters = const [('context', 'BuildContext')],
+]) =>
+    _buildOf(MemberKind.method, parameters);
+
+/// A member `build` of [kind] with the positional [parameters], each a name
+/// and a type: by default `BuildContext context`.
+IndexedMember _buildOf(
+  MemberKind kind, [
   List<(String, String)> parameters = const [('context', 'BuildContext')],
 ]) =>
     IndexedMember(
       'build',
-      kind: MemberKind.method,
+      kind: kind,
       parameters: [
         for (final (name, type) in parameters)
           IndexedParameter(
@@ -504,6 +512,31 @@ void main() {
         ),
         'in a build whose context is of another type': _appWithBuildOf(
           const [('context', 'Object')],
+        ),
+        'in a build whose context is a named parameter': _app(
+          appDeclarations: [
+            _appWidget(const [
+              IndexedMember(
+                'build',
+                kind: MemberKind.method,
+                parameters: [
+                  IndexedParameter(
+                    'context',
+                    kind: ParameterKind.requiredNamed,
+                    type: 'BuildContext',
+                  ),
+                ],
+              ),
+            ]),
+          ],
+        ),
+        'in a getter named build, next to its setter with a context': _app(
+          appDeclarations: [
+            _appWidget([
+              const IndexedMember('build', kind: MemberKind.getter),
+              _buildOf(MemberKind.setter),
+            ]),
+          ],
         ),
       };
       for (final MapEntry(key: reason, value: files) in apps.entries) {
