@@ -66,7 +66,11 @@ final class _Exception {
 }
 
 final List<_Ban> _bans = [
-  // The contracts of the old module model.
+  // The contracts of the old module model. RouteGuard is not among them:
+  // the model has guards again, as data of the router role
+  // (RoutesData.guards) that every router asks, while a guard of the old
+  // model held code for each router, as GoRouteRedirect and AutoRouteGuard,
+  // which stay banned.
   for (final name in const [
     'ModuleProfile',
     'StateManager',
@@ -79,7 +83,6 @@ final List<_Ban> _bans = [
     'RouteMeta',
     'RouteScreenArgs',
     'ParameterSource',
-    'RouteGuard',
     'GoRouteRedirect',
     'AutoRouteGuard',
     'RoutingMode',
@@ -98,8 +101,8 @@ final List<_Ban> _bans = [
     // is the CompositionFile of the DI role, a rule in ModuleKind.roleRules.
     'compositionFile',
     'compositionFileOf',
-    // Not in the model yet: DI scopes and route conditions come with a
-    // module that needs them.
+    // Not in the model yet: DI scopes, and conditions that single routes
+    // ask for, come with a module that needs them.
     'DiScopes',
     'ConditionData',
     'DiRuntimeNeed',

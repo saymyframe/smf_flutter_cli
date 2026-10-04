@@ -631,11 +631,15 @@ void main() {
       );
     });
 
-    test('renders the facade into its brick', () {
+    test('renders the facade into its brick, and no code without guards', () {
       final output = template.render(inputOf(routerRole, data: _data));
 
       expect(output.fragments, isEmpty);
-      expect(output.vars, {'facade': _facade().toDart()});
+      expect(output.vars.keys, ['facade', 'guards']);
+      expect(output.vars['facade'], _facade().toDart());
+      final guards = output.vars['guards']! as Fragment;
+      expect(guards.code, isEmpty);
+      expect(guards.imports, isEmpty);
     });
 
     test('generates valid Dart files', () async {

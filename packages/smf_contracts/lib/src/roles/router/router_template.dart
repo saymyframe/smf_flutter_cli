@@ -98,7 +98,10 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
   }
 
   /// The choice of the route at [start], the path the user asked the app to
-  /// start on, which must be a route without required parameters.
+  /// start on, which must be a route without required parameters, and
+  /// outside the flow of every guard: once a guard allows, the app shows the
+  /// location that the guard kept the user from, and an app that starts in
+  /// the flow has none.
   RouterChoice _startOn(RouterFacade facade, String start) {
     final route = facade.routeAt(start);
     if (route == null) {
@@ -116,6 +119,15 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         '${route.params.where((p) => p.isRequired).join(', ')}.',
       );
     }
+    for (final guard in facade.guards) {
+      if (guard.flow.contains(route)) {
+        throw SmfUsageException(
+          'The app cannot start on $start, because the route is in the flow '
+          'of the $guard: the app shows it until the guard allows, and then '
+          'the screen that it starts on.',
+        );
+      }
+    }
     return RouterChoice(startPath: route.fullPath);
   }
 
@@ -128,7 +140,13 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         _ => const {},
       };
 
+  /// The navigation facade of the app, and the code of its guards, which
+  /// an app without guards has none of.
   @override
-  RoleOutput render(RoleHookInput<RoutesData> input) =>
-      RoleOutput(vars: {'facade': routerRole.facadeOf(input).toDart()});
+  RoleOutput render(RoleHookInput<RoutesData> input) {
+    final facade = routerRole.facadeOf(input);
+    return RoleOutput(
+      vars: {'facade': facade.toDart(), 'guards': _guardsCode(facade)},
+    );
+  }
 }
