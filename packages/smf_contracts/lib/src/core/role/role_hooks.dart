@@ -13,8 +13,9 @@ final class RoleHookRequest {
     this.choices = const {},
   });
 
-  /// The data of all roles, each with its origin, in the order the modules
-  /// were selected.
+  /// The data of all roles, each with its origin: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -45,8 +46,10 @@ final class RoleHookInput<D extends Object> {
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] that applies in the app, each with its origin, in
-  /// the order the modules were selected.
+  /// The data of [role] that applies in the app, each with its origin: that
+  /// of the modules, in the order the modules were selected, and then that
+  /// of the templates of roles, in the order of the first provider of each
+  /// role.
   final List<RoleData<D>> data;
 
   /// The result of the role's [RoleTemplate.choose] hook, or `null` before
@@ -94,8 +97,9 @@ final class RoleChoiceRequest {
     required this.context,
   });
 
-  /// The data of all roles, each with its origin, in the order the modules
-  /// were selected.
+  /// The data of all roles, each with its origin: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -127,8 +131,9 @@ final class RoleChoiceContext<D extends Object> {
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] that applies in the app, in the order the modules
-  /// were selected.
+  /// The data of [role] that applies in the app: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<D>> data;
 
   /// The machine and the user; ask only if [SmfEnvironment.interactive].

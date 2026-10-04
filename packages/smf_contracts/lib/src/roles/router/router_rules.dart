@@ -552,7 +552,7 @@ List<String> _segmentProblems(
 
 List<SmfIssue> _checkScreenSockets(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
-  final templates = _textTemplates(input.contributions);
+  final templates = textTemplatesOf(input.contributions);
 
   final issues = <SmfIssue>[];
   void check(Route route) {
@@ -593,18 +593,6 @@ List<SmfIssue> _checkScreenSockets(ModuleRuleInput<RoutesData> input) {
   }
   return issues;
 }
-
-/// The text files of the bricks among [contributions], by path.
-Map<String, String> _textTemplates(List<Contribution> contributions) => {
-      for (final contribution in contributions)
-        if (contribution is BrickContribution)
-          for (final file in contribution.bundle.files)
-            if (file.type == 'text')
-              file.path.replaceAll(r'\', '/'): utf8.decode(
-                base64.decode(file.data),
-                allowMalformed: true,
-              ),
-    };
 
 /// What may stand between the tag of a class's annotations and the class:
 /// white space, comments and other annotations.

@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/router_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/brick_templates.dart';
 
 part 'router/router_dsl.dart';
 part 'router/router_facade.dart';
