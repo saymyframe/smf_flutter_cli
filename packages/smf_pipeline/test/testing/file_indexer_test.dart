@@ -254,6 +254,21 @@ class Shell {
         'raw getter',
       ],
     );
+    // A method, a setter and an operator have their parameters.
+    expect(
+      [
+        for (final m in shell.members)
+          if (m.parameters.isNotEmpty)
+            '${m.name} ${m.kind.name}: ${[
+              for (final p in m.parameters) '${p.type} ${p.name}',
+            ].join(', ')}',
+      ],
+      [
+        'count setter: int value',
+        'select method: int index',
+        '== method: Object other',
+      ],
+    );
   });
 
   test('an initializing formal of a field without a type has no type', () {
@@ -292,6 +307,59 @@ extension on String {
           '${i.name} in ${i.enclosingDeclaration}',
       ],
       ['double in Twice', 'shout in null'],
+    );
+  });
+
+  test(
+      'names the method, getter or setter around an invocation, and none '
+      'outside the methods of a declaration', () {
+    final index = DartFileIndexer.index('lib/panel.dart', '''
+class Panel {
+  Panel() : created = stamp();
+
+  final Object created;
+  final label = describe();
+
+  Widget build(BuildContext context) => Builder(builder: (context) => text());
+  int get size => measure();
+  set size(int value) => resize(value);
+  static Panel create() => const Panel();
+}
+
+mixin Loud {
+  void shout() => print('loud');
+}
+
+extension Twice on int {
+  int twice() => double(this);
+}
+
+final panel = Panel.create();
+
+void main() => run();
+''');
+
+    expect(
+      [
+        for (final i in index.invocations)
+          '${i.name} in ${i.enclosingDeclaration}, ${i.enclosingMember}',
+      ],
+      [
+        // In a constructor and in the initializer of a field.
+        'stamp in Panel, null',
+        'describe in Panel, null',
+        // In a method, also in a closure of it.
+        'Builder in Panel, build',
+        'text in Panel, build',
+        'measure in Panel, size',
+        'resize in Panel, size',
+        'Panel in Panel, create',
+        'print in Loud, shout',
+        'double in Twice, twice',
+        // In a top-level variable and in a top-level function.
+        'create in panel, null',
+        'run in main, null',
+      ],
     );
   });
 

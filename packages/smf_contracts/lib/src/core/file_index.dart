@@ -232,7 +232,12 @@ enum MemberKind {
 /// A member of an indexed class other than a constructor.
 final class IndexedMember {
   /// Creates the index of the member [name].
-  const IndexedMember(this.name, {required this.kind, this.isStatic = false});
+  const IndexedMember(
+    this.name, {
+    required this.kind,
+    this.isStatic = false,
+    this.parameters = const [],
+  });
 
   /// The declared name; the name of an operator is its symbol, such as
   /// `==`.
@@ -243,6 +248,10 @@ final class IndexedMember {
 
   /// Whether the member is `static`.
   final bool isStatic;
+
+  /// The parameters of a method or a setter; a field and a getter have
+  /// none.
+  final List<IndexedParameter> parameters;
 }
 
 /// Kinds of parameters.
@@ -301,6 +310,7 @@ final class IndexedInvocation {
     this.typeArguments = const [],
     this.namedArguments = const [],
     this.enclosingDeclaration,
+    this.enclosingMember,
     this.awaited = false,
     this.offset = 0,
   });
@@ -321,6 +331,12 @@ final class IndexedInvocation {
   /// The name of the top-level declaration the invocation is in, or `null`
   /// outside any.
   final String? enclosingDeclaration;
+
+  /// The name of the method, getter or setter of [enclosingDeclaration] the
+  /// invocation is in, such as `build`, or `null` outside any: in a
+  /// top-level function or variable, in a constructor, or in the
+  /// initializer of a field.
+  final String? enclosingMember;
 
   /// Whether the invocation is the operand of an `await`.
   final bool awaited;
