@@ -270,6 +270,7 @@ import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
 import 'package:fixture_app/core/di/dependencies.dart';
 import 'package:fixture_app/core/events/communication_service.dart';
 import 'package:fixture_app/core/fixture_parent/fixture_parent.dart';
+import 'package:fixture_app/core/preferences/app_preferences.dart';
 import 'package:flutter/foundation.dart';
 
 @pragma('vm:entry-point')
@@ -285,6 +286,7 @@ Future<void> bootstrap() async {
   await initCrashReporting();
   installCrashReporting();
   await initEvents();
+  await initPreferences();
   debugPrint('di');
   await registerDependencies();
   debugPrint(createBadge().labels.join());
@@ -690,10 +692,11 @@ final class _CrashReporters implements CrashReporter {
 === lib/core/di/dependencies.dart (fake_di) ===
 import 'dart:async';
 
-import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
+import 'package:fixture_app/core/analytics/analytics_service.dart' as di4;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:fixture_app/core/events/communication_service.dart' as di2;
 import 'package:fixture_app/core/fixture_services/fixture_services.dart' as di0;
+import 'package:fixture_app/core/preferences/app_preferences.dart' as di3;
 
 import 'service_locator.dart';
 
@@ -745,7 +748,8 @@ Future<void> registerDependencies() async {
   locator.lazy<di2.CommunicationService>(
     () => di2.createCommunicationService(),
   );
-  locator.lazy<di3.AnalyticsService>(() => di3.createAnalyticsService());
+  locator.lazy<di3.AppPreferences>(() => di3.createAppPreferences());
+  locator.lazy<di4.AnalyticsService>(() => di4.createAnalyticsService());
 }
 
 /// Disposes of the services that the map created, with the functions that
@@ -1058,6 +1062,87 @@ void _openAlerts() {
 }
 
 void _openNews() {}
+=== lib/core/fixture_preferences/fixture_preferences.dart (fake_preferences) ===
+import '../preferences/app_preferences.dart';
+
+/// What the preferences of the fixture have saved: it stands for the disk
+/// of a device, which outlives the preferences that a start of the app
+/// opens. A list on it is a copy of the list that was saved.
+final Map<String, Object> fixturePreferencesDisk = {};
+
+/// Creates the preferences of the fixture, which read
+/// [fixturePreferencesDisk] into memory, as a start of the app does.
+AppPreferences createFixturePreferences() => FixturePreferences();
+
+/// The preferences of the fixture: the settings of the app that are no
+/// secret, in memory, over [fixturePreferencesDisk]. Nothing here is
+/// encrypted: never store a token, a password or a key in them.
+final class FixturePreferences implements AppPreferences {
+  /// Reads [fixturePreferencesDisk] into memory.
+  FixturePreferences() {
+    for (final MapEntry(:key, :value) in fixturePreferencesDisk.entries) {
+      _values[key] = _copyOf(value);
+    }
+  }
+
+  final Map<String, Object> _values = {};
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_values[key]) {
+    final List<String> list => List.of(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) => _save(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) => _save(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _save(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) => _save(key, value);
+
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _save(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) async {
+    _values.remove(key);
+    fixturePreferencesDisk.remove(key);
+  }
+
+  /// The value of [key] in memory if it is a [T], or `null`.
+  T? _read<T>(String key) => switch (_values[key]) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// Keeps [value] under [key] in memory, and saves it to the disk.
+  Future<void> _save(String key, Object value) async {
+    _values[key] = value;
+    fixturePreferencesDisk[key] = _copyOf(value);
+  }
+
+  /// [value], or a copy of it if it is a list.
+  static Object _copyOf(Object value) =>
+      value is List<String> ? List.of(value) : value;
+}
 === lib/core/fixture_screen_log/fixture_screen_log.dart (fake_screen_log) ===
 /// The screens the user saw, as the screen listener of the fixture screen
 /// log heard of them: the full name of the route of each, or `null`, and
@@ -1227,6 +1312,69 @@ void closeFixtureCounter(FixtureCounter counter) {
   counter.count = 0;
   fixtureServiceEvents.add('close FixtureCounter');
 }
+=== lib/core/fixture_setting/fixture_setting.dart (fake_preferences_user) ===
+import '../preferences/app_preferences.dart';
+
+/// The setting of the fixture: a number that the app remembers between its
+/// launches when it has preferences.
+final fixtureSetting = FixtureSetting();
+
+/// A number, 0 until something sets it.
+final class FixtureSetting {
+  int _value = 0;
+
+  /// The preferences that remember the number, once the app opened them.
+  AppPreferences? _preferences;
+
+  /// The number.
+  int get value => _value;
+
+  /// Sets the number to [value]. In an app with preferences, it saves the
+  /// number too, once the app opened them: before that, it changes only
+  /// memory.
+  Future<void> set(int value) async {
+    _value = value;
+    await _preferences?.setInt(fixtureSettingKey, value);
+  }
+}
+
+/// The key of the setting of the fixture in the preferences.
+const fixtureSettingKey = 'fake_preferences_user.setting';
+
+/// What the restorers of the fixture read each time the app gave them the
+/// preferences, in the order they ran: the name of each and the number
+/// that was saved, or `null`.
+final List<(String, int?)> fixtureRestored = [];
+
+/// Whether the restorers of the fixture throw once they did their work, as
+/// a test that a restorer that throws keeps no other from restoring sets
+/// it.
+bool fixtureRestorersThrow = false;
+
+/// The first restorer of the fixture, which only notes in [fixtureRestored]
+/// what is saved, and then throws if [fixtureRestorersThrow].
+void noteFixtureSetting(AppPreferences preferences) {
+  fixtureRestored.add(('note', preferences.getInt(fixtureSettingKey)));
+  if (fixtureRestorersThrow) {
+    throw StateError('The first restorer of the fixture throws.');
+  }
+}
+
+/// The restorer of the setting of the fixture: takes the number that is
+/// saved, or keeps the current one when nothing is saved, and keeps
+/// [preferences] for the writes of the setting. It notes in
+/// [fixtureRestored] what is saved, and then throws if
+/// [fixtureRestorersThrow].
+void restoreFixtureSetting(AppPreferences preferences) {
+  final saved = preferences.getInt(fixtureSettingKey);
+  fixtureSetting
+    .._value = saved ?? fixtureSetting._value
+    .._preferences = preferences;
+  fixtureRestored.add(('setting', saved));
+  if (fixtureRestorersThrow) {
+    throw StateError('The restorer of the setting of the fixture throws.');
+  }
+}
 === lib/core/fixture_theme_mode/fixture_theme_mode.dart (fake_sockets) ===
 import 'package:flutter/material.dart';
 
@@ -1246,6 +1394,111 @@ class FixtureThemeMode extends InheritedWidget {
 
   @override
   bool updateShouldNotify(FixtureThemeMode oldWidget) => mode != oldWidget.mode;
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:fixture_app/core/fixture_preferences/fixture_preferences.dart'
+    as impl0;
+import 'package:fixture_app/core/fixture_setting/fixture_setting.dart';
+import 'package:flutter/foundation.dart';
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password or a key in the preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = impl0.createFixturePreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It may run again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  noteFixtureSetting,
+  restoreFixtureSetting,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws keeps no other from restoring and does not stop the start-up of
+/// the app, which goes on with the defaults of that part. In debug mode it
+/// is printed, so that a restorer that fails shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
