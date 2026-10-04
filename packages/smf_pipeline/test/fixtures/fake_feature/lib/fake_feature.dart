@@ -6,14 +6,16 @@
 /// it uses the navigation facade, the annotation sockets of the router, and
 /// the rules for resolving services. The second has another start route
 /// with a destination, so an app with both has two screens that can start
-/// it and two destinations, and a route outside the main navigation, whose
-/// page a router shows over it.
+/// it and two destinations, a route outside the main navigation, whose
+/// page a router shows over it, and a setting for the settings screen of
+/// an app that has one.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_riverpod_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_bundle.dart';
+import 'package:fake_feature/bundles/fake_second_settings_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// A feature with a start screen and a details screen.
@@ -92,7 +94,9 @@ final class FakeFeatureModule extends SmfModule {
 
 /// A second feature with a start screen that is a destination of the main
 /// navigation, and a screen outside the main navigation, which a router
-/// shows over it.
+/// shows over it. It uses the settings screen role: in an app with a
+/// settings screen, it generates the widget of a setting and gives the role
+/// an entry for it.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -107,6 +111,7 @@ final class FakeSecondModule extends SmfModule {
         id: id,
         description: 'A second start screen (fixture)',
         kind: ModuleKinds.feature,
+        uses: {settingsScreenRole},
       );
 
   @override
@@ -141,6 +146,20 @@ final class FakeSecondModule extends SmfModule {
               ),
             ),
           ]),
+        ),
+        // Only an app with a settings screen gets the widget of the
+        // setting, and only there does the entry apply.
+        BrickContribution(
+          fakeSecondSettingsBundle,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'FixtureSecondSetting',
+              import: ImportRef.app('$_folder/fixture_second_setting.dart'),
+            ),
+          ),
         ),
       ];
 }

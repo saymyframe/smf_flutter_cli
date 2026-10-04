@@ -11,6 +11,7 @@ import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
@@ -300,7 +301,9 @@ final class FakeAnalyticsModule extends SmfModule {
 /// screen of the router role, which it requires, and has no routes: so an
 /// app with it and without routes to start on starts on the fallback screen
 /// of the app entry, and an app with it and the fixture analytics has two
-/// listeners of the screen.
+/// listeners of the screen. It uses the settings screen role: in an app
+/// with a settings screen, it generates the widget of a setting and gives
+/// the role an entry for it.
 final class FakeScreenLogModule extends SmfModule {
   /// Creates the module.
   const FakeScreenLogModule();
@@ -318,6 +321,7 @@ final class FakeScreenLogModule extends SmfModule {
         description: 'A log of the screens the user sees (fixture)',
         kind: ModuleKinds.infrastructure,
         requires: {routerRole},
+        uses: {settingsScreenRole},
       );
 
   @override
@@ -326,6 +330,22 @@ final class FakeScreenLogModule extends SmfModule {
         const SocketContribution.item(
           RouterRole.screenListeners,
           Fragment('noteFixtureScreenLog', imports: [_file]),
+        ),
+        // Only an app with a settings screen gets the widget of the
+        // setting, and only there does the entry apply.
+        BrickContribution(
+          fakeScreenLogSettingsBundle,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'FixtureScreenLogSetting',
+              import: ImportRef.app(
+                'core/fixture_screen_log/fixture_screen_log_setting.dart',
+              ),
+            ),
+          ),
         ),
       ];
 }

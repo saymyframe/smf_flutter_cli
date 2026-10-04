@@ -230,6 +230,7 @@ void main() {
           'di_role',
           'events_role',
           'router_walk',
+          'settings_screen_role',
           'fake_crash',
           'fake_analytics',
           'analytics_role',

@@ -107,7 +107,8 @@ List<ModuleId> everyFixture({
 /// their services, for the test of the DI role that the CLI keeps; the
 /// fixture events, whose channel opens in the start-up, for the test of the
 /// events role that the CLI keeps; and the settings module of the CLI, for
-/// the app test that it keeps for its screen.
+/// the app test that it keeps for its screen and for the tests of the
+/// settings screen role that the CLI keeps.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their

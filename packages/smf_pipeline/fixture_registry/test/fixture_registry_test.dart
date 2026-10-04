@@ -1,6 +1,8 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:fake_broken/fake_broken.dart';
+import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
@@ -594,6 +596,71 @@ void main() {
         expect(locations, isEmpty, reason: '$modules');
         expect(shell, 'body', reason: '$modules');
       }
+    });
+  });
+
+  group('the fixtures with a setting', () {
+    const second = 'lib/features/fake_second/fixture_second_setting.dart';
+    const screenLog =
+        'lib/core/fixture_screen_log/fixture_screen_log_setting.dart';
+
+    test(
+        'give the settings screen role an entry each, in the order of the '
+        'modules, and generate its widget, in an app with a settings screen',
+        () async {
+      // No fixture provides the settings screen role in an app that must
+      // work, so the app has the provider with a known bug.
+      final result = await ContractHarness(
+        ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
+      ).check(
+        const ContractCase(
+          'fixtures with a setting',
+          requested: [
+            FakeSecondModule.id,
+            FakeScreenLogModule.id,
+            BrokenSettingsModule.id,
+            FakeRouterModule.id,
+          ],
+        ),
+      );
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(result.hook!)))
+            '${entry.widget.name} of ${entry.file}',
+        ],
+        [
+          'FixtureSecondSetting of $second',
+          'FixtureScreenLogSetting of $screenLog',
+        ],
+      );
+      expect(
+        {
+          for (final path in [second, screenLog])
+            path: result.app!.files[path]?.owner,
+        },
+        {
+          second: const ModuleOrigin(FakeSecondModule.id),
+          screenLog: const ModuleOrigin(FakeScreenLogModule.id),
+        },
+      );
+    });
+
+    test('generate no widget of a setting in an app without a settings screen',
+        () async {
+      final result = await ContractHarness(
+        ModuleRegistry(fixtureModules()),
+      ).check(ContractCase('every fixture', requested: everyFixture()));
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        result.resolution!.modules.map((module) => module.id),
+        containsAll([FakeSecondModule.id, FakeScreenLogModule.id]),
+      );
+      expect(result.app!.files.keys, isNot(contains(second)));
+      expect(result.app!.files.keys, isNot(contains(screenLog)));
     });
   });
 

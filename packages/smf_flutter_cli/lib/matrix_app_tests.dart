@@ -106,12 +106,23 @@ Future<MatrixAppTests> smfAppTests() async {
       // it: the test starts the app and goes to each location that needs
       // no values.
       await routerWalkAppTest(),
+      // The settings screen of the apps with the settings screen role,
+      // whichever module provides it: the route that the provider names
+      // shows the screen, and the screen shows every entry that the
+      // modules of the app give the role once, one below the other in the
+      // order of the role.
+      MatrixAppTest(
+        '$cli/settings_screen_role',
+        appliesTo: (app) => app.hook!.presentRoles.contains(settingsScreenRole),
+        generatedFiles: _settingsOf,
+        roles: {settingsScreenRole},
+      ),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
-    // provider of the DI role and of the events role gets the test of its
-    // role.
-    testedRoles: {routerRole, diRole, eventsRole},
+    // provider of the DI role, of the events role and of the settings
+    // screen role gets the tests of its role.
+    testedRoles: {routerRole, diRole, eventsRole, settingsScreenRole},
   );
 }
 
@@ -266,6 +277,78 @@ typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 /// routes of the app.
 const List<WalkedLocation> walkedLocations = [
 $locations];
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// settings screen role that the CLI keeps in its
+/// `app_tests/settings_screen_role`: `settingsLocation`, the location of the
+/// route that the provider of the role names as the settings screen
+/// ([SettingsScreenRole.screenIn]), created as `const` from its class of
+/// the navigation of the router role, `settingsScreen`, the type of the
+/// screen that the route shows, and `settingsEntries`, the types of the
+/// widgets of the entries of the screen, in the order of the role
+/// ([SettingsScreenRole.entriesIn]).
+const settingsScreenFile = 'test/settings_screen_role/settings.dart';
+
+/// The file at [settingsScreenFile] of [app], an app of the matrix with
+/// the settings screen role, whose package is [packageName].
+///
+/// It imports the navigation of the router role without a prefix, since the
+/// names of its classes differ from those of the file, the file of the
+/// screen with the prefix `screen`, and the file of every entry once, with a
+/// prefix of its own, `entry0`, `entry1`, ..., so that no name clashes.
+/// Throws a [StateError] if the provider of the role names no route of its
+/// own, which the rules of the role report in an app of the matrix.
+Map<String, String> _settingsOf(MatrixApp app, String packageName) {
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final route = settingsScreenRole.screenIn(input);
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the settings '
+      'screen.',
+    );
+  }
+  final screen = route.route.screen;
+  final prefixes = {screen.import.resolveUri(packageName): 'screen'};
+  final entries = StringBuffer();
+  for (final entry in settingsScreenRole.entriesIn(input)) {
+    final widget = entry.widget;
+    // The template of the role rejects an entry whose widget is not in a
+    // file of the app, so each has an import.
+    final prefix = prefixes.putIfAbsent(
+      widget.import!.resolveUri(packageName),
+      () => 'entry${prefixes.length - 1}',
+    );
+    entries.writeln('  ${widget.codeWith(prefix)},');
+  }
+  final navigation = ImportRef.app(
+    RouterRole.navigationFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  final imports = [
+    "import '$navigation';",
+    for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  return {
+    settingsScreenFile: '''
+// The settings screen of the app and its entries, which the matrix of SMF
+// writes from the data of the settings screen role of the app for the
+// tests of the role, settings_screen_test.dart and
+// settings_entries_test.dart.
+${imports.join('\n')}
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${route.locationClass}();
+
+/// The type of the settings screen.
+const Type settingsScreen = screen.${screen.className};
+
+/// The types of the widgets of the entries of the settings screen, in the
+/// order in which the screen shows them.
+const List<Type> settingsEntries = [
+$entries];
 ''',
   };
 }
