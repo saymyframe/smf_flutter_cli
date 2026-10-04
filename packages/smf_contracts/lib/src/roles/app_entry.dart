@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:meta/meta.dart';
+import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
 import 'package:smf_contracts/core.dart';
 
+part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
 
 /// The app entry role; see [AppEntryRole].
@@ -28,6 +30,12 @@ const appEntryRole = AppEntryRole._();
 /// `MaterialApp`, or a `MaterialApp.router` when the router role is present.
 /// So the screens of every module have the Material ancestors they rely
 /// on, such as the theme of the app and `MaterialLocalizations`.
+///
+/// The role's template generates the guide for coding agents that work on
+/// the app, whichever module provides the role: [agentsFile], with a
+/// section for each role and module of the app that has notes for them
+/// (see [agentSections]), and [claudeFile], which gives the same guide to
+/// the agents that read that file instead.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -69,6 +77,14 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The path of the guide for coding agents that work on the app; see
+  /// [agentSections].
+  static const agentsFile = 'AGENTS.md';
+
+  /// The path of the file that gives [agentsFile] to the agents that read
+  /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
+  static const claudeFile = 'CLAUDE.md';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -297,6 +313,35 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Sections of [agentsFile], the guide for coding agents that work on the
+  /// app, keyed by their heading, each with an [AgentNote] in Markdown.
+  ///
+  /// A note tells what the code of the app does not show: a rule that holds
+  /// across files, an order, what not to do and what to do instead, a
+  /// placeholder, a step that needs a person. The section of a role has the
+  /// [Role.description] of the role as its heading: the template of the
+  /// role tells there, with [AgentNote.ofRole], what holds whichever module
+  /// provides the role, and a provider adds what its package brings under
+  /// the same heading. A module without a role has a heading of its own.
+  ///
+  /// The sections follow the introduction of the guide as `## <heading>`
+  /// sections: that of this role first, then the others in the order of
+  /// their headings, so that the guide of an app does not depend on which
+  /// modules provide its roles. A section has the notes of the roles first,
+  /// then the others in the order of the contributions (see
+  /// [SocketContribution]), each once, with an empty line between two
+  /// notes. A heading is one line without spaces around it. A note has
+  /// text, starts neither a title nor a section, with a line that starts
+  /// with `# ` or `## `, and closes its fenced code blocks.
+  static const agentSections = SocketRef<KeyedSocket<AgentNote>>.role(
+    appEntryRole,
+    'agent_sections',
+    KeyedSocket(
+      policy: _AgentNotePolicy(),
+      renderer: _renderAgentSections,
+    ),
+  );
+
   @override
   String get id => 'app_entry';
 
@@ -328,12 +373,17 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleAppPlugins,
         gradleAppDependencies,
         readmeSections,
+        agentSections,
       ];
 
   @override
   RoleInterface get interface => const RoleInterface(
+        files: [agentsFile, claudeFile],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
+
+  @override
+  RoleTemplate<NoDsl> get template => const _AppEntryTemplate();
 
   @override
   List<ModuleRule<NoDsl>> get moduleRules => const [

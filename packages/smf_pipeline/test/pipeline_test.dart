@@ -88,14 +88,19 @@ void main() {
       plan.resolution.modules.map((m) => m.id.value),
       ['home', 'scaffold', 'go'],
     );
-    expect(plan.choices, {nav: 'the start'});
+    // The template of the app entry role makes no choice.
+    expect(plan.choices, {nav: 'the start', appEntryRole: null});
     expect(plan.environment.sdk!.flutter, '/sdk/bin/flutter');
     expect(plan.environment.interactive, isFalse);
     expect(plan.preflight.results.single.passed, isTrue);
     expect(plan.leftOut, isEmpty);
     expect(plan.collection.roleData.single.value, '/home');
-    // The base value of the minimum iOS version, from the scaffold.
-    expect(plan.socketOrders.keys, [AppEntryRole.iosDeploymentTarget]);
+    // The base value of the minimum iOS version, from the scaffold, and the
+    // note of the app entry role for coding agents, from its template.
+    expect(plan.socketOrders.keys, [
+      AppEntryRole.iosDeploymentTarget,
+      AppEntryRole.agentSections,
+    ]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies.keys, ['flutter']);
     expect(plan.request.appName, 'my_app');

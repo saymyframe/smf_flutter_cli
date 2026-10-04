@@ -4,6 +4,7 @@ import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
+import 'role_support.dart';
 import 'support.dart';
 
 /// The file of the provider with the root widget of the app.
@@ -137,7 +138,6 @@ void main() {
       expect(appEntryRole.cardinality, RoleCardinality.exactlyOne);
       expect(appEntryRole.requires, isEmpty);
       expect(appEntryRole.uses, isEmpty);
-      expect(appEntryRole.template, isNull);
       expect(appEntryRole.options, isEmpty);
       expect(appEntryRole.presenceFlag, 'has_app_entry');
     });
@@ -167,7 +167,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(17));
+      expect(sockets, hasLength(18));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -175,6 +175,7 @@ void main() {
       expect(tags.toSet(), hasLength(tags.length));
       expect(tags, contains('smf_app_entry__bootstrap_platform'));
       expect(tags, contains('smf_app_entry__root_wrappers_open'));
+      expect(tags, contains('smf_app_entry__agent_sections'));
     });
 
     test('bootstrap phases are separate sockets in start-up order', () {
@@ -630,6 +631,265 @@ void main() {
           'break in Markdown, end the line with two spaces instead.',
           reason: text,
         );
+      }
+    });
+  });
+
+  group('the guide for coding agents', () {
+    const socket = AppEntryRole.agentSections;
+
+    /// The problems of the note [text] under [heading].
+    List<String> problemsOf(String text, {String heading = 'Router'}) =>
+        socket.problemsWith(socket.entry(heading, AgentNote(text)));
+
+    test('is AGENTS.md, with a CLAUDE.md that reads it', () {
+      expect(AppEntryRole.agentsFile, 'AGENTS.md');
+      expect(AppEntryRole.claudeFile, 'CLAUDE.md');
+      expect(
+        appEntryRole.interface.files,
+        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
+      );
+      expect(socket.tag, 'smf_app_entry__agent_sections');
+      expect(socket.kind.carriesImports, isFalse);
+    });
+
+    test(
+        'comes from the template of the role, whose brick has the tag of '
+        'the sections alone on a line', () {
+      final brick = appEntryRole.template
+          .contribute(testContext)
+          .whereType<BrickContribution>()
+          .single;
+      final templates = {
+        for (final file in brick.bundle.files)
+          file.path: utf8.decode(base64.decode(file.data)),
+      };
+
+      expect(brick.bundle.name, 'app_entry_role');
+      expect(
+        templates.keys,
+        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
+      );
+      expect(templates[AppEntryRole.claudeFile], '@AGENTS.md\n');
+      final lines = templates[AppEntryRole.agentsFile]!.split('\n');
+      expect(lines.first, '# AGENTS.md');
+      // The sections render as complete lines after the introduction.
+      expect(lines.where((line) => line.contains('{{')), [
+        '{{{${socket.tag}}}}',
+      ]);
+      expect(lines.sublist(lines.length - 2), ['{{{${socket.tag}}}}', '']);
+    });
+
+    test('has the section of the role in every app, as what the role says', () {
+      final note = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .single;
+
+      expect(note.socket, socket);
+      expect(note.entryKey, appEntryRole.description);
+      expect(note.when, isEmpty);
+      expect((note.entryValue! as AgentNote).isOfRole, isTrue);
+      expect(socket.problemsWith(note), isEmpty);
+    });
+
+    test('renders with the section of the role after its introduction',
+        () async {
+      final rendered = await renderTemplate(appEntryRole);
+      final guide = rendered.files[AppEntryRole.agentsFile]!;
+      final note = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .single
+          .entryValue! as AgentNote;
+
+      expect(rendered.files.keys, [
+        AppEntryRole.agentsFile,
+        AppEntryRole.claudeFile,
+      ]);
+      expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
+      expect(rendered.elsewhere, isEmpty);
+      final [title, empty, introduction, ...sections] = guide.split('\n');
+      expect(title, '# AGENTS.md');
+      expect(empty, isEmpty);
+      expect(introduction, startsWith('Guidance for coding agents'));
+      expect(introduction, contains('[README.md](README.md)'));
+      expect(
+        sections.join('\n'),
+        '\n## App entry\n\n${note.text}\n',
+      );
+    });
+
+    test(
+        'has the section of the app entry first, then the others in the '
+        'order of their headings', () {
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('Routes.')),
+          ('App entry', AgentNote('Start-up.')),
+          ('Analytics', AgentNote('\nEvents.\n')),
+        ]),
+        {
+          socket.tag: '\n## App entry\n\nStart-up.\n'
+              '\n## Analytics\n\nEvents.\n'
+              '\n## Router\n\nRoutes.',
+        },
+      );
+    });
+
+    test(
+        'unites the notes of a section: those of roles first, then the '
+        'others in the order of the contributions, each once', () {
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('With a package: its routes.')),
+          ('Router', AgentNote.ofRole('Navigate through the facade.')),
+          ('Router', AgentNote('A listener of the screen.')),
+          ('Router', AgentNote('With a package: its routes.')),
+          ('Router', AgentNote.ofRole('Navigate through the facade.')),
+        ]),
+        {
+          socket.tag: '\n## Router\n\n'
+              'Navigate through the facade.\n\n'
+              'With a package: its routes.\n\n'
+              'A listener of the screen.',
+        },
+      );
+      // The same text as a note of a role and of a module is two notes.
+      final united = socket.kind
+          .merge([
+            socket.entry('Router', AgentNote('The same.')),
+            socket.entry('Router', AgentNote.ofRole('The same.')),
+          ])
+          .single
+          .value;
+      expect(united.text, 'The same.\n\nThe same.');
+      expect(united.isOfRole, isFalse);
+      expect(
+        socket.kind
+            .merge([
+              socket.entry('Router', AgentNote.ofRole('One.')),
+              socket.entry('Router', AgentNote.ofRole('Another.')),
+            ])
+            .single
+            .value
+            .isOfRole,
+        isTrue,
+      );
+    });
+
+    test('a note compares by its text and by whether a role says it', () {
+      final note = AgentNote('Text.');
+
+      expect(note, AgentNote('Text.'));
+      expect(note.hashCode, AgentNote('Text.').hashCode);
+      expect(note, isNot(AgentNote('Another text.')));
+      expect(note, isNot(AgentNote.ofRole('Text.')));
+      expect(AgentNote.ofRole('Text.'), AgentNote.ofRole('Text.'));
+      expect('Text.', isNot(note));
+      expect(note.isOfRole, isFalse);
+      expect(AgentNote.ofRole('Text.').isOfRole, isTrue);
+      expect(AgentNote('\n Text.\n\n').text, 'Text.');
+      expect('$note', 'Text.');
+    });
+
+    test('a section has a heading of one line', () {
+      expect(problemsOf('Text.'), isEmpty);
+      for (final heading in ['', ' Router', 'Rou\nter', 'Rou\rter']) {
+        expect(
+          problemsOf('Text.', heading: heading).single,
+          'The heading "$heading" of a section of the guide for coding '
+          'agents is not one line of text without spaces around it.',
+          reason: heading,
+        );
+      }
+    });
+
+    test('a note has text that mason keeps as it is', () {
+      for (final text in ['', ' \n']) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents has '
+          'no text.',
+          reason: text,
+        );
+      }
+      // mason drops the backslash of a line break of Markdown, also the one
+      // that ends a note or a heading, before the line break that follows.
+      for (final (heading, text) in [
+        ('Router', 'One line\\\nand another.'),
+        ('Router', r'It ends with a backslash\'),
+        (r'Rou\é', 'Text.'),
+        (r'Router\', 'Text.'),
+      ]) {
+        expect(
+          problemsOf(text, heading: heading).single,
+          'A note of the section "$heading" of the guide for coding agents '
+          'has a backslash before a line break or a non-ASCII character, '
+          'which mason removes; for a line break in Markdown, end the line '
+          'with two spaces instead.',
+          reason: '$heading: $text',
+        );
+      }
+      expect(problemsOf(r'A path of Windows, C:\Users, in a line.'), isEmpty);
+    });
+
+    test('a note starts neither a title nor another section', () {
+      for (final text in [
+        '# Title',
+        'Text.\n## Section\nMore text.',
+        '   ## Indented by three spaces',
+        'Text.\n#',
+        '#\tTitle after a tab',
+        // Not a fenced code block: a code span of three backticks.
+        '```dart``` is a language.\n## Section',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'has a line that starts with "# " or "## " outside a fenced code '
+          'block, which starts a title or another section; a note stays in '
+          'its section.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        '### Details\n\nText.',
+        '#hashtag',
+        'Text with # in a line.',
+        'Text.\n\n    ## In a code block by its indentation',
+        '```bash\n# A comment of a script\n```',
+        '~~~\n## In a block of tildes\n~~~',
+        // A block ends with as many of its characters, or more.
+        '````\n```\n# In the block still\n`````\nText.',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
+      }
+    });
+
+    test('a note closes its fenced code blocks', () {
+      for (final text in [
+        '```bash\nflutter test',
+        'Text.\n\n~~~\ncode\n```',
+        '````\ncode\n```',
+        // A line with more than the characters of the block does not close
+        // it.
+        '```\ncode\n```dart',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'does not close a fenced code block, which would take in the '
+          'sections after it.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        '```bash\nflutter test\n```',
+        '  ```\n  code\n  ```  ',
+        '~~~\ncode\n~~~~\nText.',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
       }
     });
   });

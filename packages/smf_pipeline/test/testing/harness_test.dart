@@ -990,7 +990,9 @@ void main() {
       );
 
       expect(result.errors, isEmpty);
-      expect(result.choices, {pick: 'blue'});
+      // The template of the app entry role, which every app has, makes no
+      // choice.
+      expect(result.choices, {pick: 'blue', appEntryRole: null});
       expect(result.app!.files['lib/pick.dart']!.text, '// blue\n');
       expect(result.app!.files['lib/main.dart'], isNotNull);
 
@@ -1011,7 +1013,7 @@ void main() {
       final byDefault = await defaults.check(
         const ContractCase('picker', requested: [ModuleId('picker')]),
       );
-      expect(byDefault.choices, {pick: 'red'});
+      expect(byDefault.choices, {pick: 'red', appEntryRole: null});
       final overridden = await defaults.check(
         const ContractCase(
           'picker',
@@ -1019,7 +1021,7 @@ void main() {
           roleOptions: {'pick': 'blue'},
         ),
       );
-      expect(overridden.choices, {pick: 'blue'});
+      expect(overridden.choices, {pick: 'blue', appEntryRole: null});
     });
 
     test(
@@ -1065,7 +1067,7 @@ void main() {
       expect(hook.presentRoles, result.resolution!.presentRoles);
       expect(hook.presentRoles, containsAll([appEntryRole, pick]));
       expect(hook.context, same(context));
-      expect(hook.choices, {pick: 'blue'});
+      expect(hook.choices, {pick: 'blue', appEntryRole: null});
       // A role reads from it what its hooks got when the app was rendered.
       final input = pick.hookInput(hook);
       expect([for (final data in input.data) data.value], ['seeds']);
@@ -1101,7 +1103,7 @@ void main() {
 
         final answered = await harness.check(asker);
         expect(answered.errors, isEmpty);
-        expect(answered.choices, {asking: 'green'});
+        expect(answered.choices, {asking: 'green', appEntryRole: null});
         expect(answered.answers, {'color': 'green'});
         expect(answered.app, isNotNull);
 
@@ -1114,7 +1116,7 @@ void main() {
           ),
         );
         expect(given.errors, isEmpty);
-        expect(given.choices, {asking: 'red'});
+        expect(given.choices, {asking: 'red', appEntryRole: null});
         expect(given.answers, isEmpty);
       });
 
@@ -1227,7 +1229,7 @@ void main() {
         final result = await harnessOf(role).check(asker);
 
         expect(result.errors, isEmpty);
-        expect(result.choices, {role: 'green'});
+        expect(result.choices, {role: 'green', appEntryRole: null});
       });
 
       test('of every kind gets its default or first choice', () async {
@@ -1242,7 +1244,10 @@ void main() {
         expect(result.errors, isEmpty);
         // The defaults of confirm, input and multiSelect, and the first
         // choice of a select without a default.
-        expect(result.choices, {curious: 'true, typed, b, one'});
+        expect(
+          result.choices,
+          {curious: 'true, typed, b, one', appEntryRole: null},
+        );
         expect(result.answers, {'answers': 'true, typed, b, one'});
       });
     });

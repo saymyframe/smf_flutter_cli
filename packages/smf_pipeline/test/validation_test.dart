@@ -67,9 +67,12 @@ void main() {
 
     expect(result.issues, isEmpty);
     expect(result.hasErrors, isFalse);
+    // The last is the note of the app entry role for coding agents, which
+    // its template contributes.
     expect(result.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.bootstrapEarly,
+      AppEntryRole.agentSections,
     ]);
     expect(result.pubspec.dependencies.keys, ['flutter']);
     expect(result.postGenOrder.contributions, isEmpty);

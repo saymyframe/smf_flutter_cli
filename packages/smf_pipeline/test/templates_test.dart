@@ -563,12 +563,16 @@ void f() {{{{smf_after__brace}}}
           ),
         ]),
         [
-          // The test scaffold has no bricks, so the app entry misses all.
+          // The test scaffold has no bricks, so the app entry misses all
+          // but the tag of the guide for coding agents, which the template
+          // of the role has. A role with a template is named by it.
           for (final socket in appEntryRole.sockets)
-            equals(
-              'scaffold: No template of the app entry role or of its providers '
-              'has the tag of the $socket (${socket.tags.join(', ')}).',
-            ),
+            if (socket != AppEntryRole.agentSections)
+              equals(
+                'role:app_entry: No template of the app entry role or of its '
+                'providers has the tag of the $socket '
+                '(${socket.tags.join(', ')}).',
+              ),
           equals(
             'go: No template of the nav role or of its providers has the tag '
             'of '
