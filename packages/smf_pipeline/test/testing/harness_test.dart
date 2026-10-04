@@ -967,6 +967,57 @@ void main() {
     );
   });
 
+  test(
+      'reports a note of the guide for coding agents that names a file which '
+      'the app does not have', () async {
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'liar',
+          contributions: [
+            AppEntryRole.agentSections.entry(
+              'Liar',
+              AgentNote('The screens are in `lib/liar/missing.dart`.'),
+            ),
+          ],
+        ),
+      ]),
+    );
+
+    // The guide of the app without the module names only files of the app.
+    final honest = await harness.check(
+      const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+    );
+    expect(honest.errors, isEmpty);
+    expect(honest.app!.files.keys, contains(AppEntryRole.agentsFile));
+
+    final result = await harness.check(
+      const ContractCase('liar', requested: [ModuleId('liar')]),
+    );
+    final guide = result.app!.files[AppEntryRole.agentsFile]!;
+    expect(
+      guide.text,
+      endsWith('\n## Liar\n\nThe screens are in `lib/liar/missing.dart`.\n'),
+    );
+    expect(result.app!.files.keys, isNot(contains('lib/liar/missing.dart')));
+    // The rule of the app entry role reads the rendered guide, which the
+    // template of the role owns.
+    expect(
+      [for (final issue in result.errors) issue.message],
+      [
+        equals(
+          'The section "Liar" of AGENTS.md names `lib/liar/missing.dart`, '
+          'but the app has no such file or directory.',
+        ),
+      ],
+    );
+    final issue = result.errors.single;
+    expect(issue.path, AppEntryRole.agentsFile);
+    expect(issue.origin, guide.owner);
+    expect(issue.origin, const RoleTemplateOrigin(appEntryRole));
+  });
+
   group('rendering', () {
     test('renders the app of a case with its role options', () async {
       final pick = TestRole<String>(

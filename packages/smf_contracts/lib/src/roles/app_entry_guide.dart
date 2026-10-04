@@ -193,3 +193,127 @@ The app as generated is formatted, and `flutter analyze` finds no issue in it.
 - `${AppEntryRole.bootstrapFile}`: `${AppEntryRole.bootstrap.name}()` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the registration of the services of the app, then what needs these services. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, a directory for each concern, and a feature, with its screens and their state, into `lib/features/<feature>/`.
 ''';
+
+/// The characters of a path of the app: those of the names of its files and
+/// directories, and slashes. A pattern, with `<…>` or `*`, a command and a
+/// `package:` URI have others.
+final RegExp _pathCharacters = RegExp(r'^[A-Za-z0-9_.\-/]+$');
+
+/// A line of the guide that starts a section, as [_renderAgentSections]
+/// writes it.
+final RegExp _sectionHeading = RegExp(r'^## (.+)$');
+
+/// The problems of the paths that the guide for coding agents of the app
+/// names in inline code, outside its fenced code blocks:
+/// - a path below a top-level directory of the app, such as `lib/`, that is
+///   neither a file nor a directory of the app;
+/// - a Dart file that is not named by its path from the root of the app,
+///   such as `core/di/dependencies.dart` or `main.dart`.
+///
+/// Anything else in inline code is not a path of the app: a pattern, such
+/// as `lib/features/<feature>/`, a route, such as `/home`, a command, a
+/// name of the code, a file at the root of the app, which nothing tells
+/// from a name such as `Icons.home`, or a path below a directory that the
+/// app is generated without, such as `build/`.
+List<SmfIssue> _checkAgentGuidePaths(StructuralRuleInput<NoDsl> input) {
+  const guide = AppEntryRole.agentsFile;
+  final text = input.texts[guide];
+  if (text == null) return const [];
+
+  final files = input.owners.keys.toSet();
+  final directories = <String>{};
+  final topLevel = <String>{};
+  for (final file in files) {
+    final segments = file.split('/');
+    for (var depth = 1; depth < segments.length; depth++) {
+      directories.add(segments.sublist(0, depth).join('/'));
+    }
+    if (segments.length > 1) topLevel.add(segments.first);
+  }
+
+  final issues = <SmfIssue>[];
+  final reported = <(String?, String)>{};
+  for (final (:heading, :code) in _codeSpansOf(text)) {
+    if (!_pathCharacters.hasMatch(code)) continue;
+    final String problem;
+    final String hint;
+    if (code.contains('/') && topLevel.contains(code.split('/').first)) {
+      final path =
+          code.endsWith('/') ? code.substring(0, code.length - 1) : code;
+      if (files.contains(path) || directories.contains(path)) continue;
+      problem = 'names `$code`, but the app has no such file or directory.';
+      hint = 'A note names a file or a directory of the app by its path from '
+          'the root of the app. What it tells of a file that only some apps '
+          'have is a contribution of its own, with the role of the file in '
+          'its when. A file that a later step writes is a pattern, with <…> '
+          'or *, or left to the README.';
+    } else if (code.endsWith('.dart')) {
+      problem = 'names the Dart file `$code` without its path from the root '
+          'of the app.';
+      hint = 'Write the path from the root of the app, such as '
+          '${AppEntryRole.mainFile}.';
+    } else {
+      continue;
+    }
+    if (!reported.add((heading, code))) continue;
+    final where =
+        heading == null ? 'The introduction' : 'The section "$heading"';
+    issues.add(
+      SmfIssue(
+        '$where of $guide $problem',
+        hint: hint,
+        origin: input.owners[guide],
+        path: guide,
+      ),
+    );
+  }
+  return issues;
+}
+
+/// The inline code spans of [markdown], the guide for coding agents,
+/// outside its fenced code blocks, each with the heading of its section, or
+/// `null` before the first section.
+List<({String? heading, String code})> _codeSpansOf(String markdown) {
+  final spans = <({String? heading, String code})>[];
+  String? heading;
+  var paragraph = <String>[];
+  // A code span does not go beyond its paragraph.
+  void endParagraph() {
+    for (final code in _inlineCodeOf(paragraph.join('\n'))) {
+      spans.add((heading: heading, code: code));
+    }
+    paragraph = [];
+  }
+
+  for (final line in [..._outsideFences(markdown).lines, '']) {
+    final section = _sectionHeading.firstMatch(line);
+    if (section != null) {
+      endParagraph();
+      heading = section[1];
+    } else if (line.trim().isEmpty) {
+      endParagraph();
+    } else {
+      paragraph.add(line);
+    }
+  }
+  return spans;
+}
+
+/// The inline code spans of [text], a paragraph of Markdown: what stands
+/// between two runs of as many backticks, without the spaces around it.
+List<String> _inlineCodeOf(String text) {
+  final runs = RegExp('`+').allMatches(text).toList();
+  final spans = <String>[];
+  for (var open = 0; open < runs.length; open++) {
+    final length = runs[open].end - runs[open].start;
+    final close = runs.indexWhere(
+      (run) => run.end - run.start == length,
+      open + 1,
+    );
+    // A run that nothing closes is text.
+    if (close < 0) continue;
+    spans.add(text.substring(runs[open].end, runs[close].start).trim());
+    open = close;
+  }
+  return spans;
+}

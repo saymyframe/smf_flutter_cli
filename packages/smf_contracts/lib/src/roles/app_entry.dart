@@ -35,7 +35,9 @@ const appEntryRole = AppEntryRole._();
 /// the app, whichever module provides the role: [agentsFile], with a
 /// section for each role and module of the app that has notes for them
 /// (see [agentSections]), and [claudeFile], which gives the same guide to
-/// the agents that read that file instead.
+/// the agents that read that file instead. The structural rule
+/// `app_entry.agent_guide_paths` checks that the guide names only files
+/// and directories that the app has.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -333,6 +335,16 @@ final class AppEntryRole extends Role<NoDsl> {
   /// notes. A heading is one line without spaces around it. A note has
   /// text, starts neither a title nor a section, with a line that starts
   /// with `# ` or `## `, and closes its fenced code blocks.
+  ///
+  /// A note names a file or a directory of the app in backticks, by its
+  /// path from the root of the app, such as `lib/core/di/`; the structural
+  /// rule `app_entry.agent_guide_paths` reports a path that the app does
+  /// not have. So what a note tells of a file of a role that the app may
+  /// lack is a contribution of its own, with that role in its
+  /// [Contribution.when], and what depends on the data of a role comes
+  /// from the render hook of the role or of its provider. A file that a
+  /// later step writes, such as one of a tool that runs after generation,
+  /// is named as a pattern, with `<…>` or `*`, or left to the README.
   static const agentSections = SocketRef<KeyedSocket<AgentNote>>.role(
     appEntryRole,
     'agent_sections',
@@ -432,6 +444,13 @@ final class AppEntryRole extends Role<NoDsl> {
               'the meta-data of the application in the Android manifest, and '
               'the plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.agent_guide_paths',
+          description: 'The guide for coding agents names in inline code '
+              'only files and directories that the app has, each by its '
+              'path from the root of the app.',
+          check: _checkAgentGuidePaths,
         ),
       ];
 }

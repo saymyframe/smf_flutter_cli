@@ -210,6 +210,7 @@ void main() {
           'app_entry.main_sequence',
           'app_entry.material_root',
           'app_entry.native_keys',
+          'app_entry.agent_guide_paths',
         ],
       );
       expect(
@@ -891,6 +892,231 @@ void main() {
       ]) {
         expect(problemsOf(text), isEmpty, reason: text);
       }
+    });
+  });
+
+  group('the paths of the guide for coding agents', () {
+    const guide = AppEntryRole.agentsFile;
+
+    /// What the rules of the role find in an app with [files] and the guide
+    /// [text].
+    List<SmfIssue> check(
+      String text, {
+      List<String> files = const [
+        'README.md',
+        'pubspec.yaml',
+        'lib/main.dart',
+        'lib/core/app/fallback_start_screen.dart',
+        'android/app/build.gradle.kts',
+        'ios/Runner/Info.plist',
+      ],
+    }) =>
+        appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: {guide: text},
+            owners: {
+              guide: const RoleTemplateOrigin(appEntryRole),
+              for (final path in files)
+                path: const ModuleOrigin(ModuleId('flutter_core')),
+            },
+          ),
+        );
+
+    List<String> messages(List<SmfIssue> issues) =>
+        [for (final issue in issues) issue.message];
+
+    test('are files and directories of the app', () {
+      expect(
+        check('''
+# AGENTS.md
+
+The introduction names `README.md` and `lib/main.dart`.
+
+## App entry
+
+- `lib/main.dart` has `main()`, and `lib/core/app/` the screens of the app.
+- `lib/core` and `android/` are directories, and so is `ios/Runner`.
+- `ios/Runner/Info.plist` and `android/app/build.gradle.kts` are native.
+'''),
+        isEmpty,
+      );
+    });
+
+    test(
+        'that the app does not have are reported under the heading of their '
+        'section, on the owner of the guide', () {
+      final issues = check('''
+# AGENTS.md
+
+## Liar
+
+The screens are in `lib/liar/missing.dart`, next to `lib/core/missing/`.
+
+- A tool writes `android/app/google-services.json` later.
+''');
+
+      expect(messages(issues), [
+        equals(
+          'The section "Liar" of AGENTS.md names `lib/liar/missing.dart`, but '
+          'the app has no such file or directory.',
+        ),
+        equals(
+          'The section "Liar" of AGENTS.md names `lib/core/missing/`, but the '
+          'app has no such file or directory.',
+        ),
+        equals(
+          'The section "Liar" of AGENTS.md names '
+          '`android/app/google-services.json`, but the app has no such file '
+          'or directory.',
+        ),
+      ]);
+      for (final issue in issues) {
+        expect(issue.isError, isTrue);
+        expect(issue.path, guide);
+        expect(issue.origin, const RoleTemplateOrigin(appEntryRole));
+        expect(
+          issue.hint,
+          allOf(
+            contains('with the role of the file in its when'),
+            contains('*'),
+          ),
+        );
+      }
+    });
+
+    test('of Dart files start at the root of the app', () {
+      final issues = check('''
+## Router
+
+The routes are in `core/router/navigation.dart`, and `main()` in `main.dart`
+or `./lib/main.dart`.
+''');
+
+      expect(messages(issues), [
+        for (final path in [
+          'core/router/navigation.dart',
+          'main.dart',
+          './lib/main.dart',
+        ])
+          equals(
+            'The section "Router" of AGENTS.md names the Dart file `$path` '
+            'without its path from the root of the app.',
+          ),
+      ]);
+      expect(
+        issues.first.hint,
+        'Write the path from the root of the app, such as lib/main.dart.',
+      );
+      expect(issues.first.origin, const RoleTemplateOrigin(appEntryRole));
+    });
+
+    test('are told from what is no path of the app', () {
+      expect(
+        check('''
+## Router
+
+- A pattern: `lib/features/<feature>/`, `lib/core/*/`, `test/<path>_test.dart`.
+- A route: `/home`, `/home/details/:id`, `home.details`.
+- A library: `package:flutter/material.dart`.
+- A command: `dart format .`, `flutter build ipa`.
+- A file at the root of the app, or a name: `pubspec.yaml`, `Icons.home`.
+- Code: `context.nav.home.details(id: 5).go()`, `bootstrap()`.
+- What the tools write: `build/ios/SourcePackages`, `.dart_tool/`.
+- A path in the text, not in code: lib/missing.dart.
+'''),
+        isEmpty,
+      );
+    });
+
+    test('are read in inline code, not in fenced code blocks', () {
+      final issues = check('''
+## Router
+
+```bash
+cat `lib/in_a_block.dart`
+```
+
+A span of two backticks, ``lib/two.dart``, and one after a run ``` that
+nothing closes: `lib/after.dart`. This paragraph ends with a ` alone.
+
+The next paragraph has `lib/next.dart`, which the one before does not reach.
+''');
+
+      expect(messages(issues), [
+        for (final path in ['lib/two.dart', 'lib/after.dart', 'lib/next.dart'])
+          equals(
+            'The section "Router" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
+          ),
+      ]);
+    });
+
+    test('are reported once for each section, and for the introduction', () {
+      final issues = check('''
+# AGENTS.md
+
+See `lib/missing.dart`.
+
+## Router
+
+- `lib/missing.dart` has the routes.
+- Put a route into `lib/missing.dart`.
+
+## Layout
+
+- `lib/missing.dart` has the shell.
+''');
+
+      expect(messages(issues), [
+        for (final where in [
+          'The introduction',
+          'The section "Router"',
+          'The section "Layout"',
+        ])
+          equals(
+            '$where of AGENTS.md names `lib/missing.dart`, but the app has no '
+            'such file or directory.',
+          ),
+      ]);
+    });
+
+    test('of the note of the role are those that the role guarantees',
+        () async {
+      final rendered = await renderTemplate(appEntryRole);
+      final interface = appEntryRole.interface;
+
+      // An app with nothing but what the role guarantees: the files of its
+      // template and those of the symbols of its providers.
+      expect(
+        check(
+          rendered.files[guide]!,
+          files: [
+            ...interface.files,
+            for (final symbol in interface.symbols) symbol.path,
+          ],
+        ),
+        isEmpty,
+      );
+      // Without them, the rule finds the paths of the note.
+      expect(
+        messages(check(rendered.files[guide]!, files: const ['lib/app.dart'])),
+        [
+          for (final path in [
+            AppEntryRole.mainFile,
+            AppEntryRole.bootstrapFile,
+          ])
+            equals(
+              'The section "App entry" of AGENTS.md names `$path`, but the '
+              'app has no such file or directory.',
+            ),
+        ],
+      );
     });
   });
 
