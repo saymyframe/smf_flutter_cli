@@ -44,6 +44,29 @@ void main() {
   });
 
   test(
+      'lets RouteGuard through, the guard of the routes of the router role, '
+      'but not the names of the old model next to it, nor what the model does '
+      'not have yet', () {
+    expect(
+      _names({
+        'packages/a/lib/a.dart': "const guard = RouteGuard(name: 'firstRun');\n"
+            'final class Guard extends AutoRouteGuard {}\n'
+            'final redirect = GoRouteRedirect();\n'
+            'final condition = ConditionData();\n'
+            'final scopes = DiScopes();\n'
+            'final need = DiRuntimeNeed();\n',
+      }),
+      [
+        'packages/a/lib/a.dart:2: AutoRouteGuard',
+        'packages/a/lib/a.dart:3: GoRouteRedirect',
+        'packages/a/lib/a.dart:4: ConditionData',
+        'packages/a/lib/a.dart:5: DiScopes',
+        'packages/a/lib/a.dart:6: DiRuntimeNeed',
+      ],
+    );
+  });
+
+  test(
       'finds a comment that leaves a whole file out of the coverage, but not '
       'a text that names it', () {
     expect(
