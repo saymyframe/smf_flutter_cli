@@ -491,6 +491,41 @@ void main() {
       );
     });
 
+    test(
+        'have those of the templates of roles after those of the modules, in '
+        'the order of the first provider of each role', () async {
+      const registry = [..._modules, ContrastModule()];
+      const contrast = 'ContrastSetting of lib/${ContrastRole.settingFile}';
+      const zoom = 'ZoomSetting of lib/${ZoomRole.settingFile}';
+      final look = [
+        'ThemeSetting of lib/${_look.settingsFile}',
+        'FontSetting of lib/${_look.settingsFile}',
+      ];
+
+      // The module with settings is selected last, and its entries are
+      // first all the same.
+      final result = await _rendered(
+        [ContrastModule.id, SettingsModule.id, ZoomModule.id, _look.id],
+        registry: registry,
+      );
+      expect(_entriesOf(result), [...look, contrast, zoom]);
+
+      final swapped = await _rendered(
+        [ZoomModule.id, SettingsModule.id, ContrastModule.id, _look.id],
+        registry: registry,
+      );
+      expect(_entriesOf(swapped), [...look, zoom, contrast]);
+      expect(
+        _rowsOf(swapped.app!).elements.map((row) => row.toSource()).take(4),
+        [
+          'entry0.ThemeSetting()',
+          'entry0.FontSetting()',
+          'entry1.ZoomSetting()',
+          'entry2.ContrastSetting()',
+        ],
+      );
+    });
+
     test('are only those of the modules of the app', () async {
       final result = await _rendered([SettingsModule.id, _look.id]);
 

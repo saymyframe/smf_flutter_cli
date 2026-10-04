@@ -202,21 +202,29 @@ final class ZoomRole extends Role<NoDsl> {
   Set<Role> get uses => {settingsScreenRole};
 
   @override
-  RoleTemplate<NoDsl> get template => const _ZoomTemplate();
+  RoleTemplate<NoDsl> get template =>
+      const _SettingTemplate('zoom_role_setting', setting, settingFile);
 }
 
-final class _ZoomTemplate extends RoleTemplate<NoDsl> {
-  const _ZoomTemplate();
+/// The template of a role of the tests with a setting: in an app with a
+/// settings screen, the brick [brick] with the widget [setting] in the file
+/// at [settingFile] below `lib/`, and an entry for it.
+final class _SettingTemplate extends RoleTemplate<NoDsl> {
+  const _SettingTemplate(this.brick, this.setting, this.settingFile);
+
+  final String brick;
+  final String setting;
+  final String settingFile;
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
-          _bundle('zoom_role_setting', {
-            'lib/${ZoomRole.settingFile}': _widgetsFile([ZoomRole.setting]),
+          _bundle(brick, {
+            'lib/$settingFile': _widgetsFile([setting]),
           }),
           when: const {settingsScreenRole},
         ),
-        ..._entries(ZoomRole.settingFile, [ZoomRole.setting]),
+        ..._entries(settingFile, [setting]),
       ];
 }
 
@@ -235,5 +243,55 @@ final class ZoomModule extends SmfModule {
         description: 'Zoom with two fingers (test)',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(zoomRole)],
+      );
+}
+
+/// The contrast role of the tests; see [ContrastRole].
+const contrastRole = ContrastRole._();
+
+/// A second role of the tests whose template has a setting of its own, as
+/// [ZoomRole] has, so that an app has the entries of the templates of two
+/// roles.
+final class ContrastRole extends Role<NoDsl> {
+  const ContrastRole._();
+
+  /// The class of the widget of the setting.
+  static const setting = 'ContrastSetting';
+
+  /// The path below `lib/` of the file of [setting].
+  static const settingFile = 'core/contrast/contrast_setting.dart';
+
+  @override
+  String get id => 'contrast';
+
+  @override
+  String get description => 'Contrast';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  @override
+  Set<Role> get uses => {settingsScreenRole};
+
+  @override
+  RoleTemplate<NoDsl> get template =>
+      const _SettingTemplate('contrast_role_setting', setting, settingFile);
+}
+
+/// A module of the tests that provides the [ContrastRole], with nothing of
+/// its own.
+final class ContrastModule extends SmfModule {
+  /// Creates the module.
+  const ContrastModule();
+
+  /// The id of the module.
+  static const id = ModuleId('high_contrast');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'High contrast (test)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(contrastRole)],
       );
 }
