@@ -16,9 +16,11 @@ import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 /// - `pubspec.yaml` with the dependencies of all modules, and the lints of
 ///   a new Flutter app.
 ///
-/// Every socket of the app entry role has its tag in these files. The native
-/// projects follow `flutter create` of Flutter 3.44, so the app needs
-/// Flutter 3.44 or newer, and iOS [minimumIosVersion] or newer.
+/// Every socket of the app entry role has its tag in these files, but for
+/// the sections of the guide for coding agents, whose tag is in the template
+/// of the role. The native projects follow `flutter create` of Flutter 3.44,
+/// so the app needs Flutter 3.44 or newer, and iOS [minimumIosVersion] or
+/// newer.
 final class FlutterCoreModule extends SmfModule {
   /// Creates the module.
   const FlutterCoreModule();

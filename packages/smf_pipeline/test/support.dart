@@ -300,8 +300,10 @@ dependencies {
 ''',
 };
 
-/// A brick of a small app with the tags of every socket of the app entry,
-/// and of the pipeline in its pubspec; see [entryFiles].
+/// A brick of a small app with the tags of every socket of the app entry
+/// that a provider of the role holds, and of the pipeline in its pubspec;
+/// see [entryFiles]. The template of the role has the tag of the sections
+/// of the guide for coding agents.
 BrickContribution entryBrick() =>
     BrickContribution(bundle('entry', files: entryFiles));
 
