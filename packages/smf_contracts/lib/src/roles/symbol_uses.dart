@@ -23,7 +23,8 @@ bool usesImported(DartFileIndex file, String name, ImportRef import) =>
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
 /// import of the library has and no import of another library, as in
-/// `entry0.ThemeSetting()` after `import '…/theme_setting.dart' as entry0;`.
+/// `entry0.ThemeModeSetting()` after
+/// `import '…/theme_mode_setting.dart' as entry0;`.
 ///
 /// So the name is of that library whatever other libraries declare. An
 /// import without a prefix, or with a prefix that the import of another

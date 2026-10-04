@@ -156,7 +156,7 @@ sealed class SettingsData {
 /// generates, with a `const` unnamed constructor that requires no
 /// arguments, so that the provider of the [SettingsScreenRole], which
 /// knows nothing else of the widget, can create it, in a list of constants
-/// too, as `const ThemeSetting()`. The screen puts it on a `Material`,
+/// too, as `const ThemeModeSetting()`. The screen puts it on a `Material`,
 /// sets its width, the same as that of every other entry, and puts no
 /// limit on its height, so it may be a `ListTile`, or a column of them,
 /// as tall as it takes. The widget counts on nothing else from the
@@ -166,8 +166,8 @@ sealed class SettingsData {
 /// settingsScreenRole.data(
 ///   const SettingsEntry(
 ///     widget: TypeRef(
-///       'ThemeSetting',
-///       import: ImportRef.app('core/theme/theme_setting.dart'),
+///       'ThemeModeSetting',
+///       import: ImportRef.app('core/theme/theme_mode_setting.dart'),
 ///     ),
 ///   ),
 /// )
@@ -185,7 +185,7 @@ final class SettingsEntry extends SettingsData {
   const SettingsEntry({required this.widget});
 
   /// The class of the widget, with the import of its file, a file of the
-  /// app such as `ImportRef.app('core/theme/theme_setting.dart')`.
+  /// app such as `ImportRef.app('core/theme/theme_mode_setting.dart')`.
   ///
   /// The module rule `settings_screen.entries` looks for the file among
   /// those of the bricks of the module by its path as text. So the import
@@ -197,8 +197,8 @@ final class SettingsEntry extends SettingsData {
   final TypeRef widget;
 
   /// The path of the file of [widget] relative to the project root, such
-  /// as `lib/core/theme/theme_setting.dart`, or `null` if [widget] is not
-  /// of a file of the app.
+  /// as `lib/core/theme/theme_mode_setting.dart`, or `null` if [widget] is
+  /// not of a file of the app.
   String? get file => switch (widget.import) {
         final import? when import.isAppFile => 'lib/${import.uri}',
         _ => null,
