@@ -1082,6 +1082,334 @@ flutter:
     });
   });
 
+  group('files of render hooks', () {
+    test('are files of the app, written as they are, each with its owner', () {
+      // What mason renders or removes in a template stays in such a file:
+      // tags, a backslash before a line break or a non-ASCII character,
+      // and the line endings.
+      const text = '{{app_name}} {{{smf_app_entry__bootstrap_late}}}\r\n'
+          'a\\\nb caf\\é {{#items}}\n';
+      final rendering = _Rendering(
+        templateOutput: const RoleOutput(
+          files: {'notes/of_template.txt': text},
+        ),
+        providerOutput: const RoleOutput(
+          files: {
+            'lib/store/item_1.dart': 'const item1 = 1;\n',
+            'assets/store/empty.txt': '',
+          },
+        ),
+      );
+      final app = _render([
+        entry,
+        TestModule(
+          'store',
+          providers: [rendering.provider],
+          contributions: [
+            _brick({'lib/store/store.dart': "import 'item_1.dart';\n"}),
+          ],
+        ),
+      ]);
+
+      final ofTemplate = app.files['notes/of_template.txt']!;
+      expect(ofTemplate.text, text);
+      expect(ofTemplate.bytes, utf8.encode(text));
+      expect(ofTemplate.owner, RoleTemplateOrigin(rendering.role));
+      expect(ofTemplate.isText, isTrue);
+      expect(ofTemplate.fromHook, isTrue);
+      expect(ofTemplate.addedImports, isEmpty);
+
+      final ofProvider = app.files['lib/store/item_1.dart']!;
+      expect(ofProvider.text, 'const item1 = 1;\n');
+      expect(ofProvider.owner, const ModuleOrigin(ModuleId('store')));
+      expect(ofProvider.fromHook, isTrue);
+      expect(app.texts['assets/store/empty.txt'], '');
+      expect(
+        app.owners['assets/store/empty.txt'],
+        const ModuleOrigin(ModuleId('store')),
+      );
+
+      // They are among the files of the bricks, which no hook generated.
+      expect(app.files['lib/store/store.dart']!.fromHook, isFalse);
+      expect(app.files.keys, orderedEquals([...app.files.keys]..sort()));
+    });
+
+    test(
+        'a path that leaves the app, is empty, is absolute or belongs to one '
+        'machine is an error', () {
+      final rendering = _Rendering(
+        templateOutput: const RoleOutput(
+          files: {'../x.txt': '', '': '', 'lib/fine.txt': ''},
+        ),
+        providerOutput: const RoleOutput(
+          files: {
+            '/etc/y.txt': '',
+            r'lib\y.txt': '',
+            'C:/y.txt': '',
+            'lib//y.txt': '',
+            './lib/y.txt': '',
+            'ios/Flutter/Generated.xcconfig': '',
+            'lib/.DS_Store': '',
+          },
+        ),
+      );
+
+      expect(
+        _failures([
+          entry,
+          TestModule('store', providers: [rendering.provider]),
+        ]),
+        [
+          equals(
+            'role:shelf: error [role:shelf]: The render hook of role:shelf '
+            'generates a file at "../x.txt", which leaves the directory of '
+            'the app.',
+          ),
+          equals(
+            'role:shelf: error [role:shelf]: The render hook of role:shelf '
+            'generates a file at "", which is empty.',
+          ),
+          equals(
+            'store: error [store]: The render hook of store generates a file '
+            'at "/etc/y.txt", which is not a relative path with forward '
+            'slashes.',
+          ),
+          contains(r'at "lib\y.txt", which is not a relative path with'),
+          contains('at "C:/y.txt", which is not a relative path with'),
+          contains('at "lib//y.txt", which has an empty or "." segment.'),
+          contains('at "./lib/y.txt", which has an empty or "." segment.'),
+          equals(
+            'store: error [store]: The render hook of store generates a file '
+            'at "ios/Flutter/Generated.xcconfig", which is written by '
+            "Flutter's tools, which the pipeline does not move with the app.",
+          ),
+          contains(
+            'at "lib/.DS_Store", which is left behind by the operating '
+            'system.',
+          ),
+        ],
+      );
+    });
+
+    test('a path that some machine cannot write is an error', () {
+      final rendering = _Rendering(
+        providerOutput: const RoleOutput(
+          files: {
+            'lib/a:b.txt': '',
+            'lib/a*b.txt': '',
+            'lib/a?.txt': '',
+            'lib/"a".txt': '',
+            'lib/<a>.txt': '',
+            'lib/a|b.txt': '',
+            'lib/a\nb.txt': '',
+            'lib/a\tb\x7f.txt': '',
+            'lib/a b.txt': '',
+            'lib/a./b.txt': '',
+            'lib/a /b.txt': '',
+            'lib/a.txt.': '',
+            'lib/a.txt ': '',
+            // What every machine writes: spaces and dots inside a name, a
+            // name that starts with dots, and letters beyond ASCII.
+            "lib/.a b/..it's (1) é.txt": '',
+          },
+        ),
+      );
+
+      String failure(String path, String problem) =>
+          'store: error [store]: The render hook of store generates a file at '
+          '"$path", which $problem.';
+      const character = 'has a character that Windows allows in no name of a '
+          'file: < > : " | ? or *';
+      const control = 'has a control character or a line break';
+      const ending = 'has a segment that ends with a dot or a space, which '
+          'Windows removes';
+      expect(
+        _failures([
+          entry,
+          TestModule('store', providers: [rendering.provider]),
+        ]),
+        [
+          failure('lib/a:b.txt', character),
+          failure('lib/a*b.txt', character),
+          failure('lib/a?.txt', character),
+          failure('lib/"a".txt', character),
+          failure('lib/<a>.txt', character),
+          failure('lib/a|b.txt', character),
+          // The message shows such a character as its escape.
+          failure(r'lib/a\u{a}b.txt', control),
+          failure(r'lib/a\u{9}b\u{7f}.txt', control),
+          failure(r'lib/a\u{2028}b.txt', control),
+          failure('lib/a./b.txt', ending),
+          failure('lib/a /b.txt', ending),
+          failure('lib/a.txt.', ending),
+          failure('lib/a.txt ', ending),
+        ],
+      );
+    });
+
+    test('a path of the app is a file or a directory, not both', () {
+      final rendering = _Rendering(
+        templateOutput: const RoleOutput(
+          files: {
+            // The directory of a file of a brick.
+            'lib/store': '',
+            // The same, where case does not matter.
+            'ANDROID': '',
+            // In what is a file of a brick, where case does not matter.
+            'lib/App.dart/notes.txt': '',
+            'notes/first': '',
+          },
+        ),
+        providerOutput: const RoleOutput(
+          files: {
+            // In what is a file of another hook.
+            'notes/first/second.txt': '',
+            // Next to a file and to a directory whose names start alike.
+            'lib/store_notes.txt': '',
+            'notes/first.txt': '',
+          },
+        ),
+      );
+
+      const either = 'a path of the app is a file or a directory, not both.';
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'store',
+            providers: [rendering.provider],
+            contributions: [
+              _brick({'lib/store/store.dart': ''}),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'role:shelf: error [role:shelf] lib/store: The render hook of '
+            'role:shelf generates lib/store, but lib/store is a directory of '
+            'the app, in which a brick of store generates '
+            'lib/store/store.dart; $either',
+          ),
+          equals(
+            'role:shelf: error [role:shelf] ANDROID: The render hook of '
+            'role:shelf generates ANDROID, but android, one path with ANDROID '
+            'where case does not matter, is a directory of the app, in which '
+            'a brick of scaffold generates '
+            'android/app/src/main/AndroidManifest.xml; $either',
+          ),
+          equals(
+            'role:shelf: error [role:shelf] lib/App.dart/notes.txt: The '
+            'render hook of role:shelf generates lib/App.dart/notes.txt, but '
+            'lib/app.dart, one path with lib/App.dart where case does not '
+            'matter, is a file of the app, which a brick of scaffold '
+            'generates; $either',
+          ),
+          equals(
+            'store: error [store] notes/first/second.txt: The render hook of '
+            'store generates notes/first/second.txt, but notes/first is a '
+            'file of the app, which a render hook of role:shelf generates; '
+            '$either',
+          ),
+        ],
+      );
+    });
+
+    test('the kind of the module of a provider limits their paths', () {
+      const infrastructure = ModuleKind(
+        id: 'infrastructure',
+        label: 'Infrastructure',
+        forbiddenFileRoots: ['lib/features/'],
+      );
+      final rendering = _Rendering(
+        // The template of a role has no kind.
+        templateOutput: const RoleOutput(
+          files: {'lib/features/shelf/a.txt': ''},
+        ),
+        providerOutput: const RoleOutput(
+          files: {'lib/features/store/a.txt': '', 'lib/store/b.txt': ''},
+        ),
+      );
+
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'store',
+            kind: infrastructure,
+            providers: [rendering.provider],
+          ),
+        ]),
+        [
+          equals(
+            'store: error [store] lib/features/store/a.txt: The module store '
+            'generates lib/features/store/a.txt, where modules of the '
+            'infrastructure kind may not.',
+          ),
+        ],
+      );
+    });
+
+    test('every file of the app is generated once', () {
+      final rendering = _Rendering(
+        templateOutput: const RoleOutput(
+          files: {
+            // A file of the brick of another owner.
+            'lib/app.dart': '',
+            'lib/shelf.txt': '',
+            // One file with the one before where case does not matter.
+            'lib/Shelf.txt': '',
+          },
+        ),
+        providerOutput: const RoleOutput(
+          files: {
+            // A file of the hook of the template.
+            'lib/shelf.txt': '',
+            // A file of the brick of the same module.
+            'lib/store.dart': '',
+            'lib/of_store.txt': '',
+          },
+        ),
+      );
+
+      expect(
+        _failures([
+          entry,
+          TestModule(
+            'store',
+            providers: [rendering.provider],
+            contributions: [
+              _brick({'lib/store.dart': ''}),
+            ],
+          ),
+        ]),
+        [
+          equals(
+            'role:shelf: error [role:shelf] lib/app.dart: The render hook of '
+            'role:shelf generates lib/app.dart, which a brick of scaffold '
+            'generates too; every file of the app is generated once.',
+          ),
+          equals(
+            'role:shelf: error [role:shelf] lib/Shelf.txt: The render hook '
+            'of role:shelf generates lib/Shelf.txt, one file with '
+            'lib/shelf.txt where case does not matter, which a render hook '
+            'of role:shelf generates too; every file of the app is generated '
+            'once.',
+          ),
+          equals(
+            'store: error [store] lib/shelf.txt: The render hook of store '
+            'generates lib/shelf.txt, which a render hook of role:shelf '
+            'generates too; every file of the app is generated once.',
+          ),
+          equals(
+            'store: error [store] lib/store.dart: The render hook of store '
+            'generates lib/store.dart, which a brick of store generates too; '
+            'every file of the app is generated once.',
+          ),
+        ],
+      );
+    });
+  });
+
   group('imports', () {
     test('go into the file with the tag, among its imports', () {
       final app = _render([

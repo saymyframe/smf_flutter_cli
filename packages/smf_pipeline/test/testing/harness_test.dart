@@ -1587,6 +1587,79 @@ void main() {
         );
       });
 
+      test('the files of render hooks are checked like the files of bricks',
+          () async {
+        final notes = TestRole<NoDsl>(
+          'notes',
+          structuralRules: const [
+            StructuralRule(
+              id: 'notes.names_the_app',
+              description: 'The notes name the app.',
+              check: _checkNotes,
+            ),
+          ],
+        );
+        final harness = ContractHarness(
+          ModuleRegistry([
+            ...modules,
+            TestModule(
+              'writer',
+              providers: [
+                _FilesProvider(notes, const {
+                  'NOTES.md': '# Another app\n',
+                  'lib/notes/broken.dart': 'final a = ;\n',
+                  'lib/notes/notes.dart': "import '../a/a.dart';\n"
+                      "import 'missing.dart';\n"
+                      "import 'package:zeta/zeta.dart';\n"
+                      '\n'
+                      'final a = A();\n',
+                }),
+              ],
+              contributions: [
+                // A file of a brick finds the file of the hook.
+                dart(
+                  'lib/notes/reader.dart',
+                  "import 'notes.dart';\n\nfinal b = a;\n",
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'writer',
+            requested: [ModuleId('writer'), ModuleId('lib_a')],
+          ),
+        );
+
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            startsWith('writer: lib/notes/broken.dart does not parse: '),
+            equals('writer: NOTES.md does not name contract_app.'),
+            equals(
+              'writer: lib/notes/notes.dart imports lib/a/a.dart in a file of '
+              'the render hook of writer, but that file is of lib_a, which '
+              'writer neither depends on nor knows through a role.',
+            ),
+            equals(
+              'writer: lib/notes/notes.dart imports missing.dart in a file of '
+              'the render hook of writer, but the app has no '
+              'lib/notes/missing.dart.',
+            ),
+            equals(
+              'writer: lib/notes/notes.dart imports package:zeta/zeta.dart in '
+              'a file of the render hook of writer, but the app does not '
+              'depend on zeta.',
+            ),
+          ],
+        );
+      });
+
       test('braces that mason copies are reported in the template', () async {
         final harness = ContractHarness(
           ModuleRegistry([
@@ -1885,6 +1958,75 @@ void main() {
       });
 
       test(
+          'a file that the render hook of a provider generates may use the '
+          'package of a module whose data the provider renders', () async {
+        final state = TestRole<NoDsl>('state');
+        final shelf = TestRole<String>('shelf');
+        const uri = 'package:flutter_bloc/flutter_bloc.dart';
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'bloc',
+              providers: [RoleProvider.plain(state)],
+              contributions: const [
+                PubspecContribution.hosted('flutter_bloc', '^9.1.1'),
+              ],
+            ),
+            // The hook renders the data of the shelf into a file, as it
+            // renders it into a fragment.
+            TestModule(
+              'store',
+              providers: [
+                _VarsProvider(
+                  shelf,
+                  const {},
+                  files: const {
+                    'lib/store/items/item_1.dart': "import '$uri';\n"
+                        '\n'
+                        'final observer = Bloc.observer;\n',
+                  },
+                ),
+              ],
+            ),
+            // The data of the shelf that needs the package.
+            TestModule(
+              'item',
+              requires: {shelf},
+              dependsOn: {'bloc'},
+              contributions: [
+                shelf.data('item'),
+                const PubspecContribution.hosted('flutter_bloc', 'any'),
+              ],
+            ),
+          ]),
+        );
+        Future<List<String>> errorsOf(List<String> modules) async {
+          final result = await harness.check(
+            ContractCase(
+              'store',
+              requested: [for (final id in modules) ModuleId(id)],
+            ),
+          );
+          return [
+            for (final issue in result.errors)
+              '${issue.origin}: ${issue.message}',
+          ];
+        }
+
+        expect(await errorsOf(['store', 'item']), isEmpty);
+        // Without a module whose data needs the package, the provider takes
+        // it without contributing it.
+        expect(await errorsOf(['store', 'bloc']), [
+          equals(
+            'store: lib/store/items/item_1.dart imports $uri in a file of the '
+            'render hook of store, but store does not contribute '
+            'flutter_bloc, a package of bloc, which provides the state role.',
+          ),
+        ]);
+      });
+
+      test(
           'the package check reads exports and every contribution of a '
           'module', () async {
         final state = TestRole<NoDsl>('state');
@@ -2052,6 +2194,65 @@ void main() {
             equals(
               'lib/l10n_user.dart imports generated/other.dart in the '
               'template of l10n, but the app has no lib/generated/other.dart.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'a file of the app where code generation or the localizations '
+          'write theirs is a problem', () async {
+        final notes = TestRole<NoDsl>('notes');
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'l10n',
+              providers: [
+                _FilesProvider(notes, const {
+                  'lib/l10n/app_localizations.dart': '// Of the hook.\n',
+                }),
+              ],
+              contributions: [
+                const PubspecContribution.sdk('flutter_localizations'),
+                const PubspecContribution.flutter(generate: true),
+                const CodegenRequest(
+                  outputs: ['lib/generated/config.dart', 'lib/other.g.dart'],
+                ),
+                BrickContribution(
+                  bundle(
+                    'l10n',
+                    files: {
+                      'l10n.yaml': '',
+                      // One file with the output where case does not
+                      // matter.
+                      'lib/Generated/Config.dart': '// Of the brick.\n',
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase('l10n', requested: [ModuleId('l10n')]),
+        );
+
+        expect(
+          [for (final issue in result.errors) '$issue'],
+          [
+            equals(
+              'error [l10n] lib/Generated/Config.dart: A brick of l10n '
+              'generates lib/Generated/Config.dart, but the code generation '
+              'that l10n asks for writes lib/generated/config.dart, the same '
+              'file where case does not matter, once the app is rendered.',
+            ),
+            equals(
+              'error [l10n] lib/l10n/app_localizations.dart: A render hook of '
+              'l10n generates lib/l10n/app_localizations.dart, but flutter '
+              'pub get, which generates the localizations of l10n.yaml, '
+              'writes that file once the app is rendered.',
             ),
           ],
         );
@@ -2252,17 +2453,33 @@ final class _CuriousTemplate extends RoleTemplate<String> {
   Map<String, String> optionsOf(Object? choice) => {'answers': '$choice'};
 }
 
-/// A provider whose render hook returns [vars].
+/// A provider whose render hook returns [vars] and generates [files].
 final class _VarsProvider extends RoleProvider<String> {
-  _VarsProvider(this.role, this.vars);
+  _VarsProvider(this.role, this.vars, {this.files = const {}});
 
   @override
   final Role<String> role;
 
   final Map<String, Object?> vars;
 
+  final Map<String, String> files;
+
   @override
-  RoleOutput render(RoleHookInput<String> input) => RoleOutput(vars: vars);
+  RoleOutput render(RoleHookInput<String> input) =>
+      RoleOutput(vars: vars, files: files);
+}
+
+/// A provider whose render hook generates [files].
+final class _FilesProvider extends RoleProvider<NoDsl> {
+  _FilesProvider(this.role, this.files);
+
+  @override
+  final Role<NoDsl> role;
+
+  final Map<String, String> files;
+
+  @override
+  RoleOutput render(RoleHookInput<NoDsl> input) => RoleOutput(files: files);
 }
 
 /// A `{` in a mason template.
