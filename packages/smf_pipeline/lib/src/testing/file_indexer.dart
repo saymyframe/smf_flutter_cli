@@ -310,7 +310,9 @@ String? _enclosing(AstNode node) {
   return null;
 }
 
-/// The name of the method, getter or setter that contains [node], if any.
+/// The name of the method, getter, setter or operator that contains [node],
+/// also in a closure or a local function of it, if any; the name of an
+/// operator is its symbol.
 String? _enclosingMember(AstNode node) =>
     node.thisOrAncestorOfType<MethodDeclaration>()?.name.lexeme;
 

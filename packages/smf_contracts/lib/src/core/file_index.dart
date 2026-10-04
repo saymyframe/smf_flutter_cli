@@ -275,7 +275,7 @@ enum ParameterKind {
   bool get isRequired => this == requiredPositional || this == requiredNamed;
 }
 
-/// A parameter of an indexed function or constructor.
+/// A parameter of an indexed function, constructor, method or setter.
 final class IndexedParameter {
   /// Creates the index of the parameter [name].
   const IndexedParameter(
@@ -332,10 +332,20 @@ final class IndexedInvocation {
   /// outside any.
   final String? enclosingDeclaration;
 
-  /// The name of the method, getter or setter of [enclosingDeclaration] the
-  /// invocation is in, such as `build`, or `null` outside any: in a
-  /// top-level function or variable, in a constructor, or in the
-  /// initializer of a field.
+  /// The name of the method, getter, setter or operator of
+  /// [enclosingDeclaration] that the invocation is in, such as `build`, or
+  /// `null` outside any: in a top-level function or variable, in a
+  /// constructor, or in the initializer of a field.
+  ///
+  /// An invocation in a closure or in a local function of a member is in
+  /// that member. A getter and its setter have one name, and an operator
+  /// has its symbol for a name, as in [IndexedMember.name], so the unary
+  /// `-` and the binary one have the same.
+  ///
+  /// It is set in the members of a mixin, an enum, an extension and an
+  /// extension type too, which [IndexedDeclaration.members] does not list,
+  /// and in those of an extension without a name, where
+  /// [enclosingDeclaration] is `null`.
   final String? enclosingMember;
 
   /// Whether the invocation is the operand of an `await`.

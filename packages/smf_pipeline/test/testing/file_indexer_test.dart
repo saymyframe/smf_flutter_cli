@@ -311,8 +311,8 @@ extension on String {
   });
 
   test(
-      'names the method, getter or setter around an invocation, and none '
-      'outside the methods of a declaration', () {
+      'names the method, getter, setter or operator around an invocation, '
+      'and none outside the members of a declaration', () {
     final index = DartFileIndexer.index('lib/panel.dart', '''
 class Panel {
   Panel() : created = stamp();
@@ -324,14 +324,36 @@ class Panel {
   int get size => measure();
   set size(int value) => resize(value);
   static Panel create() => const Panel();
+
+  void refresh() {
+    void later() => schedule();
+    later();
+  }
+
+  Panel operator -() => negate();
+  Panel operator -(Panel other) => subtract(other);
 }
 
 mixin Loud {
   void shout() => print('loud');
 }
 
+enum Mode {
+  on;
+
+  Mode toggled() => flip(this);
+}
+
 extension Twice on int {
   int twice() => double(this);
+}
+
+extension on String {
+  String loud() => upper(this);
+}
+
+extension type Meters(double value) {
+  Meters doubled() => scale(value);
 }
 
 final panel = Panel.create();
@@ -351,15 +373,36 @@ void main() => run();
         // In a method, also in a closure of it.
         'Builder in Panel, build',
         'text in Panel, build',
+        // A getter and its setter have one name.
         'measure in Panel, size',
         'resize in Panel, size',
         'Panel in Panel, create',
+        // In a local function of a method, as the call of that function.
+        'schedule in Panel, refresh',
+        'later in Panel, refresh',
+        // An operator has its symbol for a name, the unary one as the
+        // binary one.
+        'negate in Panel, -',
+        'subtract in Panel, -',
+        // In the members of a mixin, an enum, an extension and an
+        // extension type, and of an extension without a name.
         'print in Loud, shout',
+        'flip in Mode, toggled',
         'double in Twice, twice',
+        'upper in null, loud',
+        'scale in Meters, doubled',
         // In a top-level variable and in a top-level function.
         'create in panel, null',
         'run in main, null',
       ],
+    );
+    // The index lists the members of classes only.
+    for (final name in ['Loud', 'Mode', 'Twice', 'Meters']) {
+      expect(index.declaration(name)!.members, isEmpty, reason: name);
+    }
+    expect(
+      [for (final member in index.declaration('Panel')!.members) member.name],
+      containsAll(['build', 'size', 'create', 'refresh', '-']),
     );
   });
 
