@@ -12,13 +12,14 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
-/// role, whose providers call the listeners of the screen, the DI role and
-/// the events role.
+/// role, whose providers call the listeners of the screen, the DI role, the
+/// events role and the preferences role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
-/// they use: the fixture features, and the fixture analytics and the
-/// fixture screen log, whose listeners of the screen note what they hear.
+/// they use: the fixture features, the fixture analytics and the fixture
+/// screen log, whose listeners of the screen note what they hear, and the
+/// fixture setting, whose restorers note what they read.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -130,13 +131,38 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // provides it, the test that the CLI keeps: only in the apps with
       // every module, which run flutter test for other tests already.
       await eventsRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The preferences of the apps with the preferences role, whichever
+      // module provides it, the test that the CLI keeps: only in the apps
+      // with every module, which run flutter test for other tests already.
+      await preferencesRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
+      // The restorers of the fixture setting, whichever module provides the
+      // preferences role: the start-up gives each the preferences, the next
+      // start what the setting saved, and one that throws keeps no other
+      // from restoring. Only in the apps with every module, which run
+      // flutter test for other tests already.
+      MatrixAppTest(
+        '$appTests/preferences_restorers',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.hook!.presentRoles.contains(preferencesRole) &&
+            app.modules.contains(FakePreferencesUserModule.id),
+        roles: {preferencesRole},
+      ),
       // The routes of the apps with a router, whichever module provides it,
       // the test that the CLI keeps: only in the apps with every module,
       // which run flutter test for other tests already, and whose layout
       // shows the destinations of both fixture features.
       await routerWalkAppTest(among: (app) => app.everyModuleWith != null),
     ],
-    testedRoles: {routerRole, layoutRole, diRole, eventsRole},
+    testedRoles: {
+      routerRole,
+      layoutRole,
+      diRole,
+      eventsRole,
+      preferencesRole,
+    },
   );
 }
 

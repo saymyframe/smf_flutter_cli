@@ -151,6 +151,46 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture preferences whose writes never reach their disk: a
+  /// value that was saved is read back as long as the app runs, and gone at
+  /// its next start.
+  static const preferencesForgettingWrites = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_forget_writes'),
+    'Preferences in memory that save nothing (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [('    fixturePreferencesDisk[key] = _copyOf(value);\n', '')],
+  );
+
+  /// The fixture preferences that keep the list they are given rather than
+  /// a copy of it: a later change of that list changes what they read.
+  static const preferencesKeepingTheGivenList = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_keep_the_given_list'),
+    'Preferences in memory that keep the list they are given (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [('      _save(key, List.of(value));\n', '      _save(key, value);\n')],
+  );
+
+  /// The fixture preferences whose reads cast the value of a key to the
+  /// type they ask for, rather than returning `null` for a value of another
+  /// type: such a read throws a `TypeError`.
+  static const preferencesCastingValues = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_cast_values'),
+    'Preferences in memory whose reads cast (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [
+      (
+        '  T? _read<T>(String key) => switch (_values[key]) {\n'
+            '    final T value => value,\n'
+            '    _ => null,\n'
+            '  };\n',
+        '  T? _read<T>(String key) => _values[key] as T?;\n',
+      ),
+    ],
+  );
+
   /// The service log of the fixtures whose analytics service notes each
   /// call twice, as a service does that sends each event twice: to the
   /// tests of the analytics role, each call of the analytics service of the

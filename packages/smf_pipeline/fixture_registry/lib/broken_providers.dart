@@ -268,6 +268,58 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.preferencesForgettingWrites,
+        role: preferencesRole,
+        bug: 'Its writes never reach its disk, so the next start of the app '
+            'reads nothing of what was saved.',
+        app: [FakePreferencesUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the next start reads what was saved, and nothing that was '
+                'removed',
+            'The next start reads what was saved.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_restorers_test.dart',
+            'a restorer reads at the next start what its module saved',
+            'Each restorer reads at the next start what was saved.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesKeepingTheGivenList,
+        role: preferencesRole,
+        bug: 'It keeps the list that it is given rather than a copy of it, so '
+            'a later change of that list changes what it reads.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the preferences keep lists of their own',
+            'A change of a list that was saved, or of one that was read, '
+                'changes nothing that the preferences have.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesCastingValues,
+        role: preferencesRole,
+        bug: 'Its reads cast the value of a key to the type they ask for, so '
+            'a read of a key with a value of another type throws a TypeError '
+            'rather than returning null.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read of a key with a value of another type returns null, and '
+                'does not throw',
+            'A read returns null when the key has no value of the type it '
+                'asks for, and never throws.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenDiModule(),
         role: diRole,
         bug: 'It registers every service but one, the last in the order of '
