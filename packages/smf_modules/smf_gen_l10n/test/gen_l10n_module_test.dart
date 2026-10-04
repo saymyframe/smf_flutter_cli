@@ -547,6 +547,56 @@ void main() {
     });
   });
 
+  group('the texts of the template of a role', () {
+    test(
+        'go into the ARB files like those of a module, by the getter that '
+        'the role names them', () {
+      final provider = module.descriptor.providers.single;
+      final output = provider.render(
+        localizationRole.hookInput(
+          RoleHookRequest(
+            data: [
+              localizationRole
+                  .data(
+                    const TextsData([
+                      LocalizedText(
+                        'language',
+                        en: 'Language',
+                        translations: {'uk': 'Мова'},
+                      ),
+                    ]),
+                  )
+                  .withOrigin(const RoleTemplateOrigin(localizationRole)),
+              localizationRole
+                  .data(const TextsData([LocalizedText('hello', en: 'Hello')]))
+                  .withOrigin(ModuleOrigin(_greeting.id)),
+            ],
+            presentRoles: const {localizationRole},
+            context: ContractHarness.defaultContext,
+          ),
+        ),
+      );
+
+      expect(
+        {
+          for (final MapEntry(key: path, value: text) in output.files.entries)
+            path: jsonDecode(text),
+        },
+        {
+          'lib/l10n/app_en.arb': {
+            '@@locale': 'en',
+            'localizationLanguage': 'Language',
+            'greetingHello': 'Hello',
+          },
+          'lib/l10n/app_uk.arb': {
+            '@@locale': 'uk',
+            'localizationLanguage': 'Мова',
+          },
+        },
+      );
+    });
+  });
+
   group('the README of the app', () {
     late ContractResult result;
     late String section;
