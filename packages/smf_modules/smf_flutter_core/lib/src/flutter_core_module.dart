@@ -11,7 +11,10 @@ import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 ///   order of its phases;
 /// - `lib/app.dart`, the root widget `App`: a `MaterialApp.router` with the
 ///   router's configuration when a router is present, or else a
-///   `MaterialApp` that shows the `FallbackStartScreen`;
+///   `MaterialApp` that shows the `FallbackStartScreen`. `App` creates it in
+///   its `build`, so the arguments that the modules give it read the
+///   `BuildContext` of `App`, below the root wrappers, and `App` rebuilds
+///   when an inherited widget that they read notifies;
 /// - `lib/core/app/fallback_start_screen.dart` and a widget test of it;
 /// - `pubspec.yaml` with the dependencies of all modules, and the lints of
 ///   a new Flutter app.

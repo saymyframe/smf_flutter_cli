@@ -1,3 +1,5 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -6,6 +8,50 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import 'support.dart';
+
+/// The method `build` of the class `App` in [text], the text of
+/// `lib/app.dart`.
+MethodDeclaration _buildOfApp(String text) => parseString(content: text)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .singleWhere(
+      (declaration) => declaration.namePart.typeName.lexeme == 'App',
+    )
+    .body
+    .members
+    .whereType<MethodDeclaration>()
+    .singleWhere((method) => method.name.lexeme == 'build');
+
+/// The widget that `main()` passes to `runApp()` in [text], the text of
+/// `lib/main.dart`, as written.
+String _runAppArgumentOf(String text) {
+  final main = parseString(content: text)
+      .unit
+      .declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((function) => function.name.lexeme == 'main');
+  final body = main.functionExpression.body as BlockFunctionBody;
+  return [
+    for (final statement in body.block.statements)
+      if (statement
+          case ExpressionStatement(
+            expression: MethodInvocation(
+              methodName: SimpleIdentifier(name: 'runApp'),
+              :final argumentList,
+            ),
+          ))
+        argumentList.arguments.single.toSource(),
+  ].single;
+}
+
+/// The named arguments of [call] in their order, each as `name: expression`
+/// with the expression as written.
+List<String> _namedOf(MethodInvocation call) => [
+      for (final argument in call.argumentList.arguments)
+        if (argument case NamedArgument(:final name, :final argumentExpression))
+          '${name.lexeme}: ${argumentExpression.toSource()}',
+    ];
 
 void main() {
   const module = FlutterCoreModule();
@@ -258,5 +304,54 @@ void main() {
         contains('MediaQuery.withNoTextScaling(child: child!),'),
       );
     });
+  });
+
+  group('the arguments that the modules give the root of the app', () {
+    for (final (router, creation) in [
+      (null, 'MaterialApp'),
+      (TestRouterModule.id, 'MaterialApp.router'),
+    ]) {
+      test(
+          'are those of the $creation that the build() of App returns, and '
+          'main() runs App inside the root wrappers, so they read its '
+          'context below them', () async {
+        final result = await renderedApp([
+          FlutterCoreModule.id,
+          if (router != null) router,
+          EverySocketModule.id,
+        ]);
+        final files = result.app!.texts;
+        final build = _buildOfApp(files['lib/app.dart']!);
+        final body = build.body as ExpressionFunctionBody;
+        final root = body.expression as MethodInvocation;
+
+        // The context of the arguments is the one that build() gets, so
+        // App rebuilds when an inherited widget that they read notifies.
+        expect(build.parameters!.toSource(), '(BuildContext context)');
+        expect(
+          [
+            if (root.target case final target?) target.toSource(),
+            root.methodName.name,
+          ].join('.'),
+          creation,
+        );
+        // Among the arguments of the root itself, in the order of the
+        // socket.
+        expect(
+          _namedOf(root),
+          containsAllInOrder([
+            'themeMode: ${EverySocketModule.themeMode}',
+            'locale: ${EverySocketModule.locale}',
+            "supportedLocales: [Locale('en')]",
+          ]),
+        );
+        // The widgets that the modules put around the root are ancestors
+        // of that context.
+        expect(
+          _runAppArgumentOf(files['lib/main.dart']!),
+          'RepaintBoundary(child: const App())',
+        );
+      });
+    }
   });
 }
