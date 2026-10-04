@@ -44,6 +44,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--skip-external-setup` | Never install tools, log in or configure external services. |
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
+| `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
@@ -58,6 +59,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
+| [`gen_l10n`](https://doc.saymyframe.com/modules/gen-l10n) | Localization with gen-l10n of Flutter: the texts of the modules in ARB files, one for each language of the app. |
 | [`get_it`](https://doc.saymyframe.com/modules/get-it) | Dependency injection: the services of the modules, registered in get_it. |
 | [`event_bus`](https://doc.saymyframe.com/modules/event-bus) | Events between parts of the app that do not know each other, with event_bus. |
 | [`shared_preferences`](https://doc.saymyframe.com/modules/shared-preferences) | The settings of the app that are no secret, such as the theme mode, remembered between its launches with shared_preferences. |
