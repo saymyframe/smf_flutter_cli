@@ -126,20 +126,25 @@ class Child extends Widget {
   const Child();
 }
 
-/// A context below [scope].
+/// A context below [scope], or below no inherited widget, which notes the
+/// types of the inherited widgets that it is asked for.
 final class Below implements BuildContext {
   Below(this.scope);
 
-  final InheritedWidget scope;
+  final InheritedWidget? scope;
+
+  final List<String> asked = [];
 
   @override
   T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>({
     Object? aspect,
-  }) =>
-      switch (scope) {
-        final T scope => scope,
-        _ => null,
-      };
+  }) {
+    asked.add('\$T');
+    return switch (scope) {
+      final T scope => scope,
+      _ => null,
+    };
+  }
 }
 
 Future<void> main(List<String> arguments, SendPort port) async {
@@ -219,13 +224,42 @@ final String _starts = _scriptOf('''
   await themeModeController.select(ThemeMode.dark);
   result['writes'] = [...writes];
   result['printed'] = [...debugPrinted];
+''');
 
-  final scope = ThemeModeScope(
-    notifier: themeModeController,
-    child: const Child(),
+/// Starts the app for the first time with the mode that it is in saved, so
+/// that the start changes nothing, and selects a mode after that.
+final String _startWithTheModeSaved = _scriptOf('''
+  disk[key] = 'system';
+  await initPreferences();
+  result['the start'] = {
+    'mode': themeModeController.mode.name,
+    'heard': heard(),
+  };
+
+  await themeModeController.select(ThemeMode.dark);
+  result['a choice after it'] = {'saved': disk[key], 'writes': [...writes]};
+''');
+
+/// Asks the scope for the controller, from a context below the scope and
+/// from one below none.
+final String _scope = _scriptOf('''
+  final below = Below(
+    ThemeModeScope(notifier: themeModeController, child: const Child()),
   );
-  result['the scope gives the controller of the app'] =
-      identical(ThemeModeScope.of(Below(scope)), themeModeController);
+  result['below the scope'] = {
+    'the controller of the app':
+        identical(ThemeModeScope.of(below), themeModeController),
+    'asked of the context': below.asked,
+  };
+
+  final outside = Below(null);
+  try {
+    ThemeModeScope.of(outside);
+    result['below no scope'] = 'a controller';
+  } on TypeError {
+    result['below no scope'] = 'no controller';
+  }
+  result['asked of the context below no scope'] = outside.asked;
 ''');
 
 /// The files of the test app: the file of the mode, as the template of the
@@ -371,27 +405,35 @@ void main() {
         problems([function('createLightTheme')]),
         ['$file does not declare function createDarkTheme().'],
       );
-      expect(
-        problems([
-          function('createLightTheme', type: 'ColorScheme'),
-          function('createDarkTheme'),
-        ]).single,
-        'function createLightTheme() in $file must return ThemeData, not '
-        'ColorScheme.',
-      );
-      expect(
-        problems([
-          function('createLightTheme'),
-          function(
-            'createDarkTheme',
-            parameters: const [
-              IndexedParameter('seed', kind: ParameterKind.requiredPositional),
-            ],
-          ),
-        ]).single,
-        'function createDarkTheme() in $file must not require more than 0 '
-        'positional arguments.',
-      );
+      // Each of the two, next to the other as the role requires it.
+      for (final (name, other) in [
+        ('createLightTheme', 'createDarkTheme'),
+        ('createDarkTheme', 'createLightTheme'),
+      ]) {
+        const where = 'in $file';
+        expect(
+          problems([function(name, type: 'ColorScheme'), function(other)]),
+          ['function $name() $where must return ThemeData, not ColorScheme.'],
+          reason: 'The return type of $name().',
+        );
+        expect(
+          problems([
+            function(
+              name,
+              parameters: const [
+                IndexedParameter(
+                  'seed',
+                  kind: ParameterKind.requiredPositional,
+                ),
+              ],
+            ),
+            function(other),
+          ]).join('\n'),
+          'function $name() $where must not require more than 0 positional '
+          'arguments.',
+          reason: 'The parameters of $name().',
+        );
+      }
     });
   });
 
@@ -668,7 +710,39 @@ void main() {
         'writes': ['open 7: ${ThemeRole.modeKey} = dark'],
         // No restorer failed.
         'printed': <Object?>[],
-        'the scope gives the controller of the app': true,
+      });
+    });
+
+    test(
+        'is saved through the preferences of a start that found the mode of '
+        'the app saved, and so changed nothing', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+
+      expect(await app.run(_startWithTheModeSaved), {
+        'the start': {'mode': 'system', 'heard': <Object?>[]},
+        'a choice after it': {
+          'saved': 'dark',
+          'writes': ['open 1: ${ThemeRole.modeKey} = dark'],
+        },
+      });
+    });
+
+    test(
+        'comes from the scope around the context that asks for it, which '
+        'rebuilds its widget when the mode changes; below no scope there is '
+        'none', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+
+      expect(await app.run(_scope), {
+        'below the scope': {
+          'the controller of the app': true,
+          // The context makes its widget depend on what it is asked for.
+          'asked of the context': ['ThemeModeScope'],
+        },
+        'below no scope': 'no controller',
+        'asked of the context below no scope': ['ThemeModeScope'],
       });
     });
   });
