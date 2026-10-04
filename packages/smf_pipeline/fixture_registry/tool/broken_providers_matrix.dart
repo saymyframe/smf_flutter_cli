@@ -13,7 +13,9 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// provider must fail first on an expectation with the reason that it
 /// gives, and every other test of the app must pass; see `runFailingApps`.
 /// So each test of a role shows that it fails when a provider breaks the
-/// contract that it checks.
+/// contract that it checks. It does the same with the apps of the modules
+/// that break what the app tests expect of every module (`brokenModuleApps`),
+/// such as a guard of the routes that nothing opens for the tests.
 Future<void> main(List<String> arguments) async {
   if (arguments case [final directory] when !directory.startsWith('-')) {
     final providers = brokenProviders();
@@ -23,8 +25,13 @@ Future<void> main(List<String> arguments) async {
         'a bug: ${provider.bug}',
       );
     }
+    final ofModules = brokenModuleApps();
+    for (final app in ofModules) {
+      final files = {for (final failure in app.failures) failure.file};
+      stdout.writeln('${app.name} must fail ${files.join(', ')}.');
+    }
     final code = await runFailingApps(
-      [for (final provider in providers) provider.failingApp],
+      [for (final provider in providers) provider.failingApp, ...ofModules],
       directory: directory,
       appTests: MatrixAppTests(await brokenProviderAppTests()),
     );

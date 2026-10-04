@@ -224,9 +224,18 @@ final class FakeSecondModule extends SmfModule {
 /// the gates and those with the other have no guard, with each router: the
 /// tests of the router role and of the layout role run both in apps with
 /// guards and in apps without them, which is what most apps are.
+///
+/// With [open] `false`, the gates start closed, as the guard of a module
+/// does until the user did what it waits for, and nothing opens them for
+/// the tests of the app, as the mocks of the app test of such a module
+/// would: the app that shows that the walk of the routes fails on such a
+/// guard has them (`brokenModuleApps` of the fixture registry).
 final class FakeGateModule extends SmfModule {
-  /// Creates the module.
-  const FakeGateModule();
+  /// Creates the module, whose gates start open unless [open] is `false`.
+  const FakeGateModule({this.open = true});
+
+  /// Whether the gates are open when the app starts.
+  final bool open;
 
   /// The id of the module.
   static const id = ModuleId('fake_gate');
@@ -249,7 +258,7 @@ final class FakeGateModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(fakeGateBundle),
+        BrickContribution(fakeGateBundle, vars: {'open': open}),
         routerRole.data(
           const RoutesData(
             [
