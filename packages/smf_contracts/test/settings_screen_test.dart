@@ -438,6 +438,48 @@ void main() {
         isNull,
       );
     });
+
+    test(
+        'is one of the routes of the app, so another role reads it only if '
+        'it requires or uses the router role too', () {
+      final navigating = TestRole<NoDsl>(
+        'navigating',
+        uses: {settingsScreenRole, routerRole},
+      );
+      RoleHookRequest request(List<RoleData<Object>> data) => RoleHookRequest(
+            data: data,
+            presentRoles: {
+              settingsScreenRole,
+              routerRole,
+              _languageRole,
+              navigating,
+            },
+            context: testContext,
+          );
+      final named = request([_routes, _screenRoute('settings')]);
+
+      expect(
+        settingsScreenRole.screenIn(navigating.hookInput(named))!.fullPath,
+        '/settings',
+      );
+      expect(
+        () => settingsScreenRole.screenIn(_languageRole.hookInput(named)),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            contains('neither requires nor uses the router role'),
+          ),
+        ),
+      );
+      // Until a module names the route, there are no routes to look at.
+      expect(
+        settingsScreenRole.screenIn(
+          _languageRole.hookInput(request([_routes])),
+        ),
+        isNull,
+      );
+    });
   });
 
   group('the template of the settings screen role', () {
@@ -686,6 +728,43 @@ void main() {
           _brick([_themePath]),
         ]),
         isEmpty,
+      );
+    });
+
+    test(
+        'looks for the file among the text files of the bricks, whichever '
+        'slashes their paths have', () {
+      BrickContribution brick(String path, String type) => BrickContribution(
+            MasonBundle(
+              name: 'appearance',
+              description: 'appearance',
+              version: '0.1.0',
+              files: [
+                MasonBundledFile(
+                  path,
+                  base64.encode(utf8.encode('// A file of the tests.\n')),
+                  type,
+                ),
+              ],
+            ),
+            when: const {settingsScreenRole},
+          );
+
+      // A bundle made on Windows has backslashes in its paths.
+      expect(
+        _moduleIssues(_contributor, [
+          settingsScreenRole.data(_theme),
+          brick(r'lib\core\theme\theme_setting.dart', 'text'),
+        ]),
+        isEmpty,
+      );
+      // A file that is no text declares no widget.
+      expect(
+        _moduleIssues(_contributor, [
+          settingsScreenRole.data(_theme),
+          brick(_themePath, 'binary'),
+        ]).single.message,
+        contains('which the bricks of the module do not generate'),
       );
     });
 
@@ -1313,6 +1392,59 @@ void main() {
           contains('the settings entry ThemeSetting'),
           contains('the settings entry LanguageSetting'),
         ],
+      );
+    });
+
+    test(
+        'reports an entry whose widget is in the file that creates it, which '
+        'no import leads to', () {
+      /// The issues for an entry of the provider itself, the widget
+      /// `ResetSettings` of the file at [path], in an app with [files].
+      List<SmfIssue> issues(String path, List<DartFileIndex> files) =>
+          _structureIssues(
+            [
+              _routes,
+              _screenRoute('settings'),
+              _entryOf(
+                SettingsEntry(
+                  widget: TypeRef(
+                    'ResetSettings',
+                    import: ImportRef.app(path.substring('lib/'.length)),
+                  ),
+                ),
+                module: 'settings',
+              ),
+            ],
+            files: files,
+            owners: {for (final file in files) file.path: _settings},
+            modules: const [_provider],
+          );
+
+      // A file does not import itself, so the file of the screen cannot
+      // create a widget of its own through a prefix.
+      expect(
+        issues(_screenPath, [
+          DartFileIndex(
+            path: _screenPath,
+            declarations:
+                _widgetFile(_screenPath, 'ResetSettings').declarations,
+            invocations: const [IndexedInvocation('ResetSettings')],
+          ),
+        ]).single.message,
+        contains('does not render the settings entry ResetSettings'),
+      );
+      // In a file of its own, the widget is an entry as any other.
+      const ownPath = 'lib/features/settings/reset_settings.dart';
+      expect(
+        issues(ownPath, [
+          _widgetFile(ownPath, 'ResetSettings'),
+          const DartFileIndex(
+            path: _screenPath,
+            imports: [IndexedImport('reset_settings.dart', prefix: 'entry0')],
+            invocations: [IndexedInvocation('ResetSettings', target: 'entry0')],
+          ),
+        ]),
+        isEmpty,
       );
     });
 
