@@ -3,19 +3,21 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/analytics_role_bundle.dart';
 import 'package:smf_contracts/bundles/crash_reporting_role_bundle.dart';
 import 'package:smf_contracts/bundles/events_role_bundle.dart';
+import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'services/analytics.dart';
 part 'services/crash_reporting.dart';
 part 'services/events.dart';
+part 'services/preferences.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
-/// The service roles are [eventsRole], [analyticsRole] and
-/// [crashReportingRole]. Each generates the interface of its service and a
-/// factory that returns the implementation, or, for a role with many
+/// The service roles are [eventsRole], [preferencesRole], [analyticsRole]
+/// and [crashReportingRole]. Each generates the interface of its service
+/// and a factory that returns the implementation, or, for a role with many
 /// providers, one service that forwards every call to all of them. Every
 /// provider contributes exactly one implementation:
 ///
@@ -89,10 +91,14 @@ List<SmfIssue> _checkImplementations(
   final role = input.roleInput.role;
   final provides = input.module.provides.contains(role);
   final origin = ModuleOrigin(input.module.id);
+  // The rule is of the service roles, whose templates render the
+  // implementations into a socket of their own. The other sockets of such a
+  // role are for the modules, such as the restorers of the preferences.
+  final implementations = (role.template! as _ServiceTemplate).implementations;
   return [
     for (final contribution in input.contributions)
       if (contribution is SocketContribution &&
-          identical(contribution.socket.role, role))
+          contribution.socket == implementations)
         SmfIssue(
           'The module contributes code to the ${contribution.socket}, which '
           'the template of the role fills from the implementations.',
@@ -118,7 +124,7 @@ const _implementationsRule = ModuleRule<RoleImplementation>(
   id: 'services.implementations',
   description: 'Every provider of a service role, and only a provider, '
       'contributes one implementation, and no module contributes code to the '
-      'sockets of the role.',
+      'socket of the implementations of the role.',
   check: _checkImplementations,
 );
 
@@ -128,12 +134,15 @@ const _implementationsRule = ModuleRule<RoleImplementation>(
 ///
 /// Only the DI container creates the service; other code receives it through
 /// `resolve` in a composition file or through the dependencies of its own
-/// factory, so there is one way to get a service.
+/// factory, so there is one way to get a service. [hint] tells a module
+/// what to do instead.
 List<SmfIssue> _checkFactoryCalls(
   StructuralRuleInput<RoleImplementation> input,
   String factory,
-  String file,
-) {
+  String file, {
+  String hint = 'Resolve the service in the composition file of a feature, '
+      'or take it as a dependency of your own factory.',
+}) {
   final issues = <SmfIssue>[];
   for (final MapEntry(key: path, value: index) in input.files.entries) {
     final owner = input.owners[path];
@@ -145,8 +154,7 @@ List<SmfIssue> _checkFactoryCalls(
       issues.add(
         SmfIssue(
           '$path calls $factory(), which only the DI container calls.',
-          hint: 'Resolve the service in the composition file of a feature, '
-              'or take it as a dependency of your own factory.',
+          hint: hint,
           origin: owner,
           path: path,
         ),
@@ -286,7 +294,9 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
-  /// The code of the only implementation in [all]; see [render].
+  /// The code of the only implementation in [all]; see [render]. A role
+  /// that does more with its implementation than create it, such as the
+  /// preferences, renders it otherwise.
   String _single(List<_Prefixed> all) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);

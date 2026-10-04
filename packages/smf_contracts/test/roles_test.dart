@@ -12,6 +12,7 @@ const List<Role> _roles = [
   layoutRole,
   diRole,
   eventsRole,
+  preferencesRole,
   analyticsRole,
   crashReportingRole,
 ];
@@ -40,6 +41,7 @@ void main() {
       'layout role',
       'dependency injection role',
       'events role',
+      'preferences role',
       'analytics role',
       'crash reporting role',
     ]);
@@ -73,6 +75,11 @@ void main() {
       'uses': <String>{},
     });
     expect(shape(eventsRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'di'},
+    });
+    expect(shape(preferencesRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'di'},
@@ -143,7 +150,15 @@ void main() {
     test('exist for every role that generates files', () {
       expect(
         [for (final role in withTemplates) role.id],
-        ['router', 'layout', 'di', 'events', 'analytics', 'crash_reporting'],
+        [
+          'router',
+          'layout',
+          'di',
+          'events',
+          'preferences',
+          'analytics',
+          'crash_reporting',
+        ],
       );
     });
 
