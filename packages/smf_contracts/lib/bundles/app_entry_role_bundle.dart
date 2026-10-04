@@ -8,7 +8,7 @@ final appEntryRoleBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "AGENTS.md",
       "data":
-          "IyBBR0VOVFMubWQKCkd1aWRhbmNlIGZvciBjb2RpbmcgYWdlbnRzIHdvcmtpbmcgaW4gdGhpcyBGbHV0dGVyIGFwcDogd2hhdCB0aGUgY29kZSBkb2VzIG5vdCBzaG93LiBTZXR1cCB0aGF0IG5lZWRzIGEgcGVyc29uIG9yIGFuIGFjY291bnQgaXMgaW4gW1JFQURNRS5tZF0oUkVBRE1FLm1kKS4gV2hlbiB5b3UgY2hhbmdlIHdoYXQgYSBzZWN0aW9uIGRlc2NyaWJlcywgY2hhbmdlIHRoZSBzZWN0aW9uIHRvby4Ke3t7c21mX2FwcF9lbnRyeV9fYWdlbnRfc2VjdGlvbnN9fX0K",
+          "IyBBR0VOVFMubWQKClRoaXMgZ3VpZGUgdGVsbHMgY29kaW5nIGFnZW50cyB3aGF0IHRoZSBjb2RlIG9mIHRoaXMgRmx1dHRlciBhcHAgZG9lcyBub3Qgc2hvdy4gU2V0dXAgdGhhdCBuZWVkcyBhIHBlcnNvbiBvciBhbiBhY2NvdW50IGlzIGluIFtSRUFETUUubWRdKFJFQURNRS5tZCkuIFdoZW4geW91IGNoYW5nZSB3aGF0IGEgc2VjdGlvbiBkZXNjcmliZXMsIGNoYW5nZSB0aGUgc2VjdGlvbiB0b28uCnt7e3NtZl9hcHBfZW50cnlfX2FnZW50X3NlY3Rpb25zfX19Cg==",
       "type": "text"
     },
     {"path": "CLAUDE.md", "data": "QEFHRU5UUy5tZAo=", "type": "text"}

@@ -1081,7 +1081,7 @@ void main() {
       final [title, empty, introduction, ...sections] = guide.split('\n');
       expect(title, '# AGENTS.md');
       expect(empty, isEmpty);
-      expect(introduction, startsWith('Guidance for coding agents'));
+      expect(introduction, startsWith('This guide tells coding agents'));
       expect(introduction, contains('[README.md](README.md)'));
       expect(
         sections.join('\n'),

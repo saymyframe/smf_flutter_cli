@@ -179,7 +179,7 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
 /// The note of the app entry role in the guide for coding agents: what
 /// holds in every app, whichever module provides the role.
 final String _agentNote = '''
-The app is plain Flutter code that nothing regenerates: change it by hand, unless a section below says what writes a file. After a change, run:
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file. After a change, run:
 
 ```bash
 dart format lib test
@@ -189,9 +189,9 @@ flutter test
 
 Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, and `flutter analyze` finds no issue in it.
 
-- `${AppEntryRole.mainFile}`: `${AppEntryRole.main.name}()` initializes the binding, awaits `${AppEntryRole.bootstrap.name}()` and calls `runApp()`, in this order, and does nothing else. Start-up code goes into `${AppEntryRole.bootstrap.name}()`.
-- `${AppEntryRole.bootstrapFile}`: `${AppEntryRole.bootstrap.name}()` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the registration of the services of the app, then what needs these services. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
-- Put code that features share into `lib/core/<concern>/`, a directory for each concern, and a feature, with its screens and their state, into `lib/features/<feature>/`.
+- `${AppEntryRole.main.name}()` in `${AppEntryRole.mainFile}` initializes the binding, awaits `${AppEntryRole.bootstrap.name}()` and calls `runApp()`, in this order, and does nothing else. Start-up code goes into `${AppEntryRole.bootstrap.name}()`.
+- `${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 ''';
 
 /// The characters of a path of the app: those of the names of its files and
