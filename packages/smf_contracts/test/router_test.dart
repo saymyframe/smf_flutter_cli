@@ -4,6 +4,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/bundles/router_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -251,6 +253,181 @@ Future<void> main() async {
   links[1].go();
   await links[3].push<bool>();
   links[4].replace();
+}
+''';
+
+/// A stand-in for the part of Flutter's foundation library that the code
+/// of the guards uses, with the signatures of Flutter 3.44.
+const _vmFoundation = '''
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  const Listenable();
+
+  factory Listenable.merge(Iterable<Listenable?> listenables) = _Merged;
+
+  void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
+}
+
+abstract class ValueListenable<T> extends Listenable {
+  const ValueListenable();
+
+  T get value;
+}
+
+class ValueNotifier<T> implements ValueListenable<T> {
+  ValueNotifier(this._value);
+
+  final List<VoidCallback> _listeners = [];
+
+  T _value;
+
+  @override
+  T get value => _value;
+
+  set value(T value) {
+    if (value == _value) return;
+    _value = value;
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+}
+
+class _Merged extends Listenable {
+  _Merged(this._listenables);
+
+  final Iterable<Listenable?> _listenables;
+
+  @override
+  void addListener(VoidCallback listener) {
+    for (final listenable in _listenables) {
+      listenable?.addListener(listener);
+    }
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    for (final listenable in _listenables) {
+      listenable?.removeListener(listener);
+    }
+  }
+}
+''';
+
+/// A stand-in for the part of Flutter's widgets library that the files of
+/// the router role use: what it exports of the foundation library, without
+/// `ValueListenable`, as Flutter 3.44 does.
+const _vmWidgets = '''
+export 'foundation.dart' show Listenable, ValueNotifier, VoidCallback;
+
+abstract class BuildContext {}
+
+class RouterConfig<T> {}
+''';
+
+/// The functions of the guards of the feature `intro`, which count their
+/// calls, over notifiers that a test sets.
+const _vmIntroStatus = '''
+import 'package:flutter/foundation.dart';
+
+final ValueNotifier<bool> introSeenNow = ValueNotifier(false);
+
+final ValueNotifier<bool> premiumNow = ValueNotifier(false);
+
+int introSeenCalls = 0;
+
+int isPremiumCalls = 0;
+
+ValueListenable<bool> introSeen() {
+  introSeenCalls++;
+  return introSeenNow;
+}
+
+ValueListenable<bool> isPremium() {
+  isPremiumCalls++;
+  return premiumNow;
+}
+''';
+
+/// The function of the guard of the feature `account`.
+const _vmAccount = '''
+import 'package:flutter/foundation.dart';
+
+final ValueNotifier<bool> signedInNow = ValueNotifier(false);
+
+ValueListenable<bool> isSignedIn() => signedInNow;
+''';
+
+/// Prints the guards of the app, and then what `redirectOf()` says of some
+/// routes, and of a screen that is no route (`none`), as the guards open
+/// and close, and how often `guardChanges` notified and the functions were
+/// called.
+const _vmGuardsMain = r'''
+import 'package:my_app/core/router/app_router.dart';
+import 'package:my_app/features/account/account_composition.dart';
+import 'package:my_app/features/intro/intro_status.dart';
+
+void main() {
+  print('functions called before the first use: $introSeenCalls');
+  var changes = 0;
+  guardChanges.addListener(() => changes++);
+  for (final guard in routeGuards) {
+    print(
+      '${guard.name} shows ${guard.redirectTo.path} and allows '
+      '${guard.flow.join(', ')}',
+    );
+  }
+  const routes = [
+    'home.root',
+    'intro.intro',
+    'intro.terms',
+    'intro.paywall',
+    'account.login',
+    null,
+  ];
+  void ask(String when) {
+    final shown = <String>[];
+    final sent = <String, List<String>>{};
+    for (final route in routes) {
+      final name = route ?? 'none';
+      switch (redirectOf(route)) {
+        case null:
+          shown.add(name);
+        case final location:
+          sent.putIfAbsent(location.path, () => []).add(name);
+      }
+    }
+    print(when);
+    if (shown.isNotEmpty) print('  shows ${shown.join(', ')}');
+    for (final MapEntry(:key, :value) in sent.entries) {
+      print('  $key: ${value.join(', ')}');
+    }
+  }
+
+  ask('none allows');
+  introSeenNow.value = true;
+  ask('firstRun allows');
+  premiumNow.value = true;
+  ask('firstRun and premium allow');
+  signedInNow.value = true;
+  ask('all allow');
+  premiumNow.value = false;
+  ask('premium stopped');
+  introSeenNow.value = false;
+  ask('firstRun stopped too');
+  // A value that stays is no change.
+  introSeenNow.value = false;
+  print('changes: $changes');
+  print('calls: $introSeenCalls, $isPremiumCalls');
 }
 ''';
 
@@ -784,11 +961,197 @@ void main() {
       );
     });
 
-    test('renders the facade into its brick', () {
+    test('renders the facade into its brick, and no code without guards', () {
       final output = template.render(inputOf(routerRole, data: _data));
 
       expect(output.fragments, isEmpty);
-      expect(output.vars, {'facade': _facade().toDart()});
+      expect(output.vars.keys, ['facade', 'guards']);
+      expect(output.vars['facade'], _facade().toDart());
+      final guards = output.vars['guards']! as Fragment;
+      expect(guards.code, isEmpty);
+      expect(guards.imports, isEmpty);
+    });
+
+    test('generates nothing of the guards in an app without guards', () async {
+      final rendered = await renderTemplate(routerRole, data: _data);
+
+      final router = rendered.files[RouterRole.appRouterFile]!;
+      for (final name in [
+        'RouteGuard',
+        RouterRole.routeGuards,
+        RouterRole.redirectOf,
+        RouterRole.guardChanges,
+        'foundation.dart',
+      ]) {
+        expect(router, isNot(contains(name)), reason: name);
+      }
+    });
+
+    test(
+        'generates the guards of the app next to its router, in the order '
+        'the app asks them, with the files of their functions under '
+        'prefixes of its own', () async {
+      final rendered = await renderTemplate(routerRole, data: _guardedData);
+
+      final router = rendered.files[RouterRole.appRouterFile]!;
+      expectParses(router);
+      final unit = parseString(content: router).unit;
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            if (directive.prefix case final prefix?)
+              '${directive.uri.stringValue} as ${prefix.name}'
+            else
+              directive.uri.stringValue,
+        ],
+        containsAll([
+          'package:flutter/foundation.dart',
+          // The two guards of intro are in one file.
+          'package:my_app/features/intro/intro_status.dart as guard0',
+          'package:my_app/features/account/account_composition.dart as guard1',
+        ]),
+      );
+      final declared = [
+        for (final declaration in unit.declarations)
+          switch (declaration) {
+            ClassDeclaration(:final namePart) => namePart.typeName.lexeme,
+            FunctionDeclaration(:final name) => name.lexeme,
+            TopLevelVariableDeclaration(:final variables) =>
+              variables.variables.single.name.lexeme,
+            _ => null,
+          },
+      ];
+      expect(
+        declared,
+        containsAllInOrder([
+          'RouteGuard',
+          RouterRole.routeGuards,
+          RouterRole.redirectOf,
+          RouterRole.guardChanges,
+        ]),
+      );
+      final guards = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .map((declaration) => declaration.variables.variables.single)
+          .singleWhere(
+            (variable) => variable.name.lexeme == RouterRole.routeGuards,
+          );
+      String guard(String name, String allows, String target, String flow) =>
+          "RouteGuard('$name', allows: $allows(), redirectTo: const "
+          '${target}Location(), flow: const {$flow})';
+      expect(
+        [
+          for (final element in (guards.initializer! as ListLiteral).elements)
+            element.toSource(),
+        ],
+        [
+          guard(
+            'intro.firstRun',
+            'guard0.introSeen',
+            'IntroIntro',
+            "'intro.intro', 'intro.terms'",
+          ),
+          // The target takes an optional value, which the guard leaves out.
+          guard(
+            'intro.premium',
+            'guard0.isPremium',
+            'IntroPaywall',
+            "'intro.paywall'",
+          ),
+          guard(
+            'account.signedIn',
+            'guard1.isSignedIn',
+            'AccountLogin',
+            "'account.login'",
+          ),
+        ],
+      );
+      // The location classes of the targets are those of the facade.
+      final navigation = rendered.files[RouterRole.navigationFile]!;
+      for (final target in ['IntroIntro', 'IntroPaywall', 'AccountLogin']) {
+        expect(navigation, contains('final class ${target}Location extends'));
+      }
+    });
+
+    test(
+        'the generated guards send every route outside the flow of the first '
+        'one that does not allow to its target, and tell when one changes',
+        () async {
+      final directory = await Directory.systemTemp.createTemp('smf_guards');
+      addTearDown(() => directory.delete(recursive: true));
+      final rendered = await renderTemplate(routerRole, data: _guardedData);
+      final files = {
+        'flutter/lib/foundation.dart': _vmFoundation,
+        'flutter/lib/widgets.dart': _vmWidgets,
+        for (final MapEntry(key: path, value: text) in rendered.files.entries)
+          'app/$path': text,
+        // The file of the provider of the role, which no test here calls.
+        'app/${RouterRole.appRouterFactoryFile}': '''
+import 'app_router.dart';
+
+AppRouter createAppRouter() => throw UnimplementedError();
+''',
+        'app/lib/${_introFile.uri}': _vmIntroStatus,
+        'app/lib/${_accountFile.uri}': _vmAccount,
+        'app/bin/main.dart': _vmGuardsMain,
+        'app/.dart_tool/package_config.json': jsonEncode({
+          'configVersion': 2,
+          'packages': [
+            for (final (name, root) in [
+              ('my_app', '../'),
+              ('flutter', '../../flutter/'),
+            ])
+              {
+                'name': name,
+                'rootUri': root,
+                'packageUri': 'lib/',
+                'languageVersion': '3.6',
+              },
+          ],
+        }),
+      };
+      for (final MapEntry(key: path, value: text) in files.entries) {
+        File('${directory.path}/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(text);
+      }
+      final result = await Process.run(
+        Platform.resolvedExecutable,
+        ['run', '${directory.path}/app/bin/main.dart'],
+      );
+
+      expect(result.stderr, isEmpty);
+      // The functions of the guards are called on the first use of the
+      // guards, each once, whatever the guards are asked. The first guard
+      // that does not allow decides: the routes of its flow show, and the
+      // targets of the guards after it are routes like any other. Each
+      // change of a guard is one notification. print ends a line with
+      // \r\n on Windows.
+      expect((result.stdout as String).replaceAll('\r\n', '\n'), '''
+functions called before the first use: 0
+intro.firstRun shows /intro and allows intro.intro, intro.terms
+intro.premium shows /intro/paywall and allows intro.paywall
+account.signedIn shows /account/login and allows account.login
+none allows
+  shows intro.intro, intro.terms
+  /intro: home.root, intro.paywall, account.login, none
+firstRun allows
+  shows intro.paywall
+  /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+firstRun and premium allow
+  shows account.login
+  /account/login: home.root, intro.intro, intro.terms, intro.paywall, none
+all allow
+  shows home.root, intro.intro, intro.terms, intro.paywall, account.login, none
+premium stopped
+  shows intro.paywall
+  /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+firstRun stopped too
+  shows intro.intro, intro.terms
+  /intro: home.root, intro.paywall, account.login, none
+changes: 5
+calls: 1, 1
+''');
     });
 
     test('generates valid Dart files', () async {

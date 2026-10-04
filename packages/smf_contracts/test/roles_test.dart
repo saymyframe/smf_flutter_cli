@@ -212,7 +212,7 @@ void main() {
     // observers of the router are. The other names are the variables of the
     // render hooks of the templates.
     test('have tags only of their own sockets, and no other mustache', () {
-      final known = {'facade', 'locales'};
+      final known = {'facade', 'guards', 'locales'};
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
         for (final brick in bricksOf(role)) {

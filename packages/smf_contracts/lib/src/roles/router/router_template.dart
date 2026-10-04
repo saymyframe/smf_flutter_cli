@@ -128,7 +128,13 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         _ => const {},
       };
 
+  /// The navigation facade of the app, and the code of its guards, which
+  /// an app without guards has none of.
   @override
-  RoleOutput render(RoleHookInput<RoutesData> input) =>
-      RoleOutput(vars: {'facade': routerRole.facadeOf(input).toDart()});
+  RoleOutput render(RoleHookInput<RoutesData> input) {
+    final facade = routerRole.facadeOf(input);
+    return RoleOutput(
+      vars: {'facade': facade.toDart(), 'guards': _guardsCode(facade)},
+    );
+  }
 }

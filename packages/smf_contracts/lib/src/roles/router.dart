@@ -5,6 +5,7 @@ import 'package:smf_contracts/src/roles/brick_templates.dart';
 
 part 'router/router_dsl.dart';
 part 'router/router_facade.dart';
+part 'router/router_guards.dart';
 part 'router/router_rules.dart';
 part 'router/router_template.dart';
 
@@ -58,6 +59,14 @@ const routerRole = RouterRole._();
 ///   class `AppRouter`;
 /// - creates `config` once.
 ///
+/// A module may keep the user from the routes of the app until a condition
+/// holds, with the guards of its [RoutesData.guards] (see [RouteGuard]). In
+/// an app whose modules declare guards, the role's template also generates
+/// [routeGuards], [redirectOf] and [guardChanges] in `app_router.dart`, and
+/// the provider asks the guards about every location it shows, as
+/// [redirectOf] says, and again when one of them changes, as [guardChanges]
+/// says. An app without guards gets none of this.
+///
 /// When the role is present, the provider of the [AppEntryRole] builds the
 /// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
 /// `appRouter.config`.
@@ -80,6 +89,71 @@ final class RouterRole extends Role<RoutesData> {
     path: appRouterFactoryFile,
     returnType: 'AppRouter',
   );
+
+  /// The name of the list of the guards of an app with guards, which the
+  /// role's template generates in [appRouterFile], as
+  /// `final List<RouteGuard> routeGuards`: the guards of
+  /// [RouterFacade.guards], in the order the app asks them.
+  ///
+  /// Each is a `RouteGuard` of the app, a class of the same file:
+  /// - `name`, the full name of the guard (see [FacadeGuard.fullName]);
+  /// - `allows`, the `ValueListenable<bool>` that the function of the guard
+  ///   returns, which the list calls once, when it is first used;
+  /// - `redirectTo`, the location of the target of the guard;
+  /// - `flow`, the full names of the routes of its flow (see
+  ///   [FacadeGuard.flow]).
+  static const routeGuards = 'routeGuards';
+
+  /// The name of the function that says what the guards show in place of a
+  /// route, which the role's template generates in [appRouterFile] in an
+  /// app with guards, as `AppLocation? redirectOf(String? routeName)`.
+  ///
+  /// It takes the full name of the route of a location (see
+  /// [FacadeRoute.fullName]), or `null` for a location that is no route of
+  /// a module, such as `/` or one that no route matches. It returns the
+  /// location to show instead, or `null` to show the location itself: the
+  /// target of the first guard of [routeGuards] that does not allow, unless
+  /// the route is in the flow of that guard. No guard after it is asked,
+  /// so the answer for the routes of its flow is always to show them.
+  ///
+  /// In an app with guards, a provider asks it about every location before
+  /// it shows the location: the location the app starts on, each location
+  /// that `go()`, `push()` or `replace()` of the navigation is asked to
+  /// show, and each location that the platform gives it, if it takes any.
+  /// When the answer is a location, the provider:
+  /// - shows that location in place of the other, as `go()` to it does, so
+  ///   that it takes the whole stack. Such a `push()` completes with `null`
+  ///   at once;
+  /// - never builds the screen of the other location, and the listeners of
+  ///   [screenListeners] never hear of it;
+  /// - remembers the other location, unless it remembers one already, to
+  ///   show it once the guards allow it (see [guardChanges]).
+  static const redirectOf = 'redirectOf';
+
+  /// The name of the listenable that notifies its listeners when a guard
+  /// starts or stops allowing, which the role's template generates in
+  /// [appRouterFile] in an app with guards, as
+  /// `final Listenable guardChanges`.
+  ///
+  /// In an app with guards, a provider listens to it, and asks [redirectOf]
+  /// again each time it notifies:
+  /// - about the pages of its stack, the one on top first. When the answer
+  ///   for a page is a location, the provider shows that location, as `go()`
+  ///   to it does, so that no page that a guard keeps the user from stays
+  ///   in the stack, and remembers the location of the page, unless it
+  ///   remembers one already;
+  /// - otherwise about the location it remembers: the first one that the
+  ///   guards kept the user from since it last showed such a location.
+  ///   Once the answer is to show it, the provider shows it, as `go()` to
+  ///   it does, and forgets it.
+  ///
+  /// A notification that changes none of these answers leaves everything
+  /// as it is: the stack stays, the listeners of [screenListeners] hear
+  /// nothing, and each `push()` still completes with the value of its page.
+  /// Whether the `push()` of a page that a guard takes out of the stack
+  /// completes is up to the provider, as it is when `go()` replaces the
+  /// stack.
+  static const guardChanges = 'guardChanges';
 
   /// Factories of navigator observers, such as `() => MyNavigatorObserver()`.
   ///
