@@ -78,7 +78,7 @@ The texts of the app are in the ARB files of `${GenL10nModule.arbDirectory}`, on
 
 To add a text, add it to `${GenL10nModule.templateArbFile}` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
 
-To add a language, such as German:
+To add a language in which Flutter has the texts of its own widgets, such as German:
 
 1. Add `${GenL10nModule.arbDirectory}/app_de.arb` with `"@@locale": "de"` and the translations.
 2. Add `Locale('de')` to `appLocales` in `${LocalizationRole.appLocaleFile}`.

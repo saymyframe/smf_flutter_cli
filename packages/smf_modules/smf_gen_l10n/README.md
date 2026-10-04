@@ -4,7 +4,7 @@ The SMF module of localization with [gen-l10n](https://docs.flutter.dev/ui/inter
 
 The modules of the app give their texts to the localization role, each in English and in the other languages of the module. The role names a getter for each text, and code reads a text as `context.l10n.<getter>`. The role also lists the languages of the app in `lib/core/l10n/app_locale.dart`, and gives the root of the app its locale, its supported locales and the delegates of Flutter's own texts. This module writes the texts into ARB files in `lib/l10n`, one file for each language, and adds `l10n.yaml` and `generate: true` to the app, with which `flutter pub get` and `flutter run` generate the `AppLocalizations` class. A text without a translation into a language reads in English there.
 
-The app gets every language that a text of its modules is in, English first. `--locales` narrows them, as in `--locales en,uk`. Without a module that provides the localization, the modules show their texts in English.
+The app gets every language that a text of its modules is in, English first. `--locales` narrows them, as in `--locales en,uk`. An app can be only in a language in which Flutter has the texts of its own widgets, so SMF leaves any other language of a text out with a warning. Without a module that provides the localization, the modules show their texts in English.
 
 ## Use with the SMF CLI
 

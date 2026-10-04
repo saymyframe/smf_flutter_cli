@@ -164,7 +164,7 @@ The texts of the app are in the ARB files of `lib/l10n`, one for each language. 
 
 To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
 
-To add a language, such as German:
+To add a language in which Flutter has the texts of its own widgets, such as German:
 
 1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
 2. Add `Locale('de')` to `appLocales` in `lib/core/l10n/app_locale.dart`.
