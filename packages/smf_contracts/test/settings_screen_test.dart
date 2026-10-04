@@ -31,8 +31,8 @@ const _appearance = ModuleOrigin(ModuleId('appearance'));
 /// a setting of its own does.
 final _languageRole = TestRole<NoDsl>('language', uses: {settingsScreenRole});
 
-/// The routes of the module `settings`: the screen at `/`, a page below it
-/// and a page that needs a value.
+/// The routes of the module `settings`: the screen at `/`, a page below
+/// it, and a page that needs a value, with a page below that one.
 RoleData<Object> get _routes => dataOf(
       routerRole,
       const RoutesData([
@@ -62,6 +62,16 @@ RoleData<Object> get _routes => dataOf(
             import: ImportRef.app('features/settings/account_screen.dart'),
           ),
           params: [RouteParam.path('id', type: int)],
+          children: [
+            Route(
+              'limits',
+              name: 'limits',
+              screen: ScreenRef(
+                'LimitsScreen',
+                import: ImportRef.app('features/settings/limits_screen.dart'),
+              ),
+            ),
+          ],
         ),
       ]),
       module: 'settings',
@@ -784,15 +794,22 @@ void main() {
       expect(issue.origin, const ModuleOrigin(ModuleId('account')));
     });
 
-    test('rejects a route that needs values', () {
-      final issue = ofProvider(['account']).single;
+    test('rejects a route that needs values, its own or of a route above it',
+        () {
+      for (final (name, path) in [
+        ('account', '/settings/accounts/:id'),
+        // The page has no parameter of its own: the value is of its parent.
+        ('limits', '/settings/accounts/:id/limits'),
+      ]) {
+        final issue = ofProvider([name]).single;
 
-      expect(
-        issue.message,
-        'The route "account" (/settings/accounts/:id) of the settings screen '
-        'needs :id; the settings screen is reached without values.',
-      );
-      expect(issue.origin, _settings);
+        expect(
+          issue.message,
+          'The route "$name" ($path) of the settings screen needs :id; the '
+          'settings screen is reached without values.',
+        );
+        expect(issue.origin, _settings);
+      }
     });
 
     test('rejects a module that names the route without providing the role',
