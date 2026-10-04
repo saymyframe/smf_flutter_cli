@@ -7,7 +7,9 @@
 /// the rules for resolving services. The second has another start route
 /// with a destination, so an app with both has two screens that can start
 /// it and two destinations, and a route outside the main navigation, whose
-/// page a router shows over it.
+/// page a router shows over it. Its screens show texts of the module, which
+/// it gives the localization role: in the language of the app with the
+/// role, and in English without it.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
@@ -93,12 +95,26 @@ final class FakeFeatureModule extends SmfModule {
 /// A second feature with a start screen that is a destination of the main
 /// navigation, and a screen outside the main navigation, which a router
 /// shows over it.
+///
+/// It uses the localization role: each screen shows a text of the module.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
 
   /// The id of the module.
   static const id = ModuleId('fake_second');
+
+  /// The texts of the screens: one in English and in Ukrainian, and one
+  /// without a translation, which reads in English in every language, with
+  /// a quote that the code of its text escapes.
+  static const texts = TextsData([
+    LocalizedText(
+      'title',
+      en: 'Second screen',
+      translations: {'uk': 'Другий екран'},
+    ),
+    LocalizedText('outside', en: "Outside the app's main navigation"),
+  ]);
 
   static const _folder = 'features/fake_second';
 
@@ -107,11 +123,16 @@ final class FakeSecondModule extends SmfModule {
         id: id,
         description: 'A second start screen (fixture)',
         kind: ModuleKinds.feature,
+        uses: {localizationRole},
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(fakeSecondBundle),
+        BrickContribution(
+          fakeSecondBundle,
+          vars: localizationRole.varsOf(id, texts),
+        ),
+        localizationRole.data(texts),
         routerRole.data(
           const RoutesData([
             Route(

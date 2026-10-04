@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final fakeL10nBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/l10n/l10n.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvZm91bmRhdGlvbi5kYXJ0JzsKaW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvd2lkZ2V0cy5kYXJ0JzsKCmltcG9ydCAnYXBwX2xvY2FsZS5kYXJ0JzsKCi8vLyBUaGUgdGV4dHMgb2YgdGhlIGFwcCBpbiB0aGUgbGFuZ3VhZ2Ugb2YgYSBjb250ZXh0OiBgY29udGV4dC5sMTBuYC4KZXh0ZW5zaW9uIEFwcFRleHRzIG9uIEJ1aWxkQ29udGV4dCB7CiAgLy8vIFRoZSB0ZXh0cyBvZiB0aGUgYXBwIGluIHRoZSBsYW5ndWFnZSBvZiB0aGlzIGNvbnRleHQsIHdoaWNoIGlzIGJlbG93CiAgLy8vIHRoZSByb290IG9mIHRoZSBhcHAuCiAgRml4dHVyZVRleHRzIGdldCBsMTBuID0+IExvY2FsaXphdGlvbnMub2Y8Rml4dHVyZVRleHRzPih0aGlzLCBGaXh0dXJlVGV4dHMpITsKfQoKLy8vIFRoZSB0ZXh0cyBvZiB0aGUgYXBwIGluIG9uZSBsYW5ndWFnZSwgZWFjaCB3cml0dGVuIG91dCBpbiB0aGlzIGZpbGU6IG5vCi8vLyB0b29sIGdlbmVyYXRlcyB0aGVtLgpjbGFzcyBGaXh0dXJlVGV4dHMgewogIC8vLyBDcmVhdGVzIHRoZSB0ZXh0cyBpbiB0aGUgbGFuZ3VhZ2Ugb2YgdGhlIGNvZGUgW2xhbmd1YWdlXS4KICBjb25zdCBGaXh0dXJlVGV4dHModGhpcy5sYW5ndWFnZSk7CgogIC8vLyBUaGUgZGVsZWdhdGUgdGhhdCBsb2FkcyB0aGUgdGV4dHMgZm9yIHRoZSByb290IG9mIHRoZSBhcHAsIGluIGVhY2gKICAvLy8gbGFuZ3VhZ2Ugb2YgdGhlIGFwcC4KICBzdGF0aWMgY29uc3QgTG9jYWxpemF0aW9uc0RlbGVnYXRlPEZpeHR1cmVUZXh0cz4gZGVsZWdhdGUgPQogICAgICBfRml4dHVyZVRleHRzRGVsZWdhdGUoKTsKCiAgLy8vIFRoZSBjb2RlIG9mIHRoZSBsYW5ndWFnZSBvZiB0aGUgdGV4dHMsIHN1Y2ggYXMgYHVrYC4KICBmaW5hbCBTdHJpbmcgbGFuZ3VhZ2U7Cgp7e3tnZXR0ZXJzfX19Cn0KCmNsYXNzIF9GaXh0dXJlVGV4dHNEZWxlZ2F0ZSBleHRlbmRzIExvY2FsaXphdGlvbnNEZWxlZ2F0ZTxGaXh0dXJlVGV4dHM+IHsKICBjb25zdCBfRml4dHVyZVRleHRzRGVsZWdhdGUoKTsKCiAgQG92ZXJyaWRlCiAgYm9vbCBpc1N1cHBvcnRlZChMb2NhbGUgbG9jYWxlKSA9PiBhcHBMb2NhbGVzLmFueSgKICAgICAgICAoc3VwcG9ydGVkKSA9PiBzdXBwb3J0ZWQubGFuZ3VhZ2VDb2RlID09IGxvY2FsZS5sYW5ndWFnZUNvZGUsCiAgICAgICk7CgogIEBvdmVycmlkZQogIEZ1dHVyZTxGaXh0dXJlVGV4dHM+IGxvYWQoTG9jYWxlIGxvY2FsZSkgPT4KICAgICAgU3luY2hyb25vdXNGdXR1cmUoRml4dHVyZVRleHRzKGxvY2FsZS5sYW5ndWFnZUNvZGUpKTsKCiAgQG92ZXJyaWRlCiAgYm9vbCBzaG91bGRSZWxvYWQoX0ZpeHR1cmVUZXh0c0RlbGVnYXRlIG9sZCkgPT4gZmFsc2U7Cn0K",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "fake_l10n",
+  "description":
+      "A brick of the fixture package fake_infra, for the tests of the SMF pipeline.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

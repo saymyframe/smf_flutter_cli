@@ -6,6 +6,7 @@ import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
@@ -19,6 +20,16 @@ import 'package:smf_contracts/smf_contracts.dart';
 const _material = ImportRef('package:flutter/material.dart');
 const _foundation = ImportRef('package:flutter/foundation.dart');
 
+/// The delegate of the texts of the Material widgets of Flutter, which are
+/// in every language that Flutter's widgets are translated into, so in
+/// each language of an app.
+const _materialDelegate = Fragment(
+  'GlobalMaterialLocalizations.delegate',
+  imports: [
+    ImportRef('package:flutter_localizations/flutter_localizations.dart'),
+  ],
+);
+
 /// The section of the README that [FakeSocketsModule] and
 /// [FakeOverlapModule] both add.
 const _readmeSection = 'The app has something in every socket of its entry, '
@@ -31,6 +42,10 @@ const _readmeSection = 'The app has something in every socket of its entry, '
 /// mode that it gives the root of the app reads that widget from the
 /// context of the root: an argument of the root that depends on a widget
 /// among the root wrappers.
+///
+/// The delegate that it gives the root has no texts of the module: a module
+/// gives its texts to the localization role, whose provider knows the
+/// languages of the app.
 final class FakeSocketsModule extends SmfModule {
   /// Creates the module.
   const FakeSocketsModule();
@@ -53,7 +68,6 @@ final class FakeSocketsModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeSocketsBundle),
         const PubspecContribution.sdk('flutter_localizations'),
-        const PubspecContribution.hosted('intl', 'any'),
         const PubspecContribution.flutter(
           assets: ['assets/fixture/'],
           fonts: [
@@ -61,7 +75,6 @@ final class FakeSocketsModule extends SmfModule {
               PubspecFontAsset('fonts/FixtureSans.ttf', weight: 400),
             ]),
           ],
-          generate: true,
         ),
         const SocketContribution.code(
           AppEntryRole.topLevel,
@@ -115,27 +128,7 @@ final class FakeSocketsModule extends SmfModule {
         const SocketContribution.arg(
           AppEntryRole.appArgs,
           'localizationsDelegates',
-          Fragment(
-            'AppLocalizations.delegate',
-            imports: [ImportRef.app('l10n/app_localizations.dart')],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'localizationsDelegates',
-          Fragment(
-            'GlobalMaterialLocalizations.delegate',
-            imports: [
-              ImportRef(
-                'package:flutter_localizations/flutter_localizations.dart',
-              ),
-            ],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'supportedLocales',
-          Fragment("Locale('en')", imports: [_material]),
+          _materialDelegate,
         ),
         const SocketContribution.wrap(
           AppEntryRole.appBuilder,
@@ -200,7 +193,7 @@ final class FakeSocketsModule extends SmfModule {
 /// and values that [FakeSocketsModule] does, so an app with both merges
 /// them: equal permissions, meta-data, plist strings and README sections
 /// agree, the plist arrays are united, the highest versions win, and the
-/// supported locale appears once.
+/// delegate of the localizations appears once.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -217,10 +210,11 @@ final class FakeOverlapModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
+        const PubspecContribution.sdk('flutter_localizations'),
         const SocketContribution.arg(
           AppEntryRole.appArgs,
-          'supportedLocales',
-          Fragment("Locale('en')", imports: [_material]),
+          'localizationsDelegates',
+          _materialDelegate,
         ),
         AppEntryRole.iosDeploymentTarget.value('15.4'),
         AppEntryRole.androidManifestPermissions
@@ -248,6 +242,88 @@ final class FakeOverlapModule extends SmfModule {
         ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
       ];
+}
+
+/// A provider of the localization role that keeps the texts of the app in
+/// one Dart file, with a delegate written by hand: no tool generates code
+/// from its files, as one does from the files of translations of a
+/// provider that has them.
+///
+/// Its render hook writes a getter for each text of the app, which returns
+/// the text in the language of the texts, among the languages of the app,
+/// or in English.
+final class FakeL10nModule extends SmfModule {
+  /// Creates the module.
+  const FakeL10nModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_l10n');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The texts of the app in one Dart file (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeL10nProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeL10nBundle),
+        SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'localizationsDelegates',
+          Fragment(
+            'FixtureTexts.delegate',
+            imports: [LocalizationRole.appTexts.importRef],
+          ),
+        ),
+      ];
+}
+
+final class _FakeL10nProvider extends RoleProvider<TextsData> {
+  const _FakeL10nProvider();
+
+  @override
+  Role<TextsData> get role => localizationRole;
+
+  @override
+  RoleOutput render(RoleHookInput<TextsData> input) {
+    final locales = localizationRole.localesIn(input);
+    return RoleOutput(
+      vars: {
+        'getters': Fragment(
+          [
+            for (final text in localizationRole.textsIn(input))
+              _getterOf(text, locales),
+          ].join('\n\n'),
+        ),
+      },
+    );
+  }
+
+  /// The getter of [text] in the class of the texts, which returns its
+  /// translation into the language of the texts, among [locales], or its
+  /// English text.
+  String _getterOf(AppText text, List<String> locales) {
+    final translations = [
+      for (final language in locales)
+        if (text.text.translations[language] case final translation?)
+          "        '$language' => ${SmfNames.dartString(translation)},",
+    ];
+    final english = SmfNames.dartString(text.text.en);
+    return [
+      '  /// The $text.',
+      if (translations.isEmpty)
+        '  String get ${text.getter} => $english;'
+      else ...[
+        '  String get ${text.getter} => switch (language) {',
+        ...translations,
+        '        _ => $english,',
+        '      };',
+      ],
+    ].join('\n');
+  }
 }
 
 /// A provider of the analytics role whose service starts asynchronously and

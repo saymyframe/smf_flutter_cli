@@ -1,7 +1,0 @@
-{
-  "@@locale": "en",
-  "fixtureTitle": "Fixture",
-  "@fixtureTitle": {
-    "description": "A string of the fixture that uses every socket."
-  }
-}
