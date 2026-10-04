@@ -367,6 +367,27 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenSettingsModule(),
+        role: settingsScreenRole,
+        bug: 'Its screen creates the widget of every entry of the role, but '
+            'shows them all but the last one.',
+        // A feature and a module without screens, each with a setting, so
+        // the screen has an entry to show and one to leave out.
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakeScreenLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/settings_screen_role/settings_entries_test.dart',
+            'the settings screen shows every entry of the modules once, one '
+                'below the other in the order of the role',
+            'Every entry of the modules is on the settings screen once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '

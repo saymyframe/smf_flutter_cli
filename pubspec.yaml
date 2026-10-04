@@ -34,6 +34,7 @@ workspace:
   - packages/smf_modules/smf_go_router
   - packages/smf_modules/smf_home_flutter
   - packages/smf_modules/smf_riverpod
+  - packages/smf_modules/smf_settings
 
 executables:
   smfflutter: smfflutter_dev

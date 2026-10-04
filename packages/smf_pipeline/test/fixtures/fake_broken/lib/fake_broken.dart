@@ -13,6 +13,7 @@ library;
 import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
+import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
@@ -454,6 +455,86 @@ final class _BrokenDiProvider extends DiProvider {
         ),
       },
       files: output.files,
+    );
+  }
+}
+
+/// A provider of the settings screen role with one known bug: a feature
+/// whose screen creates the widget of every entry of the role, in a list of
+/// its file, but shows them all but the last one.
+///
+/// The file of the screen still creates the widget of every entry, as the
+/// rule `settings_screen.entries_rendered` of the role wants, and the app
+/// analyzes: only a running app shows the bug.
+final class BrokenSettingsModule extends SmfModule {
+  /// Creates the module.
+  const BrokenSettingsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_settings_hides_last_entry');
+
+  /// The name of the route of the screen.
+  static const _route = 'settings';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A settings screen that hides its last entry (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [_BrokenSettingsProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenSettingsBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'BrokenSettingsScreen',
+                import: ImportRef.app(
+                  'features/broken_settings_hides_last_entry/'
+                  'broken_settings_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        settingsScreenRole.data(const SettingsScreenRoute(_route)),
+      ];
+}
+
+/// Renders the widgets of the entries of the settings screen role as the
+/// items of the list of the file of the screen, in the order of the role,
+/// each through an import of its file with a prefix of its own.
+final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
+  const _BrokenSettingsProvider();
+
+  @override
+  Role<SettingsData> get role => settingsScreenRole;
+
+  @override
+  RoleOutput render(RoleHookInput<SettingsData> input) {
+    final files = <String, ImportRef>{};
+    final items = <String>[];
+    for (final entry in settingsScreenRole.entriesIn(input)) {
+      // The template of the role rejects an entry outside the app, so each
+      // has an import.
+      final import = entry.widget.import!;
+      final prefix = files
+          .putIfAbsent(
+            import.uri,
+            () => import.withPrefix('entry${files.length}'),
+          )
+          .prefix;
+      items.add('  ${entry.widget.codeWith(prefix)}(),');
+    }
+    return RoleOutput(
+      vars: {
+        'entries': Fragment(items.join('\n'), imports: [...files.values]),
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:fake_broken/fake_broken.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
@@ -163,6 +164,42 @@ void main() {
           for (final module in severalProvidersModules()) module.descriptor.id,
         ]),
       ]);
+    });
+
+    test(
+        'has contributors of settings entries next to the settings module of '
+        'the CLI, two of them with a widget of one name, so that the tests of '
+        'the settings screen role check a screen with entries on a provider '
+        'that must work', () async {
+      final (:apps, :failed) = await everyModuleAppsOf(
+        severalProvidersModules(),
+      );
+
+      expect(failed, isEmpty);
+      final hook = apps.single.hook!;
+      expect(hook.presentRoles, contains(settingsScreenRole));
+      final entries = settingsScreenRole.entriesIn(
+        settingsScreenRole.hookInput(hook),
+      );
+      expect(
+        entries.length,
+        greaterThan(1),
+        reason: 'With fewer than two entries, the tests of the settings '
+            'screen role show neither their order nor that the list scrolls '
+            'to the last one: add modules with a setting to '
+            'severalProvidersModules().',
+      );
+      final files = <String, Set<String?>>{};
+      for (final entry in entries) {
+        files.putIfAbsent(entry.widget.name, () => {}).add(entry.file);
+      }
+      expect(
+        files.values.where((paths) => paths.length > 1),
+        isNotEmpty,
+        reason: 'With two widgets of one name in different files, the app '
+            'analyzes only if the screen imports the file of each entry with '
+            'a prefix of its own.',
+      );
     });
   });
 
@@ -603,6 +640,71 @@ void main() {
     });
   });
 
+  group('the fixtures with a setting', () {
+    const second = 'lib/features/fake_second/fixture_second_setting.dart';
+    const screenLog =
+        'lib/core/fixture_screen_log/fixture_screen_log_setting.dart';
+
+    test(
+        'give the settings screen role an entry each, in the order of the '
+        'modules, and generate its widget, of the same name in a file of '
+        'its own, in an app with a settings screen', () async {
+      // No fixture provides the settings screen role in an app that must
+      // work, so the app has the provider with a known bug.
+      final result = await ContractHarness(
+        ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
+      ).check(
+        const ContractCase(
+          'fixtures with a setting',
+          requested: [
+            FakeSecondModule.id,
+            FakeScreenLogModule.id,
+            BrokenSettingsModule.id,
+            FakeRouterModule.id,
+          ],
+        ),
+      );
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      // The two widgets have one name, so that an app with both analyzes
+      // only if the screen imports the file of each with a prefix of its
+      // own, whichever module provides the screen.
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(result.hook!)))
+            '${entry.widget.name} of ${entry.file}',
+        ],
+        ['FixtureSetting of $second', 'FixtureSetting of $screenLog'],
+      );
+      expect(
+        {
+          for (final path in [second, screenLog])
+            path: result.app!.files[path]?.owner,
+        },
+        {
+          second: const ModuleOrigin(FakeSecondModule.id),
+          screenLog: const ModuleOrigin(FakeScreenLogModule.id),
+        },
+      );
+    });
+
+    test('generate no widget of a setting in an app without a settings screen',
+        () async {
+      final result = await ContractHarness(
+        ModuleRegistry(fixtureModules()),
+      ).check(ContractCase('every fixture', requested: everyFixture()));
+
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        result.resolution!.modules.map((module) => module.id),
+        containsAll([FakeSecondModule.id, FakeScreenLogModule.id]),
+      );
+      expect(result.app!.files.keys, isNot(contains(second)));
+      expect(result.app!.files.keys, isNot(contains(screenLog)));
+    });
+  });
+
   group('the texts of the fixtures', () {
     final harness = ContractHarness(ModuleRegistry(fixtureModules()));
     const withRole = [
@@ -778,6 +880,63 @@ void main() {
         result.app!.files.keys,
         isNot(contains(LocalizationRole.appLocaleFile)),
       );
+    });
+
+    test(
+        'are read through the role by the setting of the second feature too, '
+        'whose text only an app with a settings screen has', () async {
+      const setting = 'lib/features/fake_second/fixture_second_setting.dart';
+      // No fixture provides the settings screen role in an app that must
+      // work, so the apps have the provider with a known bug.
+      final withSettings = ContractHarness(
+        ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
+      );
+      Future<ContractResult> checkedWithSettings(List<ModuleId> modules) async {
+        final result = await withSettings.check(
+          ContractCase('a setting with a text', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        return result;
+      }
+
+      List<String> gettersOf(ContractResult result) => [
+            for (final text in localizationRole
+                .textsIn(localizationRole.hookInput(result.hook!)))
+              text.getter,
+          ];
+
+      final localized = await checkedWithSettings(
+        [...withRole, BrokenSettingsModule.id],
+      );
+      expect(
+        gettersOf(localized),
+        ['fakeSecondTitle', 'fakeSecondOutside', 'fakeSecondSetting'],
+      );
+      expect(textsOf(localized, 'fakeSecondSetting', ['en', 'uk']), {
+        'en': 'Second setting',
+        'uk': 'Друге налаштування',
+      });
+      expect(
+        shownBy(localized, setting),
+        ('context.l10n.fakeSecondSetting', importsTexts: true),
+      );
+
+      // Without the localization role, the setting shows its English text.
+      final english = await checkedWithSettings(const [
+        FakeSecondModule.id,
+        FakeRouterModule.id,
+        BrokenSettingsModule.id,
+      ]);
+      expect(
+        shownBy(english, setting),
+        ("'Second setting'", importsTexts: false),
+      );
+
+      // Without a settings screen, the app has neither the widget of the
+      // setting nor its text.
+      final without = await checked(withRole);
+      expect(without.app!.files.keys, isNot(contains(setting)));
+      expect(gettersOf(without), ['fakeSecondTitle', 'fakeSecondOutside']);
     });
 
     test('give the root of the app its language and the delegate of the texts',

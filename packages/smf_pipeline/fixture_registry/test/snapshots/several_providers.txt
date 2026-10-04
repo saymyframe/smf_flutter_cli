@@ -1050,6 +1050,48 @@ final class FixtureEvents implements CommunicationService {
   Stream<T> on<T extends AppEvent>() =>
       _events.stream.where((event) => event is T).cast<T>();
 }
+=== lib/core/fixture_screen_log/fixture_screen_log.dart (fake_screen_log) ===
+/// The screens the user saw, as the screen listener of the fixture screen
+/// log heard of them: the full name of the route of each, or `null`, and
+/// its location.
+final List<(String?, String)> fixtureScreenLog = [];
+
+/// Whether the screen listener of the fixture screen log throws once it
+/// noted a screen, as a test that a listener of the screen that throws
+/// keeps no other from hearing it sets it.
+bool fixtureScreenLogThrows = false;
+
+/// The screen listener of the fixture screen log: notes the screen of
+/// [route] at [location] in [fixtureScreenLog], and then throws if
+/// [fixtureScreenLogThrows].
+void noteFixtureScreenLog(String? route, String location) {
+  fixtureScreenLog.add((route, location));
+  if (fixtureScreenLogThrows) {
+    throw StateError('The screen listener of the fixture screen log throws.');
+  }
+}
+=== lib/core/fixture_screen_log/fixture_screen_log_setting.dart (fake_screen_log) ===
+import 'package:flutter/material.dart';
+
+/// The settings of the fixture screen log: two rows of the settings screen
+/// of the app that belong together, so the entry is taller than one row.
+///
+/// The setting of the second fixture feature has the same class name in a
+/// file of its own, so a settings screen shows both only through an import
+/// of each file with a prefix of its own.
+class FixtureSetting extends StatelessWidget {
+  /// Creates the rows.
+  const FixtureSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ListTile(leading: Icon(Icons.list), title: Text('Screen log')),
+      ListTile(leading: Icon(Icons.timer), title: Text('Keep for a day')),
+    ],
+  );
+}
 === lib/core/fixture_service_log/fixture_service_log.dart (fake_service_log) ===
 import 'package:flutter/foundation.dart';
 
@@ -1268,8 +1310,13 @@ import 'dart:async';
 
 import 'package:fixture_app/core/analytics/firebase_analytics_service.dart'
     show logFirebaseScreenView;
-import 'package:fixture_app/core/app/fallback_start_screen.dart';
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart';
+import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log.dart';
+import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
+    as screen1;
+import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
+    as screen0;
+import 'package:fixture_app/features/settings/settings_screen.dart' as screen2;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
@@ -1290,12 +1337,24 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// can navigate, even one above the router.
   @override
   late final GoRouter config = GoRouter(
-    initialLocation: '/',
+    initialLocation: '/fake_second',
     observers: _observers(),
     routes: [
+      GoRoute(path: '/', redirect: (context, state) => '/fake_second'),
       GoRoute(
-        path: '/',
-        builder: (context, state) => const FallbackStartScreen(),
+        path: '/fake_second',
+        name: 'fake_second.second',
+        builder: (context, state) => const screen0.FixtureSecondScreen(),
+      ),
+      GoRoute(
+        path: '/fake_second/outside',
+        name: 'fake_second.outside',
+        builder: (context, state) => const screen1.FixtureOutsideScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings.settings',
+        builder: (context, state) => const screen2.SettingsScreen(),
       ),
     ],
   )..routerDelegate.addListener(_pagesChanged);
@@ -1426,6 +1485,7 @@ List<NavigatorObserver> _observers() => [
 /// module, and its location.
 final List<void Function(String? route, String location)> _screenListeners = [
   noteFixtureScreen,
+  noteFixtureScreenLog,
   logFirebaseScreenView,
 ];
 
@@ -1497,15 +1557,156 @@ final class NavLink {
   void replace() => appRouter.navigatorOf(_context).replace(location);
 }
 
+/// The location of `fake_second.second`: `/fake_second`.
+final class FakeSecondSecondLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondSecondLocation();
+
+  @override
+  String get routeName => 'fake_second.second';
+
+  @override
+  String get path => '/fake_second';
+}
+
+/// The location of `fake_second.outside`: `/fake_second/outside`.
+final class FakeSecondOutsideLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondOutsideLocation();
+
+  @override
+  String get routeName => 'fake_second.outside';
+
+  @override
+  String get path => '/fake_second/outside';
+}
+
+/// The location of `settings.settings`: `/settings`.
+final class SettingsSettingsLocation extends AppLocation {
+  /// Creates the location.
+  const SettingsSettingsLocation();
+
+  @override
+  String get routeName => 'settings.settings';
+
+  @override
+  String get path => '/settings';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
-  AppNav get nav => const AppNav._();
+  AppNav get nav => AppNav._(this);
 }
 
-/// The routes of the app by module; it has none.
+/// The routes of the app by module, as `context.nav`.
 final class AppNav {
-  const AppNav._();
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `fake_second`.
+  FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
+
+  /// The routes of the module `settings`.
+  SettingsRoutes get settings => SettingsRoutes._(_context);
+}
+
+/// The routes of the module `fake_second`.
+final class FakeSecondRoutes {
+  const FakeSecondRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_second.second`: `/fake_second`.
+  NavLink second() => NavLink(_context, const FakeSecondSecondLocation());
+
+  /// The route `fake_second.outside`: `/fake_second/outside`.
+  NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+}
+
+/// The routes of the module `settings`.
+final class SettingsRoutes {
+  const SettingsRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `settings.settings`: `/settings`.
+  NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
+}
+=== lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:flutter/material.dart';
+
+/// A screen of the second fixture feature outside the main navigation,
+/// whose page a router shows over the main navigation, with a text of the
+/// feature that has no translation.
+class FixtureOutsideScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureOutsideScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text('Outside the app\'s main navigation')));
+}
+=== lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
+import 'package:flutter/material.dart';
+
+/// The screen of the second fixture feature, which can start the app too,
+/// with a text of the feature in the language of the app.
+class FixtureSecondScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureSecondScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text('Second screen')));
+}
+=== lib/features/fake_second/fixture_second_setting.dart (fake_second) ===
+import 'package:flutter/material.dart';
+
+/// The setting of the second fixture feature: a row of the settings screen
+/// of the app, with a text of the feature in the language of the app.
+///
+/// The setting of the fixture screen log has the same class name in a file
+/// of its own, so a settings screen shows both only through an import of
+/// each file with a prefix of its own.
+class FixtureSetting extends StatelessWidget {
+  /// Creates the row.
+  const FixtureSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.looks_two),
+    title: Text('Second setting'),
+  );
+}
+=== lib/features/settings/settings_screen.dart (settings) ===
+import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
+    as entry1;
+import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
+    as entry0;
+import 'package:flutter/material.dart';
+
+/// The settings of the app: an entry for each setting that a module of the
+/// app has, and what the app is, with its licenses.
+class SettingsScreen extends StatelessWidget {
+  /// Creates the screen.
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Settings')),
+    body: ListView(
+      children: const [
+        entry0.FixtureSetting(),
+        entry1.FixtureSetting(),
+        AboutListTile(
+          icon: Icon(Icons.info_outline),
+          applicationName: 'Fixture App',
+        ),
+      ],
+    ),
+  );
 }
 === lib/firebase_options.dart (firebase_core) ===
 // File generated by FlutterFire CLI.

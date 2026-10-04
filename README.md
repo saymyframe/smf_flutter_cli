@@ -61,6 +61,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
 | [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
+| [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
 | [`get_it`](https://doc.saymyframe.com/modules/get-it) | Dependency injection: the services of the modules, registered in get_it. |
