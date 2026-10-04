@@ -112,6 +112,31 @@ final List<RoleData<Object>> _guardedData = [
   dataOf(routerRole, _accountRoutes, module: 'account'),
 ];
 
+/// The routes of an app whose two guards show one target, so that both
+/// have one flow: the first route of `intro` with its child.
+final List<RoleData<Object>> _sharedTargetData = [
+  ..._data,
+  dataOf(
+    routerRole,
+    RoutesData(
+      _introRoutes.routes,
+      guards: const [
+        RouteGuard(
+          name: 'firstRun',
+          allows: FunctionRef('introSeen', import: _introFile),
+          redirectTo: 'intro',
+        ),
+        RouteGuard(
+          name: 'premium',
+          allows: FunctionRef('isPremium', import: _introFile),
+          redirectTo: 'intro',
+        ),
+      ],
+    ),
+    module: 'intro',
+  ),
+];
+
 RouterFacade _facade(List<RoleData<Object>> data) =>
     routerRole.facadeOf(inputOf(routerRole, data: data));
 
@@ -377,6 +402,145 @@ void main() {
 }
 ''';
 
+/// Prints what `GuardedNavigation` of the app answers a router that knows
+/// a location by its URI, as it is asked about locations and told of the
+/// pages of a stack while the guards open and close. A page is written as
+/// its route, or `-` for none, its location, and `pushed` if a push showed
+/// it; the page on top comes first.
+const _vmMemoryMain = r'''
+import 'package:my_app/core/router/app_router.dart';
+import 'package:my_app/features/account/account_composition.dart';
+import 'package:my_app/features/intro/intro_status.dart';
+
+final guards = GuardedNavigation<String>(
+  start: '/',
+  locationOf: (location) => location.path,
+);
+
+void asked(String? route, String location) {
+  final answer = guards.asked(route, location);
+  print('  asked $location: ${answer?.location ?? 'shows it'}');
+}
+
+void changed(String what, List<String> pages) {
+  final answer = guards.changed([
+    for (final page in pages.map((page) => page.split(' ')))
+      (
+        route: page[0] == '-' ? null : page[0],
+        location: page[1],
+        pushed: page.length > 2,
+      ),
+  ]);
+  print('  $what: ${answer?.location ?? 'stays'}');
+}
+
+void main() {
+  print('asked while no guard allows');
+  asked('home.root', '/home');
+  asked('intro.terms', '/intro/terms');
+  asked('account.login', '/account/login');
+  asked(null, '/no/such?x=1');
+  asked('home.details', '/home/details/5?tab=a');
+  introSeenNow.value = true;
+  changed('firstRun allows', ['intro.intro /intro']);
+  premiumNow.value = true;
+  changed('premium allows', ['intro.paywall /intro/paywall']);
+  signedInNow.value = true;
+  const details = ['home.details /home/details/5?tab=a', 'home.root /home'];
+  changed('signedIn allows', ['account.login /account/login']);
+  changed('a notification', details);
+
+  print('pages that a change takes out of the stack');
+  signedInNow.value = false;
+  changed('signedIn stops', ['home.details /home/details/9 pushed', ...details]);
+  premiumNow.value = false;
+  changed('premium stops', ['account.login /account/login']);
+  changed('a page outside the flows', ['home.root /home']);
+  premiumNow.value = true;
+  changed('premium allows', ['intro.paywall /intro/paywall']);
+  signedInNow.value = true;
+  changed('signedIn allows', ['account.login /account/login']);
+  signedInNow.value = false;
+  changed('signedIn stops', ['home.details /home/details/9 pushed']);
+  signedInNow.value = true;
+  changed('signedIn allows', ['account.login /account/login']);
+
+  print('a flow with nothing remembered');
+  const flow = ['intro.terms /intro/terms', 'intro.intro /intro'];
+  asked('intro.terms', '/intro/terms');
+  introSeenNow.value = false;
+  changed('firstRun stops', flow);
+  changed('a notification', flow);
+  premiumNow.value = false;
+  changed('premium stops', flow);
+  premiumNow.value = true;
+  changed('premium allows', flow);
+  introSeenNow.value = true;
+  changed('firstRun allows', flow);
+  changed('a notification', flow);
+  introSeenNow.value = false;
+  changed('firstRun stops', ['account.login /account/login']);
+  introSeenNow.value = true;
+  changed('firstRun allows, outside its flow', ['home.root /home']);
+
+  print('a location of a flow asked last');
+  introSeenNow.value = false;
+  changed('firstRun stops', ['home.root /home']);
+  asked('account.login', '/account/login');
+  introSeenNow.value = true;
+  changed('firstRun allows', ['intro.intro /intro']);
+
+  print('the location / asked last');
+  signedInNow.value = false;
+  changed('signedIn stops', ['home.root /home']);
+  asked(null, '/');
+  signedInNow.value = true;
+  changed('signedIn allows', ['account.login /account/login']);
+}
+''';
+
+/// Prints what `GuardedNavigation` answers in an app whose two guards show
+/// one target: when it is told of no pages, as by a router that has none
+/// yet, and when the guards of the one flow start allowing one after the
+/// other while a page of the flow is on top.
+const _vmSharedTargetMain = r'''
+import 'package:my_app/core/router/app_router.dart';
+import 'package:my_app/features/intro/intro_status.dart';
+
+void main() {
+  // The router is created while no guard allows, and has no page yet.
+  final guards = GuardedNavigation<String>(
+    start: '/',
+    locationOf: (location) => location.path,
+  );
+  String told(List<(String, String)> pages) =>
+      guards.changed([
+        for (final (route, location) in pages)
+          (route: route, location: location, pushed: false),
+      ])?.location ??
+      'stays';
+  const flow = [('intro.terms', '/intro/terms'), ('intro.intro', '/intro')];
+
+  print('a change before the router has a page');
+  introSeenNow.value = true;
+  premiumNow.value = true;
+  print('  both allow, no pages: ${told(const [])}');
+  final shown = guards.asked('intro.terms', '/intro/terms');
+  print('  asked /intro/terms: ${shown?.location ?? 'shows it'}');
+  print('  a notification in the flow: ${told(flow)}');
+
+  print('two guards with one target');
+  introSeenNow.value = false;
+  print('  firstRun stops: ${told(flow)}');
+  premiumNow.value = false;
+  print('  premium stops: ${told(flow)}');
+  introSeenNow.value = true;
+  print('  firstRun allows: ${told(flow)}');
+  premiumNow.value = true;
+  print('  premium allows: ${told(flow)}');
+}
+''';
+
 void main() {
   group('the guards of a module', () {
     test('a module has no guards unless it declares some', () {
@@ -483,6 +647,7 @@ void main() {
         RouterRole.routeGuards,
         RouterRole.redirectOf,
         RouterRole.guardChanges,
+        RouterRole.guardedNavigation,
         'foundation.dart',
       ]) {
         expect(router, isNot(contains(name)), reason: name);
@@ -530,6 +695,7 @@ void main() {
           RouterRole.routeGuards,
           RouterRole.redirectOf,
           RouterRole.guardChanges,
+          RouterRole.guardedNavigation,
         ]),
       );
       final guards = unit.declarations
@@ -575,13 +741,20 @@ void main() {
       }
     });
 
-    test(
-        'the generated guards send every route outside the flow of the first '
-        'one that does not allow to its target, and tell when one changes',
-        () async {
+    /// What the script [main] prints in the app with guards, with the
+    /// files of the router's template and stand-ins for Flutter and for the
+    /// files of the functions of the guards. print ends a line with \r\n
+    /// on Windows.
+    Future<String> printedBy(
+      String main, {
+      List<RoleData<Object>>? data,
+    }) async {
       final directory = await Directory.systemTemp.createTemp('smf_guards');
       addTearDown(() => directory.delete(recursive: true));
-      final rendered = await renderTemplate(routerRole, data: _guardedData);
+      final rendered = await renderTemplate(
+        routerRole,
+        data: data ?? _guardedData,
+      );
       final files = {
         'flutter/lib/foundation.dart': _vmFoundation,
         'flutter/lib/widgets.dart': _vmWidgets,
@@ -595,7 +768,7 @@ AppRouter createAppRouter() => throw UnimplementedError();
 ''',
         'app/lib/${_introFile.uri}': _vmIntroStatus,
         'app/lib/${_accountFile.uri}': _vmAccount,
-        'app/bin/main.dart': _vmGuardsMain,
+        'app/bin/main.dart': main,
         'app/.dart_tool/package_config.json': jsonEncode({
           'configVersion': 2,
           'packages': [
@@ -623,13 +796,19 @@ AppRouter createAppRouter() => throw UnimplementedError();
       );
 
       expect(result.stderr, isEmpty);
+      return (result.stdout as String).replaceAll('\r\n', '\n');
+    }
+
+    test(
+        'the generated guards send every route outside the flow of the first '
+        'one that does not allow to its target, and tell when one changes',
+        () async {
       // The functions of the guards are called on the first use of the
       // guards, each once, whatever the guards are asked. The first guard
       // that does not allow decides: the routes of its flow show, and the
       // targets of the guards after it are routes like any other. Each
-      // change of a guard is one notification. print ends a line with
-      // \r\n on Windows.
-      expect((result.stdout as String).replaceAll('\r\n', '\n'), '''
+      // change of a guard is one notification.
+      expect(await printedBy(_vmGuardsMain), '''
 functions called before the first use: 0
 intro.firstRun shows /intro and allows intro.intro, intro.terms
 intro.premium shows /intro/paywall and allows intro.paywall
@@ -654,6 +833,74 @@ firstRun stopped too
 changes: 5
 calls: 1, 1
 ''');
+    });
+
+    test(
+        'the generated class keeps what a router remembers: the latest '
+        'location that was asked for, or the location below the pushed pages '
+        'that a change took out of the stack, never one in a flow; it answers '
+        'that location once the guards allow it and forgets it, and the '
+        'start of the app when a flow is over with nothing remembered',
+        () async {
+      expect(await printedBy(_vmMemoryMain), '''
+asked while no guard allows
+  asked /home: /intro
+  asked /intro/terms: shows it
+  asked /account/login: /intro
+  asked /no/such?x=1: /intro
+  asked /home/details/5?tab=a: /intro
+  firstRun allows: /intro/paywall
+  premium allows: /account/login
+  signedIn allows: /home/details/5?tab=a
+  a notification: stays
+pages that a change takes out of the stack
+  signedIn stops: /account/login
+  premium stops: /intro/paywall
+  a page outside the flows: /intro/paywall
+  premium allows: /account/login
+  signedIn allows: /home/details/5?tab=a
+  signedIn stops: /account/login
+  signedIn allows: /
+a flow with nothing remembered
+  asked /intro/terms: shows it
+  firstRun stops: stays
+  a notification: stays
+  premium stops: stays
+  premium allows: stays
+  firstRun allows: /
+  a notification: stays
+  firstRun stops: /intro
+  firstRun allows, outside its flow: stays
+a location of a flow asked last
+  firstRun stops: /intro
+  asked /account/login: /intro
+  firstRun allows: /home
+the location / asked last
+  signedIn stops: /account/login
+  asked /: /account/login
+  signedIn allows: /
+''');
+    });
+
+    test(
+        'the generated class takes note of what the guards allow when it is '
+        'told of no pages, so that a notification without a change ends no '
+        'flow later; and of two guards with one target, the flow is over '
+        'only once both allow', () async {
+      expect(
+        await printedBy(_vmSharedTargetMain, data: _sharedTargetData),
+        '''
+a change before the router has a page
+  both allow, no pages: stays
+  asked /intro/terms: shows it
+  a notification in the flow: stays
+two guards with one target
+  firstRun stops: stays
+  premium stops: stays
+  firstRun allows: stays
+  premium allows: /
+''',
+      );
     });
   });
 
@@ -960,6 +1207,12 @@ calls: 1, 1
           'router.guards_asked',
         ],
       );
+      // The last one says what a provider uses of the role.
+      expect(
+        routerRole.structuralRules.last.description,
+        'In an app with guards, the files of the provider of the role create '
+        'a GuardedNavigation and read guardChanges.',
+      );
     });
 
     test(
@@ -1132,7 +1385,7 @@ calls: 1, 1
                 imports: [
                   IndexedImport('package:my_app/core/router/app_router.dart'),
                 ],
-                invocations: [IndexedInvocation('redirectOf')],
+                invocations: [IndexedInvocation('GuardedNavigation')],
                 references: [IndexedReference('guardChanges')],
               ),
             },
@@ -1176,11 +1429,11 @@ calls: 1, 1
         'app: none of its files $what of ${RouterRole.appRouterFile}.';
 
     test(
-        'accepts a provider whose files call redirectOf() and read '
+        'accepts a provider whose files create a GuardedNavigation and read '
         'guardChanges', () {
       expect(
         check([
-          factory(calls: ['redirectOf'], reads: ['guardChanges']),
+          factory(calls: ['GuardedNavigation'], reads: ['guardChanges']),
         ]),
         isEmpty,
       );
@@ -1188,7 +1441,7 @@ calls: 1, 1
       // with a prefix.
       expect(
         check([
-          factory(calls: ['redirectOf']),
+          factory(calls: ['GuardedNavigation']),
           const DartFileIndex(
             path: delegatePath,
             imports: [
@@ -1209,22 +1462,25 @@ calls: 1, 1
 
       expect(
         [for (final issue in issues) issue.message],
-        [problem('calls redirectOf()'), problem('reads guardChanges')],
+        [
+          problem('creates a GuardedNavigation'),
+          problem('reads guardChanges'),
+        ],
       );
       for (final issue in issues) {
         expect(issue.origin, provider);
         expect(issue.path, factoryPath);
         expect(
           issue.hint,
-          'A router asks redirectOf() about every location before it shows '
-          'it, and again when guardChanges notifies; see '
-          'RouterRole.redirectOf and RouterRole.guardChanges.',
+          'A router asks its GuardedNavigation about every location before '
+          'it shows it, and tells it of its pages when guardChanges '
+          'notifies; see RouterRole.guardedNavigation.',
         );
       }
       expect(
         [
           for (final issue in check([
-            factory(calls: ['redirectOf']),
+            factory(calls: ['GuardedNavigation']),
           ]))
             issue.message,
         ],
@@ -1237,7 +1493,15 @@ calls: 1, 1
           ]))
             issue.message,
         ],
-        [problem('calls redirectOf()')],
+        [problem('creates a GuardedNavigation')],
+      );
+      // A provider that only calls redirectOf() keeps nothing of what the
+      // guards make a router remember.
+      expect(
+        check([
+          factory(calls: ['redirectOf'], reads: ['guardChanges']),
+        ]),
+        hasLength(1),
       );
     });
 
@@ -1254,7 +1518,7 @@ calls: 1, 1
             ],
             invocations: [
               // Of other.dart, which the file imports without a prefix.
-              IndexedInvocation('redirectOf'),
+              IndexedInvocation('GuardedNavigation'),
             ],
             // Of an object, not of the import.
             memberAccesses: [IndexedMemberAccess('guards', 'guardChanges')],

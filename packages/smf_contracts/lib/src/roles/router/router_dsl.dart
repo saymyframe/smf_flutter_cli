@@ -31,9 +31,9 @@ final class RoutesData {
   final List<RouteGuard> guards;
 }
 
-/// A condition without which the user sees a route of the module in place
-/// of the other screens of the app, such as the onboarding until the user
-/// went through it.
+/// A gate over the whole app: a condition without which the user sees a
+/// route of the module in place of every other screen of the app, such as
+/// the onboarding until the user went through it.
 ///
 /// While the guard does not allow, the router shows the route [redirectTo]
 /// of the module, the target of the guard, in place of every location
@@ -41,9 +41,22 @@ final class RoutesData {
 /// location the app starts on, for every location that `go()`, `push()` or
 /// `replace()` is asked to show, and for the routes of every module, which
 /// know nothing of the guard. Once the guard allows, the router shows the
-/// first location that the guards kept the user from, so the screens of
-/// the flow only change what the guard reads: the router leaves them. See
-/// [RouterRole] for what every router does with the guards.
+/// location that the user or the platform last asked for and the guards
+/// kept them from, or the location that the guard took the user from when
+/// it stopped allowing, or else the screen that the app starts on. So the
+/// screens of the flow only change what the guard reads: the router leaves
+/// the flow. See [RouterRole.guardedNavigation] for what every router does
+/// with the guards.
+///
+/// A module whose guard stops allowing by what its own screens do, such as
+/// a sign-out, decides whether the user comes back to where they were: if
+/// it goes to the target of the guard with `go()` before the guard stops
+/// allowing, the guard takes the user from no location, and once it allows
+/// again the router shows the screen that the app starts on.
+///
+/// A guard keeps the user from every route outside its flow. A condition
+/// that only some routes ask for, such as a paid screen, is not a guard:
+/// the role has nothing for it.
 ///
 /// The app asks the guards of all modules in the order of the modules and
 /// of [RoutesData.guards]. The first one that does not allow decides, and
