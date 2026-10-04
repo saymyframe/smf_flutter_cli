@@ -12,6 +12,7 @@ const List<Role> _roles = [
   layoutRole,
   diRole,
   eventsRole,
+  preferencesRole,
   analyticsRole,
   crashReportingRole,
   settingsScreenRole,
@@ -41,6 +42,7 @@ void main() {
       'layout role',
       'dependency injection role',
       'events role',
+      'preferences role',
       'analytics role',
       'crash reporting role',
       'settings screen role',
@@ -75,6 +77,11 @@ void main() {
       'uses': <String>{},
     });
     expect(shape(eventsRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'di'},
+    });
+    expect(shape(preferencesRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'di'},
@@ -163,6 +170,7 @@ void main() {
           'layout',
           'di',
           'events',
+          'preferences',
           'analytics',
           'crash_reporting',
           'settings_screen',

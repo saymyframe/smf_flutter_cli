@@ -90,14 +90,16 @@ final class RenderedTemplate {
 
 /// Renders the template of [role] as the pipeline will: its bricks with the
 /// presence flags, the variables of its `render` hook, and the sockets of
-/// its files filled with the fragments of `render`, whose imports are added
-/// to the files that hold the sockets' tags, as are the imports of the
-/// fragment variables to the files that read them.
+/// its files filled with the fragments of `render` and with [fromModules],
+/// what the modules of the app put into the sockets of the role, whose
+/// imports are added to the files that hold the sockets' tags, as are the
+/// imports of the fragment variables to the files that read them.
 Future<RenderedTemplate> renderTemplate<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
   Set<Role> present = const {},
   Object? choice,
+  List<SocketContribution> fromModules = const [],
 }) async {
   final template = role.template!;
   final contributions = template.contribute(testContext);
@@ -108,6 +110,7 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
   for (final fragment in [
     ...contributions.whereType<SocketContribution>(),
     ...output.fragments,
+    ...fromModules,
   ]) {
     fragments.putIfAbsent(fragment.socket, () => []).add(fragment);
   }

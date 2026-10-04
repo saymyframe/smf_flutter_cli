@@ -151,6 +151,54 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture preferences whose writes never reach their disk: a
+  /// value that was saved is read back as long as the app runs, and gone at
+  /// its next start.
+  static const preferencesForgettingWrites = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_forget_writes'),
+    'Preferences in memory that save nothing (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [('    fixturePreferencesDisk[key] = _copyOf(value);\n', '')],
+  );
+
+  /// The fixture preferences that never copy a list: they keep the list
+  /// that they are given, and a read returns the list that they keep. So a
+  /// later change of the list that was saved, or of one that was read,
+  /// changes what they read.
+  static const preferencesNeverCopyingLists = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_never_copy_lists'),
+    'Preferences in memory that never copy a list (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [
+      ('      _save(key, List.of(value));\n', '      _save(key, value);\n'),
+      (
+        '    final List<String> list => List.of(list),\n',
+        '    final List<String> list => list,\n',
+      ),
+    ],
+  );
+
+  /// The fixture preferences whose reads cast the value of a key to the
+  /// type they ask for, rather than returning `null` for a value of another
+  /// type: such a read throws a `TypeError`.
+  static const preferencesCastingValues = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_cast_values'),
+    'Preferences in memory whose reads cast (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [
+      (
+        '  T? _read<T>(String key) => switch (_values[key]) {\n'
+            '    final T value => value,\n'
+            '    _ => null,\n'
+            '  };\n',
+        '  T? _read<T>(String key) => _values[key] as T?;\n',
+      ),
+    ],
+  );
+
   /// The service log of the fixtures whose analytics service notes each
   /// call twice, as a service does that sends each event twice: to the
   /// tests of the analytics role, each call of the analytics service of the
