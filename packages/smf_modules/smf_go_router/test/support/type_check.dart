@@ -12,8 +12,13 @@ import 'package:smf_pipeline/testing.dart';
 const _appEntry = ModuleOrigin(FlutterCoreModule.id);
 
 /// Stand-ins for the parts of Flutter's widgets library that the checked
-/// files use, with the signatures of Flutter 3.44.
+/// files use, with the signatures of Flutter 3.44: its own, and what it
+/// exports of the foundation library, which leaves out `ValueListenable`.
 const _widgets = '''
+import 'foundation.dart';
+
+export 'foundation.dart' show Listenable, ValueNotifier, VoidCallback;
+
 abstract class Key {
   const Key();
 }
@@ -26,12 +31,6 @@ class ValueKey<T> extends LocalKey {
   const ValueKey(this.value);
 
   final T value;
-}
-
-typedef VoidCallback = void Function();
-
-abstract class Listenable {
-  void addListener(VoidCallback listener);
 }
 
 abstract interface class BuildContext {}
@@ -80,6 +79,33 @@ const _foundation = '''
 const bool kDebugMode = true;
 
 void debugPrint(String? message, {int? wrapWidth}) {}
+
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  const Listenable();
+
+  factory Listenable.merge(Iterable<Listenable?> listenables) =>
+      throw UnimplementedError();
+
+  void addListener(VoidCallback listener);
+}
+
+abstract class ValueListenable<T> extends Listenable {
+  const ValueListenable();
+
+  T get value;
+}
+
+class ValueNotifier<T> extends ValueListenable<T> {
+  ValueNotifier(this.value);
+
+  @override
+  T value;
+
+  @override
+  void addListener(VoidCallback listener) {}
+}
 ''';
 
 /// Flutter's material library, of which the checked files use what it
@@ -117,6 +143,8 @@ abstract class GoRouterState {
   Map<String, String> get pathParameters;
 
   Uri get uri;
+
+  GoRoute? get topRoute;
 }
 
 typedef GoRouterRedirect = FutureOr<String?> Function(
@@ -206,6 +234,10 @@ class RouteMatchList {
 
   final Uri uri = Uri();
 
+  bool get isEmpty => matches.isEmpty;
+
+  bool get isError => false;
+
   RouteMatch? get lastOrNull => null;
 }
 
@@ -223,6 +255,7 @@ class RouteConfiguration {
 class GoRouter implements RouterConfig<RouteMatchList> {
   factory GoRouter({
     required List<RouteBase> routes,
+    GoRouterRedirect? redirect,
     String? initialLocation,
     List<NavigatorObserver>? observers,
   }) =>
