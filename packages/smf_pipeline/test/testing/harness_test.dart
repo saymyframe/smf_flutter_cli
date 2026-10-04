@@ -1492,6 +1492,72 @@ void main() {
         );
       });
 
+      test(
+          'imports of a variable that depends on a role belong to the module '
+          'of its brick', () async {
+        final harness = ContractHarness(
+          ModuleRegistry([
+            ...modules,
+            TestModule(
+              'reader',
+              uses: {nav},
+              contributions: [
+                BrickContribution(
+                  bundle(
+                    'reader',
+                    files: {'lib/reader/reader.dart': 'final a = {{{a}}};\n'},
+                  ),
+                  vars: {
+                    'a': RoleVar(
+                      nav,
+                      present: const Fragment(
+                        'A()',
+                        imports: [ImportRef.app('a/a.dart')],
+                      ),
+                      absent: 'null',
+                    ),
+                  },
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        // With the role, the app has the code of the fragment, whose import
+        // reaches a file that the module may not use.
+        final withRole = await harness.check(
+          const ContractCase(
+            'reader with nav',
+            requested: [ModuleId('reader'), ModuleId('go'), ModuleId('lib_a')],
+          ),
+        );
+        expect(
+          [
+            for (final issue in withRole.errors)
+              '${issue.origin}: ${issue.message}',
+          ],
+          [
+            equals(
+              'reader: lib/reader/reader.dart imports lib/a/a.dart for a '
+              'fragment of reader, but that file is of lib_a, which reader '
+              'neither depends on nor knows through a role.',
+            ),
+          ],
+        );
+
+        final without = await harness.check(
+          const ContractCase(
+            'reader',
+            requested: [ModuleId('reader'), ModuleId('lib_a')],
+          ),
+        );
+        expect(without.errors, isEmpty);
+        expect(
+          without.app!.texts['lib/reader/reader.dart'],
+          'final a = null;\n',
+        );
+      });
+
       test('structural rules read every rendered file', () async {
         final notes = TestRole<NoDsl>(
           'notes',

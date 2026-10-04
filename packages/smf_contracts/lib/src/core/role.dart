@@ -134,7 +134,8 @@ abstract base class Role<D extends Object> {
   ///
   /// The pipeline sets it in the bricks of every module and role template
   /// that provides, requires or uses the role. Template code that refers to
-  /// a symbol of a used role must be inside `{{#has_<id>}}`.
+  /// a symbol of a used role must be inside `{{#has_<id>}}`, or be the
+  /// code of a variable for an app with the role (see [RoleVar]).
   @nonVirtual
   String get presenceFlag => 'has_$id';
 

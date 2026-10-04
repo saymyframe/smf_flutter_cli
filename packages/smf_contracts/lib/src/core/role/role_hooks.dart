@@ -169,9 +169,11 @@ final class RoleOutput {
   /// the provider's module, the bricks of its variant included.
   ///
   /// They are plain data, such as strings, numbers, booleans and lists and
-  /// maps of them, and follow the rules of [BrickContribution.vars]. A
-  /// variable that two hooks of one module, or a hook and a brick of its
-  /// owner, both set is an error.
+  /// maps of them, and follow the rules of [BrickContribution.vars], but
+  /// none is a [RoleVar]: a hook asks for the presence of the roles that
+  /// its role requires or uses itself (see [RoleHookInput.has]). A variable
+  /// that two hooks of one module, or a hook and a brick of its owner, both
+  /// set is an error.
   ///
   /// A variable may also be a [Fragment] of code with the imports it needs,
   /// such as the routes a router renders from the data of its role. The

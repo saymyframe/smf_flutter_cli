@@ -140,6 +140,10 @@ final class _VariableImports {
   /// The imports for each template file.
   final Map<(ContributionOrigin, String), List<AddedImport>> imports = {};
 
+  /// The imports that each template file gets only in an app with other
+  /// roles, for a variable whose code depends on a role (see [RoleVar]).
+  final Map<(ContributionOrigin, String), List<ImportRef>> elsewhere = {};
+
   /// The fragment variables with imports that each template file reads.
   final Map<(ContributionOrigin, String), Set<String>> names = {};
 
@@ -177,14 +181,19 @@ final class _VariableImports {
 ///    and a template that is not Dart cannot read one with imports; a
 ///    fragment variable that no template of its owner reads is an error,
 ///    since its code would be lost, unless a brick of the owner that the
-///    app leaves out reads it.
+///    app leaves out reads it. A variable of the brick whose code depends
+///    on a role ([RoleVar]) has its code for the roles of the app. It is a
+///    fragment variable of the brick in every app, whichever value the app
+///    gets, but one that no template has to read.
 /// 4. Adds the files of the render hooks to those of the bricks, each as it
 ///    is. A file that a brick or another hook generates too is an error,
 ///    and so is one at a path that is a directory of another file of the
 ///    app, or in what is a file of the app.
 /// 5. Adds the imports of each socket's fragments to the Dart file that
 ///    holds its tag, and those of each fragment variable to every Dart file
-///    of its owner that reads it; see [addImports].
+///    of its owner that reads it, or of its brick for a variable of the
+///    brick; see [addImports]. A file that reads a variable whose imports
+///    depend on a role must be able to take those of each of its values.
 ///
 /// Throws a [GenerationFailedException] with every problem found.
 RenderedApp renderApp({
@@ -252,6 +261,7 @@ RenderedApp renderApp({
         files[path]!,
         [...?texts.imports[template], ...?variables.imports[template]],
         context.appName,
+        elsewhere: variables.elsewhere[template] ?? const [],
       );
     } on ImportTargetException catch (error) {
       issues.addAll(
@@ -381,12 +391,17 @@ List<SmfIssue> _importTargetIssues(
 /// [file] with the imports of [added] that it does not have yet, and with
 /// them recorded, resolved in the app of [appName].
 ///
-/// Throws an [ImportTargetException] if the file cannot have imports.
+/// Throws an [ImportTargetException] if the file cannot have imports: those
+/// of [added], or those of [elsewhere], which it gets only in an app with
+/// other roles, so that a file is right in every app or in none.
 RenderedFile _withImports(
   RenderedFile file,
   List<AddedImport> added,
-  String appName,
-) {
+  String appName, {
+  List<ImportRef> elsewhere = const [],
+}) {
+  // Only whether the file can take them matters here.
+  addImports(file.text, path: file.path, imports: elsewhere, appName: appName);
   final result = addImports(
     file.text,
     path: file.path,
@@ -554,14 +569,14 @@ final class _RenderHooks {
 }
 
 /// The issues of [fragment], the value of the brick variable [name] of the
-/// render hook of [origin]; see [_fragmentVarProblems].
+/// render hook of [origin]; see [fragmentVarProblems].
 List<SmfIssue> _fragmentVarIssues(
   Fragment fragment,
   String name,
   ContributionOrigin origin,
 ) =>
     [
-      for (final problem in _fragmentVarProblems(fragment))
+      for (final problem in fragmentVarProblems(fragment))
         SmfIssue(
           'The fragment variable $name of the render hook of $origin '
           '$problem',
@@ -590,17 +605,6 @@ List<SmfIssue> _varValueIssues(
           'them, or a fragment of code.',
           origin: origin,
         ),
-    ];
-
-/// What is wrong with [fragment], the value of a brick variable, besides
-/// what [strippedVars] finds in its code: a wrapper, and imports that are
-/// not valid.
-List<String> _fragmentVarProblems(Fragment fragment) => [
-      if (fragment.isWrapper)
-        'is a Fragment.wrap, but a variable takes a Fragment of code.',
-      for (final import in fragment.imports)
-        for (final problem in import.problems())
-          'has an invalid import. $problem',
     ];
 
 /// The rendered sockets of an app: the text of every tag, and the imports
@@ -720,14 +724,46 @@ Map<String, String>? _renderSocket(
   return null;
 }
 
+/// A variable of a brick that holds code, which the templates of the brick
+/// read as it is: a fragment variable of a render hook of the owner of the
+/// brick, or a variable of the brick whose code depends on a role (see
+/// [RoleVar]).
+final class _CodeVar {
+  const _CodeVar(
+    this.fragment, {
+    required this.contributor,
+    required this.inSection,
+    this.elsewhere = const [],
+  });
+
+  /// The code of the variable in the app, with the imports it needs.
+  final Fragment fragment;
+
+  /// Who contributed the code.
+  final ContributionOrigin contributor;
+
+  /// What a message tells a template that reads the variable inside a
+  /// mustache section, as a sentence: what decides the code that the
+  /// variable holds instead, and what to do about it.
+  final String inSection;
+
+  /// The imports of the code that the variable has in an app with other
+  /// roles: a file that reads the variable must take them too.
+  final List<ImportRef> elsewhere;
+
+  /// Whether a file that reads the variable gets imports, in the app or in
+  /// one with other roles.
+  bool get bringsImports => fragment.imports.isNotEmpty || elsewhere.isNotEmpty;
+}
+
 /// A brick that [_BrickRenderer] renders: who contributed it, its owner,
-/// its variables, and the fragment variables of its owner.
+/// its variables, and those among them that hold code.
 final class _Brick {
   _Brick({
     required this.origin,
     required this.name,
     required this.vars,
-    required this.fragments,
+    required this.code,
   }) : owner = ownerOf(origin);
 
   final ContributionOrigin origin;
@@ -737,8 +773,13 @@ final class _Brick {
   final ContributionOrigin owner;
 
   final String name;
+
+  /// The value of each variable as mason renders it: the code of a
+  /// variable that holds code.
   final Map<String, Object?> vars;
-  final Map<String, Fragment> fragments;
+
+  /// The variables that hold code, by name.
+  final Map<String, _CodeVar> code;
 }
 
 /// Renders the bricks of an app into [files], with the text of every tag
@@ -800,6 +841,16 @@ final class _BrickRenderer {
       ...texts,
       ...fromHooks,
     };
+    final code = {
+      for (final MapEntry(:key, :value)
+          in (hooks.fragmentVars[owner] ?? const <String, Fragment>{}).entries)
+        key: _CodeVar(
+          value,
+          contributor: owner,
+          inSection: 'the render hook decides what the variable holds '
+              'instead.',
+        ),
+    };
     for (final MapEntry(:key, :value) in brick.vars.entries) {
       if (fromHooks.containsKey(key)) {
         issues.add(
@@ -810,14 +861,26 @@ final class _BrickRenderer {
           ),
         );
       }
-      vars[key] = value;
+      if (value is! RoleVar) {
+        vars[key] = value;
+        continue;
+      }
+      // The variable holds code in every app, whichever of its values the
+      // app gets, so that the templates read it in the same way in all of
+      // them.
+      final (:here, :elsewhere) = _valuesOf(value, present);
+      final fragment = _fragmentOf(here);
+      vars[key] = fragment.code;
+      code[key] = _CodeVar(
+        fragment,
+        contributor: origin,
+        inSection: 'the presence of the ${value.role} alone decides what '
+            'the variable holds, so code that needs another role too goes '
+            'into a brick of its own, contributed with when.',
+        elsewhere: _fragmentOf(elsewhere).imports,
+      );
     }
-    return _Brick(
-      origin: origin,
-      name: name,
-      vars: vars,
-      fragments: hooks.fragmentVars[owner] ?? const <String, Fragment>{},
-    );
+    return _Brick(origin: origin, name: name, vars: vars, code: code);
   }
 
   void _renderFile(_Brick brick, MasonBundledFile file) {
@@ -843,7 +906,7 @@ final class _BrickRenderer {
       template,
       owner: owner,
       vars: brick.vars,
-      fragments: brick.fragments,
+      code: brick.code,
       read: (variable) => variables.read.add((owner, variable)),
     );
     for (final problem in pathProblems) {
@@ -902,14 +965,14 @@ final class _BrickRenderer {
     final text = templateTextOf(file);
     if (text == null) return (bytes: bytes, isText: false);
     if (!masonTag.hasMatch(text)) return (bytes: bytes, isText: true);
-    final _Brick(:origin, :name, :vars, :fragments) = brick;
+    final _Brick(:origin, :name, :vars, :code) = brick;
     final scan = scanTemplate(template, text);
     if (!_readFragmentVariables(
       scan,
       template,
       brick: name,
       origin: origin,
-      fragments: fragments,
+      code: code,
       variables: variables,
       issues: issues,
     )) {
@@ -934,7 +997,7 @@ final class _BrickRenderer {
     // data, which mustache renders.
     final rendered = _withoutEmptyLines(
       text,
-      (tag) => texts[tag] == '' || fragments[tag]?.code == '',
+      (tag) => texts[tag] == '' || code[tag]?.fragment.code == '',
     ).render(vars);
     return (bytes: utf8.encode(rendered), isText: true);
   }
@@ -1010,20 +1073,20 @@ final RegExp _variableLine = RegExp(
 /// The problems with the variables that [template], the path of a file of
 /// a brick of [owner], reads: one that neither the brick nor a render hook
 /// of [owner] sets, among [vars], which mustache would render as nothing,
-/// and a fragment variable among [fragments], whose code a path cannot
-/// hold; the fragment variables it reads go to [read].
+/// and a fragment variable, one of those that hold [code], which a path
+/// cannot hold; the fragment variables it reads go to [read].
 List<String> _pathVariableProblems(
   String template, {
   required ContributionOrigin owner,
   required Map<String, Object?> vars,
-  required Map<String, Fragment> fragments,
+  required Map<String, _CodeVar> code,
   required void Function(String variable) read,
 }) {
   if (!masonTag.hasMatch(template)) return const [];
   final scan = scanTemplate(template, template);
-  final code = {
+  final fragments = {
     for (final tag in scan.tags)
-      if (fragments.containsKey(variableOf(tag.name))) variableOf(tag.name),
+      if (code.containsKey(variableOf(tag.name))) variableOf(tag.name),
   }..forEach(read);
   final unset = unsetNames(scan, vars);
   final problems = <String>[];
@@ -1033,20 +1096,20 @@ List<String> _pathVariableProblems(
       'of $owner sets, so mustache would render nothing.',
     );
   }
-  if (code.isNotEmpty) {
-    final what = code.length == 1 ? 'variable' : 'variables';
+  if (fragments.isNotEmpty) {
+    final what = fragments.length == 1 ? 'variable' : 'variables';
     problems.add(
-      'reads the fragment $what ${code.join(', ')}, but a path takes plain '
-      'values only.',
+      'reads the fragment $what ${fragments.join(', ')}, but a path takes '
+      'plain values only.',
     );
   }
   return problems;
 }
 
-/// Reads the fragment variables among [fragments] that [scan], the scan of
-/// the template file [template] of the brick [brick] of [origin], reads:
-/// records them as read, and their imports for the file, and reports how
-/// the file reads them wrongly to [issues].
+/// Reads the fragment variables, those that hold [code], that [scan], the
+/// scan of the template file [template] of the brick [brick] of [origin],
+/// reads: records them as read, and their imports for the file, and reports
+/// how the file reads them wrongly to [issues].
 ///
 /// Returns `false` if the file reads one wrongly, so it is not rendered.
 bool _readFragmentVariables(
@@ -1054,13 +1117,13 @@ bool _readFragmentVariables(
   String template, {
   required String brick,
   required ContributionOrigin origin,
-  required Map<String, Fragment> fragments,
+  required Map<String, _CodeVar> code,
   required _VariableImports variables,
   required List<SmfIssue> issues,
 }) {
-  if (fragments.isEmpty) return true;
+  if (code.isEmpty) return true;
   final owner = ownerOf(origin);
-  final reads = _fragmentReads(scan, fragments);
+  final reads = _fragmentReads(scan, code);
   // The template reads the variables, even if not as it should.
   for (final variable in reads.names) {
     variables.read.add((owner, variable));
@@ -1075,14 +1138,14 @@ bool _readFragmentVariables(
     );
   }
   if (reads.problems.isNotEmpty) return false;
-  for (final variable in reads.names) {
-    final imports = fragments[variable]!.imports;
-    if (imports.isEmpty) continue;
+  for (final name in reads.names) {
+    final variable = code[name]!;
+    if (!variable.bringsImports) continue;
     if (!template.endsWith('.dart')) {
       issues.add(
         SmfIssue(
           'The template $template in the brick $brick of $origin is not '
-          'Dart, but it reads the fragment variable $variable, whose '
+          'Dart, but it reads the fragment variable $name, whose '
           'imports can only go into a Dart file.',
           origin: origin,
           path: template,
@@ -1090,13 +1153,32 @@ bool _readFragmentVariables(
       );
       continue;
     }
-    variables.names.putIfAbsent((origin, template), () => {}).add(variable);
-    variables.imports.putIfAbsent((origin, template), () => []).addAll([
-      for (final import in imports) AddedImport(import, owner),
+    final file = (origin, template);
+    variables.names.putIfAbsent(file, () => {}).add(name);
+    variables.imports.putIfAbsent(file, () => []).addAll([
+      for (final import in variable.fragment.imports)
+        AddedImport(import, variable.contributor),
     ]);
+    variables.elsewhere.putIfAbsent(file, () => []).addAll(variable.elsewhere);
   }
   return true;
 }
+
+/// The values of [variable] in an app with the roles [present]: the one
+/// that the app gets, and the one that an app gets where the role of the
+/// variable is absent when it is present here, or the other way round.
+({Object here, Object elsewhere}) _valuesOf(
+  RoleVar variable,
+  Set<Role> present,
+) =>
+    present.contains(variable.role)
+        ? (here: variable.present, elsewhere: variable.absent)
+        : (here: variable.absent, elsewhere: variable.present);
+
+/// The code of [value], a value of a variable whose code depends on a
+/// role: a fragment, or a string of code that needs no imports.
+Fragment _fragmentOf(Object value) =>
+    value is Fragment ? value : Fragment('$value');
 
 /// The names of the variables and sections that the templates of the
 /// bricks of [owner] read, those that this app leaves out included.
@@ -1119,21 +1201,21 @@ Set<String> _namesReadIn(BrickContribution brick) => {
           ],
     };
 
-/// The fragment variables among [fragments] that the template of [scan]
-/// reads, and the problems with how it reads them: each must be read as it
-/// is, `{{{name}}}`, which mustache does not escape, and outside mustache
-/// sections, since the render hook decides what the variable holds, and the
-/// imports of the fragment would otherwise go into the file for code that
-/// is not there.
+/// The fragment variables, those that hold [code], that the template of
+/// [scan] reads, and the problems with how it reads them: each must be read
+/// as it is, `{{{name}}}`, which mustache does not escape, and outside
+/// mustache sections, since the render hook, or the presence of one role,
+/// decides what the variable holds, and the imports of the fragment would
+/// otherwise go into the file for code that is not there.
 ({Set<String> names, List<String> problems}) _fragmentReads(
   TemplateScan scan,
-  Map<String, Fragment> fragments,
+  Map<String, _CodeVar> code,
 ) {
   final names = <String>{};
   final problems = <String>[];
   for (final tag in scan.tags) {
     final name = variableOf(tag.name);
-    if (!fragments.containsKey(name)) continue;
+    if (!code.containsKey(name)) continue;
     names.add(name);
     if (!tag.triple || tag.name != name) {
       final how = tag.name != name ? 'as ${tag.name}' : 'without three braces';
@@ -1145,14 +1227,14 @@ Set<String> _namesReadIn(BrickContribution brick) => {
     if (tag.sections.isNotEmpty) {
       problems.add(
         'reads the fragment variable $name inside the mustache section '
-        '${tag.sections.last} at line ${tag.line}; the render hook decides '
-        'what the variable holds instead.',
+        '${tag.sections.last} at line ${tag.line}; '
+        '${code[name]!.inSection}',
       );
     }
   }
   for (final section in scan.sections) {
     final name = variableOf(section.name);
-    if (!fragments.containsKey(name)) continue;
+    if (!code.containsKey(name)) continue;
     problems.add(
       'opens a section over the fragment variable $name at line '
       '${section.line}; read a fragment of code as it is, {{{$name}}}.',

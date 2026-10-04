@@ -510,6 +510,8 @@ final class _FixedClock implements Clock {
 /// A time zone that a module of the app asked for (fixture).
 const clockZone1 = 'Europe/Kyiv\'s zone';
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+import 'package:fixture_app/core/clock/clock_factory.dart';
+
 import '../badge/badge_factory.dart';
 
 /// The text that the clock user shows: the labels of the badge when the
@@ -517,6 +519,10 @@ import '../badge/badge_factory.dart';
 String clockUserText() {
   return createBadge().labels.join(', ');
 }
+
+/// The time zones that the clock user shows: those of the clock when the
+/// app has one.
+List<String> clockUserZones() => createClock().zones;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 

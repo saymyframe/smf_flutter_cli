@@ -53,6 +53,20 @@ void main() {
     expect(brick.vars, {'screens': 2});
   });
 
+  test('RoleVar holds a role and the values of an app with and without it', () {
+    const code = Fragment('route()', imports: [ImportRef('dart:async')]);
+    final variable = RoleVar(role, present: code, absent: "'none'");
+    final brick = BrickContribution(
+      MasonBundle.fromJson(_bundleJson),
+      vars: {'route': variable},
+    );
+
+    expect(variable.role, same(role));
+    expect(variable.present, same(code));
+    expect(variable.absent, "'none'");
+    expect(brick.vars['route'], same(variable));
+  });
+
   group('SocketContribution', () {
     final socket =
         SocketRef<CodeSocket>.role(role, 'setup', const CodeSocket());
