@@ -648,10 +648,16 @@ final class FakePreferencesUserModule extends SmfModule {
       ];
 }
 
-/// A provider of the theme role, which has at most one provider: its light
-/// theme and its dark theme derive their colours from a colour of the
-/// fixture, so they differ from the themes that Flutter gives an app
-/// without a theme.
+/// A provider of the theme role, which has at most one provider, whose look
+/// depends on state of its own: its light theme and its dark theme derive
+/// their colours from a colour that it keeps and that a test changes. The
+/// colour is one of its own at first, so its themes differ from those that
+/// Flutter gives an app without a theme.
+///
+/// The two functions of the themes read the colour from the context of the
+/// root of the app, which the role gives them, through an inherited widget
+/// that the module puts among the root wrappers: the root rebuilds in the
+/// new colours when the colour changes.
 ///
 /// The template of the role does the rest in an app with it: the theme mode
 /// that the user selects, which the preferences of the app remember, and
@@ -666,7 +672,8 @@ final class FakeThemeModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'A light and a dark theme of its own colours (fixture)',
+        description: 'A light and a dark theme of a colour that it keeps '
+            '(fixture)',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(themeRole)],
       );
@@ -674,6 +681,14 @@ final class FakeThemeModule extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeThemeBundle),
+        SocketContribution.wrap(
+          AppEntryRole.rootWrappers,
+          Fragment.wrap(
+            'FixtureSeedScope(notifier: fixtureSeed, child: ',
+            ')',
+            imports: [ThemeRole.createLightTheme.importRef],
+          ),
+        ),
       ];
 }
 

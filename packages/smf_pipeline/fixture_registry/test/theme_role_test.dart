@@ -73,13 +73,18 @@ void main() {
     return result;
   }
 
-  /// What the socket [socket] of the app of [result] got from the template
-  /// of the theme role, each fragment as its code.
-  List<String> putInto(ContractResult result, SocketRef socket) => [
+  /// What the socket [socket] of the app of [result] got from [origin], the
+  /// template of the theme role unless set, each fragment as its code.
+  List<String> putInto(
+    ContractResult result,
+    SocketRef socket, {
+    ContributionOrigin origin = const RoleTemplateOrigin(themeRole),
+  }) =>
+      [
         for (final collected
             in result.app!.socketOrders[socket]?.contributions ??
                 const <Collected>[])
-          if (collected.origin == const RoleTemplateOrigin(themeRole))
+          if (collected.origin == origin)
             switch (collected.contribution as SocketContribution) {
               SocketContribution(:final argName?, :final fragment?) =>
                 '$argName: ${fragment.code}',
@@ -135,20 +140,69 @@ void main() {
     });
 
     test(
-        'gives the root of the app the themes of the provider and the mode '
-        'of the scope around the root, and the preferences the restorer of '
-        'the mode', () async {
+        'gives the root of the app the themes of the provider for the '
+        'context of the root and the mode of the scope around the root, and '
+        'the preferences the restorer of the mode', () async {
       final result = await app(settings: false, localized: false);
 
       expect(putInto(result, AppEntryRole.appArgs), [
-        'theme: createLightTheme()',
-        'darkTheme: createDarkTheme()',
+        'theme: createLightTheme(context)',
+        'darkTheme: createDarkTheme(context)',
         'themeMode: ThemeModeScope.of(context).mode',
       ]);
       expect(putInto(result, AppEntryRole.rootWrappers), [
         'ThemeModeScope(notifier: themeModeController, child: …)',
       ]);
       expect(putInto(result, PreferencesRole.restorers), ['restoreThemeMode']);
+    });
+
+    test(
+        'has a provider whose look depends on state of its own: its themes '
+        'read a colour from the context of the root, from a widget that the '
+        'provider puts around the root', () async {
+      final result = await app(settings: false, localized: false);
+
+      expect(
+        putInto(
+          result,
+          AppEntryRole.rootWrappers,
+          origin: const ModuleOrigin(FakeThemeModule.id),
+        ),
+        ['FixtureSeedScope(notifier: fixtureSeed, child: …)'],
+      );
+      // Each of the two functions of the provider asks the scope of the
+      // colour for the context that the root gives it.
+      final unit = parseString(
+        content: result.app!.files[ThemeRole.appThemeFile]!.text,
+      ).unit;
+      final functions = {
+        for (final function
+            in unit.declarations.whereType<FunctionDeclaration>())
+          function.name.lexeme: function,
+      };
+      for (final name in [
+        ThemeRole.createLightTheme.name,
+        ThemeRole.createDarkTheme.name,
+      ]) {
+        final function = functions[name]!.functionExpression;
+        expect(
+          function.parameters!.toSource(),
+          '(BuildContext context)',
+          reason: name,
+        );
+        final body = function.body as ExpressionFunctionBody;
+        expect(
+          (body.expression as MethodInvocation)
+              .argumentList
+              .arguments
+              .first
+              .toSource(),
+          'context',
+          reason: name,
+        );
+      }
+      final themeOf = functions['_themeOf']!.toSource();
+      expect(themeOf, contains('seedColor: FixtureSeedScope.of(context)'));
     });
 
     test(

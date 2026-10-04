@@ -412,7 +412,8 @@ void main() {
 
     test(
         'requires the light theme and the dark theme from its provider, as '
-        'functions without arguments that return a ThemeData', () {
+        'functions that take the context of the root of the app and return '
+        'a ThemeData', () {
       const file = 'lib/core/theme/app_theme.dart';
       expect(ThemeRole.appThemeFile, file);
       expect(
@@ -434,10 +435,16 @@ void main() {
             }))
               issue.message,
           ];
+      // The context of the root, as a provider declares it.
+      const context = IndexedParameter(
+        'context',
+        kind: ParameterKind.requiredPositional,
+        type: 'BuildContext',
+      );
       IndexedDeclaration function(
         String name, {
         String type = 'ThemeData',
-        List<IndexedParameter> parameters = const [],
+        List<IndexedParameter> parameters = const [context],
       }) =>
           IndexedDeclaration(
             name: name,
@@ -465,22 +472,49 @@ void main() {
           ['function $name() $where must return ThemeData, not ColorScheme.'],
           reason: 'The return type of $name().',
         );
+        // What the function takes besides the context, or in its place,
+        // and what the role says of it.
+        const seed = 'seed';
+        for (final (parameters, problem) in [
+          (
+            const <IndexedParameter>[],
+            'must accept 1 positional arguments',
+          ),
+          (
+            const [
+              context,
+              IndexedParameter(seed, kind: ParameterKind.requiredPositional),
+            ],
+            'must not require more than 1 positional arguments',
+          ),
+          (
+            const [
+              context,
+              IndexedParameter(seed, kind: ParameterKind.requiredNamed),
+            ],
+            'must not require the parameter $seed',
+          ),
+        ]) {
+          expect(
+            problems([function(name, parameters: parameters), function(other)]),
+            ['function $name() $where $problem.'],
+            reason: 'The parameters of $name().',
+          );
+        }
+        // A parameter that the root need not give is the provider's own.
         expect(
           problems([
             function(
               name,
               parameters: const [
-                IndexedParameter(
-                  'seed',
-                  kind: ParameterKind.requiredPositional,
-                ),
+                context,
+                IndexedParameter(seed, kind: ParameterKind.optionalNamed),
               ],
             ),
             function(other),
-          ]).join('\n'),
-          'function $name() $where must not require more than 0 positional '
-          'arguments.',
-          reason: 'The parameters of $name().',
+          ]),
+          isEmpty,
+          reason: 'An optional parameter of $name().',
         );
       }
     });
@@ -488,8 +522,9 @@ void main() {
 
   group('the template of the theme role', () {
     test(
-        'gives the root of the app the two themes of the provider and the '
-        'mode of a scope that it puts around the root, in every app', () {
+        'gives the root of the app the two themes of the provider, each for '
+        'the context of the root, and the mode of a scope that it puts '
+        'around the root, in every app', () {
       final sockets = _contributions().whereType<SocketContribution>().toList();
 
       final wrapper = sockets
@@ -508,8 +543,8 @@ void main() {
       expect(
         [for (final arg in args) '${arg.argName}: ${arg.fragment!.code}'],
         [
-          'theme: createLightTheme()',
-          'darkTheme: createDarkTheme()',
+          'theme: createLightTheme(context)',
+          'darkTheme: createDarkTheme(context)',
           'themeMode: ThemeModeScope.of(context).mode',
         ],
       );

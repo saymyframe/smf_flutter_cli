@@ -10,10 +10,20 @@ const themeRole = ThemeRole._();
 /// selects and the app remembers.
 ///
 /// A provider owns the look. It generates [appThemeFile] with two functions
-/// that take no arguments, [createLightTheme], which returns a `ThemeData`
-/// of `Brightness.light`, and [createDarkTheme], which returns one of
-/// `Brightness.dark`. The root of the app calls them each time it builds,
-/// so a change of that file shows on a hot reload.
+/// that take the `BuildContext` of the root of the app, [createLightTheme],
+/// which returns a `ThemeData` of `Brightness.light`, and
+/// [createDarkTheme], which returns one of `Brightness.dark`. The root of
+/// the app calls them each time it builds, so a change of that file shows
+/// on a hot reload.
+///
+/// That context is the one of the [AppEntryRole.appArgs]: below the
+/// [AppEntryRole.rootWrappers] and above the root `MaterialApp`, so it has
+/// neither the theme nor the localizations of the app. A provider whose
+/// look depends on state of its own, such as a colour that the user picks
+/// or that the device gives, puts an inherited widget with that state among
+/// the root wrappers and reads it from the context in the two functions:
+/// the root rebuilds in the new look when that widget notifies. A provider
+/// whose look is fixed leaves the context alone.
 ///
 /// The role's template owns the mode, whichever provider is selected. It
 /// generates [themeModeFile] with:
@@ -56,6 +66,11 @@ const themeRole = ThemeRole._();
 /// entry are texts of the app, which the template has in English and in
 /// Ukrainian; in an app without it they are English.
 ///
+/// The mode and its entry are the role's, the same with every provider: a
+/// provider keeps no mode of its own and adds no entry for the mode. A
+/// provider that has a setting of its own for its look, such as that
+/// colour, contributes a [SettingsEntry] of its own for it.
+///
 /// The screens of a module read the theme as any Flutter code does, with
 /// `Theme.of(context)`, in an app with the role and in one without it. A
 /// module that declares the role may also read and select the mode through
@@ -92,21 +107,26 @@ final class ThemeRole extends Role<NoDsl> {
   /// [createDarkTheme].
   static const appThemeFile = 'lib/core/theme/app_theme.dart';
 
-  /// `ThemeData createLightTheme()`, the light theme of the app, which
-  /// every provider generates: a theme whose brightness is
-  /// `Brightness.light`.
+  /// `ThemeData createLightTheme(BuildContext context)`, the light theme of
+  /// the app, which every provider generates: a theme whose brightness is
+  /// `Brightness.light`. Its argument is the context of the root of the
+  /// app, below the root wrappers and above the root `MaterialApp`.
   static const createLightTheme = RequiredFunction(
     'createLightTheme',
     path: appThemeFile,
     returnType: 'ThemeData',
+    positionalArguments: 1,
   );
 
-  /// `ThemeData createDarkTheme()`, the dark theme of the app, which every
-  /// provider generates: a theme whose brightness is `Brightness.dark`.
+  /// `ThemeData createDarkTheme(BuildContext context)`, the dark theme of
+  /// the app, which every provider generates: a theme whose brightness is
+  /// `Brightness.dark`. Its argument is the context of the root of the app,
+  /// as that of [createLightTheme].
   static const createDarkTheme = RequiredFunction(
     'createDarkTheme',
     path: appThemeFile,
     returnType: 'ThemeData',
+    positionalArguments: 1,
   );
 
   /// The key of the theme mode in the preferences of the app, under which
@@ -198,7 +218,7 @@ final class _ThemeTemplate extends RoleTemplate<NoDsl> {
           AppEntryRole.appArgs,
           'theme',
           Fragment(
-            '${ThemeRole.createLightTheme.name}()',
+            '${ThemeRole.createLightTheme.name}(context)',
             imports: [ThemeRole.createLightTheme.importRef],
           ),
         ),
@@ -206,7 +226,7 @@ final class _ThemeTemplate extends RoleTemplate<NoDsl> {
           AppEntryRole.appArgs,
           'darkTheme',
           Fragment(
-            '${ThemeRole.createDarkTheme.name}()',
+            '${ThemeRole.createDarkTheme.name}(context)',
             imports: [ThemeRole.createDarkTheme.importRef],
           ),
         ),

@@ -274,8 +274,8 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Fixture App',
-    theme: createLightTheme(),
-    darkTheme: createDarkTheme(),
+    theme: createLightTheme(context),
+    darkTheme: createDarkTheme(context),
     themeMode: ThemeModeScope.of(context).mode,
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
@@ -2181,21 +2181,45 @@ final class FakeSecondRoutes {
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
 
-/// The colour that the themes of the fixture derive their colours from,
-/// which differ from those of the themes that Flutter gives an app without
-/// a theme: so the colours of a screen tell whether the app shows it in a
-/// theme of the fixture.
-const _seedColor = Color(0xFF00695C);
+/// The colour that the themes of the fixture derive their colours from: one
+/// of its own at first, so that its themes differ from those that Flutter
+/// gives an app without a theme. A test changes it, and the root of the
+/// app, which reads it through [FixtureSeedScope], rebuilds in the new
+/// colours.
+final fixtureSeed = ValueNotifier<Color>(const Color(0xFF00695C));
 
-/// The light theme of the fixture.
-ThemeData createLightTheme() => _themeOf(Brightness.light);
+/// Gives the root of the app the colour of the seed of the fixture, and
+/// rebuilds the root when the colour changes. The fixture puts it around
+/// the root.
+class FixtureSeedScope extends InheritedNotifier<ValueNotifier<Color>> {
+  /// Creates the scope of [notifier] around [child].
+  const FixtureSeedScope({
+    required ValueNotifier<Color> super.notifier,
+    required super.child,
+    super.key,
+  });
 
-/// The dark theme of the fixture.
-ThemeData createDarkTheme() => _themeOf(Brightness.dark);
+  /// The colour of the scope around [context]; the widget of [context]
+  /// rebuilds when the colour changes.
+  static Color of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<FixtureSeedScope>()!
+      .notifier!
+      .value;
+}
 
-ThemeData _themeOf(Brightness brightness) => ThemeData(
+/// The light theme of the fixture, in the colours of the seed around
+/// [context], the context of the root of the app.
+ThemeData createLightTheme(BuildContext context) =>
+    _themeOf(context, Brightness.light);
+
+/// The dark theme of the fixture, in the colours of the seed around
+/// [context], the context of the root of the app.
+ThemeData createDarkTheme(BuildContext context) =>
+    _themeOf(context, Brightness.dark);
+
+ThemeData _themeOf(BuildContext context, Brightness brightness) => ThemeData(
   colorScheme: ColorScheme.fromSeed(
-    seedColor: _seedColor,
+    seedColor: FixtureSeedScope.of(context),
     brightness: brightness,
   ),
 );
@@ -2401,6 +2425,7 @@ class FixtureSecondScreen extends StatelessWidget {
 }
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -2415,11 +2440,14 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       child: RepaintBoundary(
-        child: AppLocaleScope(
-          notifier: appLocale,
-          child: ThemeModeScope(
-            notifier: themeModeController,
-            child: const App(),
+        child: FixtureSeedScope(
+          notifier: fixtureSeed,
+          child: AppLocaleScope(
+            notifier: appLocale,
+            child: ThemeModeScope(
+              notifier: themeModeController,
+              child: const App(),
+            ),
           ),
         ),
       ),
