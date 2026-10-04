@@ -633,6 +633,25 @@ void _openAlerts() {
 }
 
 void _openNews() {}
+=== lib/core/fixture_setting/fixture_setting.dart (fake_preferences_user) ===
+/// The setting of the fixture: a number that the app remembers between its
+/// launches when it has preferences.
+final fixtureSetting = FixtureSetting();
+
+/// A number, 0 until something sets it.
+final class FixtureSetting {
+  int _value = 0;
+
+  /// The number.
+  int get value => _value;
+
+  /// Sets the number to [value]. In an app with preferences, it saves the
+  /// number too, once the app opened them: before that, it changes only
+  /// memory.
+  Future<void> set(int value) async {
+    _value = value;
+  }
+}
 === lib/core/fixture_theme_mode/fixture_theme_mode.dart (fake_sockets) ===
 import 'package:flutter/material.dart';
 

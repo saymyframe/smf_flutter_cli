@@ -268,6 +268,88 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.preferencesForgettingWrites,
+        role: preferencesRole,
+        bug: 'Its writes never reach its disk, so the next start of the app '
+            'reads nothing of what was saved.',
+        app: [FakePreferencesUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the next start reads what was saved, and nothing that was '
+                'removed',
+            'The next start reads what was saved.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_restorers_test.dart',
+            'a restorer reads at the next start what its module saved',
+            'Each restorer reads at the next start what was saved.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesNeverCopyingLists,
+        role: preferencesRole,
+        bug: 'It never copies a list: it keeps the list that it is given, and '
+            'a read returns the list that it keeps. So a later change of the '
+            'list that was saved, or of one that was read, changes what it '
+            'reads.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the preferences keep a copy of a list that they are given',
+            'A change of a list that was saved changes nothing that the '
+                'preferences have.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read returns a copy of the list that the preferences have',
+            'A change of a list that was read changes nothing that the '
+                'preferences have.',
+          ),
+          // The probe of the role, which the start check runs on a device,
+          // has the checks of the lists too.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesCastingValues,
+        role: preferencesRole,
+        bug: 'Its reads cast the value of a key to the type they ask for, so '
+            'a read of a key with a value of another type throws a TypeError '
+            'rather than returning null.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read of a key with a value of another type returns null, and '
+                'does not throw',
+            'A read returns null when the key has no value of the type it '
+                'asks for, and never throws.',
+          ),
+          // A value saved over one of another type is read by the type that
+          // the key had too, which then throws.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a write replaces what its key had, a value of another type too',
+            'A key has one value: a write replaces what the key had, '
+                'whatever its type.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenDiModule(),
         role: diRole,
         bug: 'It registers every service but one, the last in the order of '

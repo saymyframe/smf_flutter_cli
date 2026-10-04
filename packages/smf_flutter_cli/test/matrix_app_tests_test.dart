@@ -242,6 +242,73 @@ void main() {
   });
 
   test(
+      'the test of the preferences role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and has a probe for the start check', () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'store',
+          const [ModuleId('store')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await preferencesRoleAppTest();
+
+    expect(p.basename(test.directory), 'preferences_role');
+    expect(test.roles, {preferencesRole});
+    expect(test.appliesTo(appWith(preferencesRole)), isTrue);
+    expect(test.appliesTo(appWith(eventsRole)), isFalse);
+    // No module of the CLI provides the role, so its matrix does not run
+    // the test: that of the fixtures does, with their provider.
+    expect(apps.where(test.appliesTo), isEmpty);
+    expect(
+      [for (final test in appTests.tests) p.basename(test.directory)],
+      isNot(contains('preferences_role')),
+    );
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await preferencesRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(preferencesRole)), isFalse);
+    expect(
+      everyModule.appliesTo(
+        appWith(preferencesRole, everyModuleWith: const []),
+      ),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(appWith(eventsRole, everyModuleWith: const [])),
+      isFalse,
+    );
+
+    // Its probe is a function of a file of the test that takes the one that
+    // waits until the screen settles, as the start check calls it.
+    final probe = test.startProbe!;
+    expect(probe.path, 'integration_test/preferences_role/probe.dart');
+    final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+    final (:index, :errors) =
+        DartFileIndexer.parse(probe.path, file.readAsStringSync());
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == probe.function);
+    expect(function.name, 'probePreferences');
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'Future<List<String>>');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          '${parameter.kind.name} ${parameter.type}',
+      ],
+      ['requiredPositional Future<void> Function()'],
+    );
+  });
+
+  test(
       'the test of the DI role applies to the apps with the role whose '
       'modules register services, and gets the services of each from the '
       'data of the role', () {

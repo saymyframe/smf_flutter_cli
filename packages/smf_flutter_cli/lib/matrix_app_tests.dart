@@ -133,6 +133,38 @@ Future<MatrixAppTest> eventsRoleAppTest({
       roles: {eventsRole},
     );
 
+/// The test of the preferences role that the CLI keeps in its
+/// `app_tests/preferences_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them: once the
+/// start-up of the app opened the preferences, a value of each type is read
+/// back as it was saved, and as `null` by the reads of the other types,
+/// which do not throw; a key that was removed has no value; a write
+/// replaces what its key had, a value of another type too; the preferences
+/// keep a copy of a list that they are given, and a read returns a copy of
+/// it; and the next start, `initPreferences()` again, reads what was saved
+/// and nothing that was removed.
+///
+/// The test knows only the role, and writes keys of its own. Its probe,
+/// `probePreferences()` of `integration_test/preferences_role/probe.dart`,
+/// runs the checks of one run on a device for the start check, where the
+/// platform side of the provider is the real one, and the test runs the
+/// probe too. The matrix of the fixtures runs the test only in its apps
+/// with every module, which run other tests already.
+Future<MatrixAppTest> preferencesRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/preferences_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(preferencesRole) &&
+          (among?.call(app) ?? true),
+      roles: {preferencesRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/preferences_role/probe.dart',
+        'probePreferences',
+      ),
+    );
+
 /// The test of the router role that the CLI keeps in its
 /// `app_tests/router_walk`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them: it starts the app

@@ -7,6 +7,8 @@ import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
+import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
+import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
@@ -488,6 +490,82 @@ final class FakeEventsModule extends SmfModule {
             type: TypeRef('FixtureEvents', import: _file),
             init: FactoryRef('openFixtureEvents', import: _file),
           ),
+        ),
+      ];
+}
+
+/// A provider of the preferences role, which has at most one provider,
+/// whose preferences are created with the app: they keep the settings in
+/// memory, over a map that stands for the disk of a device, which each start
+/// of the app reads anew.
+final class FakePreferencesModule extends SmfModule {
+  /// Creates the module.
+  const FakePreferencesModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_preferences');
+
+  static const _file = ImportRef.app(
+    'core/fixture_preferences/fixture_preferences.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Preferences in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(preferencesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePreferencesBundle),
+        preferencesRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixturePreferences', import: _file),
+            create: FactoryRef('createFixturePreferences', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that works with the preferences when the app has them: it
+/// keeps a setting, a number, which its restorer takes from the preferences
+/// when the app starts and which it saves there from then on. It gives the
+/// role two restorers, which note what they read and throw when a test says
+/// so. Without the preferences, the setting lasts only as long as the app
+/// runs.
+final class FakePreferencesUserModule extends SmfModule {
+  /// Creates the module.
+  const FakePreferencesUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_preferences_user');
+
+  static const _file = ImportRef.app(
+    'core/fixture_setting/fixture_setting.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A setting that the preferences remember (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {preferencesRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePreferencesUserBundle),
+        const SocketContribution.item(
+          PreferencesRole.restorers,
+          Fragment('noteFixtureSetting', imports: [_file]),
+          when: {preferencesRole},
+        ),
+        const SocketContribution.item(
+          PreferencesRole.restorers,
+          Fragment('restoreFixtureSetting', imports: [_file]),
+          when: {preferencesRole},
         ),
       ];
 }

@@ -41,8 +41,8 @@ final _apps = <String, (List<SmfModule>, ContractCase)>{
       requested: everyFixture(di: GetItModule.id),
     ),
   ),
-  // No router, no DI, and the clock without the badge: the other branches
-  // of the templates.
+  // No router, no DI, the clock without the badge and the setting without
+  // the preferences: the other branches of the templates.
   'without_router': (
     fixtureModules(),
     const ContractCase(
@@ -55,6 +55,7 @@ final _apps = <String, (List<SmfModule>, ContractCase)>{
         ModuleId('fake_child'),
         ModuleId('fake_codegen'),
         ModuleId('fake_clock_user'),
+        ModuleId('fake_preferences_user'),
       ],
     ),
   ),

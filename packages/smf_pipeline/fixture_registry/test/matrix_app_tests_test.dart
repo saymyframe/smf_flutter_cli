@@ -47,11 +47,18 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the layout '
-      'role, of the DI role and of the events role with every provider of '
-      'each, which they tell apart by the roles of the app only', () {
+      'role, of the DI role, of the events role and of the preferences role '
+      'with every provider of each, which they tell apart by the roles of '
+      'the app only', () {
     expect(
       appTests.testedRoles,
-      containsAll([routerRole, layoutRole, diRole, eventsRole]),
+      containsAll([
+        routerRole,
+        layoutRole,
+        diRole,
+        eventsRole,
+        preferencesRole,
+      ]),
     );
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -60,6 +67,8 @@ void main() {
     expect(named('di_role').roles, {diRole});
     expect(named('di_disposal').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('preferences_restorers').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
@@ -117,9 +126,9 @@ void main() {
   });
 
   test(
-      'the tests of the events role and of the walk of the routes apply '
-      'only to the apps with every module, which have the roles and run '
-      'flutter test for other tests already', () {
+      'the tests of the events role, of the preferences role and of the walk '
+      'of the routes apply only to the apps with every module, which have '
+      'the roles and run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -128,6 +137,15 @@ void main() {
     expect(appsOf(named('events_role')), [
       for (final app in everyModule) app.name,
     ]);
+    // So do the test of the preferences that the CLI keeps and the test of
+    // the restorers of the fixture setting, which every such app has.
+    for (final name in ['preferences_role', 'preferences_restorers']) {
+      expect(
+        appsOf(named(name)),
+        [for (final app in everyModule) app.name],
+        reason: name,
+      );
+    }
     // So does the walk of the routes, which goes to the start screens of
     // both fixture features, destinations of the main navigation, with
     // each router and each layout.
@@ -139,10 +157,28 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        contains(eventsRole),
+        containsAll([eventsRole, preferencesRole]),
+        reason: app.name,
+      );
+      expect(
+        app.modules,
+        contains(FakePreferencesUserModule.id),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
+    }
+  });
+
+  test(
+      'the app of the fixture setting without the preferences gets no test '
+      'of the preferences', () {
+    final without = apps.singleWhere(
+      (app) => app.name == 'fake_preferences_user',
+    );
+
+    expect(without.hook!.presentRoles, isNot(contains(preferencesRole)));
+    for (final name in ['preferences_role', 'preferences_restorers']) {
+      expect(named(name).appliesTo(without), isFalse, reason: name);
     }
   });
 

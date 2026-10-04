@@ -111,7 +111,12 @@ void main() {
   });
 
   group('the module rule of the service roles', () {
-    for (final role in [eventsRole, analyticsRole, crashReportingRole]) {
+    for (final role in [
+      eventsRole,
+      preferencesRole,
+      analyticsRole,
+      crashReportingRole,
+    ]) {
       test('lets each provider of the ${role.id} contribute one implementation',
           () {
         expect(
@@ -147,6 +152,7 @@ void main() {
     test('register the service in the DI container', () {
       for (final (role, service, factory) in [
         (eventsRole, 'CommunicationService', 'createCommunicationService'),
+        (preferencesRole, 'AppPreferences', 'createAppPreferences'),
         (analyticsRole, 'AnalyticsService', 'createAnalyticsService'),
         (crashReportingRole, 'CrashReporter', 'createCrashReporter'),
       ]) {
@@ -541,17 +547,39 @@ void main() {
           ),
         );
 
-    test('are called only by the DI container', () {
+    test(
+        'are called only by the DI container, and by the template of a role '
+        'but for the factory of the preferences', () {
       for (final (role, factory) in [
         (eventsRole, 'createCommunicationService'),
+        (preferencesRole, 'createAppPreferences'),
         (analyticsRole, 'createAnalyticsService'),
         (crashReportingRole, 'createCrashReporter'),
       ]) {
-        final issue = check(role, factory).single;
+        final issues = check(role, factory);
+        final issue = issues.first;
 
         expect(issue.message, contains('calls $factory()'));
         expect(issue.path, 'lib/features/home/home_screen.dart');
         expect(issue.origin, const ModuleOrigin(ModuleId('home')));
+        // A module gets its settings through the restorers of the
+        // preferences, and any other service through the container.
+        expect(
+          issue.hint,
+          identical(role, preferencesRole)
+              ? startsWith('Put a function into PreferencesRole.restorers')
+              : startsWith('Resolve the service in the composition file'),
+        );
+        // The file of the analytics role calls the factory too. The
+        // template of a role gets the preferences through the restorers,
+        // as a module does, and any other service from its factory.
+        expect(
+          [for (final other in issues.skip(1)) other.origin],
+          identical(role, preferencesRole)
+              ? [const RoleTemplateOrigin(analyticsRole)]
+              : isEmpty,
+          reason: '$role',
+        );
       }
     });
 
