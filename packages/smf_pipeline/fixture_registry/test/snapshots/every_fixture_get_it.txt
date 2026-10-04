@@ -264,6 +264,7 @@ arb-dir: lib/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 === lib/app.dart (flutter_core) ===
+import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
 import 'package:fixture_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -280,6 +281,7 @@ class App extends StatelessWidget {
     title: 'Fixture App',
     theme: ThemeData(fontFamily: "FixtureSans"),
     darkTheme: ThemeData.dark(),
+    themeMode: FixtureThemeMode.of(context),
     localizationsDelegates: [
       AppLocalizations.delegate,
       GlobalMaterialLocalizations.delegate,
@@ -1218,6 +1220,26 @@ void closeFixtureCounter(FixtureCounter counter) {
   counter.count = 0;
   fixtureServiceEvents.add('close FixtureCounter');
 }
+=== lib/core/fixture_theme_mode/fixture_theme_mode.dart (fake_sockets) ===
+import 'package:flutter/material.dart';
+
+/// The theme mode of the fixture, which the fixture puts around the root of
+/// the app: the root reads it from its context.
+class FixtureThemeMode extends InheritedWidget {
+  /// Gives [mode] to the widgets below.
+  const FixtureThemeMode({required this.mode, required super.child, super.key});
+
+  /// The theme mode.
+  final ThemeMode mode;
+
+  /// The theme mode of the fixture around [context], which rebuilds when
+  /// the mode changes.
+  static ThemeMode of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<FixtureThemeMode>()!.mode;
+
+  @override
+  bool updateShouldNotify(FixtureThemeMode oldWidget) => mode != oldWidget.mode;
+}
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 
@@ -1919,6 +1941,7 @@ class FixtureSecondScreen extends StatelessWidget {
   }
 }
 === lib/main.dart (flutter_core) ===
+import 'package:fixture_app/core/fixture_theme_mode/fixture_theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -1928,7 +1951,7 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(RepaintBoundary(child: const App()));
+  runApp(FixtureThemeMode(mode: ThemeMode.system, child: const App()));
 }
 === pubspec.yaml (flutter_core) ===
 name: fixture_app

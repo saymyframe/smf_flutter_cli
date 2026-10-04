@@ -31,6 +31,12 @@ const appEntryRole = AppEntryRole._();
 /// So the screens of every module have the Material ancestors they rely
 /// on, such as the theme of the app and `MaterialLocalizations`.
 ///
+/// The provider creates that `MaterialApp` in the `build` of a widget and
+/// evaluates the expressions of the [appArgs] there. So `context` in such
+/// an expression is the `BuildContext` of that widget, which is below the
+/// [rootWrappers], and the root rebuilds when an inherited widget that the
+/// expression read notifies.
+///
 /// The role's template generates the guide for coding agents that work on
 /// the app, whichever module provides the role: [agentsFile], with a
 /// section for each role and module of the app that has notes for them
@@ -145,6 +151,9 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// Widgets around the root widget in `runApp()`, such as Riverpod's
   /// `ProviderScope(child: ` and `)`; the first contribution is outermost.
+  ///
+  /// The expressions of the [appArgs] can read an inherited widget among
+  /// them from `context`.
   static const rootWrappers = SocketRef<WrapperSocket>.role(
     appEntryRole,
     'root_wrappers',
@@ -175,14 +184,27 @@ final class AppEntryRole extends Role<NoDsl> {
     CodeSocket(),
   );
 
-  /// Arguments of the root `MaterialApp`: `theme` and `darkTheme` take one
-  /// value, `localizationsDelegates` and `supportedLocales` take list items.
+  /// Arguments of the root `MaterialApp`: `theme`, `darkTheme`, `themeMode`
+  /// and `locale` take one value, `localizationsDelegates` and
+  /// `supportedLocales` take list items.
+  ///
+  /// The provider evaluates the expression of an argument in the `build` of
+  /// the widget that creates the root `MaterialApp`. So the expression may
+  /// read `context`, the `BuildContext` of that widget, which is below the
+  /// [rootWrappers]: an argument can take its value from an inherited
+  /// widget that a module put around the root, such as the theme mode or
+  /// the locale that the user chose, and the root rebuilds with the new
+  /// value when that widget notifies. That context is above the
+  /// `MaterialApp`, so it has neither the theme nor the localizations of
+  /// the app.
   static const appArgs = SocketRef<ArgsSocket>.role(
     appEntryRole,
     'app_args',
     ArgsSocket({
       'theme': ArgShape.scalar,
       'darkTheme': ArgShape.scalar,
+      'themeMode': ArgShape.scalar,
+      'locale': ArgShape.scalar,
       'localizationsDelegates': ArgShape.list,
       'supportedLocales': ArgShape.list,
     }),

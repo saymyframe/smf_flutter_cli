@@ -409,6 +409,94 @@ void main() {
     });
   });
 
+  group('AppEntryRole arguments of the root MaterialApp', () {
+    const socket = AppEntryRole.appArgs;
+
+    SocketContribution arg(String name, String expression) =>
+        SocketContribution.arg(socket, name, Fragment(expression));
+
+    test(
+        'are one theme, dark theme, theme mode and locale, and the lists of '
+        'the localizations', () {
+      expect(socket.kind.args, {
+        'theme': ArgShape.scalar,
+        'darkTheme': ArgShape.scalar,
+        'themeMode': ArgShape.scalar,
+        'locale': ArgShape.scalar,
+        'localizationsDelegates': ArgShape.list,
+        'supportedLocales': ArgShape.list,
+      });
+      for (final name in socket.kind.args.keys) {
+        expect(socket.problemsWith(arg(name, 'value')), isEmpty, reason: name);
+      }
+      // The provider sets the other arguments of the root itself.
+      expect(
+        socket.problemsWith(arg('home', 'value')).single,
+        'socket app_entry.app_args has no argument "home"; expected one of '
+        'theme, darkTheme, themeMode, locale, localizationsDelegates, '
+        'supportedLocales.',
+      );
+    });
+
+    test(
+        'render in the order of the socket, whatever the order of the '
+        'contributions, with the expressions that read the context as they '
+        'are', () {
+      expect(
+        socket.render([
+          arg('supportedLocales', "Locale('en')"),
+          arg('locale', 'AppLanguage.of(context)'),
+          arg('localizationsDelegates', 'AppLocalizations.delegate'),
+          arg('themeMode', 'AppThemeMode.of(context)'),
+          arg('darkTheme', 'ThemeData.dark()'),
+          arg('theme', 'ThemeData.light()'),
+        ]),
+        {
+          'smf_app_entry__app_args': 'theme: ThemeData.light(),\n'
+              'darkTheme: ThemeData.dark(),\n'
+              'themeMode: AppThemeMode.of(context),\n'
+              'locale: AppLanguage.of(context),\n'
+              'localizationsDelegates: [AppLocalizations.delegate],\n'
+              "supportedLocales: [Locale('en')],",
+        },
+      );
+    });
+
+    test('take one theme mode and one locale: two different ones conflict', () {
+      const first = ModuleOrigin(ModuleId('first'));
+      const second = ModuleOrigin(ModuleId('second'));
+
+      for (final name in ['themeMode', 'locale']) {
+        // Two modules may agree on a value.
+        expect(
+          socket.render([arg(name, 'a'), arg(name, 'a')]),
+          {socket.tag: '$name: a,'},
+          reason: name,
+        );
+        expect(
+          () => socket.render([
+            arg(name, 'a').withOrigin(first),
+            arg(name, 'b').withOrigin(second),
+          ]),
+          throwsA(
+            isA<MergeConflict>()
+                .having((conflict) => conflict.key, 'key', name)
+                .having((conflict) => conflict.existing, 'existing', 'a')
+                .having((conflict) => conflict.incoming, 'incoming', 'b')
+                .having(
+                  (conflict) => conflict.reason,
+                  'reason',
+                  'the argument takes one value',
+                )
+                .having((c) => c.existingOrigin, 'existing origin', first)
+                .having((c) => c.incomingOrigin, 'incoming origin', second),
+          ),
+          reason: name,
+        );
+      }
+    });
+  });
+
   group('AppEntryRole native sockets', () {
     test('the iOS deployment target is the highest version', () {
       const socket = AppEntryRole.iosDeploymentTarget;
