@@ -33,10 +33,13 @@ const appEntryRole = AppEntryRole._();
 /// evaluates the expressions of the [appArgs] there. So `context` in such
 /// an expression is the `BuildContext` of that widget, which is below the
 /// [rootWrappers], and the root rebuilds when an inherited widget that the
-/// expression read notifies. The structural rules of the role check that
-/// the provider creates a `MaterialApp`, and every one of its code in
-/// `lib/` in a method `build(BuildContext context)` of a class, since they
-/// cannot tell which of them is the root.
+/// expression read notifies. The rules of the role check both places. Its
+/// module rules check that the tags of the [rootWrappers] are in the body
+/// of `main()` in [mainFile], which runs the root widget inside them. Its
+/// structural rules check that the provider creates a `MaterialApp`, and
+/// every one of its code in `lib/` in a method
+/// `build(BuildContext context)` of a class, since they cannot tell which
+/// of them is the root.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -137,8 +140,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// Widgets around the root widget in `runApp()`, such as Riverpod's
   /// `ProviderScope(child: ` and `)`; the first contribution is outermost.
   ///
-  /// The expressions of the [appArgs] can read an inherited widget among
-  /// them from `context`.
+  /// The provider has the tags of the socket in the body of `main()` in
+  /// [mainFile], around the root widget that `main()` runs. So the widget
+  /// that creates the root `MaterialApp` is below the wrappers, and the
+  /// expressions of the [appArgs] can read an inherited widget among them
+  /// from `context`.
   static const rootWrappers = SocketRef<WrapperSocket>.role(
     appEntryRole,
     'root_wrappers',
@@ -370,6 +376,14 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkBootstrapPhases,
         ),
         ModuleRule(
+          id: 'app_entry.root_wrappers_in_main',
+          description: 'The tags of the root wrappers are in the body of '
+              'main() in lib/main.dart, which runs the root widget inside '
+              'them, so the widget that creates the root MaterialApp is '
+              'below the widgets that the modules put around the root.',
+          check: _checkRootWrappersInMain,
+        ),
+        ModuleRule(
           id: 'app_entry.tag_lines',
           description: 'The tags of the sockets that render lines of a file, '
               'such as a native file or the README, stand alone at the start '
@@ -450,48 +464,70 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
   final templates = _templatesOf(input.contributions);
   final text = templates[path] ?? '';
   final tags = [for (final socket in phases) '{{{${socket.tag}}}}'];
-  final issues = <SmfIssue>[
-    for (final tag in tags)
-      if (!text.contains(tag) &&
-          templates.values.any((template) => template.contains(tag)))
-        SmfIssue(
-          'The tag $tag is not in $path, where bootstrap() runs the phases '
-          'of start-up.',
-          origin: origin,
-          path: path,
-        ),
-  ];
   final offsets = [
     for (final tag in tags)
       if (text.indexOf(tag) case final offset when offset >= 0) offset,
   ];
-  final body = _bodyOf(text, AppEntryRole.bootstrap.name);
-  for (final tag in tags) {
-    final offset = text.indexOf(tag);
-    if (offset < 0 ||
-        (body != null && offset > body.start && offset < body.end)) {
-      continue;
-    }
-    issues.add(
-      SmfIssue(
-        'The tag $tag is in $path, but not in the body of bootstrap(), which '
-        'runs the phases of start-up.',
-        origin: origin,
-        path: path,
-      ),
-    );
-  }
-  if (!_ascending(offsets)) {
-    issues.add(
+  return [
+    ..._tagsOutsideBodyOf(
+      AppEntryRole.bootstrap.name,
+      path: path,
+      does: 'runs the phases of start-up',
+      tags: tags,
+      templates: templates,
+      origin: origin,
+    ),
+    if (!_ascending(offsets))
       SmfIssue(
         'The tags of the phases of start-up in $path are not in the order '
         'early, platform, di, late.',
         origin: origin,
         path: path,
       ),
+  ];
+}
+
+List<SmfIssue> _checkRootWrappersInMain(ModuleRuleInput<NoDsl> input) =>
+    _tagsOutsideBodyOf(
+      AppEntryRole.main.name,
+      path: AppEntryRole.mainFile,
+      does: 'runs the root widget inside the root wrappers',
+      tags: [for (final tag in AppEntryRole.rootWrappers.tags) '{{{$tag}}}'],
+      templates: _templatesOf(input.contributions),
+      origin: ModuleOrigin(input.module.id),
     );
-  }
-  return issues;
+
+/// The problems of [tags], the tags of sockets that belong in the body of
+/// the function [function] of the template at [path], among the [templates]
+/// of a module: first each tag that the module has in another template
+/// only, then each that is in that template outside the body. [does] says
+/// what the function does there, such as `runs the phases of start-up`.
+List<SmfIssue> _tagsOutsideBodyOf(
+  String function, {
+  required String path,
+  required String does,
+  required List<String> tags,
+  required Map<String, String> templates,
+  required ContributionOrigin origin,
+}) {
+  final text = templates[path] ?? '';
+  final body = _bodyOf(text, function);
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: origin, path: path);
+  return [
+    for (final tag in tags)
+      if (!text.contains(tag) &&
+          templates.values.any((template) => template.contains(tag)))
+        issue('The tag $tag is not in $path, where $function() $does.'),
+    for (final tag in tags)
+      if (text.indexOf(tag) case final offset
+          when offset >= 0 &&
+              (body == null || offset <= body.start || offset >= body.end))
+        issue(
+          'The tag $tag is in $path, but not in the body of $function(), '
+          'which $does.',
+        ),
+  ];
 }
 
 /// Whether none of [offsets] is before the one in front of it.

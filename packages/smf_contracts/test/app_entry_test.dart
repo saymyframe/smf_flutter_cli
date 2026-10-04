@@ -277,7 +277,11 @@ void main() {
       );
       expect(
         appEntryRole.moduleRules.map((rule) => rule.id),
-        ['app_entry.bootstrap_phases', 'app_entry.tag_lines'],
+        [
+          'app_entry.bootstrap_phases',
+          'app_entry.root_wrappers_in_main',
+          'app_entry.tag_lines',
+        ],
       );
     });
   });
@@ -1145,9 +1149,25 @@ Future<void> bootstrap() async {
 }
 ''';
 
+    const main = '''
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(
+    {{{smf_app_entry__root_wrappers_open}}}const App(){{{smf_app_entry__root_wrappers_close}}},
+  );
+}
+''';
+
     test('module rules accept the tags of a provider in place', () {
       expect(
         checkModule({
+          AppEntryRole.mainFile: main,
           AppEntryRole.bootstrapFile: bootstrap,
           AppEntryRole.androidManifestFile: _manifestTemplate,
           AppEntryRole.infoPlistFile:
@@ -1265,6 +1285,118 @@ Future<void> bootstrap() async {
 
 void later() {}
 ''',
+        }),
+        isEmpty,
+      );
+    });
+
+    test(
+        'the root wrappers are in the body of main() in main.dart, so the '
+        'widget that creates the root is below them', () {
+      const open = '{{{smf_app_entry__root_wrappers_open}}}';
+      const close = '{{{smf_app_entry__root_wrappers_close}}}';
+      const scaffold = ModuleOrigin(ModuleId('scaffold'));
+
+      // Around the MaterialApp in the build of the root widget, which
+      // main() runs as it is: the context of that build, which the
+      // arguments of the root read, would be above the wrappers.
+      final inBuild = checkModule({
+        AppEntryRole.mainFile:
+            main.replaceFirst(open, '').replaceFirst(close, ''),
+        'lib/app.dart': '''
+import 'package:flutter/material.dart';
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      ${open}MaterialApp(
+{{{smf_app_entry__app_args}}}
+      )$close;
+}
+''',
+      });
+
+      expect(inBuild.map((issue) => issue.message), [
+        equals(
+          'The tag $open is not in lib/main.dart, where main() runs the root '
+          'widget inside the root wrappers.',
+        ),
+        equals(
+          'The tag $close is not in lib/main.dart, where main() runs the '
+          'root widget inside the root wrappers.',
+        ),
+      ]);
+      for (final issue in inBuild) {
+        expect(issue.origin, scaffold);
+        expect(issue.path, AppEntryRole.mainFile);
+      }
+
+      // In main.dart, but outside the body of main(): in a function after
+      // it, or in a variable before it.
+      for (final template in [
+        '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(_root());
+}
+
+Widget _root() => ${open}const App()$close;
+''',
+        '''
+final Widget _root = ${open}const App()$close;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(_root);
+}
+''',
+      ]) {
+        final outside = checkModule({AppEntryRole.mainFile: template});
+
+        expect(
+          outside.map((issue) => issue.message),
+          [
+            equals(
+              'The tag $open is in lib/main.dart, but not in the body of '
+              'main(), which runs the root widget inside the root wrappers.',
+            ),
+            equals(
+              'The tag $close is in lib/main.dart, but not in the body of '
+              'main(), which runs the root widget inside the root wrappers.',
+            ),
+          ],
+          reason: template,
+        );
+        for (final issue in outside) {
+          expect(issue.origin, scaffold, reason: template);
+          expect(issue.path, AppEntryRole.mainFile, reason: template);
+        }
+      }
+
+      // One of the two tags only: the wrappers open in main() and close
+      // elsewhere.
+      final split = checkModule({
+        AppEntryRole.mainFile: main.replaceFirst(close, ''),
+        'lib/app.dart': 'final close = App()$close;\n',
+      });
+
+      expect(split.map((issue) => issue.message), [
+        equals(
+          'The tag $close is not in lib/main.dart, where main() runs the '
+          'root widget inside the root wrappers.',
+        ),
+      ]);
+
+      // A provider without the tags takes no root wrappers: the pipeline
+      // reports a wrapper that a module contributes then.
+      expect(
+        checkModule({
+          AppEntryRole.mainFile:
+              main.replaceFirst(open, '').replaceFirst(close, ''),
         }),
         isEmpty,
       );
