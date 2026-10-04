@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_shared_preferences/bundles/shared_preferences_bundle.dart';
+import 'package:smf_shared_preferences/src/agents.dart';
 
 /// The module that keeps the preferences of the app with the
 /// shared_preferences package, and so provides the preferences role: the
@@ -32,6 +33,11 @@ import 'package:smf_shared_preferences/bundles/shared_preferences_bundle.dart';
 ///
 /// When the app has a DI container, the role registers the preferences in
 /// it.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// preferences which file imports the package, how this provider reads a
+/// number, and what a test of the app sets in place of the platform side of
+/// the package.
 final class SharedPreferencesModule extends SmfModule {
   /// Creates the module.
   const SharedPreferencesModule();
@@ -60,6 +66,10 @@ final class SharedPreferencesModule extends SmfModule {
             type: TypeRef('SharedAppPreferences', import: _file),
             init: FactoryRef('openSharedAppPreferences', import: _file),
           ),
+        ),
+        AppEntryRole.agentSections.entry(
+          preferencesRole.description,
+          AgentNote(agentNote),
         ),
       ];
 }

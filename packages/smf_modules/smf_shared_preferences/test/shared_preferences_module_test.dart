@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:io';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -10,6 +12,7 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_shared_preferences/bundles/shared_preferences_bundle.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_shared_preferences/src/agents.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -119,11 +122,29 @@ bool _sameBytes(List<int> a, List<int> b) {
   return true;
 }
 
+/// The notes of the guide for coding agents of [app], in the order they
+/// were contributed, each as its contributor, the heading of its section
+/// and the note.
+List<(ContributionOrigin, String, AgentNote)> _agentNotesOf(RenderedApp app) =>
+    [
+      for (final collected
+          in app.socketOrders[AppEntryRole.agentSections]?.contributions ??
+              const <Collected>[])
+        if (collected.contribution case final SocketContribution note)
+          (collected.origin, note.entryKey!, note.entryValue! as AgentNote),
+    ];
+
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
 /// Checks that [app] is [without] but for the files of the preferences, the
-/// dependency on shared_preferences, and one file of each of the modules
-/// [changedBy], whichever they are: the provider of the app entry renders
-/// the start-up, which now opens the preferences, into a file of its own,
-/// and a DI container the registration of the preferences.
+/// dependency on shared_preferences, the section of the preferences in the
+/// guide for coding agents, and one file of each of the modules [changedBy],
+/// whichever they are: the provider of the app entry renders the start-up,
+/// which now opens the preferences, into a file of its own, and a DI
+/// container the registration of the preferences.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -141,9 +162,34 @@ void _expectTheAppWithout(
     app.files[_implementation]!.owner,
     const ModuleOrigin(SharedPreferencesModule.id),
   );
+  // The guide has the notes of the app without the preferences, and in the
+  // section of the preferences what the role says and what the module adds.
+  final notes = _agentNotesOf(app);
+  expect(
+    notes.where((note) => !_preferences.contains(note.$1)),
+    _agentNotesOf(without),
+  );
+  expect(
+    [
+      for (final (origin, heading, note) in notes)
+        if (_preferences.contains(origin)) (origin, heading, note.isOfRole),
+    ],
+    unorderedEquals([
+      (
+        const ModuleOrigin(SharedPreferencesModule.id),
+        preferencesRole.description,
+        false,
+      ),
+      (
+        const RoleTemplateOrigin(preferencesRole),
+        preferencesRole.description,
+        true,
+      ),
+    ]),
+  );
   final changed = <ModuleId>[];
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml') continue;
+    if (path == 'pubspec.yaml' || path == AppEntryRole.agentsFile) continue;
     expect(app.files[path]!.owner, file.owner, reason: path);
     if (file.owner case ModuleOrigin(:final module)
         when changedBy.contains(module)) {
@@ -325,11 +371,17 @@ void main() {
     });
 
     test(
-        'contributes its brick, shared_preferences and its implementation of '
-        'the preferences, which opens asynchronously, and nothing else', () {
+        'contributes its brick, shared_preferences, its implementation of '
+        'the preferences, which opens asynchronously, and its note for '
+        'coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(4));
+      final note = contributions[3] as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, preferencesRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(sharedPreferencesBundle));
       expect(brick.bundle.name, 'shared_preferences');
@@ -606,6 +658,101 @@ void main() {
           null,
           null,
         ],
+      });
+      // What the note of the module tells coding agents of the numbers.
+      expect(
+        agentNote,
+        contains(
+          '`getDouble()` returns `null` for a key with an `int`, and '
+          '`getInt()` for a key with a `double`.',
+        ),
+      );
+    });
+
+    group('the note of the module for coding agents', () {
+      test(
+          'is in the section of the preferences of the guide, after what '
+          'the role says', () {
+        final ofRole = [
+          for (final (origin, _, note) in _agentNotesOf(withPreferences))
+            if (origin == const RoleTemplateOrigin(preferencesRole)) note.text,
+        ].single;
+
+        expect(agentNote, startsWith('With `shared_preferences`:\n'));
+        expect(
+          withPreferences.files[AppEntryRole.agentsFile]!.text,
+          contains(
+            '\n## ${preferencesRole.description}\n'
+            '\n'
+            '$ofRole\n'
+            '\n'
+            '${agentNote.trim()}\n',
+          ),
+        );
+      });
+
+      test(
+          'names the file of the module, the only one of the app that '
+          'imports the package, and what the roles of the app declare', () {
+        final code = _codeOf(agentNote);
+
+        expect(
+          code,
+          containsAll([
+            _implementation,
+            'AppPreferences',
+            'getDouble()',
+            'getInt()',
+            // The function that the app entry role requires of its provider.
+            '${AppEntryRole.bootstrap.name}()',
+          ]),
+        );
+        expect(
+          [
+            for (final file in withPreferences.files.values)
+              if (file.path.endsWith('.dart') &&
+                  file.text.contains('package:shared_preferences/'))
+                file.path,
+          ],
+          [_implementation],
+        );
+        expect(
+          _methodsOf(
+            _unitOf(withPreferences, PreferencesRole.file),
+            'AppPreferences',
+          ).keys,
+          containsAll(['getDouble', 'getInt']),
+        );
+      });
+
+      test(
+          'tells a test of the app to set the platform side that the app '
+          'test of the module sets', () {
+        const platform = 'SharedPreferencesAsyncPlatform.instance = '
+            'InMemorySharedPreferencesAsync.empty()';
+        const package = 'shared_preferences_platform_interface';
+        final mocks = parseString(
+          content: File(
+            'app_tests/shared_preferences/test/shared_preferences_mocks.dart',
+          ).readAsStringSync(),
+        ).unit;
+
+        expect(_codeOf(agentNote), containsAll([platform, package]));
+        final function =
+            mocks.declarations.whereType<FunctionDeclaration>().single;
+        final body = function.functionExpression.body as BlockFunctionBody;
+        expect(
+          [for (final statement in body.block.statements) '$statement'],
+          ['$platform;'],
+        );
+        expect(
+          [
+            for (final directive
+                in mocks.directives.whereType<ImportDirective>())
+              directive.uri.stringValue,
+          ],
+          everyElement(startsWith('package:$package/')),
+        );
       });
     });
   });
