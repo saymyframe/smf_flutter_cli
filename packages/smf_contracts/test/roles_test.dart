@@ -17,6 +17,7 @@ const List<Role> _roles = [
   analyticsRole,
   crashReportingRole,
   settingsScreenRole,
+  themeRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -48,6 +49,7 @@ void main() {
       'analytics role',
       'crash reporting role',
       'settings screen role',
+      'theme role',
     ]);
   });
 
@@ -107,6 +109,11 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': <String>{},
+    });
+    expect(shape(themeRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences'},
+      'uses': {'settings_screen', 'localization'},
     });
   });
 
@@ -191,27 +198,53 @@ void main() {
           'analytics',
           'crash_reporting',
           'settings_screen',
+          'theme',
         ],
       );
     });
 
-    test('generate exactly the files of their interfaces', () {
+    test(
+        'generate exactly the files of their interfaces in every app, and '
+        'other files only in the apps with the roles of a brick', () {
       for (final role in withTemplates) {
         final bricks = bricksOf(role);
+        final always = [
+          for (final brick in bricks)
+            if (brick.when.isEmpty) brick,
+        ];
 
-        // One brick, or none for a role that guarantees no file, such as
-        // the settings screen, whose template only checks its data.
+        // One brick for every app with the role, or none for a role that
+        // guarantees no file, such as the settings screen, whose template
+        // only checks its data.
         expect(
-          bricks,
+          always,
           hasLength(role.interface.files.isEmpty ? 0 : 1),
           reason: role.id,
         );
-        for (final brick in bricks) {
-          expect(brick.bundle.hooks, isEmpty, reason: role.id);
+        for (final brick in always) {
           expect(
             templatesOf(brick.bundle).keys.toSet(),
             role.interface.files.toSet(),
             reason: role.id,
+          );
+        }
+        // A file that only some apps have is in a brick of its own, which
+        // names the roles of those apps, among the roles that the role
+        // requires or uses. The role does not guarantee such a file.
+        for (final brick in bricks) {
+          expect(brick.bundle.hooks, isEmpty, reason: role.id);
+          if (brick.when.isEmpty) continue;
+          expect(
+            role.visibleRoles,
+            containsAll(brick.when),
+            reason: '${role.id}: ${brick.bundle.name}',
+          );
+          expect(
+            templatesOf(brick.bundle).keys.toSet().intersection(
+                  role.interface.files.toSet(),
+                ),
+            isEmpty,
+            reason: '${role.id}: ${brick.bundle.name}',
           );
         }
       }
@@ -221,7 +254,16 @@ void main() {
     // observers of the router are. The other names are the variables of the
     // render hooks of the templates.
     test('have tags only of their own sockets, and no other mustache', () {
-      final known = {'facade', 'guards', 'locales'};
+      final known = {
+        'facade',
+        'guards',
+        'locales',
+        'mode_key',
+        'text_title',
+        'text_system',
+        'text_light',
+        'text_dark',
+      };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
         for (final brick in bricksOf(role)) {

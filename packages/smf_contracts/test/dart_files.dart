@@ -22,11 +22,73 @@ void debugPrint(String? message, {int? wrapWidth}) =>
     debugPrinted.add('$message');
 ''';
 
+/// A stand-in for the part of Flutter's material library that the templates
+/// of the roles use outside their widgets, with the signatures of Flutter
+/// 3.44: the modes of a theme, a notifier that calls its listeners, and an
+/// inherited widget that holds one, which a context gives to the code that
+/// asks for it. Nothing here builds a widget, so what a notifier rebuilds
+/// is for the tests of a running app.
+const _material = '''
+enum ThemeMode { system, light, dark }
+
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  const Listenable();
+
+  void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
+}
+
+mixin class ChangeNotifier implements Listenable {
+  final List<VoidCallback> _listeners = [];
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  void notifyListeners() {
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+}
+
+abstract class Key {}
+
+abstract class Widget {
+  const Widget({this.key});
+
+  final Key? key;
+}
+
+abstract class InheritedWidget extends Widget {
+  const InheritedWidget({super.key, required this.child});
+
+  final Widget child;
+}
+
+abstract class InheritedNotifier<T extends Listenable> extends InheritedWidget {
+  const InheritedNotifier({super.key, this.notifier, required super.child});
+
+  final T? notifier;
+}
+
+abstract class BuildContext {
+  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>({
+    Object? aspect,
+  });
+}
+''';
+
 /// Dart files of an app, written to a temporary directory as the package of
-/// the test app, with a stand-in for Flutter's foundation library, so that
-/// the code that the template of a role generates can be type-checked and
-/// run with the Dart SDK alone, as the tests of the package run without
-/// the Flutter SDK. [delete] removes the directory.
+/// the test app, with stand-ins for Flutter's foundation and material
+/// libraries, so that the code that the template of a role generates can be
+/// type-checked and run with the Dart SDK alone, as the tests of the
+/// package run without the Flutter SDK. [delete] removes the directory.
 final class DartFiles {
   DartFiles._(this._root, this._paths);
 
@@ -42,6 +104,7 @@ final class DartFiles {
       write('app/$path', text);
     }
     write('flutter/lib/foundation.dart', _foundation);
+    write('flutter/lib/material.dart', _material);
     write('app/pubspec.yaml', 'name: ${testContext.appName}\n');
     write(
       'app/.dart_tool/package_config.json',

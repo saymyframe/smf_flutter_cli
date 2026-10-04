@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final themeRoleSettingBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/theme/theme_mode_setting.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvbWF0ZXJpYWwuZGFydCc7CgppbXBvcnQgJ3RoZW1lX21vZGUuZGFydCc7CgovLy8gVGhlIGVudHJ5IG9mIHRoZSB0aGVtZSBtb2RlIG9uIHRoZSBzZXR0aW5ncyBzY3JlZW4gb2YgdGhlIGFwcDogdGhlIHVzZXIKLy8vIHNlbGVjdHMgd2hldGhlciB0aGUgYXBwIGlzIGxpZ2h0LCBkYXJrLCBvciBmb2xsb3dzIHRoZSBkZXZpY2UuCmNsYXNzIFRoZW1lTW9kZVNldHRpbmcgZXh0ZW5kcyBTdGF0ZWxlc3NXaWRnZXQgewogIC8vLyBDcmVhdGVzIHRoZSBlbnRyeS4KICBjb25zdCBUaGVtZU1vZGVTZXR0aW5nKHtzdXBlci5rZXl9KTsKCiAgQG92ZXJyaWRlCiAgV2lkZ2V0IGJ1aWxkKEJ1aWxkQ29udGV4dCBjb250ZXh0KSB7CiAgICBmaW5hbCBjb250cm9sbGVyID0gVGhlbWVNb2RlU2NvcGUub2YoY29udGV4dCk7CiAgICByZXR1cm4gUmFkaW9Hcm91cDxUaGVtZU1vZGU+KAogICAgICBncm91cFZhbHVlOiBjb250cm9sbGVyLm1vZGUsCiAgICAgIG9uQ2hhbmdlZDogKG1vZGUpIHsKICAgICAgICBpZiAobW9kZSAhPSBudWxsKSBjb250cm9sbGVyLnNlbGVjdChtb2RlKTsKICAgICAgfSwKICAgICAgY2hpbGQ6IENvbHVtbigKICAgICAgICBtYWluQXhpc1NpemU6IE1haW5BeGlzU2l6ZS5taW4sCiAgICAgICAgY3Jvc3NBeGlzQWxpZ25tZW50OiBDcm9zc0F4aXNBbGlnbm1lbnQuc3RyZXRjaCwKICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgTGlzdFRpbGUoCiAgICAgICAgICAgIGxlYWRpbmc6IGNvbnN0IEljb24oSWNvbnMuYnJpZ2h0bmVzc182X291dGxpbmVkKSwKICAgICAgICAgICAgdGl0bGU6IFRleHQoe3t7dGV4dF90aXRsZX19fSksCiAgICAgICAgICApLAogICAgICAgICAgUmFkaW9MaXN0VGlsZTxUaGVtZU1vZGU+KAogICAgICAgICAgICB2YWx1ZTogVGhlbWVNb2RlLnN5c3RlbSwKICAgICAgICAgICAgdGl0bGU6IFRleHQoe3t7dGV4dF9zeXN0ZW19fX0pLAogICAgICAgICAgKSwKICAgICAgICAgIFJhZGlvTGlzdFRpbGU8VGhlbWVNb2RlPigKICAgICAgICAgICAgdmFsdWU6IFRoZW1lTW9kZS5saWdodCwKICAgICAgICAgICAgdGl0bGU6IFRleHQoe3t7dGV4dF9saWdodH19fSksCiAgICAgICAgICApLAogICAgICAgICAgUmFkaW9MaXN0VGlsZTxUaGVtZU1vZGU+KAogICAgICAgICAgICB2YWx1ZTogVGhlbWVNb2RlLmRhcmssCiAgICAgICAgICAgIHRpdGxlOiBUZXh0KHt7e3RleHRfZGFya319fSksCiAgICAgICAgICApLAogICAgICAgIF0sCiAgICAgICksCiAgICApOwogIH0KfQo=",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "theme_role_setting",
+  "description":
+      "The template of the theme role of SMF for an app with a settings screen: the entry in which the user selects the theme mode.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});
