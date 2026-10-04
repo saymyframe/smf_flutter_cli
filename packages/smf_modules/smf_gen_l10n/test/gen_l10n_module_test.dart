@@ -18,12 +18,13 @@ import 'support/type_check.dart';
 /// ASCII, which has no translation.
 const _bye = 'Say "bye" to the app\'s \\ for \$5 — до зустрічі\nSee you';
 
-/// A module with a text in three languages and one without a translation.
+/// A module with a text in three languages of the app and in Maltese, a
+/// language that no app can be in, and a text without a translation.
 const _greeting = TextsModule('greeting', [
   LocalizedText(
     'hello',
     en: 'Hello',
-    translations: {'uk': 'Вітаю', 'de': 'Hallo'},
+    translations: {'uk': 'Вітаю', 'mt': 'Bonġu', 'de': 'Hallo'},
   ),
   LocalizedText('bye', en: _bye),
 ]);
@@ -293,12 +294,18 @@ void main() {
     test('has an ARB file for each language of the app', () {
       final input = localizationRole.hookInput(result.hook!);
 
+      // The role leaves out Maltese, a language of a text in which Flutter
+      // has no texts for its own widgets, so gen-l10n gets no file for it.
       expect(localizationRole.localesIn(input), ['en', 'uk', 'de']);
       expect(_arbFilesOf(app).keys, [
         'lib/l10n/app_de.arb',
         'lib/l10n/app_en.arb',
         'lib/l10n/app_uk.arb',
       ]);
+      expect(
+        [for (final file in app.files.values) file.text],
+        everyElement(isNot(contains('Bonġu'))),
+      );
       for (final path in _arbFilesOf(app).keys) {
         expect(app.files[path]!.owner, _module, reason: path);
         expect(app.files[path]!.fromHook, isTrue, reason: path);
