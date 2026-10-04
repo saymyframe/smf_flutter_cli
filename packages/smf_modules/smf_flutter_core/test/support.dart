@@ -201,6 +201,10 @@ final class EverySocketModule extends SmfModule {
           'Every socket',
           'The app has something in every socket of its entry.',
         ),
+        AppEntryRole.agentSections.entry(
+          'Every socket',
+          AgentNote('Leave what the sockets of `lib/bootstrap.dart` got.'),
+        ),
       ];
 }
 

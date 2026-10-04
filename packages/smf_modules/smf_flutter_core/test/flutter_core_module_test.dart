@@ -69,11 +69,13 @@ void main() {
   });
 
   group('an app of flutter_core alone', () {
+    late RenderedApp app;
     late Map<String, String> texts;
 
     setUpAll(() async {
       final result = await renderedApp(const [FlutterCoreModule.id]);
-      texts = result.app!.texts;
+      app = result.app!;
+      texts = app.texts;
     });
 
     test('has the Dart entry point, the root widget and a widget test', () {
@@ -179,6 +181,28 @@ void main() {
     test('names the app in a README without sections', () {
       expect(texts['README.md'], '# contract_app\n\nA new Flutter project.\n');
     });
+
+    test(
+        'has the guide for coding agents of the app entry role, with the '
+        'section of the role', () {
+      final guide = app.files[AppEntryRole.agentsFile]!;
+
+      // The template of the role generates the guide, whichever module
+      // provides the role.
+      expect(guide.owner, const RoleTemplateOrigin(appEntryRole));
+      expect(
+        app.files[AppEntryRole.claudeFile]!.owner,
+        const RoleTemplateOrigin(appEntryRole),
+      );
+      expect(texts[AppEntryRole.claudeFile], '@AGENTS.md\n');
+      expect(guide.text, startsWith('# AGENTS.md\n\n'));
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true)
+            .allMatches(guide.text)
+            .map((heading) => heading[1]),
+        [appEntryRole.description],
+      );
+    });
   });
 
   group('an app of flutter_core with a router', () {
@@ -243,6 +267,18 @@ void main() {
         '## Every socket\n'
         '\n'
         'The app has something in every socket of its entry.\n',
+      );
+    });
+
+    test('has the notes of the modules in its guide for coding agents', () {
+      expect(
+        texts[AppEntryRole.agentsFile],
+        endsWith(
+          '\n'
+          '## Every socket\n'
+          '\n'
+          'Leave what the sockets of `lib/bootstrap.dart` got.\n',
+        ),
       );
     });
 
