@@ -74,6 +74,7 @@ void main() {
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('preferences_restorers').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
+    expect(named('router_walk_guards').roles, {routerRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -309,6 +310,40 @@ void main() {
   });
 
   test(
+      'the test of the walk of the routes while a guard keeps the user out '
+      'applies to the apps with the walk and the fixture gates, with each '
+      'router', () {
+    final walkGuards = named('router_walk_guards');
+
+    expect(appsOf(walkGuards), isNotEmpty);
+    // It runs the walk that the CLI keeps, with the file that the matrix
+    // writes for it.
+    expect(appsOf(named('router_walk')), containsAll(appsOf(walkGuards)));
+    for (final app in apps) {
+      if (!walkGuards.appliesTo(app)) continue;
+      expect(
+        app.modules,
+        contains(const ModuleId('fake_gate')),
+        reason: app.name,
+      );
+    }
+    for (final module in fixtureModules()) {
+      if (!module.descriptor.provides.contains(routerRole)) continue;
+      expect(
+        [
+          for (final app in apps)
+            if (walkGuards.appliesTo(app) &&
+                app.modules.contains(module.descriptor.id))
+              app.name,
+        ],
+        isNotEmpty,
+        reason: 'No app with ${module.descriptor.id} has the test of the walk '
+            'while a guard keeps the user out.',
+      );
+    }
+  });
+
+  test(
       'the tests that use the helpers of router_screens apply only to the '
       'apps that have them', () {
     final routerScreens = appsOf(named('router_screens'));
@@ -317,6 +352,7 @@ void main() {
       'router_listeners',
       'router_guards',
       'layout_guards',
+      'router_walk_guards',
       'layout_screens',
       'go_router_screens',
       'bottom_tabs_screens',

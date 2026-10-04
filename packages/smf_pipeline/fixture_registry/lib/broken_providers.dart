@@ -250,6 +250,13 @@ List<BrokenProvider> brokenProviders() => const [
             'While a guard does not allow, the target of a guard after it is '
                 'a route like any other.',
           ),
+          MatrixExpectedFailure(
+            'test/router_walk_guards_test.dart',
+            'the walk of the routes holds while a guard keeps the user out',
+            'While a guard does not allow, each location outside its flow '
+                'shows the target of the guard, and each location of its flow '
+                'its own screen.',
+          ),
         ],
       ),
       BrokenProvider(

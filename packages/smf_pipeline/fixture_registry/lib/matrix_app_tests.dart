@@ -196,6 +196,20 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // which run flutter test for other tests already, and whose layout
       // shows the destinations of both fixture features.
       await routerWalkAppTest(among: (app) => app.everyModuleWith != null),
+      // That walk of the routes while a guard keeps the user out, as on a
+      // device, where no test opens a guard: with a gate of the fixture
+      // gates closed, the walk expects the target of its guard in place of
+      // each location outside its flow, as the router role says, whichever
+      // module provides the router. The apps it applies to have the walk,
+      // and the tests of router_screens, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/router_walk_guards',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_gate')),
+        roles: {routerRole},
+      ),
     ],
     testedRoles: {
       routerRole,
