@@ -70,6 +70,22 @@ void main() {
       );
     });
 
+    test('checks a value the same whoever contributes it', () {
+      const policy = MaxPolicy();
+
+      for (final origin in [
+        null,
+        const ModuleOrigin(ModuleId('home')),
+        const PipelineOrigin(),
+      ]) {
+        expect(policy.problemFrom(origin, 'ios', '15.0'), isNull);
+        expect(
+          policy.problemFrom(origin, 'ios', 'latest'),
+          policy.problemWith('ios', 'latest'),
+        );
+      }
+    });
+
     test('keeps the higher version and the earlier of equal ones', () {
       const policy = MaxPolicy();
 

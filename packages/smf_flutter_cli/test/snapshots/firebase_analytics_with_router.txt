@@ -1,3 +1,17 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
 === README.md (flutter_core) ===
 # my_app
 

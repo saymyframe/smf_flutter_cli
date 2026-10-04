@@ -283,7 +283,7 @@ ValidationResult validate({
 
   final orders = <SocketRef, ContributionOrder>{};
   for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
-    final order = orderContributions(contributions, resolution);
+    final order = orderSocket(socket, contributions, resolution);
     orders[socket] = order;
     issues
       ..addAll(_orderIssues('the $socket', order))
@@ -1044,6 +1044,11 @@ Iterable<SmfIssue> _pubspecTagIssues(
 
 /// Two bricks that generate the same file.
 ///
+/// The issue is that of the later of the two contributors, or, when one of
+/// them is the template of a role, of the module: the file of the template
+/// is part of the role, so the module is the one that an app can do
+/// without.
+///
 /// A path with a variable is left to stage 8, which compares the rendered
 /// paths.
 Iterable<SmfIssue> _ownerIssues(Collection collection) sync* {
@@ -1060,7 +1065,10 @@ Iterable<SmfIssue> _ownerIssues(Collection collection) sync* {
             : 'Both $existing and ${collected.origin} generate';
         yield SmfIssue(
           '$who ${file.path}; every file has one brick.',
-          origin: collected.origin,
+          origin:
+              collected.origin is RoleTemplateOrigin && existing is ModuleOrigin
+                  ? existing
+                  : collected.origin,
           path: file.path,
         );
       }

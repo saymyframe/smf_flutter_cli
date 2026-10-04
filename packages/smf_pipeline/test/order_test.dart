@@ -3,6 +3,9 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
+String _keys(List<MapEntry<String, String>> entries) =>
+    entries.map((entry) => entry.key).join(',');
+
 void main() {
   final socketRole = TestRole<NoDsl>('s', openToAllModules: true);
   final socket =
@@ -248,6 +251,74 @@ void main() {
     // A cycle through modules that do not contribute names them too.
     final through = orderContributions([of('a')], resolution);
     expect(through.cycle, ['a', 'b', 'c']);
+  });
+
+  test(
+      'a socket that does not follow the edges takes its contributors by '
+      'name, and a cycle of edges among them is none of its own', () {
+    final x = TestRole<NoDsl>('x');
+    final y = TestRole<NoDsl>('y');
+    final z = TestRole<NoDsl>('z');
+    // The edges of a, b and c form a cycle, and d comes after a.
+    final resolution = resolutionOf([
+      TestModule('a', requires: {x}, providers: [RoleProvider.plain(z)]),
+      TestModule('b', requires: {y}, providers: [RoleProvider.plain(x)]),
+      TestModule('c', requires: {z}, providers: [RoleProvider.plain(y)]),
+      TestModule('d', dependsOn: {'a'}),
+      TestModule('0', dependsOn: {'d'}),
+    ]);
+    final sorted = SocketRef<KeyedSocket<String>>.role(
+      socketRole,
+      'sorted',
+      const KeyedSocket(
+        policy: ConflictPolicy(),
+        renderer: _keys,
+        followsOrderEdges: false,
+      ),
+    );
+    Collected entry(ContributionOrigin origin, String key) => Collected(
+          sorted.entry(key, key).withOrigin(origin),
+          origin,
+          applies: true,
+        );
+    Collected entryOf(String module, String key) =>
+        entry(ModuleOrigin(ModuleId(module)), key);
+
+    final order = orderSocket(
+      sorted,
+      [
+        entryOf('d', 'd'),
+        entry(RoleTemplateOrigin(x), 'template'),
+        entryOf('c', 'c2'),
+        entryOf('b', 'b'),
+        entryOf('0', '0'),
+        entryOf('c', 'c1'),
+        entryOf('a', 'a'),
+      ],
+      resolution,
+    );
+
+    // By the names of the contributors alone, each contributor's in the
+    // order it gave them: 0 comes first though it depends on d.
+    expect(
+      [
+        for (final collected in order.contributions)
+          (collected.contribution as SocketContribution).entryKey,
+      ],
+      ['0', 'a', 'b', 'c2', 'c1', 'd', 'template'],
+    );
+    expect(order.edges, isEmpty);
+    expect(order.cycle, isEmpty);
+
+    // The same contributors of a socket that follows the edges are on the
+    // cycle.
+    final following = orderSocket(
+      socket,
+      [of('d'), of('c'), of('b'), of('0'), of('a')],
+      resolution,
+    );
+    expect(codes(following), ['a', 'b', 'c', 'd', '0']);
+    expect(following.cycle, ['a', 'b', 'c']);
   });
 
   test('a contributor keeps the order of its contributions and variant', () {

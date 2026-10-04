@@ -144,13 +144,21 @@ void main() {
   });
 
   test('the role interfaces name files of the app', () {
+    final dartFile = RegExp(r'^lib/[a-z0-9_/]+\.dart$');
+    // A file for those who work on the app, such as the guide for coding
+    // agents, is at its root.
+    final rootFile = RegExp(r'^[A-Z]+\.md$');
     for (final role in _roles) {
       final interface = role.interface;
-      for (final file in [
-        ...interface.files,
-        for (final symbol in interface.symbols) symbol.path,
-      ]) {
-        expect(file, matches(RegExp(r'^lib/[a-z0-9_/]+\.dart$')), reason: file);
+      for (final file in interface.files) {
+        expect(
+          file,
+          anyOf(matches(dartFile), matches(rootFile)),
+          reason: file,
+        );
+      }
+      for (final symbol in interface.symbols) {
+        expect(symbol.path, matches(dartFile), reason: symbol.path);
       }
     }
   });
@@ -173,6 +181,7 @@ void main() {
       expect(
         [for (final role in withTemplates) role.id],
         [
+          'app_entry',
           'router',
           'layout',
           'localization',

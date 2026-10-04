@@ -11,6 +11,20 @@ String _renderKeys(List<MapEntry<String, NoValue>> entries) =>
 
 String _renderValue(String value) => 'v$value';
 
+/// A policy that takes a value only from the module `home`.
+final class _OnlyFromHome extends MergePolicy<String> {
+  const _OnlyFromHome();
+
+  @override
+  String? problemFrom(ContributionOrigin? origin, String key, String value) =>
+      origin == const ModuleOrigin(ModuleId('home'))
+          ? null
+          : '$origin may not set $key.';
+
+  @override
+  String merge(String key, String existing, String incoming) => incoming;
+}
+
 String _renderRaw(List<MapEntry<String, String>> entries) =>
     entries.map((entry) => entry.value).join();
 
@@ -625,6 +639,68 @@ void main() {
       expect(const ArgsSocket({}).carriesImports, isTrue);
       expect(keyed.kind.carriesImports, isFalse);
       expect(minIos.kind.carriesImports, isFalse);
+    });
+
+    test(
+        'follow the order edges of their contributors, but for a keyed '
+        'socket whose renderer orders its entries itself', () {
+      for (final kind in <SocketKind>[
+        const CodeSocket(),
+        const CodeSocket.text(),
+        const WrapperSocket(),
+        const FactoryListSocket(),
+        const ArgsSocket({}),
+        keyed.kind,
+        minIos.kind,
+        PipelineSockets.pubspecFlutter.kind,
+      ]) {
+        expect(kind.followsOrderEdges, isTrue, reason: '$kind');
+      }
+      const sorted = KeyedSocket<String>(
+        policy: ConflictPolicy(),
+        renderer: _renderRaw,
+        followsOrderEdges: false,
+      );
+      expect(sorted.followsOrderEdges, isFalse);
+    });
+
+    test('keyed and value sockets tell their policy who contributes a value',
+        () {
+      const policy = _OnlyFromHome();
+      final keyedSocket = SocketRef<KeyedSocket<String>>.role(
+        role,
+        'from_home',
+        const KeyedSocket(policy: policy, renderer: _renderPairs),
+      );
+      final valueSocket = SocketRef<ValueSocket<String>>.role(
+        role,
+        'one_from_home',
+        const ValueSocket(policy: policy, renderer: _renderValue),
+      );
+      const home = ModuleOrigin(ModuleId('home'));
+      const other = ModuleOrigin(ModuleId('other'));
+
+      for (final (socket, contribution, key) in [
+        (keyedSocket, keyedSocket.entry('a', '1'), 'a'),
+        (valueSocket, valueSocket.value('1'), valueSocket.tag),
+      ]) {
+        expect(
+          socket.problemsWith(contribution.withOrigin(home)),
+          isEmpty,
+          reason: '$socket',
+        );
+        expect(
+          socket.problemsWith(contribution.withOrigin(other)),
+          ['other may not set $key.'],
+          reason: '$socket',
+        );
+        // Not collected yet: no contributor.
+        expect(
+          socket.problemsWith(contribution),
+          ['null may not set $key.'],
+          reason: '$socket',
+        );
+      }
     });
 
     test('keyed and value sockets check the type of their values', () {

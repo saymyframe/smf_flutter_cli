@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:meta/meta.dart';
+import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
 import 'package:smf_contracts/core.dart';
 
+part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
 
 /// The app entry role; see [AppEntryRole].
@@ -40,6 +42,15 @@ const appEntryRole = AppEntryRole._();
 /// every one of its code in `lib/` in a method
 /// `build(BuildContext context)` of a class, since they cannot tell which
 /// of them is the root.
+///
+/// The role's template generates the guide for coding agents that work on
+/// the app, whichever module provides the role: [agentsFile], with a
+/// section for each role and module of the app that has notes for them
+/// (see [agentSections]), and [claudeFile], which gives the same guide to
+/// the agents that read that file instead. The structural rule
+/// `app_entry.agent_guide_paths` checks the paths that the guide names
+/// below the top-level directories of a Flutter project, and its paths to
+/// Dart files: each is a file or a directory of the app.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -81,6 +92,14 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The path of the guide for coding agents that work on the app; see
+  /// [agentSections].
+  static const agentsFile = 'AGENTS.md';
+
+  /// The path of the file that gives [agentsFile] to the agents that read
+  /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
+  static const claudeFile = 'CLAUDE.md';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -328,6 +347,57 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Sections of [agentsFile], the guide for coding agents that work on the
+  /// app, keyed by their heading, each with an [AgentNote] in Markdown.
+  ///
+  /// A note tells what the code of the app does not show: a rule that holds
+  /// across files, an order, what not to do and what to do instead, a
+  /// placeholder, a step that needs a person. The section of a role has the
+  /// [Role.description] of the role as its heading: the template of the
+  /// role tells there, with [AgentNote.ofRole], what holds whichever module
+  /// provides the role, and a provider adds what its package brings under
+  /// the same heading. A module without a role has a heading of its own.
+  ///
+  /// The sections follow the introduction of the guide as `## <heading>`
+  /// sections: that of this role first, then the others in the order of
+  /// their headings. A section has the notes of the roles first, then the
+  /// others in the order of the ids of their contributors, each once, with
+  /// an empty line between two notes. So replacing the provider of a role
+  /// changes only its own note. The socket does not follow the order edges
+  /// of its contributors (see [SocketKind.followsOrderEdges]): a role in
+  /// the [Contribution.when] of a note adds no edge, so no note can make
+  /// the app impossible to generate.
+  ///
+  /// A heading is one line without spaces around it. A note has text,
+  /// starts neither a title nor a section, with a line that starts with
+  /// `# ` or `## ` or a line of `=` or `-` under a line of text, and closes
+  /// its fenced code blocks. Only the template of a role contributes a
+  /// note of a role ([AgentNote.ofRole]).
+  ///
+  /// A note names a file or a directory of the app in backticks, by its
+  /// path from the root of the app, such as `lib/core/di/`. The structural
+  /// rule `app_entry.agent_guide_paths` reads the paths below a top-level
+  /// directory of a Flutter project, such as `lib/`, `test/` or `android/`,
+  /// whether the app has that directory or not, and the paths to Dart
+  /// files, and reports one that the app does not have. It does not read
+  /// the name of a file at the root of the app, such as `pubspec.yaml`,
+  /// which nothing tells from other names. So what a note tells of a file
+  /// of a role that the app may lack is a contribution of its own, with
+  /// that role in its [Contribution.when], and what depends on the data of
+  /// a role comes from the render hook of the role or of its provider. A
+  /// file that a later step writes, such as one of a tool that runs after
+  /// generation, is named as a pattern, with `<…>` or `*`, or left to the
+  /// README.
+  static const agentSections = SocketRef<KeyedSocket<AgentNote>>.role(
+    appEntryRole,
+    'agent_sections',
+    KeyedSocket(
+      policy: _AgentNotePolicy(),
+      renderer: _renderAgentSections,
+      followsOrderEdges: false,
+    ),
+  );
+
   @override
   String get id => 'app_entry';
 
@@ -359,12 +429,17 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleAppPlugins,
         gradleAppDependencies,
         readmeSections,
+        agentSections,
       ];
 
   @override
   RoleInterface get interface => const RoleInterface(
+        files: [agentsFile, claudeFile],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
+
+  @override
+  RoleTemplate<NoDsl> get template => const _AppEntryTemplate();
 
   @override
   List<ModuleRule<NoDsl>> get moduleRules => const [
@@ -430,6 +505,14 @@ final class AppEntryRole extends Role<NoDsl> {
               'the meta-data of the application in the Android manifest, and '
               'the plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.agent_guide_paths',
+          description: 'A path that the guide for coding agents names in '
+              'inline code below a top-level directory of a Flutter '
+              'project, or to a Dart file, is a file or a directory of the '
+              'app, written from the root of the app.',
+          check: _checkAgentGuidePaths,
         ),
       ];
 }

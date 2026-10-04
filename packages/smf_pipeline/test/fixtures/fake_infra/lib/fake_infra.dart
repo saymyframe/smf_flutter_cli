@@ -36,6 +36,18 @@ const _materialDelegate = Fragment(
 const _readmeSection = 'The app has something in every socket of its entry, '
     'with `code` and a [link](https://example.com).';
 
+/// The note for coding agents that [FakeSocketsModule] and
+/// [FakeOverlapModule] both add.
+const _agentNote = 'The modules of the fixture fill the sockets of the app '
+    'entry, and the tests read what the sockets got.';
+
+/// The note for coding agents of [FakeSocketsModule] alone: its files by
+/// their paths, and the directories of the fixtures as a pattern.
+const _filesAgentNote = 'The assets of the fixture are in `assets/fixture/`, '
+    'and its theme mode in '
+    '`lib/core/fixture_theme_mode/fixture_theme_mode.dart`, one of the '
+    'directories `lib/core/fixture_*/`.';
+
 /// A module that puts something into every socket of the app entry that no
 /// real module uses yet, and into the `flutter:` section of the pubspec.
 ///
@@ -187,14 +199,20 @@ final class FakeSocketsModule extends SmfModule {
           '1.9.1',
         ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
+        AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
+        AppEntryRole.agentSections.entry(
+          'Fixture',
+          AgentNote(_filesAgentNote),
+        ),
       ];
 }
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
 /// them: equal permissions, meta-data, plist strings and README sections
-/// agree, the plist arrays are united, the highest versions win, and the
-/// delegate of the localizations appears once.
+/// agree, the plist arrays are united, the highest versions win, the
+/// delegate of the localizations appears once, and so does the note for
+/// coding agents that both have.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -242,6 +260,7 @@ final class FakeOverlapModule extends SmfModule {
           '1.8.0',
         ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
+        AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];
 }
 

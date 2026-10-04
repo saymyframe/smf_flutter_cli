@@ -164,7 +164,7 @@ final class _VariableImports {
 ///    machine can write, and where the kind of the module of a provider
 ///    may generate files.
 /// 2. Orders the contributions of every socket, those of the render hooks
-///    included (see [orderContributions]), and renders each socket into the
+///    included (see [orderSocket]), and renders each socket into the
 ///    text of its tags. A socket that gets contributions but has no tag in
 ///    any brick is an error, since its code would be lost. The sockets of
 ///    the pipeline get the sections of the merged [pubspec], and the tags
@@ -659,7 +659,7 @@ _SocketTexts _renderSockets({
   }
 
   for (final MapEntry(key: socket, value: collected) in bySocket.entries) {
-    final order = orderContributions(collected, resolution);
+    final order = orderSocket(socket, collected, resolution);
     if (order.cycle.isNotEmpty) {
       issues.add(
         SmfIssue(

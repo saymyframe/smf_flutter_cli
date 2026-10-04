@@ -4,6 +4,7 @@ import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
+import 'role_support.dart';
 import 'support.dart';
 
 /// The file of the provider with the root widget of the app.
@@ -200,7 +201,6 @@ void main() {
       expect(appEntryRole.cardinality, RoleCardinality.exactlyOne);
       expect(appEntryRole.requires, isEmpty);
       expect(appEntryRole.uses, isEmpty);
-      expect(appEntryRole.template, isNull);
       expect(appEntryRole.options, isEmpty);
       expect(appEntryRole.presenceFlag, 'has_app_entry');
     });
@@ -230,7 +230,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(17));
+      expect(sockets, hasLength(18));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -238,6 +238,7 @@ void main() {
       expect(tags.toSet(), hasLength(tags.length));
       expect(tags, contains('smf_app_entry__bootstrap_platform'));
       expect(tags, contains('smf_app_entry__root_wrappers_open'));
+      expect(tags, contains('smf_app_entry__agent_sections'));
     });
 
     test('bootstrap phases are separate sockets in start-up order', () {
@@ -273,6 +274,7 @@ void main() {
           'app_entry.material_root',
           'app_entry.root_in_build',
           'app_entry.native_keys',
+          'app_entry.agent_guide_paths',
         ],
       );
       expect(
@@ -979,6 +981,655 @@ void main() {
           reason: text,
         );
       }
+    });
+  });
+
+  group('the guide for coding agents', () {
+    const socket = AppEntryRole.agentSections;
+
+    /// The problems of the note [text] under [heading].
+    List<String> problemsOf(String text, {String heading = 'Router'}) =>
+        socket.problemsWith(socket.entry(heading, AgentNote(text)));
+
+    test('is AGENTS.md, with a CLAUDE.md that reads it', () {
+      expect(AppEntryRole.agentsFile, 'AGENTS.md');
+      expect(AppEntryRole.claudeFile, 'CLAUDE.md');
+      expect(
+        appEntryRole.interface.files,
+        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
+      );
+      expect(socket.tag, 'smf_app_entry__agent_sections');
+      expect(socket.kind.carriesImports, isFalse);
+      // Its renderer orders the sections and their notes itself, so a note
+      // under a condition adds no order edge between the contributors.
+      expect(socket.kind.followsOrderEdges, isFalse);
+    });
+
+    test(
+        'comes from the template of the role, whose brick has the tag of '
+        'the sections alone on a line', () {
+      final brick = appEntryRole.template
+          .contribute(testContext)
+          .whereType<BrickContribution>()
+          .single;
+      final templates = {
+        for (final file in brick.bundle.files)
+          file.path: utf8.decode(base64.decode(file.data)),
+      };
+
+      expect(brick.bundle.name, 'app_entry_role');
+      expect(
+        templates.keys,
+        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
+      );
+      expect(templates[AppEntryRole.claudeFile], '@AGENTS.md\n');
+      final lines = templates[AppEntryRole.agentsFile]!.split('\n');
+      expect(lines.first, '# AGENTS.md');
+      // The sections render as complete lines after the introduction.
+      expect(lines.where((line) => line.contains('{{')), [
+        '{{{${socket.tag}}}}',
+      ]);
+      expect(lines.sublist(lines.length - 2), ['{{{${socket.tag}}}}', '']);
+    });
+
+    test('has the section of the role in every app, as what the role says', () {
+      final note = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .single;
+
+      expect(note.socket, socket);
+      expect(note.entryKey, appEntryRole.description);
+      expect(note.when, isEmpty);
+      expect((note.entryValue! as AgentNote).isOfRole, isTrue);
+      expect(socket.problemsWith(note), isEmpty);
+    });
+
+    test(
+        'a note of a role comes from the template of a role, not from a '
+        'module', () {
+      SocketContribution from(ContributionOrigin origin, AgentNote note) =>
+          socket.entry('Router', note).withOrigin(origin);
+      const module = ModuleOrigin(ModuleId('go_router'));
+      const template = RoleTemplateOrigin(appEntryRole);
+
+      expect(
+        socket.problemsWith(from(module, AgentNote.ofRole('Text.'))).single,
+        'The module go_router contributes a note of a role to the section '
+        '"Router" of the guide for coding agents. Only the template of a '
+        'role says what the role guarantees; a module contributes '
+        'AgentNote(text).',
+      );
+      expect(socket.problemsWith(from(module, AgentNote('Text.'))), isEmpty);
+      expect(
+        socket.problemsWith(from(template, AgentNote.ofRole('Text.'))),
+        isEmpty,
+      );
+      // A contribution that the pipeline has not collected has no
+      // contributor to check.
+      expect(
+        socket.problemsWith(socket.entry('Router', AgentNote.ofRole('Text.'))),
+        isEmpty,
+      );
+      // The other problems of a note do not depend on its contributor.
+      expect(
+        socket.problemsWith(from(module, AgentNote(''))).single,
+        endsWith('has no text.'),
+      );
+      expect(
+        socket.problemsWith(from(template, AgentNote.ofRole(''))).single,
+        endsWith('has no text.'),
+      );
+    });
+
+    test('renders with the section of the role after its introduction',
+        () async {
+      final rendered = await renderTemplate(appEntryRole);
+      final guide = rendered.files[AppEntryRole.agentsFile]!;
+      final note = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .single
+          .entryValue! as AgentNote;
+
+      expect(rendered.files.keys, [
+        AppEntryRole.agentsFile,
+        AppEntryRole.claudeFile,
+      ]);
+      expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
+      expect(rendered.elsewhere, isEmpty);
+      final [title, empty, introduction, ...sections] = guide.split('\n');
+      expect(title, '# AGENTS.md');
+      expect(empty, isEmpty);
+      expect(introduction, startsWith('This guide tells coding agents'));
+      expect(introduction, contains('[README.md](README.md)'));
+      expect(
+        sections.join('\n'),
+        '\n## App entry\n\n${note.text}\n',
+      );
+    });
+
+    test(
+        'has the section of the app entry first, then the others in the '
+        'order of their headings', () {
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('Routes.')),
+          ('App entry', AgentNote('Start-up.')),
+          ('Analytics', AgentNote('\nEvents.\n')),
+        ]),
+        {
+          socket.tag: '\n## App entry\n\nStart-up.\n'
+              '\n## Analytics\n\nEvents.\n'
+              '\n## Router\n\nRoutes.',
+        },
+      );
+    });
+
+    test(
+        'unites the notes of a section: those of roles first, then the '
+        'others in the order of the contributions, each once', () {
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('With a package: its routes.')),
+          ('Router', AgentNote.ofRole('Navigate through the facade.')),
+          ('Router', AgentNote('A listener of the screen.')),
+          ('Router', AgentNote('With a package: its routes.')),
+          ('Router', AgentNote.ofRole('Navigate through the facade.')),
+        ]),
+        {
+          socket.tag: '\n## Router\n\n'
+              'Navigate through the facade.\n\n'
+              'With a package: its routes.\n\n'
+              'A listener of the screen.',
+        },
+      );
+      // Notes that differ only in the spaces and the empty lines around
+      // them are one.
+      expect(
+        _render(socket, [
+          ('Router', AgentNote('Same text.')),
+          ('Router', AgentNote('Same text.\n')),
+          ('Router', AgentNote('  Same text.')),
+        ]),
+        {socket.tag: '\n## Router\n\nSame text.'},
+      );
+      // The same text as a note of a role and of a module is two notes.
+      final united = socket.kind
+          .merge([
+            socket.entry('Router', AgentNote('The same.')),
+            socket.entry('Router', AgentNote.ofRole('The same.')),
+          ])
+          .single
+          .value;
+      expect(united.text, 'The same.\n\nThe same.');
+      expect(united.isOfRole, isFalse);
+      expect(
+        socket.kind
+            .merge([
+              socket.entry('Router', AgentNote.ofRole('One.')),
+              socket.entry('Router', AgentNote.ofRole('Another.')),
+            ])
+            .single
+            .value
+            .isOfRole,
+        isTrue,
+      );
+    });
+
+    test('a note compares by its text and by whether a role says it', () {
+      final note = AgentNote('Text.');
+
+      expect(note, AgentNote('Text.'));
+      expect(note.hashCode, AgentNote('Text.').hashCode);
+      expect(note, isNot(AgentNote('Another text.')));
+      expect(note, isNot(AgentNote.ofRole('Text.')));
+      expect(AgentNote.ofRole('Text.'), AgentNote.ofRole('Text.'));
+      expect('Text.', isNot(note));
+      expect(note.isOfRole, isFalse);
+      expect(AgentNote.ofRole('Text.').isOfRole, isTrue);
+      expect(AgentNote('\n Text.\n\n').text, 'Text.');
+      // The spaces and the empty lines around a text do not count.
+      expect(AgentNote('  Text.'), note);
+      expect(AgentNote('Text.\n'), note);
+      expect(AgentNote('Text.\n').hashCode, note.hashCode);
+      expect(AgentNote.ofRole('\nText.'), AgentNote.ofRole('Text.'));
+      expect('$note', 'Text.');
+    });
+
+    test('a section has a heading of one line', () {
+      expect(problemsOf('Text.'), isEmpty);
+      for (final heading in ['', ' Router', 'Rou\nter', 'Rou\rter']) {
+        expect(
+          problemsOf('Text.', heading: heading).single,
+          'The heading "$heading" of a section of the guide for coding '
+          'agents is not one line of text without spaces around it.',
+          reason: heading,
+        );
+      }
+    });
+
+    test('a note has text that mason keeps as it is', () {
+      for (final text in ['', ' \n']) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents has '
+          'no text.',
+          reason: text,
+        );
+      }
+      // mason drops the backslash of a line break of Markdown, also the one
+      // that ends a note or a heading, before the line break that follows.
+      for (final text in [
+        'One line\\\nand another.',
+        r'It ends with a backslash\',
+        // A command continued on the next line, in a fenced code block.
+        '```bash\nflutter build apk \\\n  --debug\n```',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'has a backslash before a line break or a non-ASCII character, '
+          'which mason removes. For a line break in Markdown, end the line '
+          'with two spaces, and write a command on one line rather than '
+          'continue it with a backslash.',
+          reason: text,
+        );
+      }
+      for (final heading in [r'Rou\é', r'Router\']) {
+        expect(
+          problemsOf('Text.', heading: heading).single,
+          'The heading "$heading" of a section of the guide for coding '
+          'agents has a backslash at its end or before a non-ASCII '
+          'character, which mason removes.',
+          reason: heading,
+        );
+      }
+      expect(problemsOf(r'A path of Windows, C:\Users, in a line.'), isEmpty);
+    });
+
+    test('a note starts neither a title nor another section', () {
+      for (final text in [
+        '# Title',
+        'Text.\n## Section\nMore text.',
+        '   ## Indented by three spaces',
+        'Text.\n#',
+        '#\tTitle after a tab',
+        // Not a fenced code block: a code span of three backticks.
+        '```dart``` is a language.\n## Section',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'has a line that starts with "# " or "## " outside a fenced code '
+          'block, which starts a title or another section; a note stays in '
+          'its section.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        '### Details\n\nText.',
+        '#hashtag',
+        'Text with # in a line.',
+        'Text.\n\n    ## In a code block by its indentation',
+        '```bash\n# A comment of a script\n```',
+        '~~~\n## In a block of tildes\n~~~',
+        // A block ends with as many of its characters, or more.
+        '````\n```\n# In the block still\n`````\nText.',
+        // A block in an item of a list, indented with the item.
+        '- Run:\n  ```bash\n  # A comment of a script\n  flutter test\n  ```',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
+      }
+    });
+
+    test(
+        'a note has no line of = or - that makes the line above it a title '
+        'or the heading of a section', () {
+      for (final text in [
+        'My own title\n============',
+        'Another section\n---',
+        'A title\n=   ',
+        'Text.\n\nA heading in the text\n  -\nMore text.',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'has a line of "=" or "-" under a line of text outside a fenced '
+          'code block, which makes that line a title or the heading of '
+          'another section; a note stays in its section.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        // A rule between two paragraphs, after an empty line.
+        'Text.\n\n---\n\nMore text.',
+        '- An item.\n- Another.',
+        'A table:\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
+        '```\nA title in a block\n=====\n```',
+        'Two signs == in a line, and a - too.',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
+      }
+    });
+
+    test('a note closes its fenced code blocks', () {
+      for (final text in [
+        '```bash\nflutter test',
+        'Text.\n\n~~~\ncode\n```',
+        '````\ncode\n```',
+        // A line with more than the characters of the block does not close
+        // it.
+        '```\ncode\n```dart',
+        // A block in an item of a list, indented with the item.
+        '- Run:\n  ```bash\n  flutter test',
+      ]) {
+        expect(
+          problemsOf(text).single,
+          'A note of the section "Router" of the guide for coding agents '
+          'does not close a fenced code block, which would take in the '
+          'sections after it.',
+          reason: text,
+        );
+      }
+      for (final text in [
+        '```bash\nflutter test\n```',
+        '  ```\n  code\n  ```  ',
+        '~~~\ncode\n~~~~\nText.',
+      ]) {
+        expect(problemsOf(text), isEmpty, reason: text);
+      }
+    });
+  });
+
+  group('the paths of the guide for coding agents', () {
+    const guide = AppEntryRole.agentsFile;
+
+    /// What the rules of the role find in an app with [files] and the guide
+    /// [text].
+    List<SmfIssue> check(
+      String text, {
+      List<String> files = const [
+        'README.md',
+        'pubspec.yaml',
+        'lib/main.dart',
+        'lib/core/app/fallback_start_screen.dart',
+        'android/app/build.gradle.kts',
+        'ios/Runner/Info.plist',
+      ],
+    }) =>
+        appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: {guide: text},
+            owners: {
+              guide: const RoleTemplateOrigin(appEntryRole),
+              for (final path in files)
+                path: const ModuleOrigin(ModuleId('flutter_core')),
+            },
+          ),
+        );
+
+    List<String> messages(List<SmfIssue> issues) =>
+        [for (final issue in issues) issue.message];
+
+    test('are files and directories of the app', () {
+      expect(
+        check('''
+# AGENTS.md
+
+The introduction names `README.md` and `lib/main.dart`.
+
+## App entry
+
+- `lib/main.dart` has `main()`, and `lib/core/app/` the screens of the app.
+- `lib/core` and `android/` are directories, and so is `ios/Runner`.
+- `ios/Runner/Info.plist` and `android/app/build.gradle.kts` are native.
+'''),
+        isEmpty,
+      );
+    });
+
+    test(
+        'that the app does not have are reported under the heading of their '
+        'section, on the owner of the guide', () {
+      final issues = check('''
+# AGENTS.md
+
+## Liar
+
+The screens are in `lib/liar/missing.dart`, next to `lib/core/missing/`.
+
+- A tool writes `android/app/google-services.json` later.
+''');
+
+      expect(messages(issues), [
+        equals(
+          'The section "Liar" of AGENTS.md names `lib/liar/missing.dart`, but '
+          'the app has no such file or directory.',
+        ),
+        equals(
+          'The section "Liar" of AGENTS.md names `lib/core/missing/`, but the '
+          'app has no such file or directory.',
+        ),
+        equals(
+          'The section "Liar" of AGENTS.md names '
+          '`android/app/google-services.json`, but the app has no such file '
+          'or directory.',
+        ),
+      ]);
+      for (final issue in issues) {
+        expect(issue.isError, isTrue);
+        expect(issue.path, guide);
+        expect(issue.origin, const RoleTemplateOrigin(appEntryRole));
+        expect(
+          issue.hint,
+          allOf(
+            contains('with the role of the file in its when'),
+            contains('*'),
+          ),
+        );
+      }
+    });
+
+    test(
+        'below a directory of a Flutter project that the app is without are '
+        'reported too', () {
+      final issues = check('''
+## Liar
+
+The icon is `assets/icons/home.png` and the page `web/index.html`. The tests
+are in `test/` and `integration_test/app_test.dart`, and the app runs on
+`macos/`.
+''');
+
+      expect(messages(issues), [
+        for (final path in [
+          'assets/icons/home.png',
+          'web/index.html',
+          'test/',
+          'integration_test/app_test.dart',
+          'macos/',
+        ])
+          equals(
+            'The section "Liar" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
+          ),
+      ]);
+    });
+
+    test(
+        'to Dart files are paths of the app whatever they start with, and '
+        'the name of a Dart file alone is no path', () {
+      final issues = check('''
+## Router
+
+The routes are in `core/router/navigation.dart`, and `main()` in `main.dart`
+or `./lib/main.dart`. The tests end with `_test.dart`.
+''');
+
+      expect(messages(issues), [
+        equals(
+          'The section "Router" of AGENTS.md names '
+          '`core/router/navigation.dart`, but the app has no such file or '
+          'directory.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names the Dart file `main.dart` '
+          'without its path from the root of the app.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names `./lib/main.dart`, but '
+          'the app has no such file or directory.',
+        ),
+        equals(
+          'The section "Router" of AGENTS.md names the Dart file '
+          '`_test.dart` without its path from the root of the app.',
+        ),
+      ]);
+      expect(
+        issues[1].hint,
+        'Write the path from the root of the app, such as lib/main.dart, or, '
+        'for the files of a kind, a pattern with *, such as *_test.dart.',
+      );
+      expect(issues.last.hint, issues[1].hint);
+      expect(issues.first.origin, const RoleTemplateOrigin(appEntryRole));
+    });
+
+    test('are told from what is no path of the app', () {
+      expect(
+        check('''
+## Router
+
+- A pattern: `lib/features/<feature>/`, `lib/core/*/`, `test/<path>_test.dart`,
+  `*_test.dart`.
+- A route: `/home`, `/home/details/:id`, `home.details`.
+- A library: `package:flutter/material.dart`.
+- A command: `dart format .`, `flutter build ipa`.
+- A file at the root of the app, or a name: `pubspec.yaml`, `Icons.home`.
+- Code: `context.nav.home.details(id: 5).go()`, `bootstrap()`.
+- What the tools write: `build/ios/SourcePackages`, `.dart_tool/`.
+- A path in the text, not in code: lib/missing.dart.
+'''),
+        isEmpty,
+      );
+    });
+
+    test('are read in inline code, not in fenced code blocks', () {
+      final issues = check('''
+## Router
+
+```bash
+cat `lib/in_a_block.dart`
+```
+
+A span of two backticks, ``lib/two.dart``, and one after a run ``` that
+nothing closes: `lib/after.dart`. This paragraph ends with a ` alone.
+
+The next paragraph has `lib/next.dart`, which the one before does not reach.
+''');
+
+      expect(messages(issues), [
+        for (final path in ['lib/two.dart', 'lib/after.dart', 'lib/next.dart'])
+          equals(
+            'The section "Router" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
+          ),
+      ]);
+    });
+
+    test('are read in each item of a list on its own', () {
+      final issues = check('''
+## Router
+
+- This item has a ` alone.
+- The next names `lib/missing.dart`,
+  and goes on in `lib/another.dart`.
+1. A numbered item with a ` alone.
+2. The next names `lib/numbered.dart`.
+   * And an item below it has a ` alone.
+   * Its next names `lib/below.dart`.
+''');
+
+      expect(messages(issues), [
+        for (final path in [
+          'lib/missing.dart',
+          'lib/another.dart',
+          'lib/numbered.dart',
+          'lib/below.dart',
+        ])
+          equals(
+            'The section "Router" of AGENTS.md names `$path`, but the app has '
+            'no such file or directory.',
+          ),
+      ]);
+    });
+
+    test('are reported once for each section, and for the introduction', () {
+      final issues = check('''
+# AGENTS.md
+
+See `lib/missing.dart`.
+
+## Router
+
+- `lib/missing.dart` has the routes.
+- Put a route into `lib/missing.dart`.
+
+## Layout
+
+- `lib/missing.dart` has the shell.
+''');
+
+      expect(messages(issues), [
+        for (final where in [
+          'The introduction',
+          'The section "Router"',
+          'The section "Layout"',
+        ])
+          equals(
+            '$where of AGENTS.md names `lib/missing.dart`, but the app has no '
+            'such file or directory.',
+          ),
+      ]);
+    });
+
+    test('of the note of the role are those that the role guarantees',
+        () async {
+      final rendered = await renderTemplate(appEntryRole);
+      final interface = appEntryRole.interface;
+
+      // An app with nothing but what the role guarantees: the files of its
+      // template and those of the symbols of its providers.
+      expect(
+        check(
+          rendered.files[guide]!,
+          files: [
+            ...interface.files,
+            for (final symbol in interface.symbols) symbol.path,
+          ],
+        ),
+        isEmpty,
+      );
+      // Without them, the rule finds the paths of the note.
+      expect(
+        messages(check(rendered.files[guide]!, files: const ['lib/app.dart'])),
+        [
+          for (final path in [
+            AppEntryRole.mainFile,
+            AppEntryRole.bootstrapFile,
+          ])
+            equals(
+              'The section "App entry" of AGENTS.md names `$path`, but the '
+              'app has no such file or directory.',
+            ),
+        ],
+      );
     });
   });
 

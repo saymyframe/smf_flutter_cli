@@ -134,7 +134,10 @@ final class Explanation {
     final ordered = [
       for (final MapEntry(key: socket, value: order)
           in validation.socketOrders.entries)
-        if (_contributors(order).length > 1) ('$socket', order),
+        // A socket that does not follow the order edges has no order to
+        // explain: its renderer orders its entries itself.
+        if (socket.kind.followsOrderEdges && _contributors(order).length > 1)
+          ('$socket', order),
       if (_contributors(validation.postGenOrder).length > 1)
         ('post-generation steps', validation.postGenOrder),
     ];

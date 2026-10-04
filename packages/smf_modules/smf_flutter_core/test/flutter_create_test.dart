@@ -19,12 +19,16 @@ const _createdApp = 'SMF_FLUTTER_CREATE_APP';
 /// The files of `flutter create` that the brick leaves out: SMF's own
 /// files, which it compares elsewhere, the Gradle wrapper, which Flutter
 /// writes when it builds the app, the files of an IDE, and what
-/// `flutter pub get` wrote, which belongs to one machine.
+/// `flutter pub get` wrote, which belongs to one machine. The guide for
+/// coding agents, which the app entry role adds to every app, is no file of
+/// `flutter create` either.
 bool _leftOut(String path) =>
     const {
       'pubspec.yaml',
       'pubspec.lock',
       'README.md',
+      AppEntryRole.agentsFile,
+      AppEntryRole.claudeFile,
       'analysis_options.yaml',
       '.flutter-plugins-dependencies',
       'android/gradlew',
