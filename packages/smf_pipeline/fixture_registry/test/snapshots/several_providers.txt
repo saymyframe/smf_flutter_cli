@@ -11,6 +11,30 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 
+## Analytics
+
+- Record what users do through `AnalyticsService` of `lib/core/analytics/analytics_service.dart`, never through the SDK of a provider. `createAnalyticsService()` returns the one service of the app. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead.
+- The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
+- A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
+
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+## Dependency injection
+
+- A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `registerDependencies()` in `lib/core/di/dependencies.dart` registers every service, and `bootstrap()` awaits it: a new service gets its line there.
+- Only the composition file of a feature, `lib/features/<feature>/<feature>_composition.dart`, calls `resolve<T>()` of `lib/core/di/service_locator.dart`, to create what the screens of the feature need, such as the object that holds their state.
+- A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
+
+## Events
+
+- An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
+- The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
+
 ## Preferences
 
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
@@ -23,6 +47,16 @@ With `shared_preferences`:
 - In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
 - A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
 - In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

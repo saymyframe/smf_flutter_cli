@@ -117,4 +117,11 @@ final class _AnalyticsTemplate extends _ServiceTemplate {
 
   @override
   SocketRef<CodeSocket> get implementations => AnalyticsRole.implementations;
+
+  @override
+  String get agentNote => '''
+- Record what users do through `$service` of `$file`, never through the SDK of a provider. `$factory()` returns the one service of the app. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead.
+- The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
+- A new provider implements `$service`. The function that creates it gets an entry in `$variable` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `$initFunction()`, which the file has once a provider needs it.
+''';
 }

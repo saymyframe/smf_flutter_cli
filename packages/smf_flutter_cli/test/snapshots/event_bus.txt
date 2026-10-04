@@ -10,6 +10,12 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+## Events
+
+- An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
+- The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

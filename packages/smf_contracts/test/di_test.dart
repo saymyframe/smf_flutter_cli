@@ -482,16 +482,48 @@ void main() {
   group('the DI template', () {
     final template = diRole.template;
 
-    test('contributes its brick and registers the dependencies at start', () {
+    test(
+        'contributes its brick, registers the dependencies at start and has '
+        'a note for coding agents', () {
       final contributions = template.contribute(testContext);
-      final start = contributions.whereType<SocketContribution>().single;
+      final [start, note] =
+          contributions.whereType<SocketContribution>().toList();
 
+      expect(contributions, hasLength(3));
       expect(contributions.whereType<BrickContribution>(), hasLength(1));
       expect(start.socket, AppEntryRole.bootstrapDi);
       expect(start.fragment!.code, 'await registerDependencies();');
       expect(start.fragment!.imports, [
         const ImportRef.app('core/di/dependencies.dart'),
       ]);
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, 'Dependency injection');
+      expect(note.entryValue, agentNoteOf(diRole));
+    });
+
+    test(
+        'names in its note the composition file of a feature and what its '
+        'file declares', () async {
+      final rendered = await renderTemplate(diRole);
+      final note = agentNoteOf(diRole);
+
+      expect(rendered.notes.single.entryValue, note);
+      // The function at the top level of the file, not the method of the
+      // locator.
+      expectNamesOfCode(
+        note,
+        {
+          DiRole.serviceLocatorFile: ['resolve'],
+        },
+        files: rendered.files,
+      );
+      // The file where a feature may resolve services, as its kind has it.
+      final composition = ModuleKinds.feature
+          .ruleOf<CompositionFile>()!
+          .path
+          .replaceAll('<id>', '<feature>');
+      expect(composition, 'lib/features/<feature>/<feature>_composition.dart');
+      expect(note.text, contains('`$composition`'));
     });
 
     test('validates the graph of the registrations', () {

@@ -11,6 +11,18 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+## Events
+
+- An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
+- The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
+
 ## Fixture
 
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
