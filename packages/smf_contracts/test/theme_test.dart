@@ -120,8 +120,8 @@ final class FakePreferences implements AppPreferences {
 
 /// A script for the test app that runs [body] and sends back `result`, what
 /// the body noted. The body has `key`, the key of the mode in the
-/// preferences, and `heard()`, the modes that the listeners of the
-/// controller were told of since it last asked.
+/// preferences, and `heard()`, the modes that the listeners of the mode of
+/// the app were told of since it last asked.
 ///
 /// It imports only the files of the two roles and the fake, which need
 /// nothing but Dart and the stand-ins for Flutter's libraries.
@@ -163,8 +163,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   const key = '${ThemeRole.modeKey}';
   final result = <String, Object?>{};
   final told = <String>[];
-  themeModeController
-      .addListener(() => told.add(themeModeController.mode.name));
+  appThemeMode.addListener(() => told.add(appThemeMode.value.name));
   List<String> heard() {
     final modes = [...told];
     told.clear();
@@ -178,11 +177,11 @@ $body
 
 /// Selects modes before the app opened its preferences and after.
 final String _choices = _scriptOf('''
-  result['at first'] = themeModeController.mode.name;
+  result['at first'] = appThemeMode.value.name;
 
-  await themeModeController.select(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
   result['a choice before the preferences are open'] = {
-    'mode': themeModeController.mode.name,
+    'mode': appThemeMode.value.name,
     'heard': heard(),
     'saved': disk[key],
     'writes': [...writes],
@@ -190,20 +189,20 @@ final String _choices = _scriptOf('''
 
   await initPreferences();
   result['the start with nothing saved'] = {
-    'mode': themeModeController.mode.name,
+    'mode': appThemeMode.value.name,
     'heard': heard(),
     'saved': disk[key],
   };
 
-  await themeModeController.select(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
   result['the choice of the mode that the app is in'] = {
     'heard': heard(),
     'saved': disk[key],
   };
 
-  final saved = themeModeController.select(ThemeMode.light);
+  final saved = appThemeMode.choose(ThemeMode.light);
   result['a choice whose write is on its way'] = {
-    'mode': themeModeController.mode.name,
+    'mode': appThemeMode.value.name,
     'heard': heard(),
     'saved': disk[key],
   };
@@ -222,7 +221,7 @@ final String _starts = _scriptOf('''
       disk[key] = saved;
     }
     await initPreferences();
-    return {'mode': themeModeController.mode.name, 'heard': heard()};
+    return {'mode': appThemeMode.value.name, 'heard': heard()};
   }
 
   result['with dark saved'] = await start('dark');
@@ -233,7 +232,7 @@ final String _starts = _scriptOf('''
   result['with a number saved'] = await start(2);
   result['with system saved'] = await start('system');
 
-  await themeModeController.select(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
   result['writes'] = [...writes];
   result['printed'] = [...debugPrinted];
 ''');
@@ -244,11 +243,11 @@ final String _startWithTheModeSaved = _scriptOf('''
   disk[key] = 'system';
   await initPreferences();
   result['the start'] = {
-    'mode': themeModeController.mode.name,
+    'mode': appThemeMode.value.name,
     'heard': heard(),
   };
 
-  await themeModeController.select(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
   result['a choice after it'] = {'saved': disk[key], 'writes': [...writes]};
 ''');
 
@@ -258,13 +257,13 @@ final String _failedWrites = _scriptOf('''
   Future<Map<String, Object?>> choice(ThemeMode mode) async {
     String? error;
     try {
-      await themeModeController.select(mode);
+      await appThemeMode.choose(mode);
     } on StateError catch (failure) {
       error = failure.message;
     }
     return {
       'error': error,
-      'mode': themeModeController.mode.name,
+      'mode': appThemeMode.value.name,
       'heard': heard(),
       'saved': disk[key],
     };
@@ -284,29 +283,30 @@ final String _failedWrites = _scriptOf('''
 
   await initPreferences();
   result['the next start'] = {
-    'mode': themeModeController.mode.name,
+    'mode': appThemeMode.value.name,
     'heard': heard(),
   };
 ''');
 
-/// Asks the scope for the controller, from a context below the scope and
-/// from one below none.
+/// Asks the scope for the mode, from a context below the scope, before and
+/// after a choice, and from a context below no scope.
 final String _scope = _scriptOf('''
   final below = Below(
-    ThemeModeScope(notifier: themeModeController, child: const Child()),
+    AppThemeModeScope(notifier: appThemeMode, child: const Child()),
   );
   result['below the scope'] = {
-    'the controller of the app':
-        identical(ThemeModeScope.of(below), themeModeController),
-    'asked of the context': below.asked,
+    'the mode': AppThemeModeScope.of(below).name,
+    'asked of the context': [...below.asked],
   };
+  await appThemeMode.choose(ThemeMode.dark);
+  result['below the scope, after a choice'] =
+      AppThemeModeScope.of(below).name;
 
   final outside = Below(null);
   try {
-    ThemeModeScope.of(outside);
-    result['below no scope'] = 'a controller';
+    result['below no scope'] = AppThemeModeScope.of(outside).name;
   } on TypeError {
-    result['below no scope'] = 'no controller';
+    result['below no scope'] = 'no mode';
   }
   result['asked of the context below no scope'] = outside.asked;
 ''');
@@ -536,7 +536,7 @@ void main() {
           .singleWhere((socket) => socket.socket == AppEntryRole.rootWrappers);
       expect(
         wrapper.fragment!.code,
-        'ThemeModeScope(notifier: themeModeController, child: ',
+        'AppThemeModeScope(notifier: appThemeMode, child: ',
       );
       expect(wrapper.fragment!.closing, ')');
       expect(wrapper.fragment!.imports, [_themeMode]);
@@ -550,7 +550,7 @@ void main() {
         [
           'theme: createLightTheme(context)',
           'darkTheme: createDarkTheme(context)',
-          'themeMode: ThemeModeScope.of(context).mode',
+          'themeMode: AppThemeModeScope.of(context)',
         ],
       );
       expect(
@@ -573,7 +573,7 @@ void main() {
           .whereType<SocketContribution>()
           .singleWhere((socket) => socket.socket == PreferencesRole.restorers);
 
-      expect(restorer.fragment!.code, 'restoreThemeMode');
+      expect(restorer.fragment!.code, 'restoreAppThemeMode');
       expect(restorer.fragment!.imports, [_themeMode]);
       expect(restorer.when, isEmpty);
     });
@@ -607,8 +607,8 @@ void main() {
         containsAll([
           '${ThemeRole.createLightTheme.name}(context)',
           '${ThemeRole.createDarkTheme.name}(context)',
-          'themeModeController.select(mode)',
-          'ThemeModeScope.of(context).mode',
+          'appThemeMode.choose(mode)',
+          'AppThemeModeScope.of(context)',
           ThemeRole.modeKey,
         ]),
       );
@@ -639,10 +639,10 @@ void main() {
       expect(
         declared,
         containsAll([
-          'themeModeController',
-          'ThemeModeController.select',
-          'ThemeModeController.mode',
-          'ThemeModeScope.of',
+          'appThemeMode',
+          'AppThemeModeController.choose',
+          'AppThemeModeController.value',
+          'AppThemeModeScope.of',
         ]),
       );
     });
@@ -949,12 +949,13 @@ void main() {
 
       expect(await app.run(_scope), {
         'below the scope': {
-          'the controller of the app': true,
+          'the mode': 'system',
           // The context makes its widget depend on what it is asked for.
-          'asked of the context': ['ThemeModeScope'],
+          'asked of the context': ['AppThemeModeScope'],
         },
-        'below no scope': 'no controller',
-        'asked of the context below no scope': ['ThemeModeScope'],
+        'below the scope, after a choice': 'dark',
+        'below no scope': 'no mode',
+        'asked of the context below no scope': ['AppThemeModeScope'],
       });
     });
   });
@@ -1012,15 +1013,22 @@ void main() {
     });
 
     test(
-        'offers the three modes in a group whose choice is the mode of the '
-        'app, and selects the one that the user picks', () async {
+        'offers the three modes in a group whose choice is the mode that it '
+        'reads from the scope, and chooses the one that the user picks on '
+        'the mode of the app', () async {
       final (_, calls) = await entry(localized: false);
 
       final group = calls['RadioGroup']!.single;
       expect(group.typeArguments!.toSource(), '<ThemeMode>');
-      expect(_argumentsOf(group)['groupValue'], 'controller.mode');
-      expect(calls['of']!.single.toSource(), 'ThemeModeScope.of(context)');
-      expect(calls['select']!.single.toSource(), 'controller.select(mode)');
+      expect(
+        _argumentsOf(group)['groupValue'],
+        'AppThemeModeScope.of(context)',
+      );
+      expect(calls['of'], hasLength(1));
+      expect(
+        calls['choose']!.single.toSource(),
+        'appThemeMode.choose(mode)',
+      );
       expect(
         [
           for (final option in calls['RadioListTile']!)

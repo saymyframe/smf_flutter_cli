@@ -27,17 +27,20 @@ const themeRole = ThemeRole._();
 ///
 /// The role's template owns the mode, whichever provider is selected. It
 /// generates [themeModeFile] with:
-/// - `themeModeController`, the `ThemeModeController` of the app. Its
-///   `mode` is the `ThemeMode` of the app: `ThemeMode.system`, which follows
-///   the device, unless the user selected another. `select(mode)` makes
-///   `mode` the mode of the app at once and saves it; its future completes
-///   once the mode is saved. The controller is a `ChangeNotifier`, which
-///   tells its listeners when the mode changes;
-/// - `ThemeModeScope`, the widget around the root of the app, whose
-///   `ThemeModeScope.of(context)` returns the controller and rebuilds the
+/// - `appThemeMode`, the `AppThemeModeController` of the app, which has no
+///   other. Its `value` is the `ThemeMode` of the app: `ThemeMode.system`,
+///   which follows the device, unless the user selected another.
+///   `choose(mode)` makes `mode` the mode of the app at once and saves it;
+///   its future completes once the mode is saved. The controller is a
+///   `ChangeNotifier`, which tells its listeners when the mode changes;
+/// - `AppThemeModeScope`, the widget around the root of the app, whose
+///   `AppThemeModeScope.of(context)` returns the mode and rebuilds the
 ///   widget of `context` when the mode changes;
-/// - `restoreThemeMode`, the restorer of the mode, which the template puts
-///   into [PreferencesRole.restorers].
+/// - `restoreAppThemeMode`, the restorer of the mode, which the template
+///   puts into [PreferencesRole.restorers].
+///
+/// So a widget reads the mode from the scope, and code changes it on
+/// `appThemeMode`.
 ///
 /// The template gives the root `MaterialApp` its `theme`, its `darkTheme`
 /// and its `themeMode`, which reads the scope from the context of the root:
@@ -49,10 +52,10 @@ const themeRole = ThemeRole._();
 /// [modeKey], as the name of the `ThemeMode`, such as `dark`. The restorer
 /// takes the mode that is saved, and keeps the current one when nothing is
 /// saved or when what is saved is no name of a mode. Until the preferences
-/// were opened for the first time, `select` changes only memory; from then
+/// were opened for the first time, `choose` changes only memory; from then
 /// on it saves through the preferences that were opened last.
 ///
-/// A write of the mode that fails is not caught: the future of `select`
+/// A write of the mode that fails is not caught: the future of `choose`
 /// completes with the error of the preferences. The app is in the selected
 /// mode by then and stays in it while it runs, but its next launch has the
 /// mode that was saved before; the same choice again saves it. The entry of
@@ -62,7 +65,8 @@ const themeRole = ThemeRole._();
 /// In an app with the [SettingsScreenRole], the template also generates
 /// [themeModeSettingFile] with `ThemeModeSetting`, the entry of the
 /// settings screen in which the user selects the mode: follow the device,
-/// light, or dark. In an app with the [LocalizationRole], the texts of the
+/// light, or dark. The entry reads the mode from the scope and chooses on
+/// `appThemeMode`. In an app with the [LocalizationRole], the texts of the
 /// entry are texts of the app, which the template has in English and in
 /// Ukrainian; in an app without it they are English.
 ///
@@ -73,27 +77,27 @@ const themeRole = ThemeRole._();
 ///
 /// The screens of a module read the theme as any Flutter code does, with
 /// `Theme.of(context)`, in an app with the role and in one without it. A
-/// module that declares the role may also read and select the mode through
+/// module that declares the role may also read and choose the mode through
 /// [themeModeFile].
 ///
-/// A test selects a mode with `themeModeController.select(mode)` and reads
-/// the selected one from `themeModeController.mode`, whichever module
-/// provides the role. It shows that a mode is saved by reading [modeKey]
-/// from the preferences after a choice, and that it is remembered by
-/// writing [modeKey], running `initPreferences()` again and reading the
-/// mode (see [PreferencesRole.restorers]).
+/// A test selects a mode with `appThemeMode.choose(mode)` and reads the
+/// selected one from `appThemeMode.value`, whichever module provides the
+/// role. It shows that a mode is saved by reading [modeKey] from the
+/// preferences after a choice, and that it is remembered by writing
+/// [modeKey], running `initPreferences()` again and reading the mode (see
+/// [PreferencesRole.restorers]).
 ///
 /// The app has one controller, and two things of it outlive a test, into
 /// the next test of the same file: its mode, and the preferences of the
-/// last start, through which `select` saves from then on, also before the
-/// next start. So a test that selects a mode selects `ThemeMode.system`
+/// last start, through which `choose` saves from then on, also before the
+/// next start. So a test that selects a mode chooses `ThemeMode.system`
 /// again when it ends. That choice saves `system`: a test that needs
 /// nothing saved removes [modeKey] from the preferences.
 final class ThemeRole extends Role<NoDsl> {
   const ThemeRole._();
 
-  /// The path of the file with `themeModeController`, `ThemeModeController`,
-  /// `ThemeModeScope` and `restoreThemeMode`.
+  /// The path of the file with `appThemeMode`, `AppThemeModeController`,
+  /// `AppThemeModeScope` and `restoreAppThemeMode`.
   static const themeModeFile = 'lib/core/theme/theme_mode.dart';
 
   /// The path of the file with `ThemeModeSetting`, the entry of the theme
@@ -203,7 +207,7 @@ const Map<String, LocalizedText> _texts = {
 /// only some have.
 final String _agentNote = '''
 - `${ThemeRole.createLightTheme.name}(context)` and `${ThemeRole.createDarkTheme.name}(context)` in `${ThemeRole.appThemeFile}` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
-- The theme mode is in `${ThemeRole.themeModeFile}`. Change it only with `themeModeController.select(mode)`, which also saves it in the preferences, and write nothing under the key `${ThemeRole.modeKey}` yourself. A widget reads the mode with `ThemeModeScope.of(context).mode` and rebuilds when it changes.
+- The theme mode is in `${ThemeRole.themeModeFile}`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `${ThemeRole.modeKey}` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 ''';
 
@@ -224,7 +228,7 @@ final class _ThemeTemplate extends RoleTemplate<NoDsl> {
         const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(
-            'ThemeModeScope(notifier: themeModeController, child: ',
+            'AppThemeModeScope(notifier: appThemeMode, child: ',
             ')',
             imports: [_themeMode],
           ),
@@ -248,11 +252,11 @@ final class _ThemeTemplate extends RoleTemplate<NoDsl> {
         const SocketContribution.arg(
           AppEntryRole.appArgs,
           'themeMode',
-          Fragment('ThemeModeScope.of(context).mode', imports: [_themeMode]),
+          Fragment('AppThemeModeScope.of(context)', imports: [_themeMode]),
         ),
         const SocketContribution.item(
           PreferencesRole.restorers,
-          Fragment('restoreThemeMode', imports: [_themeMode]),
+          Fragment('restoreAppThemeMode', imports: [_themeMode]),
         ),
         // The entry of the settings screen, with its texts: only an app with
         // a settings screen gets the file of the entry, and only then does

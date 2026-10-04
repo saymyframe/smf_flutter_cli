@@ -157,12 +157,15 @@ void main() {
       expect(putInto(result, AppEntryRole.appArgs), [
         'theme: createLightTheme(context)',
         'darkTheme: createDarkTheme(context)',
-        'themeMode: ThemeModeScope.of(context).mode',
+        'themeMode: AppThemeModeScope.of(context)',
       ]);
       expect(putInto(result, AppEntryRole.rootWrappers), [
-        'ThemeModeScope(notifier: themeModeController, child: …)',
+        'AppThemeModeScope(notifier: appThemeMode, child: …)',
       ]);
-      expect(putInto(result, PreferencesRole.restorers), ['restoreThemeMode']);
+      expect(
+        putInto(result, PreferencesRole.restorers),
+        ['restoreAppThemeMode'],
+      );
     });
 
     test(

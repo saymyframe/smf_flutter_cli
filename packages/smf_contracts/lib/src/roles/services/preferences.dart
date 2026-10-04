@@ -75,7 +75,7 @@ final class PreferencesRole extends Role<RoleImplementation> {
   );
 
   /// Functions that restore what their owner, a module or the template of a
-  /// role, keeps in the preferences, such as `restoreThemeMode`: functions
+  /// role, keeps in the preferences, such as `restoreAppThemeMode`: functions
   /// of the type `void Function(AppPreferences preferences)`.
   ///
   /// `initPreferences()` calls each with the preferences of the app once
