@@ -882,6 +882,63 @@ void main() {
       );
     });
 
+    test(
+        'are read through the role by the setting of the second feature too, '
+        'whose text only an app with a settings screen has', () async {
+      const setting = 'lib/features/fake_second/fixture_second_setting.dart';
+      // No fixture provides the settings screen role in an app that must
+      // work, so the apps have the provider with a known bug.
+      final withSettings = ContractHarness(
+        ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
+      );
+      Future<ContractResult> checkedWithSettings(List<ModuleId> modules) async {
+        final result = await withSettings.check(
+          ContractCase('a setting with a text', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        return result;
+      }
+
+      List<String> gettersOf(ContractResult result) => [
+            for (final text in localizationRole
+                .textsIn(localizationRole.hookInput(result.hook!)))
+              text.getter,
+          ];
+
+      final localized = await checkedWithSettings(
+        [...withRole, BrokenSettingsModule.id],
+      );
+      expect(
+        gettersOf(localized),
+        ['fakeSecondTitle', 'fakeSecondOutside', 'fakeSecondSetting'],
+      );
+      expect(textsOf(localized, 'fakeSecondSetting', ['en', 'uk']), {
+        'en': 'Second setting',
+        'uk': 'Друге налаштування',
+      });
+      expect(
+        shownBy(localized, setting),
+        ('context.l10n.fakeSecondSetting', importsTexts: true),
+      );
+
+      // Without the localization role, the setting shows its English text.
+      final english = await checkedWithSettings(const [
+        FakeSecondModule.id,
+        FakeRouterModule.id,
+        BrokenSettingsModule.id,
+      ]);
+      expect(
+        shownBy(english, setting),
+        ("'Second setting'", importsTexts: false),
+      );
+
+      // Without a settings screen, the app has neither the widget of the
+      // setting nor its text.
+      final without = await checked(withRole);
+      expect(without.app!.files.keys, isNot(contains(setting)));
+      expect(gettersOf(without), ['fakeSecondTitle', 'fakeSecondOutside']);
+    });
+
     test('give the root of the app its language and the delegate of the texts',
         () async {
       final result = await checked(withRole);

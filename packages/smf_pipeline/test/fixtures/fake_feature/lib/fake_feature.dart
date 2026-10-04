@@ -127,6 +127,15 @@ final class FakeSecondModule extends SmfModule {
     LocalizedText('outside', en: "Outside the app's main navigation"),
   ]);
 
+  /// The text of the setting, which only an app with a settings screen has.
+  static const settingTexts = TextsData([
+    LocalizedText(
+      'setting',
+      en: 'Second setting',
+      translations: {'uk': 'Друге налаштування'},
+    ),
+  ]);
+
   static const _folder = 'features/fake_second';
 
   @override
@@ -175,11 +184,13 @@ final class FakeSecondModule extends SmfModule {
           ]),
         ),
         // Only an app with a settings screen gets the widget of the
-        // setting, and only there does the entry apply.
+        // setting and its text, and only there does the entry apply.
         BrickContribution(
           fakeSecondSettingsBundle,
+          vars: localizationRole.varsOf(id, settingTexts),
           when: const {settingsScreenRole},
         ),
+        localizationRole.data(settingTexts, when: const {settingsScreenRole}),
         settingsScreenRole.data(
           const SettingsEntry(
             widget: TypeRef(
