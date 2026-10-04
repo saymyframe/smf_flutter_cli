@@ -736,6 +736,21 @@ flutter:
         'The settings screen has an entry for the theme.\n',
       ),
     );
+    // What each contributor gave the socket, by the ids of the contributors.
+    final entries = app.entriesOf(AppEntryRole.agentSections);
+    expect(
+      [for (final (origin, heading, _) in entries) '$origin: $heading'],
+      [
+        'material_theme: Theme',
+        'material_theme: Theme',
+        'role:app_entry: App entry',
+        'role:nav: Nav',
+        'role:nav: Nav',
+      ],
+    );
+    expect(entries.first.$3, AgentNote('Change the colors in the theme.'));
+    // A socket that got nothing has no entries.
+    expect(app.entriesOf(AppEntryRole.readmeSections), isEmpty);
   });
 
   test('a cycle that only a fragment of a render hook meets stops rendering',
