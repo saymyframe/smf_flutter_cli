@@ -1000,6 +1000,9 @@ void main() {
       );
       expect(socket.tag, 'smf_app_entry__agent_sections');
       expect(socket.kind.carriesImports, isFalse);
+      // Its renderer orders the sections and their notes itself, so a note
+      // under a condition adds no order edge between the contributors.
+      expect(socket.kind.followsOrderEdges, isFalse);
     });
 
     test(

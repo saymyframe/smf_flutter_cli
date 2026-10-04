@@ -25,6 +25,18 @@ sealed class SocketKind {
   /// minimum iOS version in each build configuration of `project.pbxproj`.
   bool get carriesImports;
 
+  /// Whether the pipeline puts the contributions of the socket in the order
+  /// of the edges between their contributors (see [SocketContribution]).
+  ///
+  /// Every kind renders its contributions in the order it gets them, so
+  /// most sockets need these edges: start-up code runs after what it
+  /// depends on. A cycle of the edges among the contributors of such a
+  /// socket is an error. A [KeyedSocket] whose renderer puts the entries in
+  /// an order of its own does without the edges: the pipeline then takes
+  /// its contributions by the ids of their contributors alone, so that no
+  /// condition of a contribution can make them impossible to order.
+  bool get followsOrderEdges => true;
+
   /// Describes what is wrong with the payload of [c], a contribution to
   /// [socket], a socket of this kind.
   List<String> _payloadProblems(SocketRef socket, SocketContribution c);
@@ -193,14 +205,25 @@ final class KeyedSocket<V extends Object> extends SocketKind {
   /// Creates the kind with a merge [policy] and a [renderer] of the merged
   /// entries, which gets them in the order their keys were first
   /// contributed, and the [reservedKeys] it does not take.
+  ///
+  /// A socket whose [renderer] puts the entries in an order of its own
+  /// passes `followsOrderEdges: false`: the pipeline then takes its
+  /// contributions by the ids of their contributors, each contributor's in
+  /// the order it gave them, instead of the order of the edges between the
+  /// contributors (see [SocketKind.followsOrderEdges]). The values of a key
+  /// reach the [policy] in that order.
   const KeyedSocket({
     required this.policy,
     required String Function(List<MapEntry<String, V>> entries) renderer,
     this.reservedKeys = const {},
+    this.followsOrderEdges = true,
   }) : _renderer = renderer;
 
   /// How two values for one key merge.
   final MergePolicy<V> policy;
+
+  @override
+  final bool followsOrderEdges;
 
   /// Keys that no contribution may have, each with the reason, such as the
   /// Gradle plugins that the template of every Flutter app declares.

@@ -283,7 +283,7 @@ ValidationResult validate({
 
   final orders = <SocketRef, ContributionOrder>{};
   for (final MapEntry(key: socket, value: contributions) in bySocket.entries) {
-    final order = orderContributions(contributions, resolution);
+    final order = orderSocket(socket, contributions, resolution);
     orders[socket] = order;
     issues
       ..addAll(_orderIssues('the $socket', order))

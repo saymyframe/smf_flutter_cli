@@ -1038,6 +1038,40 @@ void main() {
       );
     });
 
+    test('lists no order for a socket that does not follow the order edges',
+        () async {
+      final host = FakeHost();
+      List<Contribution> both(String name) => [
+            AppEntryRole.agentSections.entry(name, AgentNote('The $name.')),
+            SocketContribution.code(
+              AppEntryRole.bootstrapLate,
+              Fragment('$name();'),
+            ),
+          ];
+      final modules = [
+        scaffold(contributions: both('scaffold')),
+        TestModule('home', contributions: both('home')),
+      ];
+
+      await pipeline(modules, host).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('home')],
+          explain: true,
+        ),
+      );
+
+      // The start-up code runs in the order of its contributors. The notes
+      // of the guide for coding agents are ordered by the renderer of their
+      // socket, so the report has no order to tell.
+      final report = host.logger.infos.join('\n');
+      expect(
+        report,
+        contains('  socket app_entry.bootstrap_late: home, scaffold'),
+      );
+      expect(report, isNot(contains('app_entry.agent_sections')));
+    });
+
     test('prints the variant and a cycle', () {
       const order = ContributionOrder(
         contributions: [

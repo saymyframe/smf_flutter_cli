@@ -627,6 +627,29 @@ void main() {
       expect(minIos.kind.carriesImports, isFalse);
     });
 
+    test(
+        'follow the order edges of their contributors, but for a keyed '
+        'socket whose renderer orders its entries itself', () {
+      for (final kind in <SocketKind>[
+        const CodeSocket(),
+        const CodeSocket.text(),
+        const WrapperSocket(),
+        const FactoryListSocket(),
+        const ArgsSocket({}),
+        keyed.kind,
+        minIos.kind,
+        PipelineSockets.pubspecFlutter.kind,
+      ]) {
+        expect(kind.followsOrderEdges, isTrue, reason: '$kind');
+      }
+      const sorted = KeyedSocket<String>(
+        policy: ConflictPolicy(),
+        renderer: _renderRaw,
+        followsOrderEdges: false,
+      );
+      expect(sorted.followsOrderEdges, isFalse);
+    });
+
     test('keyed and value sockets check the type of their values', () {
       final wideKeyed = keyed as SocketRef<KeyedSocket<Object>>;
       final wideValue = minIos as SocketRef<ValueSocket<Object>>;

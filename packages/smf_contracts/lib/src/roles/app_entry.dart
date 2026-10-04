@@ -359,13 +359,19 @@ final class AppEntryRole extends Role<NoDsl> {
   ///
   /// The sections follow the introduction of the guide as `## <heading>`
   /// sections: that of this role first, then the others in the order of
-  /// their headings, so that the guide of an app does not depend on which
-  /// modules provide its roles. A section has the notes of the roles first,
-  /// then the others in the order of the contributions (see
-  /// [SocketContribution]), each once, with an empty line between two
-  /// notes. A heading is one line without spaces around it. A note has
-  /// text, starts neither a title nor a section, with a line that starts
-  /// with `# ` or `## `, and closes its fenced code blocks.
+  /// their headings. A section has the notes of the roles first, then the
+  /// others in the order of the ids of their contributors, each once, with
+  /// an empty line between two notes. So replacing the provider of a role
+  /// changes only its own note. The socket does not follow the order edges
+  /// of its contributors (see [SocketKind.followsOrderEdges]): a role in
+  /// the [Contribution.when] of a note adds no edge, so no note can make
+  /// the app impossible to generate.
+  ///
+  /// A heading is one line without spaces around it. A note has text,
+  /// starts neither a title nor a section, with a line that starts with
+  /// `# ` or `## ` or a line of `=` or `-` under a line of text, and closes
+  /// its fenced code blocks. Only the template of a role contributes a
+  /// note of a role ([AgentNote.ofRole]).
   ///
   /// A note names a file or a directory of the app in backticks, by its
   /// path from the root of the app, such as `lib/core/di/`; the structural
@@ -382,6 +388,7 @@ final class AppEntryRole extends Role<NoDsl> {
     KeyedSocket(
       policy: _AgentNotePolicy(),
       renderer: _renderAgentSections,
+      followsOrderEdges: false,
     ),
   );
 

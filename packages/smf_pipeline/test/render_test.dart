@@ -80,6 +80,58 @@ List<String> _failures(
   fail('The app rendered.');
 }
 
+/// An app whose notes for coding agents are under conditions that put their
+/// contributors on a cycle of order edges: the template of the role `nav`
+/// has a note for an app with a theme, the provider of the theme has one
+/// for an app with a settings screen, and the module of the settings
+/// screen requires `nav`.
+List<SmfModule> _notesOnACycle() {
+  final theme = TestRole<NoDsl>('theme');
+  final settingsScreen = TestRole<NoDsl>('settings_screen');
+  final nav = TestRole<NoDsl>(
+    'nav',
+    uses: {theme},
+    template: TestTemplate(
+      contributions: [
+        AppEntryRole.agentSections.entry(
+          'Nav',
+          AgentNote.ofRole('Navigate with the router.'),
+        ),
+        AppEntryRole.agentSections.entry(
+          'Nav',
+          AgentNote.ofRole('A route takes its colors from the theme.'),
+          when: {theme},
+        ),
+      ],
+    ),
+  );
+  return [
+    scaffold(),
+    TestModule('router', providers: [RoleProvider.plain(nav)]),
+    TestModule(
+      'material_theme',
+      uses: {settingsScreen},
+      providers: [RoleProvider.plain(theme)],
+      contributions: [
+        AppEntryRole.agentSections.entry(
+          'Theme',
+          AgentNote('Change the colors in the theme.'),
+        ),
+        AppEntryRole.agentSections.entry(
+          'Theme',
+          AgentNote('The settings screen has an entry for the theme.'),
+          when: {settingsScreen},
+        ),
+      ],
+    ),
+    TestModule(
+      'settings',
+      requires: {nav},
+      providers: [RoleProvider.plain(settingsScreen)],
+    ),
+  ];
+}
+
 BrickContribution _brick(
   Map<String, String> files, {
   Map<String, Object?> vars = const {},
@@ -659,6 +711,30 @@ flutter:
           'argument',
         ),
       ],
+    );
+  });
+
+  test(
+      'a cycle among the contributors of a socket that does not follow the '
+      'order edges renders: a note under a condition cannot stop an app', () {
+    final app = _render(_notesOnACycle());
+
+    expect(
+      app.files[AppEntryRole.agentsFile]!.text,
+      endsWith(
+        '\n'
+        '## Nav\n'
+        '\n'
+        'Navigate with the router.\n'
+        '\n'
+        'A route takes its colors from the theme.\n'
+        '\n'
+        '## Theme\n'
+        '\n'
+        'Change the colors in the theme.\n'
+        '\n'
+        'The settings screen has an entry for the theme.\n',
+      ),
     );
   });
 

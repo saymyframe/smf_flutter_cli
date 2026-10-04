@@ -1984,6 +1984,27 @@ void main() {
       );
     });
 
+    test(
+        'a cycle among the contributors of a socket that does not follow '
+        'the order edges is no issue', () {
+      final result = _validate(_notesOnACycle());
+
+      expect(_messages(result), isEmpty);
+      final order = result.socketOrders[AppEntryRole.agentSections]!;
+      expect(
+        [for (final collected in order.contributions) '${collected.origin}'],
+        [
+          'material_theme',
+          'material_theme',
+          'role:app_entry',
+          'role:nav',
+          'role:nav',
+        ],
+      );
+      expect(order.edges, isEmpty);
+      expect(order.cycle, isEmpty);
+    });
+
     test('a cycle of three is reported for sockets and steps', () {
       final x = TestRole<NoDsl>('x');
       final y = TestRole<NoDsl>('y');
@@ -2022,6 +2043,58 @@ void main() {
       expect(result.issues.last.message, contains('post-generation steps'));
     });
   });
+}
+
+/// An app whose notes for coding agents are under conditions that put their
+/// contributors on a cycle of order edges: the template of the role `nav`
+/// has a note for an app with a theme, the provider of the theme has one
+/// for an app with a settings screen, and the module of the settings
+/// screen requires `nav`.
+List<SmfModule> _notesOnACycle() {
+  final theme = TestRole<NoDsl>('theme');
+  final settingsScreen = TestRole<NoDsl>('settings_screen');
+  final nav = TestRole<NoDsl>(
+    'nav',
+    uses: {theme},
+    template: TestTemplate(
+      contributions: [
+        AppEntryRole.agentSections.entry(
+          'Nav',
+          AgentNote.ofRole('Navigate with the router.'),
+        ),
+        AppEntryRole.agentSections.entry(
+          'Nav',
+          AgentNote.ofRole('A route takes its colors from the theme.'),
+          when: {theme},
+        ),
+      ],
+    ),
+  );
+  return [
+    scaffold(),
+    TestModule('router', providers: [RoleProvider.plain(nav)]),
+    TestModule(
+      'material_theme',
+      uses: {settingsScreen},
+      providers: [RoleProvider.plain(theme)],
+      contributions: [
+        AppEntryRole.agentSections.entry(
+          'Theme',
+          AgentNote('Change the colors in the theme.'),
+        ),
+        AppEntryRole.agentSections.entry(
+          'Theme',
+          AgentNote('The settings screen has an entry for the theme.'),
+          when: {settingsScreen},
+        ),
+      ],
+    ),
+    TestModule(
+      'settings',
+      requires: {nav},
+      providers: [RoleProvider.plain(settingsScreen)],
+    ),
+  ];
 }
 
 List<SmfIssue> _count(ModuleRuleInput<String> input) => [

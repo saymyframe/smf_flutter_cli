@@ -34,6 +34,11 @@ part of '../contributions.dart';
 /// role comes after the modules the role's provider depends on. Otherwise
 /// contributors are ordered by id. A cycle of edges is an error. Phases,
 /// such as the start-up phases of the app entry, are separate sockets.
+///
+/// A socket whose kind does not follow these edges (see
+/// [SocketKind.followsOrderEdges]) gets its contributions by the ids of
+/// their contributors alone, each contributor's in the order it gave them,
+/// and a cycle of edges among its contributors is no error.
 final class SocketContribution extends Contribution {
   /// Adds [fragment] to a [CodeSocket].
   const SocketContribution.code(
