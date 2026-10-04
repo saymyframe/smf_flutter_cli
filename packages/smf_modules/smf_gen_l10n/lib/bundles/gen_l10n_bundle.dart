@@ -8,7 +8,7 @@ final genL10nBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "l10n.yaml",
       "data":
-          "YXJiLWRpcjogbGliL2wxMG4KdGVtcGxhdGUtYXJiLWZpbGU6IGFwcF9lbi5hcmIKb3V0cHV0LWxvY2FsaXphdGlvbi1maWxlOiBhcHBfbG9jYWxpemF0aW9ucy5kYXJ0Cm51bGxhYmxlLWdldHRlcjogZmFsc2UK",
+          "YXJiLWRpcjogbGliL2wxMG4KdGVtcGxhdGUtYXJiLWZpbGU6IGFwcF9lbi5hcmIKb3V0cHV0LWxvY2FsaXphdGlvbi1maWxlOiBhcHBfbG9jYWxpemF0aW9ucy5kYXJ0Cm51bGxhYmxlLWdldHRlcjogZmFsc2UKdXNlLWVzY2FwaW5nOiBmYWxzZQo=",
       "type": "text"
     },
     {

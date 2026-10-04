@@ -413,7 +413,8 @@ void main() {
 
     test(
         'name the directory of the ARB files, the template among them and '
-        'the file of the localizations, whose class is not nullable', () {
+        'the file of the localizations, whose class is not nullable, and '
+        'take each text as it is written', () {
       final options = _yamlOf(app.files['l10n.yaml']!.text);
 
       expect(options, {
@@ -421,7 +422,17 @@ void main() {
         'template-arb-file': 'app_en.arb',
         'output-localization-file': 'app_localizations.dart',
         'nullable-getter': false,
+        // The module writes a text into the ARB file as its owner gave it,
+        // so gen-l10n must not read an apostrophe as an escape. It does
+        // not by default; the option keeps the texts as they are when a
+        // later Flutter has another default.
+        'use-escaping': false,
       });
+      expect(
+        _arbFilesOf(app)[GenL10nModule.templateArbFile],
+        contains(('greetingBye', _bye)),
+      );
+      expect(_bye, contains("'"));
       expect(GenL10nModule.arbDirectory, 'lib/l10n');
       expect(
         GenL10nModule.templateArbFile,
