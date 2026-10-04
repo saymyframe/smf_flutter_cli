@@ -7,7 +7,7 @@ dart pub global activate smf_flutter_cli
 smf create my_app -m home,settings,bottom_tabs --no-input
 ```
 
-The screens and the layout need a router, so `smf create` adds `go_router`, naming the first module that needs it:
+The screens and the layout need a router, so `smf create` adds `go_router` and names the first module that needs it:
 
 ```text
 Adding flutter_core: the only provider of the app entry role, which every app needs.
