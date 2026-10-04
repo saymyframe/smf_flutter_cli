@@ -10,6 +10,7 @@ import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_settings/smf_settings.dart';
 
 /// The modules that `smf create` offers.
 ///
@@ -25,6 +26,7 @@ const List<SmfModule> smfModules = [
   BlocModule(),
   RiverpodModule(),
   HomeModule(),
+  SettingsModule(),
   BottomTabsModule(),
   GetItModule(),
   EventBusModule(),

@@ -215,16 +215,18 @@ void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
-      'manager, the app of home, which gets the router, the app of the DI '
-      'container, the app of the events with the DI container and without, '
-      'the app of Firebase, the app of Crashlytics with the DI container and '
-      'without, which gets Firebase, the apps of Firebase Analytics with and '
-      'without the DI container and the router, which get Firebase, and one '
-      'of every module for each state manager', () async {
+      'manager, the app of home and the app of settings, which get the '
+      'router, the app of the DI container, the app of the events with the DI '
+      'container and without, the app of Firebase, the app of Crashlytics '
+      'with the DI container and without, which gets Firebase, the apps of '
+      'Firebase Analytics with and without the DI container and the router, '
+      'which get Firebase, and one of every module for each state manager',
+      () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     String everyModule(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
-        'event_bus, firebase_core, firebase_crashlytics, firebase_analytics)';
+        '(flutter_core, go_router, $stateManager, home, settings, '
+        'bottom_tabs, get_it, event_bus, firebase_core, firebase_crashlytics, '
+        'firebase_analytics)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -234,6 +236,7 @@ void main() {
       'bloc (bloc, flutter_core)',
       'riverpod (riverpod, flutter_core)',
       'home (home, flutter_core, go_router)',
+      'settings (settings, flutter_core, go_router)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
       'event_bus (event_bus, flutter_core)',
@@ -404,8 +407,8 @@ void main() {
 
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
-        'event_bus, local)';
+        '(flutter_core, go_router, $stateManager, home, settings, '
+        'bottom_tabs, get_it, event_bus, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -1406,6 +1409,7 @@ Type type() => Types;
               'go_router',
               stateManager,
               'home',
+              'settings',
               'bottom_tabs',
               'get_it',
               'event_bus',

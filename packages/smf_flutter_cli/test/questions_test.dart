@@ -179,6 +179,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Settings screen': ['None'],
       'State management': ['bloc'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -191,6 +192,7 @@ void main() {
       'Features: which do you want?',
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
+      'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -208,6 +210,10 @@ void main() {
       'None',
     ]);
     expect(run.asked[3].shown, [
+      'settings — Settings screen with the settings of the modules',
+      'None',
+    ]);
+    expect(run.asked[4].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -249,6 +255,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -261,6 +268,7 @@ void main() {
       'Features: which do you want?',
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
+      'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -292,12 +300,118 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the settings screen '
+      'after the layout, and offers settings, which the layout shows after '
+      'the start screen', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Infrastructure': [],
+      'Layout': ['bottom_tabs'],
+      'Settings screen': ['settings'],
+      'State management': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final settings = messages.indexOf(
+      'Settings screen: which module provides it?',
+    );
+    // Both roles require the router, so their questions come before its
+    // own, in the order of the roles of the registry: the layout first,
+    // which the router role uses, so it comes with the router, and then the
+    // settings screen, which comes with the settings module.
+    expect(settings, messages.indexOf('Layout: which module provides it?') + 1);
+    expect(run.asked[settings].shown, [
+      'settings — Settings screen with the settings of the modules',
+      'None',
+    ]);
+    // The module provides a role, so it is not among the features to pick.
+    expect(run.asked[0].shown, [
+      'home — Start screen with the name of the app',
+    ]);
+    expect(
+      run.lines,
+      contains(
+        'Adding go_router: the only provider of the router role, which home '
+        'requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/features/settings/settings_screen.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('class SettingsScreen extends StatelessWidget'),
+        contains("applicationName: 'My App',"),
+      ),
+    );
+    // The tabs are Home and Settings, in the order of the list of modules,
+    // and the app starts on the start screen.
+    final router = app
+        .childFile('lib/core/router/app_router_factory.dart')
+        .readAsStringSync();
+    final home = router.indexOf("Destination(label: 'Home', icon: Icons.home)");
+    expect(home, isNonNegative);
+    expect(
+      router.indexOf("Destination(label: 'Settings', icon: Icons.settings)"),
+      greaterThan(home),
+    );
+    expect(router, contains("initialLocation: '/home',"));
+  });
+
+  test(
+      'a run in a terminal adds the router that the settings screen requires '
+      'without a question, and the app does not start on that screen',
+      () async {
+    final run = await _create({
+      'Features': [],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['settings'],
+      'State management': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(
+      run.asked.map((question) => question.message),
+      isNot(contains('Router: which module provides it?')),
+    );
+    const added = 'Adding go_router: the only provider of the router role, '
+        'which settings requires.';
+    // The screen is a route that nothing opens in an app without a layout.
+    const start = 'No route is marked as a start candidate, so the app starts '
+        'on its fallback screen. Choose a start route with --start.';
+    expect(run.lines, containsAll([added, start]));
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/router/app_router_factory.dart')
+          .readAsStringSync(),
+      allOf(
+        contains("initialLocation: '/',"),
+        contains("path: '/settings',"),
+        isNot(contains('AppShell')),
+      ),
+    );
+  });
+
+  test(
       'a run in a terminal adds the router that the layout requires without '
       'a question', () async {
     final run = await _create({
       'Features': [],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Settings screen': ['None'],
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -310,6 +424,7 @@ void main() {
       'Features: which do you want?',
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
+      'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -346,6 +461,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
       'Dependency injection': ['None'],
@@ -359,6 +475,7 @@ void main() {
       'Features: which do you want?',
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
+      'Settings screen: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -366,7 +483,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
-    expect(run.asked[3].shown, [
+    expect(run.asked[4].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);
@@ -387,6 +504,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Settings screen': ['None'],
       'State management': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -443,6 +561,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
       'Dependency injection': ['get_it'],
@@ -504,6 +623,7 @@ void main() {
         'Features': [],
         'Infrastructure': ['firebase_core'],
         'Layout': ['None'],
+        'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
         'Dependency injection': ['None'],
@@ -565,6 +685,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
         'Dependency injection': ['get_it'],
@@ -668,6 +789,7 @@ void main() {
         'Features': ['home'],
         'Infrastructure': [],
         'Layout': ['bottom_tabs'],
+        'Settings screen': ['None'],
         'State management': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -763,6 +885,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
         'Dependency injection': ['get_it'],
