@@ -171,7 +171,8 @@ void main() {
       );
       final readme = contributions[4] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
-      expect(readme.entryKey, 'Languages');
+      expect(readme.entryKey, GenL10nModule.readmeHeading);
+      expect(GenL10nModule.readmeHeading, 'Texts');
       for (final contribution in contributions) {
         expect(contribution.when, isEmpty);
       }
@@ -537,24 +538,30 @@ void main() {
 
   group('the README of the app', () {
     late ContractResult result;
+    late String section;
 
     setUpAll(() async {
       result = await _rendered([GenL10nModule.id, _greeting.id]);
-    });
-
-    test('has a section of the module on the languages', () {
-      expect(
-        _putInto(result, AppEntryRole.readmeSections),
-        [('gen_l10n', 'Languages')],
-      );
-    });
-
-    test('names files of the app, but for the one of a language to add', () {
-      final section = module
+      section = module
           .contribute(ContractHarness.defaultContext)
           .whereType<SocketContribution>()
           .singleWhere((socket) => socket.socket == AppEntryRole.readmeSections)
           .entryValue! as String;
+    });
+
+    test(
+        'has the section of the module on the texts, and the section of '
+        'the role on the languages', () {
+      expect(
+        _putInto(result, AppEntryRole.readmeSections),
+        [
+          ('gen_l10n', GenL10nModule.readmeHeading),
+          ('role:localization', LocalizationRole.readmeHeading),
+        ],
+      );
+    });
+
+    test('names files of the app, but for the one of a language to add', () {
       final paths = {
         for (final match
             in RegExp(r'`((?:lib|ios)/[^`]+|l10n\.yaml)`').allMatches(section))
@@ -567,8 +574,6 @@ void main() {
         'l10n.yaml',
         _accessor,
         '${GenL10nModule.arbDirectory}/app_de.arb',
-        LocalizationRole.appLocaleFile,
-        AppEntryRole.infoPlistFile,
       });
       final files = result.app!.files.keys;
       for (final path in paths.difference({
@@ -581,6 +586,52 @@ void main() {
         files.where((path) => path.startsWith(GenL10nModule.arbDirectory)),
         isNotEmpty,
       );
+      // The file that gen-l10n writes, as the options name it.
+      final options = _yamlOf(result.app!.files['l10n.yaml']!.text)!
+          as Map<String, Object?>;
+      expect(section, contains('`${options['output-localization-file']}`'));
+    });
+
+    test(
+        'tells to run gen-l10n once the file of a new language is added, '
+        'which flutter pub get does not notice', () {
+      final steps = [
+        for (final line in section.split('\n'))
+          if (RegExp(r'^\d+\. ').hasMatch(line)) line,
+      ];
+      final commands = {
+        for (final match in RegExp('`(flutter [^`]+)`').allMatches(section))
+          match[1]!,
+      };
+
+      expect(steps, hasLength(2));
+      expect(steps.first, startsWith('1. '));
+      expect(
+        steps.first,
+        contains('`${GenL10nModule.arbDirectory}/app_de.arb`'),
+      );
+      expect(steps.last, startsWith('2. '));
+      expect(steps.last, contains('`flutter gen-l10n`'));
+      expect(commands, {'flutter pub get', 'flutter gen-l10n'});
+    });
+
+    test(
+        'leaves where else a new language goes to the section of the role, '
+        'which it names', () {
+      final role = _putInto(result, AppEntryRole.readmeSections).last;
+
+      expect(role, ('role:localization', LocalizationRole.readmeHeading));
+      expect(section, contains('"${LocalizationRole.readmeHeading}"'));
+      // What the template of the role writes for each language is in its
+      // section alone, so that no provider keeps a copy of it.
+      for (final ofRole in [
+        LocalizationRole.appLocaleFile,
+        'appLocales',
+        AppEntryRole.infoPlistFile,
+        'CFBundleLocalizations',
+      ]) {
+        expect(section, isNot(contains(ofRole)), reason: ofRole);
+      }
     });
   });
 }

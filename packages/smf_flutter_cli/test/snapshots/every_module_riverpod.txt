@@ -158,17 +158,27 @@ The app reports its errors to [Firebase Crashlytics](https://firebase.google.com
 ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
 ```
 
-## Languages
+## Texts
 
-The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. `flutter pub get` and `flutter run` generate the `AppLocalizations` class from these files with [gen-l10n](https://docs.flutter.dev/ui/internationalization), as `l10n.yaml` says. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. `flutter pub get` runs it when one of the ARB files changed or the files it writes are missing, so you can commit those files or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
 
 To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
 
-To add a language in which Flutter has the texts of its own widgets, such as German:
+The texts of a new language, such as German, go into a file of their own:
 
 1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
-2. Add `Locale('de')` to `appLocales` in `lib/core/l10n/app_locale.dart`.
-3. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+2. Run `flutter gen-l10n`, because `flutter pub get` does not notice a new ARB file.
+
+The section "Languages" tells where else the new language goes.
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -1049,8 +1059,9 @@ extension AppTexts on BuildContext {
   /// The texts of the app in the language of this context, which is below
   /// the root of the app.
   ///
-  /// Flutter generates [AppLocalizations] from the ARB files in `lib/l10n`
-  /// when `flutter pub get` or `flutter run` runs.
+  /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
+  /// `lib/l10n`. `flutter pub get` runs it when one of those files changed,
+  /// and `flutter gen-l10n` runs it for a new file too.
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
 === lib/core/layout/app_shell.dart (bottom_tabs) ===

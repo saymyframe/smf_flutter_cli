@@ -88,6 +88,15 @@ A new Flutter project.
 ## Fixture
 
 The app has something in every socket of its entry, with `code` and a [link](https://example.com).
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")

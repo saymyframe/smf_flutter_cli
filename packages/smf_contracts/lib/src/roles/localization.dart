@@ -39,7 +39,12 @@ const localizationRole = LocalizationRole._();
 ///
 /// It also gives the root `MaterialApp` its `locale`, its
 /// `supportedLocales` and the delegates of Flutter's own localizations, and
-/// names the languages of the app in the `Info.plist` of the iOS app.
+/// names the languages of the app in the `Info.plist` of the iOS app. The
+/// section [readmeHeading] of the README of the app, which the template
+/// writes too, tells where the app keeps the list of its languages and
+/// each place that a new language goes into. So a provider tells in a
+/// section of its own only where its texts are, how to add one, and what
+/// its texts need for a new language.
 ///
 /// A provider generates [textsFile] with the extension [appTexts], whose
 /// getter `l10n` returns an object with a `String` getter for each text of
@@ -74,6 +79,11 @@ final class LocalizationRole extends Role<TextsData> {
 
   /// The path of the provider's file with [appTexts].
   static const textsFile = 'lib/core/l10n/l10n.dart';
+
+  /// The heading of the section of the README of the app in which the
+  /// template tells where the languages of the app are and how to add one.
+  /// The section of a provider on its texts can refer to it.
+  static const readmeHeading = 'Languages';
 
   /// The extension on `BuildContext` that every provider generates, whose
   /// getter `l10n` gives the texts of the app in the language of the

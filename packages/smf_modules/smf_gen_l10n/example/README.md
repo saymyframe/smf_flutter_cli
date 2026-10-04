@@ -9,7 +9,7 @@ smf create my_app -m gen_l10n --no-input
 
 The module adds to the app:
 
-- `l10n.yaml`, the options of gen-l10n, and `generate: true` in `pubspec.yaml`, with which `flutter pub get` and `flutter run` generate the `AppLocalizations` class in `lib/l10n`;
+- `l10n.yaml`, the options of gen-l10n, and `generate: true` in `pubspec.yaml`, with which `flutter pub get` generates the `AppLocalizations` class in `lib/l10n`;
 - `lib/l10n/app_en.arb` with every text of the modules of the app in English, and a file for each other language that the texts are in, with the translations;
 - `lib/core/l10n/l10n.dart` with `context.l10n`, the `AppLocalizations` of a `BuildContext`.
 
@@ -32,7 +32,7 @@ import 'package:my_app/core/l10n/l10n.dart';
 Text(context.l10n.cartTitle)
 ```
 
-A text without a translation into a language reads in English there. The README of the app tells how to add a language.
+A text without a translation into a language reads in English there. The README of the app tells how to add a language: its ARB file needs `flutter gen-l10n`, since `flutter pub get` does not notice a new file.
 
 Without `-m`, `smf create` asks which module provides the localization of the app.
 

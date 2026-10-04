@@ -1495,7 +1495,9 @@ void main() {
           flutterLocalizations,
         ],
       );
-      expect(sockets, hasLength(6));
+      // The wrapper, the arguments of the root and the section of the
+      // README.
+      expect(sockets, hasLength(7));
 
       final package = contributions.whereType<PubspecDependency>().single;
       expect(package.package, 'flutter_localizations');
@@ -1565,6 +1567,59 @@ void main() {
           .singleWhere((socket) => socket.socket == AppEntryRole.infoPlist);
       expect(entry.entryKey, 'CFBundleLocalizations');
       expect(entry.entryValue, const PlistStringArray(['uk', 'en']));
+    });
+
+    test(
+        'tells in the README of the app where its languages are, and each '
+        'place that a new language goes into', () async {
+      final section = localizationRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .singleWhere(
+            (socket) => socket.socket == AppEntryRole.readmeSections,
+          );
+      final text = section.entryValue! as String;
+
+      expect(LocalizationRole.readmeHeading, 'Languages');
+      expect(section.entryKey, LocalizationRole.readmeHeading);
+      expect(section.when, isEmpty);
+
+      // What the template writes differently for an app with one more
+      // language: the places that a new language goes into.
+      Future<RenderedTemplate> appIn(List<String> languages) => renderTemplate(
+            localizationRole,
+            data: data,
+            choice: LocalizationChoice(languages),
+          );
+      final english = await appIn(['en']);
+      final german = await appIn(['en', 'de']);
+      final files = [
+        for (final MapEntry(key: path, value: code) in german.files.entries)
+          if (english.files[path] != code) path,
+      ];
+      final entries = [
+        for (final (index, entry) in german.elsewhere.indexed)
+          if (entry.entryValue != english.elsewhere[index].entryValue) entry,
+      ];
+      expect(files, [LocalizationRole.appLocaleFile]);
+      expect(
+        german.files[LocalizationRole.appLocaleFile],
+        contains("const appLocales = <Locale>[Locale('en'), Locale('de')];"),
+      );
+      expect(entries.single.socket, AppEntryRole.infoPlist);
+      expect(entries.single.entryValue, const PlistStringArray(['en', 'de']));
+
+      // The section names each of them, and what goes there.
+      for (final named in [
+        LocalizationRole.appLocaleFile,
+        'appLocales',
+        "Locale('de')",
+        AppEntryRole.infoPlistFile,
+        entries.single.entryKey!,
+        'de',
+      ]) {
+        expect(text, contains('`$named`'), reason: named);
+      }
     });
   });
 }
