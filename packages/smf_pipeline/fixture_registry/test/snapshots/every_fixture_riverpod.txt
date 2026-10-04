@@ -2230,6 +2230,11 @@ final class ThemeModeController extends ChangeNotifier {
   /// Makes [mode] the mode of the app at once, and saves it: the future
   /// completes once the mode is saved. Before the app opened its
   /// preferences, it changes only memory.
+  ///
+  /// If the preferences fail to save the mode, the future completes with
+  /// their error. The app is in [mode] by then and stays in it while it
+  /// runs, but its next launch has the mode that was saved before. The
+  /// same choice again saves it.
   Future<void> select(ThemeMode mode) async {
     if (mode != _mode) {
       _mode = mode;

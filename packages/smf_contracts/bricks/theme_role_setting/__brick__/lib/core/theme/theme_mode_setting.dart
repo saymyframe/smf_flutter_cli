@@ -4,6 +4,12 @@ import 'theme_mode.dart';
 
 /// The entry of the theme mode on the settings screen of the app: the user
 /// selects whether the app is light, dark, or follows the device.
+///
+/// The entry does not wait until a choice is saved. If the preferences fail
+/// to save it, the app shows the selected mode while it runs, its next
+/// launch has the mode that was saved before, and the error is one that
+/// nothing here catches: it reaches the handlers of the uncaught errors of
+/// the app.
 class ThemeModeSetting extends StatelessWidget {
   /// Creates the entry.
   const ThemeModeSetting({super.key});

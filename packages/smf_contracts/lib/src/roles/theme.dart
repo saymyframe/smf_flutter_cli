@@ -20,9 +20,9 @@ const themeRole = ThemeRole._();
 /// - `themeModeController`, the `ThemeModeController` of the app. Its
 ///   `mode` is the `ThemeMode` of the app: `ThemeMode.system`, which follows
 ///   the device, unless the user selected another. `select(mode)` makes
-///   `mode` the mode of the app and saves it; its future completes once the
-///   mode is saved. The controller is a `ChangeNotifier`, which tells its
-///   listeners when the mode changes;
+///   `mode` the mode of the app at once and saves it; its future completes
+///   once the mode is saved. The controller is a `ChangeNotifier`, which
+///   tells its listeners when the mode changes;
 /// - `ThemeModeScope`, the widget around the root of the app, whose
 ///   `ThemeModeScope.of(context)` returns the controller and rebuilds the
 ///   widget of `context` when the mode changes;
@@ -40,6 +40,13 @@ const themeRole = ThemeRole._();
 /// takes the mode that is saved, and keeps the current one when nothing is
 /// saved or when what is saved is no name of a mode. Before the preferences
 /// are open, `select` changes only memory.
+///
+/// A write of the mode that fails is not caught: the future of `select`
+/// completes with the error of the preferences. The app is in the selected
+/// mode by then and stays in it while it runs, but its next launch has the
+/// mode that was saved before; the same choice again saves it. The entry of
+/// the settings screen does not wait for that future, so there the error
+/// reaches the handlers of the uncaught errors of the app.
 ///
 /// In an app with the [SettingsScreenRole], the template also generates
 /// [themeModeSettingFile] with `ThemeModeSetting`, the entry of the

@@ -65,17 +65,23 @@ List<RoleData<Object>> _dataFor(Role role) => [
 
 /// Preferences of the test app that read and write a text, which is all
 /// that the theme mode needs, over a map that stands for the disk: each
-/// open reads the map anew, and a write takes a moment. Any other read or
-/// write throws.
+/// open reads the map anew, and a write takes a moment, and fails when the
+/// test says so. Any other read or write throws.
 const _fakePreferences = r'''
 import '../core/preferences/app_preferences.dart';
 
 /// What the preferences have saved.
 final Map<String, Object> disk = {};
 
-/// The writes of the app, each with the open of the preferences that got
-/// it: the first, the second.
+/// The writes of the app that were saved, each with the open of the
+/// preferences that got it: the first, the second.
 final List<String> writes = [];
+
+/// Whether a write fails once it took its moment: its future has an error.
+bool writesFail = false;
+
+/// Whether a write throws at once, before it returns a future.
+bool writesThrow = false;
 
 int _opens = 0;
 
@@ -94,8 +100,14 @@ final class FakePreferences implements AppPreferences {
       };
 
   @override
-  Future<void> setString(String key, String value) async {
+  Future<void> setString(String key, String value) {
+    if (writesThrow) throw StateError('The write throws.');
+    return _write(key, value);
+  }
+
+  Future<void> _write(String key, String value) async {
     await Future<void>.delayed(Duration.zero);
+    if (writesFail) throw StateError('The write fails.');
     _values[key] = value;
     disk[key] = value;
     writes.add('open $_open: $key = $value');
@@ -238,6 +250,43 @@ final String _startWithTheModeSaved = _scriptOf('''
 
   await themeModeController.select(ThemeMode.dark);
   result['a choice after it'] = {'saved': disk[key], 'writes': [...writes]};
+''');
+
+/// Selects modes with preferences that fail to save them, as a future with
+/// an error and as a throw, and starts the app again after that.
+final String _failedWrites = _scriptOf('''
+  Future<Map<String, Object?>> choice(ThemeMode mode) async {
+    String? error;
+    try {
+      await themeModeController.select(mode);
+    } on StateError catch (failure) {
+      error = failure.message;
+    }
+    return {
+      'error': error,
+      'mode': themeModeController.mode.name,
+      'heard': heard(),
+      'saved': disk[key],
+    };
+  }
+
+  await initPreferences();
+  result['a write that is saved'] = await choice(ThemeMode.dark);
+
+  writesFail = true;
+  result['a write that fails'] = await choice(ThemeMode.light);
+  writesFail = false;
+  result['the same choice again'] = await choice(ThemeMode.light);
+
+  writesThrow = true;
+  result['a write that throws'] = await choice(ThemeMode.system);
+  writesThrow = false;
+
+  await initPreferences();
+  result['the next start'] = {
+    'mode': themeModeController.mode.name,
+    'heard': heard(),
+  };
 ''');
 
 /// Asks the scope for the controller, from a context below the scope and
@@ -724,6 +773,46 @@ void main() {
         'a choice after it': {
           'saved': 'dark',
           'writes': ['open 1: ${ThemeRole.modeKey} = dark'],
+        },
+      });
+    });
+
+    test(
+        'changes at once also when the preferences fail to save it: the '
+        'choice fails with their error, the same choice again saves it, and '
+        'the next start has the mode that was saved last', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+
+      expect(await app.run(_failedWrites), {
+        'a write that is saved': {
+          'error': null,
+          'mode': 'dark',
+          'heard': ['dark'],
+          'saved': 'dark',
+        },
+        'a write that fails': {
+          'error': 'The write fails.',
+          'mode': 'light',
+          'heard': ['light'],
+          'saved': 'dark',
+        },
+        // The app is in the mode already, and the choice still saves it.
+        'the same choice again': {
+          'error': null,
+          'mode': 'light',
+          'heard': <Object?>[],
+          'saved': 'light',
+        },
+        'a write that throws': {
+          'error': 'The write throws.',
+          'mode': 'system',
+          'heard': ['system'],
+          'saved': 'light',
+        },
+        'the next start': {
+          'mode': 'light',
+          'heard': ['light'],
         },
       });
     });
