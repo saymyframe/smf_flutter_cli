@@ -141,9 +141,10 @@ Map<String, DartFileIndex> _appWithBuildOf(List<(String, String)> parameters) =>
 /// What the rule of the role says of a `MaterialApp` that the provider
 /// creates in the file at [path] outside a `build(BuildContext context)`.
 String _outsideBuild(String path) =>
-    '$path creates the root MaterialApp outside a method '
-    'build(BuildContext context) of a class, so the arguments that the '
-    'modules give the root cannot read its context.';
+    '$path creates a MaterialApp outside a method build(BuildContext '
+    'context) of a class. Every MaterialApp that the provider creates in '
+    'lib/ counts, since each may be the root of the app, whose arguments '
+    'from the modules read the context of such a build.';
 
 /// Checks [files] of an app whose app entry flutter_core provides; it owns
 /// each file, unless [owners] names another owner.
@@ -490,10 +491,30 @@ void main() {
     });
 
     test(
-        'require the root MaterialApp in a build(BuildContext context) of a '
-        'class, where the arguments of the modules read its context', () {
+        'require a MaterialApp of the provider in a build(BuildContext '
+        'context) of a class, where the arguments of the modules read the '
+        'context', () {
       final apps = {
         'in another method of the widget': _app(
+          appCalls: [_root(member: '_root')],
+        ),
+        'in a helper of the widget that takes the context of its build': _app(
+          appDeclarations: [
+            _appWidget([
+              _build(),
+              const IndexedMember(
+                '_root',
+                kind: MemberKind.method,
+                parameters: [
+                  IndexedParameter(
+                    'context',
+                    kind: ParameterKind.requiredPositional,
+                    type: 'BuildContext',
+                  ),
+                ],
+              ),
+            ]),
+          ],
           appCalls: [_root(member: '_root')],
         ),
         'in a top-level function': _app(
@@ -555,7 +576,8 @@ void main() {
         );
         expect(
           issues.single.hint,
-          contains('in the build of a widget'),
+          'Create it in the build(BuildContext context) of a widget. main() '
+          'runs the widget that creates the root inside the root wrappers.',
           reason: reason,
         );
       }

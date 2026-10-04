@@ -588,12 +588,14 @@ class App extends StatelessWidget {
     });
 
     test(
-        'app entry: the root MaterialApp is created in a method '
+        'app entry: every MaterialApp of the provider is created in a method '
         'build(BuildContext context) of a class', () {
       const provider = ModuleOrigin(ModuleId('scaffold'));
-      const outside = 'lib/app.dart creates the root MaterialApp outside a '
-          'method build(BuildContext context) of a class, so the arguments '
-          'that the modules give the root cannot read its context.';
+      String outside(String path) =>
+          '$path creates a MaterialApp outside a method build(BuildContext '
+          'context) of a class. Every MaterialApp that the provider creates '
+          'in lib/ counts, since each may be the root of the app, whose '
+          'arguments from the modules read the context of such a build.';
       List<SmfIssue> issuesOf(String app) => appEntryIssues(
             {'lib/app.dart': "import 'package:flutter/material.dart';\n\n$app"},
             owners: const {'lib/app.dart': provider},
@@ -649,6 +651,18 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) => _root();
 
   Widget _root() => MaterialApp(title: 'My App');
+}
+''',
+        // In a helper that build() calls with its context: the rule asks
+        // for the build itself.
+        '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => _root(context);
+
+  Widget _root(BuildContext context) => MaterialApp(title: 'My App');
 }
 ''',
         // In a function, a variable or a field, outside any widget.
@@ -725,10 +739,42 @@ Widget preview() => MaterialApp(title: 'Preview');
 ''',
       ]) {
         final issues = issuesOf(app);
-        expect(issues.map((issue) => issue.message), [outside], reason: app);
+        expect(
+          issues.map((issue) => issue.message),
+          [outside('lib/app.dart')],
+          reason: app,
+        );
         expect(issues.single.origin, provider, reason: app);
         expect(issues.single.path, 'lib/app.dart', reason: app);
       }
+
+      // A MaterialApp in another file of the provider in lib/ counts too,
+      // such as one for the tests of the app, and one outside lib/ does not.
+      const pumpApp = "Widget pumpApp() => MaterialApp(title: 'Test');\n";
+      final issues = appEntryIssues(
+        {
+          'lib/app.dart': '''
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(title: 'My App');
+}
+''',
+          'lib/testing/pump_app.dart': pumpApp,
+          'test/pump_app.dart': pumpApp,
+        },
+        owners: const {
+          'lib/app.dart': provider,
+          'lib/testing/pump_app.dart': provider,
+          'test/pump_app.dart': provider,
+        },
+        modules: [scaffold().descriptor],
+      );
+      expect(
+        issues.map((issue) => issue.message),
+        [outside('lib/testing/pump_app.dart')],
+      );
     });
 
     test('app entry: the required symbols are checked', () {

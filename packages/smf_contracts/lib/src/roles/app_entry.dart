@@ -34,8 +34,9 @@ const appEntryRole = AppEntryRole._();
 /// an expression is the `BuildContext` of that widget, which is below the
 /// [rootWrappers], and the root rebuilds when an inherited widget that the
 /// expression read notifies. The structural rules of the role check that
-/// the provider creates a `MaterialApp`, and only in a method
-/// `build(BuildContext context)` of a class.
+/// the provider creates a `MaterialApp`, and every one of its code in
+/// `lib/` in a method `build(BuildContext context)` of a class, since they
+/// cannot tell which of them is the root.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -401,9 +402,11 @@ final class AppEntryRole extends Role<NoDsl> {
         ),
         StructuralRule(
           id: 'app_entry.root_in_build',
-          description: 'The provider creates the root MaterialApp in a '
-              'method build(BuildContext context) of a class, so the '
-              'arguments that the modules give the root read its context.',
+          description: 'The provider creates every MaterialApp of lib/, one '
+              'of which is the root of the app, in a method '
+              'build(BuildContext context) of a class, so the arguments '
+              'that the modules give the root read the context of that '
+              'build.',
           check: _checkRootInBuild,
         ),
         StructuralRule(
@@ -648,18 +651,23 @@ List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
   ];
 }
 
+/// The index cannot tell which `MaterialApp` of the provider is the root of
+/// the app, so the rule asks the same of every one that the provider
+/// creates in `lib/`: one in a helper of a widget or in a function, such as
+/// an app for tests, is reported too.
 List<SmfIssue> _checkRootInBuild(StructuralRuleInput<NoDsl> input) => [
       for (final (path, file, provider) in _filesOfProvider(input))
         for (final invocation in file.invocations)
           if (_createsMaterialApp(invocation) && !_inBuild(file, invocation))
             SmfIssue(
-              '$path creates the root MaterialApp outside a method '
-              'build(BuildContext context) of a class, so the arguments that '
-              'the modules give the root cannot read its context.',
-              hint: 'Create it in the build of a widget that main() runs '
-                  'inside the root wrappers: the expression of an argument '
-                  'of the root may read the BuildContext of that widget as '
-                  'context.',
+              '$path creates a MaterialApp outside a method '
+              'build(BuildContext context) of a class. Every MaterialApp '
+              'that the provider creates in lib/ counts, since each may be '
+              'the root of the app, whose arguments from the modules read '
+              'the context of such a build.',
+              hint: 'Create it in the build(BuildContext context) of a '
+                  'widget. main() runs the widget that creates the root '
+                  'inside the root wrappers.',
               origin: ModuleOrigin(provider),
               path: path,
             ),
