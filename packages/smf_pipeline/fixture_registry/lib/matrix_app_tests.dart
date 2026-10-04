@@ -54,6 +54,46 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(const ModuleId('fake_screen_log')),
         roles: {routerRole},
       ),
+      // The guards of the routes, which the router asks about every location
+      // before it shows it, and tells of its pages when one of them starts
+      // or stops allowing, whichever module provides the router: the tests
+      // close and open the gates of the fixture gates, whose guards then
+      // keep the user from the screens of the fixture feature. The apps it
+      // applies to have the tests of router_screens, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/router_guards',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_gate')),
+        roles: {routerRole},
+      ),
+      // The guards over the fallback screen of the app entry, the location
+      // `/`, which is no route of a module, whichever module provides the
+      // router: in the apps with the fixture gates in which no route starts
+      // the app, as the router role chose it.
+      MatrixAppTest(
+        '$appTests/router_guards_fallback',
+        appliesTo: (app) =>
+            app.hook!.presentRoles.contains(routerRole) &&
+            routerRole.startIn(routerRole.hookInput(app.hook!)) == null &&
+            app.modules.contains(const ModuleId('fake_gate')),
+        roles: {routerRole},
+      ),
+      // The guards with a page shown over the main navigation, whichever
+      // modules provide the router and the layout: once a guard allows
+      // again, the user is back in the main navigation, on the destination
+      // that the page of the second fixture feature was pushed from. The
+      // apps it applies to have the tests of router_screens and of
+      // router_guards, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/layout_guards',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.hook!.presentRoles.contains(layoutRole) &&
+            app.modules.contains(const ModuleId('fake_second')) &&
+            app.modules.contains(const ModuleId('fake_gate')),
+        roles: {routerRole},
+      ),
       // The fallback screen of the app entry, which the router shows when
       // no route starts the app, as the router role chose it, whichever
       // module provides the router, and which the listener of the fixture
