@@ -255,6 +255,7 @@ void main() {
       appEntryRole,
       routerRole,
       layoutRole,
+      localizationRole,
       diRole,
       eventsRole,
       analyticsRole,

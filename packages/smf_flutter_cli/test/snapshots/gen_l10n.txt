@@ -10,6 +10,35 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Localization
+
+- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `appLocales` in `lib/core/l10n/app_locale.dart` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
+- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Set `appLocale.value` to one of `appLocales`, or to `null`, and the root of the app rebuilds in that language. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+With `gen-l10n` of Flutter:
+
+- The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files. Then run `flutter pub get`, which generates `context.l10n.<name>`.
+- Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says. After adding the ARB file of a new language, run `flutter gen-l10n`, because `flutter pub get` does not notice a new file.
+- Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===

@@ -44,7 +44,11 @@ const localizationRole = LocalizationRole._();
 /// writes too, tells where the app keeps the list of its languages and
 /// each place that a new language goes into. So a provider tells in a
 /// section of its own only where its texts are, how to add one, and what
-/// its texts need for a new language.
+/// its texts need for a new language. In the guide for coding agents of
+/// the app, the template writes the note of the role under its
+/// description: how code reads a text, where the languages of the app are,
+/// how code changes the language, and what a new language needs. A
+/// provider adds what holds with its tool under the same heading.
 ///
 /// A provider generates [textsFile] with the extension [appTexts], whose
 /// getter `l10n` returns an object with a `String` getter for each text of

@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_gen_l10n/smf_gen_l10n.dart';
+import 'package:smf_gen_l10n/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -138,11 +139,15 @@ void main() {
 
     test(
         'contributes its brick, the generation of the localizations, intl '
-        'in the version of Flutter, its delegate and a section of the '
-        'README, and nothing else', () {
+        'in the version of Flutter, its delegate, a section of the README '
+        'and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(5));
+      expect(contributions, hasLength(6));
+      final note = contributions[5] as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, localizationRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
       final brick = (contributions[0] as BrickContribution).bundle;
       expect(brick.name, 'gen_l10n');
       expect(brick.hooks, isEmpty);
@@ -594,6 +599,164 @@ void main() {
           },
         },
       );
+    });
+  });
+
+  group('the note of the module for coding agents', () {
+    late RenderedApp app;
+
+    setUpAll(() async {
+      app = (await _rendered([GenL10nModule.id, _greeting.id, _tabs.id])).app!;
+    });
+
+    /// The inline code of the note: what stands between two backticks.
+    Set<String> code() => {
+          for (final match in RegExp('`([^`]+)`').allMatches(agentNote))
+            match[1]!,
+        };
+
+    test(
+        'is in the section of the localization of the guide, after what the '
+        'role says, and changes no other section', () async {
+      final localization = <ContributionOrigin>{
+        const RoleTemplateOrigin(localizationRole),
+        _module,
+      };
+      final without = (await _rendered([_greeting.id, _tabs.id])).app!;
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+
+      // The guide has the notes of the app without the localization, and
+      // in the section of the localization what the role says and what the
+      // module adds.
+      expect(
+        notes.where((note) => !localization.contains(note.$1)),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        [
+          for (final (origin, heading, note) in notes)
+            if (localization.contains(origin)) (origin, heading, note.isOfRole),
+        ],
+        unorderedEquals([
+          (_module, localizationRole.description, false),
+          (
+            const RoleTemplateOrigin(localizationRole),
+            localizationRole.description,
+            true,
+          ),
+        ]),
+      );
+      expect(
+        [
+          for (final (origin, _, note) in notes)
+            if (origin == _module) note,
+        ],
+        [AgentNote(agentNote)],
+      );
+      final ofRole = [
+        for (final (origin, _, note) in notes)
+          if (origin == const RoleTemplateOrigin(localizationRole)) note.text,
+      ].single;
+
+      // The tool of Flutter that the module generates the texts with, as
+      // the note of a provider with a package names its package.
+      expect(agentNote, startsWith('With `gen-l10n` of Flutter:\n'));
+      expect(
+        app.files[AppEntryRole.agentsFile]!.text,
+        contains(
+          '\n## ${localizationRole.description}\n'
+          '\n'
+          '$ofRole\n'
+          '\n'
+          '${agentNote.trim()}\n',
+        ),
+      );
+    });
+
+    test(
+        'names the ARB files of the app by the directory and the pattern of '
+        'their paths, and the files that gen-l10n writes by a pattern', () {
+      final arbFiles = _arbFilesOf(app).keys;
+      final generated = generatedLocalizationsOf(app).path;
+      // A pattern of the note as an expression: any text in place of
+      // `<code>` and of `*`.
+      RegExp patternOf(String pattern) {
+        final parts = pattern.split(RegExp(r'<code>|\*'));
+        return RegExp('^${parts.map(RegExp.escape).join('.*')}\$');
+      }
+
+      expect(
+        code(),
+        containsAll([
+          GenL10nModule.arbDirectory,
+          GenL10nModule.templateArbFile,
+          '${GenL10nModule.arbDirectory}/app_<code>.arb',
+          '${GenL10nModule.arbDirectory}/app_localizations*.dart',
+          'l10n.yaml',
+        ]),
+      );
+      expect(arbFiles, hasLength(3));
+      for (final path in arbFiles) {
+        expect(
+          path,
+          matches(patternOf('${GenL10nModule.arbDirectory}/app_<code>.arb')),
+        );
+      }
+      // The module writes none of the files of gen-l10n, so the note names
+      // them by a pattern, which the guide does not read as a path.
+      expect(
+        generated,
+        matches(
+          patternOf('${GenL10nModule.arbDirectory}/app_localizations*.dart'),
+        ),
+      );
+      expect(app.files.keys, isNot(contains(generated)));
+    });
+
+    test(
+        'tells how a text and the file of a language get their code, with '
+        'the commands of the README of the app, and that the options turn '
+        'the escapes off', () {
+      final readme = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<SocketContribution>()
+          .singleWhere((socket) => socket.socket == AppEntryRole.readmeSections)
+          .entryValue! as String;
+      final options =
+          _yamlOf(app.files['l10n.yaml']!.text)! as Map<String, Object?>;
+
+      expect(
+        code(),
+        containsAll([
+          'flutter pub get',
+          'flutter gen-l10n',
+          'context.l10n.<name>',
+          'use-escaping: false',
+        ]),
+      );
+      for (final command in ['flutter pub get', 'flutter gen-l10n']) {
+        expect(readme, contains('`$command`'), reason: command);
+      }
+      expect(options['use-escaping'], isFalse);
+      // The getter that the note reads a text through is the one that the
+      // file of the module declares on a context.
+      final texts = DartFileIndexer.index(
+        _accessor,
+        app.files[_accessor]!.text,
+      ).declaration(LocalizationRole.appTexts.name)!;
+      expect(texts.kind, DeclarationKind.extension);
+      expect(
+        [
+          for (final member in texts.members)
+            if (member.kind == MemberKind.getter) member.name,
+        ],
+        ['l10n'],
+      );
+      // A name in lowerCamelCase, as the getters that the role names.
+      for (final name in _arbFilesOf(app)[GenL10nModule.templateArbFile]!) {
+        if (name.$1.startsWith('@')) continue;
+        expect(name.$1, matches(RegExp(r'^[a-z][A-Za-z0-9]*$')));
+      }
     });
   });
 

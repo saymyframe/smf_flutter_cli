@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_gen_l10n/bundles/gen_l10n_bundle.dart';
+import 'package:smf_gen_l10n/src/agents.dart';
 
 /// The module that keeps the texts of the app in ARB files, from which
 /// gen-l10n of Flutter generates the code that reads them, and so provides
@@ -26,7 +27,10 @@ import 'package:smf_gen_l10n/bundles/gen_l10n_bundle.dart';
 /// - the section [readmeHeading] of the README of the app, which tells
 ///   where the texts are, how to add a text, and how to add the ARB file of
 ///   a new language, which only `flutter gen-l10n` picks up. The section of
-///   the role tells where else a new language goes.
+///   the role tells where else a new language goes;
+/// - a note in the section of the localization of the guide for coding
+///   agents of the app, after what the role says there: where the texts
+///   are, how to add one, and which files gen-l10n writes itself.
 ///
 /// The ARB files come from the render hook of the module, since the app
 /// has one for each of its languages. SMF never writes the code that reads
@@ -74,6 +78,10 @@ final class GenL10nModule extends SmfModule {
           ),
         ),
         AppEntryRole.readmeSections.entry(readmeHeading, _readmeSection),
+        AppEntryRole.agentSections.entry(
+          localizationRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 

@@ -62,6 +62,13 @@ The modules of the fixture fill the sockets of the app entry, and the tests read
 
 The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/readme.txt`, and the Dart files of the fixtures in the directories `lib/core/fixture_*/`.
 
+## Localization
+
+- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `appLocales` in `lib/core/l10n/app_locale.dart` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
+- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Set `appLocale.value` to one of `appLocales`, or to `null`, and the root of the app rebuilds in that language. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
 ## Preferences
 
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
