@@ -72,14 +72,20 @@ final class CodeSocket extends SocketKind {
       {tag: c.map((contribution) => contribution.fragment!.code).join('\n')};
 }
 
-/// Whether an argument of an [ArgsSocket] takes one value or a list.
+/// Whether an argument of an [ArgsSocket] takes one value or a list, and
+/// whose items a list takes.
 enum ArgShape {
   /// One value, such as `theme:`. Two different values conflict.
   scalar,
 
   /// A list that unites the items of all contributions, such as
-  /// `supportedLocales:`.
+  /// `localizationsDelegates:`.
   list,
+
+  /// A list of the items of one contributor, such as `supportedLocales:`.
+  /// The items of a second contributor conflict, also when they are the
+  /// same items.
+  listOfOneContributor,
 }
 
 /// A socket for named arguments of a call, such as the arguments of
@@ -89,6 +95,14 @@ enum ArgShape {
 /// `name: value,` lines in that order. Each contribution sets one argument
 /// to an expression; items of a list argument are united, dropping repeated
 /// expressions, and two different values of a scalar argument conflict.
+///
+/// A list of one contributor ([ArgShape.listOfOneContributor]) takes the
+/// items of one module, those of its variants included, or of the template
+/// of one role. A conflict names the items of one contributor and then
+/// those of the other, to which the pipeline reports it: the one that
+/// contributed second, but between a module and the template of a role the
+/// module, whichever contributed first, since the template gives its items
+/// for every module of the app.
 final class ArgsSocket extends SocketKind {
   /// Creates the kind for the arguments [args].
   const ArgsSocket(this.args);
@@ -119,6 +133,11 @@ final class ArgsSocket extends SocketKind {
       final name = contribution.argName!;
       final code = contribution.fragment!.code;
       final existing = byName.putIfAbsent(name, () => []);
+      if (args[name] == ArgShape.listOfOneContributor &&
+          existing.isNotEmpty &&
+          _contributorOf(existing.first) != _contributorOf(contribution)) {
+        throw _twoContributors(name, existing, contribution);
+      }
       if (existing.any((other) => other.fragment!.code == code)) continue;
       if (args[name] == ArgShape.scalar && existing.isNotEmpty) {
         throw MergeConflict(
@@ -146,6 +165,40 @@ final class ArgsSocket extends SocketKind {
       ].join('\n'),
     };
   }
+}
+
+/// Who [contribution] is from, for an argument that takes the items of one
+/// contributor: a module, whose variants contribute for it, the template of
+/// a role or the pipeline, or `null` for a contribution without an origin.
+Object? _contributorOf(SocketContribution contribution) =>
+    switch (contribution.origin) {
+      ModuleOrigin(:final module) => module,
+      final origin => origin,
+    };
+
+/// The conflict of [second] with [first], the items that another
+/// contributor gave the argument [name], which takes the items of one.
+///
+/// A module comes second in it, after the template of a role, whichever
+/// contributed first.
+MergeConflict _twoContributors(
+  String name,
+  List<SocketContribution> first,
+  SocketContribution second,
+) {
+  String codes(List<SocketContribution> items) =>
+      items.map((item) => item.fragment!.code).join(', ');
+  final swap =
+      second.origin is RoleTemplateOrigin && first.first.origin is ModuleOrigin;
+  final (existing, incoming) = swap ? ([second], first) : (first, [second]);
+  return MergeConflict(
+    name,
+    codes(existing),
+    codes(incoming),
+    'the argument takes the items of one contributor',
+    existingOrigin: existing.first.origin,
+    incomingOrigin: incoming.first.origin,
+  );
 }
 
 /// A socket that wraps a piece of code, such as the root widget of the app.

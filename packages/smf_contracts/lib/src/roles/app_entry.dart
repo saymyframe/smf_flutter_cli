@@ -195,8 +195,15 @@ final class AppEntryRole extends Role<NoDsl> {
   );
 
   /// Arguments of the root `MaterialApp`: `theme`, `darkTheme`, `themeMode`
-  /// and `locale` take one value, `localizationsDelegates` and
-  /// `supportedLocales` take list items.
+  /// and `locale` take one value, `localizationsDelegates` takes the list
+  /// items of every contributor, and `supportedLocales` takes the list
+  /// items of one contributor ([ArgShape.listOfOneContributor]).
+  ///
+  /// Every delegate of the root has to support each of its locales, so a
+  /// module that added a locale next to another contributor would break
+  /// the delegates of the other. So the pipeline reports the items of a
+  /// second contributor of `supportedLocales` as a conflict. In an app with
+  /// the localization role, the template of that role is the contributor.
   ///
   /// The provider evaluates the expression of an argument in the `build` of
   /// the widget that creates the root `MaterialApp`. So the expression may
@@ -216,7 +223,7 @@ final class AppEntryRole extends Role<NoDsl> {
       'themeMode': ArgShape.scalar,
       'locale': ArgShape.scalar,
       'localizationsDelegates': ArgShape.list,
-      'supportedLocales': ArgShape.list,
+      'supportedLocales': ArgShape.listOfOneContributor,
     }),
   );
 

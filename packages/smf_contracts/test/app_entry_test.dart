@@ -676,15 +676,16 @@ void main() {
         SocketContribution.arg(socket, name, Fragment(expression));
 
     test(
-        'are one theme, dark theme, theme mode and locale, and the lists of '
-        'the localizations', () {
+        'are one theme, dark theme, theme mode and locale, the delegates of '
+        'the localizations of every contributor, and the supported locales '
+        'of one contributor', () {
       expect(socket.kind.args, {
         'theme': ArgShape.scalar,
         'darkTheme': ArgShape.scalar,
         'themeMode': ArgShape.scalar,
         'locale': ArgShape.scalar,
         'localizationsDelegates': ArgShape.list,
-        'supportedLocales': ArgShape.list,
+        'supportedLocales': ArgShape.listOfOneContributor,
       });
       for (final name in socket.kind.args.keys) {
         expect(socket.problemsWith(arg(name, 'value')), isEmpty, reason: name);
@@ -754,6 +755,122 @@ void main() {
           reason: name,
         );
       }
+    });
+
+    group('take the supported locales of one contributor:', () {
+      const first = ModuleOrigin(ModuleId('first'));
+      const ofVariant = ModuleOrigin(
+        ModuleId('first'),
+        variant: ModuleId('bloc'),
+      );
+      const second = ModuleOrigin(ModuleId('second'));
+      const template = RoleTemplateOrigin(appEntryRole);
+
+      SocketContribution locales(String code, [ContributionOrigin? origin]) {
+        final contribution = arg('supportedLocales', code);
+        return origin == null ? contribution : contribution.withOrigin(origin);
+      }
+
+      Matcher conflictOf(
+        String existing,
+        String incoming, {
+        required ContributionOrigin from,
+        required ContributionOrigin and,
+      }) =>
+          throwsA(
+            isA<MergeConflict>()
+                .having((conflict) => conflict.key, 'key', 'supportedLocales')
+                .having((conflict) => conflict.existing, 'existing', existing)
+                .having((conflict) => conflict.incoming, 'incoming', incoming)
+                .having(
+                  (conflict) => conflict.reason,
+                  'reason',
+                  'the argument takes the items of one contributor',
+                )
+                .having((c) => c.existingOrigin, 'existing origin', from)
+                .having((c) => c.incomingOrigin, 'incoming origin', and),
+          );
+
+      test('the items of a module, those of its variant too, are a list', () {
+        expect(
+          socket.render([
+            locales("Locale('en')", first),
+            locales("Locale('uk')", ofVariant),
+            // An item that it gives twice is in the list once.
+            locales("Locale('en')", ofVariant),
+          ]),
+          {socket.tag: "supportedLocales: [Locale('en'), Locale('uk')],"},
+        );
+        // Contributions without an origin, as a test of a socket makes
+        // them, are of one contributor.
+        expect(
+          socket.render([locales("Locale('en')"), locales("Locale('uk')")]),
+          {socket.tag: "supportedLocales: [Locale('en'), Locale('uk')],"},
+        );
+        // The list of the template of a role, alone.
+        expect(
+          socket.render([locales('...appLocales', template)]),
+          {socket.tag: 'supportedLocales: [...appLocales],'},
+        );
+      });
+
+      test('the items of a second module conflict, also the same ones', () {
+        for (final item in ["Locale('uk')", "Locale('en')"]) {
+          expect(
+            () => socket.render([
+              locales("Locale('en')", first),
+              locales(item, second),
+            ]),
+            conflictOf("Locale('en')", item, from: first, and: second),
+            reason: item,
+          );
+        }
+      });
+
+      test(
+          'a module next to the template of a role is the second '
+          'contributor of the conflict, whichever contributed first', () {
+        // The module first, with two items: the conflict names both.
+        expect(
+          () => socket.render([
+            locales("Locale('en')", first),
+            locales("Locale('fr')", first),
+            locales('...appLocales', template),
+          ]),
+          conflictOf(
+            '...appLocales',
+            "Locale('en'), Locale('fr')",
+            from: template,
+            and: first,
+          ),
+        );
+        expect(
+          () => socket.render([
+            locales('...appLocales', template),
+            locales("Locale('en')", first),
+          ]),
+          conflictOf(
+            '...appLocales',
+            "Locale('en')",
+            from: template,
+            and: first,
+          ),
+        );
+      });
+
+      test('the delegates of the localizations are those of everyone', () {
+        expect(
+          socket.render([
+            arg('localizationsDelegates', 'A.delegate').withOrigin(first),
+            arg('localizationsDelegates', 'B.delegate').withOrigin(second),
+            arg('localizationsDelegates', 'C.delegate').withOrigin(template),
+          ]),
+          {
+            socket.tag: 'localizationsDelegates: '
+                '[A.delegate, B.delegate, C.delegate],',
+          },
+        );
+      });
     });
   });
 

@@ -108,9 +108,12 @@ const localizationRole = LocalizationRole._();
 ///
 /// Every delegate among the `localizationsDelegates` of the root supports
 /// each language of the app, and the `supportedLocales` of the root are
-/// those of the role alone. So a module gives its texts to the role: it
-/// brings no delegate of texts of its own, which would have to know the
-/// languages of the app, and adds no language to the root.
+/// those of the role alone: the argument takes the items of one
+/// contributor, so the pipeline reports a module that gives the root a
+/// locale of its own in an app with the role as a conflict with the role.
+/// So a module gives its texts to the role: it brings no delegate of texts
+/// of its own, which would have to know the languages of the app, and adds
+/// no language to the root.
 ///
 /// A module that only uses the role reads a text through a variable of
 /// [varsOf], and the template of a role through a fragment of

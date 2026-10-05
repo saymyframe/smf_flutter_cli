@@ -1624,6 +1624,45 @@ void main() {
       expect(package.dev, isFalse);
     });
 
+    test(
+        'alone gives the root its languages: a module that gives it a '
+        'language of its own conflicts with the role', () {
+      const slovak = ModuleOrigin(ModuleId('slovak'));
+      const template = RoleTemplateOrigin(localizationRole);
+      final ofRole = contributions()
+          .whereType<SocketContribution>()
+          .singleWhere((socket) => socket.argName == 'supportedLocales')
+          .withOrigin(template);
+      final ofModule = const SocketContribution.arg(
+        AppEntryRole.appArgs,
+        'supportedLocales',
+        Fragment("Locale('sk')"),
+      ).withOrigin(slovak);
+
+      expect(
+        AppEntryRole.appArgs.render([ofRole]),
+        {AppEntryRole.appArgs.tag: 'supportedLocales: [...appLocales],'},
+      );
+      // The module contributes before the template of the role, and is
+      // the one that the conflict is reported to.
+      expect(
+        () => AppEntryRole.appArgs.render([ofModule, ofRole]),
+        throwsA(
+          isA<MergeConflict>()
+              .having((conflict) => conflict.key, 'key', 'supportedLocales')
+              .having((c) => c.existing, 'existing', '...appLocales')
+              .having((c) => c.incoming, 'incoming', "Locale('sk')")
+              .having(
+                (conflict) => conflict.reason,
+                'reason',
+                'the argument takes the items of one contributor',
+              )
+              .having((c) => c.existingOrigin, 'existing origin', template)
+              .having((c) => c.incomingOrigin, 'incoming origin', slovak),
+        ),
+      );
+    });
+
     test('gives the preferences the restorer of the language', () {
       final restorer = contributions()
           .whereType<SocketContribution>()
