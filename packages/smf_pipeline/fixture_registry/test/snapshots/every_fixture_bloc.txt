@@ -1666,6 +1666,8 @@ void _restore(AppPreferences preferences) {
   }
 }
 === lib/core/router/app_router.dart (role:router) ===
+import 'package:fixture_app/features/fake_gate/fixture_gates.dart' as guard0;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app_router_factory.dart';
@@ -1713,6 +1715,180 @@ abstract interface class AppNavigator {
   /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
 }
+
+/// A guard of the routes of the app: while it does not allow, the router
+/// shows its target in place of every location outside its flow.
+///
+/// `go()`, `push()` and `replace()` of such a location show the target
+/// too, and `push()` completes with `null`. Once the guard allows, the
+/// router shows the location that the user last asked for, or the one that
+/// the guard took the user from, or else the screen that the app starts
+/// on.
+final class RouteGuard {
+  /// Creates the guard [name].
+  const RouteGuard(
+    this.name, {
+    required this.allows,
+    required this.redirectTo,
+    required this.flow,
+  });
+
+  /// The full name of the guard: its module and its name there.
+  final String name;
+
+  /// Whether the guard lets the user see the locations outside its [flow];
+  /// it notifies its listeners when that changes.
+  final ValueListenable<bool> allows;
+
+  /// The target of the guard: the location that the router shows while the
+  /// guard does not allow.
+  final AppLocation redirectTo;
+
+  /// The full names of the routes that the user may see while the guard
+  /// does not allow: the route of [redirectTo] and the routes below it.
+  final Set<String> flow;
+}
+
+/// The guards of the routes of the app, in the order the app asks them.
+final List<RouteGuard> routeGuards = [
+  RouteGuard(
+    'fake_gate.first',
+    allows: guard0.fixtureGateOpen(),
+    redirectTo: const FakeGateGateLocation(),
+    flow: const {'fake_gate.gate', 'fake_gate.step'},
+  ),
+  RouteGuard(
+    'fake_gate.second',
+    allows: guard0.fixtureSecondGateOpen(),
+    redirectTo: const FakeGateSecondLocation(),
+    flow: const {'fake_gate.second'},
+  ),
+];
+
+/// The location that the router shows in place of the route [routeName],
+/// or `null` if the guards let the user see it.
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, such as the error screen of the router. The first
+/// guard that does not allow decides, and no guard after it is asked: it
+/// shows its target in place of every route outside its flow.
+AppLocation? redirectOf(String? routeName) {
+  for (final guard in routeGuards) {
+    if (guard.allows.value) continue;
+    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+  }
+  return null;
+}
+
+/// Notifies its listeners when a guard starts or stops allowing, so that
+/// the router tells its [GuardedNavigation] of its pages.
+final Listenable guardChanges = Listenable.merge([
+  for (final guard in routeGuards) guard.allows,
+]);
+
+/// The guards of the routes as the router of the app asks them, with what
+/// they make it remember: the location that the user comes back to once
+/// the guards allow it.
+///
+/// [L] is how the router knows a location that it can show as `go()`
+/// does, such as its URI. The router asks [asked] before it shows a
+/// location, and [changed] when [guardChanges] notifies. It shows the
+/// location that either answers in place of its whole stack, as `go()` to
+/// it does. An answer is a record with the location, so that `null` is no
+/// answer also for a router whose [L] is nullable.
+final class GuardedNavigation<L> {
+  /// Creates the guards for a router whose location `/`, the screen that
+  /// the app starts on, is [start], and which knows a location of the
+  /// navigation, such as the target of a guard, as [locationOf] says.
+  GuardedNavigation({required this.start, required this.locationOf});
+
+  /// The location `/` of the router: the screen that the app starts on.
+  final L start;
+
+  /// The location of the router for a location of the navigation.
+  final L Function(AppLocation location) locationOf;
+
+  /// The location that the user comes back to once the guards allow it,
+  /// with the full name of its route, or `null` if there is none.
+  ({String? route, L location})? _remembered;
+
+  /// Whether each guard allowed when the router last told of its pages.
+  List<bool> _allowed = _allowedNow();
+
+  /// What the router shows in place of [location], whose route has the
+  /// full name [route], or `null` to show it; see [redirectOf].
+  ///
+  /// The router asks before it shows a location: the one the app starts
+  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
+  /// and each one from the platform. A location that a guard keeps the
+  /// user from is remembered in place of the one before it, so the user
+  /// comes back to the latest one that they or the platform asked for. A
+  /// location in the flow of a guard is never remembered: once that guard
+  /// allows, its flow is over.
+  ({L location})? asked(String? route, L location) {
+    final target = redirectOf(route);
+    if (target == null) return null;
+    if (!_inAFlow(route)) _remembered = (route: route, location: location);
+    return (location: locationOf(target));
+  }
+
+  /// What the router shows in place of its stack now that a guard started
+  /// or stopped allowing, or `null` to leave the stack as it is.
+  ///
+  /// [pages] are the pages that the user can get back to, the one on top
+  /// first: those of the root navigator and of the selected branch of the
+  /// main navigation, each with the full name of its route, its location,
+  /// and whether `push()` showed it; none for a router that has no page
+  /// yet. The answer is the first of these:
+  /// - the target of the guard that keeps the user from one of the pages.
+  ///   The location below the pages that pushes showed is then remembered,
+  ///   or [start] if pushes showed them all, unless one is remembered
+  ///   already or it is in the flow of a guard;
+  /// - the remembered location, once the guards allow it, which is then
+  ///   forgotten;
+  /// - [start], when a guard started allowing while a page of its flow is
+  ///   on top, every guard allows and nothing is remembered: its flow is
+  ///   over.
+  ({L location})? changed(
+    Iterable<({String? route, L location, bool pushed})> pages,
+  ) {
+    final before = _allowed;
+    _allowed = _allowedNow();
+    for (final page in pages) {
+      final target = redirectOf(page.route);
+      if (target == null) continue;
+      final below = pages.where((other) => !other.pushed).firstOrNull;
+      if (_remembered == null && !_inAFlow(below?.route)) {
+        _remembered = (
+          route: below?.route,
+          location: below == null ? start : below.location,
+        );
+      }
+      return (location: locationOf(target));
+    }
+    if (_remembered case final remembered?) {
+      if (redirectOf(remembered.route) != null) return null;
+      _remembered = null;
+      return (location: remembered.location);
+    }
+    final top = pages.firstOrNull?.route;
+    for (final (index, guard) in routeGuards.indexed) {
+      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
+        return _allowed.contains(false) ? null : (location: start);
+      }
+    }
+    return null;
+  }
+
+  /// Whether each guard allows now, in the order of [routeGuards].
+  static List<bool> _allowedNow() => [
+    for (final guard in routeGuards) guard.allows.value,
+  ];
+
+  /// Whether [route] is in the flow of a guard, of whichever guard.
+  static bool _inAFlow(String? route) =>
+      routeGuards.any((guard) => guard.flow.contains(route));
+}
 === lib/core/router/app_router_factory.dart (fake_router) ===
 import 'dart:async';
 
@@ -1722,6 +1898,8 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
+import 'package:fixture_app/features/fake_gate/fixture_gate_screens.dart'
+    as screen4;
 import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen3;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
@@ -1772,6 +1950,12 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     for (final location in <AppLocation>[const FakeFeatureHomeLocation()]) {
       _show(location);
     }
+    // The guards are asked about the screen that the app starts on before
+    // the router builds it, and told of its pages when one of them changes.
+    final start = _guards.start;
+    final guarded = _guards.asked(start?.routeName, start);
+    if (guarded != null) _go(guarded.location);
+    guardChanges.addListener(_guardsChanged);
   }
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey();
@@ -1805,6 +1989,62 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// The page on top, as the listeners of the screen last heard of it, or
   /// `null` before the first screen; see [_top].
   (int, AppLocation?)? _shown;
+
+  /// The guards of the app as the router asks them, which keep the location
+  /// that the user comes back to once they allow it. The router knows a
+  /// location as an [AppLocation], and the fallback screen, which has none,
+  /// as `null`: the screen that the app starts on is its start route, or
+  /// the fallback screen.
+  final GuardedNavigation<AppLocation?> _guards = GuardedNavigation(
+    start: <AppLocation>[const FakeFeatureHomeLocation()].firstOrNull,
+    locationOf: (location) => location,
+  );
+
+  /// The pages that the user can get back to, the one on top first: those
+  /// of the root navigator and, in place of the main navigation, those of
+  /// its selected branch, or the fallback screen alone. A page is one that
+  /// a push showed while its push waits for the value that it closes with.
+  List<({String? route, AppLocation? location, bool pushed})> get _pages => [
+    if (_stack.isEmpty) (route: null, location: null, pushed: false),
+    for (final entry in _stack.reversed)
+      for (final location
+          in entry is AppLocation ? [entry] : _branches[_selected].reversed)
+        (
+          route: location.routeName,
+          location: location,
+          pushed: _results.containsKey(location),
+        ),
+  ];
+
+  /// Shows [location] in place of the whole stack and of the stacks of
+  /// every branch of the main navigation, each of which is back on its
+  /// destination; `null` is the fallback screen.
+  void _go(AppLocation? location) {
+    _stack.clear();
+    for (final (index, branch) in _branches.indexed) {
+      branch
+        ..clear()
+        ..add(_destinations[index]);
+    }
+    if (location != null) _show(location);
+    notifyListeners();
+  }
+
+  /// Shows what the guards show in place of [location], as [go] to it
+  /// does; `false` if the guards let the user see [location].
+  bool _redirected(AppLocation location) {
+    final guarded = _guards.asked(location.routeName, location);
+    if (guarded == null) return false;
+    _go(guarded.location);
+    return true;
+  }
+
+  /// Tells the guards of the pages of the router, as when one of them
+  /// starts or stops allowing, and shows the location that they answer.
+  void _guardsChanged() {
+    final shown = _guards.changed(_pages);
+    if (shown != null) _go(shown.location);
+  }
 
   /// The page on top: the branch it is in, or -1 for the root navigator,
   /// and its location, or `null` for the fallback screen.
@@ -1979,12 +2219,14 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
+    if (_redirected(location)) return;
     _show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
+    if (_redirected(location)) return Future.value();
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
@@ -2002,6 +2244,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
+    if (_redirected(location)) return;
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
     if (branch != null && _onMainNavigation) {
@@ -2058,6 +2301,9 @@ Widget _screen(AppLocation location) => switch (location) {
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
   FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
+  FakeGateGateLocation() => const screen4.FixtureGateScreen(),
+  FakeGateStepLocation() => const screen4.FixtureGateStepScreen(),
+  FakeGateSecondLocation() => const screen4.FixtureSecondGateScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -2190,6 +2436,45 @@ final class FakeSecondOutsideLocation extends AppLocation {
   String get path => '/fake_second/outside';
 }
 
+/// The location of `fake_gate.gate`: `/fake_gate`.
+final class FakeGateGateLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateGateLocation();
+
+  @override
+  String get routeName => 'fake_gate.gate';
+
+  @override
+  String get path => '/fake_gate';
+}
+
+/// The location of `fake_gate.step`: `/fake_gate/step`.
+final class FakeGateStepLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateStepLocation();
+
+  @override
+  String get routeName => 'fake_gate.step';
+
+  @override
+  String get path => '/fake_gate/step';
+
+  @override
+  AppLocation get parent => const FakeGateGateLocation();
+}
+
+/// The location of `fake_gate.second`: `/fake_gate/second`.
+final class FakeGateSecondLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateSecondLocation();
+
+  @override
+  String get routeName => 'fake_gate.second';
+
+  @override
+  String get path => '/fake_gate/second';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -2212,6 +2497,9 @@ final class AppNav {
 
   /// The routes of the module `fake_second`.
   FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
+
+  /// The routes of the module `fake_gate`.
+  FakeGateRoutes get fakeGate => FakeGateRoutes._(_context);
 }
 
 /// The routes of the module `fake_feature`.
@@ -2239,6 +2527,22 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.outside`: `/fake_second/outside`.
   NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+}
+
+/// The routes of the module `fake_gate`.
+final class FakeGateRoutes {
+  const FakeGateRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_gate.gate`: `/fake_gate`.
+  NavLink gate() => NavLink(_context, const FakeGateGateLocation());
+
+  /// The route `fake_gate.step`: `/fake_gate/step`.
+  NavLink step() => NavLink(_context, const FakeGateStepLocation());
+
+  /// The route `fake_gate.second`: `/fake_gate/second`.
+  NavLink second() => NavLink(_context, const FakeGateSecondLocation());
 }
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
@@ -2459,6 +2763,70 @@ class FixtureHomeScreen extends StatelessWidget {
     ),
   );
 }
+=== lib/features/fake_gate/fixture_gate_screens.dart (fake_gate) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// The screen that the first guard of the fixture shows in place of the
+/// other screens of the app while its gate is closed.
+@FixtureScreen('fake_gate.gate')
+class FixtureGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the gate screen, which the first guard of the fixture
+/// lets the user see too while its gate is closed.
+@FixtureScreen('fake_gate.step')
+class FixtureGateStepScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureGateStepScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// The screen that the second guard of the fixture shows while its gate is
+/// closed.
+@FixtureScreen('fake_gate.second')
+class FixtureSecondGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureSecondGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+=== lib/features/fake_gate/fixture_gates.dart (fake_gate) ===
+import 'package:flutter/foundation.dart';
+
+/// A gate of the fixture: whether it is open, which a test sets. A guard of
+/// the fixture allows while its gate is open.
+final class FixtureGate extends ValueNotifier<bool> {
+  /// Creates the gate, which is open.
+  FixtureGate() : super(true);
+
+  /// Notifies the listeners of the gate though it did not change, as a
+  /// guard may that notifies for more than what it allows.
+  void poke() => notifyListeners();
+}
+
+/// The first gate of the fixture: while it is closed, the first guard of
+/// the fixture shows the gate screen in place of the other screens of the
+/// app.
+final FixtureGate fixtureGate = FixtureGate();
+
+/// The second gate of the fixture, whose guard comes after the first and
+/// shows the second gate screen.
+final FixtureGate fixtureSecondGate = FixtureGate();
+
+/// Whether the first guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureGateOpen() => fixtureGate;
+
+/// Whether the second guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';

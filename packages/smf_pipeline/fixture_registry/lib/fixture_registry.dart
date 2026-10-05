@@ -6,9 +6,9 @@
 /// modules take part where the fixtures need them:
 /// - flutter_core creates the app;
 /// - go_router routes the fake features too, so their routes compile with a
-///   real router, and bottom tabs provide the layout, so an app with the two
-///   fake features has a main navigation with either router, and two
-///   screens that can start it;
+///   real router, which asks their guards too, and bottom tabs provide the
+///   layout, so an app with the two fake features has a main navigation
+///   with either router, and two screens that can start it;
 /// - get_it registers the services of the fixtures too, so their
 ///   registrations compile with a real container.
 ///
@@ -51,6 +51,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeRiverpodModule(),
       const FakeFeatureModule(),
       const FakeSecondModule(),
+      const FakeGateModule(),
       const FakeSocketsModule(),
       const FakeOverlapModule(),
       const FakeL10nModule(),
@@ -70,9 +71,10 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const BottomTabsModule(),
     ];
 
-/// The modules to ask for so that an app has every fixture, with the
-/// state manager [stateManager], the router [router] and the DI container
-/// [di].
+/// The modules to ask for so that an app has every fixture that fits, with
+/// the state manager [stateManager], the router [router] and the DI
+/// container [di]: the fixture gates, and so the guards of the routes, are
+/// only in an app with the state manager that they depend on.
 List<ModuleId> everyFixture({
   ModuleId stateManager = FakeBlocModule.id,
   ModuleId router = FakeRouterModule.id,
@@ -81,6 +83,8 @@ List<ModuleId> everyFixture({
     [
       FakeFeatureModule.id,
       FakeSecondModule.id,
+      // The fixture gates depend on one of the state managers.
+      if (stateManager == FakeGateModule.stateManager) FakeGateModule.id,
       router,
       stateManager,
       di,

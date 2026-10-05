@@ -229,6 +229,96 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerAskingGuardsOnlyAtStart,
+        role: routerRole,
+        bug: 'It asks the guards of the routes about the screen that the app '
+            'starts on, and again when one of them changes, but not about the '
+            'locations that go(), push() and replace() are asked to show.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'go() to a location that a guard keeps the user from shows the '
+                'target of the guard.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_order_test.dart',
+            'the first guard that does not allow shows its target, and the '
+                'next one once it allows',
+            'While a guard does not allow, the target of a guard after it is '
+                'a route like any other.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerIgnoringGuardChanges,
+        role: routerRole,
+        bug: 'It tells the guards of the routes of its pages when one of '
+            'them starts or stops allowing, and does not show the location '
+            'that they answer.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'Once the guards allow, the router shows the latest location '
+                'that was asked for and that a guard kept the user from, with '
+                'its query.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_changes_test.dart',
+            'a guard that stops allowing shows its target, and the location '
+                'below the pushed pages once it allows again',
+            'When a guard stops allowing, the router shows its target in '
+                'place of the pages that it keeps the user from.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_order_test.dart',
+            'the first guard that does not allow shows its target, and the '
+                'next one once it allows',
+            'Once a guard allows, the next one that does not allow shows its '
+                'target.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_flow_test.dart',
+            'a guard that starts allowing while its flow is shown, with no '
+                'location to come back to, shows the screen that the app '
+                'starts on',
+            'When a guard starts allowing while a page of its flow is on top '
+                'and there is no location to come back to, the router shows '
+                'the screen that the app starts on.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_early_change_test.dart',
+            'a guard that changes before the router shows its first location '
+                'ends no flow later',
+            'With guards that allow when the app starts, the app starts on '
+                'its start screen.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerKeepingPageOnGuardedReplace,
+        role: routerRole,
+        bug: 'Its replace() asks the guards of the routes, and leaves the '
+            'stack as it is when a guard keeps the user from the location, '
+            'rather than showing the target of the guard in its place.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'replace() with a location that a guard keeps the user from '
+                'shows the target of the guard alone, from a page of its flow '
+                'too.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenLayoutModule(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '
@@ -464,6 +554,21 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
     ];
+
+/// The other modules of the app of a router that breaks what the role says
+/// of the guards of the routes: the fixture gates, whose guards the tests
+/// close and open, the fixture feature, whose screens the guards keep the
+/// user from, and what the fixture feature and the tests of the listeners
+/// of the screen need.
+const List<ModuleId> _appWithGates = [
+  FakeFeatureModule.id,
+  FakeGateModule.id,
+  FakeBlocModule.id,
+  FakeDiModule.id,
+  FakeAnalyticsModule.id,
+  FakeCrashModule.id,
+  FakeServiceLogModule.id,
+];
 
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of
