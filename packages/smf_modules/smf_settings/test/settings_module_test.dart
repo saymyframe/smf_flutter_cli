@@ -352,6 +352,8 @@ void main() {
       // router.
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
         if (path == RouterRole.navigationFile) continue;
+        // The guide for coding agents gets the section of the screen.
+        if (path == AppEntryRole.agentsFile) continue;
         if (file.owner case ModuleOrigin(:final module)
             when router.contains(module)) {
           continue;
