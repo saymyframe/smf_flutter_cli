@@ -9,6 +9,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_bottom_tabs` | `bottom_tabs`, tabs in a bar at the bottom |
 | `smf_home_flutter` | `home`, a start screen |
 | `smf_settings` | `settings`, a settings screen |
+| `smf_onboarding` | `onboarding`, the onboarding of the first launch |
 | `smf_material_theme` | `material_theme`, a light and a dark Material 3 theme |
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
 | `smf_gen_l10n` | `gen_l10n`, localization with gen-l10n of Flutter |
