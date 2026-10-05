@@ -49,10 +49,16 @@ bool _writesAll(_Template template, String text) {
   return RegExp('^${parts.join()}\$', dotAll: true).hasMatch(text);
 }
 
+/// The fewest characters of the text of a file itself that a text with a
+/// value of the app in it must have, for the file to count as writing it:
+/// a real piece of its text, since one character next to a value, such as
+/// the period after it, is in almost any sentence.
+const _leastOwnText = 12;
+
 /// Whether [template], with any text in place of each of its values, writes
-/// a text that has [text], with at least one character of the template
-/// itself in [text], as a reason of an expectation that names a value of
-/// the app, such as a service, does.
+/// a text that has [text], with at least [_leastOwnText] characters of the
+/// template itself in [text], as a reason of an expectation that names a
+/// value of the app, such as a service, does.
 bool _writesPart(_Template template, String text) {
   const value = '\u0000';
   final written = [for (final part in template) part ?? value].join();
@@ -60,7 +66,7 @@ bool _writesPart(_Template template, String text) {
   for (var start = 0; start < written.length; start++) {
     for (var end = start + 1; end <= written.length; end++) {
       final piece = written.substring(start, end);
-      if (piece.replaceAll(value, '').isEmpty) continue;
+      if (piece.replaceAll(value, '').length < _leastOwnText) continue;
       final pattern = piece.split(value).map(RegExp.escape).join('.*');
       if (RegExp('^$pattern\$', dotAll: true).hasMatch(text)) return true;
     }
@@ -281,6 +287,33 @@ void main() {
     expect(writes('FixtureReplica does not resolve: Bad state: gone.'), isTrue);
     expect(writes('A reason on three lines.'), isFalse);
     expect(writes('FixtureReplica is not resolved:'), isFalse);
+  });
+
+  test(
+      'takes a text for written with a value of the app in it only when a '
+      'real piece of the text of the file is in it, not a character next '
+      'to a value', () {
+    final strings = _stringsIn(r'''
+void main() {
+  problems.add('No delegate of $type of the root of the app supports $locale.');
+  problems.add('The ${text.name} reads "$read" in $language rather than '
+      '"$expected".');
+}
+''');
+    bool writes(String text) =>
+        strings.any((string) => _writesPart(string, text));
+
+    // What the file writes, whole or in part.
+    expect(
+      writes('No delegate of FixtureTexts of the root of the app supports uk.'),
+      isTrue,
+    );
+    expect(writes('reads "Second screen" in uk rather than'), isTrue);
+    // A reason that ends with a period, or that starts as a text of the
+    // file does, is not written by the file for that.
+    expect(writes('Nothing in the tests writes this reason.'), isFalse);
+    expect(writes('The probe is happy'), isFalse);
+    expect(writes('A probe is happy'), isFalse);
   });
 
   test(
