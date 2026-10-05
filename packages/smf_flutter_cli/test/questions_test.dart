@@ -197,9 +197,9 @@ void main() {
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Localization: which module provides it?',
+      'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
-      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -277,9 +277,9 @@ void main() {
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Localization: which module provides it?',
+      'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
-      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -441,9 +441,9 @@ void main() {
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
       'Localization: which module provides it?',
+      'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
-      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -497,9 +497,9 @@ void main() {
       'Router: which module provides it?',
       'State management: which module provides it?',
       'Localization: which module provides it?',
+      'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
-      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -520,7 +520,8 @@ void main() {
   test(
       'a run in a terminal asks which module provides the localization after '
       'the state management, and offers gen_l10n, which keeps the texts of '
-      'the app in ARB files', () async {
+      'the app in ARB files and brings the preferences, in which the app '
+      'remembers its language', () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
@@ -530,7 +531,6 @@ void main() {
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
-      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -599,6 +599,27 @@ void main() {
     expect(
       app.childFile('README.md').readAsStringSync(),
       contains('\n## Languages\n'),
+    );
+    // The localization requires the preferences, in which the app
+    // remembers the language that the user chose. One module provides
+    // them, so the run takes it without a question and says why.
+    expect(messages, isNot(contains(startsWith('Preferences'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which gen_l10n requires.',
+      ),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      contains('  shared_preferences: '),
+    );
+    expect(
+      app
+          .childFile('lib/core/preferences/app_preferences.dart')
+          .readAsStringSync(),
+      contains('restoreAppLocale,'),
     );
   });
 
@@ -725,8 +746,8 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the preferences after '
-      'the events, and offers shared_preferences, which the start-up opens '
-      'and the DI container registers', () async {
+      'the localization, which requires them, and offers shared_preferences, '
+      'which the start-up opens and the DI container registers', () async {
     final run = await _create({
       'Features': [],
       'Infrastructure': [],
@@ -747,16 +768,19 @@ void main() {
     final preferences = messages.indexOf(
       'Preferences: which module provides it?',
     );
-    // The roles come in the order of the list of modules, and
-    // shared_preferences is after event_bus and before the modules of
-    // Firebase.
+    // The roles come in the order in which the modules of the list name
+    // them, and gen_l10n, whose role requires the preferences, is before
+    // get_it. So the question of the preferences knows whether the answer
+    // on the localization needs them.
     expect(
       preferences,
-      greaterThan(messages.indexOf('Events: which module provides it?')),
+      messages.indexOf('Localization: which module provides it?') + 1,
     );
     expect(
       preferences,
-      lessThan(messages.indexOf('Crash reporting: which module provides it?')),
+      lessThan(
+        messages.indexOf('Dependency injection: which module provides it?'),
+      ),
     );
     expect(run.asked[preferences].shown, [
       'shared_preferences — Preferences with shared_preferences',

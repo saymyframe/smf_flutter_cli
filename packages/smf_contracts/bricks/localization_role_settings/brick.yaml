@@ -1,0 +1,12 @@
+name: localization_role_settings
+description: "The template of the localization role of SMF for an app with a settings screen: the setting of the language of the app."
+
+# A template of a role in the module model, which only an app with a
+# settings screen gets. Its files are relative to the root of the generated
+# app. The pipeline renders it with app_name, org_name, the has_<role>
+# flags, the rendered sockets of its tags, and the variables the role's
+# template returns from render().
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

@@ -971,35 +971,44 @@ void main() {
       );
     });
 
+    // No fixture provides the settings screen role in an app that must
+    // work, so the apps have the provider with a known bug.
+    final withSettings = ContractHarness(
+      ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
+    );
+    Future<ContractResult> checkedWithSettings(List<ModuleId> modules) async {
+      final result = await withSettings.check(
+        ContractCase('a setting with a text', requested: modules),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    List<String> gettersOf(ContractResult result) => [
+          for (final text in localizationRole
+              .textsIn(localizationRole.hookInput(result.hook!)))
+            text.getter,
+        ];
+
     test(
         'are read through the role by the setting of the second feature too, '
         'whose text only an app with a settings screen has', () async {
       const setting = 'lib/features/fake_second/fixture_second_setting.dart';
-      // No fixture provides the settings screen role in an app that must
-      // work, so the apps have the provider with a known bug.
-      final withSettings = ContractHarness(
-        ModuleRegistry([...fixtureModules(), const BrokenSettingsModule()]),
-      );
-      Future<ContractResult> checkedWithSettings(List<ModuleId> modules) async {
-        final result = await withSettings.check(
-          ContractCase('a setting with a text', requested: modules),
-        );
-        expect(result.errors.map((issue) => '$issue'), isEmpty);
-        return result;
-      }
-
-      List<String> gettersOf(ContractResult result) => [
-            for (final text in localizationRole
-                .textsIn(localizationRole.hookInput(result.hook!)))
-              text.getter,
-          ];
 
       final localized = await checkedWithSettings(
         [...withRole, BrokenSettingsModule.id],
       );
       expect(
         gettersOf(localized),
-        ['fakeSecondTitle', 'fakeSecondOutside', 'fakeSecondSetting'],
+        [
+          'fakeSecondTitle',
+          'fakeSecondOutside',
+          'fakeSecondSetting',
+          // The texts of the setting of the language, which the template
+          // of the role gives it in such an app.
+          'localizationLanguage',
+          'localizationSystem',
+        ],
       );
       expect(textsOf(localized, 'fakeSecondSetting', ['en', 'uk']), {
         'en': 'Second setting',
@@ -1026,6 +1035,67 @@ void main() {
       final without = await checked(withRole);
       expect(without.app!.files.keys, isNot(contains(setting)));
       expect(gettersOf(without), ['fakeSecondTitle', 'fakeSecondOutside']);
+    });
+
+    test(
+        'are in an app that remembers its language: the role brings the '
+        'preferences, and gives them the restorer of the language', () async {
+      final result = await checked(withRole);
+
+      // The role requires the preferences, so the app gets their provider.
+      expect(
+        [
+          for (final module in result.resolution!.providersOf(preferencesRole))
+            module.id,
+        ],
+        [FakePreferencesModule.id],
+      );
+      expect(
+        [
+          for (final collected in result
+              .app!.socketOrders[PreferencesRole.restorers]!.contributions)
+            (
+              '${collected.origin}',
+              (collected.contribution as SocketContribution).fragment!.code,
+            ),
+        ],
+        [('role:localization', 'restoreAppLocale')],
+      );
+      // No module of the app provides a settings screen, so the app has
+      // neither the setting of the language nor its texts.
+      expect(
+        result.app!.files.keys,
+        isNot(contains(LocalizationRole.languageSettingFile)),
+      );
+    });
+
+    test(
+        'are in an app with a settings screen next to the setting of the '
+        'language: the last entry of the screen, with its texts in the '
+        'languages of the app', () async {
+      final result = await checkedWithSettings(
+        [...withRole, BrokenSettingsModule.id],
+      );
+
+      final setting = result.app!.files[LocalizationRole.languageSettingFile]!;
+      expect('${setting.owner}', 'role:localization');
+      // The entries of the modules come first, and then those of the
+      // templates of roles.
+      final entries = settingsScreenRole.entriesIn(
+        settingsScreenRole.hookInput(result.hook!),
+      );
+      expect(entries.last.file, LocalizationRole.languageSettingFile);
+      expect(entries.last.widget.name, 'LanguageSetting');
+      expect(entries.length, greaterThan(1));
+      // The provider of the texts renders those of the setting too.
+      expect(textsOf(result, 'localizationLanguage', ['en', 'uk']), {
+        'en': 'Language',
+        'uk': 'Мова',
+      });
+      expect(textsOf(result, 'localizationSystem', ['en', 'uk']), {
+        'en': 'System',
+        'uk': 'Як у системі',
+      });
     });
 
     test('give the root of the app its language and the delegate of the texts',

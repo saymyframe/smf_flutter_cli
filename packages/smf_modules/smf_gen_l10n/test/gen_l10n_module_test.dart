@@ -9,6 +9,7 @@ import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_gen_l10n/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -35,16 +36,22 @@ const _tabs = TextsModule('tabs', [
   LocalizedText('first', en: 'First', translations: {'uk': 'Перша'}),
 ]);
 
-/// The modules of the tests: flutter_core, which creates the app, this
-/// module, and two modules with texts.
+/// The modules of the tests: flutter_core, which creates the app,
+/// shared_preferences, the preferences that the localization role requires,
+/// this module, and two modules with texts.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
+  SharedPreferencesModule(),
   GenL10nModule(),
   _greeting,
   _tabs,
 ];
 
 const _module = ModuleOrigin(GenL10nModule.id);
+
+/// The provider of the preferences, which every app with the localization
+/// role has, since the app remembers its language in them.
+const ModuleId _preferences = SharedPreferencesModule.id;
 
 /// The path of the file with the extension that the role requires.
 const String _accessor = LocalizationRole.textsFile;
@@ -194,6 +201,7 @@ void main() {
     test('builds the apps of the modules with texts with the module', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core',
+        'shared_preferences',
         'gen_l10n',
         'greeting with localization',
         'greeting',
@@ -242,9 +250,10 @@ void main() {
     late RenderedApp without;
 
     setUpAll(() async {
-      result = await _rendered(const [GenL10nModule.id]);
+      result = await _rendered(const [GenL10nModule.id, _preferences]);
       app = result.app!;
-      without = (await _rendered(const [FlutterCoreModule.id])).app!;
+      // The app with the preferences, without the localization.
+      without = (await _rendered(const [_preferences])).app!;
     });
 
     test('has the options of gen-l10n, the extension and the English file', () {
@@ -279,8 +288,10 @@ void main() {
         pubspec['flutter'],
         {'uses-material-design': true, 'generate': true},
       );
+      final others =
+          _yamlOf(without.files['pubspec.yaml']!.text)! as Map<String, Object?>;
       expect(pubspec['dependencies'], {
-        'flutter': {'sdk': 'flutter'},
+        ...others['dependencies']! as Map<String, Object?>,
         // The template of the role adds the localizations of Flutter.
         'flutter_localizations': {'sdk': 'flutter'},
         'intl': 'any',
@@ -293,7 +304,9 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      result = await _rendered([GenL10nModule.id, _greeting.id, _tabs.id]);
+      result = await _rendered(
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
+      );
       app = result.app!;
     });
 
@@ -369,7 +382,7 @@ void main() {
 
     test('has files only for the languages of --locales', () async {
       final narrowed = await _rendered(
-        [GenL10nModule.id, _greeting.id, _tabs.id],
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
         options: const {'locales': 'uk,en'},
       );
 
@@ -383,7 +396,7 @@ void main() {
       );
 
       final english = await _rendered(
-        [GenL10nModule.id, _greeting.id, _tabs.id],
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
         options: const {'locales': 'en'},
       );
       expect(
@@ -413,7 +426,8 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      app = (await _rendered([GenL10nModule.id, _greeting.id])).app!;
+      app = (await _rendered([GenL10nModule.id, _preferences, _greeting.id]))
+          .app!;
     });
 
     test(
@@ -491,6 +505,7 @@ void main() {
       final result = await _check(
         const [
           GenL10nModule.id,
+          _preferences,
           ModuleId('locale'),
           ModuleId('supported'),
           ModuleId('localizations'),
@@ -606,7 +621,10 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      app = (await _rendered([GenL10nModule.id, _greeting.id, _tabs.id])).app!;
+      app = (await _rendered(
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
+      ))
+          .app!;
     });
 
     /// The inline code of the note: what stands between two backticks.
@@ -622,7 +640,8 @@ void main() {
         const RoleTemplateOrigin(localizationRole),
         _module,
       };
-      final without = (await _rendered([_greeting.id, _tabs.id])).app!;
+      final without =
+          (await _rendered([_preferences, _greeting.id, _tabs.id])).app!;
       final notes = app.entriesOf(AppEntryRole.agentSections);
 
       // The guide has the notes of the app without the localization, and
@@ -765,7 +784,7 @@ void main() {
     late String section;
 
     setUpAll(() async {
-      result = await _rendered([GenL10nModule.id, _greeting.id]);
+      result = await _rendered([GenL10nModule.id, _preferences, _greeting.id]);
       section = module
           .contribute(ContractHarness.defaultContext)
           .whereType<SocketContribution>()
@@ -853,6 +872,8 @@ void main() {
         'appLocales',
         AppEntryRole.infoPlistFile,
         'CFBundleLocalizations',
+        LocalizationRole.languageSettingFile,
+        '_names',
       ]) {
         expect(section, isNot(contains(ofRole)), reason: ofRole);
       }

@@ -18,17 +18,29 @@ const _flutterDelegates = [
 /// app.
 const _plistLanguages = 'CFBundleLocalizations';
 
-/// The section of the role in the README of the app: where the languages of
-/// the app are, and each place that a new language goes into, whichever
-/// module provides the role.
-const _readmeSection = '''
-The app is in the languages of `appLocales` in `${LocalizationRole.appLocaleFile}`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them.
+/// The template of the role itself, the owner of its own texts.
+const _template = RoleTemplateOrigin(localizationRole);
+
+/// The texts of the setting of the language.
+const _settingTexts = TextsData([
+  LocalizationRole.languageSettingTitle,
+  LocalizationRole.languageOfDevice,
+]);
+
+/// The section of the role in the README of the app, whichever module
+/// provides the role: where the languages of the app are, how the app comes
+/// to be in another of them and that it remembers that choice, and each
+/// place that a new language goes into. In an app with a settings screen
+/// ([withSetting]), it names the setting of the language, which is one of
+/// those places.
+String _readmeSection({required bool withSetting}) => '''
+The app is in the languages of `appLocales` in `${LocalizationRole.appLocaleFile}`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again.${withSetting ? ' The entry `LanguageSetting` of the settings screen, in `${LocalizationRole.languageSettingFile}`, lets the user choose.' : ''}
 
 To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
 
 1. Add `Locale('de')` to `appLocales`.
 2. Add `de` to `$_plistLanguages` in `${AppEntryRole.infoPlistFile}`, which tells iOS the languages of the app.
-''';
+${withSetting ? "3. Add `'de': 'Deutsch'` to `_names` in `${LocalizationRole.languageSettingFile}`, the name that the setting shows for the language. Without it, the setting shows `de`.\n" : ''}''';
 
 /// The note of the localization role in the guide for coding agents: how
 /// code shows a text, where the languages of the app are, how code changes
@@ -37,19 +49,50 @@ To add a language in which Flutter has the texts of its own widgets, such as Ger
 const _agentNote = '''
 - Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
 - `appLocales` in `${LocalizationRole.appLocaleFile}` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
-- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Set `appLocale.value` to one of `appLocales`, or to `null`, and the root of the app rebuilds in that language. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
+- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Change it only with `appLocale.choose(locale)`, which takes one of `appLocales` or `null` and also saves the choice in the preferences, and write nothing under the key `${LocalizationRole.localeKey}` yourself. A widget reads the choice with `AppLocaleScope.of(context)` and rebuilds when it changes. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
 - Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `$_plistLanguages` in the Info.plist of the iOS app, and into the texts of the app.
 ''';
 
+/// What the role adds to its note for coding agents in an app with a
+/// settings screen: the setting of the language, whose file only such an
+/// app has, and where it takes the name of a language from.
+const _settingAgentNote = '''
+- `LanguageSetting` in `${LocalizationRole.languageSettingFile}` is the entry of the settings screen with which the user chooses the language. It shows a language by its name in `_names` in that file, and by its code when `_names` has none. Add the name of a new language there, written in that language.
+''';
+
 /// The template of the [LocalizationRole]: the languages of the app, the
-/// language that the user chose, what the root of the app needs to follow
-/// it, and the note of the role for coding agents.
+/// language that the user chose, which the app remembers, what the root of
+/// the app needs to follow it, its setting in an app with a settings
+/// screen, the section of the role in the README of the app, and its notes
+/// for coding agents.
 final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   const _LocalizationTemplate();
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(localizationRoleBundle),
+        // Only an app with a settings screen gets the setting of the
+        // language and its texts.
+        BrickContribution(
+          localizationRoleSettingsBundle,
+          when: const {settingsScreenRole},
+        ),
+        localizationRole.data(
+          _settingTexts,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'LanguageSetting',
+              import: ImportRef.app('core/l10n/language_setting.dart'),
+            ),
+          ),
+        ),
+        const SocketContribution.item(
+          PreferencesRole.restorers,
+          Fragment('restoreAppLocale', imports: [_appLocale]),
+        ),
         const PubspecContribution.sdk('flutter_localizations'),
         const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
@@ -75,13 +118,15 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
             'localizationsDelegates',
             Fragment(delegate, imports: const [_flutterLocalizations]),
           ),
-        AppEntryRole.readmeSections.entry(
-          LocalizationRole.readmeHeading,
-          _readmeSection,
-        ),
         AppEntryRole.agentSections.entry(
           localizationRole.description,
           AgentNote.ofRole(_agentNote),
+        ),
+        // The file of the setting is only in an app with a settings screen.
+        AppEntryRole.agentSections.entry(
+          localizationRole.description,
+          AgentNote.ofRole(_settingAgentNote),
+          when: const {settingsScreenRole},
         ),
       ];
 
@@ -135,8 +180,9 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   /// language that a text of the app is in and that an app can be in (see
   /// [LocalizationRole.supportedLanguages]), English first. It asks
   /// nothing, and warns of the languages of the texts that it leaves out
-  /// because no app can be in them, and of the texts that have no
-  /// translation into a language of the app.
+  /// because no app can be in them, of the texts that have no translation
+  /// into a language of the app, and, in an app with a settings screen, of
+  /// the languages that the setting of the language shows by their codes.
   @override
   Future<Object?> choose(RoleChoiceContext<TextsData> context) async {
     final texts = _textsOf(context.data);
@@ -149,6 +195,7 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
       // takes none that an app cannot be in.
       if (option == null) ..._leftOut(texts),
       for (final language in locales) ..._untranslated(texts, language),
+      if (context.has(settingsScreenRole)) ..._unnamed(locales),
     ];
     if (warnings.isNotEmpty) {
       warnings.forEach(context.environment.logger.warn);
@@ -239,6 +286,24 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
     ];
   }
 
+  /// A warning of the languages among [locales], those of an app with the
+  /// setting of the language, that the setting shows by their codes, since
+  /// the role has no names for them; none if it names each.
+  List<String> _unnamed(List<String> locales) {
+    final codes = [
+      for (final code in locales)
+        if (!LocalizationRole.languageNames.containsKey(code)) code,
+    ];
+    if (codes.isEmpty) return const [];
+    final one = codes.length == 1;
+    final warning = 'The setting of the language shows ${codes.join(', ')} '
+        'by ${one ? 'its code' : 'their codes'}: SMF has the names of '
+        '${LocalizationRole.languageNames.keys.join(', ')} only. Add the '
+        'name of ${one ? 'the language' : 'each language'} to _names in '
+        '${LocalizationRole.languageSettingFile} of the app.';
+    return [warning];
+  }
+
   /// A warning for each owner with texts among [texts] that have no
   /// translation into [language].
   List<String> _untranslated(List<AppText> texts, String language) {
@@ -265,12 +330,36 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
     return RoleOutput(
       vars: {
         'locales': [for (final code in locales) "Locale('$code')"].join(', '),
+        'locale_key': SmfNames.dartString(LocalizationRole.localeKey),
+        // What the setting of the language reads, in an app with a settings
+        // screen.
+        'text_language': localizationRole.expressionOf(
+          input,
+          _template,
+          LocalizationRole.languageSettingTitle,
+        ),
+        'text_system': localizationRole.expressionOf(
+          input,
+          _template,
+          LocalizationRole.languageOfDevice,
+        ),
+        'locale_names': [
+          for (final code in locales)
+            if (LocalizationRole.languageNames[code] case final name?)
+              "  '$code': ${SmfNames.dartString(name)},",
+        ].join('\n'),
       },
       fragments: [
         // iOS shows the app in the languages that its bundle names.
         AppEntryRole.infoPlist.entry(
           _plistLanguages,
           PlistStringArray(locales),
+        ),
+        // One text under the heading, which depends on whether the app has
+        // the setting of the language.
+        AppEntryRole.readmeSections.entry(
+          LocalizationRole.readmeHeading,
+          _readmeSection(withSetting: input.has(settingsScreenRole)),
         ),
       ],
     );

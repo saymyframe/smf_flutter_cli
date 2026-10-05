@@ -200,12 +200,16 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
 }
 
 /// The note of [role] in the guide for coding agents: what its template
-/// contributes to the section of the role.
-AgentNote agentNoteOf(Role role) => role.template!
+/// contributes to the section of the role in every app with the role, or,
+/// with [when], in an app with those roles too.
+AgentNote agentNoteOf(Role role, {Set<Role> when = const {}}) => role.template!
     .contribute(testContext)
     .whereType<SocketContribution>()
     .singleWhere(
-      (contribution) => contribution.socket == AppEntryRole.agentSections,
+      (contribution) =>
+          contribution.socket == AppEntryRole.agentSections &&
+          contribution.when.length == when.length &&
+          contribution.when.containsAll(when),
     )
     .entryValue! as AgentNote;
 

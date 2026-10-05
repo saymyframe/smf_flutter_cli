@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/localization_role_bundle.dart';
+import 'package:smf_contracts/bundles/localization_role_settings_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 part 'localization/localization_dsl.dart';
@@ -31,24 +32,65 @@ const localizationRole = LocalizationRole._();
 /// selected, with:
 /// - `appLocales`, the languages of the app as `Locale`s, the first of
 ///   which the app uses when the device asks for none of them;
-/// - `appLocale`, the language that the user chose, or `null` while the app
-///   follows the device, as a `ValueNotifier<Locale?>`;
+/// - `appLocale`, which keeps the language that the user chose: its `value`
+///   is one of `appLocales`, or `null` while the app follows the device,
+///   and `choose()` changes it;
 /// - `AppLocaleScope`, the widget around the root of the app through which
 ///   the root reads `appLocale`, so that it rebuilds in the new language
-///   when the choice changes.
+///   when the choice changes;
+/// - `restoreAppLocale()`, the restorer of the choice.
 ///
 /// It also gives the root `MaterialApp` its `locale`, its
 /// `supportedLocales` and the delegates of Flutter's own localizations, and
 /// names the languages of the app in the `Info.plist` of the iOS app. The
 /// section [readmeHeading] of the README of the app, which the template
-/// writes too, tells where the app keeps the list of its languages and
-/// each place that a new language goes into. So a provider tells in a
+/// writes too, tells where the app keeps the list of its languages, how
+/// the app comes to be in another of them, which it remembers, and each
+/// place that a new language goes into; in an app with a settings screen,
+/// the setting of the language is one of them. So a provider tells in a
 /// section of its own only where its texts are, how to add one, and what
 /// its texts need for a new language. In the guide for coding agents of
 /// the app, the template writes the note of the role under its
 /// description: how code reads a text, where the languages of the app are,
-/// how code changes the language, and what a new language needs. A
-/// provider adds what holds with its tool under the same heading.
+/// how code changes the language, and what a new language needs. In an app
+/// with a settings screen, a second note tells where the setting of the
+/// language takes the name of a language from. A provider adds what holds
+/// with its tool under the same heading.
+///
+/// The app remembers the language that the user chose, so the role requires
+/// the [PreferencesRole]. `appLocale.choose()` takes one of `appLocales`, or
+/// a locale of the language of one of them, which then is the choice, and
+/// refuses a locale of another language with an [ArgumentError]. A choice
+/// is saved under [localeKey] as the code of the language, and removed when
+/// the app follows the device again. The template gives the preferences
+/// `restoreAppLocale()` as a restorer, which reads the saved choice before
+/// the first frame; a code that is none of the languages of the app counts
+/// as nothing saved. A choice before the app opened its preferences changes
+/// only memory.
+///
+/// The language changes before the choice is saved. So when the preferences
+/// fail to save it, the future of `choose()` completes with their error,
+/// the app stays in the new language while it runs, and its next launch
+/// starts with what was saved before; choosing the language again saves it
+/// again. Code that does not await the future leaves the error to the
+/// handlers of the errors of the app, such as its crash reporting, as the
+/// setting of the language does.
+///
+/// In an app with a settings screen, which the role uses (see
+/// [SettingsScreenRole]), the template adds [languageSettingFile] with
+/// `LanguageSetting`, an entry of the settings screen that shows the choice
+/// and lets the user change it: one of the languages of the app, or the
+/// languages of the device. It reads the choice from `AppLocaleScope` and
+/// changes it with `appLocale.choose()`. The texts of the entry,
+/// [languageSettingTitle] and [languageOfDevice], are texts of the template
+/// of the role, which it gives the role only in such an app.
+///
+/// The entry shows a language by its name in that language when the role
+/// has one, which it has for the languages of [languageNames], English and
+/// Ukrainian, and any other language of the app by its code. The choice of
+/// the languages warns of each such language of an app with a settings
+/// screen: the developer of the app adds its name to `_names` in
+/// [languageSettingFile].
 ///
 /// A provider generates [textsFile] with the extension [appTexts], whose
 /// getter `l10n` returns an object with a `String` getter for each text of
@@ -88,6 +130,42 @@ final class LocalizationRole extends Role<TextsData> {
   /// template tells where the languages of the app are and how to add one.
   /// The section of a provider on its texts can refer to it.
   static const readmeHeading = 'Languages';
+
+  /// The path of the file with `LanguageSetting`, the entry of the settings
+  /// screen, which the template generates only in an app with a settings
+  /// screen.
+  static const languageSettingFile = 'lib/core/l10n/language_setting.dart';
+
+  /// The key of the preferences of the app under which the app saves the
+  /// language that the user chose, as the code of the language, such as
+  /// `uk`, as text. Nothing is saved under it while the app follows the
+  /// languages of the device. The file of the role keeps the key to itself,
+  /// so a test of an app takes it from here.
+  static const localeKey = 'localization.locale';
+
+  /// The title of the setting of the language, a text of the template of
+  /// the role in an app with a settings screen.
+  static const languageSettingTitle = LocalizedText(
+    'language',
+    en: 'Language',
+    translations: {'uk': 'Мова'},
+  );
+
+  /// The option of the setting of the language with which the app follows
+  /// the languages of the device, which the setting also shows while the
+  /// app does; a text of the template of the role in an app with a settings
+  /// screen.
+  static const languageOfDevice = LocalizedText(
+    'system',
+    en: 'System',
+    translations: {'uk': 'Як у системі'},
+  );
+
+  /// The names of the languages that the setting of the language can name,
+  /// each in that language, by the code of the language. The setting shows
+  /// any other language of the app by its code, until the developer of the
+  /// app adds its name to `_names` in [languageSettingFile].
+  static const languageNames = {'en': 'English', 'uk': 'Українська'};
 
   /// The extension on `BuildContext` that every provider generates, whose
   /// getter `l10n` gives the texts of the app in the language of the
@@ -141,6 +219,12 @@ final class LocalizationRole extends Role<TextsData> {
 
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  @override
+  Set<Role> get requires => const {preferencesRole};
+
+  @override
+  Set<Role> get uses => const {settingsScreenRole};
 
   @override
   RoleInterface get interface => const RoleInterface(

@@ -1,9 +1,14 @@
+@TestOn('vm')
+library;
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:mason/mason.dart' show MasonBundle;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
+import 'dart_files.dart';
 import 'role_support.dart';
 import 'support.dart';
 
@@ -48,6 +53,50 @@ RoleData<Object> _ofVariant(
 /// The messages of [issues].
 List<String> _messages(List<SmfIssue> issues) =>
     [for (final issue in issues) issue.message];
+
+/// Collects the named arguments of each creation of the class that it is
+/// for in the code that it visits, each as the code of its expression by
+/// the name of the argument.
+final class _NamedArgumentsOf extends RecursiveAstVisitor<void> {
+  _NamedArgumentsOf(this.className);
+
+  /// The name of the class.
+  final String className;
+
+  /// The named arguments of each creation, in the order of the code.
+  final found = <Map<String, String>>[];
+
+  void _note(String name, ArgumentList arguments) {
+    if (name != className) return;
+    found.add({
+      for (final argument in arguments.arguments.whereType<NamedArgument>())
+        argument.name.lexeme: argument.argumentExpression.toSource(),
+    });
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    _note(node.constructorName.type.name.lexeme, node.argumentList);
+    super.visitInstanceCreationExpression(node);
+  }
+
+  // Unresolved code has the creation of a class without `new` or `const` as
+  // the call of a method.
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target == null) _note(node.methodName.name, node.argumentList);
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// Collects the string literals of the code that it visits.
+final class _StringLiterals extends GeneralizingAstVisitor<void> {
+  /// The literals, as the code writes them.
+  final found = <String>[];
+
+  @override
+  void visitStringLiteral(StringLiteral node) => found.add(node.toSource());
+}
 
 void main() {
   group('LocalizedText', () {
@@ -338,12 +387,16 @@ void main() {
       List<RoleData<Object>> data, {
       String? locales,
       SmfEnvironment? environment,
+      bool settingsScreen = false,
     }) =>
         localizationRole.template.choose(
           localizationRole.choiceContext(
             RoleChoiceRequest(
               data: data,
-              presentRoles: {localizationRole},
+              presentRoles: {
+                localizationRole,
+                if (settingsScreen) settingsScreenRole,
+              },
               optionValues: {'locales': locales},
               environment: environment ?? FakeEnvironment(),
               context: testContext,
@@ -413,6 +466,68 @@ void main() {
       await choose(data, locales: 'en', environment: environment);
 
       expect(environment.warnings, isEmpty);
+    });
+
+    group('in an app with a settings screen', () {
+      /// The warnings of the choice for [texts] that are none of a text
+      /// without a translation.
+      Future<List<String>> warningsOf(
+        List<LocalizedText> texts, {
+        String? locales,
+        bool settingsScreen = true,
+      }) async {
+        final environment = PromptingEnvironment();
+        await choose(
+          [_of('home', texts)],
+          locales: locales,
+          environment: environment,
+          settingsScreen: settingsScreen,
+        );
+        return [
+          for (final warning in environment.warnings)
+            if (!warning.startsWith('No translation into ')) warning,
+        ];
+      }
+
+      const inFour = [
+        LocalizedText(
+          'title',
+          en: 'Settings',
+          translations: {
+            'uk': 'Налаштування',
+            'de': 'Einstellungen',
+            'fr': 'Réglages',
+          },
+        ),
+      ];
+
+      test(
+          'warns of the languages that the setting of the language shows by '
+          'their codes, and tells where their names go', () async {
+        expect(LocalizationRole.languageNames.keys, ['en', 'uk']);
+        expect(
+          (await warningsOf(inFour)).single,
+          'The setting of the language shows de, fr by their codes: SMF has '
+          'the names of en, uk only. Add the name of each language to _names '
+          'in ${LocalizationRole.languageSettingFile} of the app.',
+        );
+        // One language, and only the languages of the app.
+        expect(
+          (await warningsOf(inFour, locales: 'en,de')).single,
+          'The setting of the language shows de by its code: SMF has the '
+          'names of en, uk only. Add the name of the language to _names in '
+          '${LocalizationRole.languageSettingFile} of the app.',
+        );
+      });
+
+      test('says nothing of the languages that the setting names', () async {
+        expect(await warningsOf(const [_title]), isEmpty);
+        expect(await warningsOf(inFour, locales: 'uk,en'), isEmpty);
+      });
+
+      test('says nothing in an app without the setting', () async {
+        expect(await warningsOf(inFour, settingsScreen: false), isEmpty);
+      });
     });
 
     test('needs codes with commas between them', () {
@@ -1455,11 +1570,14 @@ void main() {
     final data = [
       _of('home', const [_title, _openDetails]),
     ];
+    const appLocale = ImportRef.app('core/l10n/app_locale.dart');
+
+    /// The contributions of the template.
+    List<Contribution> contributions() =>
+        localizationRole.template.contribute(testContext);
 
     test('gives the root its language, its languages and the delegates', () {
-      final contributions = localizationRole.template.contribute(testContext);
-      final sockets = contributions.whereType<SocketContribution>().toList();
-      const appLocale = ImportRef.app('core/l10n/app_locale.dart');
+      final sockets = contributions().whereType<SocketContribution>().toList();
       const flutterLocalizations = ImportRef(
         'package:flutter_localizations/flutter_localizations.dart',
       );
@@ -1495,52 +1613,207 @@ void main() {
           flutterLocalizations,
         ],
       );
-      // The wrapper, the arguments of the root, the section of the README
-      // and the note for coding agents.
-      expect(sockets, hasLength(8));
+      // The wrapper, the arguments of the root, the restorer, the note for
+      // coding agents and the one of the setting of the language.
+      expect(sockets, hasLength(9));
 
-      final package = contributions.whereType<PubspecDependency>().single;
+      final package = contributions().whereType<PubspecDependency>().single;
       expect(package.package, 'flutter_localizations');
       expect(package.source, PubspecSource.sdk);
       expect(package.sdk, 'flutter');
       expect(package.dev, isFalse);
     });
 
-    test('generates the languages of the app and what follows the choice',
-        () async {
-      final rendered = await renderTemplate(
-        localizationRole,
-        data: data,
-        choice: const LocalizationChoice(['uk', 'en']),
+    test('gives the preferences the restorer of the language', () {
+      final restorer = contributions()
+          .whereType<SocketContribution>()
+          .singleWhere((socket) => socket.socket == PreferencesRole.restorers);
+
+      expect(restorer.fragment!.code, 'restoreAppLocale');
+      expect(restorer.fragment!.imports, [appLocale]);
+      // The role requires the preferences, so every app with it has them.
+      expect(restorer.when, isEmpty);
+      expect(LocalizationRole.localeKey, 'localization.locale');
+    });
+
+    test(
+        'gives an app with a settings screen the setting of the language '
+        'and its texts, in English and in Ukrainian', () {
+      final all = contributions();
+      final bricks = all.whereType<BrickContribution>().toList();
+      final entry = all
+          .whereType<RoleData<Object>>()
+          .singleWhere((data) => identical(data.role, settingsScreenRole));
+      final texts = all
+          .whereType<RoleData<Object>>()
+          .singleWhere((data) => identical(data.role, localizationRole));
+
+      expect(
+        [for (final brick in bricks) brick.bundle.name],
+        ['localization_role', 'localization_role_settings'],
+      );
+      expect(bricks.first.when, isEmpty);
+      expect(bricks.last.when, {settingsScreenRole});
+      expect(
+        templatesOf(bricks.last.bundle).keys,
+        [LocalizationRole.languageSettingFile],
       );
 
-      expect(rendered.files.keys, [LocalizationRole.appLocaleFile]);
-      final code = rendered.files[LocalizationRole.appLocaleFile]!;
-      expectParses(code);
-      final unit = parseString(content: code).unit;
-      final variables = {
-        for (final declaration
-            in unit.declarations.whereType<TopLevelVariableDeclaration>())
-          for (final variable in declaration.variables.variables)
-            variable.name.lexeme: (
-              keyword: declaration.variables.keyword?.lexeme,
-              value: variable.initializer!.toSource(),
-            ),
-      };
-      expect(variables, {
-        'appLocales': (
-          keyword: 'const',
-          value: "<Locale>[Locale('uk'), Locale('en')]",
-        ),
-        'appLocale': (keyword: 'final', value: 'ValueNotifier<Locale?>(null)'),
+      final setting = entry.value as SettingsEntry;
+      expect(setting.widget.name, 'LanguageSetting');
+      expect(setting.file, LocalizationRole.languageSettingFile);
+      expect(setting.problems(), isEmpty);
+      // The data of a role applies only in an app with the role.
+      expect(entry.when, isEmpty);
+
+      // An app without a settings screen shows none of the texts, so it
+      // does not get them.
+      expect(texts.when, {settingsScreenRole});
+      final own = (texts.value as TextsData).texts;
+      expect(own, [
+        LocalizationRole.languageSettingTitle,
+        LocalizationRole.languageOfDevice,
+      ]);
+      expect(
+        [
+          for (final text in own)
+            '${text.name}: ${text.en} / ${text.textIn('uk')}',
+        ],
+        ['language: Language / Мова', 'system: System / Як у системі'],
+      );
+      for (final text in own) {
+        expect(text.problems(), isEmpty, reason: text.name);
+        expect(text.languages, ['en', 'uk'], reason: text.name);
+      }
+    });
+
+    group('in an app without a settings screen', () {
+      late String code;
+      late CompilationUnit unit;
+
+      setUpAll(() async {
+        final rendered = await renderTemplate(
+          localizationRole,
+          data: data,
+          present: {preferencesRole},
+          choice: const LocalizationChoice(['uk', 'en']),
+        );
+        expect(rendered.files.keys, [LocalizationRole.appLocaleFile]);
+        code = rendered.files[LocalizationRole.appLocaleFile]!;
+        expectParses(code);
+        unit = parseString(content: code).unit;
       });
 
-      final scope = unit.declarations.whereType<ClassDeclaration>().single;
-      expect(scope.namePart.typeName.lexeme, 'AppLocaleScope');
-      expect(
-        scope.extendsClause!.superclass.toSource(),
-        'InheritedNotifier<ValueNotifier<Locale?>>',
-      );
+      test('generates the languages of the app and the key of the choice', () {
+        final variables = {
+          for (final declaration
+              in unit.declarations.whereType<TopLevelVariableDeclaration>())
+            for (final variable in declaration.variables.variables)
+              variable.name.lexeme: (
+                keyword: declaration.variables.keyword?.lexeme,
+                value: variable.initializer!.toSource(),
+              ),
+        };
+
+        expect(variables, {
+          'appLocales': (
+            keyword: 'const',
+            value: "<Locale>[Locale('uk'), Locale('en')]",
+          ),
+          // The key is a constant of the role, which the file keeps to
+          // itself.
+          '_key': (
+            keyword: 'const',
+            value: "'${LocalizationRole.localeKey}'",
+          ),
+          'appLocale': (keyword: 'final', value: 'AppLocaleController._()'),
+        });
+      });
+
+      test(
+          'lets other code read the choice and choose, but not create a '
+          'choice of its own', () {
+        final controller = unit.declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == 'AppLocaleController',
+            );
+        final members = controller.body.members;
+
+        expect(
+          [
+            for (final constructor
+                in members.whereType<ConstructorDeclaration>())
+              constructor.name?.lexeme,
+          ],
+          ['_'],
+        );
+        expect(
+          [
+            for (final member in members.whereType<MethodDeclaration>())
+              if (!member.name.lexeme.startsWith('_'))
+                '${member.isGetter ? 'get ' : ''}${member.name.lexeme}',
+          ],
+          ['get value', 'choose'],
+        );
+        // No field of its own is public: the choice changes through
+        // choose() alone.
+        expect(
+          [
+            for (final field in members.whereType<FieldDeclaration>())
+              for (final variable in field.fields.variables)
+                if (!variable.name.lexeme.startsWith('_')) variable.name.lexeme,
+          ],
+          isEmpty,
+        );
+      });
+
+      test('generates the choice, its scope and its restorer', () {
+        final classes = {
+          for (final declaration
+              in unit.declarations.whereType<ClassDeclaration>())
+            declaration.namePart.typeName.lexeme: declaration,
+        };
+        final restorer =
+            unit.declarations.whereType<FunctionDeclaration>().singleWhere(
+                  (function) => !function.name.lexeme.startsWith('_'),
+                );
+
+        expect(classes.keys, ['AppLocaleController', 'AppLocaleScope']);
+        expect(
+          classes['AppLocaleScope']!.extendsClause!.superclass.toSource(),
+          'InheritedNotifier<AppLocaleController>',
+        );
+        // The root listens to the choice.
+        expect(
+          classes['AppLocaleController']!.extendsClause!.superclass.toSource(),
+          'ChangeNotifier',
+        );
+        // A restorer of the preferences takes them, and returns nothing.
+        expect(restorer.name.lexeme, 'restoreAppLocale');
+        expect(restorer.returnType!.toSource(), 'void');
+        expect(
+          restorer.functionExpression.parameters!.toSource(),
+          '(AppPreferences preferences)',
+        );
+      });
+
+      test('reads the preferences from the file of their role', () {
+        final imports = [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue!,
+        ];
+
+        expect(imports, [
+          'package:flutter/widgets.dart',
+          '../preferences/app_preferences.dart',
+        ]);
+        expect(
+          Uri.parse(LocalizationRole.appLocaleFile).resolve(imports.last).path,
+          PreferencesRole.file,
+        );
+      });
     });
 
     test('generates the languages of the texts before a choice', () async {
@@ -1569,17 +1842,36 @@ void main() {
       expect(entry.entryValue, const PlistStringArray(['uk', 'en']));
     });
 
+    /// The data of an app with a settings screen: [data] and the texts of
+    /// the template, as the pipeline gives them to the role in such an app.
+    List<RoleData<Object>> dataWithSetting() => [
+          ...data,
+          for (final contribution
+              in contributions().whereType<RoleData<Object>>())
+            if (identical(contribution.role, localizationRole))
+              contribution
+                  .withOrigin(const RoleTemplateOrigin(localizationRole)),
+        ];
+
+    /// What the template renders for an app in [languages], with a settings
+    /// screen or without one.
+    Future<RenderedTemplate> appIn(
+      List<String> languages, {
+      required bool setting,
+    }) =>
+        renderTemplate(
+          localizationRole,
+          data: setting ? dataWithSetting() : data,
+          present: {preferencesRole, if (setting) settingsScreenRole},
+          choice: LocalizationChoice(languages),
+        );
+
     test(
         'tells coding agents how code reads a text, where the languages of '
         'the app are, how code changes the language and what a new language '
         'needs, in a note of the role that names only what every app with '
         'the role has', () async {
-      final contributions = localizationRole.template.contribute(testContext);
-      final rendered = await renderTemplate(
-        localizationRole,
-        data: data,
-        choice: const LocalizationChoice(['en', 'uk']),
-      );
+      final rendered = await appIn(['en', 'uk'], setting: false);
       final note = agentNoteOf(localizationRole);
 
       // The section of the role, whichever module provides the role.
@@ -1590,7 +1882,12 @@ void main() {
       expectNamesOfCode(
         note,
         {
-          LocalizationRole.appLocaleFile: ['appLocales', 'appLocale'],
+          LocalizationRole.appLocaleFile: [
+            'appLocales',
+            'appLocale',
+            'AppLocaleController.choose',
+            'AppLocaleScope.of',
+          ],
         },
         files: rendered.files,
       );
@@ -1608,7 +1905,9 @@ void main() {
         spans,
         containsAll([
           'context.l10n.<name>',
-          'appLocale.value',
+          'appLocale.choose(locale)',
+          'AppLocaleScope.of(context)',
+          LocalizationRole.localeKey,
           'locale',
           'supportedLocales',
           'localizationsDelegates',
@@ -1625,13 +1924,15 @@ void main() {
       // template gives the root.
       expect(
         {
-          for (final socket in contributions.whereType<SocketContribution>())
+          for (final socket in contributions().whereType<SocketContribution>())
             if (socket.socket == AppEntryRole.appArgs) socket.argName,
         },
         {'locale', 'supportedLocales', 'localizationsDelegates'},
       );
-      // The language that the user chose is a value that code sets, and
-      // the key of the Info.plist is the one that the template writes.
+      // The language that the user chose is in the controller whose
+      // `choose()` the note names, the key that the note tells to leave
+      // alone is the one that the file saves the choice under, and the key
+      // of the Info.plist is the one that the template writes.
       final unit = parseString(
         content: rendered.files[LocalizationRole.appLocaleFile]!,
       ).unit;
@@ -1644,7 +1945,8 @@ void main() {
         },
         {
           'appLocales': "<Locale>[Locale('en'), Locale('uk')]",
-          'appLocale': 'ValueNotifier<Locale?>(null)',
+          '_key': "'${LocalizationRole.localeKey}'",
+          'appLocale': 'AppLocaleController._()',
         },
       );
       expect(
@@ -1658,59 +1960,704 @@ void main() {
       // the paths of a note of a role are checked against, has no native
       // file.
       expect(note.text, isNot(contains(AppEntryRole.infoPlistFile)));
+      // It names nothing of the setting of the language, which only an app
+      // with a settings screen has.
+      expect(note.text, isNot(contains('LanguageSetting')));
     });
 
     test(
-        'tells in the README of the app where its languages are, and each '
-        'place that a new language goes into', () async {
-      final section = localizationRole.template
-          .contribute(testContext)
-          .whereType<SocketContribution>()
-          .singleWhere(
-            (socket) => socket.socket == AppEntryRole.readmeSections,
-          );
-      final text = section.entryValue! as String;
+        'tells coding agents where the setting of the language is and where '
+        'it takes the name of a language from, in a note of its own for an '
+        'app with a settings screen', () async {
+      final rendered = await appIn(['en', 'uk'], setting: true);
+      final note = agentNoteOf(localizationRole, when: {settingsScreenRole});
 
-      expect(LocalizationRole.readmeHeading, 'Languages');
-      expect(section.entryKey, LocalizationRole.readmeHeading);
-      expect(section.when, isEmpty);
-
-      // What the template writes differently for an app with one more
-      // language: the places that a new language goes into.
-      Future<RenderedTemplate> appIn(List<String> languages) => renderTemplate(
-            localizationRole,
-            data: data,
-            choice: LocalizationChoice(languages),
-          );
-      final english = await appIn(['en']);
-      final german = await appIn(['en', 'de']);
-      final files = [
-        for (final MapEntry(key: path, value: code) in german.files.entries)
-          if (english.files[path] != code) path,
-      ];
-      final entries = [
-        for (final (index, entry) in german.elsewhere.indexed)
-          if (entry.entryValue != english.elsewhere[index].entryValue) entry,
-      ];
-      expect(files, [LocalizationRole.appLocaleFile]);
+      // After the note of every app with the role, in the same section.
       expect(
-        german.files[LocalizationRole.appLocaleFile],
-        contains("const appLocales = <Locale>[Locale('en'), Locale('de')];"),
+        [
+          for (final contribution in rendered.notes)
+            (contribution.entryKey, contribution.entryValue),
+        ],
+        [
+          (localizationRole.description, agentNoteOf(localizationRole)),
+          (localizationRole.description, note),
+        ],
       );
-      expect(entries.single.socket, AppEntryRole.infoPlist);
-      expect(entries.single.entryValue, const PlistStringArray(['en', 'de']));
+      expect(note.isOfRole, isTrue);
+      // The file that it names is the one of the setting, which declares
+      // what it names.
+      expect(
+        {
+          for (final span in codeSpansOf(note.text))
+            if (span.contains('/')) span,
+        },
+        {LocalizationRole.languageSettingFile},
+      );
+      expectNamesOfCode(
+        note,
+        {
+          LocalizationRole.languageSettingFile: ['LanguageSetting', '_names'],
+        },
+        files: rendered.files,
+      );
+    });
 
-      // The section names each of them, and what goes there.
-      for (final named in [
-        LocalizationRole.appLocaleFile,
-        'appLocales',
-        "Locale('de')",
-        AppEntryRole.infoPlistFile,
-        entries.single.entryKey!,
-        'de',
-      ]) {
-        expect(text, contains('`$named`'), reason: named);
+    group('the section of the role in the README of the app', () {
+      /// The section of [app], under the heading of the role.
+      String sectionOf(RenderedTemplate app) {
+        final section = app.elsewhere.singleWhere(
+          (socket) => socket.socket == AppEntryRole.readmeSections,
+        );
+        expect(section.entryKey, LocalizationRole.readmeHeading);
+        return section.entryValue! as String;
       }
+
+      /// The places that a new language goes into in an app with a settings
+      /// screen or without one: what the template writes differently for an
+      /// app in Ukrainian too, a language that the role has a name for. The
+      /// files, the entries of the sockets of other files, and the section
+      /// of the app.
+      Future<
+          ({
+            List<String> files,
+            List<SocketContribution> entries,
+            RenderedTemplate app,
+            String section,
+          })> placesOf({required bool setting}) async {
+        final english = await appIn(['en'], setting: setting);
+        final ukrainian = await appIn(['en', 'uk'], setting: setting);
+        return (
+          files: [
+            for (final MapEntry(key: path, value: code)
+                in ukrainian.files.entries)
+              if (english.files[path] != code) path,
+          ],
+          entries: [
+            for (final (index, entry) in ukrainian.elsewhere.indexed)
+              if (entry.entryValue != english.elsewhere[index].entryValue)
+                entry,
+          ],
+          app: ukrainian,
+          section: sectionOf(ukrainian),
+        );
+      }
+
+      /// The numbers of the steps of [section].
+      List<String> stepsOf(String section) => [
+            for (final step
+                in RegExp(r'^(\d+)\. ', multiLine: true).allMatches(section))
+              step[1]!,
+          ];
+
+      test(
+          'tells where the languages of the app are, how the app comes to '
+          'be in another of them, which it remembers, and each place that a '
+          'new language goes into', () async {
+        final (:files, :entries, :app, :section) =
+            await placesOf(setting: false);
+
+        expect(LocalizationRole.readmeHeading, 'Languages');
+        expect(files, [LocalizationRole.appLocaleFile]);
+        expect(
+          app.files[LocalizationRole.appLocaleFile],
+          contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
+        );
+        expect(entries.single.socket, AppEntryRole.infoPlist);
+        expect(
+          entries.single.entryValue,
+          const PlistStringArray(['en', 'uk']),
+        );
+
+        // The section names each of them, and what goes there for German,
+        // the language of its example.
+        for (final named in [
+          LocalizationRole.appLocaleFile,
+          'appLocales',
+          "Locale('de')",
+          AppEntryRole.infoPlistFile,
+          entries.single.entryKey!,
+          'de',
+        ]) {
+          expect(section, contains('`$named`'), reason: named);
+        }
+        expect(stepsOf(section), ['1', '2']);
+        // The choice, which the file of the languages declares.
+        expect(section, contains('`appLocale.choose()`'));
+        expect(section, contains('`appLocale.choose(null)`'));
+        expect(
+          section,
+          contains('the app remembers that choice between its launches'),
+        );
+        expect(
+          declarationsOf(app.files[LocalizationRole.appLocaleFile]!),
+          containsAll(['appLocale', 'AppLocaleController.choose']),
+        );
+        // The app has no setting of the language.
+        expect(section, isNot(contains(LocalizationRole.languageSettingFile)));
+        expect(section, isNot(contains('LanguageSetting')));
+      });
+
+      test(
+          'names the setting of the language too in an app with a settings '
+          'screen, where a new language has a third place, for its name',
+          () async {
+        final (:files, :entries, :app, :section) =
+            await placesOf(setting: true);
+        final withoutSetting = (await placesOf(setting: false)).section;
+
+        expect(files, [
+          LocalizationRole.appLocaleFile,
+          LocalizationRole.languageSettingFile,
+        ]);
+        expect(entries.single.socket, AppEntryRole.infoPlist);
+        final setting = app.files[LocalizationRole.languageSettingFile]!;
+        expect(setting, contains("  'uk': 'Українська',\n"));
+
+        // The example is a language that the role has no name for, so that
+        // the step holds for it, written as the file writes a name.
+        expect(LocalizationRole.languageNames.keys, isNot(contains('de')));
+        expect(LocalizationRole.supportedLanguages, contains('de'));
+        for (final named in [
+          LocalizationRole.languageSettingFile,
+          '_names',
+          "'de': 'Deutsch'",
+          'LanguageSetting',
+        ]) {
+          expect(section, contains('`$named`'), reason: named);
+        }
+        expect(
+          declarationsOf(setting),
+          containsAll(['_names', 'LanguageSetting']),
+        );
+        expect(stepsOf(section), ['1', '2', '3']);
+        // It is the section of an app without the setting, with the entry
+        // and the third step.
+        final lines = section.split('\n');
+        final added = [
+          for (final line in lines)
+            if (!withoutSetting.split('\n').contains(line)) line,
+        ];
+        expect(added, hasLength(2));
+        expect(added.first, startsWith('The app is in the languages of '));
+        expect(
+          added.first,
+          contains('`LanguageSetting` of the settings screen'),
+        );
+        expect(added.last, startsWith('3. Add '));
+      });
+    });
+
+    group('in an app with a settings screen', () {
+      late CompilationUnit unit;
+      late String code;
+
+      /// The file with the setting of an app in the languages [locales].
+      Future<String> settingOf(List<String> locales) async {
+        final rendered = await appIn(locales, setting: true);
+        expect(rendered.files.keys, [
+          LocalizationRole.appLocaleFile,
+          LocalizationRole.languageSettingFile,
+        ]);
+        final setting = rendered.files[LocalizationRole.languageSettingFile]!;
+        expectParses(setting);
+        return setting;
+      }
+
+      /// The names of the languages in the file [setting], as it writes
+      /// them.
+      String namesIn(String setting) {
+        final names = parseString(content: setting)
+            .unit
+            .declarations
+            .whereType<TopLevelVariableDeclaration>()
+            .single
+            .variables
+            .variables
+            .single;
+        expect(names.name.lexeme, '_names');
+        return names.initializer!.toSource();
+      }
+
+      setUpAll(() async {
+        code = await settingOf(['en', 'uk', 'de']);
+        unit = parseString(content: code).unit;
+      });
+
+      test(
+          'generates the setting as a widget that the settings screen '
+          'creates as a constant without arguments', () {
+        final setting =
+            unit.declarations.whereType<ClassDeclaration>().singleWhere(
+                  (declaration) =>
+                      declaration.namePart.typeName.lexeme == 'LanguageSetting',
+                );
+        final constructor =
+            setting.body.members.whereType<ConstructorDeclaration>().single;
+
+        expect(setting.extendsClause!.superclass.toSource(), 'StatelessWidget');
+        expect(constructor.constKeyword, isNotNull);
+        expect(constructor.name, isNull);
+        expect(constructor.parameters.toSource(), '({super.key})');
+      });
+
+      test('reads its texts from the texts of the app, by their getters', () {
+        final input = inputOf(
+          localizationRole,
+          data: [
+            _ofTemplate(localizationRole, const [
+              LocalizedText('language', en: 'Language'),
+              LocalizedText('system', en: 'System'),
+            ]),
+          ],
+        );
+        final getters = [
+          for (final text in localizationRole.textsIn(input)) text.getter,
+        ];
+        final read = RegExp(r'context\.l10n\.(\w+)')
+            .allMatches(code)
+            .map((match) => match[1])
+            .toSet();
+
+        expect(getters, ['localizationLanguage', 'localizationSystem']);
+        expect(read, getters.toSet());
+        expect(
+          [
+            for (final directive
+                in unit.directives.whereType<ImportDirective>())
+              directive.uri.stringValue,
+          ],
+          unorderedEquals([
+            'package:flutter/material.dart',
+            'app_locale.dart',
+            // The pipeline adds the import of the texts of the app, which
+            // the code of its texts needs.
+            'package:my_app/core/l10n/l10n.dart',
+          ]),
+        );
+      });
+
+      test(
+          'shows no text but the texts of the app and the names of the '
+          'languages', () {
+        final literals = _StringLiterals();
+        for (final declaration in unit.declarations) {
+          // The names of the languages.
+          if (declaration is TopLevelVariableDeclaration) continue;
+          declaration.accept(literals);
+        }
+
+        expect(literals.found, isEmpty);
+      });
+
+      test(
+          'marks the option of the choice of the user as selected, and with '
+          'a check', () {
+        final options = _NamedArgumentsOf('ListTile');
+        unit.declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == '_LanguageDialog',
+            )
+            .accept(options);
+
+        final option = options.found.single;
+        expect(option['selected'], 'locale == chosen');
+        expect(
+          option['trailing'],
+          'locale == chosen ? const Icon(Icons.check) : null',
+        );
+      });
+
+      test(
+          'names each language of the app that the role can name in that '
+          'language, and no other', () async {
+        // German has no name here, so the setting shows its code.
+        expect(
+          namesIn(code),
+          "<String, String>{'en' : 'English', 'uk' : 'Українська'}",
+        );
+        expect(
+          namesIn(await settingOf(['en'])),
+          "<String, String>{'en' : 'English'}",
+        );
+      });
+    });
+  });
+
+  group('the language that the user chose', () {
+    /// A stand-in for the part of Flutter's widgets library that the file
+    /// of the role uses, with the signatures of Flutter 3.44. It has no
+    /// more of the foundation library than the widgets library exports:
+    /// `ChangeNotifier` and `Listenable`, but not `ValueListenable`.
+    const widgets = r'''
+typedef VoidCallback = void Function();
+
+class Locale {
+  const Locale(this.languageCode, [this.countryCode]);
+
+  final String languageCode;
+
+  final String? countryCode;
+
+  @override
+  bool operator ==(Object other) =>
+      other is Locale &&
+      other.languageCode == languageCode &&
+      other.countryCode == countryCode;
+
+  @override
+  int get hashCode => Object.hash(languageCode, countryCode);
+
+  @override
+  String toString() =>
+      countryCode == null ? languageCode : '${languageCode}_$countryCode';
+}
+
+abstract class Listenable {
+  void addListener(VoidCallback listener);
+}
+
+class ChangeNotifier implements Listenable {
+  final List<VoidCallback> _listeners = [];
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  void notifyListeners() {
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+}
+
+abstract class Key {}
+
+abstract class Widget {
+  const Widget({this.key});
+
+  final Key? key;
+}
+
+abstract class BuildContext {
+  T? dependOnInheritedWidgetOfExactType<T extends Object>();
+}
+
+abstract class InheritedNotifier<T extends Listenable> extends Widget {
+  const InheritedNotifier({required this.child, this.notifier, super.key});
+
+  final T? notifier;
+
+  final Widget child;
+}
+''';
+
+    /// Preferences in memory over a map that stands for the disk, which
+    /// each open reads anew. A write can be made to fail, and the
+    /// preferences of an earlier open refuse to write, as the app writes
+    /// through those of its last start.
+    const preferences = '''
+import '../core/preferences/app_preferences.dart';
+
+/// The key of the role under which the app saves the language.
+const savedKey = '${LocalizationRole.localeKey}';
+
+/// What the preferences have saved.
+final Map<String, Object> disk = {};
+
+/// How a write fails: `future`, with a future that fails, `throw`, by
+/// throwing, or not at all.
+String? failure;
+
+FakePreferences? _open;
+
+AppPreferences openPreferences() => _open = FakePreferences(Map.of(disk));
+
+final class FakePreferences implements AppPreferences {
+  FakePreferences(this._values);
+
+  final Map<String, Object> _values;
+
+  T? _get<T>(String key) => switch (_values[key]) {
+        final T value => value,
+        _ => null,
+      };
+
+  Future<void> _write(void Function(Map<String, Object> values) change) {
+    if (!identical(this, _open)) {
+      throw StateError('These preferences are not those of the last start.');
+    }
+    if (failure == 'throw') throw StateError('The write threw.');
+    if (failure == 'future') {
+      return Future.error(StateError('The write failed.'));
+    }
+    change(_values);
+    change(disk);
+    return Future.value();
+  }
+
+  Future<void> _set(String key, Object value) =>
+      _write((values) => values[key] = value);
+
+  @override
+  String? getString(String key) => _get(key);
+
+  @override
+  bool? getBool(String key) => _get(key);
+
+  @override
+  int? getInt(String key) => _get(key);
+
+  @override
+  double? getDouble(String key) => _get(key);
+
+  @override
+  List<String>? getStringList(String key) => _get(key);
+
+  @override
+  Future<void> setString(String key, String value) => _set(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) => _set(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _set(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) => _set(key, value);
+
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _set(key, value);
+
+  @override
+  Future<void> remove(String key) => _write((values) => values.remove(key));
+}
+''';
+
+    /// What the scripts share: the choice and what is saved after each
+    /// step, and each change of the choice that the listeners hear of.
+    const notes = r'''
+import 'dart:isolate';
+
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/preferences/app_preferences.dart';
+import 'package:my_app/fakes/preferences.dart';
+
+final steps = <String, Object?>{};
+final changes = <String?>[];
+
+void note(String step) =>
+    steps[step] = '${appLocale.value}, saved ${disk[savedKey]}';
+
+/// The error that [choice] completes with, or throws, as text.
+Future<String> errorOf(Future<void> Function() choice) async {
+  try {
+    await choice();
+    return 'none';
+  } on Object catch (error) {
+    return '${error.runtimeType}: $error'.split('\n').first;
+  }
+}
+''';
+
+    /// Chooses languages before and after the app opened its preferences,
+    /// starts the app again with different things saved, and sends back the
+    /// choice and what is saved after each step.
+    const restarts = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  appLocale.addListener(() => changes.add('${appLocale.value}'));
+
+  note('at first');
+  await appLocale.choose(const Locale('uk'));
+  note('a choice before the preferences are open');
+  await initPreferences();
+  note('a start with nothing saved');
+  await appLocale.choose(const Locale('uk'));
+  note('the same choice again, once they are open');
+  await appLocale.choose(const Locale('en'));
+  note('a choice');
+  disk[savedKey] = 'uk';
+  await initPreferences();
+  note('a start with a language of the app saved');
+  disk[savedKey] = 'de';
+  await initPreferences();
+  note('a start with another language saved');
+  disk[savedKey] = 7;
+  await initPreferences();
+  note('a start with no text saved');
+  await appLocale.choose(null);
+  note('the device again');
+  await initPreferences();
+  note('a start after that');
+  disk[savedKey] = 'en';
+  await initPreferences();
+  await createAppPreferences().setString(savedKey, 'uk');
+  note('a start, and then a write of the key by other code');
+  steps['changes'] = changes;
+  port.send(steps);
+}
+''';
+
+    /// Starts the app as its first launch does, with nothing saved and
+    /// nothing chosen, and then chooses: a locale of a language of the app,
+    /// one of another language, and languages while the writes of the
+    /// preferences fail.
+    const firstLaunch = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  appLocale.addListener(() => changes.add('${appLocale.value}'));
+
+  await initPreferences();
+  note('a first launch');
+  await appLocale.choose(const Locale('uk'));
+  note('a choice');
+
+  // A locale of a language of the app, and one of another language.
+  await appLocale.choose(const Locale('en', 'GB'));
+  note('a locale of a language of the app');
+  steps['the choice is the language of the app'] =
+      identical(appLocale.value, appLocales.first);
+  steps['a locale of another language'] =
+      await errorOf(() => appLocale.choose(const Locale('de')));
+  note('after it');
+
+  // Writes that fail, by a future and by a throw.
+  failure = 'future';
+  steps['a choice that is not saved'] =
+      await errorOf(() => appLocale.choose(const Locale('uk')));
+  note('after it is not saved');
+  failure = null;
+  await appLocale.choose(const Locale('uk'));
+  note('the same choice again');
+  failure = 'throw';
+  steps['the device, which is not saved'] =
+      await errorOf(() => appLocale.choose(null));
+  note('after the device is not saved');
+  failure = null;
+  await appLocale.choose(null);
+  note('the device again');
+
+  steps['changes'] = changes;
+  port.send(steps);
+}
+''';
+
+    late DartFiles app;
+
+    setUpAll(() async {
+      const fakes = ImportRef.app('fakes/preferences.dart');
+      final role = await renderTemplate(
+        localizationRole,
+        present: {preferencesRole},
+        choice: const LocalizationChoice(['en', 'uk']),
+      );
+      final restorers = [
+        for (final contribution in role.contributions)
+          if (contribution case SocketContribution(:final socket)
+              when socket == PreferencesRole.restorers)
+            contribution,
+      ];
+      // The preferences of the app, with the restorer of the role as their
+      // template renders it.
+      final ofPreferences = await renderTemplate(
+        preferencesRole,
+        data: [
+          dataOf(
+            preferencesRole,
+            const RoleImplementation(
+              type: TypeRef('FakePreferences', import: fakes),
+              create: FactoryRef('openPreferences', import: fakes),
+            ),
+            module: 'preferences',
+          ),
+        ],
+        fromModules: restorers,
+      );
+      app = DartFiles.write(
+        {
+          ...role.files,
+          ...ofPreferences.files,
+          'lib/fakes/preferences.dart': preferences,
+        },
+        flutter: {'widgets.dart': widgets},
+      );
+    });
+
+    tearDownAll(() => app.delete());
+
+    test('is kept by code that type-checks', () async {
+      expect(await app.analysisProblems(), isEmpty);
+    });
+
+    test(
+        'is saved once the app opened its preferences, restored at a start '
+        'when one of the languages of the app is saved, and kept otherwise',
+        () async {
+      final steps =
+          (await app.run('$notes$restarts'))! as Map<Object?, Object?>;
+
+      expect(steps, {
+        'at first': 'null, saved null',
+        // Only memory changes.
+        'a choice before the preferences are open': 'uk, saved null',
+        'a start with nothing saved': 'uk, saved null',
+        // A choice is saved each time, also one that changes nothing.
+        'the same choice again, once they are open': 'uk, saved uk',
+        'a choice': 'en, saved en',
+        'a start with a language of the app saved': 'uk, saved uk',
+        // A language that the app does not have, and a value that is no
+        // text, count as nothing saved.
+        'a start with another language saved': 'uk, saved de',
+        'a start with no text saved': 'uk, saved 7',
+        // Following the device removes what is saved, through the
+        // preferences of the last start.
+        'the device again': 'null, saved null',
+        'a start after that': 'null, saved null',
+        // A start reads what is saved; a later write of other code does
+        // not change the choice.
+        'a start, and then a write of the key by other code': 'en, saved uk',
+        // The listeners hear of each change of the choice once, and not
+        // of a choice or a start that leaves it as it is.
+        'changes': ['uk', 'en', 'uk', 'null', 'en'],
+      });
+    });
+
+    test(
+        'is saved from the first launch on, is one of the languages of the '
+        'app, and changes at once, also when the preferences fail to save '
+        'it, which the future of the choice tells', () async {
+      final steps =
+          (await app.run('$notes$firstLaunch'))! as Map<Object?, Object?>;
+
+      expect(steps, {
+        // Nothing is saved and nothing is chosen, as on a new device.
+        'a first launch': 'null, saved null',
+        'a choice': 'uk, saved uk',
+        // A locale of a language of the app chooses that language.
+        'a locale of a language of the app': 'en, saved en',
+        'the choice is the language of the app': true,
+        // A locale of another language is refused, and nothing changes.
+        'a locale of another language':
+            'ArgumentError: Invalid argument (locale): The app is not in '
+                'the language of this locale: "de"',
+        'after it': 'en, saved en',
+        // The language changes, the future fails with the error of the
+        // preferences, and the next launch would start with what was
+        // saved before.
+        'a choice that is not saved':
+            'StateError: Bad state: The write failed.',
+        'after it is not saved': 'uk, saved en',
+        // Choosing it again saves it.
+        'the same choice again': 'uk, saved uk',
+        'the device, which is not saved':
+            'StateError: Bad state: The write threw.',
+        'after the device is not saved': 'null, saved uk',
+        'the device again': 'null, saved null',
+        // A refused locale and a choice that only saves change nothing
+        // that the listeners hear of.
+        'changes': ['uk', 'en', 'uk', 'null'],
+      });
     });
   });
 }

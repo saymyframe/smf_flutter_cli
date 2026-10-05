@@ -1653,6 +1653,35 @@ void main() {
         );
       });
 
+      /// A provider of the preferences role, which the localization role
+      /// requires, for the apps of the tests of its rules.
+      TestModule preferences() => TestModule(
+            'prefs',
+            providers: [const RoleProvider.plain(preferencesRole)],
+            contributions: [
+              preferencesRole.data(
+                const RoleImplementation(
+                  type: TypeRef(
+                    'Prefs',
+                    import: ImportRef.app('prefs/prefs.dart'),
+                  ),
+                  create: FactoryRef(
+                    'createPrefs',
+                    import: ImportRef.app('prefs/prefs.dart'),
+                  ),
+                ),
+              ),
+              dart(
+                'lib/prefs/prefs.dart',
+                "import '../core/preferences/app_preferences.dart';\n"
+                    '\n'
+                    'abstract class Prefs implements AppPreferences {}\n'
+                    '\n'
+                    'Prefs createPrefs() => throw UnimplementedError();\n',
+              ),
+            ],
+          );
+
       test(
           'the rule of the localization role finds what a module reads from '
           'the texts of the app in its code as the indexer indexes it',
@@ -1661,6 +1690,7 @@ void main() {
         final harness = ContractHarness(
           ModuleRegistry([
             scaffold(),
+            preferences(),
             TestModule(
               'texts',
               providers: [const RoleProvider.plain(localizationRole)],
@@ -1776,6 +1806,7 @@ void main() {
         final harness = ContractHarness(
           ModuleRegistry([
             scaffold(),
+            preferences(),
             // The extension of the role, and a getter for one text only.
             TestModule(
               'texts',
@@ -1846,6 +1877,7 @@ void main() {
         final harness = ContractHarness(
           ModuleRegistry([
             scaffold(),
+            preferences(),
             TestModule(
               'texts',
               providers: [const RoleProvider.plain(localizationRole)],

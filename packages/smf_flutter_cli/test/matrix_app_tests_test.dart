@@ -420,6 +420,9 @@ void main() {
           if (named('preferences_role').appliesTo(app)) app.name,
       ],
       [
+        // The localization role requires the preferences.
+        'gen_l10n with settings_screen',
+        'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
         'every module (bloc)',
@@ -778,7 +781,12 @@ void main() {
         for (final app in apps)
           if (settings.appliesTo(app)) app.name,
       ],
-      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+      [
+        'settings',
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
     );
     // They run in a test of the app only, so they have no probe for a
     // check on a device, where the walk of the routes goes to the screen.
@@ -793,9 +801,15 @@ void main() {
       // The screen of the provider, as the role finds it.
       final screen =
           settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
+      // The one setting among the modules and the roles of the CLI is the
+      // setting of the language, which the localization role gives an app
+      // with a settings screen.
+      final localized = app.hook!.presentRoles.contains(localizationRole);
       expect(
         [for (final import in index.imports) '${import.uri} ${import.prefix}'],
         [
+          if (localized)
+            'package:my_app/core/l10n/language_setting.dart entry0',
           'package:my_app/core/router/navigation.dart null',
           '${screen.route.screen.import.resolveUri('my_app')} screen',
         ],
@@ -816,8 +830,11 @@ void main() {
             'const Type settingsScreen = '
             'screen.${screen.route.screen.className};',
           ),
-          // No module of the CLI has a setting yet.
-          contains('const List<Type> settingsEntries = [\n];'),
+          contains(
+            'const List<Type> settingsEntries = [\n'
+            '${localized ? '  entry0.LanguageSetting,\n' : ''}'
+            '];',
+          ),
         ),
         reason: app.name,
       );
@@ -941,7 +958,12 @@ void main() {
         for (final app in apps)
           if (named('settings').appliesTo(app)) app.name,
       ],
-      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+      [
+        'settings',
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
     );
   });
 
