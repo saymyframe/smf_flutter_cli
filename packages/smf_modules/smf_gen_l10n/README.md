@@ -1,8 +1,10 @@
 # smf_gen_l10n
 
-The SMF module of localization with [gen-l10n](https://docs.flutter.dev/ui/internationalization), the generator of localizations in the Flutter SDK. It provides the localization role of SMF: the app shows its texts in the language of the device, among the languages that the texts are in.
+The SMF module of localization with [gen-l10n](https://docs.flutter.dev/ui/internationalization), the generator of localizations in the Flutter SDK. It provides the localization role of SMF: the app shows its texts in the language of the device, among the languages that the texts are in, or in the one that the user chose.
 
 The modules of the app give their texts to the localization role, each in English and in the other languages of the module. The role names a getter for each text, and code reads a text as `context.l10n.<getter>`. The role also lists the languages of the app in `lib/core/l10n/app_locale.dart`, and gives the root of the app its locale, its supported locales and the delegates of Flutter's own texts. This module writes the texts into ARB files in `lib/l10n`, one file for each language, and adds `l10n.yaml` and `generate: true` to the app, with which `flutter pub get` generates the `AppLocalizations` class. A text without a translation into a language reads in English there.
+
+The app remembers the language that the user chose in its preferences, so an app with this module needs a module that provides them. `smf create` adds `shared_preferences` by itself while it is the only module that provides the preferences, and asks otherwise. In an app with a settings screen, the role adds the setting of the language to that screen.
 
 The app gets every language that a text of its modules is in, English first. `--locales` narrows them, as in `--locales en,uk`. An app can be only in a language in which Flutter has the texts of its own widgets, so SMF leaves any other language of a text out with a warning. Without a module that provides the localization, the modules show their texts in English.
 
