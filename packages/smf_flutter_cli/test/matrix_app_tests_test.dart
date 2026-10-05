@@ -112,7 +112,7 @@ void main() {
     );
     expect(
       index.declarations.map((declaration) => declaration.name),
-      ['WalkedLocation', 'walkedLocations'],
+      ['WalkedLocation', 'walkedLocations', 'shownFor', 'closedGuards'],
     );
     expect(
       files[routerWalkFile],
@@ -122,6 +122,153 @@ void main() {
         '    location: HomeHomeLocation(),\n'
         '    screen: screen0.HomeScreen,\n'
         '  ),\n',
+      ),
+    );
+    // No module of the app has a guard of the routes: the walk expects each
+    // location itself, and the file names nothing of what the role
+    // generates for guards, which the app does not have.
+    expect(
+      files[routerWalkFile],
+      contains(
+        'WalkedLocation shownFor(WalkedLocation walked) => walked;\n',
+      ),
+    );
+    expect(
+      files[routerWalkFile],
+      contains('List<String> closedGuards() => const [];\n'),
+    );
+    for (final name in [RouterRole.redirectOf, RouterRole.routeGuards]) {
+      expect(files[routerWalkFile], isNot(contains(name)));
+    }
+  });
+
+  test(
+      'in an app with guards of the routes, the file of the walk has the '
+      'target of each guard once, also one beyond the locations that the '
+      'walk goes to, the location that the router shows for another, and '
+      'the guards that do not allow', () {
+    const screens = ImportRef.app('features/gate/gate_screens.dart');
+    const status = ImportRef.app('features/gate/gate_status.dart');
+    Route route(
+      String path,
+      String screen, {
+      List<Route> children = const [],
+    }) =>
+        Route(
+          path,
+          name: path.replaceFirst('/', ''),
+          screen: ScreenRef(screen, import: screens),
+          children: children,
+        );
+    RouteGuard guard(String name, String target) => RouteGuard(
+          name: name,
+          allows: FunctionRef(name, import: status),
+          redirectTo: target,
+        );
+    final app = MatrixApp(
+      'gate',
+      const [ModuleId('gate')],
+      hook: RoleHookRequest(
+        data: [
+          routerRole
+              .data(
+                RoutesData(
+                  [
+                    route(
+                      '/intro',
+                      'IntroScreen',
+                      children: [route('terms', 'TermsScreen')],
+                    ),
+                    // As many routes as fill the walk with the two above.
+                    for (var index = 2; index < routerWalkLimit; index++)
+                      route('/r$index', 'Screen$index'),
+                    route('/login', 'LoginScreen'),
+                  ],
+                  guards: [
+                    guard('firstRun', 'intro'),
+                    guard('consent', 'intro'),
+                    guard('signedIn', 'login'),
+                  ],
+                ),
+              )
+              .withOrigin(const ModuleOrigin(ModuleId('gate'))),
+        ],
+        presentRoles: {routerRole},
+        context: ContractHarness.defaultContext,
+      ),
+    );
+
+    final text =
+        named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+
+    final (:index, :errors) = DartFileIndexer.parse(routerWalkFile, text);
+    expect(errors, isEmpty);
+    // The file of the role with the guards, next to its navigation.
+    expect(
+      [for (final import in index.imports) '${import.uri} ${import.prefix}'],
+      [
+        'package:my_app/core/router/app_router.dart null',
+        'package:my_app/core/router/navigation.dart null',
+        'package:my_app/features/gate/gate_screens.dart screen0',
+      ],
+    );
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      [
+        'WalkedLocation',
+        'walkedLocations',
+        'guardTargets',
+        'shownFor',
+        'closedGuards',
+      ],
+    );
+    List<String?> routesIn(String code) => [
+          for (final match in RegExp(r"route: '([\w.]+)'").allMatches(code))
+            match[1],
+        ];
+    final targetsAt = text.indexOf('guardTargets = [');
+    final walked = text.substring(0, targetsAt);
+    final targets = text.substring(
+      targetsAt,
+      text.indexOf('WalkedLocation shownFor'),
+    );
+    // The walk does not go to the target of the last guard, which is past
+    // its limit; the file has it all the same, for the walk to expect it.
+    expect(routesIn(walked), hasLength(routerWalkLimit));
+    expect(routesIn(walked), isNot(contains('gate.login')));
+    expect(routesIn(targets), ['gate.intro', 'gate.login']);
+    expect(
+      targets,
+      contains(
+        '  (\n'
+        "    route: 'gate.login',\n"
+        '    location: GateLoginLocation(),\n'
+        '    screen: screen0.LoginScreen,\n'
+        '  ),\n',
+      ),
+    );
+    // What the router shows for a location is what redirectOf() of the
+    // role says of its route, and the guards that do not allow are those of
+    // routeGuards of the role.
+    expect(
+      [
+        for (final call in index.invocations)
+          if (call.target == null) call.name,
+      ],
+      contains(RouterRole.redirectOf),
+    );
+    expect(
+      text,
+      contains(
+        '  final target = redirectOf(walked.route);\n'
+        '  if (target == null) return walked;\n',
+      ),
+    );
+    expect(
+      text,
+      contains(
+        '  for (final guard in routeGuards)\n'
+        '    if (!guard.allows.value) guard.name,\n',
       ),
     );
   });

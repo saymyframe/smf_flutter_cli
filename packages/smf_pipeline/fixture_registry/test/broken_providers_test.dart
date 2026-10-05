@@ -218,6 +218,47 @@ final class _TestNames extends RecursiveAstVisitor<void> {
   }
 }
 
+/// Checks that each test that must fail in the app of [failing] is among
+/// the tests that apply to the app, in one file, declared under its name,
+/// and that the file, or a file of its tests that it imports, writes the
+/// reason.
+Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
+  final (:app, problems: _) = await failing.check();
+  final tests = [
+    for (final test in await brokenProviderAppTests())
+      if (test.appliesTo(app!)) test,
+  ];
+
+  for (final failure in failing.failures) {
+    final files = [
+      for (final test in tests)
+        if (File('${test.directory}/${failure.file}') case final file
+            when file.existsSync())
+          (file: file, directory: test.directory),
+    ];
+    expect(
+      files,
+      hasLength(1),
+      reason: 'The tests of the app have ${failure.file} once.',
+    );
+    final (:file, :directory) = files.single;
+    final text = file.readAsStringSync();
+    expect(
+      _testNamesIn(text).any((name) => _writesAll(name, failure.test)),
+      isTrue,
+      reason: '$failure is a test of its file.',
+    );
+    expect(
+      [text, ..._importedTextsOf(file, directory)]
+          .expand(_stringsIn)
+          .any((text) => _writesPart(text, failure.reason)),
+      isTrue,
+      reason: 'The reason of $failure is a text that its file writes, '
+          'or a file of its tests that it imports.',
+    );
+  }
+}
+
 void main() {
   final providers = brokenProviders();
 
@@ -406,40 +447,7 @@ void main() {
       test(
           'the tests that must fail are among the tests of its app, as they '
           'are named, with their reasons', () async {
-        final (:app, problems: _) = await provider.failingApp.check();
-        final tests = [
-          for (final test in await brokenProviderAppTests())
-            if (test.appliesTo(app!)) test,
-        ];
-
-        for (final failure in provider.failures) {
-          final files = [
-            for (final test in tests)
-              if (File('${test.directory}/${failure.file}') case final file
-                  when file.existsSync())
-                (file: file, directory: test.directory),
-          ];
-          expect(
-            files,
-            hasLength(1),
-            reason: 'The tests of the app have ${failure.file} once.',
-          );
-          final (:file, :directory) = files.single;
-          final text = file.readAsStringSync();
-          expect(
-            _testNamesIn(text).any((name) => _writesAll(name, failure.test)),
-            isTrue,
-            reason: '$failure is a test of its file.',
-          );
-          expect(
-            [text, ..._importedTextsOf(file, directory)]
-                .expand(_stringsIn)
-                .any((text) => _writesPart(text, failure.reason)),
-            isTrue,
-            reason: 'The reason of $failure is a text that its file writes, '
-                'or a file of its tests that it imports.',
-          );
-        }
+        await _expectFailuresAmongTests(provider.failingApp);
       });
 
       test(
@@ -466,6 +474,89 @@ void main() {
       });
     });
   }
+
+  for (final failing in brokenModuleApps()) {
+    group('${failing.name}:', () {
+      test(
+          'its app is the app with every module of its registry, which the '
+          'contract harness renders without errors', () async {
+        final (:app, :problems) = await failing.check();
+
+        expect(problems, isEmpty);
+        expect(ModuleRegistry.problemsOf(failing.modules), isEmpty);
+        expect(
+          app!.modules,
+          unorderedEquals([
+            for (final module in failing.modules) module.descriptor.id,
+          ]),
+        );
+        expect(app.everyModuleWith, isNotNull);
+        expect(failing.failures, isNotEmpty);
+      });
+
+      test(
+          'the tests that must fail are among the tests of its app, as they '
+          'are named, with their reasons', () async {
+        await _expectFailuresAmongTests(failing);
+      });
+    });
+  }
+
+  test(
+      'the app of the fixture gates that start closed has guards that do '
+      'not allow when it starts, and no mocks that open them, so the test '
+      'of the walk of the routes must fail on them', () async {
+    final failing = brokenModuleApps().singleWhere(
+      (app) => app.name == 'fake_gate_stays_closed',
+    );
+    final (:app, problems: _) = await failing.check();
+
+    expect(
+      routerRole.facadeOf(routerRole.hookInput(app!.hook!)).guards,
+      isNotEmpty,
+    );
+    final harness = ContractHarness(ModuleRegistry(failing.modules));
+    final result = await harness.check(harness.casesOfAll().single);
+    expect(
+      result.app!.files['lib/features/fake_gate/fixture_gates.dart']!.text,
+      contains('FixtureGate() : super(false);'),
+    );
+    final tests = [
+      for (final test in await brokenProviderAppTests())
+        if (test.appliesTo(app)) test,
+    ];
+    expect(
+      [
+        for (final test in tests)
+          if (test.mocks != null) test.directory,
+      ],
+      isEmpty,
+    );
+    expect(
+      failing.failures.map((failure) => failure.file),
+      ['test/router_walk_test.dart'],
+    );
+    // The file of the test writes the reason itself, as one text without a
+    // value of the app in it: a text of the walk that it imports, with the
+    // route of a location in it, does not stand for it.
+    final walk = tests.singleWhere(
+      (test) =>
+          File('${test.directory}/test/router_walk_test.dart').existsSync(),
+    );
+    final texts = _stringsIn(
+      File('${walk.directory}/test/router_walk_test.dart').readAsStringSync(),
+    );
+    expect(
+      texts.any(
+        (text) =>
+            !text.contains(null) &&
+            text.join().contains(failing.failures.single.reason),
+      ),
+      isTrue,
+      reason: 'The test of the walk expects no guard that does not allow, '
+          'with the reason that the app must fail it for.',
+    );
+  });
 
   test(
       'every role whose contract the app tests check has a broken provider, '

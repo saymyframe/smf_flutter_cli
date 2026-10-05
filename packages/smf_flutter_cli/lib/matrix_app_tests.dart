@@ -225,12 +225,23 @@ Future<MatrixAppTest> preferencesRoleAppTest({
 /// innermost navigator on the screen, and the screen of the route, without
 /// an `ErrorWidget` on the screen or an error that Flutter reports.
 ///
+/// In an app with guards of the routes, the walk expects what the role
+/// says: for a location that a guard keeps the user from, the page and the
+/// screen of the target of that guard (`redirectOf()` of the role). So its
+/// probe, `probeRoutes()`, which the start check runs on a device, holds
+/// whichever guards allow there, where no test can open one, such as a
+/// guard that asks for a signed-in user. The test itself first fails on
+/// each guard that does not allow, by its name: under `flutter test`, the
+/// module of a guard opens it for the tests of the app, in the mocks of its
+/// app test ([MatrixAppTest.mocks]), so that the walk reaches every route
+/// and the tests of the other modules see the screens that they expect.
+///
 /// The test knows only the role. The matrix writes the locations of each
-/// app for it, from the routes of its router role, into [routerWalkFile],
-/// next to the walk in `integration_test/router_walk/walk.dart`, whose
-/// probe, `probeRoutes()`, the start check runs on a device. The matrix of
-/// the fixtures runs it too, only in the apps with every module, which run
-/// other tests already.
+/// app for it, from the routes and the guards of its router role, into
+/// [routerWalkFile], next to the walk in
+/// `integration_test/router_walk/walk.dart`. The matrix of the fixtures
+/// runs it too, only in the apps with every module, which run other tests
+/// already.
 Future<MatrixAppTest> routerWalkAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>
@@ -254,6 +265,19 @@ Future<MatrixAppTest> routerWalkAppTest({
 /// ([FacadeRoute.fullName]), the location, created as `const` from its
 /// class of the navigation of the role, and the type of the screen that the
 /// route shows.
+///
+/// The file also says what the guards of the routes of the app
+/// ([RouterFacade.guards]) do to the walk, with two functions that every
+/// app gets, so that the walk is the same in an app with guards and in one
+/// without, which has nothing of what the role generates for them:
+/// - `shownFor(walked)`, the location that the router shows when it is
+///   asked to show `walked`: `walked` itself, or the target of the guard
+///   that keeps the user from it, as `redirectOf()` of the role says. In an
+///   app without guards it returns `walked`. The targets are in
+///   `guardTargets`, in the order of the guards, also those that are not
+///   among the first [routerWalkLimit] locations;
+/// - `closedGuards()`, the full names of the guards that do not allow, in
+///   the order of `routeGuards` of the role; none in an app without guards.
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
@@ -266,41 +290,48 @@ const routerWalkLimit = 20;
 /// It imports the navigation of the role without a prefix, since the names
 /// of its classes differ from those of the file, and the file of every
 /// screen once, with a prefix of its own, `screen0`, `screen1`, ..., so
-/// that no name clashes.
+/// that no name clashes. In an app with guards it imports the file of the
+/// role that has them too, without a prefix either.
 Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
+  final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
   final routes = [
-    for (final route
-        in routerRole.facadeOf(routerRole.hookInput(app.hook!)).routes)
+    for (final route in facade.routes)
       if (!route.hasRequiredParams) route,
   ].take(routerWalkLimit);
   final screens = <String, String>{};
-  final locations = StringBuffer();
-  for (final route in routes) {
+  String walked(FacadeRoute route) {
     final screen = route.route.screen;
     final prefix = screens.putIfAbsent(
       screen.import.resolveUri(packageName),
       () => 'screen${screens.length}',
     );
-    locations
-      ..writeln('  (')
-      ..writeln('    route: ${SmfNames.dartString(route.fullName)},')
-      ..writeln('    location: ${route.locationClass}(),')
-      ..writeln('    screen: $prefix.${screen.className},')
-      ..writeln('  ),');
+    return '  (\n'
+        '    route: ${SmfNames.dartString(route.fullName)},\n'
+        '    location: ${route.locationClass}(),\n'
+        '    screen: $prefix.${screen.className},\n'
+        '  ),\n';
   }
-  final navigation = ImportRef.app(
-    RouterRole.navigationFile.substring('lib/'.length),
-  ).resolveUri(packageName);
+
+  final locations = routes.map(walked).join();
+  // Each target once: two guards may show the same one.
+  final targets = {for (final guard in facade.guards) guard.target};
+  final guards = targets.isEmpty
+      ? _withoutGuards
+      : _withGuards(targets.map(walked).join());
+  String ofRole(String file) =>
+      ImportRef.app(file.substring('lib/'.length)).resolveUri(packageName);
   final imports = [
-    "import '$navigation';",
+    "import '${ofRole(RouterRole.navigationFile)}';",
+    if (targets.isNotEmpty) "import '${ofRole(RouterRole.appRouterFile)}';",
     for (final MapEntry(key: uri, value: prefix) in screens.entries)
       "import '$uri' as $prefix;",
   ]..sort();
   return {
     routerWalkFile: '''
 // The locations of the app that need no values, at most $routerWalkLimit,
-// which the matrix of SMF writes from the data of the router role of the
-// app for the walk of its routes, walk.dart.
+// and what the guards of its routes show in their place, which the matrix
+// of SMF writes from the data of the router role of the app for the walk of
+// its routes, walk.dart.
 ${imports.join('\n')}
 
 /// A location of the app that needs no values: the full name of its route,
@@ -311,9 +342,51 @@ typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 /// routes of the app.
 const List<WalkedLocation> walkedLocations = [
 $locations];
-''',
+$guards''',
   };
 }
+
+/// What [routerWalkFile] says of the guards in an app without guards, which
+/// has neither `redirectOf()` nor `routeGuards` of the router role.
+const _withoutGuards = '''
+
+/// The location that the router shows when it is asked to show [walked]:
+/// [walked] itself, since no module of the app has a guard of the routes.
+WalkedLocation shownFor(WalkedLocation walked) => walked;
+
+/// The full names of the guards of the routes that do not allow: none,
+/// since no module of the app has a guard.
+List<String> closedGuards() => const [];
+''';
+
+/// What [routerWalkFile] says of the guards in an app with guards, whose
+/// targets are [targets], each as a location of the walk.
+String _withGuards(String targets) => '''
+
+/// The targets of the guards of the routes of the app, in the order of the
+/// guards: the location that the router shows while a guard does not
+/// allow.
+const List<WalkedLocation> guardTargets = [
+$targets];
+
+/// The location that the router shows when it is asked to show [walked]:
+/// [walked] itself, or the target of the guard that keeps the user from it,
+/// as redirectOf() of the router role says.
+WalkedLocation shownFor(WalkedLocation walked) {
+  final target = ${RouterRole.redirectOf}(walked.route);
+  if (target == null) return walked;
+  return guardTargets.firstWhere(
+    (shown) => shown.route == target.routeName,
+  );
+}
+
+/// The full names of the guards of the routes that do not allow, in the
+/// order of the guards.
+List<String> closedGuards() => [
+  for (final guard in ${RouterRole.routeGuards})
+    if (!guard.allows.value) guard.name,
+];
+''';
 
 /// The path in an app of what the matrix writes for the tests of the
 /// settings screen role that the CLI keeps in its

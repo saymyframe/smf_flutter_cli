@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 /// A gate of the fixture: whether it is open, which a test sets. A guard of
 /// the fixture allows while its gate is open.
 final class FixtureGate extends ValueNotifier<bool> {
-  /// Creates the gate, which is open.
-  FixtureGate() : super(true);
+  /// Creates the gate, which is open unless the gates of the app start
+  /// closed.
+  FixtureGate() : super({{{open}}});
 
   /// Notifies the listeners of the gate though it did not change, as a
   /// guard may that notifies for more than what it allows.

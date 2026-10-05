@@ -9,7 +9,9 @@
 /// exemption with its reason; the tests of this package check it. The
 /// broken providers are in no registry of apps that must work
 /// ([fixtureModules] and [severalProvidersModules]), so the matrices do not
-/// grow with them.
+/// grow with them. An expectation that the app tests have of every module,
+/// rather than of a role, has an app that must fail it in
+/// [brokenModuleApps].
 library;
 
 import 'package:fake_broken/fake_broken.dart';
@@ -23,6 +25,7 @@ import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 
 /// A provider of a role with one known bug, and the tests of the role that
 /// must fail on it in its app.
@@ -249,6 +252,13 @@ List<BrokenProvider> brokenProviders() => const [
                 'next one once it allows',
             'While a guard does not allow, the target of a guard after it is '
                 'a route like any other.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_walk_guards_test.dart',
+            'the walk of the routes holds while a guard keeps the user out',
+            'While a guard does not allow, each location outside its flow '
+                'shows the target of the guard, and each location of its flow '
+                'its own screen.',
           ),
         ],
       ),
@@ -589,6 +599,40 @@ Future<List<MatrixAppTest>> brokenProviderAppTests() async {
   }
   return [...tests.values];
 }
+
+/// The apps whose tests must fail for what a module of the app does, rather
+/// than a provider of a role; `tool/broken_providers_matrix.dart` generates
+/// them and runs their tests with those of the broken providers.
+///
+/// The app of the fixture gates that start closed has guards that nothing
+/// opens for the tests of the app, as the mocks of the app test of their
+/// module would. The test of the walk of the routes must fail on them, by
+/// their names and with what the module of a guard does about it, and every
+/// other test of the app must pass.
+List<MatrixFailingApp> brokenModuleApps() => const [
+      MatrixFailingApp(
+        'fake_gate_stays_closed',
+        modules: [
+          FlutterCoreModule(),
+          FakeRouterModule(),
+          FakeBlocModule(),
+          FakeGateModule(open: false),
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_walk_test.dart',
+            'each location that needs no values shows the page and the '
+                'screen of its route',
+            'These guards of the routes do not allow, so the walk cannot '
+                'reach the routes outside their flows, and the tests of the '
+                'other modules of the app do not see the screens that they '
+                'expect. The module of a guard opens it for the tests of the '
+                'app in the mocks of its app test (MatrixAppTest.mocks), '
+                'before the app starts.',
+          ),
+        ],
+      ),
+    ];
 
 /// The roles whose contract the app tests check but no broken provider
 /// breaks, each with the reason.
