@@ -80,7 +80,8 @@ final class RenderedTemplate {
   /// The generated files, by path relative to the project root.
   final Map<String, String> files;
 
-  /// What the template's `contribute` hook returned.
+  /// What the template's `contribute` hook returned that applies in the
+  /// app.
   final List<Contribution> contributions;
 
   /// Fragments of `render` for sockets whose tags are not in the template,
@@ -88,12 +89,15 @@ final class RenderedTemplate {
   final List<SocketContribution> elsewhere;
 }
 
-/// Renders the template of [role] as the pipeline will: its bricks with the
-/// presence flags, the variables of its `render` hook, and the sockets of
-/// its files filled with the fragments of `render` and with [fromModules],
-/// what the modules of the app put into the sockets of the role, whose
-/// imports are added to the files that hold the sockets' tags, as are the
-/// imports of the fragment variables to the files that read them.
+/// Renders the template of [role] as the pipeline will, in an app with
+/// [role] and the roles in [present]: its bricks with the presence flags,
+/// the variables of its `render` hook, and the sockets of its files filled
+/// with the fragments of `render` and with [fromModules], what the modules
+/// of the app put into the sockets of the role, whose imports are added to
+/// the files that hold the sockets' tags, as are the imports of the
+/// fragment variables to the files that read them. A contribution of the
+/// template applies only when the roles of its [Contribution.when] are in
+/// the app.
 Future<RenderedTemplate> renderTemplate<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
@@ -102,7 +106,10 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
   List<SocketContribution> fromModules = const [],
 }) async {
   final template = role.template!;
-  final contributions = template.contribute(testContext);
+  final contributions = [
+    for (final contribution in template.contribute(testContext))
+      if (contribution.when.every({role, ...present}.contains)) contribution,
+  ];
   final input = inputOf(role, data: data, present: present, choice: choice);
   final output = template.render(input);
 

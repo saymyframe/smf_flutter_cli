@@ -375,9 +375,17 @@ void main() {
         result
             .validation!.socketOrders[AppEntryRole.rootWrappers]!.contributions
             .map((collected) => '${collected.origin}'),
-        // The template of the localization role puts the language that the
-        // user chose around the root.
-        ['fake_riverpod', 'fake_sockets', 'role:localization'],
+        // The fixture of the theme puts the colour of its themes around the
+        // root, the template of the localization role the language that the
+        // user chose, and that of the theme role the theme mode that the
+        // user selected.
+        [
+          'fake_riverpod',
+          'fake_sockets',
+          'fake_theme',
+          'role:localization',
+          'role:theme',
+        ],
       );
       expect(
         result.validation!.pubspec.dependencies['flutter_riverpod']!
@@ -1320,6 +1328,8 @@ const _cases = [
   'fake_preferences',
   'fake_preferences_user with preferences',
   'fake_preferences_user',
+  'fake_theme with localization',
+  'fake_theme',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
