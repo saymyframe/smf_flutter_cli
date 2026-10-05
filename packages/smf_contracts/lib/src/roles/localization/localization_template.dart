@@ -42,22 +42,24 @@ To add a language in which Flutter has the texts of its own widgets, such as Ger
 2. Add `de` to `$_plistLanguages` in `${AppEntryRole.infoPlistFile}`, which tells iOS the languages of the app.
 ${withSetting ? "3. Add `'de': 'Deutsch'` to `_names` in `${LocalizationRole.languageSettingFile}`, the name that the setting shows for the language. Without it, the setting shows `de`.\n" : ''}''';
 
-/// The note of the localization role in the guide for coding agents: how
-/// code shows a text, where the languages of the app are, how code changes
-/// the language, and what a new language needs, whichever module provides
-/// the role.
+/// The note of the localization role in the guide for coding agents,
+/// whichever module provides the role: that code shows the user no text of
+/// its own, where the languages of the app and the choice of the user are,
+/// how code changes the language, and what a new language needs. What the
+/// doc comments of [LocalizationRole.appLocaleFile] tell, the note leaves
+/// to them. The name of the app is no text of the role: the screens of the
+/// modules show it from a literal.
 const _agentNote = '''
-- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
-- `appLocales` in `${LocalizationRole.appLocaleFile}` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
-- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Change it only with `appLocale.choose(locale)`, which takes one of `appLocales` or `null` and also saves the choice in the preferences, and write nothing under the key `${LocalizationRole.localeKey}` yourself. A widget reads the choice with `AppLocaleScope.of(context)` and rebuilds when it changes. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
-- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `$_plistLanguages` in the Info.plist of the iOS app, and into the texts of the app.
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `${LocalizationRole.appLocaleFile}` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `${LocalizationRole.localeKey}` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `$_plistLanguages` in the Info.plist of the iOS app, and into the texts of the app.
 ''';
 
 /// What the role adds to its note for coding agents in an app with a
-/// settings screen: the setting of the language, whose file only such an
-/// app has, and where it takes the name of a language from.
+/// settings screen: one more place of a new language, the file of the
+/// setting of the language, which only such an app has.
 const _settingAgentNote = '''
-- `LanguageSetting` in `${LocalizationRole.languageSettingFile}` is the entry of the settings screen with which the user chooses the language. It shows a language by its name in `_names` in that file, and by its code when `_names` has none. Add the name of a new language there, written in that language.
+- A new language also needs its name in `_names` in `${LocalizationRole.languageSettingFile}`: the setting of the language on the settings screen shows a language by that name, and by its code without one.
 ''';
 
 /// The template of the [LocalizationRole]: the languages of the app, the

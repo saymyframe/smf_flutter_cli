@@ -28,16 +28,15 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 ## Localization
 
-- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
-- `appLocales` in `lib/core/l10n/app_locale.dart` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
-- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Change it only with `appLocale.choose(locale)`, which takes one of `appLocales` or `null` and also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. A widget reads the choice with `AppLocaleScope.of(context)` and rebuilds when it changes. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
-- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
 
 With `gen-l10n` of Flutter:
 
 - The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
-- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files. Then run `flutter pub get`, which generates `context.l10n.<name>`.
-- Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says. After adding the ARB file of a new language, run `flutter gen-l10n`, because `flutter pub get` does not notice a new file.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
 - Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
 
 ## Preferences
@@ -61,14 +60,14 @@ A new Flutter project.
 
 ## Texts
 
-The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. `flutter pub get` runs it when one of the ARB files changed or the files it writes are missing, so you can commit those files or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
 
-To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
 
 The texts of a new language, such as German, go into a file of their own:
 
 1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
-2. Run `flutter gen-l10n`, because `flutter pub get` does not notice a new ARB file.
+2. Run `flutter gen-l10n`.
 
 The section "Languages" tells where else the new language goes.
 
@@ -461,8 +460,7 @@ extension AppTexts on BuildContext {
   /// the root of the app.
   ///
   /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
-  /// `lib/l10n`. `flutter pub get` runs it when one of those files changed,
-  /// and `flutter gen-l10n` runs it for a new file too.
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
 === lib/core/preferences/app_preferences.dart (role:preferences) ===

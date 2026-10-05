@@ -693,8 +693,10 @@ void main() {
     });
 
     test(
-        'names the ARB files of the app by the directory and the pattern of '
-        'their paths, and the files that gen-l10n writes by a pattern', () {
+        'names in inline code its tool and the command of it, the ARB files '
+        'of the app by the directory and the pattern of their paths, the '
+        'files that gen-l10n writes by a pattern, the options and how code '
+        'reads a text, and nothing else', () {
       final arbFiles = _arbFilesOf(app).keys;
       final generated = generatedLocalizationsOf(app).path;
       // A pattern of the note as an expression: any text in place of
@@ -704,16 +706,19 @@ void main() {
         return RegExp('^${parts.map(RegExp.escape).join('.*')}\$');
       }
 
-      expect(
-        code(),
-        containsAll([
-          GenL10nModule.arbDirectory,
-          GenL10nModule.templateArbFile,
-          '${GenL10nModule.arbDirectory}/app_<code>.arb',
-          '${GenL10nModule.arbDirectory}/app_localizations*.dart',
-          'l10n.yaml',
-        ]),
-      );
+      // All of them: the note names nothing of the role, such as the file
+      // of the languages, which the note of the role tells of.
+      expect(code(), {
+        'gen-l10n',
+        GenL10nModule.arbDirectory,
+        GenL10nModule.templateArbFile,
+        '${GenL10nModule.arbDirectory}/app_<code>.arb',
+        'flutter gen-l10n',
+        'context.l10n.<name>',
+        '${GenL10nModule.arbDirectory}/app_localizations*.dart',
+        'l10n.yaml',
+        'use-escaping: false',
+      });
       expect(arbFiles, hasLength(3));
       for (final path in arbFiles) {
         expect(
@@ -733,9 +738,9 @@ void main() {
     });
 
     test(
-        'tells how a text and the file of a language get their code, with '
-        'the commands of the README of the app, and that the options turn '
-        'the escapes off', () {
+        'tells to run the command of the README of the app after every '
+        'change of the ARB files, to name a text as the module names the '
+        'texts of the app, and that the options turn the escapes off', () {
       final readme = module
           .contribute(ContractHarness.defaultContext)
           .whereType<SocketContribution>()
@@ -744,18 +749,24 @@ void main() {
       final options =
           _yamlOf(app.files['l10n.yaml']!.text)! as Map<String, Object?>;
 
+      // One command, which generates the code after every change of the
+      // ARB files, a new file included; `flutter pub get` does so only for
+      // a file that it read before, in the directory of its last run.
       expect(
-        code(),
-        containsAll([
-          'flutter pub get',
-          'flutter gen-l10n',
-          'context.l10n.<name>',
-          'use-escaping: false',
-        ]),
+        {
+          for (final span in code())
+            if (span.startsWith('flutter ')) span,
+        },
+        {'flutter gen-l10n'},
       );
-      for (final command in ['flutter pub get', 'flutter gen-l10n']) {
-        expect(readme, contains('`$command`'), reason: command);
-      }
+      expect(
+        agentNote,
+        contains(
+          'After every change of the ARB files, a new file included, run '
+          '`flutter gen-l10n`',
+        ),
+      );
+      expect(readme, contains('`flutter gen-l10n`'));
       expect(options['use-escaping'], isFalse);
       // The getter that the note reads a text through is the one that the
       // file of the module declares on a context.
@@ -771,10 +782,20 @@ void main() {
         ],
         ['l10n'],
       );
-      // A name in lowerCamelCase, as the getters that the role names.
-      for (final name in _arbFilesOf(app)[GenL10nModule.templateArbFile]!) {
-        if (name.$1.startsWith('@')) continue;
-        expect(name.$1, matches(RegExp(r'^[a-z][A-Za-z0-9]*$')));
+      // The case that the note asks of the name of a new text is the case
+      // of the names that the module writes, the getters of the role.
+      final asked = RegExp('under a name in ([A-Za-z_]+),').firstMatch(
+        agentNote,
+      )![1];
+      expect(asked, 'lowerCamelCase');
+      final names = [
+        for (final (name, _)
+            in _arbFilesOf(app)[GenL10nModule.templateArbFile]!)
+          if (!name.startsWith('@')) name,
+      ];
+      expect(names, isNotEmpty);
+      for (final name in names) {
+        expect(name, matches(RegExp(r'^[a-z][A-Za-z0-9]*$')));
       }
     });
   });
@@ -836,8 +857,8 @@ void main() {
     });
 
     test(
-        'tells to run gen-l10n once the file of a new language is added, '
-        'which flutter pub get does not notice', () {
+        'tells to run gen-l10n after every change of the ARB files: after a '
+        'new text, and once the file of a new language is added', () {
       final steps = [
         for (final line in section.split('\n'))
           if (RegExp(r'^\d+\. ').hasMatch(line)) line,
@@ -853,9 +874,34 @@ void main() {
         steps.first,
         contains('`${GenL10nModule.arbDirectory}/app_de.arb`'),
       );
-      expect(steps.last, startsWith('2. '));
-      expect(steps.last, contains('`flutter gen-l10n`'));
+      expect(steps.last, '2. Run `flutter gen-l10n`.');
+      final paragraphs = section.split('\n\n');
+      expect(
+        paragraphs.first,
+        contains('Run `flutter gen-l10n` after every change of the ARB files.'),
+      );
+      expect(
+        paragraphs.singleWhere((text) => text.startsWith('To add a text, ')),
+        contains('Then run `flutter gen-l10n`.'),
+      );
+      // The other command is for a fresh clone, which has no generated
+      // code: after a change it generates the code only for a file that it
+      // read before, in the directory of its last run.
       expect(commands, {'flutter pub get', 'flutter gen-l10n'});
+      expect(
+        paragraphs.first,
+        contains(
+          'In a fresh clone of the app, `flutter pub get` generates those '
+          'files',
+        ),
+      );
+      expect(
+        [
+          for (final paragraph in paragraphs)
+            if (paragraph.contains('`flutter pub get`')) paragraph,
+        ],
+        [paragraphs.first],
+      );
     });
 
     test(

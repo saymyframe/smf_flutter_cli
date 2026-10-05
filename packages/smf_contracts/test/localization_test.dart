@@ -1878,6 +1878,31 @@ void main() {
       expect(rendered.notes.single.socket, AppEntryRole.agentSections);
       expect(rendered.notes.single.entryKey, localizationRole.description);
       expect(rendered.notes.single.entryValue, note);
+      // All that it names in inline code: the two files of the role, the
+      // one of the template and the one that every provider generates, what
+      // they declare, and the arguments of the root. It names nothing of a
+      // provider, such as its tool or the files of its texts, nothing of
+      // the setting of the language, which only an app with a settings
+      // screen has, and no path of the Info.plist: the interface of the app
+      // entry role, which the paths of a note of a role are checked
+      // against, has no native file.
+      expect(codeSpansOf(note.text).toSet(), {
+        'context.l10n.<name>',
+        LocalizationRole.textsFile,
+        'context',
+        'BuildContext',
+        'const',
+        LocalizationRole.appLocaleFile,
+        'appLocales',
+        'appLocale',
+        'appLocale.choose(locale)',
+        LocalizationRole.localeKey,
+        'MaterialApp',
+        'locale',
+        'supportedLocales',
+        'localizationsDelegates',
+        'CFBundleLocalizations',
+      });
       // What it names of the file of the languages, that file declares.
       expectNamesOfCode(
         note,
@@ -1886,33 +1911,9 @@ void main() {
             'appLocales',
             'appLocale',
             'AppLocaleController.choose',
-            'AppLocaleScope.of',
           ],
         },
         files: rendered.files,
-      );
-      final spans = codeSpansOf(note.text);
-      // The files that it names: the one of the template, and the one that
-      // every provider generates.
-      expect(
-        {
-          for (final span in spans)
-            if (span.contains('/')) span,
-        },
-        {LocalizationRole.textsFile, LocalizationRole.appLocaleFile},
-      );
-      expect(
-        spans,
-        containsAll([
-          'context.l10n.<name>',
-          'appLocale.choose(locale)',
-          'AppLocaleScope.of(context)',
-          LocalizationRole.localeKey,
-          'locale',
-          'supportedLocales',
-          'localizationsDelegates',
-          'CFBundleLocalizations',
-        ]),
       );
 
       // What it names of the texts is the extension that the role requires
@@ -1921,14 +1922,19 @@ void main() {
       expect(LocalizationRole.appTexts.on, 'BuildContext');
       expect(LocalizationRole.appTexts.getters, ['l10n']);
       // The arguments of the root that it names are those that the
-      // template gives the root.
+      // template gives the root, two of them from the file of the
+      // languages, as it says.
+      final args = {
+        for (final socket in contributions().whereType<SocketContribution>())
+          if (socket.socket == AppEntryRole.appArgs)
+            socket.argName: socket.fragment!.imports,
+      };
       expect(
-        {
-          for (final socket in contributions().whereType<SocketContribution>())
-            if (socket.socket == AppEntryRole.appArgs) socket.argName,
-        },
+        args.keys,
         {'locale', 'supportedLocales', 'localizationsDelegates'},
       );
+      expect(args['locale'], [appLocale]);
+      expect(args['supportedLocales'], [appLocale]);
       // The language that the user chose is in the controller whose
       // `choose()` the note names, the key that the note tells to leave
       // alone is the one that the file saves the choice under, and the key
@@ -1955,20 +1961,21 @@ void main() {
             .entryKey,
         'CFBundleLocalizations',
       );
-      // The note gives the key and no path of its file, which the provider
-      // of the app entry has: the interface of the app entry role, which
-      // the paths of a note of a role are checked against, has no native
-      // file.
-      expect(note.text, isNot(contains(AppEntryRole.infoPlistFile)));
-      // It names nothing of the setting of the language, which only an app
-      // with a settings screen has.
-      expect(note.text, isNot(contains('LanguageSetting')));
+      // The name of the app is no text of the role, and the screens of the
+      // modules show it from a literal, so the ban leaves it out.
+      expect(
+        note.text,
+        contains(
+          'Show the user no text but the name of the app from a string '
+          'literal.',
+        ),
+      );
     });
 
     test(
-        'tells coding agents where the setting of the language is and where '
-        'it takes the name of a language from, in a note of its own for an '
-        'app with a settings screen', () async {
+        'tells coding agents that a new language needs its name in the '
+        'setting of the language, in a note of its own for an app with a '
+        'settings screen', () async {
       final rendered = await appIn(['en', 'uk'], setting: true);
       final note = agentNoteOf(localizationRole, when: {settingsScreenRole});
 
@@ -1984,19 +1991,16 @@ void main() {
         ],
       );
       expect(note.isOfRole, isTrue);
-      // The file that it names is the one of the setting, which declares
-      // what it names.
+      // All that it names: the file of the setting, and the names of the
+      // languages, which that file declares.
       expect(
-        {
-          for (final span in codeSpansOf(note.text))
-            if (span.contains('/')) span,
-        },
-        {LocalizationRole.languageSettingFile},
+        codeSpansOf(note.text).toSet(),
+        {'_names', LocalizationRole.languageSettingFile},
       );
       expectNamesOfCode(
         note,
         {
-          LocalizationRole.languageSettingFile: ['LanguageSetting', '_names'],
+          LocalizationRole.languageSettingFile: ['_names'],
         },
         files: rendered.files,
       );
