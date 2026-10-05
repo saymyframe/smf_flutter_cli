@@ -1571,6 +1571,12 @@ class FixtureTexts {
     _ => 'Second setting',
   };
 
+  /// The text title of the module settings.
+  String get settingsTitle => switch (language) {
+    'uk' => 'Налаштування',
+    _ => 'Settings',
+  };
+
   /// The text title of the template of the theme role.
   String get themeTitle => switch (language) {
     'uk' => 'Тема',
@@ -2493,6 +2499,7 @@ class FixtureSetting extends StatelessWidget {
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
     as entry1;
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/l10n/language_setting.dart' as entry3;
 import 'package:fixture_app/core/theme/theme_mode_setting.dart' as entry2;
 import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
@@ -2507,7 +2514,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
+    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
     body: ListView(
       children: const [
         entry0.FixtureSetting(),

@@ -546,11 +546,11 @@ void main() {
       [
         // The theme role and the localization role require the
         // preferences.
+        'settings with localization',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'gen_l10n with settings_screen',
         'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
@@ -649,9 +649,9 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'gen_l10n with settings_screen',
         'gen_l10n',
         'every module (bloc)',
         'every module (riverpod)',
@@ -673,8 +673,8 @@ void main() {
     expect(
       [for (final app in localized) app.name],
       [
+        'settings with localization',
         'material_theme with settings_screen, localization',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1004,8 +1004,8 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'material_theme with settings_screen, localization',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1414,10 +1414,10 @@ void main() {
           if (settings.appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1446,7 +1446,7 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
-        'gen_l10n with settings_screen': ['LanguageSetting'],
+        'settings with localization': ['LanguageSetting'],
         'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
         'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
       },
@@ -1891,10 +1891,10 @@ void main() {
           if (named('settings').appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],

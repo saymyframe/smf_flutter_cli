@@ -2098,6 +2098,7 @@ class HomeScreen extends StatelessWidget {
 }
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry1;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
@@ -2109,7 +2110,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
+    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
     body: ListView(
       children: const [
         entry0.ThemeModeSetting(),
@@ -2183,6 +2184,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
   "@@locale": "en",
+  "settingsTitle": "Settings",
   "themeTitle": "Theme",
   "themeSystem": "System",
   "themeLight": "Light",
@@ -2193,6 +2195,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
   "@@locale": "uk",
+  "settingsTitle": "Налаштування",
   "themeTitle": "Тема",
   "themeSystem": "Системна",
   "themeLight": "Світла",

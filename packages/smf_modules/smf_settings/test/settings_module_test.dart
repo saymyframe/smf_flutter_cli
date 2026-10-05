@@ -3,10 +3,12 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 
 import 'support/settings.dart';
@@ -20,8 +22,11 @@ const _look = SettingsInfrastructure(
 
 /// The modules of the tests: flutter_core, which creates the app, go_router,
 /// which routes it, bottom tabs, whose main navigation shows its
-/// destinations, this module, and the contributors of settings: a feature,
-/// a library, and the provider of a role whose template has a setting.
+/// destinations, this module, the contributors of settings, which are a
+/// feature, a library, and the provider of a role whose template has a
+/// setting, gen_l10n, which keeps the texts of the app, for the title of
+/// the screen, and shared_preferences, in which an app with texts remembers
+/// its language.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -30,6 +35,8 @@ const List<SmfModule> _modules = [
   SettingsModule(),
   _look,
   ZoomModule(),
+  GenL10nModule(),
+  SharedPreferencesModule(),
 ];
 
 /// The path of the screen of the module in the app.
@@ -155,6 +162,15 @@ List<String> _labelsOf(ContractResult result) => [
         route.route.destination!.label,
     ];
 
+/// The title of the settings screen of [app], as the app bar of the screen
+/// creates it.
+String _titleOf(RenderedApp app) {
+  final screen = _classOf(_parsed(app, _screen), 'SettingsScreen');
+  final bar = _argument(_returnedBy(screen, 'build'), 'appBar');
+  expect((bar as MethodInvocation).methodName.name, 'AppBar');
+  return _argument(bar, 'title').toSource();
+}
+
 /// The modules that provide [role] in the app of [result], whichever they
 /// are.
 Set<ModuleId> _providersOf(ContractResult result, Role role) => {
@@ -167,7 +183,7 @@ void main() {
   group('SettingsModule', () {
     test(
         'is a feature without variants, which provides the settings screen '
-        'role and requires the router', () {
+        'role, requires the router and uses the localization role', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, const ModuleId('settings'));
@@ -176,7 +192,8 @@ void main() {
       // The kind makes a feature require the router, and so does the role.
       expect(descriptor.requires, isEmpty);
       expect(descriptor.effectiveRequires, {routerRole});
-      expect(descriptor.effectiveUses, isEmpty);
+      // For the title of its screen, in an app with texts.
+      expect(descriptor.effectiveUses, {localizationRole});
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.variants, isNull);
     });
@@ -233,19 +250,23 @@ void main() {
     });
 
     test(
-        'builds the app of the module, and those of the contributors of '
-        'settings with and without the settings screen', () {
+        'builds the app of the module with and without the texts of the app, '
+        'and those of the contributors of settings with and without the '
+        'settings screen', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router',
         'flutter_core',
         'go_router with layout',
         'feed with settings_screen',
         'feed',
+        'settings with localization',
         'settings',
         'look with settings_screen',
         'look',
         'pinch_zoom with settings_screen',
         'pinch_zoom',
+        'gen_l10n',
+        'shared_preferences',
       ]);
     });
 
@@ -298,20 +319,27 @@ void main() {
     });
 
     test(
-        'gets the brick of the screen with its title, the route and its name '
-        'for the role, and nothing else', () {
+        'gets the brick of the screen with its title, the title as a text of '
+        'the module, the route and its name for the role, and nothing else',
+        () {
       final contributions = [
         for (final collected in result.collection!.ofModule(SettingsModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(4));
       final brick = contributions.whereType<BrickContribution>().single;
       expect(brick.bundle.name, 'settings');
       expect(brick.bundle.files.map((file) => file.path), [_screen]);
-      expect(brick.vars, {'title': "'Settings'"});
+      // The title depends on whether the app has texts.
+      expect(brick.vars.keys, ['text_title']);
+      final title = brick.vars['text_title']! as RoleVar;
+      expect(title.role, localizationRole);
+      expect(title.absent, "'Settings'");
+      expect((title.present as Fragment).code, 'context.l10n.settingsTitle');
       expect(contributions.whereType<RoleData<RoutesData>>(), hasLength(1));
       expect(contributions.whereType<RoleData<SettingsData>>(), hasLength(1));
+      expect(contributions.whereType<RoleData<TextsData>>(), hasLength(1));
     });
 
     test('is the app with the router but for the screen and its route', () {
@@ -412,6 +440,82 @@ void main() {
       );
       // No blank line where the entries would be.
       expect(text, contains('children: const [\n        AboutListTile('));
+    });
+  });
+
+  group('the title of the settings screen', () {
+    test(
+        'is a text that the module gives the localization role, in English '
+        'and in Ukrainian', () async {
+      final result =
+          await _rendered(const [SettingsModule.id, GenL10nModule.id]);
+      final input = localizationRole.hookInput(result.hook!);
+
+      // The role has texts of its own too, for its entry of the screen.
+      final title = localizationRole
+          .textsIn(input)
+          .where((text) => text.owner == const ModuleOrigin(SettingsModule.id))
+          .single;
+      expect(title.getter, 'settingsTitle');
+      expect(title.text.en, 'Settings');
+      expect(title.text.translations, {'uk': 'Налаштування'});
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+    });
+
+    test(
+        'is read from the texts of the app by the screen in an app with the '
+        'localization role', () async {
+      final result =
+          await _rendered(const [SettingsModule.id, GenL10nModule.id]);
+      final app = result.app!;
+
+      // No constant: the text depends on the language of the context.
+      expect(_titleOf(app), 'Text(context.l10n.settingsTitle)');
+      // The file of the texts of the app, which the pipeline imports for
+      // the code of the title, next to the library of the widgets. The
+      // imports with a prefix are those of the entries of the screen.
+      expect(
+        [
+          for (final MapEntry(key: uri, value: prefix)
+              in _importsOf(app).entries)
+            if (prefix == null) uri,
+        ],
+        [
+          LocalizationRole.appTexts.importRef
+              .resolveUri(ContractHarness.defaultContext.appName),
+          'package:flutter/material.dart',
+        ],
+      );
+      // The rows stay constants.
+      expect(_rowsOf(app).constKeyword, isNotNull);
+    });
+
+    test(
+        'is its English text, as a constant, in an app without the '
+        'localization role', () async {
+      final result = await _rendered(const [SettingsModule.id]);
+
+      expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(_titleOf(result.app!), "const Text('Settings')");
+      expect(_importsOf(result.app!).keys, ['package:flutter/material.dart']);
+    });
+
+    test('is the label of the destination of the screen too, in English', () {
+      final routes = [
+        for (final contribution
+            in module.contribute(ContractHarness.defaultContext))
+          if (contribution is RoleData<RoutesData>) contribution,
+      ].single;
+      final texts = [
+        for (final contribution
+            in module.contribute(ContractHarness.defaultContext))
+          if (contribution is RoleData<TextsData>) contribution,
+      ].single;
+
+      expect(
+        routes.value.routes.single.destination!.label,
+        texts.value.texts.single.en,
+      );
     });
   });
 
