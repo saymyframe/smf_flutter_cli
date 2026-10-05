@@ -1132,6 +1132,75 @@ void main() {
       expect(plist, contains('<string>en</string>'));
       expect(plist, contains('<string>uk</string>'));
     });
+
+    test(
+        'are in an app whose languages the role alone gives the root: a '
+        'module that gives the root a language of its own is reported, as '
+        'two such modules are in an app without the role', () async {
+      const slovak = _OwnLanguageModule('slovak', 'sk');
+      const czech = _OwnLanguageModule('czech', 'cs');
+      final withLanguages = ContractHarness(
+        ModuleRegistry([...fixtureModules(), slovak, czech]),
+      );
+      Future<ContractResult> check(List<ModuleId> modules) =>
+          withLanguages.check(ContractCase('languages', requested: modules));
+      String conflict(String first, String second, String from) =>
+          'The contributions to the socket app_entry.app_args conflict: '
+          'MergeConflict: "supportedLocales" has conflicting values "$first" '
+          'and "$second" (from $from): the argument takes the items of one '
+          'contributor.';
+
+      // With the role, the module is the one that the issue is reported
+      // to, whether it contributes before the template of the role, as
+      // czech does, or after it.
+      for (final (module, language) in [(czech, 'cs'), (slovak, 'sk')]) {
+        final next = await check([...withRole, module.id]);
+        expect(next.app, isNull, reason: '${module.id}');
+        expect(
+          [for (final issue in next.errors) (issue.message, issue.origin)],
+          [
+            (
+              conflict(
+                '...appLocales',
+                "Locale('$language')",
+                'role:localization and ${module.id}',
+              ),
+              ModuleOrigin(module.id),
+            ),
+          ],
+          reason: '${module.id}',
+        );
+      }
+
+      // Without the role, a module that gives the root its locales, as a
+      // module of an earlier version does, is their one contributor.
+      final alone = await check([FakeRouterModule.id, slovak.id]);
+      expect(alone.errors, isEmpty);
+      expect(
+        AppEntryRole.appArgs
+            .render([
+              for (final collected in alone
+                  .app!.socketOrders[AppEntryRole.appArgs]!.contributions)
+                collected.contribution as SocketContribution,
+            ])
+            .values
+            .single,
+        "supportedLocales: [Locale('sk')],",
+      );
+
+      // Two such modules are two contributors.
+      final two = await check([FakeRouterModule.id, slovak.id, czech.id]);
+      expect(two.app, isNull);
+      expect(
+        [for (final issue in two.errors) (issue.message, issue.origin)],
+        [
+          (
+            conflict("Locale('cs')", "Locale('sk')", 'czech and slovak'),
+            ModuleOrigin(slovak.id),
+          ),
+        ],
+      );
+    });
   });
 
   group('smf create', () {
@@ -1518,4 +1587,37 @@ final class _NamedArguments extends RecursiveAstVisitor<void> {
     }
     super.visitNamedArgument(node);
   }
+}
+
+/// A module that gives the root of the app a supported locale of its own,
+/// as a module of an earlier version of SMF could next to others.
+final class _OwnLanguageModule extends SmfModule {
+  const _OwnLanguageModule(this._id, this._language);
+
+  final String _id;
+
+  /// The code of the language of the locale.
+  final String _language;
+
+  /// The id of the module.
+  ModuleId get id => ModuleId(_id);
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'A language of its own ($_language)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'supportedLocales',
+          Fragment(
+            "Locale('$_language')",
+            imports: const [ImportRef('package:flutter/widgets.dart')],
+          ),
+        ),
+      ];
 }
