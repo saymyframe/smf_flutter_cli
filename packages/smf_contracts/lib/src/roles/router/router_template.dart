@@ -145,13 +145,21 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         _ => const {},
       };
 
-  /// The navigation facade of the app, and the code of its guards, which
-  /// an app without guards has none of.
+  /// The navigation facade of the app, and the code of its guards with the
+  /// note of the role about them in the guide for coding agents, which an
+  /// app without guards has none of.
   @override
   RoleOutput render(RoleHookInput<RoutesData> input) {
     final facade = routerRole.facadeOf(input);
     return RoleOutput(
       vars: {'facade': facade.toDart(), 'guards': _guardsCode(facade)},
+      fragments: [
+        if (facade.guards.isNotEmpty)
+          AppEntryRole.agentSections.entry(
+            routerRole.description,
+            AgentNote.ofRole(_guardsAgentNote),
+          ),
+      ],
     );
   }
 }
@@ -167,4 +175,19 @@ const String _agentNote = '''
   3. the route itself, where the provider of the router declares its routes.
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `${RouterRole.appRouterFile}` is the one router of the app: create no other.
+''';
+
+/// The note of the router role about the guards, in the guide for coding
+/// agents of an app with guards: where they are, how the code of the app
+/// adds one and changes what it allows, that the router navigates when it
+/// does, and how the code keeps the user from coming back to where they
+/// were, as after a sign-out (see [RouteGuard]), whichever module provides
+/// the role.
+///
+/// The note leaves out what the comments of the generated code say, such as
+/// what `redirectOf()` and `guardChanges` are for.
+const String _guardsAgentNote = '''
+- `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`.
+- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
 ''';

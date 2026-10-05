@@ -690,6 +690,43 @@ void main() {
         isEmpty,
       );
     });
+
+    test(
+        'has the guards of the routes in the guide for coding agents of an '
+        'app with guards, in a note of the router role after its other '
+        'note, and nothing of them in the guide of an app without guards',
+        () async {
+      /// Whether each note of the router role in the guide of the app of
+      /// [modules] tells of the guards, in the order the guide has the
+      /// notes.
+      Future<List<bool>> tellsOfGuards(List<ModuleId> modules) async {
+        final result = await harness.check(
+          ContractCase('fixture router', requested: modules),
+        );
+        // No rule fails, such as the one of the paths that the guide names.
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final notes = [
+          for (final (origin, heading, note)
+              in result.app!.entriesOf(AppEntryRole.agentSections))
+            if (origin == const RoleTemplateOrigin(routerRole)) (heading, note),
+        ];
+        for (final (heading, note) in notes) {
+          expect(heading, routerRole.description);
+          expect(note.isOfRole, isTrue);
+        }
+        return [
+          for (final (_, note) in notes)
+            note.text.contains('`${RouterRole.routeGuards}`'),
+        ];
+      }
+
+      // The fixture gates depend on one of the two fixture state managers.
+      expect(await tellsOfGuards(everyFixture()), [false, true]);
+      expect(
+        await tellsOfGuards(everyFixture(stateManager: FakeRiverpodModule.id)),
+        [false],
+      );
+    });
   });
 
   group('the fixtures with a setting', () {

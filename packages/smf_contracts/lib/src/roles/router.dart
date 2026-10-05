@@ -66,8 +66,10 @@ const routerRole = RouterRole._();
 /// [routeGuards], [redirectOf], [guardChanges] and [guardedNavigation] in
 /// `app_router.dart`. The provider asks the guards through them about every
 /// location before it shows it, and tells them of its pages when one of
-/// them changes, as [guardedNavigation] says. An app without guards gets
-/// none of this.
+/// them changes, as [guardedNavigation] says. In the guide for coding
+/// agents of such an app, the template tells where the guards are, how the
+/// code of the app adds one and changes what it allows, and that the router
+/// navigates when it does. An app without guards gets none of this.
 ///
 /// When the role is present, the provider of the [AppEntryRole] builds the
 /// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
