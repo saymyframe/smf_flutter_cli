@@ -207,6 +207,7 @@ void main() {
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
+      'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -347,6 +348,7 @@ void main() {
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
       'home — Start screen with the name of the app',
+      'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(
       run.lines,
@@ -923,6 +925,81 @@ void main() {
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
       contains('  shared_preferences: '),
+    );
+  });
+
+  test(
+      'a run in a terminal offers the onboarding among the features, and '
+      'adds the preferences that it requires without a question; the app '
+      'still starts on the start screen', () async {
+    final run = await _create({
+      'Features': ['home', 'onboarding'],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['None'],
+      'State management': ['None'],
+      'Theme': ['None'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // shared_preferences is the only module that provides the preferences,
+    // which the onboarding requires, so there is nothing to ask.
+    expect(
+      run.asked.map((question) => question.message),
+      isNot(contains(startsWith('Preferences:'))),
+    );
+    expect(
+      run.lines,
+      contains(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which onboarding requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/features/onboarding/onboarding_pages.dart')
+          .readAsStringSync(),
+      allOf(
+        contains("title: 'My App',"),
+        contains("text: 'Welcome! We are glad you are here.',"),
+      ),
+    );
+    // The router asks the guard of the onboarding, which reads what the
+    // start-up restored from the preferences.
+    expect(
+      app.childFile('lib/core/router/app_router.dart').readAsStringSync(),
+      allOf(
+        contains("'onboarding.firstRun',"),
+        contains('allows: guard0.onboardingCompleted(),'),
+        contains('redirectTo: const OnboardingOnboardingLocation(),'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/preferences/app_preferences.dart')
+          .readAsStringSync(),
+      contains('restoreOnboarding,'),
+    );
+    expect(
+      app.childFile('lib/bootstrap.dart').readAsStringSync(),
+      contains('await initPreferences();'),
+    );
+    // The onboarding is a route that cannot start the app: once it is
+    // finished, the app shows its start screen.
+    expect(
+      app
+          .childFile('lib/core/router/app_router_factory.dart')
+          .readAsStringSync(),
+      allOf(
+        contains("initialLocation: '/home',"),
+        contains("path: '/onboarding',"),
+      ),
     );
   });
 

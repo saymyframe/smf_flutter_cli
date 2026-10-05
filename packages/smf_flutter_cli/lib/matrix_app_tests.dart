@@ -8,6 +8,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
@@ -25,6 +26,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
@@ -95,6 +97,43 @@ Future<MatrixAppTests> smfAppTests() async {
             app.hook!.presentRoles.contains(routerRole),
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
+      ),
+      // The onboarding of the module: on its first launch, the app shows
+      // it in place of the screen that it starts on (see
+      // _startScreenFileOf), and Done or Skip saves that it is finished and
+      // shows that screen; an app that finds it finished goes straight
+      // there. The onboarding has its texts in each language of the app,
+      // as the device asks for it (see _onboardingTextsFileOf). The router
+      // leaves the onboarding, whichever module provides it, as the router
+      // role says of the guards of the routes: a test of the router role
+      // too. The mocks finish the onboarding before the app starts, in
+      // memory, and the matrix sets them up for the tests of every module
+      // of the app, which expect the screens that the guard of the
+      // onboarding would keep them from. Its probe goes through the
+      // onboarding on a device, where a first launch finds nothing saved,
+      // unless the onboarding is finished there. The test comes before the
+      // walk of the routes in this list, whose probe then goes through the
+      // routes of an app past its onboarding. The walk goes to the route of
+      // the onboarding last, as it does to every route in the flow of a
+      // guard. By then the onboarding is finished, so its screen starts it
+      // again, and on a device the start check leaves the app in that
+      // state.
+      MatrixAppTest(
+        '$onboarding/onboarding',
+        appliesTo: _has(OnboardingModule.id),
+        generatedFiles: (app, packageName) => {
+          ..._startScreenFileOf(app, packageName),
+          ..._onboardingTextsFileOf(app),
+        },
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/onboarding_mocks.dart',
+          'finishOnboarding',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/onboarding/probe.dart',
+          'probeOnboarding',
+        ),
       ),
       // The last row of the settings screen of the module, which tells
       // what the app is: it opens the about dialog of Flutter with the name
@@ -995,6 +1034,88 @@ $services];
 /// registration.
 List<DiRegistration> _servicesOf(MatrixApp app) =>
     diRole.graphOf(diRole.hookInput(app.hook!)).ordered;
+
+/// The path in an app of what the matrix writes for the tests of the
+/// onboarding module: `startScreen`, the type of the screen that the app
+/// starts on, which the app shows once the onboarding is finished.
+const onboardingStartScreenFile = 'test/onboarding/start_screen.dart';
+
+/// The file at [onboardingStartScreenFile] of [app], an app of the matrix
+/// with the router role, whose package is [packageName]: the screen of the
+/// route that the router role chose to start the app on, or the fallback
+/// start screen of the app entry role when no route of its modules can
+/// start it.
+///
+/// It imports the file of the screen with the prefix `screen`.
+Map<String, String> _startScreenFileOf(MatrixApp app, String packageName) {
+  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
+  final (import, screen) = switch (start?.screen) {
+    final screen? => (screen.import, screen.className),
+    null => (
+        AppEntryRole.fallbackStartScreen.importRef,
+        AppEntryRole.fallbackStartScreen.name,
+      ),
+  };
+  return {
+    onboardingStartScreenFile: '''
+// The screen that the app starts on, which the matrix of SMF writes from
+// the data of the router role of the app for the tests of the onboarding
+// module, first_launch_test.dart and later_launch_test.dart.
+import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the test of the first
+/// launch of the onboarding module: `onboardingTexts`, the texts of the
+/// module ([OnboardingModule.texts]), each by its name, in each language of
+/// the app, by the code of the language. The languages are those of the
+/// localization role of the app ([LocalizationRole.localesIn]), in its
+/// order, and English alone in an app without the role, whose onboarding
+/// has the English texts.
+const onboardingTextsFile = 'test/onboarding/texts.dart';
+
+/// The file at [onboardingTextsFile] of [app], an app of the matrix.
+///
+/// A text of the module without a translation into a language of the app
+/// is the English one there, as the localization role says of the texts of
+/// an app.
+Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in OnboardingModule.texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $name: $shown,');
+    }
+    texts.writeln('  },');
+  }
+  return {
+    onboardingTextsFile: '''
+// The texts of the onboarding in each language of the app, which the
+// matrix of SMF writes from the texts of the onboarding module and the
+// languages of the localization role of the app for the test of the
+// module, first_launch_test.dart.
+
+/// The texts of the onboarding by the code of each language of the app,
+/// the first of which the app uses when the device asks for none of them:
+/// each text by its name in the module. An app without the localization
+/// role has the English texts alone.
+const Map<String, Map<String, String>> onboardingTexts = {
+$texts};
+''',
+  };
+}
 
 /// The name under which the listener of Firebase Analytics logs the
 /// screen that [app] starts on: the full name of the route that the router

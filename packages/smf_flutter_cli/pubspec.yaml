@@ -39,6 +39,7 @@ dependencies:
   smf_go_router: ^0.3.0
   smf_home_flutter: ^0.3.0
   smf_material_theme: ^0.3.0
+  smf_onboarding: ^0.3.0
   smf_pipeline: ^0.3.0
   smf_riverpod: ^0.3.0
   smf_settings: ^0.3.0

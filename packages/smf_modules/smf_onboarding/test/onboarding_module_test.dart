@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
@@ -1528,6 +1529,30 @@ void main() {
       expect(
         _stringsIn(_parsed(app, _status)),
         [OnboardingModule.completedKey],
+      );
+    });
+
+    test(
+        'tells a test of another screen to finish the onboarding before the '
+        'app starts, as the mocks of the app test of the module do', () {
+      final mocks = parseString(
+        content: File('app_tests/onboarding/test/onboarding_mocks.dart')
+            .readAsStringSync(),
+      ).unit;
+
+      expect(_codeOf(agentNote), contains('onboardingStatus.complete()'));
+      final calls = _Calls('complete');
+      _functionOf(mocks, 'finishOnboarding').accept(calls);
+      expect(
+        calls.found.map((call) => call.toSource()),
+        ['onboardingStatus.complete()'],
+      );
+      // The file of the status, which the note names.
+      expect(
+        _importsOf(mocks),
+        contains(
+          'package:{{app_name}}/features/onboarding/onboarding_status.dart',
+        ),
       );
     });
   });
