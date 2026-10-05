@@ -122,18 +122,6 @@ bool _sameBytes(List<int> a, List<int> b) {
   return true;
 }
 
-/// The notes of the guide for coding agents of [app], in the order they
-/// were contributed, each as its contributor, the heading of its section
-/// and the note.
-List<(ContributionOrigin, String, AgentNote)> _agentNotesOf(RenderedApp app) =>
-    [
-      for (final collected
-          in app.socketOrders[AppEntryRole.agentSections]?.contributions ??
-              const <Collected>[])
-        if (collected.contribution case final SocketContribution note)
-          (collected.origin, note.entryKey!, note.entryValue! as AgentNote),
-    ];
-
 /// The inline code of [markdown]: what stands between two backticks.
 Set<String> _codeOf(String markdown) => {
       for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
@@ -164,10 +152,10 @@ void _expectTheAppWithout(
   );
   // The guide has the notes of the app without the preferences, and in the
   // section of the preferences what the role says and what the module adds.
-  final notes = _agentNotesOf(app);
+  final notes = app.entriesOf(AppEntryRole.agentSections);
   expect(
     notes.where((note) => !_preferences.contains(note.$1)),
-    _agentNotesOf(without),
+    without.entriesOf(AppEntryRole.agentSections),
   );
   expect(
     [
@@ -674,7 +662,8 @@ void main() {
           'is in the section of the preferences of the guide, after what '
           'the role says', () {
         final ofRole = [
-          for (final (origin, _, note) in _agentNotesOf(withPreferences))
+          for (final (origin, _, note)
+              in withPreferences.entriesOf(AppEntryRole.agentSections))
             if (origin == const RoleTemplateOrigin(preferencesRole)) note.text,
         ].single;
 
