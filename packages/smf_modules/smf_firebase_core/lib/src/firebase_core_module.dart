@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/bundles/firebase_core_bundle.dart';
+import 'package:smf_firebase_core/src/agents.dart';
 import 'package:smf_firebase_core/src/configure.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 import 'package:smf_firebase_core/src/preflight/firebase_login.dart';
@@ -36,7 +37,9 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// later, and so does a run that lacks what the checks look for, since
 /// flutterfire would fail without it. The modules that depend on this one
 /// may continue the step, as [configureStep]. The README of the app tells
-/// how to configure it again, such as on another machine.
+/// how to configure it again, such as on another machine, and its guide for
+/// coding agents that the options are a placeholder which flutterfire
+/// writes, and that only a person can run it.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
@@ -105,6 +108,7 @@ final class FirebaseCoreModule extends SmfModule {
         readmeHeading,
         readmeSection(['flutterfire', ...configure].join(' ')),
       ),
+      AppEntryRole.agentSections.entry(agentHeading, AgentNote(agentNote)),
     ];
   }
 }

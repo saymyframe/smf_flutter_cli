@@ -545,13 +545,86 @@ void main() {
   group('the router template', () {
     final template = routerRole.template;
 
-    test('contributes its brick', () {
+    test('contributes its brick and its note for coding agents', () {
       final contributions = template.contribute(testContext);
 
-      expect(contributions, hasLength(1));
+      expect(contributions, hasLength(2));
       expect(
-        (contributions.single as BrickContribution).bundle.name,
+        (contributions.first as BrickContribution).bundle.name,
         'router_role',
+      );
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, 'Router');
+      expect(note.entryValue, agentNoteOf(routerRole));
+    });
+
+    test(
+        'names in its note the navigation that its files declare, in an app '
+        'with routes and in one without', () async {
+      for (final data in [_data, const <RoleData<Object>>[]]) {
+        final rendered = await renderTemplate(routerRole, data: data);
+
+        expect(rendered.notes.single.entryValue, agentNoteOf(routerRole));
+        expectNamesOfCode(
+          agentNoteOf(routerRole),
+          {
+            // The facade, and what a location class overrides.
+            RouterRole.navigationFile: [
+              'AppNavigation.nav',
+              'AppNav',
+              'NavLink',
+              'NavLink.go',
+              'NavLink.push',
+              'NavLink.replace',
+              'AppLocation',
+              'AppLocation.routeName',
+              'AppLocation.path',
+              'AppLocation.parent',
+            ],
+            RouterRole.appRouterFile: ['appRouter'],
+          },
+          files: rendered.files,
+        );
+        // AppLocation is sealed, as the note says: a location class is in
+        // its file.
+        expect(
+          declaresSealedClass(
+            rendered.files[RouterRole.navigationFile]!,
+            'AppLocation',
+          ),
+          isTrue,
+        );
+        expect(
+          agentNoteOf(routerRole).text,
+          contains('the sealed `AppLocation`'),
+        );
+      }
+    });
+
+    test(
+        'names in its note the class of the routes of a feature, which '
+        'AppNav returns from a getter with the name of the feature', () async {
+      final rendered = await renderTemplate(routerRole, data: _data);
+      final declared = declarationsOf(
+        rendered.files[RouterRole.navigationFile]!,
+      );
+      final facade = routerRole.facadeOf(inputOf(routerRole, data: _data));
+
+      expect(facade.features, isNotEmpty);
+      for (final feature in facade.features) {
+        // The getter of AppNav, in lowerCamelCase, and the class it returns,
+        // with a method for each route.
+        expect(declared, contains('AppNav.${feature.accessor}'));
+        expect(declared, contains(feature.routesClass));
+        expect(declared, contains('${feature.routesClass}._context'));
+      }
+      expect(declared, contains('AppNav._context'));
+      final note = agentNoteOf(routerRole).text;
+      expect(note, contains('`AppNav` returns that class from a getter'));
+      expect(
+        note,
+        contains('In `context.nav` both names are in lowerCamelCase'),
       );
     });
 

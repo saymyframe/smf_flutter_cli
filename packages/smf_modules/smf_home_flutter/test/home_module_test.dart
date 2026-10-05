@@ -4,6 +4,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_home_flutter/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -220,24 +221,72 @@ void main() {
       );
     });
 
-    test('gets the brick of the screen and the route, and nothing else', () {
+    test(
+        'gets the brick of the screen, the route and the note for coding '
+        'agents, and nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(HomeModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       final brick = contributions.first as BrickContribution;
       expect(brick.bundle.name, 'home');
       expect(brick.bundle.files.map((file) => file.path), [_screen]);
       expect(brick.vars, isEmpty);
       expect(
-        (contributions.last as RoleData<RoutesData>).value.routes.single.name,
+        (contributions[1] as RoleData<RoutesData>).value.routes.single.name,
         'home',
+      );
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, 'Home');
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
+    });
+
+    test(
+        'has a section of its own in the guide for coding agents, which '
+        'names the screen and the route as the app has them', () {
+      const home = ModuleOrigin(HomeModule.id);
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+
+      // The guide of the app with the router, and the section of home.
+      expect(
+        notes.where((note) => note.$1 != home),
+        withRouter.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        notes.where((note) => note.$1 == home),
+        [(home, agentHeading, AgentNote(agentNote))],
+      );
+      expect(
+        app.files[AppEntryRole.agentsFile]!.text,
+        contains('\n## Home\n\n$agentNote'),
+      );
+      // The screen and its route, as the router role has them; the file of
+      // the screen declares its class.
+      final route = _startRouteOf(result)!;
+      final screen = route.route.screen;
+      expect(screen.file, _screen);
+      expect(
+        DartFileIndexer.index(_screen, app.files[_screen]!.text)
+            .declaration(screen.className)
+            ?.kind,
+        DeclarationKind.classType,
+      );
+      expect(
+        agentNote,
+        startsWith(
+          '- `${screen.className}` in `${screen.file}`, the route '
+          '`${route.fullName}` at `${route.fullPath}`, ',
+        ),
       );
     });
 
-    test('is the app with the router but for the screen and its route', () {
+    test(
+        'is the app with the router but for the screen, its route and its '
+        'section in the guide for coding agents', () {
       final router = _providersOf(result, routerRole);
 
       expect(app.files.keys.toSet(), {...withRouter.files.keys, _screen});
@@ -245,7 +294,10 @@ void main() {
       // The pubspec too: home adds no dependency. The route goes into the
       // navigation of the role and into the files of the router.
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
-        if (path == RouterRole.navigationFile) continue;
+        if (path == RouterRole.navigationFile ||
+            path == AppEntryRole.agentsFile) {
+          continue;
+        }
         if (file.owner case ModuleOrigin(:final module)
             when router.contains(module)) {
           continue;

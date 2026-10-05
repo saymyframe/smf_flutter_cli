@@ -92,9 +92,32 @@ final class _LayoutTemplate extends RoleTemplate<NoDsl> {
   const _LayoutTemplate();
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      [BrickContribution(layoutRoleBundle)];
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(layoutRoleBundle),
+        AppEntryRole.agentSections.entry(
+          layoutRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
+      ];
 }
+
+/// The parameters of the shell of the main navigation as a note names them:
+/// each in inline code, with `and` before the last.
+String get _shellParameters {
+  final names = [
+    for (final name in LayoutRole.appShell.namedParameters) '`$name`',
+  ];
+  return '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
+}
+
+/// The note of the layout role in the guide for coding agents: who creates
+/// the shell of the main navigation and what a destination is, whichever
+/// module provides the role.
+final String _agentNote = '''
+- `${LayoutRole.appShell.name}` of `${LayoutRole.appShellFile}` only shows the main navigation around the screen of the selected destination. The router creates it, with its $_shellParameters, and keeps the stack of each destination, so keep these parameters. Without destinations, the router creates no `${LayoutRole.appShell.name}`.
+- A destination is a `${LayoutRole.destination.name}` of `${LayoutRole.destinationFile}`, a label and an icon, for a top-level route that needs no values. The routes below it stay in its stack, and every other top-level route shows over the main navigation.
+- `go()` to a location in the main navigation selects its destination. From a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError`: use `go()`.
+''';
 
 /// A module's implementation of the [LayoutRole].
 ///

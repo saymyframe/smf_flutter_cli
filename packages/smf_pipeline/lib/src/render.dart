@@ -105,6 +105,24 @@ final class RenderedApp {
   /// are not among them.
   final Map<SocketRef, ContributionOrder> socketOrders;
 
+  /// What the contributors gave the keyed [socket], in the order the socket
+  /// got them: the contributor, the key and the value of each entry. Empty
+  /// for a socket that got nothing.
+  ///
+  /// A test reads with it what a module gave a socket whose template
+  /// belongs to a role, such as its note in the guide for coding agents,
+  /// without reading the file that the role renders.
+  List<(ContributionOrigin, String, V)> entriesOf<V extends Object>(
+    SocketRef<KeyedSocket<V>> socket,
+  ) =>
+      [
+        for (final collected
+            in socketOrders[socket]?.contributions ?? const <Collected>[])
+          if (collected.contribution
+              case SocketContribution(:final entryKey?, :final entryValue?))
+            (collected.origin, entryKey, entryValue as V),
+      ];
+
   /// The text of every text file, by path.
   Map<String, String> get texts => {
         for (final file in files.values)

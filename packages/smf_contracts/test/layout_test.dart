@@ -205,4 +205,50 @@ void main() {
     expect(LayoutRole.destination.namedParameters, ['label', 'icon']);
     expect(LayoutRole.destination.constConstructor, isTrue);
   });
+
+  test(
+      'the note of the template for coding agents names the shell and the '
+      'destination of the role, and the navigation of the router', () async {
+    final rendered = await renderTemplate(layoutRole, present: {routerRole});
+    final note = agentNoteOf(layoutRole);
+
+    expect(rendered.notes.single.socket, AppEntryRole.agentSections);
+    expect(rendered.notes.single.entryKey, 'Layout');
+    expect(rendered.notes.single.entryValue, note);
+    expectNamesOfCode(
+      note,
+      {
+        LayoutRole.destinationFile: ['Destination'],
+      },
+      files: rendered.files,
+    );
+    // The navigation of the router role, which the layout requires.
+    expectNamesOfCode(
+      note,
+      {
+        RouterRole.navigationFile: [
+          'NavLink.go',
+          'NavLink.push',
+          'NavLink.replace',
+        ],
+      },
+      files: (await renderTemplate(routerRole)).files,
+    );
+    // Where the router creates the shell is up to its provider: the role
+    // guarantees only the function that creates the router in that file.
+    expect(note.text, isNot(contains(RouterRole.appRouterFactoryFile)));
+    // The shell of the provider, as the role requires it.
+    for (final name in [
+      LayoutRole.appShell.name,
+      ...LayoutRole.appShell.namedParameters,
+    ]) {
+      expect(note.text, contains('`$name`'), reason: name);
+    }
+    expect(
+      note.text,
+      contains(
+        'with its `destinations`, `currentIndex`, `onSelect` and `body`,',
+      ),
+    );
+  });
 }

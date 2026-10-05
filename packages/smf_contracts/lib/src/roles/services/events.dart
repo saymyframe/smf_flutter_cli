@@ -109,4 +109,11 @@ final class _EventsTemplate extends _ServiceTemplate {
 
   @override
   SocketRef<CodeSocket> get implementations => EventsRole.implementations;
+
+  @override
+  String get agentNote => '''
+- An event is a class that extends `AppEvent` of `$file`: `fire()` of `$service` sends it, and `on<T>()` listens to its type.
+- The app has one `$service`, which `$factory()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
+''';
 }

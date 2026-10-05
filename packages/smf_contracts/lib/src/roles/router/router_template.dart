@@ -6,8 +6,13 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
   const _RouterTemplate();
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      [BrickContribution(routerRoleBundle)];
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(routerRoleBundle),
+        AppEntryRole.agentSections.entry(
+          routerRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
+      ];
 
   /// Checks what the module rule `router.routes` cannot see from one module:
   /// data of role templates, the getters of `context.nav` and the location
@@ -150,3 +155,16 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     );
   }
 }
+
+/// The note of the router role in the guide for coding agents: how the code
+/// of an app navigates and where a route is, whichever module provides the
+/// role.
+const String _agentNote = '''
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `${RouterRole.navigationFile}`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `${RouterRole.appRouterFile}` is the one router of the app: create no other.
+''';

@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
+import 'package:smf_bottom_tabs/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -163,22 +164,48 @@ void main() {
       );
     });
 
-    test('gets the brick of the shell, and nothing else', () {
+    test(
+        'gets the brick of the shell and its note for coding agents, and '
+        'nothing else', () {
       final contributions = [
         for (final collected
             in result.collection!.ofModule(BottomTabsModule.id))
           collected.contribution,
       ];
 
-      final brick = contributions.single as BrickContribution;
+      expect(contributions, hasLength(2));
+      final brick = contributions.first as BrickContribution;
       expect(brick.bundle.name, 'bottom_tabs');
       expect(brick.bundle.files.map((file) => file.path), [_shell]);
       expect(brick.vars, isEmpty);
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, layoutRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
     });
 
     test(
-        'is the app without it but for the shell, the destinations and the '
-        'router', () {
+        'tells coding agents of the bar that its shell has, and of the most '
+        'destinations that it takes', () {
+      final index = DartFileIndexer.index(_shell, app.files[_shell]!.text);
+
+      // The bar of the shell, which the shell leaves out with fewer than
+      // two destinations.
+      expect(index.invocationsOf('NavigationBar'), hasLength(1));
+      expect(app.files[_shell]!.text, contains('destinations.length < 2'));
+      expect(agentNote, contains('`NavigationBar`'));
+      expect(agentNote, contains('`${LayoutRole.appShell.name}`'));
+      expect(agentNote, contains('fewer than two'));
+      // As many as the module lets smf create put into the app.
+      expect(BottomTabsModule.maxDestinations, 5);
+      expect(agentNote, contains('Keep to five destinations'));
+    });
+
+    test(
+        'is the app without it but for the shell, the destinations, the '
+        'router and the section of the layout in the guide for coding agents',
+        () {
       expect(
         app.files.keys.toSet(),
         {...without.files.keys, _shell, LayoutRole.destinationFile},
@@ -196,6 +223,7 @@ void main() {
       final router = _providersOf(result, routerRole);
       final ofRouter = <String>[];
       for (final MapEntry(key: path, value: file) in without.files.entries) {
+        if (path == AppEntryRole.agentsFile) continue;
         if (file.owner case ModuleOrigin(:final module)
             when router.contains(module)) {
           if (app.files[path]!.text != file.text) ofRouter.add(path);
@@ -204,6 +232,47 @@ void main() {
         expect(app.files[path]!.bytes, file.bytes, reason: path);
       }
       expect(ofRouter, isNotEmpty);
+      // The guide has the notes of the app without the layout, and those of
+      // the layout under the heading of the role. The router, which builds
+      // the main navigation, may tell of it too.
+      final layout = <ContributionOrigin>{
+        const RoleTemplateOrigin(layoutRole),
+        const ModuleOrigin(BottomTabsModule.id),
+      };
+      bool byRouter(ContributionOrigin origin) => switch (origin) {
+            ModuleOrigin(:final module) => router.contains(module),
+            _ => false,
+          };
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+      expect(
+        notes.where((note) => !layout.contains(note.$1) && !byRouter(note.$1)),
+        without
+            .entriesOf(AppEntryRole.agentSections)
+            .where((note) => !byRouter(note.$1)),
+      );
+      // The template of a role contributes after its providers; the guide
+      // shows what the role says first.
+      expect(
+        [
+          for (final (origin, heading, note) in notes)
+            if (layout.contains(origin)) (origin, heading, note.isOfRole),
+        ],
+        [
+          (
+            const ModuleOrigin(BottomTabsModule.id),
+            layoutRole.description,
+            false,
+          ),
+          (const RoleTemplateOrigin(layoutRole), layoutRole.description, true),
+        ],
+      );
+      expect(
+        [
+          for (final (origin, _, note) in notes)
+            if (origin == const ModuleOrigin(BottomTabsModule.id)) note,
+        ],
+        [AgentNote(agentNote)],
+      );
     });
 
     test(

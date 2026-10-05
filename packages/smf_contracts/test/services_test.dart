@@ -174,6 +174,83 @@ void main() {
       }
     });
 
+    test('name in their notes for coding agents what their files declare',
+        () async {
+      for (final (role, names) in [
+        (
+          eventsRole,
+          [
+            'AppEvent',
+            'CommunicationService',
+            'createCommunicationService',
+            'CommunicationService.fire',
+            'CommunicationService.on',
+          ],
+        ),
+        (
+          analyticsRole,
+          [
+            'AnalyticsService',
+            'createAnalyticsService',
+            '_analyticsServices',
+            // How an entry of the list of the providers looks.
+            '_createAlone',
+          ],
+        ),
+        (
+          crashReportingRole,
+          [
+            'CrashReporter',
+            'createCrashReporter',
+            '_crashReporters',
+            '_createAlone',
+            'installCrashReporting',
+            'CrashReporter.recordError',
+          ],
+        ),
+      ]) {
+        final rendered =
+            await renderTemplate(role, data: [_data(role, 'Console')]);
+        final note = agentNoteOf(role);
+        final file = role.interface.files.single;
+
+        expect(rendered.notes.single.entryKey, role.description);
+        expect(rendered.notes.single.entryValue, note, reason: role.id);
+        expectNamesOfCode(note, {file: names}, files: rendered.files);
+        // A provider that starts asynchronously goes into the function of
+        // the role that bootstrap() awaits, which the file has with one.
+        if (role != eventsRole) {
+          final init =
+              role == analyticsRole ? 'initAnalytics' : 'initCrashReporting';
+          expect(declarationsOf(rendered.files[file]!), isNot(contains(init)));
+          final withAsync = await renderTemplate(
+            role,
+            data: [
+              _data(role, 'Console'),
+              _data(role, 'Delayed', async: true),
+            ],
+          );
+          expectNamesOfCode(
+            note,
+            {
+              file: [init],
+            },
+            files: withAsync.files,
+          );
+          expect(
+            declarationsOf(withAsync.files[file]!),
+            contains('_startAlone'),
+          );
+        }
+        // The file of the service, as the role names it.
+        expect(
+          note.text,
+          contains('`${role.interface.files.single}`'),
+          reason: role.id,
+        );
+      }
+    });
+
     test('report the problems of the implementations', () {
       final issues = analyticsRole.template.validate(
         inputOf(
