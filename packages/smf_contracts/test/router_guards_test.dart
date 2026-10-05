@@ -112,6 +112,13 @@ final List<RoleData<Object>> _guardedData = [
   dataOf(routerRole, _accountRoutes, module: 'account'),
 ];
 
+/// The routes of an app with one guard: a feature without one, which can
+/// start the app, and a feature with a guard.
+final List<RoleData<Object>> _oneGuardData = [
+  ..._data,
+  dataOf(routerRole, _accountRoutes, module: 'account'),
+];
+
 /// The routes of an app whose two guards show one target, so that both
 /// have one flow: the first route of `intro` with its child.
 final List<RoleData<Object>> _sharedTargetData = [
@@ -652,6 +659,85 @@ void main() {
       ]) {
         expect(router, isNot(contains(name)), reason: name);
       }
+      // Nor does the guide for coding agents tell of what the app lacks:
+      // it has the note of the role alone.
+      expect(rendered.notes.single.entryValue, agentNoteOf(routerRole));
+    });
+
+    test(
+        'tells coding agents about the guards in an app with guards, be it '
+        'one guard or several, after the note of the role, with the names '
+        'that its files declare there', () async {
+      const socket = AppEntryRole.agentSections;
+      final notes = <AgentNote>[];
+      for (final (guards, data) in [(1, _oneGuardData), (3, _guardedData)]) {
+        final reason = 'The number of the guards of the app: $guards';
+        expect(
+          routerRole.facadeOf(inputOf(routerRole, data: data)).guards,
+          hasLength(guards),
+        );
+        final rendered = await renderTemplate(routerRole, data: data);
+
+        expect(rendered.notes, hasLength(2), reason: reason);
+        expect(rendered.notes.first.entryValue, agentNoteOf(routerRole));
+        final entry = rendered.notes.last;
+        expect(entry.socket, socket);
+        expect(entry.entryKey, routerRole.description);
+        expect(socket.problemsWith(entry), isEmpty);
+        final note = entry.entryValue! as AgentNote;
+        notes.add(note);
+        // What the role guarantees, whichever module provides it.
+        expect(note.isOfRole, isTrue);
+        expect(note.text, contains('`${RouterRole.appRouterFile}`'));
+        expectNamesOfCode(
+          note,
+          {
+            RouterRole.appRouterFile: [
+              'RouteGuard',
+              'RouteGuard.allows',
+              'RouteGuard.redirectTo',
+              RouterRole.routeGuards,
+            ],
+            // What the code of the app calls to go to the target of a guard.
+            RouterRole.navigationFile: ['NavLink.go'],
+          },
+          files: rendered.files,
+        );
+
+        // The section has the two notes of the role, in this order, and
+        // names only files that the app entry and the role guarantee.
+        final section = socket.render(rendered.notes)[socket.tag]!;
+        expect(
+          section,
+          contains('${agentNoteOf(routerRole).text}\n\n${note.text}'),
+        );
+        final issues = appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: {AppEntryRole.agentsFile: '# AGENTS.md\n$section\n'},
+            owners: {
+              for (final role in <Role>[appEntryRole, routerRole]) ...{
+                for (final path in role.interface.files)
+                  path: RoleTemplateOrigin(role),
+                for (final symbol in role.interface.symbols)
+                  symbol.path: RoleTemplateOrigin(role),
+              },
+            },
+          ),
+        );
+        expect(
+          [for (final issue in issues) issue.message],
+          isEmpty,
+          reason: reason,
+        );
+      }
+      // The note tells of the guards as such, not of those of one app.
+      expect(notes.toSet(), hasLength(1));
     });
 
     test(
