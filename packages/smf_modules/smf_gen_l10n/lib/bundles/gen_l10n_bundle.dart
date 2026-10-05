@@ -1,0 +1,28 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final genL10nBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "l10n.yaml",
+      "data":
+          "YXJiLWRpcjogbGliL2wxMG4KdGVtcGxhdGUtYXJiLWZpbGU6IGFwcF9lbi5hcmIKb3V0cHV0LWxvY2FsaXphdGlvbi1maWxlOiBhcHBfbG9jYWxpemF0aW9ucy5kYXJ0Cm51bGxhYmxlLWdldHRlcjogZmFsc2UKdXNlLWVzY2FwaW5nOiBmYWxzZQo=",
+      "type": "text"
+    },
+    {
+      "path": "lib/core/l10n/l10n.dart",
+      "data":
+          "aW1wb3J0ICdwYWNrYWdlOmZsdXR0ZXIvd2lkZ2V0cy5kYXJ0JzsKCmltcG9ydCAnLi4vLi4vbDEwbi9hcHBfbG9jYWxpemF0aW9ucy5kYXJ0JzsKCi8vLyBUaGUgdGV4dHMgb2YgdGhlIGFwcCBpbiB0aGUgbGFuZ3VhZ2Ugb2YgYSBjb250ZXh0OiBgY29udGV4dC5sMTBuYC4KZXh0ZW5zaW9uIEFwcFRleHRzIG9uIEJ1aWxkQ29udGV4dCB7CiAgLy8vIFRoZSB0ZXh0cyBvZiB0aGUgYXBwIGluIHRoZSBsYW5ndWFnZSBvZiB0aGlzIGNvbnRleHQsIHdoaWNoIGlzIGJlbG93CiAgLy8vIHRoZSByb290IG9mIHRoZSBhcHAuCiAgLy8vCiAgLy8vIGdlbi1sMTBuIG9mIEZsdXR0ZXIgZ2VuZXJhdGVzIFtBcHBMb2NhbGl6YXRpb25zXSBmcm9tIHRoZSBBUkIgZmlsZXMgaW4KICAvLy8gYGxpYi9sMTBuYC4gYGZsdXR0ZXIgcHViIGdldGAgcnVucyBpdCB3aGVuIG9uZSBvZiB0aG9zZSBmaWxlcyBjaGFuZ2VkLAogIC8vLyBhbmQgYGZsdXR0ZXIgZ2VuLWwxMG5gIHJ1bnMgaXQgZm9yIGEgbmV3IGZpbGUgdG9vLgogIEFwcExvY2FsaXphdGlvbnMgZ2V0IGwxMG4gPT4gQXBwTG9jYWxpemF0aW9ucy5vZih0aGlzKTsKfQo=",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "gen_l10n",
+  "description":
+      "The localization of an SMF app with gen-l10n of Flutter: its options and the texts of the app in the language of a context.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

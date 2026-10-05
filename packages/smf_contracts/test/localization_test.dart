@@ -1495,7 +1495,9 @@ void main() {
           flutterLocalizations,
         ],
       );
-      expect(sockets, hasLength(6));
+      // The wrapper, the arguments of the root, the section of the README
+      // and the note for coding agents.
+      expect(sockets, hasLength(8));
 
       final package = contributions.whereType<PubspecDependency>().single;
       expect(package.package, 'flutter_localizations');
@@ -1565,6 +1567,150 @@ void main() {
           .singleWhere((socket) => socket.socket == AppEntryRole.infoPlist);
       expect(entry.entryKey, 'CFBundleLocalizations');
       expect(entry.entryValue, const PlistStringArray(['uk', 'en']));
+    });
+
+    test(
+        'tells coding agents how code reads a text, where the languages of '
+        'the app are, how code changes the language and what a new language '
+        'needs, in a note of the role that names only what every app with '
+        'the role has', () async {
+      final contributions = localizationRole.template.contribute(testContext);
+      final rendered = await renderTemplate(
+        localizationRole,
+        data: data,
+        choice: const LocalizationChoice(['en', 'uk']),
+      );
+      final note = agentNoteOf(localizationRole);
+
+      // The section of the role, whichever module provides the role.
+      expect(rendered.notes.single.socket, AppEntryRole.agentSections);
+      expect(rendered.notes.single.entryKey, localizationRole.description);
+      expect(rendered.notes.single.entryValue, note);
+      // What it names of the file of the languages, that file declares.
+      expectNamesOfCode(
+        note,
+        {
+          LocalizationRole.appLocaleFile: ['appLocales', 'appLocale'],
+        },
+        files: rendered.files,
+      );
+      final spans = codeSpansOf(note.text);
+      // The files that it names: the one of the template, and the one that
+      // every provider generates.
+      expect(
+        {
+          for (final span in spans)
+            if (span.contains('/')) span,
+        },
+        {LocalizationRole.textsFile, LocalizationRole.appLocaleFile},
+      );
+      expect(
+        spans,
+        containsAll([
+          'context.l10n.<name>',
+          'appLocale.value',
+          'locale',
+          'supportedLocales',
+          'localizationsDelegates',
+          'CFBundleLocalizations',
+        ]),
+      );
+
+      // What it names of the texts is the extension that the role requires
+      // of its provider.
+      expect(LocalizationRole.appTexts.path, LocalizationRole.textsFile);
+      expect(LocalizationRole.appTexts.on, 'BuildContext');
+      expect(LocalizationRole.appTexts.getters, ['l10n']);
+      // The arguments of the root that it names are those that the
+      // template gives the root.
+      expect(
+        {
+          for (final socket in contributions.whereType<SocketContribution>())
+            if (socket.socket == AppEntryRole.appArgs) socket.argName,
+        },
+        {'locale', 'supportedLocales', 'localizationsDelegates'},
+      );
+      // The language that the user chose is a value that code sets, and
+      // the key of the Info.plist is the one that the template writes.
+      final unit = parseString(
+        content: rendered.files[LocalizationRole.appLocaleFile]!,
+      ).unit;
+      expect(
+        {
+          for (final declaration
+              in unit.declarations.whereType<TopLevelVariableDeclaration>())
+            for (final variable in declaration.variables.variables)
+              variable.name.lexeme: variable.initializer!.toSource(),
+        },
+        {
+          'appLocales': "<Locale>[Locale('en'), Locale('uk')]",
+          'appLocale': 'ValueNotifier<Locale?>(null)',
+        },
+      );
+      expect(
+        rendered.elsewhere
+            .singleWhere((socket) => socket.socket == AppEntryRole.infoPlist)
+            .entryKey,
+        'CFBundleLocalizations',
+      );
+      // The note gives the key and no path of its file, which the provider
+      // of the app entry has: the interface of the app entry role, which
+      // the paths of a note of a role are checked against, has no native
+      // file.
+      expect(note.text, isNot(contains(AppEntryRole.infoPlistFile)));
+    });
+
+    test(
+        'tells in the README of the app where its languages are, and each '
+        'place that a new language goes into', () async {
+      final section = localizationRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .singleWhere(
+            (socket) => socket.socket == AppEntryRole.readmeSections,
+          );
+      final text = section.entryValue! as String;
+
+      expect(LocalizationRole.readmeHeading, 'Languages');
+      expect(section.entryKey, LocalizationRole.readmeHeading);
+      expect(section.when, isEmpty);
+
+      // What the template writes differently for an app with one more
+      // language: the places that a new language goes into.
+      Future<RenderedTemplate> appIn(List<String> languages) => renderTemplate(
+            localizationRole,
+            data: data,
+            choice: LocalizationChoice(languages),
+          );
+      final english = await appIn(['en']);
+      final german = await appIn(['en', 'de']);
+      final files = [
+        for (final MapEntry(key: path, value: code) in german.files.entries)
+          if (english.files[path] != code) path,
+      ];
+      final entries = [
+        for (final (index, entry) in german.elsewhere.indexed)
+          if (entry.entryValue != english.elsewhere[index].entryValue) entry,
+      ];
+      expect(files, [LocalizationRole.appLocaleFile]);
+      expect(
+        german.files[LocalizationRole.appLocaleFile],
+        contains("const appLocales = <Locale>[Locale('en'), Locale('de')];"),
+      );
+      expect(entries.single.socket, AppEntryRole.infoPlist);
+      expect(entries.single.entryValue, const PlistStringArray(['en', 'de']));
+
+      // The section names each of them, and what goes there.
+      for (final named in [
+        LocalizationRole.appLocaleFile,
+        'appLocales',
+        "Locale('de')",
+        AppEntryRole.infoPlistFile,
+        entries.single.entryKey!,
+        'de',
+      ]) {
+        expect(text, contains('`$named`'), reason: named);
+      }
     });
   });
 }

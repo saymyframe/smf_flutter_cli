@@ -182,6 +182,7 @@ void main() {
     const home = 'packages/smf_modules/smf_home_flutter/test/home_test.dart';
     const router = 'packages/smf_modules/smf_go_router/test/support/app.dart';
     const tabs = 'packages/smf_modules/smf_bottom_tabs/test/tabs_test.dart';
+    const texts = 'packages/smf_modules/smf_gen_l10n/test/texts_test.dart';
     expect(
       _names({
         home: 'const factory = RouterRole.appRouterFactoryFile;\n'
@@ -205,6 +206,8 @@ void main() {
             'const file = DiRole.dependenciesFile;\n',
         tabs: 'const file = LayoutRole.appShellFile;\n'
             'const router = RouterRole.appRouterFactoryFile;\n',
+        texts: 'const file = LocalizationRole.textsFile;\n'
+            'const shell = LayoutRole.appShellFile;\n',
         // Code of modules, and the tests of other packages.
         'packages/smf_modules/smf_home_flutter/lib/home.dart':
             'const factory = RouterRole.appRouterFactoryFile;\n',
@@ -222,6 +225,7 @@ void main() {
         '$home:11: LocalizationRole.textsFile',
         '$router:2: LayoutRole.appShellFile',
         '$tabs:2: RouterRole.appRouterFactoryFile',
+        '$texts:2: LayoutRole.appShellFile',
       ],
     );
   });

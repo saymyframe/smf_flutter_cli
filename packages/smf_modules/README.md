@@ -10,6 +10,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_home_flutter` | `home`, a start screen |
 | `smf_settings` | `settings`, a settings screen |
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
+| `smf_gen_l10n` | `gen_l10n`, localization with gen-l10n of Flutter |
 | `smf_get_it` | `get_it`, dependency injection |
 | `smf_event_bus` | `event_bus`, events |
 | `smf_shared_preferences` | `shared_preferences`, the settings that the app remembers |

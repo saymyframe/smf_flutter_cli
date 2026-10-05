@@ -34,6 +34,7 @@ dependencies:
   smf_firebase_core: ^0.3.0
   smf_firebase_crashlytics: ^0.3.0
   smf_flutter_core: ^0.3.0
+  smf_gen_l10n: ^0.3.0
   smf_get_it: ^0.3.0
   smf_go_router: ^0.3.0
   smf_home_flutter: ^0.3.0

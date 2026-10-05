@@ -236,6 +236,12 @@ const _lasting = [
     'smf_bottom_tabs provides the layout role, and its tests check its file.',
   ),
   _Exception(
+    ['packages/smf_modules/smf_gen_l10n/test/'],
+    {'LocalizationRole.textsFile'},
+    'smf_gen_l10n provides the localization role, and its tests check its '
+    'file.',
+  ),
+  _Exception(
     ['packages/smf_modules/smf_flutter_core/test/'],
     {'AppEntryRole.bootstrapFile', 'AppEntryRole.mainFile', 'lib/app.dart'},
     'smf_flutter_core provides the app entry role, and its tests check its '

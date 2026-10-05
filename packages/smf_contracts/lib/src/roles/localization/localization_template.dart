@@ -14,9 +14,36 @@ const _flutterDelegates = [
   'GlobalCupertinoLocalizations.delegate',
 ];
 
+/// The key of the `Info.plist` of the iOS app with the languages of the
+/// app.
+const _plistLanguages = 'CFBundleLocalizations';
+
+/// The section of the role in the README of the app: where the languages of
+/// the app are, and each place that a new language goes into, whichever
+/// module provides the role.
+const _readmeSection = '''
+The app is in the languages of `appLocales` in `${LocalizationRole.appLocaleFile}`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`.
+2. Add `de` to `$_plistLanguages` in `${AppEntryRole.infoPlistFile}`, which tells iOS the languages of the app.
+''';
+
+/// The note of the localization role in the guide for coding agents: how
+/// code shows a text, where the languages of the app are, how code changes
+/// the language, and what a new language needs, whichever module provides
+/// the role.
+const _agentNote = '''
+- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `appLocales` in `${LocalizationRole.appLocaleFile}` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
+- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Set `appLocale.value` to one of `appLocales`, or to `null`, and the root of the app rebuilds in that language. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `$_plistLanguages` in the Info.plist of the iOS app, and into the texts of the app.
+''';
+
 /// The template of the [LocalizationRole]: the languages of the app, the
-/// language that the user chose, and what the root of the app needs to
-/// follow it.
+/// language that the user chose, what the root of the app needs to follow
+/// it, and the note of the role for coding agents.
 final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   const _LocalizationTemplate();
 
@@ -48,6 +75,14 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
             'localizationsDelegates',
             Fragment(delegate, imports: const [_flutterLocalizations]),
           ),
+        AppEntryRole.readmeSections.entry(
+          LocalizationRole.readmeHeading,
+          _readmeSection,
+        ),
+        AppEntryRole.agentSections.entry(
+          localizationRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
       ];
 
   /// Checks what the module rule `localization.texts` cannot see from one
@@ -234,7 +269,7 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
       fragments: [
         // iOS shows the app in the languages that its bundle names.
         AppEntryRole.infoPlist.entry(
-          'CFBundleLocalizations',
+          _plistLanguages,
           PlistStringArray(locales),
         ),
       ],
