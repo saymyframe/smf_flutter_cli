@@ -37,16 +37,23 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role and of the settings screen role with every '
-      'provider of each, which they tell apart by the roles of the app only',
-      () {
+      'of the events role, of the preferences role and of the settings '
+      'screen role with every provider of each, which they tell apart by '
+      'the roles of the app only', () {
     expect(
       appTests.testedRoles,
-      containsAll([routerRole, diRole, eventsRole, settingsScreenRole]),
+      containsAll([
+        routerRole,
+        diRole,
+        eventsRole,
+        preferencesRole,
+        settingsScreenRole,
+      ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('preferences_role').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
 
@@ -245,69 +252,79 @@ void main() {
 
   test(
       'the test of the preferences role applies to the apps with the role, '
-      'whichever module provides it, or to those of them that it is given, '
-      'and has a probe for the start check', () async {
-    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
-        MatrixApp(
-          'store',
-          const [ModuleId('store')],
-          everyModuleWith: everyModuleWith,
-          hook: RoleHookRequest(
-            data: const [],
-            presentRoles: {role},
-            context: ContractHarness.defaultContext,
-          ),
-        );
-    final test = await preferencesRoleAppTest();
+      'whichever module provides it, or to those of them that it is given',
+      () async {
+    bool hasPreferences(MatrixApp app) =>
+        app.hook!.presentRoles.contains(preferencesRole);
 
-    expect(p.basename(test.directory), 'preferences_role');
-    expect(test.roles, {preferencesRole});
-    expect(test.appliesTo(appWith(preferencesRole)), isTrue);
-    expect(test.appliesTo(appWith(eventsRole)), isFalse);
-    // No module of the CLI provides the role, so its matrix does not run
-    // the test: that of the fixtures does, with their provider.
-    expect(apps.where(test.appliesTo), isEmpty);
     expect(
-      [for (final test in appTests.tests) p.basename(test.directory)],
-      isNot(contains('preferences_role')),
+      [
+        for (final app in apps)
+          if (named('preferences_role').appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (hasPreferences(app)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (named('preferences_role').appliesTo(app)) app.name,
+      ],
+      [
+        'shared_preferences with di',
+        'shared_preferences',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
     );
 
     // As the fixtures take it, only in the apps with every module.
     final everyModule = await preferencesRoleAppTest(
       among: (app) => app.everyModuleWith != null,
     );
-    expect(everyModule.appliesTo(appWith(preferencesRole)), isFalse);
-    expect(
-      everyModule.appliesTo(
-        appWith(preferencesRole, everyModuleWith: const []),
-      ),
-      isTrue,
-    );
-    expect(
-      everyModule.appliesTo(appWith(eventsRole, everyModuleWith: const [])),
-      isFalse,
-    );
-
-    // Its probe is a function of a file of the test that takes the one that
-    // waits until the screen settles, as the start check calls it.
-    final probe = test.startProbe!;
-    expect(probe.path, 'integration_test/preferences_role/probe.dart');
-    final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
-    final (:index, :errors) =
-        DartFileIndexer.parse(probe.path, file.readAsStringSync());
-    expect(errors, isEmpty);
-    final function = index.declarations
-        .singleWhere((declaration) => declaration.name == probe.function);
-    expect(function.name, 'probePreferences');
-    expect(function.kind, DeclarationKind.function);
-    expect(function.type, 'Future<List<String>>');
     expect(
       [
-        for (final parameter in function.parameters)
-          '${parameter.kind.name} ${parameter.type}',
+        for (final app in apps)
+          if (everyModule.appliesTo(app)) app.name,
       ],
-      ['requiredPositional Future<void> Function()'],
+      ['every module (bloc)', 'every module (riverpod)'],
     );
+  });
+
+  test(
+      'the test of shared_preferences applies to the apps with the module, '
+      'whose start-up opens the preferences, and declares the mocks of the '
+      'platform side of the package for the tests of every module of those '
+      'apps', () {
+    final test = named('shared_preferences');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('shared_preferences')))
+            app.name,
+      ],
+    );
+    expect(test.roles, isEmpty);
+    expect(test.devDependencies, ['shared_preferences_platform_interface']);
+    expect(test.mocks!.path, 'test/shared_preferences_mocks.dart');
+    expect(test.mocks!.function, 'mockSharedPreferences');
+    final (:index, :errors) = DartFileIndexer.parse(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
   });
 
   test(
@@ -324,6 +341,7 @@ void main() {
       ],
       [
         'event_bus with di',
+        'shared_preferences with di',
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
@@ -494,10 +512,11 @@ void main() {
   });
 
   test(
-      'the start check runs the probes of the tests of the roles that go '
-      'into an app with it, the walk of the routes and the services of the '
-      'DI role, each a function of a file of its tests that takes the one '
-      'that waits until the screen settles', () async {
+      'the start check runs the probes of the tests that go into an app '
+      'with it, the walk of the routes, the services of the DI role, the '
+      'preferences of the role and those of shared_preferences once they '
+      'are opened again, each a function of a file of its tests that takes '
+      'the one that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -506,7 +525,11 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'shared_preferences': 'integration_test/shared_preferences/probe.dart '
+            'probeSharedPreferences',
         'di_role': 'integration_test/di_role/probe.dart probeServices',
+        'preferences_role':
+            'integration_test/preferences_role/probe.dart probePreferences',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
       },
     );
@@ -531,12 +554,18 @@ void main() {
     }
 
     // With the start check, an app with every module gets the probes of
-    // both, which the list of the probes names.
+    // all of them, which the list of the probes names.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
-      ['start', 'di_role', 'router_walk'],
+      [
+        'start',
+        'shared_preferences',
+        'di_role',
+        'preferences_role',
+        'router_walk',
+      ],
     );
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
     addTearDown(() => directory.deleteSync(recursive: true));
@@ -566,12 +595,19 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: di_role/probe.dart',
-        'probe1: router_walk/walk.dart',
+        'probe0: shared_preferences/probe.dart',
+        'probe1: di_role/probe.dart',
+        'probe2: preferences_role/probe.dart',
+        'probe3: router_walk/walk.dart',
       ],
     );
-    expect(list, contains("('di_role', probe0.probeServices),"));
-    expect(list, contains("('router_walk', probe1.probeRoutes),"));
+    expect(
+      list,
+      contains("('shared_preferences', probe0.probeSharedPreferences),"),
+    );
+    expect(list, contains("('di_role', probe1.probeServices),"));
+    expect(list, contains("('preferences_role', probe2.probePreferences),"));
+    expect(list, contains("('router_walk', probe3.probeRoutes),"));
   });
 
   test(

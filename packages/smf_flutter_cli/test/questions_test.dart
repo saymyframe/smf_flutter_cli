@@ -183,6 +183,7 @@ void main() {
       'State management': ['bloc'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -196,6 +197,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -259,6 +261,7 @@ void main() {
       'State management': ['riverpod'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -272,6 +275,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -311,6 +315,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -376,6 +381,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -415,6 +421,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -428,6 +435,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -466,6 +474,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -480,6 +489,7 @@ void main() {
       'State management: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
+      'Preferences: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
     ]);
@@ -508,6 +518,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -566,6 +577,7 @@ void main() {
       'State management': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
+      'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
     });
@@ -615,6 +627,79 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the preferences after '
+      'the events, and offers shared_preferences, which the start-up opens '
+      'and the DI container registers', () async {
+    final run = await _create({
+      'Features': [],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['None'],
+      'Router': ['None'],
+      'State management': ['None'],
+      'Dependency injection': ['get_it'],
+      'Events': ['None'],
+      'Preferences': ['shared_preferences'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final preferences = messages.indexOf(
+      'Preferences: which module provides it?',
+    );
+    // The roles come in the order of the list of modules, and
+    // shared_preferences is after event_bus and before the modules of
+    // Firebase.
+    expect(
+      preferences,
+      greaterThan(messages.indexOf('Events: which module provides it?')),
+    );
+    expect(
+      preferences,
+      lessThan(messages.indexOf('Crash reporting: which module provides it?')),
+    );
+    expect(run.asked[preferences].shown, [
+      'shared_preferences — Preferences with shared_preferences',
+      'None',
+    ]);
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/preferences/app_preferences.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('abstract interface class AppPreferences'),
+        contains('await impl0.openSharedAppPreferences()'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/preferences/shared_app_preferences.dart')
+          .readAsStringSync(),
+      contains('SharedPreferencesWithCache.create('),
+    );
+    // The start-up opens the preferences before it fills the container.
+    final bootstrap = app.childFile('lib/bootstrap.dart').readAsStringSync();
+    expect(
+      bootstrap.indexOf('await initPreferences();'),
+      inInclusiveRange(0, bootstrap.indexOf('await registerDependencies();')),
+    );
+    expect(
+      app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
+      allOf(
+        contains('.registerLazySingleton<'),
+        contains('.createAppPreferences()'),
+      ),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  shared_preferences: '), contains('  get_it: ')),
+    );
+  });
+
+  test(
       'a run in a terminal asks for the infrastructure after the features, '
       'and offers Firebase, which a run that skips external setup leaves for '
       'later', () async {
@@ -628,6 +713,7 @@ void main() {
         'State management': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
       },
@@ -690,6 +776,7 @@ void main() {
         'State management': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
       },
@@ -793,6 +880,7 @@ void main() {
         'State management': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
       },
@@ -890,6 +978,7 @@ void main() {
         'State management': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
       },

@@ -60,6 +60,11 @@ const preferencesRole = PreferencesRole._();
 ///
 /// The provider contributes its implementation as a [RoleImplementation],
 /// created with the app or asynchronously.
+///
+/// In the guide for coding agents of the app, the template tells in the
+/// section of the role what the preferences are for, what never goes into
+/// them, how code remembers a setting, and that code does not call the
+/// functions of the role.
 final class PreferencesRole extends Role<RoleImplementation> {
   const PreferencesRole._();
 
@@ -224,6 +229,25 @@ final class _PreferencesTemplate extends _ServiceTemplate {
 
   @override
   SocketRef<CodeSocket> get implementations => PreferencesRole.implementations;
+
+  /// The note of the role in the guide for coding agents: what the
+  /// preferences are for, what never goes into them, and how the code of an
+  /// app gets them, whichever module provides the role.
+  String get agentNote => '''
+- `$service` in `$file` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `$service` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- Do not call `$factory()` or `$initFunction()`. `${AppEntryRole.bootstrap.name}()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences.
+''';
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        ...super.contribute(context),
+        AppEntryRole.agentSections.entry(
+          role.description,
+          AgentNote.ofRole(agentNote),
+        ),
+      ];
 
   /// `bootstrap()` always awaits `initPreferences()`, which also calls the
   /// restorers, whether the implementation is created asynchronously or

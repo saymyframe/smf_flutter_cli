@@ -11,6 +11,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
 /// The modules that `smf create` offers.
 ///
@@ -30,6 +31,7 @@ const List<SmfModule> smfModules = [
   BottomTabsModule(),
   GetItModule(),
   EventBusModule(),
+  SharedPreferencesModule(),
   FirebaseCoreModule(),
   FirebaseCrashlyticsModule(),
   FirebaseAnalyticsModule(),

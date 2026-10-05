@@ -934,15 +934,19 @@ jobs:
       # refers to itself. The ids of the app and the build phase that
       # flutterfire adds to its Xcode project download nothing, so the jobs
       # whose apps have the same plugins share a cache, and the tool writes
-      # no file for an app without plugins with iOS code, such as the app of
-      # the start check without Firebase, which then neither restores nor
-      # saves a cache. Every job that builds for iOS restores the cache of
-      # its app, or else the newest of its app from an earlier week, or else
-      # the newest of any app, and saves the cache of its app as for Gradle:
-      # when it did not find it and its build added more than
+      # no file for an app without plugins with iOS code, which then neither
+      # restores nor saves a cache. Every job that builds for iOS restores
+      # the cache of its app, or else the newest of its app from an earlier
+      # week, or else the newest of any app, and saves the cache of its app
+      # as for Gradle: when it did not find it and its build added more than
       # NATIVE_CACHE_SAVE_ABOVE_MB, only in the runs on main, of pushes and
       # of the nightly run with the latest Flutter (the input
-      # save_swiftpm_cache).
+      # save_swiftpm_cache). The tool lists every plugin with iOS code,
+      # whether its Swift package names a remote package or not. So the apps
+      # that CI starts without Firebase, whose only such plugin,
+      # shared_preferences_foundation, downloads nothing, have a key too:
+      # their builds add nothing to save under it, and each of their jobs
+      # restores the newest cache of any app, which its build does not use.
       - name: Find what the app builds with for iOS
         run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/ios" build/native_build/ios.txt
 

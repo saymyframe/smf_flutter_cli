@@ -12,6 +12,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
 | `smf_get_it` | `get_it`, dependency injection |
 | `smf_event_bus` | `event_bus`, events |
+| `smf_shared_preferences` | `shared_preferences`, the settings that the app remembers |
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
