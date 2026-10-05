@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_event_bus/bundles/event_bus_bundle.dart';
+import 'package:smf_event_bus/src/agents.dart';
 
 /// The module that delivers the events of the app with the event_bus
 /// package, and so provides the events role.
@@ -14,6 +15,9 @@ import 'package:smf_event_bus/bundles/event_bus_bundle.dart';
 /// The service is created on first use, without waiting, so the app starts
 /// as it would without it. When the app has a DI container, the role
 /// registers the service in it.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// events which events a listener gets with event_bus, and when.
 final class EventBusModule extends SmfModule {
   /// Creates the module.
   const EventBusModule();
@@ -45,6 +49,10 @@ final class EventBusModule extends SmfModule {
               import: _file,
             ),
           ),
+        ),
+        AppEntryRole.agentSections.entry(
+          eventsRole.description,
+          AgentNote(agentNote),
         ),
       ];
 }

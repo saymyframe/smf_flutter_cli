@@ -3,6 +3,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_riverpod/src/agents.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -225,22 +226,65 @@ void main() {
     });
 
     test(
-        'gets flutter_riverpod and the ProviderScope from it, and nothing '
-        'else', () {
+        'gets flutter_riverpod, the ProviderScope and its note for coding '
+        'agents from it, and nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(RiverpodModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       final dependency = contributions.first as PubspecDependency;
       expect(dependency.package, 'flutter_riverpod');
       expect(dependency.constraint, '^3.4.3');
       expect(dependency.dev, isFalse);
-      final wrapper = contributions.last as SocketContribution;
+      final wrapper = contributions[1] as SocketContribution;
       expect(wrapper.socket, AppEntryRole.rootWrappers);
       expect(wrapper.fragment!.code, 'ProviderScope(child: ');
       expect(wrapper.fragment!.closing, ')');
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, stateManagementRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
+    });
+
+    test(
+        'has the section of the state management in its guide for coding '
+        'agents, which is the note of the module', () {
+      const riverpod = ModuleOrigin(RiverpodModule.id);
+      final notes = withRiverpod.entriesOf(AppEntryRole.agentSections);
+
+      // The role has no template, so the module says all of the section.
+      expect(stateManagementRole.template, isNull);
+      expect(
+        notes.where((note) => note.$1 != riverpod),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        notes.where((note) => note.$1 == riverpod),
+        [(riverpod, 'State management', AgentNote(agentNote))],
+      );
+      expect(
+        withRiverpod.files[AppEntryRole.agentsFile]!.text,
+        endsWith('\n## State management\n\n$agentNote'),
+      );
+      // The package of the module, without a generator of providers, and
+      // the scope that the module puts around the root widget.
+      expect(agentNote, startsWith('With `flutter_riverpod`:\n'));
+      final pubspec = _pubspecOf(withRiverpod);
+      expect(pubspec['dependencies'], contains('flutter_riverpod'));
+      for (final packages in [
+        pubspec['dependencies'],
+        pubspec['dev_dependencies'],
+      ]) {
+        expect(
+          (packages! as Map<String, Object?>).keys,
+          everyElement(isNot(anyOf(contains('generator'), 'build_runner'))),
+        );
+      }
+      expect(_rootWrappersOf(result).single, contains('ProviderScope('));
+      expect(agentNote, contains('`ProviderScope` is around the root widget'));
     });
 
     test('runs the app inside a ProviderScope', () {
@@ -265,11 +309,14 @@ void main() {
       });
     });
 
-    test('is the app without Riverpod but for the scope and dependency', () {
+    test(
+        'is the app without Riverpod but for the scope, the dependency and '
+        'the section of the guide for coding agents', () {
       expect(withRiverpod.files.keys, orderedEquals(without.files.keys));
       for (final MapEntry(key: path, value: file) in without.files.entries) {
         // The file that holds the scope, which the test above checks.
         if (path == 'pubspec.yaml' ||
+            path == AppEntryRole.agentsFile ||
             _holdsCodeOfModule(withRiverpod.files[path]!)) {
           continue;
         }

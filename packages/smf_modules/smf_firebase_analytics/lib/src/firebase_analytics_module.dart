@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
+import 'package:smf_firebase_analytics/src/agents.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The module that records what users do in the app with Firebase
@@ -34,6 +35,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// service is created on first use, without waiting, and the first screen
 /// shows after `bootstrap()`. When the app has a DI container, the role
 /// registers the service in it.
+///
+/// In the guide for coding agents of an app with a router, the module adds
+/// to the section of the analytics that the screen views need no code.
 final class FirebaseAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseAnalyticsModule();
@@ -78,6 +82,12 @@ final class FirebaseAnalyticsModule extends SmfModule {
               ),
             ],
           ),
+          when: {routerRole},
+        ),
+        // Of the listener, which only an app with a router has.
+        AppEntryRole.agentSections.entry(
+          analyticsRole.description,
+          AgentNote(screenViewsAgentNote),
           when: {routerRole},
         ),
       ];

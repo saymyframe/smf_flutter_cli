@@ -135,4 +135,11 @@ final class _CrashReportingTemplate extends _ServiceTemplate {
         if (hasAsync) 'await $initFunction();',
         'installCrashReporting();',
       ].join('\n');
+
+  @override
+  String get agentNote => '''
+- `installCrashReporting()` of `$file`, which `${AppEntryRole.bootstrap.name}()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `$service`. `$factory()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `$service`. The function that creates it gets an entry in `$variable` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `$initFunction()`, which the file has once a provider needs it.
+''';
 }

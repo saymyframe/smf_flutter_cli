@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_riverpod/src/agents.dart';
 
 /// The module that manages the state of screens with Riverpod, without code
 /// generation, and so provides the state management role.
@@ -26,6 +27,11 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// provider, or by depending on it. So the root wrappers of a module that
 /// uses Riverpod go inside the `ProviderScope`. The wrappers of the other
 /// modules read no provider, and their place around it follows their ids.
+///
+/// The section of the state management in the guide for coding agents of
+/// the app is the note of the module: where the state of a screen lives,
+/// that a widget talks only to providers, and that the scope stays above
+/// the widgets that read them.
 final class RiverpodModule extends SmfModule {
   /// Creates the module.
   const RiverpodModule();
@@ -43,9 +49,9 @@ final class RiverpodModule extends SmfModule {
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) => const [
-        PubspecContribution.hosted('flutter_riverpod', '^3.4.3'),
-        SocketContribution.wrap(
+  List<Contribution> contribute(ModuleContext context) => [
+        const PubspecContribution.hosted('flutter_riverpod', '^3.4.3'),
+        const SocketContribution.wrap(
           AppEntryRole.rootWrappers,
           Fragment.wrap(
             'ProviderScope(child: ',
@@ -57,6 +63,10 @@ final class RiverpodModule extends SmfModule {
               ),
             ],
           ),
+        ),
+        AppEntryRole.agentSections.entry(
+          stateManagementRole.description,
+          AgentNote(agentNote),
         ),
       ];
 }

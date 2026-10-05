@@ -250,6 +250,83 @@ void main() {
       }
     });
 
+    // The roles whose templates have a note in the guide for coding agents.
+    const withNotes = <Role>[
+      appEntryRole,
+      routerRole,
+      layoutRole,
+      diRole,
+      eventsRole,
+      analyticsRole,
+      crashReportingRole,
+      preferencesRole,
+      themeRole,
+    ];
+
+    test(
+        'say in the guide for coding agents what their roles guarantee, '
+        'under the descriptions of the roles', () {
+      const socket = AppEntryRole.agentSections;
+      for (final role in withNotes) {
+        final notes = [
+          for (final contribution in role.template!
+              .contribute(testContext)
+              .whereType<SocketContribution>())
+            if (contribution.socket == socket) contribution,
+        ];
+
+        expect(notes, hasLength(1), reason: role.id);
+        expect(notes.single.entryKey, role.description, reason: role.id);
+        expect(
+          (notes.single.entryValue! as AgentNote).isOfRole,
+          isTrue,
+          reason: role.id,
+        );
+        // In every app with the role.
+        expect(notes.single.when, isEmpty, reason: role.id);
+        expect(socket.problemsWith(notes.single), isEmpty, reason: role.id);
+      }
+    });
+
+    test('name in the guide only files that their roles guarantee', () {
+      const socket = AppEntryRole.agentSections;
+      for (final role in withNotes) {
+        // An app with nothing but what the app entry, the role and the
+        // roles it requires guarantee: the files of their templates and
+        // those of the symbols of their providers.
+        final guaranteed = {
+          for (final present in {appEntryRole, role, ...role.requires}) ...[
+            ...present.interface.files,
+            for (final symbol in present.interface.symbols) symbol.path,
+          ],
+        };
+        final sections = socket.render([
+          socket.entry(role.description, agentNoteOf(role)),
+        ])[socket.tag];
+        final issues = appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: {AppEntryRole.agentsFile: '# AGENTS.md\n$sections\n'},
+            owners: {
+              for (final path in guaranteed)
+                path: const RoleTemplateOrigin(appEntryRole),
+            },
+          ),
+        );
+
+        expect(
+          [for (final issue in issues) issue.message],
+          isEmpty,
+          reason: role.id,
+        );
+      }
+    });
+
     // A role's socket may also be tagged in its provider's files, as the
     // observers of the router are. The other names are the variables of the
     // render hooks of the templates.

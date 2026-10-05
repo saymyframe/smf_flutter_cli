@@ -232,6 +232,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
 
   SocketRef<CodeSocket> get implementations;
 
+  /// The note of the role in the guide for coding agents: how the code of
+  /// an app uses the service, whichever modules provide the role.
+  String get agentNote;
+
   ImportRef get import => ImportRef.app(file.substring('lib/'.length));
 
   bool get single => !role.cardinality.allowsMany;
@@ -244,6 +248,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
             type: TypeRef(service, import: import),
             create: FactoryRef(factory, import: import),
           ),
+        ),
+        AppEntryRole.agentSections.entry(
+          role.description,
+          AgentNote.ofRole(agentNote),
         ),
       ];
 

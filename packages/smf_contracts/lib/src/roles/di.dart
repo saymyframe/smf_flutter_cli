@@ -143,12 +143,32 @@ final class _DiTemplate extends RoleTemplate<DiRegistration> {
             imports: [DiRole.registerDependencies.importRef],
           ),
         ),
+        AppEntryRole.agentSections.entry(
+          diRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
       ];
 
   @override
   List<SmfIssue> validate(RoleHookInput<DiRegistration> input) =>
       diRole.graphOf(input).issues;
 }
+
+/// The path of the composition file of a feature as a note names it, with
+/// `<feature>` for the feature: that of the features of [ModuleKinds].
+String get _compositionFile => ModuleKinds.feature
+    .ruleOf<CompositionFile>()!
+    .path
+    .replaceAll('<id>', '<feature>');
+
+/// The note of the DI role in the guide for coding agents: what a service
+/// is, where the services are registered and who may resolve them,
+/// whichever module provides the role.
+final String _agentNote = '''
+- A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `${DiRole.registerDependencies.name}()` in `${DiRole.dependenciesFile}` registers every service, and `${AppEntryRole.bootstrap.name}()` awaits it: a new service gets its line there.
+- Only the composition file of a feature, `$_compositionFile`, calls `resolve<T>()` of `${DiRole.serviceLocatorFile}`, to create what the screens of the feature need, such as the object that holds their state.
+- A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
+''';
 
 /// A module's implementation of the [DiRole], such as get_it.
 ///

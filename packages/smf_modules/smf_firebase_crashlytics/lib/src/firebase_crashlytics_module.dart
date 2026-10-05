@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dart';
+import 'package:smf_firebase_crashlytics/src/agents.dart';
 import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
 import 'package:smf_firebase_crashlytics/src/readme.dart';
 
@@ -32,7 +33,9 @@ import 'package:smf_firebase_crashlytics/src/readme.dart';
 /// `flutter build ipa` finds it too: its step continues the step of
 /// firebase_core that runs flutterfire, [FirebaseCoreModule.configureStep].
 /// The README of the app tells how to fix the phase after configuring the
-/// app again.
+/// app again, and its guide for coding agents points there. The guide also
+/// says to report through the reporter of the app rather than through
+/// Crashlytics itself.
 final class FirebaseCrashlyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseCrashlyticsModule();
@@ -71,5 +74,9 @@ final class FirebaseCrashlyticsModule extends SmfModule {
         ),
         crashlyticsPhaseFix,
         AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
+        AppEntryRole.agentSections.entry(
+          crashReportingRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }

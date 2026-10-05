@@ -6,6 +6,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_analytics/src/agents.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
@@ -192,10 +193,18 @@ Set<ModuleId> _providersOf(ContractResult result, Role role) => {
 List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
     diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
 
+/// The owners of the code of the analytics: the template of the role and
+/// this module.
+final Set<ContributionOrigin> _analytics = {
+  const RoleTemplateOrigin(analyticsRole),
+  const ModuleOrigin(FirebaseAnalyticsModule.id),
+};
+
 /// Checks that [app] is [without] but for the files of the analytics, the
-/// dependency on firebase_analytics and the files that the modules
-/// [changedBy] generate; its `bootstrap()` included, since the service
-/// starts without waiting.
+/// dependency on firebase_analytics, the section of the analytics in the
+/// guide for coding agents and the files that the modules [changedBy]
+/// generate; its `bootstrap()` included, since the service starts without
+/// waiting.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -214,7 +223,7 @@ void _expectTheAppWithout(
     const ModuleOrigin(FirebaseAnalyticsModule.id),
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml') continue;
+    if (path == 'pubspec.yaml' || path == AppEntryRole.agentsFile) continue;
     if (file.owner case ModuleOrigin(:final module)
         when changedBy.contains(module)) {
       continue;
@@ -226,7 +235,48 @@ void _expectTheAppWithout(
     _pubspecWithoutAnalytics(app),
     _yamlOf(without.files['pubspec.yaml']!.text),
   );
+  // The guide has the notes of the app without the analytics, and those of
+  // the analytics under the heading of the role.
+  final notes = app.entriesOf(AppEntryRole.agentSections);
+  expect(
+    notes.where((note) => !_analytics.contains(note.$1)),
+    without.entriesOf(AppEntryRole.agentSections),
+  );
+  expect(
+    [
+      for (final (origin, heading, note) in notes)
+        if (_analytics.contains(origin)) (origin, heading, note.isOfRole),
+    ],
+    // The template of a role contributes after its providers; the guide
+    // shows what the role says first.
+    [
+      for (final _ in _notesOfModule(app))
+        (
+          const ModuleOrigin(FirebaseAnalyticsModule.id),
+          analyticsRole.description,
+          false,
+        ),
+      (
+        const RoleTemplateOrigin(analyticsRole),
+        analyticsRole.description,
+        true,
+      ),
+    ],
+  );
+  // The note of the screen views is in the apps with a router, which have
+  // the listener that it names.
+  expect(_notesOfModule(app), [
+    if (app.files.containsKey(RouterRole.appRouterFile))
+      AgentNote(screenViewsAgentNote),
+  ]);
 }
+
+/// The notes of this module in the guide for coding agents of [app], in the
+/// order of the guide.
+List<AgentNote> _notesOfModule(RenderedApp app) => [
+      for (final (origin, _, note) in app.entriesOf(AppEntryRole.agentSections))
+        if (origin == const ModuleOrigin(FirebaseAnalyticsModule.id)) note,
+    ];
 
 /// The contributions to [socket] in the app of [result], those of the
 /// render hooks of the roles included, in the order they were rendered,
@@ -365,11 +415,17 @@ void main() {
 
     test(
         'contributes its brick, firebase_analytics, its implementation of the '
-        'service, created without waiting, and a listener of the screen for '
-        'a router, and nothing else', () {
+        'service, created without waiting, a listener of the screen for a '
+        'router and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(4));
+      expect(contributions, hasLength(5));
+      // Of the listener of the screen, which only an app with a router has.
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, analyticsRole.description);
+      expect(note.entryValue, AgentNote(screenViewsAgentNote));
+      expect(note.when, {routerRole});
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseAnalyticsBundle));
       expect(brick.bundle.name, 'firebase_analytics');
@@ -518,6 +574,42 @@ void main() {
             .whereType<FunctionDeclaration>()
             .map((function) => function.name.lexeme),
         ['createAnalyticsService', '_createAlone'],
+      );
+    });
+
+    test(
+        'tells coding agents which events of Firebase Analytics a sign-in '
+        'and a sign-up are, as its service logs them', () {
+      final index = DartFileIndexer.index(
+        _implementation,
+        withAnalytics.files[_implementation]!.text,
+      );
+      final role = DartFileIndexer.index(
+        AnalyticsRole.file,
+        withAnalytics.files[AnalyticsRole.file]!.text,
+      );
+
+      // The two calls of the service of the role, which the service of the
+      // module passes on to the calls of Firebase Analytics for its
+      // standard events.
+      for (final service in [
+        role.declaration('AnalyticsService')!,
+        index.declaration('FirebaseAnalyticsService')!,
+      ]) {
+        expect(
+          service.members.map((member) => member.name),
+          containsAll(['logSignIn', 'logSignUp']),
+          reason: service.name,
+        );
+      }
+      expect(index.invocationsOf('logLogin').single.target, '_analytics');
+      expect(index.invocationsOf('logSignUp').single.target, '_analytics');
+      // Without a router, the module has nothing to tell coding agents:
+      // the guide says nothing of screen views.
+      expect(_notesOfModule(withAnalytics), isEmpty);
+      expect(
+        withAnalytics.files[AppEntryRole.agentsFile]!.text,
+        isNot(contains('Screen views')),
       );
     });
 
@@ -748,6 +840,33 @@ void main() {
           ..._listenerImports,
           "import 'analytics_service.dart';",
         ],
+      );
+    });
+
+    test(
+        'tells coding agents that the listener of its file logs the screen '
+        'views', () {
+      expect(_notesOfModule(withAnalytics), [AgentNote(screenViewsAgentNote)]);
+      expect(
+        withAnalytics.files[AppEntryRole.agentsFile]!.text,
+        contains('\n\n${screenViewsAgentNote.trim()}\n'),
+      );
+      expect(
+        screenViewsAgentNote,
+        startsWith('With `firebase_analytics`:\n'),
+      );
+      // The listener that the note names: the function of the file of the
+      // module that the router gets, as the tests above show.
+      expect(
+        DartFileIndexer.index(
+          _implementation,
+          withAnalytics.files[_implementation]!.text,
+        ).declaration(_listener)?.kind,
+        DeclarationKind.function,
+      );
+      expect(
+        screenViewsAgentNote,
+        contains('the router calls `$_listener()` with each screen'),
       );
     });
 
