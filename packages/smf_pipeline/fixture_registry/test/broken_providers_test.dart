@@ -395,7 +395,8 @@ void main() {
   test(
       'the registry of a broken provider has the fixture modules, with the '
       'broken provider in place of the other providers of its role, and its '
-      'app the app entry, the broken provider and the modules it names', () {
+      'app the app entry, the broken provider and the modules it names, or '
+      'the broken provider as its app entry', () {
     for (final provider in providers) {
       final id = provider.module.descriptor.id;
       final ids = {
@@ -419,14 +420,28 @@ void main() {
         for (final module in provider.modules) module.descriptor.id,
       ];
       expect(ModuleRegistry.problemsOf(provider.modules), isEmpty);
-      expect(modules.take(2 + provider.app.length), [
-        const ModuleId('flutter_core'),
+      // The app entry of the fixtures comes first, unless the broken
+      // provider is an app entry itself: an app has one.
+      final isAppEntry =
+          provider.module.descriptor.provides.contains(appEntryRole);
+      final ofApp = [
+        if (!isAppEntry) const ModuleId('flutter_core'),
         id,
         ...provider.app,
-      ]);
+      ];
+      expect(modules.take(ofApp.length), ofApp);
+      expect(
+        [
+          for (final module in provider.modules)
+            if (module.descriptor.provides.contains(appEntryRole))
+              module.descriptor.id,
+        ],
+        [if (isAppEntry) id else const ModuleId('flutter_core')],
+        reason: '$id',
+      );
       // The other modules of the registry are the providers that the
       // modules of the app have variants for.
-      for (final other in modules.skip(2 + provider.app.length)) {
+      for (final other in modules.skip(ofApp.length)) {
         expect(
           provider.modules.any(
             (module) =>

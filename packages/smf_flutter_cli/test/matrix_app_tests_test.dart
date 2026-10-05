@@ -38,8 +38,9 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the DI role, '
       'of the events role, of the preferences role, of the settings screen '
-      'role and of the localization role with every provider of each, which '
-      'they tell apart by the roles of the app only', () {
+      'role, of the theme role, of the localization role and of the app '
+      'entry role with every provider of each, which they tell apart by the '
+      'roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -48,6 +49,8 @@ void main() {
         eventsRole,
         preferencesRole,
         settingsScreenRole,
+        themeRole,
+        appEntryRole,
         localizationRole,
       ]),
     );
@@ -57,6 +60,10 @@ void main() {
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
+    // The test of the theme role checks that the root of the app, which the
+    // provider of the app entry builds, follows the theme mode.
+    expect(named('theme_role').roles, {themeRole, appEntryRole});
+    expect(named('theme_setting').roles, {themeRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('language_setting').roles, {localizationRole});
 
@@ -1447,6 +1454,276 @@ void main() {
     expect(
       () => settings.generatedFiles!(
         appOf([routerRole.data(routes).withOrigin(options), ...entries]),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of options names a route of its own as the settings '
+              'screen.',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'the test of the theme role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and gets the key of the theme mode that the role publishes', () async {
+    final theme = named('theme_role');
+
+    expect(
+      [
+        for (final app in apps)
+          if (theme.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(themeRole)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (theme.appliesTo(app)) app.name,
+      ],
+      [
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'material_theme with localization',
+        'material_theme',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+    for (final app in apps.where(theme.appliesTo)) {
+      expect(
+        theme.values!(app),
+        {'mode_key': ThemeRole.modeKey},
+        reason: app.name,
+      );
+    }
+    expect(theme.generatedFiles, isNull);
+    // On a device the mode is the same Dart state as in a test, so the test
+    // has no probe for the start check.
+    expect(theme.startProbe, isNull);
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await themeRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (everyModule.appliesTo(app)) app.name,
+      ],
+      ['every module (bloc)', 'every module (riverpod)'],
+    );
+  });
+
+  test(
+      'the test of the entry of the theme mode applies to the apps with the '
+      'theme role and the settings screen role, and gets the location of '
+      'the settings screen and the type of the entry from the data of the '
+      'settings screen role, and the key of the mode', () {
+    final setting = named('theme_setting');
+
+    expect(
+      [
+        for (final app in apps)
+          if (setting.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll([themeRole, settingsScreenRole]))
+            app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (setting.appliesTo(app)) app.name,
+      ],
+      [
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+    // It opens the settings screen with the location that the matrix writes
+    // for it, so it needs no file of the tests of the settings screen role.
+    expect(setting.startProbe, isNull);
+
+    for (final app in apps.where(setting.appliesTo)) {
+      expect(
+        setting.values!(app),
+        {'mode_key': ThemeRole.modeKey},
+        reason: app.name,
+      );
+      final files = setting.generatedFiles!(app, 'my_app');
+      expect(files.keys, [themeSettingFile]);
+      final text = files[themeSettingFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(themeSettingFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        [for (final import in index.imports) '${import.uri} ${import.prefix}'],
+        [
+          'package:my_app/core/router/navigation.dart null',
+          'package:my_app/core/theme/theme_mode_setting.dart entry',
+        ],
+        reason: app.name,
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['settingsLocation', 'themeModeEntry'],
+        reason: app.name,
+      );
+      // The screen of the provider, as the settings screen role finds it.
+      final screen =
+          settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
+      expect(
+        text,
+        allOf(
+          contains(
+            'const AppLocation settingsLocation = ${screen.locationClass}();',
+          ),
+          contains('const Type themeModeEntry = entry.ThemeModeSetting;'),
+        ),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the file of the test of the entry of the theme mode names the entry '
+      'that the template of the theme role contributes, among those of the '
+      'modules and of other roles, and needs that one entry and the route of '
+      'the screen', () {
+    const routes = RoutesData([
+      Route(
+        '/options',
+        name: 'options',
+        screen: ScreenRef(
+          'OptionsScreen',
+          import: ImportRef.app('features/options/options_screen.dart'),
+        ),
+      ),
+    ]);
+    const options = ModuleOrigin(ModuleId('options'));
+    RoleData<Object> entry(
+      String widget,
+      String file,
+      ContributionOrigin origin,
+    ) =>
+        settingsScreenRole
+            .data(
+              SettingsEntry(
+                widget: TypeRef(widget, import: ImportRef.app(file)),
+              ),
+            )
+            .withOrigin(origin);
+    MatrixApp appOf(List<RoleData<Object>> data) => MatrixApp(
+          'options',
+          const [ModuleId('options')],
+          hook: RoleHookRequest(
+            data: data,
+            presentRoles: {routerRole, settingsScreenRole, themeRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final screen = [
+      routerRole.data(routes).withOrigin(options),
+      settingsScreenRole
+          .data(const SettingsScreenRoute('options'))
+          .withOrigin(options),
+    ];
+    // A setting of a module, of the provider of the theme, such as a colour,
+    // and of the template of another role, before and after the entry of
+    // the theme mode.
+    final others = [
+      entry('FeedSetting', 'features/options/feed_setting.dart', options),
+      entry(
+        'ColourSetting',
+        'core/theme/colour_setting.dart',
+        const ModuleOrigin(ModuleId('look')),
+      ),
+    ];
+    final ofTheme = entry(
+      'ModeSetting',
+      'core/theme/mode_setting.dart',
+      const RoleTemplateOrigin(themeRole),
+    );
+    final ofLanguage = entry(
+      'LanguageSetting',
+      'core/l10n/language_setting.dart',
+      const RoleTemplateOrigin(localizationRole),
+    );
+    final setting = named('theme_setting');
+    String fileOf(List<RoleData<Object>> entries) => setting.generatedFiles!(
+          appOf([...screen, ...entries]),
+          'my_app',
+        )[themeSettingFile]!;
+
+    final text = fileOf([...others, ofTheme, ofLanguage]);
+
+    final (:index, :errors) = DartFileIndexer.parse(themeSettingFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      [
+        'package:my_app/core/router/navigation.dart as null',
+        'package:my_app/core/theme/mode_setting.dart as entry',
+      ],
+    );
+    expect(
+      text,
+      allOf(
+        contains(
+          'const AppLocation settingsLocation = OptionsOptionsLocation();',
+        ),
+        contains('const Type themeModeEntry = entry.ModeSetting;'),
+      ),
+    );
+
+    // The test taps the modes of one entry: an app in which the template of
+    // the theme role gives the settings screen none, or two, is no app of
+    // the matrix.
+    for (final (entries, count) in [
+      ([...others, ofLanguage], 0),
+      (
+        [
+          ofTheme,
+          entry(
+            'ContrastSetting',
+            'core/theme/contrast_setting.dart',
+            const RoleTemplateOrigin(themeRole),
+          ),
+        ],
+        2,
+      ),
+    ]) {
+      expect(
+        () => fileOf(entries),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The template of the theme role gives the settings screen of '
+                'options $count entries, rather than the entry of the theme '
+                'mode alone.',
+          ),
+        ),
+        reason: '$count',
+      );
+    }
+    // Nor is an app whose provider of the settings screen names no route of
+    // its own: the rules of the role report it first.
+    expect(
+      () => setting.generatedFiles!(
+        appOf([routerRole.data(routes).withOrigin(options), ofTheme]),
         'my_app',
       ),
       throwsA(

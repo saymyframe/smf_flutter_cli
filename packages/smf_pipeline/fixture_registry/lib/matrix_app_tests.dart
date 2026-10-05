@@ -13,13 +13,16 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
 /// role, whose providers call the listeners of the screen, the DI role, the
-/// events role, the preferences role and the localization role.
+/// events role, the preferences role, the localization role, the theme
+/// role, and the app entry role, whose provider builds the root that
+/// follows the theme mode.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
 /// they use: the fixture features, the fixture analytics and the fixture
-/// screen log, whose listeners of the screen note what they hear, and the
-/// fixture setting, whose restorers note what they read.
+/// screen log, whose listeners of the screen note what they hear, the
+/// fixture setting, whose restorers note what they read, and the fixture
+/// theme, whose colour a test changes.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -218,6 +221,27 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(const ModuleId('fake_gate')),
         roles: {routerRole},
       ),
+      // The theme mode of the apps with the theme role, whichever module
+      // provides it, the test that the CLI keeps, which is a test of the
+      // app entry role too: only in the apps with every module, which run
+      // flutter test for other tests already. There the fixture theme
+      // provides the role, whose themes read a colour from the context of
+      // the root.
+      await themeRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The look of the fixture theme, whose themes read a colour from the
+      // context of the root, through a widget that the fixture puts around
+      // the root: when the test changes the colour, the screens get the
+      // themes of the new colour. A test of the app entry role, whose
+      // provider builds the root: the root rebuilds when an inherited widget
+      // that its arguments read notifies. Only in the apps with every
+      // module, which run flutter test for other tests already.
+      MatrixAppTest(
+        '$appTests/theme_look',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.modules.contains(FakeThemeModule.id),
+        roles: {appEntryRole},
+      ),
     ],
     testedRoles: {
       routerRole,
@@ -226,6 +250,8 @@ Future<MatrixAppTests> fixtureAppTests() async {
       eventsRole,
       preferencesRole,
       localizationRole,
+      themeRole,
+      appEntryRole,
     },
   );
 }
