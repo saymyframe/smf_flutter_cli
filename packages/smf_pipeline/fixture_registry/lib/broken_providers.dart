@@ -26,6 +26,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_settings/smf_settings.dart';
 
 /// A provider of a role with one known bug, and the tests of the role that
 /// must fail on it in its app.
@@ -446,6 +447,30 @@ List<BrokenProvider> brokenProviders() => const [
             'the probe of the role finds no problem',
             'The probe finds no problem with preferences that keep the '
                 'contract of the role in one run of the app.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.textsInFirstLanguage,
+        role: localizationRole,
+        bug: 'Its texts are always in the first language of the app, '
+            'whatever language the root of the app is in.',
+        // A settings screen, which gets the setting of the language, and a
+        // feature with a text in two languages.
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakePreferencesModule.id,
+          SettingsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/language_setting/language_setting_test.dart',
+            'the setting of the language shows the choice of the user, and '
+                'its dialog chooses a language of the app or the languages '
+                'of the device',
+            'The setting shows its texts in the language that the user '
+                'chose.',
           ),
         ],
       ),
