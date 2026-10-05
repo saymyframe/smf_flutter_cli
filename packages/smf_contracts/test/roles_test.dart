@@ -77,8 +77,8 @@ void main() {
     });
     expect(shape(localizationRole), {
       'cardinality': RoleCardinality.atMostOne,
-      'requires': <String>{},
-      'uses': <String>{},
+      'requires': {'preferences'},
+      'uses': {'settings_screen'},
     });
     expect(shape(diRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -264,67 +264,92 @@ void main() {
       themeRole,
     ];
 
+    /// The notes of the template of [role] for the guide for coding agents.
+    List<SocketContribution> notesOf(Role role) => [
+          for (final contribution in role.template!
+              .contribute(testContext)
+              .whereType<SocketContribution>())
+            if (contribution.socket == AppEntryRole.agentSections) contribution,
+        ];
+
     test(
         'say in the guide for coding agents what their roles guarantee, '
         'under the descriptions of the roles', () {
       const socket = AppEntryRole.agentSections;
       for (final role in withNotes) {
-        final notes = [
-          for (final contribution in role.template!
-              .contribute(testContext)
-              .whereType<SocketContribution>())
-            if (contribution.socket == socket) contribution,
-        ];
+        final notes = notesOf(role);
 
-        expect(notes, hasLength(1), reason: role.id);
-        expect(notes.single.entryKey, role.description, reason: role.id);
+        // One note in every app with the role.
         expect(
-          (notes.single.entryValue! as AgentNote).isOfRole,
-          isTrue,
+          notes.where((note) => note.when.isEmpty),
+          hasLength(1),
           reason: role.id,
         );
-        // In every app with the role.
-        expect(notes.single.when, isEmpty, reason: role.id);
-        expect(socket.problemsWith(notes.single), isEmpty, reason: role.id);
+        for (final note in notes) {
+          expect(note.entryKey, role.description, reason: role.id);
+          expect(
+            (note.entryValue! as AgentNote).isOfRole,
+            isTrue,
+            reason: role.id,
+          );
+          // A note of what only some apps with the role have, such as the
+          // file of a setting in an app with a settings screen, names the
+          // roles of those apps, among the roles that the role requires or
+          // uses.
+          expect(role.visibleRoles, containsAll(note.when), reason: role.id);
+          expect(socket.problemsWith(note), isEmpty, reason: role.id);
+        }
       }
     });
 
     test('name in the guide only files that their roles guarantee', () {
       const socket = AppEntryRole.agentSections;
       for (final role in withNotes) {
-        // An app with nothing but what the app entry, the role and the
-        // roles it requires guarantee: the files of their templates and
-        // those of the symbols of their providers.
-        final guaranteed = {
-          for (final present in {appEntryRole, role, ...role.requires}) ...[
-            ...present.interface.files,
-            for (final symbol in present.interface.symbols) symbol.path,
-          ],
-        };
-        final sections = socket.render([
-          socket.entry(role.description, agentNoteOf(role)),
-        ])[socket.tag];
-        final issues = appEntryRole.checkStructure(
-          StructuralRuleRequest(
-            hook: const RoleHookRequest(
-              data: [],
-              presentRoles: {appEntryRole},
-              context: testContext,
+        for (final note in notesOf(role)) {
+          // An app with nothing but what the app entry, the role, the
+          // roles it requires and the roles of the note guarantee: the
+          // files of their templates and those of the symbols of their
+          // providers, and the files that the template of the role
+          // generates in an app with the roles of the note.
+          final guaranteed = {
+            for (final present in {
+              appEntryRole,
+              role,
+              ...role.requires,
+              ...note.when,
+            }) ...[
+              ...present.interface.files,
+              for (final symbol in present.interface.symbols) symbol.path,
+            ],
+            for (final brick in bricksOf(role))
+              if (note.when.containsAll(brick.when))
+                ...templatesOf(brick.bundle).keys,
+          };
+          final sections = socket.render([
+            socket.entry(role.description, note.entryValue! as AgentNote),
+          ])[socket.tag];
+          final issues = appEntryRole.checkStructure(
+            StructuralRuleRequest(
+              hook: const RoleHookRequest(
+                data: [],
+                presentRoles: {appEntryRole},
+                context: testContext,
+              ),
+              files: const {},
+              texts: {AppEntryRole.agentsFile: '# AGENTS.md\n$sections\n'},
+              owners: {
+                for (final path in guaranteed)
+                  path: const RoleTemplateOrigin(appEntryRole),
+              },
             ),
-            files: const {},
-            texts: {AppEntryRole.agentsFile: '# AGENTS.md\n$sections\n'},
-            owners: {
-              for (final path in guaranteed)
-                path: const RoleTemplateOrigin(appEntryRole),
-            },
-          ),
-        );
+          );
 
-        expect(
-          [for (final issue in issues) issue.message],
-          isEmpty,
-          reason: role.id,
-        );
+          expect(
+            [for (final issue in issues) issue.message],
+            isEmpty,
+            reason: '${role.id}, in an app with ${note.when}',
+          );
+        }
       }
     });
 
@@ -336,6 +361,9 @@ void main() {
         'facade',
         'guards',
         'locales',
+        'locale_key',
+        'locale_names',
+        'text_language',
         'mode_key',
         'text_title',
         'text_system',

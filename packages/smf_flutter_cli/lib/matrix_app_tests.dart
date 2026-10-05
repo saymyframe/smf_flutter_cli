@@ -145,6 +145,12 @@ Future<MatrixAppTests> smfAppTests() async {
         generatedFiles: _settingsOf,
         roles: {settingsScreenRole},
       ),
+      // The setting of the language on the settings screen of the apps
+      // with the localization role and the settings screen role, whichever
+      // modules provide them: its dialog chooses a language of the app,
+      // which the app is then in and remembers, or the languages of the
+      // device.
+      await languageSettingAppTest(),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
@@ -215,6 +221,114 @@ Future<MatrixAppTest> preferencesRoleAppTest({
         'probePreferences',
       ),
     );
+
+/// The test of the setting of the language, the entry that the template of
+/// the localization role gives the settings screen, which the CLI keeps in
+/// its `app_tests/language_setting`, for the apps with the localization
+/// role and the settings screen role, whichever modules provide them. On
+/// the settings screen, the setting shows its title and the choice of the
+/// user, the languages of the device while the user chose none. A tap opens
+/// a dialog with an option for the languages of the device and one for each
+/// language of the app, by its name in that language, or its code, with
+/// the chosen one selected and checked. A tap on an option closes the
+/// dialog: the app and the texts of the setting are in the language of the
+/// option, which is saved under [LocalizationRole.localeKey], and the
+/// option of the device removes what was saved.
+///
+/// The test knows only the two roles. The matrix writes the widget of the
+/// entry for it into [languageSettingFile], from the entries of the
+/// settings screen role of the app, with the labels of the languages of the
+/// app and the texts of the setting in each of them, from the localization
+/// role. It opens the settings screen with the helper of the tests of the
+/// settings screen role that the CLI keeps, which every app with the
+/// settings screen role has too.
+Future<MatrixAppTest> languageSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/language_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll({localizationRole, settingsScreenRole}),
+      generatedFiles: _languageSettingOf,
+      roles: {localizationRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the setting
+/// of the language: `languageSetting`, the type of the widget of the entry
+/// that the template of the localization role gives the settings screen
+/// role; `savedLanguageKey`, the key of the role in the preferences of the
+/// app ([LocalizationRole.localeKey]); `languageLabels`, what the setting
+/// shows for each language of the app, by the code of the language, its
+/// name in that language ([LocalizationRole.languageNames]) or its code;
+/// and `settingTitles` and `deviceOptions`, the title of the setting and
+/// its option of the languages of the device in each language of the app.
+const languageSettingFile = 'test/language_setting/setting.dart';
+
+/// The file at [languageSettingFile] of [app], an app of the matrix with
+/// the localization role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. The entry is
+/// the one of the settings screen role whose widget is in
+/// [LocalizationRole.languageSettingFile]. Throws a [StateError] if the
+/// role has no such entry, which the template of the localization role
+/// gives it in every app with both roles.
+Map<String, String> _languageSettingOf(MatrixApp app, String packageName) {
+  final languages =
+      localizationRole.localesIn(localizationRole.hookInput(app.hook!));
+  final entries = [
+    for (final entry in settingsScreenRole
+        .entriesIn(settingsScreenRole.hookInput(app.hook!)))
+      if (entry.file == LocalizationRole.languageSettingFile) entry,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The settings screen of ${app.name} has ${entries.length} entries in '
+      '${LocalizationRole.languageSettingFile}, the file of the setting of '
+      'the language, rather than one.',
+    );
+  }
+  final widget = entries.single.widget;
+  String byLanguage(String Function(String language) text) => [
+        for (final language in languages)
+          "  '$language': ${SmfNames.dartString(text(language))},\n",
+      ].join();
+  String Function(String language) textOf(LocalizedText text) =>
+      (language) => text.textIn(language) ?? text.en;
+  final key = SmfNames.dartString(LocalizationRole.localeKey);
+  final labels = byLanguage(
+    (language) => LocalizationRole.languageNames[language] ?? language,
+  );
+  final titles = byLanguage(textOf(LocalizationRole.languageSettingTitle));
+  final ofDevice = byLanguage(textOf(LocalizationRole.languageOfDevice));
+  return {
+    languageSettingFile: '''
+// The setting of the language of the app, which the matrix of SMF writes
+// from the data of the settings screen role and of the localization role
+// of the app for the test of the setting, language_setting_test.dart.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the setting, an entry of the settings screen.
+const Type languageSetting = ${widget.codeWith('entry')};
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the localization role has it.
+const String savedLanguageKey = $key;
+
+/// What the setting shows for each language of the app, by the code of the
+/// language: its name in that language, or its code.
+const Map<String, String> languageLabels = {
+$labels};
+
+/// The title of the setting in each language of the app, by the code of
+/// the language.
+const Map<String, String> settingTitles = {
+$titles};
+
+/// The option of the setting with which the app follows the languages of
+/// the device, in each language of the app, by the code of the language.
+const Map<String, String> deviceOptions = {
+$ofDevice};
+''',
+  };
+}
 
 /// The test of the router role that the CLI keeps in its
 /// `app_tests/router_walk`, for the apps with the role, whichever module

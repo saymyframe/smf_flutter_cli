@@ -71,6 +71,14 @@ With `get_it`:
 - `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
 - A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
 
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+- A new language also needs its name in `_names` in `lib/core/l10n/language_setting.dart`: the setting of the language on the settings screen shows a language by that name, and by its code without one.
+
 ## Preferences
 
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
@@ -131,6 +139,16 @@ The app reports its errors to [Firebase Crashlytics](https://firebase.google.com
 ```bash
 ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
 ```
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again. The entry `LanguageSetting` of the settings screen, in `lib/core/l10n/language_setting.dart`, lets the user choose.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+3. Add `'de': 'Deutsch'` to `_names` in `lib/core/l10n/language_setting.dart`, the name that the setting shows for the language. Without it, the setting shows `de`.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -326,10 +344,18 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
 </dict>
 </plist>
 === lib/app.dart (flutter_core) ===
+import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/router/app_router.dart';
 
@@ -341,6 +367,14 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Fixture App',
+    locale: AppLocaleScope.of(context),
+    localizationsDelegates: [
+      FixtureTexts.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: [...appLocales],
     routerConfig: appRouter.config,
     builder: (context, child) => child!,
   );
@@ -1366,7 +1400,259 @@ Future<void> startFixture() async {
   ErrorWidget.builder = (details) =>
       ErrorWidget.withDetails(message: details.exceptionAsString());
 }
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (fake_l10n) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'app_locale.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  FixtureTexts get l10n => Localizations.of<FixtureTexts>(this, FixtureTexts)!;
+}
+
+/// The texts of the app in one language, each written out in this file: no
+/// tool generates them.
+class FixtureTexts {
+  /// Creates the texts in the language of the code [language].
+  const FixtureTexts(this.language);
+
+  /// The delegate that loads the texts for the root of the app, in each
+  /// language of the app.
+  static const LocalizationsDelegate<FixtureTexts> delegate =
+      _FixtureTextsDelegate();
+
+  /// The code of the language of the texts, such as `uk`.
+  final String language;
+
+  /// The text title of the module fake_second.
+  String get fakeSecondTitle => switch (language) {
+    'uk' => 'Другий екран',
+    _ => 'Second screen',
+  };
+
+  /// The text outside of the module fake_second.
+  String get fakeSecondOutside => 'Outside the app\'s main navigation';
+
+  /// The text setting of the module fake_second.
+  String get fakeSecondSetting => switch (language) {
+    'uk' => 'Друге налаштування',
+    _ => 'Second setting',
+  };
+
+  /// The text language of the template of the localization role.
+  String get localizationLanguage => switch (language) {
+    'uk' => 'Мова',
+    _ => 'Language',
+  };
+
+  /// The text system of the template of the localization role.
+  String get localizationSystem => switch (language) {
+    'uk' => 'Як у системі',
+    _ => 'System',
+  };
+}
+
+class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
+  const _FixtureTextsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => appLocales.any(
+    (supported) => supported.languageCode == locale.languageCode,
+  );
+
+  @override
+  Future<FixtureTexts> load(Locale locale) =>
+      SynchronousFuture(FixtureTexts(locale.languageCode));
+
+  @override
+  bool shouldReload(_FixtureTextsDelegate old) => false;
+}
+=== lib/core/l10n/language_setting.dart (role:localization) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+
+import 'app_locale.dart';
+
+/// The names of the languages of the app, each in its own language, by the
+/// code of the language. The setting shows a language of the app without a
+/// name here by its code: add the name of such a language.
+const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
+
+/// The setting of the language of the app, an entry of the settings screen:
+/// it shows the language that the user chose, and lets the user choose one
+/// of the languages of the app, or follow the languages of the device.
+class LanguageSetting extends StatelessWidget {
+  /// Creates the setting.
+  const LanguageSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = AppLocaleScope.of(context);
+    return ListTile(
+      leading: const Icon(Icons.language),
+      title: Text(context.l10n.localizationLanguage),
+      subtitle: Text(
+        chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      ),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (context) => const _LanguageDialog(),
+      ),
+    );
+  }
+}
+
+/// The name of the language of [locale] in that language, or its code.
+String _nameOf(Locale locale) =>
+    _names[locale.languageCode] ?? locale.languageCode;
+
+/// The choice between the languages of the app and those of the device.
+class _LanguageDialog extends StatelessWidget {
+  const _LanguageDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = AppLocaleScope.of(context);
+    return SimpleDialog(
+      title: Text(context.l10n.localizationLanguage),
+      children: [
+        for (final Locale? locale in [null, ...appLocales])
+          ListTile(
+            title: Text(
+              locale == null
+                  ? context.l10n.localizationSystem
+                  : _nameOf(locale),
+            ),
+            selected: locale == chosen,
+            trailing: locale == chosen ? const Icon(Icons.check) : null,
+            onTap: () async {
+              Navigator.of(context).pop();
+              await appLocale.choose(locale);
+            },
+          ),
+      ],
+    );
+  }
+}
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/preferences/shared_app_preferences.dart'
     as impl0;
 import 'package:flutter/foundation.dart';
@@ -1455,7 +1741,9 @@ Future<void> initPreferences() async {
 /// of its part. It is synchronous and awaits nothing: nothing waits for an
 /// asynchronous one, and what such a one throws is not caught. It may run
 /// again, with preferences that were opened anew.
-final List<void Function(AppPreferences preferences)> _restorers = [];
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+];
 
 /// Calls each of [_restorers] with [preferences] on its own: what one
 /// throws, an error or an exception, keeps no other from restoring and does
@@ -1953,6 +2241,7 @@ final class SettingsRoutes {
   NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
 }
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
@@ -1964,9 +2253,10 @@ class FixtureOutsideScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Scaffold(body: Center(child: Text('Outside the app\'s main navigation')));
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondOutside)));
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 /// The screen of the second fixture feature, which can start the app too,
@@ -1977,9 +2267,10 @@ class FixtureSecondScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Scaffold(body: Center(child: Text('Second screen')));
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondTitle)));
 }
 === lib/features/fake_second/fixture_second_setting.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 /// The setting of the second fixture feature: a row of the settings screen
@@ -1995,12 +2286,13 @@ class FixtureSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     leading: const Icon(Icons.looks_two),
-    title: Text('Second setting'),
+    title: Text(context.l10n.fakeSecondSetting),
   );
 }
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
     as entry1;
+import 'package:fixture_app/core/l10n/language_setting.dart' as entry2;
 import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
     as entry0;
 import 'package:flutter/material.dart';
@@ -2018,6 +2310,7 @@ class SettingsScreen extends StatelessWidget {
       children: const [
         entry0.FixtureSetting(),
         entry1.FixtureSetting(),
+        entry2.LanguageSetting(),
         AboutListTile(
           icon: Icon(Icons.info_outline),
           applicationName: 'Fixture App',
@@ -2085,6 +2378,7 @@ class DefaultFirebaseOptions {
   }
 }
 === lib/main.dart (flutter_core) ===
+import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app.dart';
@@ -2093,7 +2387,7 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(const App());
+  runApp(AppLocaleScope(notifier: appLocale, child: const App()));
 }
 === pubspec.yaml (flutter_core) ===
 name: fixture_app
@@ -2107,6 +2401,8 @@ environment:
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   firebase_analytics: "^12.6.0"
   firebase_core: "^4.15.0"

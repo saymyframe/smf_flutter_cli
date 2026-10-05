@@ -28,17 +28,29 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 ## Localization
 
-- Show the user no text from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
-- `appLocales` in `lib/core/l10n/app_locale.dart` lists the languages of the app. The app is in the one that the device prefers among them, and in the first of the list when the device asks for none of them.
-- `appLocale` in that file holds the language that the user chose, or `null` while the app follows the device. Set `appLocale.value` to one of `appLocales`, or to `null`, and the root of the app rebuilds in that language. Pass no `locale` and no `supportedLocales` to the root `MaterialApp` anywhere else.
-- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into that list, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
 
 With `gen-l10n` of Flutter:
 
 - The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
-- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files. Then run `flutter pub get`, which generates `context.l10n.<name>`.
-- Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says. After adding the ARB file of a new language, run `flutter gen-l10n`, because `flutter pub get` does not notice a new file.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
 - Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- Do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -48,20 +60,20 @@ A new Flutter project.
 
 ## Texts
 
-The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. `flutter pub get` runs it when one of the ARB files changed or the files it writes are missing, so you can commit those files or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
 
-To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
 
 The texts of a new language, such as German, go into a file of their own:
 
 1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
-2. Run `flutter gen-l10n`, because `flutter pub get` does not notice a new ARB file.
+2. Run `flutter gen-l10n`.
 
 The section "Languages" tells where else the new language goes.
 
 ## Languages
 
-The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them.
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again.
 
 To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
 
@@ -303,10 +315,14 @@ class App extends StatelessWidget {
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/preferences/app_preferences.dart';
+
 /// Runs the start-up code of the app before its first frame: first what
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
-Future<void> bootstrap() async {}
+Future<void> bootstrap() async {
+  await initPreferences();
+}
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 
@@ -322,25 +338,106 @@ class FallbackStartScreen extends StatelessWidget {
 === lib/core/l10n/app_locale.dart (role:localization) ===
 import 'package:flutter/widgets.dart';
 
+import '../preferences/app_preferences.dart';
+
 /// The languages of the app. The app shows its texts in the language that
 /// the device prefers among them, and in the first of the list when the
 /// device asks for none of them.
 const appLocales = <Locale>[Locale('en')];
 
-/// The language that the user chose for the app, or `null` while the app
-/// follows the languages of the device.
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
 ///
-/// Set its value to one of [appLocales], or to `null`, to change the
-/// language: the root of the app, which reads it through [AppLocaleScope],
-/// rebuilds in the new language.
-final appLocale = ValueNotifier<Locale?>(null);
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
 
 /// Gives the root of the app the language that the user chose, and rebuilds
 /// the root when the choice changes.
-class AppLocaleScope extends InheritedNotifier<ValueNotifier<Locale?>> {
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
   /// Creates the scope of [notifier] around [child].
   const AppLocaleScope({
-    required ValueNotifier<Locale?> super.notifier,
+    required AppLocaleController super.notifier,
     required super.child,
     super.key,
   });
@@ -363,9 +460,219 @@ extension AppTexts on BuildContext {
   /// the root of the app.
   ///
   /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
-  /// `lib/l10n`. `flutter pub get` runs it when one of those files changed,
-  /// and `flutter gen-l10n` runs it for a new file too.
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
   AppLocalizations get l10n => AppLocalizations.of(this);
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, the reads of
+/// this run return the value all the same, and the next launch reads none.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
 }
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
@@ -399,6 +706,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: "any"
+  shared_preferences: "^2.5.5"
 
 dev_dependencies:
   flutter_test:

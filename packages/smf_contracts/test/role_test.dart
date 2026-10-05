@@ -324,6 +324,45 @@ void main() {
       expect(await router.template!.choose(context), '/settings');
       expect(() => context.option('unrelated'), throwsArgumentError);
     });
+
+    test(
+        'tells the hook whether a role that its role requires or uses is in '
+        'the app, and of no other role', () {
+      final layout = TestRole<String>('layout');
+      final events = TestRole<String>('events');
+      final feature = TestRole<String>(
+        'feature',
+        requires: {router},
+        uses: {layout},
+      );
+      RoleChoiceContext<String> contextOf(Set<Role> present) =>
+          feature.choiceContext(
+            RoleChoiceRequest(
+              data: const [],
+              presentRoles: present,
+              optionValues: const {},
+              environment: environment,
+              context: testContext,
+            ),
+          );
+
+      final context = contextOf({feature, router, events});
+      expect(context.has(feature), isTrue);
+      expect(context.has(router), isTrue);
+      expect(context.has(layout), isFalse);
+      expect(contextOf({feature, router, layout}).has(layout), isTrue);
+      expect(
+        () => context.has(events),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'The feature role neither requires nor uses the events role, so '
+                'its hooks cannot check its presence',
+          ),
+        ),
+      );
+    });
   });
 
   group('RoleTemplate and RoleProvider defaults', () {

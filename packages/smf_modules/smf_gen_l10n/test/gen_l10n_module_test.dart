@@ -9,6 +9,7 @@ import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_gen_l10n/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -35,16 +36,22 @@ const _tabs = TextsModule('tabs', [
   LocalizedText('first', en: 'First', translations: {'uk': 'Перша'}),
 ]);
 
-/// The modules of the tests: flutter_core, which creates the app, this
-/// module, and two modules with texts.
+/// The modules of the tests: flutter_core, which creates the app,
+/// shared_preferences, the preferences that the localization role requires,
+/// this module, and two modules with texts.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
+  SharedPreferencesModule(),
   GenL10nModule(),
   _greeting,
   _tabs,
 ];
 
 const _module = ModuleOrigin(GenL10nModule.id);
+
+/// The provider of the preferences, which every app with the localization
+/// role has, since the app remembers its language in them.
+const ModuleId _preferences = SharedPreferencesModule.id;
 
 /// The path of the file with the extension that the role requires.
 const String _accessor = LocalizationRole.textsFile;
@@ -194,6 +201,7 @@ void main() {
     test('builds the apps of the modules with texts with the module', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core',
+        'shared_preferences',
         'gen_l10n',
         'greeting with localization',
         'greeting',
@@ -242,9 +250,10 @@ void main() {
     late RenderedApp without;
 
     setUpAll(() async {
-      result = await _rendered(const [GenL10nModule.id]);
+      result = await _rendered(const [GenL10nModule.id, _preferences]);
       app = result.app!;
-      without = (await _rendered(const [FlutterCoreModule.id])).app!;
+      // The app with the preferences, without the localization.
+      without = (await _rendered(const [_preferences])).app!;
     });
 
     test('has the options of gen-l10n, the extension and the English file', () {
@@ -279,8 +288,10 @@ void main() {
         pubspec['flutter'],
         {'uses-material-design': true, 'generate': true},
       );
+      final others =
+          _yamlOf(without.files['pubspec.yaml']!.text)! as Map<String, Object?>;
       expect(pubspec['dependencies'], {
-        'flutter': {'sdk': 'flutter'},
+        ...others['dependencies']! as Map<String, Object?>,
         // The template of the role adds the localizations of Flutter.
         'flutter_localizations': {'sdk': 'flutter'},
         'intl': 'any',
@@ -293,7 +304,9 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      result = await _rendered([GenL10nModule.id, _greeting.id, _tabs.id]);
+      result = await _rendered(
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
+      );
       app = result.app!;
     });
 
@@ -369,7 +382,7 @@ void main() {
 
     test('has files only for the languages of --locales', () async {
       final narrowed = await _rendered(
-        [GenL10nModule.id, _greeting.id, _tabs.id],
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
         options: const {'locales': 'uk,en'},
       );
 
@@ -383,7 +396,7 @@ void main() {
       );
 
       final english = await _rendered(
-        [GenL10nModule.id, _greeting.id, _tabs.id],
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
         options: const {'locales': 'en'},
       );
       expect(
@@ -413,7 +426,8 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      app = (await _rendered([GenL10nModule.id, _greeting.id])).app!;
+      app = (await _rendered([GenL10nModule.id, _preferences, _greeting.id]))
+          .app!;
     });
 
     test(
@@ -491,6 +505,7 @@ void main() {
       final result = await _check(
         const [
           GenL10nModule.id,
+          _preferences,
           ModuleId('locale'),
           ModuleId('supported'),
           ModuleId('localizations'),
@@ -606,7 +621,10 @@ void main() {
     late RenderedApp app;
 
     setUpAll(() async {
-      app = (await _rendered([GenL10nModule.id, _greeting.id, _tabs.id])).app!;
+      app = (await _rendered(
+        [GenL10nModule.id, _preferences, _greeting.id, _tabs.id],
+      ))
+          .app!;
     });
 
     /// The inline code of the note: what stands between two backticks.
@@ -622,7 +640,8 @@ void main() {
         const RoleTemplateOrigin(localizationRole),
         _module,
       };
-      final without = (await _rendered([_greeting.id, _tabs.id])).app!;
+      final without =
+          (await _rendered([_preferences, _greeting.id, _tabs.id])).app!;
       final notes = app.entriesOf(AppEntryRole.agentSections);
 
       // The guide has the notes of the app without the localization, and
@@ -674,8 +693,10 @@ void main() {
     });
 
     test(
-        'names the ARB files of the app by the directory and the pattern of '
-        'their paths, and the files that gen-l10n writes by a pattern', () {
+        'names in inline code its tool and the command of it, the ARB files '
+        'of the app by the directory and the pattern of their paths, the '
+        'files that gen-l10n writes by a pattern, the options and how code '
+        'reads a text, and nothing else', () {
       final arbFiles = _arbFilesOf(app).keys;
       final generated = generatedLocalizationsOf(app).path;
       // A pattern of the note as an expression: any text in place of
@@ -685,16 +706,19 @@ void main() {
         return RegExp('^${parts.map(RegExp.escape).join('.*')}\$');
       }
 
-      expect(
-        code(),
-        containsAll([
-          GenL10nModule.arbDirectory,
-          GenL10nModule.templateArbFile,
-          '${GenL10nModule.arbDirectory}/app_<code>.arb',
-          '${GenL10nModule.arbDirectory}/app_localizations*.dart',
-          'l10n.yaml',
-        ]),
-      );
+      // All of them: the note names nothing of the role, such as the file
+      // of the languages, which the note of the role tells of.
+      expect(code(), {
+        'gen-l10n',
+        GenL10nModule.arbDirectory,
+        GenL10nModule.templateArbFile,
+        '${GenL10nModule.arbDirectory}/app_<code>.arb',
+        'flutter gen-l10n',
+        'context.l10n.<name>',
+        '${GenL10nModule.arbDirectory}/app_localizations*.dart',
+        'l10n.yaml',
+        'use-escaping: false',
+      });
       expect(arbFiles, hasLength(3));
       for (final path in arbFiles) {
         expect(
@@ -714,9 +738,9 @@ void main() {
     });
 
     test(
-        'tells how a text and the file of a language get their code, with '
-        'the commands of the README of the app, and that the options turn '
-        'the escapes off', () {
+        'tells to run the command of the README of the app after every '
+        'change of the ARB files, to name a text as the module names the '
+        'texts of the app, and that the options turn the escapes off', () {
       final readme = module
           .contribute(ContractHarness.defaultContext)
           .whereType<SocketContribution>()
@@ -725,18 +749,24 @@ void main() {
       final options =
           _yamlOf(app.files['l10n.yaml']!.text)! as Map<String, Object?>;
 
+      // One command, which generates the code after every change of the
+      // ARB files, a new file included; `flutter pub get` does so only for
+      // a file that it read before, in the directory of its last run.
       expect(
-        code(),
-        containsAll([
-          'flutter pub get',
-          'flutter gen-l10n',
-          'context.l10n.<name>',
-          'use-escaping: false',
-        ]),
+        {
+          for (final span in code())
+            if (span.startsWith('flutter ')) span,
+        },
+        {'flutter gen-l10n'},
       );
-      for (final command in ['flutter pub get', 'flutter gen-l10n']) {
-        expect(readme, contains('`$command`'), reason: command);
-      }
+      expect(
+        agentNote,
+        contains(
+          'After every change of the ARB files, a new file included, run '
+          '`flutter gen-l10n`',
+        ),
+      );
+      expect(readme, contains('`flutter gen-l10n`'));
       expect(options['use-escaping'], isFalse);
       // The getter that the note reads a text through is the one that the
       // file of the module declares on a context.
@@ -752,10 +782,20 @@ void main() {
         ],
         ['l10n'],
       );
-      // A name in lowerCamelCase, as the getters that the role names.
-      for (final name in _arbFilesOf(app)[GenL10nModule.templateArbFile]!) {
-        if (name.$1.startsWith('@')) continue;
-        expect(name.$1, matches(RegExp(r'^[a-z][A-Za-z0-9]*$')));
+      // The case that the note asks of the name of a new text is the case
+      // of the names that the module writes, the getters of the role.
+      final asked = RegExp('under a name in ([A-Za-z_]+),').firstMatch(
+        agentNote,
+      )![1];
+      expect(asked, 'lowerCamelCase');
+      final names = [
+        for (final (name, _)
+            in _arbFilesOf(app)[GenL10nModule.templateArbFile]!)
+          if (!name.startsWith('@')) name,
+      ];
+      expect(names, isNotEmpty);
+      for (final name in names) {
+        expect(name, matches(RegExp(r'^[a-z][A-Za-z0-9]*$')));
       }
     });
   });
@@ -765,7 +805,7 @@ void main() {
     late String section;
 
     setUpAll(() async {
-      result = await _rendered([GenL10nModule.id, _greeting.id]);
+      result = await _rendered([GenL10nModule.id, _preferences, _greeting.id]);
       section = module
           .contribute(ContractHarness.defaultContext)
           .whereType<SocketContribution>()
@@ -817,8 +857,8 @@ void main() {
     });
 
     test(
-        'tells to run gen-l10n once the file of a new language is added, '
-        'which flutter pub get does not notice', () {
+        'tells to run gen-l10n after every change of the ARB files: after a '
+        'new text, and once the file of a new language is added', () {
       final steps = [
         for (final line in section.split('\n'))
           if (RegExp(r'^\d+\. ').hasMatch(line)) line,
@@ -834,9 +874,34 @@ void main() {
         steps.first,
         contains('`${GenL10nModule.arbDirectory}/app_de.arb`'),
       );
-      expect(steps.last, startsWith('2. '));
-      expect(steps.last, contains('`flutter gen-l10n`'));
+      expect(steps.last, '2. Run `flutter gen-l10n`.');
+      final paragraphs = section.split('\n\n');
+      expect(
+        paragraphs.first,
+        contains('Run `flutter gen-l10n` after every change of the ARB files.'),
+      );
+      expect(
+        paragraphs.singleWhere((text) => text.startsWith('To add a text, ')),
+        contains('Then run `flutter gen-l10n`.'),
+      );
+      // The other command is for a fresh clone, which has no generated
+      // code: after a change it generates the code only for a file that it
+      // read before, in the directory of its last run.
       expect(commands, {'flutter pub get', 'flutter gen-l10n'});
+      expect(
+        paragraphs.first,
+        contains(
+          'In a fresh clone of the app, `flutter pub get` generates those '
+          'files',
+        ),
+      );
+      expect(
+        [
+          for (final paragraph in paragraphs)
+            if (paragraph.contains('`flutter pub get`')) paragraph,
+        ],
+        [paragraphs.first],
+      );
     });
 
     test(
@@ -853,6 +918,8 @@ void main() {
         'appLocales',
         AppEntryRole.infoPlistFile,
         'CFBundleLocalizations',
+        LocalizationRole.languageSettingFile,
+        '_names',
       ]) {
         expect(section, isNot(contains(ofRole)), reason: ofRole);
       }

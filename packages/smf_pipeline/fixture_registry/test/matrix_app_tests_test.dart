@@ -402,10 +402,48 @@ void main() {
           'fake_analytics',
           'analytics_role',
           'crash_reporting_role',
+          'language_setting',
         ]),
       );
       for (final test in severalProviders.tests) {
         expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
+      }
+    });
+
+    test(
+        'has the setting of the language, with texts in two languages: its '
+        'app has the localization role and the settings screen role, and '
+        'the test of the setting, a test of the localization role, applies '
+        'to it with the helper of the tests of the settings screen', () {
+      final hook = everyModule.hook!;
+      final setting = ofSeveral('language_setting');
+
+      expect(
+        hook.presentRoles,
+        containsAll([localizationRole, settingsScreenRole, preferencesRole]),
+      );
+      expect(
+        localizationRole.localesIn(localizationRole.hookInput(hook)),
+        ['en', 'uk'],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(hook)))
+            entry.file,
+        ],
+        contains(LocalizationRole.languageSettingFile),
+      );
+      expect(setting.roles, {localizationRole});
+      expect(setting.appliesTo(everyModule), isTrue);
+      // It opens the settings screen with the helper of those tests, which
+      // every app that it applies to has.
+      for (final app in matrix.where(setting.appliesTo)) {
+        expect(
+          ofSeveral('settings_screen_role').appliesTo(app),
+          isTrue,
+          reason: app.name,
+        );
       }
     });
 

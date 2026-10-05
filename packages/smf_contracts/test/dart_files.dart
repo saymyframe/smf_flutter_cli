@@ -93,8 +93,13 @@ final class DartFiles {
   DartFiles._(this._root, this._paths);
 
   /// Writes [files], the text of each Dart file by its path from the root
-  /// of the app, such as `lib/core/preferences/app_preferences.dart`.
-  factory DartFiles.write(Map<String, String> files) {
+  /// of the app, such as `lib/core/preferences/app_preferences.dart`, and
+  /// [flutter], stand-ins for other libraries of Flutter that the files
+  /// use, each by its name, such as `widgets.dart`.
+  factory DartFiles.write(
+    Map<String, String> files, {
+    Map<String, String> flutter = const {},
+  }) {
     final root = Directory.systemTemp.createTempSync('smf_contracts_');
     void write(String path, String text) => File('${root.path}/$path')
       ..createSync(recursive: true)
@@ -105,6 +110,9 @@ final class DartFiles {
     }
     write('flutter/lib/foundation.dart', _foundation);
     write('flutter/lib/material.dart', _material);
+    for (final MapEntry(key: library, value: text) in flutter.entries) {
+      write('flutter/lib/$library', text);
+    }
     write('app/pubspec.yaml', 'name: ${testContext.appName}\n');
     write(
       'app/.dart_tool/package_config.json',

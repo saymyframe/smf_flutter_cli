@@ -420,6 +420,9 @@ void main() {
           if (named('preferences_role').appliesTo(app)) app.name,
       ],
       [
+        // The localization role requires the preferences.
+        'gen_l10n with settings_screen',
+        'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
         'every module (bloc)',
@@ -472,6 +475,184 @@ void main() {
         .singleWhere((declaration) => declaration.name == test.mocks!.function);
     expect(function.kind, DeclarationKind.function);
     expect(function.parameters, isEmpty);
+  });
+
+  test(
+      'the test of the setting of the language applies to the apps with the '
+      'localization role and the settings screen role, whichever modules '
+      'provide them, and gets the widget of the entry, the label of each '
+      'language and the texts of the setting from the data of the roles',
+      () async {
+    const settingFile = ImportRef.app('core/l10n/language_setting.dart');
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<String>? languages,
+      bool setting = true,
+    }) =>
+        MatrixApp(
+          'texts',
+          const [ModuleId('texts'), ModuleId('screen')],
+          hook: RoleHookRequest(
+            data: [
+              // An entry of a module, and the entry of the template of the
+              // localization role after it.
+              settingsScreenRole
+                  .data(
+                    const SettingsEntry(
+                      widget: TypeRef(
+                        'ThemeSetting',
+                        import: ImportRef.app('core/theme/theme_setting.dart'),
+                      ),
+                    ),
+                  )
+                  .withOrigin(const ModuleOrigin(ModuleId('theme'))),
+              if (setting)
+                settingsScreenRole
+                    .data(
+                      const SettingsEntry(
+                        widget: TypeRef('LanguageSetting', import: settingFile),
+                      ),
+                    )
+                    .withOrigin(const RoleTemplateOrigin(localizationRole)),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+            choices: {
+              if (languages != null)
+                localizationRole: LocalizationChoice(languages),
+            },
+          ),
+        );
+    final test = await languageSettingAppTest();
+
+    expect(p.basename(test.directory), 'language_setting');
+    // A provider of the localization role breaks it, so it is a test of
+    // that role.
+    expect(test.roles, {localizationRole});
+    expect(test.startProbe, isNull);
+    expect(
+      test.appliesTo(appWith({localizationRole, settingsScreenRole})),
+      isTrue,
+    );
+    expect(test.appliesTo(appWith({localizationRole})), isFalse);
+    expect(test.appliesTo(appWith({settingsScreenRole})), isFalse);
+    // The apps of the matrix of the CLI with both roles: the app of
+    // gen_l10n with a settings screen, and the apps with every module.
+    final registered = named('language_setting');
+    expect(registered.roles, test.roles);
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({localizationRole, settingsScreenRole}))
+            app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+
+    final files = test.generatedFiles!(
+      appWith(
+        {localizationRole, settingsScreenRole},
+        languages: ['uk', 'en', 'de'],
+      ),
+      'my_app',
+    );
+    expect(files.keys, [languageSettingFile]);
+    final text = files[languageSettingFile]!;
+    final (:index, :errors) = DartFileIndexer.parse(languageSettingFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      ['package:my_app/core/l10n/language_setting.dart as entry'],
+    );
+    expect(
+      'lib/${settingFile.uri}',
+      LocalizationRole.languageSettingFile,
+    );
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      [
+        'languageSetting',
+        'savedLanguageKey',
+        'languageLabels',
+        'settingTitles',
+        'deviceOptions',
+      ],
+    );
+    expect(
+      text,
+      contains('const Type languageSetting = entry.LanguageSetting;'),
+    );
+    expect(
+      text,
+      contains(
+        "const String savedLanguageKey = '${LocalizationRole.localeKey}';",
+      ),
+    );
+    // Each language of the app in its order: a name of the role, or the
+    // code of the language; and the texts of the setting, in English where
+    // they have no translation.
+    expect(
+      text,
+      contains(
+        'const Map<String, String> languageLabels = {\n'
+        "  'uk': 'Українська',\n"
+        "  'en': 'English',\n"
+        "  'de': 'de',\n"
+        '};\n',
+      ),
+    );
+    expect(
+      text,
+      contains(
+        'const Map<String, String> settingTitles = {\n'
+        "  'uk': 'Мова',\n"
+        "  'en': 'Language',\n"
+        "  'de': 'Language',\n"
+        '};\n',
+      ),
+    );
+    expect(
+      text,
+      contains(
+        'const Map<String, String> deviceOptions = {\n'
+        "  'uk': 'Як у системі',\n"
+        "  'en': 'System',\n"
+        "  'de': 'System',\n"
+        '};\n',
+      ),
+    );
+
+    // An app whose settings screen lacks the entry has nothing to test.
+    expect(
+      () => test.generatedFiles!(
+        appWith({localizationRole, settingsScreenRole}, setting: false),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'The settings screen of texts has 0 entries in '
+              '${LocalizationRole.languageSettingFile}, the file of the '
+              'setting of the language, rather than one.',
+        ),
+      ),
+    );
   });
 
   test(
@@ -778,7 +959,12 @@ void main() {
         for (final app in apps)
           if (settings.appliesTo(app)) app.name,
       ],
-      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+      [
+        'settings',
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
     );
     // They run in a test of the app only, so they have no probe for a
     // check on a device, where the walk of the routes goes to the screen.
@@ -793,9 +979,15 @@ void main() {
       // The screen of the provider, as the role finds it.
       final screen =
           settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
+      // The one setting among the modules and the roles of the CLI is the
+      // setting of the language, which the localization role gives an app
+      // with a settings screen.
+      final localized = app.hook!.presentRoles.contains(localizationRole);
       expect(
         [for (final import in index.imports) '${import.uri} ${import.prefix}'],
         [
+          if (localized)
+            'package:my_app/core/l10n/language_setting.dart entry0',
           'package:my_app/core/router/navigation.dart null',
           '${screen.route.screen.import.resolveUri('my_app')} screen',
         ],
@@ -816,8 +1008,11 @@ void main() {
             'const Type settingsScreen = '
             'screen.${screen.route.screen.className};',
           ),
-          // No module of the CLI has a setting yet.
-          contains('const List<Type> settingsEntries = [\n];'),
+          contains(
+            'const List<Type> settingsEntries = [\n'
+            '${localized ? '  entry0.LanguageSetting,\n' : ''}'
+            '];',
+          ),
         ),
         reason: app.name,
       );
@@ -941,7 +1136,12 @@ void main() {
         for (final app in apps)
           if (named('settings').appliesTo(app)) app.name,
       ],
-      ['settings', 'every module (bloc)', 'every module (riverpod)'],
+      [
+        'settings',
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
     );
   });
 

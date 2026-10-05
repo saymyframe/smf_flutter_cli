@@ -14,8 +14,9 @@ import 'package:smf_gen_l10n/src/agents.dart';
 /// This module adds:
 /// - `l10n.yaml`, the options of gen-l10n, and `generate: true` in the
 ///   pubspec, with which `flutter pub get` generates the `AppLocalizations`
-///   class in [arbDirectory], and generates it again when an ARB file that
-///   it read before changed;
+///   class in [arbDirectory] in a new app and in a fresh clone of one.
+///   After a change of the ARB files, `flutter gen-l10n` generates it
+///   again;
 /// - an ARB file in [arbDirectory] for each language of the app: the
 ///   template, [templateArbFile], with every text of the app in English,
 ///   and the file of each other language with the texts that have a
@@ -25,12 +26,13 @@ import 'package:smf_gen_l10n/src/agents.dart';
 /// - the delegate of `AppLocalizations` among the `localizationsDelegates`
 ///   of the root of the app;
 /// - the section [readmeHeading] of the README of the app, which tells
-///   where the texts are, how to add a text, and how to add the ARB file of
-///   a new language, which only `flutter gen-l10n` picks up. The section of
-///   the role tells where else a new language goes;
+///   where the texts are, how to add a text and the ARB file of a new
+///   language, and to run `flutter gen-l10n` after every change of the ARB
+///   files. The section of the role tells where else a new language goes;
 /// - a note in the section of the localization of the guide for coding
 ///   agents of the app, after what the role says there: where the texts
-///   are, how to add one, and which files gen-l10n writes itself.
+///   are, how to add one, the same command, and which files gen-l10n
+///   writes itself.
 ///
 /// The ARB files come from the render hook of the module, since the app
 /// has one for each of its languages. SMF never writes the code that reads
@@ -90,14 +92,14 @@ final class GenL10nModule extends SmfModule {
 /// Where else a new language goes is the same with every provider of the
 /// role, so the section of the role tells it.
 const _readmeSection = '''
-The texts of the app are in the ARB files of `${GenL10nModule.arbDirectory}`, one for each language. `${GenL10nModule.templateArbFile}` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. `flutter pub get` runs it when one of the ARB files changed or the files it writes are missing, so you can commit those files or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app.
+The texts of the app are in the ARB files of `${GenL10nModule.arbDirectory}`, one for each language. `${GenL10nModule.templateArbFile}` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `${LocalizationRole.textsFile}` imported, where `context` is a `BuildContext` below the root of the app.
 
-To add a text, add it to `${GenL10nModule.templateArbFile}` under a name of its own, and its translations under the same name to the files of the other languages. A text without a translation into a language reads in English there.
+To add a text, add it to `${GenL10nModule.templateArbFile}` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
 
 The texts of a new language, such as German, go into a file of their own:
 
 1. Add `${GenL10nModule.arbDirectory}/app_de.arb` with `"@@locale": "de"` and the translations.
-2. Run `flutter gen-l10n`, because `flutter pub get` does not notice a new ARB file.
+2. Run `flutter gen-l10n`.
 
 The section "${LocalizationRole.readmeHeading}" tells where else the new language goes.
 ''';

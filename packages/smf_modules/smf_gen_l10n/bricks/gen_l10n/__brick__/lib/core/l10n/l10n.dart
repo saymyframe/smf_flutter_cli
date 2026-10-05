@@ -8,7 +8,6 @@ extension AppTexts on BuildContext {
   /// the root of the app.
   ///
   /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
-  /// `lib/l10n`. `flutter pub get` runs it when one of those files changed,
-  /// and `flutter gen-l10n` runs it for a new file too.
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
   AppLocalizations get l10n => AppLocalizations.of(this);
 }

@@ -13,7 +13,7 @@ The module adds to the app:
 - `lib/l10n/app_en.arb` with every text of the modules of the app in English, and a file for each other language that the texts are in, with the translations;
 - `lib/core/l10n/l10n.dart` with `context.l10n`, the `AppLocalizations` of a `BuildContext`.
 
-The localization role adds `lib/core/l10n/app_locale.dart` with the languages of the app, and gives the root of the app its locale, its supported locales and the delegates of Flutter's own texts.
+The localization role adds `lib/core/l10n/app_locale.dart` with the languages of the app and the one that the user chose, and gives the root of the app its locale, its supported locales and the delegates of Flutter's own texts. The app remembers that choice in its preferences, so `smf create` adds `shared_preferences` too, the only module that provides them.
 
 To add a text of your own, add it to `lib/l10n/app_en.arb`, and its translations to the files of the other languages:
 
@@ -24,7 +24,7 @@ To add a text of your own, add it to `lib/l10n/app_en.arb`, and its translations
 }
 ```
 
-After `flutter pub get`, read it where a `BuildContext` below the root of the app is at hand:
+After `flutter gen-l10n`, read it where a `BuildContext` below the root of the app is at hand:
 
 ```dart
 import 'package:my_app/core/l10n/l10n.dart';
@@ -32,7 +32,7 @@ import 'package:my_app/core/l10n/l10n.dart';
 Text(context.l10n.cartTitle)
 ```
 
-A text without a translation into a language reads in English there. The README of the app tells how to add a language: its ARB file needs `flutter gen-l10n`, since `flutter pub get` does not notice a new file.
+A text without a translation into a language reads in English there. Run `flutter gen-l10n` after every change of the ARB files, a new file included. The README of the app tells how to add a language.
 
 Without `-m`, `smf create` asks which module provides the localization of the app.
 

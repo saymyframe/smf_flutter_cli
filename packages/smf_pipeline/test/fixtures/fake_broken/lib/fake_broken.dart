@@ -264,6 +264,25 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture texts that are always in the first language of the app,
+  /// whatever language the root of the app is in: the delegate of the texts
+  /// supports each language of the app, and loads the texts of the first
+  /// one for it.
+  static const textsInFirstLanguage = BrokenModule._(
+    FakeL10nModule(),
+    ModuleId('broken_texts_in_first_language'),
+    'The texts of the app, always in its first language (fixture)',
+    LocalizationRole.textsFile,
+    [
+      (
+        '      SynchronousFuture(FixtureTexts(locale.languageCode));\n',
+        '      SynchronousFuture(\n'
+            '        FixtureTexts(appLocales.first.languageCode),\n'
+            '      );\n',
+      ),
+    ],
+  );
+
   /// The service log of the fixtures whose analytics service notes each
   /// call twice, as a service does that sends each event twice: to the
   /// tests of the analytics role, each call of the analytics service of the

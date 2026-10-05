@@ -123,10 +123,12 @@ final class RoleChoiceContext<D extends Object> {
   RoleChoiceContext._({
     required this.role,
     required this.data,
+    required Set<Role> present,
     required Map<String, String?> optionValues,
     required this.environment,
     required this.context,
-  }) : _optionValues = optionValues;
+  })  : _present = present,
+        _optionValues = optionValues;
 
   /// The role whose hook runs.
   final Role<D> role;
@@ -142,7 +144,26 @@ final class RoleChoiceContext<D extends Object> {
   /// The app being generated.
   final ModuleContext context;
 
+  final Set<Role> _present;
   final Map<String, String?> _optionValues;
+
+  /// Whether [other] is present in the app.
+  ///
+  /// A hook may ask only about its own role and the roles it requires or
+  /// uses (see [Role.visibleRoles]), as [RoleHookInput.has] lets the other
+  /// hooks; throws an [ArgumentError] for any other.
+  bool has(Role other) {
+    if (identical(other, role)) return true;
+    if (!role.visibleRoles.contains(other)) {
+      throw ArgumentError.value(
+        other,
+        'other',
+        'The $role neither requires nor uses the $other, so its hooks cannot '
+            'check its presence',
+      );
+    }
+    return _present.contains(other);
+  }
 
   /// The value of the role's option [name], or `null` if it was not given.
   ///
