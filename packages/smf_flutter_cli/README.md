@@ -57,6 +57,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
 | [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
 | [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
+| [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme from one seed colour, and the theme mode that the user selects, which the app remembers. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
 | [`gen_l10n`](https://doc.saymyframe.com/modules/gen-l10n) | Localization with gen-l10n of Flutter: the texts of the modules in ARB files, one for each language of the app. |

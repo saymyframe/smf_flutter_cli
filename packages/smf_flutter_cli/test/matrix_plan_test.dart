@@ -879,7 +879,8 @@ void main() {
       expect(problems, isEmpty);
       expect(plan, {
         'combinations': 'pairwise',
-        // One app more than a shard checks (appsPerShard).
+        // More apps than a shard checks (appsPerShard): those of the
+        // matrix, and the apps with every module once more.
         'shards': ['1/2', '2/2'],
         'apps': ['every module (bloc)', 'every module (riverpod)'],
         'start': ['every module (bloc)', 'every module (riverpod)'],

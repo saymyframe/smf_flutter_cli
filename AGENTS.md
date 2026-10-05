@@ -18,6 +18,7 @@ SMF (Say My Frame) is a Flutter CLI (`smf create`) that generates apps from inde
   | `smf_home_flutter` | `home` | The feature `home` (`HomeModule`), the start screen at `/home`; requires the router role. |
   | `smf_settings` | `settings` | The feature `settings` (`SettingsModule`), the settings screen at `/settings`; provides the settings screen role, whose entries the modules of the app and the templates of its roles contribute, and requires the router role. |
   | `smf_bottom_tabs` | `bottom_tabs` | Provides the layout role: tabs in a bar at the bottom for the destinations of the features, which the router builds its main navigation around. The layout requires the router role. |
+  | `smf_material_theme` | `material_theme` | Provides the theme role: a light and a dark Material 3 theme from one seed colour in `lib/core/theme/app_theme.dart`, the file that a developer edits for another look. The theme mode that the user selects is the role's, with every provider: its template remembers the mode in the preferences, which the role requires, and adds its entry to the settings screen. |
   | `smf_gen_l10n` | `gen_l10n` | Provides the localization role with gen-l10n of Flutter: it writes the texts of the modules into ARB files, one for each language of the app, and `flutter pub get` generates the class through which code reads them. |
   | `smf_get_it` | `get_it` | Provides the dependency injection (DI) role and registers in get_it the services that the modules of the app declare. |
   | `smf_event_bus` | `event_bus` | Provides the events role: a service on the event_bus package through which parts of the app that do not know each other exchange events. |
@@ -38,7 +39,7 @@ packages/
     test/fixtures/            # fake modules for the features of the model that no real module uses yet, and providers of roles with a known bug
   smf_modules/
     smf_contribution_engine/  # a standalone engine that patches Dart files; no module uses it
-    smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, shared_preferences, home, settings, flutter_core, bloc, riverpod, bottom_tabs, gen_l10n
+    smf_<module>/             # first-party modules: go_router, get_it, firebase_*, event_bus, shared_preferences, home, settings, flutter_core, bloc, riverpod, bottom_tabs, gen_l10n, material_theme
   smf_flutter_cli/            # the `smf` binary: the modules it offers, and the terminal, files and processes of the machine
 tools/                        # bundle_bricks.dart and sync_cli_version.dart; banlist.dart, coverage_check.dart, native_build.dart, test_annotations.dart and workspace_members.dart with their tests; package_graph_test.dart, build_workflow_test.dart, workflow_apps_test.dart, each_app_test.dart, start_app_test.dart, firebase_registration_test.dart, flutterfire_version_test.dart, sonar_lcov_test.dart, matrix_plan_test.dart, app_tests_test.dart, app_test_imports_test.dart and workspace.dart, which the last two share; the tools read the members of the workspace with workspace_members.dart, the only file that reads them from the root pubspec, as banlist.dart checks
 ```

@@ -423,7 +423,12 @@ void main() {
           if (named('preferences_role').appliesTo(app)) app.name,
       ],
       [
-        // The localization role requires the preferences.
+        // The theme role and the localization role require the
+        // preferences.
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'material_theme with localization',
+        'material_theme',
         'gen_l10n with settings_screen',
         'gen_l10n',
         'shared_preferences with di',
@@ -523,6 +528,8 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'material_theme with settings_screen, localization',
+        'material_theme with localization',
         'gen_l10n with settings_screen',
         'gen_l10n',
         'every module (bloc)',
@@ -845,6 +852,7 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'material_theme with settings_screen, localization',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
@@ -1255,6 +1263,8 @@ void main() {
       ],
       [
         'settings',
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
@@ -1263,6 +1273,32 @@ void main() {
     // They run in a test of the app only, so they have no probe for a
     // check on a device, where the walk of the routes goes to the screen.
     expect(settings.startProbe, isNull);
+    // The entries of each app, as the role gives them: none in the app of
+    // the settings module alone, whose modules have no setting; the entry
+    // of the theme mode, which the template of the theme role contributes,
+    // in the apps with the theme; and the setting of the language, which
+    // the template of the localization role contributes, in the apps with
+    // the localization, after that of the theme, as the modules that
+    // provide the two roles are in the list of the CLI.
+    List<SettingsEntry> entriesOf(MatrixApp app) =>
+        settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
+    expect(
+      {
+        for (final app in apps.where(settings.appliesTo))
+          app.name: [for (final entry in entriesOf(app)) entry.widget.name],
+      },
+      {
+        'settings': isEmpty,
+        'material_theme with settings_screen, localization': [
+          'ThemeModeSetting',
+          'LanguageSetting',
+        ],
+        'material_theme with settings_screen': ['ThemeModeSetting'],
+        'gen_l10n with settings_screen': ['LanguageSetting'],
+        'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
+        'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
+      },
+    );
 
     for (final app in apps.where(settings.appliesTo)) {
       final files = settings.generatedFiles!(app, 'my_app');
@@ -1273,18 +1309,17 @@ void main() {
       // The screen of the provider, as the role finds it.
       final screen =
           settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
-      // The one setting among the modules and the roles of the CLI is the
-      // setting of the language, which the localization role gives an app
-      // with a settings screen.
-      final localized = app.hook!.presentRoles.contains(localizationRole);
+      // The file of each entry, with a prefix of its own, in the order of
+      // the entries; the imports are sorted.
+      final entries = entriesOf(app);
       expect(
         [for (final import in index.imports) '${import.uri} ${import.prefix}'],
         [
-          if (localized)
-            'package:my_app/core/l10n/language_setting.dart entry0',
           'package:my_app/core/router/navigation.dart null',
+          for (final (index, entry) in entries.indexed)
+            '${entry.widget.import!.resolveUri('my_app')} entry$index',
           '${screen.route.screen.import.resolveUri('my_app')} screen',
-        ],
+        ]..sort(),
         reason: app.name,
       );
       expect(
@@ -1304,7 +1339,10 @@ void main() {
           ),
           contains(
             'const List<Type> settingsEntries = [\n'
-            '${localized ? '  entry0.LanguageSetting,\n' : ''}'
+            '${[
+              for (final (index, entry) in entries.indexed)
+                '  entry$index.${entry.widget.name},\n',
+            ].join()}'
             '];',
           ),
         ),
@@ -1432,6 +1470,8 @@ void main() {
       ],
       [
         'settings',
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
