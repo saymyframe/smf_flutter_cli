@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_settings/bundles/settings_bundle.dart';
+import 'package:smf_settings/src/agents.dart';
 
 /// The module of the settings screen of the app: a feature with one route,
 /// whose screen, `SettingsScreen`, shows the settings that the modules of
@@ -42,6 +43,10 @@ import 'package:smf_settings/bundles/settings_bundle.dart';
 /// has no state of its own, since each entry keeps the state of its
 /// setting, so the module has no variants for the modules that manage
 /// state, and it adds no package to the app.
+///
+/// In the guide for coding agents of the app, the module adds to the section
+/// of the settings screen where the screen is and how code opens it in an
+/// app without a main navigation ([agentNote]).
 final class SettingsModule extends SmfModule {
   /// Creates the module.
   const SettingsModule();
@@ -100,6 +105,10 @@ final class SettingsModule extends SmfModule {
           ]),
         ),
         settingsScreenRole.data(const SettingsScreenRoute(_route)),
+        AppEntryRole.agentSections.entry(
+          settingsScreenRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 
