@@ -1902,6 +1902,112 @@ void main() {
   });
 
   test(
+      'the tests of the settings module get the languages of the app, which '
+      'is in English alone without the localization role', () {
+    final settings = named('settings');
+    final withoutRole = [
+      for (final app in apps.where(settings.appliesTo))
+        if (!app.hook!.presentRoles.contains(localizationRole)) app,
+    ];
+
+    expect(
+      withoutRole.map((app) => app.name),
+      ['settings', 'material_theme with settings_screen'],
+    );
+    for (final app in withoutRole) {
+      final files = settings.generatedFiles!(app, 'my_app');
+      expect(files.keys, [settingsLanguagesFile]);
+      final text = files[settingsLanguagesFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(settingsLanguagesFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(index.imports, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['appLanguages', 'chooseLanguage'],
+        reason: app.name,
+      );
+      expect(
+        text,
+        allOf(
+          contains("const List<String> appLanguages = ['en'];"),
+          // Nothing to choose.
+          contains('Future<void> chooseLanguage(String language) async {}'),
+        ),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the file of the languages of an app with the localization role has '
+      'the languages of the role, also when the app is given its languages, '
+      'and chooses one through the language that the role keeps for the '
+      'app', () async {
+    final settings = named('settings');
+    // The apps as they are, and with the one language that they are given.
+    final (apps: english, :failed) = await matrixOf(
+      smfModules,
+      roleOptions: const {'locales': 'en'},
+    );
+    expect(failed, isEmpty);
+
+    for (final (matrix, languages) in [
+      // The languages that the title of the module is in.
+      (apps, "['en', 'uk']"),
+      (english, "['en']"),
+    ]) {
+      final withRole = [
+        for (final app in matrix.where(settings.appliesTo))
+          if (app.hook!.presentRoles.contains(localizationRole)) app,
+      ];
+
+      expect(
+        withRole.map((app) => app.name),
+        [
+          'settings with localization',
+          'material_theme with settings_screen, localization',
+          'every module (bloc)',
+          'every module (riverpod)',
+        ],
+        reason: languages,
+      );
+      for (final app in withRole) {
+        final reason = '${app.name} in $languages';
+        final files = settings.generatedFiles!(app, 'my_app');
+        expect(files.keys, [settingsLanguagesFile], reason: reason);
+        final text = files[settingsLanguagesFile]!;
+        final (:index, :errors) =
+            DartFileIndexer.parse(settingsLanguagesFile, text);
+        expect(errors, isEmpty, reason: reason);
+        expect(
+          [for (final import in index.imports) import.uri],
+          ['dart:ui', 'package:my_app/core/l10n/app_locale.dart'],
+          reason: reason,
+        );
+        expect(
+          index.declarations.map((declaration) => declaration.name),
+          ['appLanguages', 'chooseLanguage'],
+          reason: reason,
+        );
+        expect(
+          text,
+          allOf(
+            contains('const List<String> appLanguages = $languages;'),
+            // The future of the role, which completes once the choice is
+            // saved.
+            contains(
+              'Future<void> chooseLanguage(String language) =>\n'
+              '    appLocale.choose(Locale(language));',
+            ),
+          ),
+          reason: reason,
+        );
+      }
+    }
+  });
+
+  test(
       'the test of the screen views expects the screen that the router role '
       'chose for the app to start on', () {
     final screenViews = named('screen_views');
