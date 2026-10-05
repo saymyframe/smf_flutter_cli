@@ -48,9 +48,9 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the layout '
-      'role, of the DI role, of the events role and of the preferences role '
-      'with every provider of each, which they tell apart by the roles of '
-      'the app only', () {
+      'role, of the DI role, of the events role, of the preferences role and '
+      'of the localization role with every provider of each, which they '
+      'tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -59,8 +59,10 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        localizationRole,
       ]),
     );
+    expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
     expect(named('router_guards').roles, {routerRole});
@@ -131,9 +133,10 @@ void main() {
   });
 
   test(
-      'the tests of the events role, of the preferences role and of the walk '
-      'of the routes apply only to the apps with every module, which have '
-      'the roles and run flutter test for other tests already', () {
+      'the tests of the events role, of the preferences role, of the '
+      'localization role and of the walk of the routes apply only to the '
+      'apps with every module, which have the roles and run flutter test '
+      'for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -150,6 +153,21 @@ void main() {
         [for (final app in everyModule) app.name],
         reason: name,
       );
+    }
+    // So does the test of the localization role that the CLI keeps: each
+    // such app has the texts of the second fixture feature, in two
+    // languages of the app.
+    expect(appsOf(named('localization_role')), [
+      for (final app in everyModule) app.name,
+    ]);
+    for (final app in everyModule) {
+      final input = localizationRole.hookInput(app.hook!);
+      expect(
+        localizationRole.localesIn(input),
+        ['en', 'uk'],
+        reason: app.name,
+      );
+      expect(localizationRole.textsIn(input), isNotEmpty, reason: app.name);
     }
     // So does the walk of the routes, which goes to the start screens of
     // both fixture features, destinations of the main navigation, with
@@ -402,6 +420,7 @@ void main() {
           'fake_analytics',
           'analytics_role',
           'crash_reporting_role',
+          'localization_role',
           'language_setting',
         ]),
       );

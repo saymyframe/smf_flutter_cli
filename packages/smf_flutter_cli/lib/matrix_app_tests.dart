@@ -145,6 +145,13 @@ Future<MatrixAppTests> smfAppTests() async {
         generatedFiles: _settingsOf,
         roles: {settingsScreenRole},
       ),
+      // The languages and the texts of the apps with the localization
+      // role, whichever module provides it: the root supports the languages
+      // of the app, with a delegate of each kind for each of them, the app
+      // and its texts follow the language that the user chose, and the
+      // choice is saved and restored. Its probe goes through the languages
+      // on a device.
+      await localizationRoleAppTest(),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
       // modules provide them: its dialog chooses a language of the app,
@@ -154,14 +161,16 @@ Future<MatrixAppTests> smfAppTests() async {
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
-    // provider of the DI role, of the events role, of the preferences role
-    // and of the settings screen role gets the tests of its role.
+    // provider of the DI role, of the events role, of the preferences
+    // role, of the settings screen role and of the localization role gets
+    // the tests of its role.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
       settingsScreenRole,
+      localizationRole,
     },
   );
 }
@@ -221,6 +230,132 @@ Future<MatrixAppTest> preferencesRoleAppTest({
         'probePreferences',
       ),
     );
+
+/// The test of the localization role that the CLI keeps in its
+/// `app_tests/localization_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them: the root of
+/// the app supports the languages of the app and no other, and has, for
+/// each of them, a delegate of each kind of localizations that supports
+/// it; once the user chose a language, the app is in it, and each text of
+/// the app reads in it, or in English when it has no translation into it;
+/// while the user chose none, the app and its texts are in the language
+/// that the device prefers among those of the app; a choice is saved under
+/// [LocalizationRole.localeKey], and removed when the app follows the
+/// device again; and the next start, `initPreferences()` again, restores
+/// the language that was saved.
+///
+/// The test knows only the role. The matrix writes the languages and the
+/// texts of each app for it, from the data of its localization role, into
+/// [languagesAndTextsFile], next to the probe of the test in
+/// `integration_test/localization_role/probe.dart`, `probeLanguages()`. On
+/// a device, for the start check, the probe checks the texts in the
+/// language that it finds, goes through the first languages of the app, at
+/// most [languagesProbeLimit], and puts back the choice that it found. The
+/// matrix of the fixtures runs the test only in its apps with every module,
+/// which run other tests already.
+Future<MatrixAppTest> localizationRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/localization_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(localizationRole) &&
+          (among?.call(app) ?? true),
+      generatedFiles: _languagesAndTextsOf,
+      roles: {localizationRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/localization_role/probe.dart',
+        'probeLanguages',
+      ),
+    );
+
+/// The path in an app of the languages and the texts of the app, which the
+/// matrix writes for the test of the localization role: `appLanguages`, the
+/// codes of the languages that the role chose, in their order;
+/// `probedLanguages`, the first of them, at most [languagesProbeLimit],
+/// which the probe of the role goes through on a device;
+/// `savedLanguageKey`, the key of the role in the preferences of the app
+/// ([LocalizationRole.localeKey]); and `appTextChecks`, the texts of the
+/// app in the order of the role ([LocalizationRole.textsIn]), each with its
+/// name, such as `text title of the module settings`, a function that reads
+/// it through `context.l10n` of the role, and what it reads in each
+/// language of the app: its translation, or its English text.
+const languagesAndTextsFile = 'integration_test/localization_role/texts.dart';
+
+/// The most languages that the probe of the test of the localization role
+/// goes through on a device, the first of the app: for each, the screen
+/// settles once, and the probes of an app share a minute.
+const languagesProbeLimit = 10;
+
+/// The file at [languagesAndTextsFile] of [app], an app of the matrix with
+/// the localization role, whose package is [packageName].
+///
+/// It imports the file of the texts of the role only in an app with texts,
+/// where it reads them.
+Map<String, String> _languagesAndTextsOf(MatrixApp app, String packageName) {
+  final input = localizationRole.hookInput(app.hook!);
+  final languages = localizationRole.localesIn(input);
+  final checks = StringBuffer();
+  for (final text in localizationRole.textsIn(input)) {
+    checks
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString('$text')},')
+      ..writeln('    read: (context) => context.l10n.${text.getter},')
+      ..writeln('    expected: {');
+    for (final language in languages) {
+      final expected = text.text.textIn(language) ?? text.text.en;
+      checks.writeln(
+        "      '$language': ${SmfNames.dartString(expected)},",
+      );
+    }
+    checks
+      ..writeln('    },')
+      ..writeln('  ),');
+  }
+  final texts = LocalizationRole.appTexts.importRef.resolveUri(packageName);
+  final imports = [
+    "import 'package:flutter/widgets.dart';",
+    if (checks.isNotEmpty) "import '$texts';",
+  ];
+  String codesOf(Iterable<String> languages) =>
+      [for (final language in languages) "'$language'"].join(', ');
+  final key = SmfNames.dartString(LocalizationRole.localeKey);
+  final list = checks.isEmpty
+      ? 'const List<AppTextCheck> appTextChecks = [];'
+      : 'final List<AppTextCheck> appTextChecks = [\n$checks];';
+  return {
+    languagesAndTextsFile: '''
+// The languages and the texts of the app, and the key of the language that
+// the user chose, which the matrix of SMF writes from the data of the
+// localization role of the app for the tests of the role, in
+// test/localization_role, and their probe.
+${imports.join('\n')}
+
+/// The codes of the languages of the app, in their order.
+const List<String> appLanguages = [${codesOf(languages)}];
+
+/// The codes of the languages that the probe of the role goes through on a
+/// device: the first of the app, at most $languagesProbeLimit.
+const List<String> probedLanguages = [${codesOf(languages.take(languagesProbeLimit))}];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the localization role has it.
+const String savedLanguageKey = $key;
+
+/// A text of the app: its name, a function that reads it at a context below
+/// the root of the app, and what it reads in each language of the app, by
+/// the code of the language.
+typedef AppTextCheck = ({
+  String name,
+  String Function(BuildContext context) read,
+  Map<String, String> expected,
+});
+
+/// The texts of the app, in the order of the localization role.
+$list
+''',
+  };
+}
 
 /// The test of the setting of the language, the entry that the template of
 /// the localization role gives the settings screen, which the CLI keeps in
