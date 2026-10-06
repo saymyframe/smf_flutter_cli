@@ -14,7 +14,7 @@ Adding flutter_core: the only provider of the app entry role, which every app ne
 Adding go_router: the only provider of the router role, which home requires.
 ```
 
-The module writes `lib/core/layout/app_shell.dart` with `AppShell`, a `Scaffold` with a Material 3 `NavigationBar` that has a tab for each destination of the features, such as Home with the home icon. The router builds the main navigation around it, and each tab keeps its own stack. This app has a single destination, so the bar stays hidden until a second feature, such as `settings` or a module of your own, adds another one. With `gen_l10n` among the modules, the tabs are in the language of the app.
+The module writes `lib/core/layout/app_shell.dart` with `AppShell`, a `Scaffold` with a bar at the bottom that has a tab for each destination of the features, such as Home with the home icon. The file draws the bar itself and shows the selected tab in the colour that the theme gives the selected destination of a navigation bar, or in its primary colour. To change the look of the bar, edit that file. The router builds the main navigation around it, and each tab keeps its own stack. This app has a single destination, so the bar stays hidden until a second feature, such as `settings` or a module of your own, adds another one. With `gen_l10n` among the modules, the tabs are in the language of the app.
 
 Without `-m`, `smf create` asks which module provides the layout.
 
