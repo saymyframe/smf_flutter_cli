@@ -981,11 +981,16 @@ final class ContractHarness {
   ///   fragments may use: their own files, the files of the modules they
   ///   depend on directly, the files of the roles they provide,
   ///   require or use (the files of each role's template and the files of
-  ///   its required symbols), and, for the template and the providers of a
-  ///   role, the files of those who contribute data to the role, which they
-  ///   render. The cases the harness builds have one provider of each
-  ///   role, so there a provider cannot reach the files of another through
-  ///   the data.
+  ///   its required symbols). The template and the providers of a role
+  ///   render the data that its hooks read, so the code that a render hook
+  ///   of theirs gives may also import the files of those who contribute
+  ///   data to the role or to a role that it requires or uses: an import
+  ///   that the pipeline added for a fragment of theirs, and one in a file
+  ///   that their render hook generated. The template of a brick is the
+  ///   same in every app, so an import that it has itself reaches no file
+  ///   through the data. The cases the harness builds have one provider of
+  ///   each role, so there a provider cannot reach the files of another
+  ///   through the data.
   ///
   /// Throws an [ArgumentError] if the case of [result] did not resolve.
   List<SmfIssue> checkRendered(ContractResult result, RenderedApp app) {
@@ -1202,9 +1207,9 @@ final class _ImportCheck {
     return packages;
   }
 
-  /// The template and the providers of a role render the data of its
-  /// contributors, and of those of the roles that it requires or uses, so
-  /// they may import their files.
+  /// Who contributes data to each role, as the owner of their files. The
+  /// template and the providers of a role render the data that its hooks
+  /// read; see [_rendersDataOf].
   static Map<Role, Set<ContributionOrigin>> _dataContributorsOf(
     Collection collection,
   ) {
@@ -1298,14 +1303,26 @@ final class _ImportCheck {
           ),
       ];
     }
+    // What a render hook gave may follow the data that the hook read; the
+    // template of a brick names the same files in every app.
+    final rendered = users.byPipeline || users.inHookFile;
     final issues = <SmfIssue>[];
     for (final who in users.users) {
       if (_mayImport(who, target)) continue;
+      final ofData = _rendersDataOf(who, target);
+      if (rendered && ofData) continue;
       issues.add(
         SmfIssue(
           '$path $verb $target ${_how(who, users)}, but that file is of '
           '${app.files[target]!.owner}, which $who neither depends on '
           'nor knows through a role.',
+          hint: ofData
+              ? 'The owner of that file gives data to a role that $who '
+                  'renders, so a render hook of $who may give the import: '
+                  'with a fragment variable whose code needs it, or in a '
+                  'file that the hook generates. The template of a brick is '
+                  'the same in every app, so it names no file of a module.'
+              : null,
           origin: who,
           path: path,
         ),
@@ -1429,7 +1446,9 @@ final class _ImportCheck {
     ];
   }
 
-  /// Whether [who] may use the file of the app at [target].
+  /// Whether [who] may use the file of the app at [target] wherever its
+  /// code is: in the template of a brick too, which is the same in every
+  /// app.
   bool _mayImport(ContributionOrigin who, String target) {
     final owner = ownerOf(app.files[target]!.owner);
     final user = ownerOf(who);
@@ -1449,13 +1468,24 @@ final class _ImportCheck {
         return true;
       }
     }
+    return false;
+  }
+
+  /// Whether [who] is the template or a provider of a role whose hooks
+  /// read data of the owner of the file of the app at [target]: data that
+  /// the owner gave the role, or a role that it requires or uses, as the
+  /// layout role reads the destinations of the router role.
+  ///
+  /// What a render hook of [who] gives may then import the file, since the
+  /// hook wrote the code from that data: a fragment variable, whose imports
+  /// the pipeline adds, and a file that the hook generates.
+  bool _rendersDataOf(ContributionOrigin who, String target) {
+    final owner = ownerOf(app.files[target]!.owner);
+    final user = ownerOf(who);
     for (final role in resolution.presentRoles) {
       final renders = user == RoleTemplateOrigin(role) ||
           resolution.providersOf(role).any((module) => module.origin == user);
       if (!renders) continue;
-      // The hooks of a role read its data and the data of the roles that it
-      // requires or uses, as the layout role reads the destinations of the
-      // router role.
       for (final read in {role, ...role.visibleRoles}) {
         if (dataContributors[read]?.contains(owner) ?? false) return true;
       }
