@@ -209,6 +209,12 @@ final List<_Ban> _bans = [
     ),
 ];
 
+/// The licence of the font that the brick of the theme module puts into an
+/// app.
+const _fontLicence =
+    'packages/smf_modules/smf_material_theme/bricks/material_theme/__brick__/'
+    'assets/fonts/geist/OFL.txt';
+
 const _lasting = [
   _Exception(
     ['tools/banlist.dart', 'tools/banlist_test.dart'],
@@ -276,6 +282,12 @@ const _lasting = [
     ['tools/workspace_members.dart'],
     {'workspace: read by hand'},
     'It reads the members of the workspace for every tool.',
+  ),
+  _Exception(
+    [_fontLicence],
+    {'"by itself" without "only"'},
+    'The licence of the font of the themes, whose text is that of its '
+    'authors.',
   ),
 ];
 

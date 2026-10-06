@@ -916,10 +916,10 @@ void main() {
       theme,
       messages.indexOf('Localization: which module provides it?') + 1,
     );
-    expect(run.asked[theme].shown, [
-      'material_theme — Light and dark Material 3 themes from one seed colour',
-      'None',
-    ]);
+    const materialTheme =
+        'material_theme — Light and dark Material 3 themes with a palette '
+        'and a bundled font';
+    expect(run.asked[theme].shown, [materialTheme, 'None']);
     // The theme role requires the preferences, and shared_preferences is the
     // only module that provides them, so the run does not ask for them.
     expect(messages, isNot(contains(startsWith('Preferences'))));

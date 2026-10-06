@@ -1,11 +1,3 @@
-This product includes software developed by SayMyFrame (https://saymyframe.com).
-
-Licensed under the Apache License, Version 2.0 (the "License");
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-This product includes the Geist font, version 1.401, which the apps it
-generates bundle:
-
 Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
