@@ -4,7 +4,9 @@
 // what the preferences of the module save reaches the package under the
 // same key and with the same type, what they remove is gone from it, and
 // they read what the package has when they are opened, a number only as the
-// type that it was saved as.
+// type that it was saved as. A write that the platform side refuses fails,
+// its value is read in the run that wrote it, and preferences that are
+// opened again read what was saved before.
 //
 // When the preferences are opened, a platform returns a list in a form of
 // its own, which the platform side in memory does not: iOS a list of
@@ -52,6 +54,26 @@ base class _PlatformLists extends InMemorySharedPreferencesAsync {
             in (await super.getPreferences(parameters, options)).entries)
           key: value is List<Object?> ? _formOf(List.of(value)) : value,
       };
+}
+
+/// A platform side that keeps what is saved in memory, and refuses to save
+/// a text under a key of [_refused], as Android refuses a text that starts
+/// with the prefix that the package marks a list with.
+base class _RefusingPlatform extends InMemorySharedPreferencesAsync {
+  _RefusingPlatform(this._refused, Map<String, Object> saved)
+      : super.withData(saved);
+
+  final Set<String> _refused;
+
+  @override
+  Future<bool> setString(
+    String key,
+    String value,
+    SharedPreferencesOptions options,
+  ) =>
+      _refused.contains(key)
+          ? Future.error(StateError('The platform refused to save $key.'))
+          : super.setString(key, value, options);
 }
 
 /// The forms of a list that the platforms return when the preferences are
@@ -176,6 +198,44 @@ void main() {
         reason: 'A double is not read as an int, $run.',
       );
     }
+  });
+
+  test(
+      'a write that the platform refuses fails, its value is read in the run '
+      'that wrote it, and the preferences read what was saved before once '
+      'they are opened again', () async {
+    const kept = 'shared_preferences.refused_kept';
+    const added = 'shared_preferences.refused_new';
+    _use(_RefusingPlatform({kept, added}, {kept: 'before'}));
+    final preferences = await openSharedAppPreferences();
+
+    for (final key in [kept, added]) {
+      await expectLater(
+        preferences.setString(key, 'refused'),
+        throwsStateError,
+        reason: 'A write that the platform refuses fails.',
+      );
+      expect(
+        preferences.getString(key),
+        'refused',
+        reason: 'The write put its value into memory before the platform '
+            'refused it, so this run reads the value.',
+      );
+    }
+
+    final next = await openSharedAppPreferences();
+    expect(
+      next.getString(kept),
+      'before',
+      reason: 'The next launch reads what was saved before a write that the '
+          'platform refused.',
+    );
+    expect(
+      next.getString(added),
+      isNull,
+      reason: 'A key that had no value has none after a write that the '
+          'platform refused.',
+    );
   });
 
   for (final MapEntry(key: platform, value: formOf) in _platformLists.entries) {

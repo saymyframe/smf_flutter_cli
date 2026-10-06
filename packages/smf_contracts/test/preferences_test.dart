@@ -621,10 +621,21 @@ void main() {
         (await _rendered(async: true)).files[PreferencesRole.file],
         contains('A key is `<owner id>.<setting>`'),
       );
+      // The ban is for the code of the app. A test opens the preferences
+      // as the next launch does, which the role lets it do.
       expect(
         text,
         contains(
-          'Do not call `createAppPreferences()` or `initPreferences()`',
+          'In the code of the app, do not call `createAppPreferences()` or '
+          '`initPreferences()`',
+        ),
+      );
+      expect(
+        text,
+        contains(
+          'A test may call both: `initPreferences()` opens the preferences '
+          'again, as the next launch of the app does, and '
+          '`createAppPreferences()` returns them.',
         ),
       );
       expect(

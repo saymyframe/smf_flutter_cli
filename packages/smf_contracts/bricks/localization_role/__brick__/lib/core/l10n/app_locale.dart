@@ -5,6 +5,11 @@ import '../preferences/app_preferences.dart';
 /// The languages of the app. The app shows its texts in the language that
 /// the device prefers among them, and in the first of the list when the
 /// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
 const appLocales = <Locale>[{{{locales}}}];
 
 /// The key of the preferences of the app under which the app saves the

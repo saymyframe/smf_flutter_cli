@@ -612,6 +612,28 @@ void main() {
           ThemeRole.modeKey,
         ]),
       );
+      // The arguments of the root that it tells to leave alone are those
+      // that the template gives the root, the first two from the functions
+      // of the provider.
+      final args = {
+        for (final socket in _contributions().whereType<SocketContribution>())
+          if (socket.socket == AppEntryRole.appArgs)
+            socket.argName: socket.fragment!.code,
+      };
+      expect(args, {
+        'theme': '${ThemeRole.createLightTheme.name}(context)',
+        'darkTheme': '${ThemeRole.createDarkTheme.name}(context)',
+        'themeMode': 'AppThemeModeScope.of(context)',
+      });
+      expect(spans, containsAll(['MaterialApp', ...args.keys]));
+      expect(
+        note.text,
+        contains(
+          'the root of the app calls them each time it builds, for the '
+          '`theme` and the `darkTheme` of the root `MaterialApp`. Leave '
+          'those two arguments and its `themeMode` as they are.',
+        ),
+      );
 
       // What it names of the file of the mode is what that file declares.
       final rendered = await renderTemplate(

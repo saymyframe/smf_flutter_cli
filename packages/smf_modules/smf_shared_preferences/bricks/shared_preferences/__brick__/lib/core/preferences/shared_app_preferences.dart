@@ -27,8 +27,9 @@ Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
 ///
 /// A write puts its value into memory before it saves it. If the platform
 /// refuses the save, as Android does for a text that starts with the prefix
-/// that shared_preferences marks a list with, the write fails, the reads of
-/// this run return the value all the same, and the next launch reads none.
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
 final class SharedAppPreferences implements AppPreferences {
   /// Creates the preferences on [SharedPreferencesWithCache], which has
   /// read what is saved.

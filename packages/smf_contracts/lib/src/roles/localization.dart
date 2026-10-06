@@ -60,9 +60,12 @@ const localizationRole = LocalizationRole._();
 /// The app remembers the language that the user chose, so the role requires
 /// the [PreferencesRole]. `appLocale.choose()` takes one of `appLocales`, or
 /// a locale of the language of one of them, which then is the choice, and
-/// refuses a locale of another language with an [ArgumentError]. A choice
-/// is saved under [localeKey] as the code of the language, and removed when
-/// the app follows the device again. The template gives the preferences
+/// refuses a locale of another language with an [ArgumentError]. The file
+/// tells the languages of the app apart by their codes alone, so
+/// `appLocales` has one locale for each language: of two locales of one
+/// language, `choose()` takes the first. A choice is saved under
+/// [localeKey] as the code of the language, and removed when the app
+/// follows the device again. The template gives the preferences
 /// `restoreAppLocale()` as a restorer, which reads the saved choice before
 /// the first frame; a code that is none of the languages of the app counts
 /// as nothing saved. A choice before the app opened its preferences changes
@@ -72,9 +75,10 @@ const localizationRole = LocalizationRole._();
 /// fail to save it, the future of `choose()` completes with their error,
 /// the app stays in the new language while it runs, and its next launch
 /// starts with what was saved before; choosing the language again saves it
-/// again. Code that does not await the future leaves the error to the
-/// handlers of the errors of the app, such as its crash reporting, as the
-/// setting of the language does.
+/// again. Code that does not catch the error leaves it to the handlers of
+/// the uncaught errors of the app, such as its crash reporting. The setting
+/// of the language does so: it awaits the choice in the callback of a tap,
+/// which nothing awaits.
 ///
 /// In an app with a settings screen, which the role uses (see
 /// [SettingsScreenRole]), the template adds [languageSettingFile] with

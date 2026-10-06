@@ -30,9 +30,15 @@ void debugPrint(String? message, {int? wrapWidth}) {}
 /// The platform is `platformPreferences`, a map in memory, as the one that
 /// the package has for tests. The cache takes its values as they are, so a
 /// test can put a list there in the form that a platform returns it in.
+/// The platform refuses to save under the keys of `refusedKeys`, as a
+/// platform refuses some values: the write has put its value into the cache
+/// by then, as that of the package has.
 const _sharedPreferences = '''
 /// What the platform has saved, as the tests read it.
 final Map<String, Object> platformPreferences = {};
+
+/// The keys that the platform refuses to save under.
+final Set<String> refusedKeys = {};
 
 /// How many times the preferences were created.
 int created = 0;
@@ -104,6 +110,9 @@ class SharedPreferencesWithCache {
   Future<void> _set(String key, Object value) async {
     _cache[key] = value;
     await Future<void>.delayed(Duration.zero);
+    if (refusedKeys.contains(key)) {
+      throw StateError('The platform refused to save under ' + key + '.');
+    }
     platformPreferences[key] = value;
   }
 }

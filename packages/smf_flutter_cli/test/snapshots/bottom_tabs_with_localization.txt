@@ -54,7 +54,7 @@ With `gen-l10n` of Flutter:
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
 - To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
 - Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
-- Do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
 
 With `shared_preferences`:
 
@@ -105,7 +105,7 @@ The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. 
 
 To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
 
-1. Add `Locale('de')` to `appLocales`.
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
 2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
@@ -371,6 +371,11 @@ import '../preferences/app_preferences.dart';
 /// The languages of the app. The app shows its texts in the language that
 /// the device prefers among them, and in the first of the list when the
 /// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
 const appLocales = <Locale>[Locale('en')];
 
 /// The key of the preferences of the app under which the app saves the
@@ -702,8 +707,9 @@ Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
 ///
 /// A write puts its value into memory before it saves it. If the platform
 /// refuses the save, as Android does for a text that starts with the prefix
-/// that shared_preferences marks a list with, the write fails, the reads of
-/// this run return the value all the same, and the next launch reads none.
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
 final class SharedAppPreferences implements AppPreferences {
   /// Creates the preferences on [SharedPreferencesWithCache], which has
   /// read what is saved.

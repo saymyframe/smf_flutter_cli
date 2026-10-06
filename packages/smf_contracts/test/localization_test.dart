@@ -66,6 +66,14 @@ List<String> _messages(List<SmfIssue> issues) =>
 /// Collects the named arguments of each creation of the class that it is
 /// for in the code that it visits, each as the code of its expression by
 /// the name of the argument.
+/// The doc comments of [dart] as running text: each line without its
+/// marker, joined to the line before it.
+String _commentsOf(String dart) => [
+      for (final line in dart.split('\n'))
+        if (line.trimLeft().startsWith('///'))
+          line.trimLeft().substring(3).trim(),
+    ].join(' ');
+
 final class _NamedArgumentsOf extends RecursiveAstVisitor<void> {
   _NamedArgumentsOf(this.className);
 
@@ -2719,6 +2727,36 @@ void main() {
         },
         files: rendered.files,
       );
+      // The note of every app with the role lets the app show no text from
+      // a literal but its name. The names of the languages are literals of
+      // that file, so this note tells of them.
+      expect(
+        agentNoteOf(localizationRole).text,
+        contains('Show the user no text but the name of the app from a '
+            'string literal.'),
+      );
+      expect(
+        note.text,
+        contains(
+          'Each name there is a string literal, the name of the language in '
+          'that language',
+        ),
+      );
+      expect(
+        parseString(
+          content: rendered.files[LocalizationRole.languageSettingFile]!,
+        )
+            .unit
+            .declarations
+            .whereType<TopLevelVariableDeclaration>()
+            .single
+            .variables
+            .variables
+            .single
+            .initializer!
+            .toSource(),
+        "<String, String>{'en' : 'English', 'uk' : 'Українська'}",
+      );
     });
 
     group('the section of the role in the README of the app', () {
@@ -2800,6 +2838,22 @@ void main() {
           expect(section, contains('`$named`'), reason: named);
         }
         expect(stepsOf(section), ['1', '2']);
+        // A language has one locale there, as the file of the languages
+        // says where it declares them.
+        const oneLocale =
+            'one locale for each language, since the app tells its languages '
+            'apart by their codes';
+        expect(
+          section,
+          contains("1. Add `Locale('de')` to `appLocales`, $oneLocale."),
+        );
+        expect(
+          _commentsOf(app.files[LocalizationRole.appLocaleFile]!),
+          contains(
+            'A language has one locale here. The app tells its languages '
+            'apart by their codes alone',
+          ),
+        );
         // The choice, which the file of the languages declares.
         expect(section, contains('`appLocale.choose()`'));
         expect(section, contains('`appLocale.choose(null)`'));
@@ -2917,6 +2971,50 @@ void main() {
         expect(constructor.constKeyword, isNotNull);
         expect(constructor.name, isNull);
         expect(constructor.parameters.toSource(), '({super.key})');
+      });
+
+      test(
+          'does not wait until a choice is saved, and catches no error of '
+          'it, as its comment tells', () {
+        final setting =
+            unit.declarations.whereType<ClassDeclaration>().singleWhere(
+                  (declaration) =>
+                      declaration.namePart.typeName.lexeme == 'LanguageSetting',
+                );
+        final options = _NamedArgumentsOf('ListTile');
+        unit.declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == '_LanguageDialog',
+            )
+            .accept(options);
+
+        // The callback of the tap awaits the choice, but nothing awaits the
+        // callback or catches what the choice completes with.
+        expect(
+          options.found.single['onTap'],
+          '() async {Navigator.of(context).pop(); '
+          'await appLocale.choose(locale);}',
+        );
+        expect(
+          code,
+          isNot(contains(RegExp(r'\b(try|catch|catchError|onError)\b'))),
+        );
+        expect(
+          _commentsOf(
+            setting.documentationComment!.tokens
+                .map((token) => token.lexeme)
+                .join('\n'),
+          ),
+          contains(
+            'The entry does not wait until a choice is saved. If the '
+            'preferences fail to save it, the app is in the chosen language '
+            'while it runs, its next launch starts with what was saved '
+            'before, and the error is one that nothing here catches: it '
+            'reaches the handlers of the uncaught errors of the app.',
+          ),
+        );
       });
 
       test('reads its texts from the texts of the app, by their getters', () {
@@ -3262,7 +3360,21 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+    /// Chooses the second of two locales of one language, in an app whose
+    /// languages a developer changed by hand.
+    const twoLocales = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  await initPreferences();
+  await appLocale.choose(const Locale('pt', 'PT'));
+  note('the second locale of a language');
+  await initPreferences();
+  note('a start after that');
+  port.send(steps);
+}
+''';
+
     late DartFiles app;
+    late Map<String, String> files;
 
     setUpAll(() async {
       const fakes = ImportRef.app('fakes/preferences.dart');
@@ -3293,14 +3405,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
         ],
         fromModules: restorers,
       );
-      app = DartFiles.write(
-        {
-          ...role.files,
-          ...ofPreferences.files,
-          'lib/fakes/preferences.dart': preferences,
-        },
-        flutter: {'widgets.dart': widgets},
-      );
+      files = {
+        ...role.files,
+        ...ofPreferences.files,
+        'lib/fakes/preferences.dart': preferences,
+      };
+      app = DartFiles.write(files, flutter: {'widgets.dart': widgets});
     });
 
     tearDownAll(() => app.delete());
@@ -3377,6 +3487,41 @@ Future<void> main(List<String> arguments, SendPort port) async {
         // that the listeners hear of.
         'changes': ['uk', 'en', 'uk', 'null'],
       });
+    });
+
+    test(
+        'is the first of two locales of one language, whichever of them is '
+        'chosen, as the file tells where it declares the languages', () async {
+      const generated = "const appLocales = <Locale>[Locale('en'), "
+          "Locale('uk')];";
+      final byHand = DartFiles.write(
+        {
+          ...files,
+          LocalizationRole.appLocaleFile:
+              files[LocalizationRole.appLocaleFile]!.replaceFirst(
+            generated,
+            "const appLocales = <Locale>[Locale('pt', 'BR'), "
+            "Locale('pt', 'PT')];",
+          ),
+        },
+        flutter: {'widgets.dart': widgets},
+      );
+      addTearDown(byHand.delete);
+      expect(files[LocalizationRole.appLocaleFile], contains(generated));
+
+      expect(await byHand.run('$notes$twoLocales'), {
+        'the second locale of a language': 'pt_BR, saved pt',
+        'a start after that': 'pt_BR, saved pt',
+      });
+      expect(
+        _commentsOf(files[LocalizationRole.appLocaleFile]!),
+        contains(
+          'their codes alone, so of two locales of one language, such as '
+          "`Locale('pt', 'BR')` and `Locale('pt', 'PT')`, "
+          '`appLocale.choose()` takes the first, whichever of them it is '
+          'given.',
+        ),
+      );
     });
   });
 }

@@ -232,13 +232,15 @@ final class _PreferencesTemplate extends _ServiceTemplate {
 
   /// The note of the role in the guide for coding agents: what the
   /// preferences are for, what never goes into them, and how the code of an
-  /// app gets them, whichever module provides the role.
+  /// app gets them, whichever module provides the role. The two functions
+  /// of the role are not for the code of the app, but a test of the app may
+  /// call them, as the tests of the role do.
   @override
   String get agentNote => '''
 - `$service` in `$file` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
 - To remember a setting, write a function that takes the `$service` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
 - Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
-- Do not call `$factory()` or `$initFunction()`. `${AppEntryRole.bootstrap.name}()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences.
+- In the code of the app, do not call `$factory()` or `$initFunction()`. `${AppEntryRole.bootstrap.name}()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `$initFunction()` opens the preferences again, as the next launch of the app does, and `$factory()` returns them.
 ''';
 
   /// `bootstrap()` always awaits `initPreferences()`, which also calls the

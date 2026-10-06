@@ -321,6 +321,21 @@ Future<void> main(List<String> arguments, SendPort port) async {
     platformPreferences.containsKey('a.count'),
   ];
 
+  // Writes that the platform refuses: one of a key that has a value, and
+  // one of a key that has none.
+  refusedKeys.addAll(const ['a.text', 'a.refused']);
+  final refused = <Object?>[];
+  for (final key in refusedKeys) {
+    try {
+      await preferences.setString(key, 'refused');
+      refused.add('saved');
+    } on StateError catch (error) {
+      refused.add(error.message);
+    }
+    refused.add(preferences.getString(key));
+  }
+  result['writes that the platform refuses'] = refused;
+
   // The next start opens the preferences anew.
   await initPreferences();
   final next = createAppPreferences();
@@ -332,10 +347,28 @@ Future<void> main(List<String> arguments, SendPort port) async {
     typed(next.getDouble('a.whole')),
     next.getInt('a.whole'),
     next.getInt('a.count'),
+    next.getString('a.refused'),
   ];
   port.send(result);
 }
 ''';
+
+/// The doc comments of [dart] as running text: each line without its
+/// marker, joined to the line before it.
+String _commentsOf(String dart) => [
+      for (final line in dart.split('\n'))
+        if (line.trimLeft().startsWith('///'))
+          line.trimLeft().substring(3).trim(),
+    ].join(' ');
+
+/// The code of the Dart blocks of the Markdown [text].
+List<String> _dartBlocksOf(String text) => [
+      // A checkout on Windows may have the file with CRLF line endings.
+      for (final block
+          in RegExp(r'^```dart\n(.*?)^```', multiLine: true, dotAll: true)
+              .allMatches(text.replaceAll('\r\n', '\n')))
+        block[1]!,
+    ];
 
 void main() {
   const module = SharedPreferencesModule();
@@ -637,6 +670,16 @@ void main() {
           ['a', 'b', 'd'],
         ],
         'removed': [null, false],
+        // The write fails, and this run reads its value all the same.
+        'writes that the platform refuses': [
+          'The platform refused to save under a.text.',
+          'refused',
+          'The platform refused to save under a.refused.',
+          'refused',
+        ],
+        // The next start reads what was saved before a refused write: the
+        // text of the key that had one, and nothing for the key that had
+        // none.
         'the next start': [
           true,
           2,
@@ -645,8 +688,18 @@ void main() {
           'double 2.0',
           null,
           null,
+          null,
         ],
       });
+      // As the comment of the implementation tells.
+      expect(
+        _commentsOf(withPreferences.files[_implementation]!.text),
+        contains(
+          'the write fails, and the reads of this run return the value all '
+          'the same. The next launch reads what was saved before the write, '
+          'or nothing if the key had no value.',
+        ),
+      );
       // What the note of the module tells coding agents of the numbers.
       expect(
         agentNote,
@@ -655,6 +708,72 @@ void main() {
           '`getInt()` for a key with a `double`.',
         ),
       );
+    });
+
+    test(
+        'has an example that gets the preferences as the guide for coding '
+        'agents tells code of the app to: in a restorer, without a call of '
+        'the functions of the role', () {
+      final example = File('example/README.md').readAsStringSync();
+      final code = _dartBlocksOf(example);
+      final index = DartFileIndexer.index('example.dart', code.join('\n'));
+
+      expect(code, isNotEmpty);
+      // What the note of the role keeps from the code of an app.
+      final note = withPreferences
+          .entriesOf(AppEntryRole.agentSections)
+          .firstWhere(
+            (entry) => entry.$1 == const RoleTemplateOrigin(preferencesRole),
+          )
+          .$3
+          .text;
+      expect(
+        note,
+        contains(
+          'In the code of the app, do not call `createAppPreferences()` or '
+          '`initPreferences()`',
+        ),
+      );
+      expect(
+        [for (final invocation in index.invocations) invocation.name],
+        isNot(
+          anyOf(
+            contains('createAppPreferences'),
+            contains('initPreferences'),
+          ),
+        ),
+      );
+      expect(example, isNot(contains('createAppPreferences()')));
+      // A function for `_restorers` of the file of the role, which takes
+      // the preferences as that list gives them.
+      final restorers = [
+        for (final declaration in index.declarations)
+          if (declaration.kind == DeclarationKind.function &&
+              declaration.type == 'void' &&
+              [for (final parameter in declaration.parameters) parameter.type]
+                      .join() ==
+                  'AppPreferences')
+            declaration.name,
+      ];
+      expect(restorers, hasLength(1));
+      expect(example, contains('`_restorers`'));
+      expect(example, contains('`${PreferencesRole.file}`'));
+      expect(
+        withPreferences.files[PreferencesRole.file]!.text,
+        contains(
+          'final List<void Function(AppPreferences preferences)> _restorers',
+        ),
+      );
+    });
+
+    test('has a README that leads to the guide of the preferences', () {
+      final readme = File('README.md').readAsStringSync();
+
+      expect(
+        readme,
+        contains('(https://doc.saymyframe.com/guides/preferences)'),
+      );
+      expect(readme, isNot(contains('guides/services')));
     });
 
     group('the note of the module for coding agents', () {
