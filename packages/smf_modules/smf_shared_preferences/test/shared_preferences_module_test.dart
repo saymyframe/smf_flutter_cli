@@ -363,9 +363,10 @@ String _commentsOf(String dart) => [
 
 /// The code of the Dart blocks of the Markdown [text].
 List<String> _dartBlocksOf(String text) => [
+      // A checkout on Windows may have the file with CRLF line endings.
       for (final block
           in RegExp(r'^```dart\n(.*?)^```', multiLine: true, dotAll: true)
-              .allMatches(text))
+              .allMatches(text.replaceAll('\r\n', '\n')))
         block[1]!,
     ];
 
