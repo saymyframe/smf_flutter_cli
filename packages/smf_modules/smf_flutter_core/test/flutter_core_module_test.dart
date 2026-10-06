@@ -52,24 +52,29 @@ String _constantOf(String name, String text) => [
             if (variable.name.lexeme == name) variable.initializer!.toSource(),
     ].single;
 
-/// The first argument of each `Text` that [text], the text of a Dart file,
-/// creates, as written and in the order of the file.
-List<String> _shownTextsOf(String text) {
-  final shown = <String>[];
-  parseString(content: text).unit.accept(_TextVisitor(shown));
-  return shown;
+/// The first argument of each call of [name] in [text], the text of a
+/// Dart file, as written and in the order of the file.
+List<String> _firstArgumentsOf(String name, String text) {
+  final arguments = <String>[];
+  parseString(content: text).unit.accept(_CallVisitor(name, arguments));
+  return arguments;
 }
 
-final class _TextVisitor extends RecursiveAstVisitor<void> {
-  _TextVisitor(this.shown);
+/// The first argument of each `Text` that [text], the text of a Dart file,
+/// creates, as written and in the order of the file.
+List<String> _shownTextsOf(String text) => _firstArgumentsOf('Text', text);
 
-  final List<String> shown;
+final class _CallVisitor extends RecursiveAstVisitor<void> {
+  _CallVisitor(this.name, this.arguments);
+
+  final String name;
+  final List<String> arguments;
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
-    // Without resolved types, the parser reads `Text(...)` as a call.
-    if (node.target == null && node.methodName.name == 'Text') {
-      shown.add(node.argumentList.arguments.first.toSource());
+    // Without resolved types, the parser reads `Text(...)` as a call too.
+    if (node.methodName.name == name) {
+      arguments.add(node.argumentList.arguments.first.toSource());
     }
     super.visitMethodInvocation(node);
   }
@@ -346,7 +351,12 @@ void main() {
         "const FallbackStartView(hint: 'No start screen yet. Add a feature "
         "with a route, or replace this screen.', copied: 'Copied')",
       );
-      expect(screen, isNot(contains('l10n')));
+      expect(
+        DartFileIndexer.index(_screenFile, screen).imports.map(
+              (import) => import.uri,
+            ),
+        ['package:flutter/material.dart', 'package:flutter/services.dart'],
+      );
     });
 
     test(
@@ -362,8 +372,14 @@ void main() {
         'package:contract_app/core/app/fallback_start_screen.dart',
       ]);
       expect(_constantOf('_file', test), "'$_screenFile'");
-      expect(test, contains("find.bySemanticsLabel('Contract App')"));
-      expect(test, contains("find.text('Ca')"));
+      // It finds the name of the app by what a screen reader reads, where
+      // the number of the cell is not, and the symbol of the cell by its
+      // text.
+      expect(
+        _firstArgumentsOf('bySemanticsLabel', test),
+        ["'11'", "'Contract App'"],
+      );
+      expect(_firstArgumentsOf('text', test), contains("'Ca'"));
       // It shows the view, which takes its texts, and not the screen, which
       // reads them.
       expect(
@@ -606,7 +622,7 @@ void main() {
 
     test(
         'reads the texts of the fallback start screen from the texts of '
-        'the app', () {
+        'the app', () async {
       final screen = texts[_screenFile]!;
 
       // No constant: the texts are in the language of the context.
@@ -621,11 +637,13 @@ void main() {
         ),
         isTrue,
       );
-      // The view shows what it is given, as in an app without the texts.
-      expect(
-        _shownTextsOf(screen),
-        containsAllInOrder(['hint', r"'$copied: $_file'"]),
-      );
+      // The view, which shows what it is given, is that of an app without
+      // the texts.
+      String viewOf(String screen) =>
+          screen.substring(screen.indexOf('class FallbackStartView '));
+      final without = await renderedApp(const [FlutterCoreModule.id]);
+      expect(screen, contains('class FallbackStartView '));
+      expect(viewOf(screen), viewOf(without.app!.texts[_screenFile]!));
     });
 
     test('is in English and in Ukrainian, the languages of those texts', () {
