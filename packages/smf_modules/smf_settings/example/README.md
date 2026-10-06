@@ -7,7 +7,7 @@ dart pub global activate smf_flutter_cli
 smf create my_app -m home,settings,bottom_tabs,material_theme --no-input
 ```
 
-The screens and the layout need a router, and the theme mode is remembered in the preferences of the app, so `smf create` adds the modules that provide them:
+The screens and the layout need a router, and the app remembers the theme mode in its preferences, so `smf create` adds the modules that provide them:
 
 ```text
 Adding flutter_core: the only provider of the app entry role, which every app needs.

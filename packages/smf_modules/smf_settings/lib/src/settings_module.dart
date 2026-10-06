@@ -36,10 +36,10 @@ import 'package:smf_settings/src/agents.dart';
 /// features before it. There the screen has no app bar. Without a main
 /// navigation, nothing that SMF generates opens the screen: code of the
 /// app shows it on top of the current screen with
-/// `context.nav.settings.settings().push<void>()`. Shown so, the screen
-/// has an app bar with a back button, which leads back. `go()` would
-/// replace the stack with the screen alone, and nothing would lead back
-/// from it.
+/// `context.nav.settings.settings().push<void>()`. Shown that way, the
+/// screen has an app bar with a back button, which leads back. `go()`
+/// would replace the stack with the screen alone, and nothing would lead
+/// back from it.
 ///
 /// The route is not a start candidate, so the app starts on the screen
 /// only when it is chosen as the start, as `--start /settings` does. An
