@@ -181,10 +181,27 @@ Future<void> closeNewHome(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The deep green of Say My Frame, the colour of the card of the screen.
+const brandGreen = Color(0xFF0F3326);
+
+/// The card that tells that the app is ready: the box in the deep green of
+/// Say My Frame around its title.
+Finder card() => find.ancestor(
+      of: text('readyTitle'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            switch (widget.decoration) {
+              BoxDecoration(:final color) => color == brandGreen,
+              _ => false,
+            },
+      ),
+    );
+
 /// The cells that the card of the screen draws next to the cell of the app:
 /// what paints them.
-Finder cells(Finder card) =>
-    find.descendant(of: card, matching: find.byType(CustomPaint));
+Finder cells() =>
+    find.descendant(of: card(), matching: find.byType(CustomPaint));
 
 /// How far each part of the screen has come in, from 0 for a part that is
 /// not shown yet to 1 for one that is there.

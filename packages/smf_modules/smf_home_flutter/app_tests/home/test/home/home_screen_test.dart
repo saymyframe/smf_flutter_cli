@@ -20,22 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'app.dart';
 import 'texts.dart';
 
-/// The deep green of Say My Frame, the colour of the card of the screen.
-const _brandGreen = Color(0xFF0F3326);
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  /// The card that tells that the app is ready: the box in the colour of
-  /// Say My Frame around its title.
-  Finder card() => find.ancestor(
-        of: text('readyTitle'),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is DecoratedBox &&
-              (widget.decoration as BoxDecoration).color == _brandGreen,
-        ),
-      );
 
   /// The card of the step whose path or address is [code].
   Finder stepOf(String code) =>
@@ -168,7 +154,7 @@ void main() {
         }
 
         expect(
-          cells(card()),
+          cells(),
           paintsExactlyCountTimes(#drawRect, 17),
           reason: 'On a phone of the usual width, the card draws four '
               'columns of three cells next to the cell of the app, and '

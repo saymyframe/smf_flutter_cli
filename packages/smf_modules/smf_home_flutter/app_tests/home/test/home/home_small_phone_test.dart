@@ -140,12 +140,7 @@ void main() {
         );
 
         expect(
-          cells(
-            find.ancestor(
-              of: text('readyTitle'),
-              matching: find.byType(ClipRRect),
-            ),
-          ),
+          cells(),
           paintsExactlyCountTimes(#drawRect, 9),
           reason: 'On a narrow phone, the card draws only the two columns '
               'of cells that have room next to the cell of the app, and '
@@ -235,8 +230,8 @@ void main() {
             reason: 'The snack bar of a copy is on the screen of a small '
                 'phone, below the inset at its top: ${step.code}.',
           );
-          // After a moment, the snack bar goes away on its own, and covers no step
-          // then.
+          // After a moment, the snack bar goes away on its own, and covers
+          // no step then.
           await tester.pump(const Duration(seconds: 5));
           await tester.pumpAndSettle();
         }
