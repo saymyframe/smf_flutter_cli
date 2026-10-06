@@ -14,12 +14,14 @@
 // the layout role and of the localization role, with what puts the app
 // into a language. It reads the label of a destination as the layout does,
 // with label() of the Destination for a context below the root of the app,
-// and looks for the texts of the labels in what the AppShell shows, so it
-// depends neither on the router nor on how the layout shows a destination.
-// It uses what the tests of router_screens share, which every app that it
-// applies to has. Each expectation gives its reason, which a provider of a
-// role with a known bug fails the test with (brokenProviders of the fixture
-// registry).
+// and looks for the labels in what the AppShell shows: its texts, the
+// messages of its tooltips, and what it says to the semantics of the app.
+// So it depends neither on the router nor on how the layout shows a
+// destination. It uses what the tests of router_screens share, which every
+// app that it applies to has. Each expectation gives its reason, which a
+// provider of a role with a known bug fails the test with (brokenProviders
+// of the fixture registry).
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
 
@@ -39,21 +41,43 @@ List<String> _labels(WidgetTester tester) {
   ];
 }
 
+/// Whether [element] says [text] to the semantics of the app: on a line of
+/// its own of the label, the value, the hint or the tooltip of its node,
+/// which has a line for each widget that it merges.
+bool _says(Element element, String text) {
+  if (element is! RenderObjectElement) return false;
+  final node = element.renderObject.debugSemantics;
+  if (node == null) return false;
+  return [node.label, node.value, node.hint, node.tooltip]
+      .any((said) => said.split('\n').contains(text));
+}
+
+/// How the main navigation shows [text]: as a text, as the message of a
+/// tooltip, to the semantics of the app, or not at all.
+List<String> _shownAs(String text) {
+  bool has(Finder finder) =>
+      find.descendant(of: _shell(), matching: finder).evaluate().isNotEmpty;
+  return [
+    if (has(find.text(text, findRichText: true))) 'as a text',
+    if (has(find.byTooltip(text))) 'in a tooltip',
+    if (has(find.byElementPredicate((element) => _says(element, text))))
+      'to the semantics',
+  ];
+}
+
 /// The labels that the main navigation shows though the app is in
 /// [language]: those of the destinations in another language of the app
-/// that are no label in [language], each with the code of its language.
-List<String> _labelsOfAnotherLanguage(WidgetTester tester, String language) {
+/// that are no label in [language], each with the code of its language and
+/// with how the main navigation shows it.
+List<String> _labelsOfAnotherLanguage(String language) {
   final current = destinationLabels[language]!;
   return [
     for (final other in labelLanguages)
       if (other != language)
         for (final label in destinationLabels[other]!)
-          if (!current.contains(label) &&
-              find
-                  .descendant(of: _shell(), matching: find.text(label))
-                  .evaluate()
-                  .isNotEmpty)
-            '$label ($other)',
+          if (!current.contains(label))
+            if (_shownAs(label) case final shown when shown.isNotEmpty)
+              '$label ($other, ${shown.join(', ')})',
   ];
 }
 
@@ -85,44 +109,52 @@ void main() {
   // fails sooner.
   testWidgets('the labels of the destinations follow the language of the app',
       (tester) async {
-    // The device of a test is in English, a language of every app.
-    await startApp(tester);
-    expect(
-      {'device': _labels(tester)},
-      {'device': destinationLabels['en']},
-      reason: 'While the app follows a device in English, each destination '
-          'gives its label in English.',
-    );
+    // With the semantics of the app on from its first build, as with a
+    // screen reader, so that the test sees what the layout says to them.
+    final semantics = tester.ensureSemantics();
+    try {
+      // The device of a test is in English, a language of every app.
+      await startApp(tester);
+      expect(
+        {'device': _labels(tester)},
+        {'device': destinationLabels['en']},
+        reason: 'While the app follows a device in English, each destination '
+            'gives its label in English.',
+      );
 
-    // Through the languages in both directions, so that the app comes into
-    // each from another one.
-    for (final language in [...labelLanguages.reversed, ...labelLanguages]) {
-      await _choose(tester, () => chooseLanguage(language));
+      // Through the languages in both directions, so that the app comes
+      // into each from another one.
+      for (final language in [...labelLanguages.reversed, ...labelLanguages]) {
+        await _choose(tester, () => chooseLanguage(language));
+        expect(
+          {language: _labels(tester)},
+          {language: destinationLabels[language]},
+          reason:
+              'Each destination gives its label in the language of the app.',
+        );
+        expect(
+          {language: _labelsOfAnotherLanguage(language)},
+          {language: isEmpty},
+          reason: 'The layout shows no label of a destination in a language '
+              'that the app is not in.',
+        );
+      }
+
+      await _choose(tester, followDevice);
       expect(
-        {language: _labels(tester)},
-        {language: destinationLabels[language]},
-        reason: 'Each destination gives its label in the language of the app.',
+        {'device': _labels(tester)},
+        {'device': destinationLabels['en']},
+        reason: 'Once the app follows the device again, each destination '
+            'gives its label in the language of the device.',
       );
       expect(
-        {language: _labelsOfAnotherLanguage(tester, language)},
-        {language: isEmpty},
-        reason: 'The layout shows no label of a destination in a language '
-            'that the app is not in.',
+        {'device': _labelsOfAnotherLanguage('en')},
+        {'device': isEmpty},
+        reason: 'Once the app follows the device again, the layout shows no '
+            'label of a destination in a language that the app is not in.',
       );
+    } finally {
+      semantics.dispose();
     }
-
-    await _choose(tester, followDevice);
-    expect(
-      {'device': _labels(tester)},
-      {'device': destinationLabels['en']},
-      reason: 'Once the app follows the device again, each destination gives '
-          'its label in the language of the device.',
-    );
-    expect(
-      {'device': _labelsOfAnotherLanguage(tester, 'en')},
-      {'device': isEmpty},
-      reason: 'Once the app follows the device again, the layout shows no '
-          'label of a destination in a language that the app is not in.',
-    );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

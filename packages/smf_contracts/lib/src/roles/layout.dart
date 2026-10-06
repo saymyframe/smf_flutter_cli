@@ -69,13 +69,13 @@ final class LayoutRole extends Role<NoDsl> {
   /// switches to another destination, and the `body`, the widget of the
   /// selected destination's branch.
   ///
-  /// Wherever it shows the label of a destination, as a text or to the
-  /// semantics of the app, it calls `label(context)` of the destination in
-  /// the `build` of the widget that shows it, with the context of that
-  /// widget. The label is then in the language that the app is in, and the
-  /// widget builds again, with the new label, when the language changes. A
-  /// layout that keeps what a label returned shows it in the language of
-  /// before.
+  /// Wherever it shows the label of a destination, as a text, in a tooltip
+  /// or to the semantics of the app, it calls `label(context)` of the
+  /// destination in the `build` of the widget that shows it, with the
+  /// context of that widget. The label is then in the language that the app
+  /// is in, and the widget builds again, with the new label, when the
+  /// language changes. A layout that keeps what a label returned shows it
+  /// in the language of before.
   ///
   /// It keeps `destinations`, `currentIndex` and `onSelect` as public fields
   /// or getters, since code that knows only the role reads them from the
