@@ -985,10 +985,17 @@ final class ContractHarness {
   ///   render the data that its hooks read, so the code that a render hook
   ///   of theirs gives may also import the files of those who contribute
   ///   data to the role or to a role that it requires or uses: an import
-  ///   that the pipeline added for a fragment of theirs, and one in a file
-  ///   that their render hook generated. The template of a brick is the
-  ///   same in every app, so an import that it has itself reaches no file
-  ///   through the data. The cases the harness builds have one provider of
+  ///   that the pipeline added for a fragment of the hook, one of
+  ///   [RoleOutput.fragments] or a fragment variable, and one in a file
+  ///   that the hook generated. No other import of theirs reaches a file
+  ///   through the data: not one that the template of a brick has itself,
+  ///   and not one for a fragment of their contributions, a socket
+  ///   contribution or the code of a [RoleVar], which are the same whatever
+  ///   the modules give the role. The bound is who gave the import, not the
+  ///   files that the data names: a render hook that names a file of a
+  ///   module itself passes in an app with the module, and the cases of its
+  ///   owner without that module report the import, which the app then
+  ///   cannot resolve. The cases the harness builds have one provider of
   ///   each role, so there a provider cannot reach the files of another
   ///   through the data.
   ///
@@ -1120,22 +1127,25 @@ final class ContractHarness {
 
 /// A Dart file of an app whose imports [_ImportCheck] checks: its path, the
 /// file, the packages it may use, and the imports that the pipeline added
-/// to it, with who needed each, by URI and prefix.
+/// to it, by URI and prefix: who needed each, and whether every fragment of
+/// theirs that needs it is one that their render hook gave.
 typedef _CheckedFile = ({
   String path,
   RenderedFile file,
   Set<String> packages,
-  Map<String, Set<ContributionOrigin>> added,
+  Map<String, Map<ContributionOrigin, bool>> added,
 });
 
 /// Who uses an import or export of a file: the contributors of the
 /// fragments that need it, when the pipeline added it, or the owner of the
 /// file, in the template of a brick or in a file that its render hook
-/// generated.
+/// generated. Those in `ofHook` use it only in what a render hook of theirs
+/// gave: for its fragments alone, or in a file that it generated.
 typedef _Users = ({
   Set<ContributionOrigin> users,
   bool byPipeline,
   bool inHookFile,
+  Set<ContributionOrigin> ofHook,
 });
 
 /// The checks of the imports and exports of the Dart files of a rendered
@@ -1253,14 +1263,20 @@ final class _ImportCheck {
   /// The problems of the imports and exports of [file], the Dart file at
   /// [path] with [index].
   List<SmfIssue> issuesOf(String path, RenderedFile file, DartFileIndex index) {
-    final added = <String, Set<ContributionOrigin>>{};
+    final added = <String, Map<ContributionOrigin, bool>>{};
     for (final import in file.addedImports) {
+      // A fragment of a contribution that needs the import too makes it one
+      // that the contributor needs whatever its render hook gives.
       added
           .putIfAbsent(
             '${import.import.uri} as ${import.import.prefix}',
             () => {},
           )
-          .add(import.contributor);
+          .update(
+            import.contributor,
+            (ofHook) => ofHook && import.fromHook,
+            ifAbsent: () => import.fromHook,
+          );
     }
     final public = path.startsWith('lib/') || path.startsWith('bin/');
     final checked = (
@@ -1303,14 +1319,12 @@ final class _ImportCheck {
           ),
       ];
     }
-    // What a render hook gave may follow the data that the hook read; the
-    // template of a brick names the same files in every app.
-    final rendered = users.byPipeline || users.inHookFile;
     final issues = <SmfIssue>[];
     for (final who in users.users) {
       if (_mayImport(who, target)) continue;
+      // What a render hook gave may follow the data that the hook read.
       final ofData = _rendersDataOf(who, target);
-      if (rendered && ofData) continue;
+      if (ofData && users.ofHook.contains(who)) continue;
       issues.add(
         SmfIssue(
           '$path $verb $target ${_how(who, users)}, but that file is of '
@@ -1318,10 +1332,12 @@ final class _ImportCheck {
           'nor knows through a role.',
           hint: ofData
               ? 'The owner of that file gives data to a role that $who '
-                  'renders, so a render hook of $who may give the import: '
-                  'with a fragment variable whose code needs it, or in a '
-                  'file that the hook generates. The template of a brick is '
-                  'the same in every app, so it names no file of a module.'
+                  'renders. Code may use the file only where a render hook '
+                  'of $who gives the import with the code that needs it: as '
+                  'an import of a fragment of the hook, for a variable or '
+                  'for a socket, or in a file that the hook generates. Of '
+                  'any other import, the harness cannot tell that it '
+                  'follows the data.'
               : null,
           origin: who,
           path: path,
@@ -1338,12 +1354,22 @@ final class _ImportCheck {
     final uri = _packageUriOf(directive.uri, checked.path, appName);
     final contributors = checked.added['$uri as ${directive.prefix}'];
     if (verb == 'imports' && contributors != null) {
-      return (users: contributors, byPipeline: true, inHookFile: false);
+      return (
+        users: contributors.keys.toSet(),
+        byPipeline: true,
+        inHookFile: false,
+        ofHook: {
+          for (final MapEntry(key: who, value: ofHook) in contributors.entries)
+            if (ofHook) who,
+        },
+      );
     }
+    final owner = checked.file.owner;
     return (
-      users: {checked.file.owner},
+      users: {owner},
       byPipeline: false,
       inHookFile: checked.file.fromHook,
+      ofHook: {if (checked.file.fromHook) owner},
     );
   }
 
@@ -1477,8 +1503,8 @@ final class _ImportCheck {
   /// layout role reads the destinations of the router role.
   ///
   /// What a render hook of [who] gives may then import the file, since the
-  /// hook wrote the code from that data: a fragment variable, whose imports
-  /// the pipeline adds, and a file that the hook generates.
+  /// hook wrote the code from that data: a fragment of the hook, whose
+  /// imports the pipeline adds, and a file that the hook generates.
   bool _rendersDataOf(ContributionOrigin who, String target) {
     final owner = ownerOf(app.files[target]!.owner);
     final user = ownerOf(who);

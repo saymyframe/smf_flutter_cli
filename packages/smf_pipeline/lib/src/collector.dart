@@ -4,7 +4,12 @@ import 'package:smf_pipeline/src/resolver.dart';
 /// A contribution with who made it and whether it applies in the app.
 final class Collected {
   /// Creates the collected [contribution] of [origin].
-  const Collected(this.contribution, this.origin, {required this.applies});
+  const Collected(
+    this.contribution,
+    this.origin, {
+    required this.applies,
+    this.fromHook = false,
+  });
 
   /// The contribution; a [RoleData] or [SocketContribution] carries
   /// [origin] too.
@@ -17,6 +22,11 @@ final class Collected {
   /// and, for [RoleData] and for a [SocketContribution] to a socket of a
   /// role, that role is.
   final bool applies;
+
+  /// Whether a render hook of [origin] returned it, as one of
+  /// [RoleOutput.fragments], rather than its `contribute`, which does not
+  /// get the data of the roles.
+  final bool fromHook;
 }
 
 /// Stage 4 of the pipeline: the contributions of every module, of the
