@@ -13,7 +13,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// The tests of the apps of the fixture modules, and the roles whose
 /// contract they check with every provider: the router role and the layout
 /// role, whose providers call the listeners of the screen, the DI role, the
-/// events role and the preferences role.
+/// events role, the preferences role and the localization role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -191,6 +191,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakePreferencesUserModule.id),
         roles: {preferencesRole},
       ),
+      // The languages and the texts of the apps with the localization
+      // role, whichever module provides it, the test that the CLI keeps:
+      // only in the apps with every module, which run flutter test for
+      // other tests already, and whose second fixture feature has texts in
+      // two languages of the app.
+      await localizationRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
       // The routes of the apps with a router, whichever module provides it,
       // the test that the CLI keeps: only in the apps with every module,
       // which run flutter test for other tests already, and whose layout
@@ -217,6 +225,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       diRole,
       eventsRole,
       preferencesRole,
+      localizationRole,
     },
   );
 }

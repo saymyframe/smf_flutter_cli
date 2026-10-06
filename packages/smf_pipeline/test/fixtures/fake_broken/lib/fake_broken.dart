@@ -264,6 +264,26 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture texts whose delegate supports English only, whatever the
+  /// languages of the app: in another language of the app, the root of the
+  /// app loads no texts of the app, and the code that reads one throws.
+  static const textsDelegateForEnglishOnly = BrokenModule._(
+    FakeL10nModule(),
+    ModuleId('broken_texts_delegate_for_english_only'),
+    'The texts of the app with a delegate for English only (fixture)',
+    LocalizationRole.textsFile,
+    [
+      ("import 'app_locale.dart';\n\n", ''),
+      (
+        '  bool isSupported(Locale locale) => appLocales.any(\n'
+            '        (supported) => supported.languageCode == '
+            'locale.languageCode,\n'
+            '      );\n',
+        "  bool isSupported(Locale locale) => locale.languageCode == 'en';\n",
+      ),
+    ],
+  );
+
   /// The fixture texts that are always in the first language of the app,
   /// whatever language the root of the app is in: the delegate of the texts
   /// supports each language of the app, and loads the texts of the first

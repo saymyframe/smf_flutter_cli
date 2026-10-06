@@ -451,6 +451,46 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.textsDelegateForEnglishOnly,
+        role: localizationRole,
+        bug: 'The delegate of its texts supports English only, whatever the '
+            'languages of the app: in another language of the app, the root '
+            'loads no texts of the app.',
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakePreferencesModule.id,
+        ],
+        failures: [
+          // A test that puts the app into another language checks first
+          // that its root can be in each language of the app.
+          MatrixExpectedFailure(
+            'test/localization_role/languages_test.dart',
+            _languagesTest,
+            _eachLanguageSupported,
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/device_test.dart',
+            _deviceTest,
+            _eachLanguageSupported,
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/saved_language_test.dart',
+            'a choice of the user is saved under the key of the role, '
+                'removed when the app follows the device again, and restored '
+                'by the next start',
+            _eachLanguageSupported,
+          ),
+          // The probe of the role, which the start check runs on a device,
+          // has the check of the delegates too.
+          MatrixExpectedFailure(
+            'test/localization_role/probe_test.dart',
+            _probeTest,
+            _probeFindsNoProblem,
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.textsInFirstLanguage,
         role: localizationRole,
         bug: 'Its texts are always in the first language of the app, '
@@ -471,6 +511,26 @@ List<BrokenProvider> brokenProviders() => const [
                 'of the device',
             'The setting shows its texts in the language that the user '
                 'chose.',
+          ),
+          // The root can be in each language, so the tests of the role get
+          // to the texts, which do not follow it.
+          MatrixExpectedFailure(
+            'test/localization_role/languages_test.dart',
+            _languagesTest,
+            'The app and its texts follow the language that the user chose: '
+                'a text reads in it, or in English when it has no '
+                'translation into it.',
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/device_test.dart',
+            _deviceTest,
+            'While the app follows the device, each text of the app reads '
+                'in the language that the app is in.',
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/probe_test.dart',
+            _probeTest,
+            _probeFindsNoProblem,
           ),
         ],
       ),
@@ -604,6 +664,24 @@ const List<ModuleId> _appWithGates = [
   FakeCrashModule.id,
   FakeServiceLogModule.id,
 ];
+
+/// The names of three tests of the localization role, and the reasons of
+/// two of their expectations: that the root of the app can be in each
+/// language of the app, and that the probe of the role finds no problem.
+const _languagesTest =
+    'once the user chose a language, the app is in it, and each text of the '
+    'app reads in it, in each language of the app';
+const _deviceTest =
+    'while the user chose no language, the app is in the language that the '
+    'device prefers among its own, and in its first one when the device asks '
+    'for none of them';
+const _probeTest = 'the probe of the role finds no problem';
+const _eachLanguageSupported =
+    'For each language of the app, the root has a delegate of each kind of '
+    'localizations that supports it.';
+const _probeFindsNoProblem =
+    'The probe finds no problem with an app that keeps the contract of the '
+    'role.';
 
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of

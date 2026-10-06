@@ -37,9 +37,9 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role and of the settings '
-      'screen role with every provider of each, which they tell apart by '
-      'the roles of the app only', () {
+      'of the events role, of the preferences role, of the settings screen '
+      'role and of the localization role with every provider of each, which '
+      'they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -48,6 +48,7 @@ void main() {
         eventsRole,
         preferencesRole,
         settingsScreenRole,
+        localizationRole,
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
@@ -56,6 +57,8 @@ void main() {
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
+    expect(named('localization_role').roles, {localizationRole});
+    expect(named('language_setting').roles, {localizationRole});
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
@@ -478,6 +481,290 @@ void main() {
   });
 
   test(
+      'the test of the localization role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and has a probe for the start check', () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'texts',
+          const [ModuleId('texts')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await localizationRoleAppTest();
+
+    expect(p.basename(test.directory), 'localization_role');
+    expect(test.roles, {localizationRole});
+    expect(test.appliesTo(appWith(localizationRole)), isTrue);
+    expect(test.appliesTo(appWith(preferencesRole)), isFalse);
+    // The matrix of the CLI runs it in every app with the role: the apps
+    // of gen_l10n, with a settings screen and without, and the apps with
+    // every module.
+    final registered = named('localization_role');
+    expect(registered.roles, test.roles);
+    expect(registered.startProbe!.path, test.startProbe!.path);
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(localizationRole)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        'gen_l10n with settings_screen',
+        'gen_l10n',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await localizationRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(localizationRole)), isFalse);
+    expect(
+      everyModule.appliesTo(
+        appWith(localizationRole, everyModuleWith: const []),
+      ),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(
+        appWith(preferencesRole, everyModuleWith: const []),
+      ),
+      isFalse,
+    );
+
+    // Its probe is a function of a file of the test that takes the one that
+    // waits until the screen settles, as the start check calls it.
+    final probe = test.startProbe!;
+    expect(probe.path, 'integration_test/localization_role/probe.dart');
+    final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+    final (:index, :errors) =
+        DartFileIndexer.parse(probe.path, file.readAsStringSync());
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == probe.function);
+    expect(function.name, 'probeLanguages');
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'Future<List<String>>');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          '${parameter.kind.name} ${parameter.type}',
+      ],
+      ['requiredPositional Future<void> Function()'],
+    );
+    // The probe reads what the matrix writes next to it.
+    expect(
+      p.posix.dirname(languagesAndTextsFile),
+      p.posix.dirname(probe.path),
+    );
+    expect(
+      [for (final import in index.imports) import.uri],
+      contains(p.posix.basename(languagesAndTextsFile)),
+    );
+  });
+
+  test(
+      'the test of the localization role gets the languages of the app, the '
+      'key of the role and each text of the app, with what it reads in each '
+      'language, from the data of the role', () async {
+    MatrixApp appOf(
+      List<RoleData<Object>> texts, {
+      List<String>? languages,
+    }) =>
+        MatrixApp(
+          'texts',
+          const [ModuleId('cart')],
+          hook: RoleHookRequest(
+            data: texts,
+            presentRoles: {localizationRole},
+            context: ContractHarness.defaultContext,
+            choices: {
+              if (languages != null)
+                localizationRole: LocalizationChoice(languages),
+            },
+          ),
+        );
+    final test = await localizationRoleAppTest();
+    final app = appOf(
+      [
+        localizationRole
+            .data(
+              const TextsData([
+                LocalizedText(
+                  'title',
+                  en: 'Your cart',
+                  translations: {'uk': 'Ваш кошик', 'de': 'Ihr Warenkorb'},
+                ),
+                // A text without a translation, with what code escapes.
+                LocalizedText('empty', en: r"It's empty: $0"),
+              ]),
+            )
+            .withOrigin(const ModuleOrigin(ModuleId('cart'))),
+        localizationRole
+            .data(
+              const TextsData([
+                LocalizedText(
+                  'language',
+                  en: 'Language',
+                  translations: {'uk': 'Мова'},
+                ),
+              ]),
+            )
+            .withOrigin(const RoleTemplateOrigin(localizationRole)),
+      ],
+      languages: ['uk', 'en'],
+    );
+
+    final files = test.generatedFiles!(app, 'my_app');
+
+    expect(files.keys, [languagesAndTextsFile]);
+    final text = files[languagesAndTextsFile]!;
+    final (:index, :errors) =
+        DartFileIndexer.parse(languagesAndTextsFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) import.uri],
+      ['package:flutter/widgets.dart', 'package:my_app/core/l10n/l10n.dart'],
+    );
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      [
+        'appLanguages',
+        'probedLanguages',
+        'savedLanguageKey',
+        'AppTextCheck',
+        'appTextChecks',
+      ],
+    );
+    // The languages that the role chose, in their order, and its key.
+    expect(text, contains("const List<String> appLanguages = ['uk', 'en'];"));
+    // The probe goes through each language of an app with a few of them.
+    expect(
+      text,
+      contains("const List<String> probedLanguages = ['uk', 'en'];"),
+    );
+    expect(
+      text,
+      contains(
+        "const String savedLanguageKey = '${LocalizationRole.localeKey}';",
+      ),
+    );
+    // Each text by the getter of the role, in each language of the app and
+    // in no other: its translation, or its English text.
+    expect(
+      text,
+      contains(
+        '  (\n'
+        "    name: 'text title of the module cart',\n"
+        '    read: (context) => context.l10n.cartTitle,\n'
+        '    expected: {\n'
+        "      'uk': 'Ваш кошик',\n"
+        "      'en': 'Your cart',\n"
+        '    },\n'
+        '  ),\n'
+        '  (\n'
+        "    name: 'text empty of the module cart',\n"
+        '    read: (context) => context.l10n.cartEmpty,\n'
+        '    expected: {\n'
+        r"      'uk': 'It\'s empty: \$0',"
+        '\n'
+        r"      'en': 'It\'s empty: \$0',"
+        '\n'
+        '    },\n'
+        '  ),\n',
+      ),
+    );
+    final texts =
+        localizationRole.textsIn(localizationRole.hookInput(app.hook!));
+    expect(
+      [
+        for (final match in RegExp(r'context\.l10n\.(\w+),').allMatches(text))
+          match[1],
+      ],
+      [for (final text in texts) text.getter],
+    );
+    expect(texts.last.getter, 'localizationLanguage');
+    expect(text, isNot(contains('Ihr Warenkorb')));
+
+    // Before a choice, the languages are those of the texts.
+    final unchosen = test.generatedFiles!(
+      appOf([app.hook!.data.first]),
+      'my_app',
+    )[languagesAndTextsFile]!;
+    expect(
+      unchosen,
+      contains("const List<String> appLanguages = ['en', 'uk', 'de'];"),
+    );
+
+    // An app without texts reads none, so its file does not import them.
+    final empty =
+        test.generatedFiles!(appOf(const []), 'my_app')[languagesAndTextsFile]!;
+    final parsed = DartFileIndexer.parse(languagesAndTextsFile, empty);
+    expect(parsed.errors, isEmpty);
+    expect(
+      [for (final import in parsed.index.imports) import.uri],
+      ['package:flutter/widgets.dart'],
+    );
+    expect(empty, contains("const List<String> appLanguages = ['en'];"));
+    expect(empty, contains('const List<AppTextCheck> appTextChecks = [];'));
+  });
+
+  test(
+      'the probe of the localization role goes through the first '
+      '$languagesProbeLimit languages of an app, which has all of them',
+      () async {
+    final languages = [
+      ...LocalizationRole.supportedLanguages.take(languagesProbeLimit + 2),
+    ];
+    final test = await localizationRoleAppTest();
+    final app = MatrixApp(
+      'texts',
+      const [ModuleId('texts')],
+      hook: RoleHookRequest(
+        data: const [],
+        presentRoles: {localizationRole},
+        context: ContractHarness.defaultContext,
+        choices: {localizationRole: LocalizationChoice(languages)},
+      ),
+    );
+
+    final text = test.generatedFiles!(app, 'my_app')[languagesAndTextsFile]!;
+
+    String listOf(Iterable<String> codes) =>
+        [for (final code in codes) "'$code'"].join(', ');
+    expect(DartFileIndexer.parse(languagesAndTextsFile, text).errors, isEmpty);
+    expect(languagesProbeLimit, 10);
+    expect(languages, hasLength(12));
+    expect(
+      text,
+      contains('const List<String> appLanguages = [${listOf(languages)}];'),
+    );
+    expect(
+      text,
+      contains(
+        'const List<String> probedLanguages = '
+        '[${listOf(languages.take(10))}];',
+      ),
+    );
+  });
+
+  test(
       'the test of the setting of the language applies to the apps with the '
       'localization role and the settings screen role, whichever modules '
       'provide them, and gets the widget of the entry, the label of each '
@@ -843,8 +1130,9 @@ void main() {
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role and those of shared_preferences once they '
-      'are opened again, each a function of a file of its tests that takes '
-      'the one that waits until the screen settles', () async {
+      'are opened again, and the languages of the localization role, each a '
+      'function of a file of its tests that takes the one that waits until '
+      'the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -859,6 +1147,8 @@ void main() {
         'preferences_role':
             'integration_test/preferences_role/probe.dart probePreferences',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
+        'localization_role':
+            'integration_test/localization_role/probe.dart probeLanguages',
       },
     );
     for (final test in appTests.tests) {
@@ -893,6 +1183,7 @@ void main() {
         'di_role',
         'preferences_role',
         'router_walk',
+        'localization_role',
       ],
     );
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
@@ -911,6 +1202,7 @@ void main() {
           startProbesFile,
           registeredServicesFile,
           routerWalkFile,
+          languagesAndTextsFile,
         ])
           p.joinAll(file.split('/')),
       ]),
@@ -927,6 +1219,7 @@ void main() {
         'probe1: di_role/probe.dart',
         'probe2: preferences_role/probe.dart',
         'probe3: router_walk/walk.dart',
+        'probe4: localization_role/probe.dart',
       ],
     );
     expect(
@@ -936,6 +1229,7 @@ void main() {
     expect(list, contains("('di_role', probe1.probeServices),"));
     expect(list, contains("('preferences_role', probe2.probePreferences),"));
     expect(list, contains("('router_walk', probe3.probeRoutes),"));
+    expect(list, contains("('localization_role', probe4.probeLanguages),"));
   });
 
   test(
