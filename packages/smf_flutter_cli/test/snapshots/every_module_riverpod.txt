@@ -2830,7 +2830,7 @@ class OnboardingPageScope extends InheritedWidget {
       oldWidget.index != index || oldWidget.controller != controller;
 }
 
-/// A page of the onboarding: a cell of a table of elements with [symbol] or
+/// A page of the onboarding: a cell of the periodic table with [symbol] or
 /// [icon], among smaller cells, and a title and a text below them. The
 /// cells and the texts move at their own pace while the pages turn. The
 /// page scrolls when it is too small for them, as with a large text size on

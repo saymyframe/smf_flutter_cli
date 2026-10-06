@@ -8,8 +8,8 @@ import 'package:smf_onboarding/src/app_symbol.dart';
 /// of the app, before every other screen.
 ///
 /// The screen shows two neutral pages, a welcome with the name of the app
-/// and a page that ends the onboarding. A page is a cell of a table of
-/// elements among smaller cells, with a title and a text below them. The
+/// and a page that ends the onboarding. A page is a cell of the periodic
+/// table among smaller cells, with a title and a text below them. The
 /// cell of the first page has the symbol of the app, such as `Ma` for
 /// `my_app`, which the module computes from the name of the app when it
 /// generates the app, and that of the last page has an icon. Skip is above

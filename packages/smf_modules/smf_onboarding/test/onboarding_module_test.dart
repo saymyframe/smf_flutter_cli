@@ -1525,6 +1525,42 @@ void main() {
     });
 
     test(
+        'read how far the pages are turned from their controller whenever '
+        'it knows its page, so that a page built right after the pages got '
+        'a new scroll position stays where it is', () {
+      // A new scroll position has the page of the old one, but no
+      // dimensions of its own before its first layout: code that waits for
+      // those takes a page that the user sees for one not reached yet.
+      expect(
+        _methodOf(unit, 'OnboardingPageScope', 'turnedOf').body.toSource(),
+        '=> (controller.hasClients ? controller.page : null) ?? '
+        'controller.initialPage.toDouble();',
+      );
+      expect(
+        _methodOf(unit, 'OnboardingPageScope', 'turned').body.toSource(),
+        '=> (turnedOf(controller) - index).clamp(-1, 1);',
+      );
+      // The background and the marks of the screen read it the same way.
+      expect(
+        [
+          for (final read in _calls(_parsed(app, _screen), 'turnedOf'))
+            read.toSource(),
+        ],
+        [
+          'OnboardingPageScope.turnedOf(_controller)',
+          'OnboardingPageScope.turnedOf(controller)',
+        ],
+      );
+      for (final path in [_pages, _screen]) {
+        expect(
+          app.files[path]!.text,
+          isNot(contains('haveDimensions')),
+          reason: path,
+        );
+      }
+    });
+
+    test(
         'keep the letters and the number of their cell at their size, '
         'whatever the text size of the device, since the cell does not grow',
         () {

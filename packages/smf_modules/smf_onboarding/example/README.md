@@ -32,7 +32,7 @@ List<Widget> onboardingPages(BuildContext context) => [
 ];
 ```
 
-An `OnboardingPage` is a cell of a table of elements among smaller cells, with a title and a text below it. The cell has a `symbol`, here the one that SMF makes from the name of the app, or an `icon`. Change this list to change what the onboarding shows. A page is any widget.
+An `OnboardingPage` is a cell of the periodic table among smaller cells, with a title and a text below it. The cell has a `symbol`, here the one that SMF makes from the name of the app, or an `icon`. Change this list to change what the onboarding shows. A page is any widget.
 
 `OnboardingScreen` in `onboarding_screen.dart` shows the pages one at a time. Skip is above them. Below them are a mark for each page and one button: Next, and Get started on the last page. While the pages turn, the cells move at different speeds and the background blends into the colour of the last page. The screen takes its colours and its text styles from the theme of the app.
 

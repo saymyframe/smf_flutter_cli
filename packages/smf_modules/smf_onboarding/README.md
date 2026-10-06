@@ -2,11 +2,11 @@
 
 The SMF module of the onboarding of the app. It is a feature: a screen with its route, which the module that provides the router renders, and a guard of the routes, which that module asks.
 
-On its first launch, the app shows the onboarding in place of every other screen. The onboarding has two pages: a welcome with the name of the app, and a page that ends it. A page is a picture with a title and a text below it. The picture is a cell of a table of elements among smaller cells, over a grid that fades at its edges. The cell of the first page has the symbol of the app, which SMF makes from its name: `Ma` for `my_app`. The cell of the last page has an icon.
+On its first launch, the app shows the onboarding in place of every other screen. The onboarding has two pages: a welcome with the name of the app, and a page that ends it. A page is a picture with a title and a text below it. The picture is a cell of the periodic table among smaller cells, over a grid that fades at its edges. The cell of the first page has the symbol of the app, which SMF makes from its name: `Ma` for `my_app`. The cell of the last page has an icon.
 
 Skip is above the pages. Below them are a mark for each page and one button of the whole width: Next, and Get started on the last page, where Skip is gone. Skip and Get started finish the onboarding. The app then shows the screen that it starts on, and later launches start there.
 
-While the pages turn, the cells move at different speeds, the background blends into the colour of the last page, and the marks follow. Every animation ends. On a device that asks for less motion, the cells are there at once and Next shows the next page without the turn.
+While the pages turn, the cells move at different speeds, the background blends into the colour of the last page, and the marks follow. No animation runs without end, so a widget test that waits for the screen with `pumpAndSettle()` returns. On a device that asks for less motion, the cells are there at once and Next shows the next page without the turn.
 
 The module generates three files in `lib/features/onboarding/`:
 
