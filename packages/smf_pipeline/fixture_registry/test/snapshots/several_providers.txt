@@ -71,6 +71,11 @@ With `get_it`:
 - `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
 - A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
 
+## Home
+
+- `HomeScreen` in `lib/features/home/home_screen.dart`, the route `home.home` at `/home`, is a welcome to the developer of the app: it names the app and lists what to do next. Replace its content with the first screen of the app, and keep the route while the app starts there.
+- The screen shows the image `lib/features/home/assets/smf_mark.png`, which `pubspec.yaml` declares among the assets of the app. Flutter takes the files of the same name in `2.0x/` and `3.0x/` next to it for a screen with more pixels. Once no screen shows the image, remove the files and their line in `pubspec.yaml`.
+
 ## Localization
 
 - Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
@@ -1746,6 +1751,96 @@ class FixtureTexts {
     _ => 'Done',
   };
 
+  /// The text label of the module home.
+  String get homeLabel => switch (language) {
+    'uk' => 'Головна',
+    _ => 'Home',
+  };
+
+  /// The text greetingMorning of the module home.
+  String get homeGreetingMorning => switch (language) {
+    'uk' => 'Доброго ранку',
+    _ => 'Good morning',
+  };
+
+  /// The text greetingAfternoon of the module home.
+  String get homeGreetingAfternoon => switch (language) {
+    'uk' => 'Добрий день',
+    _ => 'Good afternoon',
+  };
+
+  /// The text greetingEvening of the module home.
+  String get homeGreetingEvening => switch (language) {
+    'uk' => 'Добрий вечір',
+    _ => 'Good evening',
+  };
+
+  /// The text readyTitle of the module home.
+  String get homeReadyTitle => switch (language) {
+    'uk' => 'Ваш застосунок готовий',
+    _ => 'Your app is ready',
+  };
+
+  /// The text readyText of the module home.
+  String get homeReadyText => switch (language) {
+    'uk' => 'Згенеровано з Say My Frame. Усе, що ви бачите, можна змінити.',
+    _ => 'Generated with Say My Frame. Everything you see is yours to change.',
+  };
+
+  /// The text nextTitle of the module home.
+  String get homeNextTitle => switch (language) {
+    'uk' => 'Що далі',
+    _ => 'Next steps',
+  };
+
+  /// The text stepScreenTitle of the module home.
+  String get homeStepScreenTitle => switch (language) {
+    'uk' => 'Зробіть цей екран своїм',
+    _ => 'Make this screen yours',
+  };
+
+  /// The text stepScreenText of the module home.
+  String get homeStepScreenText => switch (language) {
+    'uk' => 'Замініть це привітання першим екраном вашого застосунку.',
+    _ => 'Replace this welcome with the first screen of your app.',
+  };
+
+  /// The text stepFeatureTitle of the module home.
+  String get homeStepFeatureTitle => switch (language) {
+    'uk' => 'Додайте фічу',
+    _ => 'Add a feature',
+  };
+
+  /// The text stepFeatureText of the module home.
+  String get homeStepFeatureText => switch (language) {
+    'uk' => 'Фіча тримає свої екрани й маршрути у власній теці.',
+    _ => 'A feature keeps its screens and routes in a folder of its own.',
+  };
+
+  /// The text stepDocsTitle of the module home.
+  String get homeStepDocsTitle => switch (language) {
+    'uk' => 'Почитайте документацію',
+    _ => 'Read the docs',
+  };
+
+  /// The text stepDocsText of the module home.
+  String get homeStepDocsText => switch (language) {
+    'uk' => 'Настанови до кожного модуля і до написання власного.',
+    _ => 'Guides for every module, and for writing your own.',
+  };
+
+  /// The text copied of the module home.
+  String get homeCopied => switch (language) {
+    'uk' => 'Скопійовано',
+    _ => 'Copied',
+  };
+
+  /// The text footer of the module home.
+  String get homeFooter => switch (language) {
+    'uk' => 'Зроблено з Say My Frame',
+    _ => 'Built with Say My Frame',
+  };
+
   /// The text title of the template of the theme role.
   String get themeTitle => switch (language) {
     'uk' => 'Тема',
@@ -2318,6 +2413,7 @@ import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
     as screen0;
+import 'package:fixture_app/features/home/home_screen.dart' as screen4;
 import 'package:fixture_app/features/onboarding/onboarding_screen.dart'
     as screen3;
 import 'package:fixture_app/features/settings/settings_screen.dart' as screen2;
@@ -2373,6 +2469,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         path: '/onboarding',
         name: 'onboarding.onboarding',
         builder: (context, state) => const screen3.OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/home',
+        name: 'home.home',
+        builder: (context, state) => const screen4.HomeScreen(),
       ),
     ],
   )..routerDelegate.addListener(_pagesChanged);
@@ -2677,6 +2778,18 @@ final class OnboardingOnboardingLocation extends AppLocation {
   String get path => '/onboarding';
 }
 
+/// The location of `home.home`: `/home`.
+final class HomeHomeLocation extends AppLocation {
+  /// Creates the location.
+  const HomeHomeLocation();
+
+  @override
+  String get routeName => 'home.home';
+
+  @override
+  String get path => '/home';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
@@ -2697,6 +2810,9 @@ final class AppNav {
 
   /// The routes of the module `onboarding`.
   OnboardingRoutes get onboarding => OnboardingRoutes._(_context);
+
+  /// The routes of the module `home`.
+  HomeRoutes get home => HomeRoutes._(_context);
 }
 
 /// The routes of the module `fake_second`.
@@ -2731,6 +2847,16 @@ final class OnboardingRoutes {
   /// The route `onboarding.onboarding`: `/onboarding`.
   NavLink onboarding() =>
       NavLink(_context, const OnboardingOnboardingLocation());
+}
+
+/// The routes of the module `home`.
+final class HomeRoutes {
+  const HomeRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `home.home`: `/home`.
+  NavLink home() => NavLink(_context, const HomeHomeLocation());
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -3189,6 +3315,603 @@ class FixtureSetting extends StatelessWidget {
     title: Text(context.l10n.fakeSecondSetting),
   );
 }
+=== lib/features/home/assets/2.0x/smf_mark.png (home) ===
+<7096 bytes>
+=== lib/features/home/assets/3.0x/smf_mark.png (home) ===
+<11061 bytes>
+=== lib/features/home/assets/smf_mark.png (home) ===
+<4087 bytes>
+=== lib/features/home/home_screen.dart (home) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The name of the app, as the screen shows it.
+const _appName = 'Fixture App';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Fa';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 10;
+
+/// The mark of Say My Frame, an image of the app. Flutter takes the file
+/// in `2.0x/` or in `3.0x/` next to it on a screen with more pixels.
+const _mark = 'lib/features/home/assets/smf_mark.png';
+
+/// The colours of Say My Frame, which the card of the screen keeps in the
+/// light and in the dark theme: it is the mark of what generated the app.
+const _brandGreen = Color(0xFF0F3326);
+const _brandCream = Color(0xFFF1F1E8);
+const _brandAccent = Color(0xFF4ADE80);
+
+/// The font of a path and of the number of a cell: the monospaced font of
+/// the device, whose name differs between the platforms.
+const _monospace = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The side of the cell of the app in the card, and the space between the
+/// cell and the edges of the card.
+const _cellSide = 88.0;
+const _cardPadding = 24.0;
+
+/// The screen that the app starts on: a welcome to the developer of the app,
+/// with what to do next. Replace its content with the first screen of the
+/// app.
+class HomeScreen extends StatefulWidget {
+  /// Creates the screen, which greets by the time that [now] tells.
+  const HomeScreen({super.key, this.now = DateTime.now});
+
+  /// Tells the time, for the greeting of the screen. A test gives a time of
+  /// its own.
+  final DateTime Function() now;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  /// Lets the parts of the screen rise in one after another, once.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  var _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // An app that asks for less motion shows the screen at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  /// Copies [code] and says so.
+  Future<void> _copy(String code) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final copied = context.l10n.homeCopied;
+    await Clipboard.setData(ClipboardData(text: code));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          // As in the box of its step, the path is not much larger than
+          // usual, so that a large text size leaves the snack bar room on
+          // a small phone.
+          content: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.5,
+            child: Text('$copied: $code'),
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hour = widget.now().hour;
+    final greeting = hour < 12
+        ? context.l10n.homeGreetingMorning
+        : hour < 18
+        ? context.l10n.homeGreetingAfternoon
+        : context.l10n.homeGreetingEvening;
+    final steps = [
+      (
+        Icons.edit_outlined,
+        context.l10n.homeStepScreenTitle,
+        context.l10n.homeStepScreenText,
+        'lib/features/home/home_screen.dart',
+      ),
+      (
+        Icons.add_box_outlined,
+        context.l10n.homeStepFeatureTitle,
+        context.l10n.homeStepFeatureText,
+        'lib/features/',
+      ),
+      (
+        Icons.menu_book_outlined,
+        context.l10n.homeStepDocsTitle,
+        context.l10n.homeStepDocsText,
+        'doc.saymyframe.com',
+      ),
+    ];
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // The screen has no app bar, so it tells the colour of the icons of
+      // the status bar itself.
+      value: theme.brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            // The list ends above what covers the bottom of the screen,
+            // such as the bar of the home gesture.
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              32 + MediaQuery.paddingOf(context).bottom,
+            ),
+            children: [
+              _Rise(
+                animation: _entrance,
+                order: 0,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            greeting,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              _appName,
+                              style: theme.textTheme.headlineLarge,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        _mark,
+                        width: 48,
+                        height: 48,
+                        semanticLabel: 'Say My Frame',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              _Rise(
+                animation: _entrance,
+                order: 1,
+                child: _ReadyCard(
+                  animation: _entrance,
+                  title: context.l10n.homeReadyTitle,
+                  text: context.l10n.homeReadyText,
+                ),
+              ),
+              const SizedBox(height: 32),
+              _Rise(
+                animation: _entrance,
+                order: 2,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    context.l10n.homeNextTitle,
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final (index, (icon, title, text, code)) in steps.indexed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _Rise(
+                    animation: _entrance,
+                    order: 3 + index,
+                    child: _StepCard(
+                      icon: icon,
+                      title: title,
+                      text: text,
+                      code: code,
+                      onTap: () => _copy(code),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              _Rise(
+                animation: _entrance,
+                order: 6,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.asset(
+                        _mark,
+                        width: 20,
+                        height: 20,
+                        excludeFromSemantics: true,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // With a large text size, the text takes more lines.
+                    Flexible(
+                      child: Text(
+                        context.l10n.homeFooter,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets [child] fade in and rise while [animation] runs, later for a higher
+/// [order].
+class _Rise extends StatelessWidget {
+  const _Rise({
+    required this.animation,
+    required this.order,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final int order;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = order * 0.08;
+    final curve = Interval(
+      start,
+      (start + 0.45).clamp(0, 1),
+      curve: Easing.emphasizedDecelerate,
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final shown = curve.transform(animation.value);
+        return Opacity(
+          opacity: shown,
+          child: Transform.translate(
+            offset: Offset(0, (1 - shown) * 18),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// The card in the colours of Say My Frame that tells that the app is
+/// ready, with the app as an element of a table whose cells light up.
+class _ReadyCard extends StatelessWidget {
+  const _ReadyCard({
+    required this.animation,
+    required this.title,
+    required this.text,
+  });
+
+  final Animation<double> animation;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _brandGreen,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _CellsPainter(animation)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(_cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _ElementTile(symbol: _appSymbol, number: _appNumber),
+                  const SizedBox(height: 60),
+                  Text(
+                    title,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: _brandCream,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    text,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: _brandCream.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A cell of the table of elements with [symbol] and [number], as the mark
+/// of Say My Frame has one.
+///
+/// It is a picture of the app, whose name the screen tells above the card.
+/// So its letters keep their size when the text of the device is larger,
+/// and a screen reader passes it by.
+class _ElementTile extends StatelessWidget {
+  const _ElementTile({required this.symbol, required this.number});
+
+  final String symbol;
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ExcludeSemantics(
+      child: MediaQuery.withNoTextScaling(
+        child: Container(
+          width: _cellSide,
+          height: _cellSide,
+          decoration: BoxDecoration(
+            color: _brandGreen,
+            border: Border.all(color: _brandCream, width: 1.5),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 6,
+                right: 8,
+                child: Text(
+                  '$number',
+                  style: _monospace.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+              Center(
+                child: Text(
+                  symbol,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -1.5,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cells of a table of elements on the right of the card: outlines,
+/// some of which light up one after another while [animation] runs.
+class _CellsPainter extends CustomPainter {
+  _CellsPainter(this.animation) : super(repaint: animation);
+
+  final Animation<double> animation;
+
+  /// The cells that light up, by column from the right and row from the
+  /// top, each with its colour and the order in which it lights up.
+  static const _lit = <(int, int, Color, int)>[
+    (0, 0, _brandAccent, 0),
+    (1, 1, Color(0x33F1F1E8), 1),
+    (0, 2, Color(0x664ADE80), 2),
+    (2, 0, Color(0x1FF1F1E8), 3),
+    (3, 1, Color(0x14F1F1E8), 4),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 44.0;
+    const gap = 8.0;
+    const inset = 20.0;
+    final outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var column = 0; column < 4; column++) {
+      for (var row = 0; row < 3; row++) {
+        final rect = Rect.fromLTWH(
+          size.width - inset - cell - column * (cell + gap),
+          inset + row * (cell + gap),
+          cell,
+          cell,
+        );
+        // A narrow card has no room for every column: it leaves out those
+        // that would reach the cell of the app on its left.
+        if (rect.left < _cardPadding + _cellSide + gap) continue;
+        // The outlines fade towards the text on the left.
+        outline.color = _brandCream.withValues(alpha: 0.14 - column * 0.035);
+        canvas.drawRect(rect, outline);
+        for (final (litColumn, litRow, color, order) in _lit) {
+          if (litColumn != column || litRow != row) continue;
+          final start = 0.25 + order * 0.1;
+          final shown = Interval(
+            start,
+            (start + 0.3).clamp(0, 1),
+            curve: Curves.easeOut,
+          ).transform(animation.value);
+          canvas.drawRect(
+            rect,
+            Paint()..color = color.withValues(alpha: color.a * shown),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CellsPainter oldDelegate) =>
+      oldDelegate.animation != animation;
+}
+
+/// A step for the developer of the app: what to do, and the path or the
+/// address that it is about, which a tap copies.
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.code,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+  final String code;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Card(
+      // The response to a tap keeps to the corners of the card.
+      clipBehavior: Clip.antiAlias,
+      // A screen reader announces the card as one button.
+      child: Semantics(
+        button: true,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.secondaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 20,
+                        color: colors.onSecondaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          Text(
+                            text,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        // A long path takes more lines, which break at its
+                        // slashes while the text is not much larger than
+                        // usual.
+                        child: MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.5,
+                          child: Text(
+                            code,
+                            style: _monospace.copyWith(
+                              fontSize: 12.5,
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.copy_rounded,
+                        size: 15,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
@@ -3625,6 +4348,7 @@ flutter:
   uses-material-design: true
   assets:
     - "assets/fonts/geist/OFL.txt"
+    - "lib/features/home/assets/smf_mark.png"
   fonts:
     - family: "Geist"
       fonts:

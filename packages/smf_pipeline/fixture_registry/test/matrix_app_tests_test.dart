@@ -624,6 +624,7 @@ void main() {
           'onboarding',
           'settings',
           'shared_preferences',
+          'home',
           'di_role',
           'events_role',
           'preferences_role',
@@ -642,6 +643,24 @@ void main() {
       for (final test in severalProviders.tests) {
         expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
       }
+    });
+
+    test(
+        'starts on the screen of the fixture feature, with the start screen '
+        'of the CLI among its routes, so the app test of that screen, which '
+        'applies to it, goes to its screen through the navigation of the '
+        'router role', () {
+      final input = routerRole.hookInput(everyModule.hook!);
+
+      expect(routerRole.startIn(input)!.fullName, 'fake_second.second');
+      expect(
+        [
+          for (final route in routerRole.facadeOf(input).routes)
+            if (!route.hasRequiredParams) route.fullName,
+        ],
+        contains('home.home'),
+      );
+      expect(ofSeveral('home').appliesTo(everyModule), isTrue);
     });
 
     test(
