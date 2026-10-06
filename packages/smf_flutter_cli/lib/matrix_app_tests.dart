@@ -8,6 +8,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -26,6 +27,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -167,6 +169,20 @@ Future<MatrixAppTests> smfAppTests() async {
           'integration_test/shared_preferences/probe.dart',
           'probeSharedPreferences',
         ),
+      ),
+      // The start screen of the module, a welcome to the developer of the
+      // app, wherever the app starts: it names the app, greets by the time
+      // of the day and lists the next steps with their paths, with its
+      // texts in each language of the app (see _homeTextsFileOf); a tap on
+      // a step copies its path and says so; its parts come in once, at
+      // once in an app that asks for less motion; and it fits a small
+      // phone with a large text size. The tests go to the route of the
+      // module through the navigation of the router role, so they hold in
+      // an app that starts on another screen too.
+      MatrixAppTest(
+        '$home/home',
+        appliesTo: _has(HomeModule.id),
+        generatedFiles: (app, packageName) => _homeTextsFileOf(app),
       ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
@@ -989,6 +1005,51 @@ const List<String> appLanguages = [${languages.join(', ')}];
 /// future completes once it did.
 Future<void> chooseLanguage(String language) =>
     appLocale.choose(Locale(language));
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the home
+/// module: `homeTexts`, the texts of the screen of the module
+/// ([HomeModule.texts]), each by its name, in each language of the app, by
+/// the code of the language. The languages are those of the localization
+/// role of the app ([LocalizationRole.localesIn]), in its order, and English
+/// alone in an app without the role, whose screen has the English texts.
+const homeTextsFile = 'test/home/texts.dart';
+
+/// The file at [homeTextsFile] of [app], an app of the matrix.
+///
+/// A text of the module without a translation into a language of the app
+/// is the English one there, as the localization role says of the texts of
+/// an app.
+Map<String, String> _homeTextsFileOf(MatrixApp app) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in HomeModule.texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $name: $shown,');
+    }
+    texts.writeln('  },');
+  }
+  return {
+    homeTextsFile: '''
+// The texts of the start screen of the home module in each language of the
+// app, which the matrix of SMF writes from the texts of the module and the
+// languages of the localization role of the app for the tests of the
+// module, in test/home.
+
+/// The texts of the screen by the code of each language of the app, the
+/// first of which the app uses when the device asks for none of them: each
+/// text by its name in the module. An app without the localization role
+/// has the English texts alone.
+const Map<String, Map<String, String>> homeTexts = {
+$texts};
 ''',
   };
 }
