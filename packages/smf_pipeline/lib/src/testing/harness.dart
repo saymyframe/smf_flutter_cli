@@ -1203,7 +1203,8 @@ final class _ImportCheck {
   }
 
   /// The template and the providers of a role render the data of its
-  /// contributors, so they may import their files.
+  /// contributors, and of those of the roles that it requires or uses, so
+  /// they may import their files.
   static Map<Role, Set<ContributionOrigin>> _dataContributorsOf(
     Collection collection,
   ) {
@@ -1451,8 +1452,12 @@ final class _ImportCheck {
     for (final role in resolution.presentRoles) {
       final renders = user == RoleTemplateOrigin(role) ||
           resolution.providersOf(role).any((module) => module.origin == user);
-      if (renders && (dataContributors[role]?.contains(owner) ?? false)) {
-        return true;
+      if (!renders) continue;
+      // The hooks of a role read its data and the data of the roles that it
+      // requires or uses, as the layout role reads the destinations of the
+      // router role.
+      for (final read in {role, ...role.visibleRoles}) {
+        if (dataContributors[read]?.contains(owner) ?? false) return true;
       }
     }
     return false;
