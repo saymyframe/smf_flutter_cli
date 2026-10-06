@@ -69,14 +69,17 @@ final class StructuralRuleRequest {
 final class StructuralRuleInput<D extends Object> {
   StructuralRuleInput._({
     required this.roleInput,
+    required RoleHookRequest hook,
     required this.files,
     required this.texts,
     required this.owners,
     required this.modules,
-  });
+  }) : _hook = hook;
 
   /// The role's data and view of the app, as its hooks get them.
   final RoleHookInput<D> roleInput;
+
+  final RoleHookRequest _hook;
 
   /// The indexes of the Dart files, by path relative to the project root.
   final Map<String, DartFileIndex> files;
@@ -97,6 +100,29 @@ final class StructuralRuleInput<D extends Object> {
       if (module.id == id) return module;
     }
     return null;
+  }
+
+  /// What the hooks of [user] get of the app, where [user] is a role that
+  /// requires or uses the role of the rule: its data, and the data and the
+  /// presence of the roles that it requires or uses, as [Role.hookInput]
+  /// builds them.
+  ///
+  /// With it a rule checks how the code of [user] uses its role against
+  /// what [user] renders: which of the texts of the modules the template
+  /// of a role may read depends on the data that the role gets. Throws an
+  /// [ArgumentError] for any other role, so that a rule sees no more of the
+  /// app than the roles that build on its role do.
+  RoleHookInput<Object> inputOf(Role user) {
+    final role = roleInput.role;
+    if (!user.visibleRoles.contains(role)) {
+      throw ArgumentError.value(
+        user,
+        'user',
+        'The $user neither requires nor uses the $role, so the rules of the '
+            '$role cannot read what its hooks get',
+      );
+    }
+    return user.hookInput(_hook);
   }
 }
 

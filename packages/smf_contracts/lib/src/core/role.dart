@@ -221,6 +221,7 @@ abstract base class Role<D extends Object> {
   List<SmfIssue> checkStructure(StructuralRuleRequest request) {
     final input = StructuralRuleInput<D>._(
       roleInput: hookInput(request.hook),
+      hook: request.hook,
       files: Map.unmodifiable(request.files),
       texts: Map.unmodifiable(request.texts),
       owners: Map.unmodifiable(request.owners),
