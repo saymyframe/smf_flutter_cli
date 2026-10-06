@@ -205,6 +205,18 @@ void main() {
                 'it.',
           );
           above = rect.bottom;
+          // What the card of the step paints, without the space that a
+          // theme may put around a card.
+          final painted = tester.getRect(
+            inStep(step.code, find.byType(Material)).first,
+          );
+          final ready = tester.getRect(card());
+          expect(
+            (painted.left, painted.right),
+            (ready.left, ready.right),
+            reason: 'The step with ${step.code} is as wide as the card '
+                'above the steps, in the theme of any app.',
+          );
           final button = tester.getSemantics(
             inStep(step.code, find.byType(InkWell)),
           );

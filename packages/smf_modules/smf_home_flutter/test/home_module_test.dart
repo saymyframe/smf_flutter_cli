@@ -973,9 +973,11 @@ void main() {
       final tapped = _argument(button, 'child') as MethodInvocation;
       expect(tapped.methodName.name, 'InkWell');
       expect(_namedArgumentsOf(tapped)['onTap'], 'onTap');
-      // The card clips the response to the tap to its corners in a theme
-      // whose cards do not.
+      // In a theme whose cards do not, the card has no space around it, as
+      // the card above the steps has none, and clips the response to the
+      // tap to its corners.
       final card = _calls(unit, 'Card').single;
+      expect(_namedArgumentsOf(card)['margin'], 'EdgeInsets.zero');
       expect(_namedArgumentsOf(card)['clipBehavior'], 'Clip.antiAlias');
       expect(_argument(card, 'child'), same(button));
     });

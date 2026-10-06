@@ -3254,7 +3254,9 @@ class _StepCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return Card(
-      // The response to a tap keeps to the corners of the card.
+      // In the theme of any app, the card is as wide as what is above it,
+      // and the response to a tap keeps to its corners.
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       // A screen reader announces the card as one button.
       child: Semantics(
