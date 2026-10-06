@@ -1,7 +1,6 @@
 @TestOn('vm')
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -1339,43 +1338,25 @@ void main() {
         'Ukrainian', () {
       final input = localizationRole.hookInput(result.hook!);
 
+      // What the role has of the module, in the order of its texts: the
+      // provider of the role renders them, and the rule
+      // localization.texts_rendered of the role checks that it does.
       expect(
         [
           for (final text in localizationRole.textsIn(input))
-            ('${text.owner}', text.getter, text.text.en),
+            (
+              '${text.owner}',
+              text.getter,
+              text.text.en,
+              text.text.textIn('uk'),
+            ),
         ],
         [
           for (final MapEntry(key: getter, value: english) in _texts.entries)
-            ('$_module', getter, english),
+            ('$_module', getter, english, _ukrainian[getter]),
         ],
       );
       expect(localizationRole.localesIn(input), ['en', 'uk']);
-    });
-
-    test(
-        'the provider of the role writes each text of the module into the '
-        'file of each language of the app, the English ones and the '
-        'Ukrainian ones', () {
-      final texts = localizationRole.textsIn(
-        localizationRole.hookInput(result.hook!),
-      );
-      Map<String, Object?> arbOf(String language) => jsonDecode(
-            app.files['${GenL10nModule.arbDirectory}/app_$language.arb']!.text,
-          ) as Map<String, Object?>;
-
-      // No other module of the app has a text, so each file has the texts
-      // of the module alone, after its language.
-      expect(arbOf('en'), {'@@locale': 'en', ..._texts});
-      expect(texts.map((text) => text.getter), _texts.keys);
-      expect(arbOf('uk'), {'@@locale': 'uk', ..._ukrainian});
-      // In the order of the texts of the module.
-      for (final language in ['en', 'uk']) {
-        expect(
-          arbOf(language).keys.skip(1),
-          _texts.keys,
-          reason: language,
-        );
-      }
     });
 
     test(
