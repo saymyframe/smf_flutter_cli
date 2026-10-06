@@ -8,11 +8,23 @@
 // place of each location outside its flow, and the locations of its flow
 // themselves. closedGuards() of the file that the matrix writes for the
 // walk names the guard, as the test of the walk does when it fails on it.
-// Once the gate opens, the walk reaches every route. It uses what the tests
-// of router_screens share, which every app that it applies to has. Each
-// expectation gives its reason, which a provider of the role with a known
-// bug fails the test with (brokenProviders of the fixture registry).
+// Once the gate opens, the walk reaches every route.
+//
+// The walk goes to the locations in the flows of the guards last, since a
+// screen of a flow may change what its guard allows when it is shown: one
+// that is shown although its flow is over may start the flow again, for
+// example. The test stands in for such a screen: it closes the first gate
+// as soon as the walk shows the gate screen. Every location outside the
+// flows has shown its own screen by then, and the walk holds. The location
+// of the flow of the second guard then shows the target of the first, which
+// is all that the walk checks of it.
+//
+// It uses what the tests of router_screens share, which every app that it
+// applies to has. Each expectation gives its reason, which a provider of
+// the role with a known bug fails the test with (brokenProviders of the
+// fixture registry).
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
 
 import '../integration_test/router_walk/locations.dart';
@@ -84,6 +96,68 @@ void main() {
         isEmpty,
         reason: 'Once the guards allow, each location shows the page and the '
             'screen of its route.',
+      );
+
+      // A screen of the flow of the first guard makes the guard stop
+      // allowing when it is shown: the test closes the gate as soon as the
+      // walk shows the gate screen, and notes which screen of a flow each
+      // location showed.
+      const flows = {...flow, 'fake_gate.second'};
+      expect(
+        routes.skipWhile((route) => !flows.contains(route)),
+        everyElement(isIn(flows)),
+        reason: 'The walk goes to the locations in the flows of the guards '
+            'after every other location.',
+      );
+      final shown = <String>[];
+      Future<void> settle() async {
+        await tester.pumpAndSettle();
+        if (fixtureGate.value &&
+            find.byType(FixtureGateScreen).evaluate().isNotEmpty) {
+          fixtureGate.value = false;
+          await tester.pumpAndSettle();
+        }
+        shown.add(
+          [
+            if (find.byType(FixtureGateScreen).evaluate().isNotEmpty)
+              'fake_gate.gate',
+            if (find.byType(FixtureGateStepScreen).evaluate().isNotEmpty)
+              'fake_gate.step',
+            if (find.byType(FixtureSecondGateScreen).evaluate().isNotEmpty)
+              'fake_gate.second',
+          ].join(', '),
+        );
+      }
+
+      final closing = await walkRoutes(settle);
+      expect(
+        closing.all,
+        isEmpty,
+        reason: 'The walk holds when a screen of a flow makes its guard stop '
+            'allowing while it is shown.',
+      );
+      expect(
+        closedGuards(),
+        ['fake_gate.first'],
+        reason: 'The screen of the flow has made its guard stop allowing.',
+      );
+      expect(
+        shown,
+        [
+          for (final route in routes)
+            if (!flows.contains(route))
+              // A screen of its own, which the walk has checked.
+              ''
+            else if (flow.contains(route))
+              route
+            else
+              // The flow of the second guard, outside the flow of the first.
+              'fake_gate.gate',
+        ],
+        reason: 'Every location outside the flows has shown its own screen '
+            'before a screen of a flow made its guard stop allowing. The '
+            'location of the flow of another guard then shows the target of '
+            'that guard, which is all that the walk checks of it.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

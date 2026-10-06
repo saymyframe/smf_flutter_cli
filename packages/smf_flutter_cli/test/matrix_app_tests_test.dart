@@ -13,6 +13,19 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
+/// The full names of the routes of the locations that the walk of the
+/// routes goes to, in its order, from the file that the matrix writes for
+/// it, [file].
+List<String> _walkedRoutesOf(String file) {
+  const start = 'const List<WalkedLocation> walkedLocations = [';
+  final list = file.substring(file.indexOf(start) + start.length);
+  return [
+    for (final route in RegExp(r"^    route: '([\w.]+)',$", multiLine: true)
+        .allMatches(list.substring(0, list.indexOf('\n];'))))
+      route[1]!,
+  ];
+}
+
 void main() {
   late MatrixAppTests appTests;
   late List<MatrixApp> apps;
@@ -281,6 +294,107 @@ void main() {
         '    if (!guard.allows.value) guard.name,\n',
       ),
     );
+  });
+
+  test(
+      'the walk of the routes goes to the locations in the flows of the '
+      'guards after every other location, in their order among themselves, '
+      'and leaves them out first in an app with more locations than it goes '
+      'to', () {
+    const gate = ImportRef.app('features/gate/gate_screens.dart');
+    const feed = ImportRef.app('features/feed/feed_screens.dart');
+    const status = ImportRef.app('features/gate/gate_status.dart');
+    Route route(
+      String path,
+      String screen,
+      ImportRef file, {
+      List<Route> children = const [],
+    }) =>
+        Route(
+          path,
+          name: path.replaceFirst('/', ''),
+          screen: ScreenRef(screen, import: file),
+          children: children,
+        );
+    RouteGuard guard(String name, String target) => RouteGuard(
+          name: name,
+          allows: FunctionRef(name, import: status),
+          redirectTo: target,
+        );
+    // A module with two guards, listed before a module with [routes] routes
+    // of its own. The flow of its first guard is the target and the route
+    // below it, and its last route is in no flow.
+    MatrixApp appWith({required int routes}) => MatrixApp(
+          'gate, feed',
+          const [ModuleId('gate'), ModuleId('feed')],
+          hook: RoleHookRequest(
+            data: [
+              routerRole
+                  .data(
+                    RoutesData(
+                      [
+                        route(
+                          '/intro',
+                          'IntroScreen',
+                          gate,
+                          children: [route('terms', 'TermsScreen', gate)],
+                        ),
+                        route('/login', 'LoginScreen', gate),
+                        route('/help', 'HelpScreen', gate),
+                      ],
+                      guards: [
+                        guard('firstRun', 'intro'),
+                        guard('signedIn', 'login'),
+                      ],
+                    ),
+                  )
+                  .withOrigin(const ModuleOrigin(ModuleId('gate'))),
+              routerRole
+                  .data(
+                    RoutesData([
+                      for (var index = 0; index < routes; index++)
+                        route('/r$index', 'Screen$index', feed),
+                    ]),
+                  )
+                  .withOrigin(const ModuleOrigin(ModuleId('feed'))),
+            ],
+            presentRoles: {routerRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    String fileOf(MatrixApp app) =>
+        named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+
+    // A screen in the flow of a guard may change what its guard allows when
+    // it is shown. The router then shows the target of that guard for each
+    // location after it, so the walk would not see the screens of those.
+    final text = fileOf(appWith(routes: 2));
+    expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
+    expect(_walkedRoutesOf(text), [
+      'gate.help',
+      'feed.r0',
+      'feed.r1',
+      'gate.intro',
+      'gate.terms',
+      'gate.login',
+    ]);
+
+    // The locations of the flows count among those that the walk goes to,
+    // so they are the first that it leaves out.
+    expect(_walkedRoutesOf(fileOf(appWith(routes: routerWalkLimit - 2))), [
+      'gate.help',
+      for (var index = 0; index < routerWalkLimit - 2; index++) 'feed.r$index',
+      'gate.intro',
+    ]);
+    final beyond = fileOf(appWith(routes: routerWalkLimit));
+    expect(_walkedRoutesOf(beyond), [
+      'gate.help',
+      for (var index = 0; index < routerWalkLimit - 1; index++) 'feed.r$index',
+    ]);
+    // The file has the targets of the guards all the same, for the walk to
+    // expect them while a guard does not allow.
+    expect(beyond, contains("    route: 'gate.intro',\n"));
+    expect(beyond, contains("    route: 'gate.login',\n"));
   });
 
   test(
