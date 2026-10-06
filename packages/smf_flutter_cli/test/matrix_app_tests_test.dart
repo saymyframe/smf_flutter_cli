@@ -529,6 +529,28 @@ void main() {
         'every module (riverpod)',
       ],
     );
+    // What the test has to check there. An app with a settings screen has
+    // the texts of the setting of the language, which the role gives it in
+    // English and in Ukrainian, so the test reads texts in two languages
+    // with the provider of the CLI. The app of gen_l10n alone has no
+    // module with a text: there the test checks the languages of the root
+    // and the choice that the app saves and restores.
+    final localized = [
+      for (final app in apps)
+        if (registered.appliesTo(app) &&
+            app.hook!.presentRoles.contains(settingsScreenRole))
+          app,
+    ];
+    expect(localized, hasLength(3));
+    for (final app in localized) {
+      final input = localizationRole.hookInput(app.hook!);
+      expect(
+        localizationRole.localesIn(input),
+        ['en', 'uk'],
+        reason: app.name,
+      );
+      expect(localizationRole.textsIn(input), isNotEmpty, reason: app.name);
+    }
 
     // As the fixtures take it, only in the apps with every module.
     final everyModule = await localizationRoleAppTest(
