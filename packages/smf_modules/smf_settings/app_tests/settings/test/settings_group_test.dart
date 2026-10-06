@@ -269,6 +269,50 @@ Future<void> _expectNote(WidgetTester tester) async {
   }
 }
 
+/// On a narrow phone with a large text size, the title of the screen gets
+/// smaller rather than break inside a word: it stays on one line, within
+/// the screen.
+Future<void> _expectTitleOnOneLine(WidgetTester tester) async {
+  const width = 320.0;
+  tester.view
+    ..physicalSize = const Size(width, 480)
+    ..devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  tester.platformDispatcher.textScaleFactorTestValue = 3;
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  await tester.pumpAndSettle();
+
+  final title = find.descendant(
+    of: find
+        .descendant(
+          of: _screen,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && (widget.properties.header ?? false),
+          ),
+        )
+        .first,
+    matching: find.byType(Text),
+  );
+  final style = tester.widget<Text>(title).style!;
+  // The height of a line of the title at this text size.
+  final line =
+      MediaQuery.textScalerOf(tester.element(title)).scale(style.fontSize!) *
+          (style.height ?? 1);
+  expect(
+    tester.getSize(title).height,
+    lessThan(1.5 * line),
+    reason: 'The title is on one line, also when its line is too short for '
+        'it at this text size.',
+  );
+  final shown = tester.getRect(title);
+  expect(
+    (shown.left >= 0, shown.right <= width),
+    (true, true),
+    reason: 'The title is within the screen: it is at $shown.',
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -287,6 +331,7 @@ void main() {
       } else {
         await _expectNote(tester);
       }
+      await _expectTitleOnOneLine(tester);
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

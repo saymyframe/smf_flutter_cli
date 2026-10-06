@@ -24,9 +24,15 @@ class SettingsScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Semantics(
         header: true,
-        child: Text(
-          {{{text_title}}},
-          style: theme.textTheme.headlineLarge,
+        // A title that is too long for its line, as with a large text
+        // size, gets smaller rather than break inside a word.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            {{{text_title}}},
+            style: theme.textTheme.headlineLarge,
+          ),
         ),
       ),
     );
