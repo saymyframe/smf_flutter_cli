@@ -558,11 +558,13 @@ void main() {
         'builds the apps with and without home, and the app of home with '
         'and without the texts of the app', () {
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'home with localization',
         'home',
-        'gen_l10n',
         'shared_preferences',
       ]);
     });
@@ -1386,12 +1388,13 @@ void main() {
       expect(
         [
           for (final text in localizationRole.textsIn(input))
-            (
-              '${text.owner}',
-              text.getter,
-              text.text.en,
-              text.text.textIn('uk'),
-            ),
+            if (text.owner == _module)
+              (
+                '${text.owner}',
+                text.getter,
+                text.text.en,
+                text.text.textIn('uk'),
+              ),
         ],
         [
           ('$_module', 'homeLabel', 'Home', 'Головна'),

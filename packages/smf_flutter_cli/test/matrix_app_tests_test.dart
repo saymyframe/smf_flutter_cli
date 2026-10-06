@@ -555,6 +555,8 @@ void main() {
       [
         // The localization role and the theme role require the
         // preferences.
+        'flutter_core with router, localization',
+        'flutter_core with localization',
         'home with localization',
         'settings with localization',
         'bottom_tabs with localization',
@@ -562,7 +564,6 @@ void main() {
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
         // The onboarding requires the preferences.
@@ -642,9 +643,10 @@ void main() {
     expect(test.appliesTo(appWith(localizationRole)), isTrue);
     expect(test.appliesTo(appWith(preferencesRole)), isFalse);
     // The matrix of the CLI runs it in every app with the role: the apps
-    // of gen_l10n and those of material_theme with the localization, with
-    // a settings screen and without, the app of the onboarding with the
-    // role, and the apps with every module.
+    // of flutter_core with the localization, with a router and without,
+    // those of material_theme with the localization, with a settings
+    // screen and without, the app of the onboarding with the role, and the
+    // apps with every module.
     final registered = named('localization_role');
     expect(registered.roles, test.roles);
     expect(registered.startProbe!.path, test.startProbe!.path);
@@ -666,26 +668,26 @@ void main() {
       [
         // The apps of the modules with texts, and of the layout, which
         // shows the labels of the destinations in the language of the app.
+        'flutter_core with router, localization',
+        'flutter_core with localization',
         'home with localization',
         'settings with localization',
         'bottom_tabs with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'gen_l10n',
         'onboarding with localization',
         'every module (bloc)',
         'every module (riverpod)',
       ],
     );
-    // What the test has to check there. An app with a settings screen has
-    // the texts of the setting of the language, which the role gives it in
-    // English and in Ukrainian. An app with the start screen or with the
-    // settings module has the label of its destination in both, and an app
-    // with the onboarding the texts of its pages. So the test reads texts
-    // in two languages with the provider of the CLI. Without them an app
-    // may have no text at all, as the app of gen_l10n alone and the app of
-    // the layout, which has no destination: there the test checks the
-    // languages of the root and the choice that the app saves and restores.
+    // What the test has to check there. Every app has the two texts of the
+    // fallback start screen of its app entry, in English and in Ukrainian.
+    // An app with a settings screen also has the texts of the setting of
+    // the language, which the role gives it in both languages. An app with
+    // the start screen or with the settings module has the label of its
+    // destination in both, and an app with the onboarding the texts of its
+    // pages. So the test reads texts in two languages in each app, with
+    // the provider of the CLI.
     List<String> languagesOf(MatrixApp app) =>
         localizationRole.localesIn(localizationRole.hookInput(app.hook!));
     expect(
@@ -694,12 +696,13 @@ void main() {
           if (registered.appliesTo(app)) app.name: languagesOf(app),
       },
       {
+        'flutter_core with router, localization': ['en', 'uk'],
+        'flutter_core with localization': ['en', 'uk'],
         'home with localization': ['en', 'uk'],
         'settings with localization': ['en', 'uk'],
-        'bottom_tabs with localization': ['en'],
+        'bottom_tabs with localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
-        'material_theme with localization': ['en'],
-        'gen_l10n': ['en'],
+        'material_theme with localization': ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
         'every module (bloc)': ['en', 'uk'],
         'every module (riverpod)': ['en', 'uk'],

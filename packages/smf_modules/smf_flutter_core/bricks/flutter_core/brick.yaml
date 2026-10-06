@@ -5,7 +5,10 @@ description: "The Flutter app every SMF app starts from: the Android and iOS pro
 # generated app, and follow the files of `flutter create` of Flutter 3.44.
 # The pipeline renders it with app_name, org_name, the has_<role> flags and
 # the rendered sockets of its tags; the module adds android_namespace,
-# android_application_id, android_package_path and ios_bundle_id.
+# android_application_id, android_package_path and ios_bundle_id, and for
+# the fallback start screen app_symbol and app_number, the symbol and the
+# number of the cell of the app, and text_fallback_hint and
+# text_fallback_copied, the code that reads each of its two texts.
 version: 0.1.0+1
 
 environment:

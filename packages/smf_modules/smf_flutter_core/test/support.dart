@@ -6,11 +6,18 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
-/// The registry of the tests: flutter_core, a router, and a module that
-/// fills every socket of the app entry.
+/// The registry of the tests: flutter_core, a router, the texts of the app
+/// with the preferences that their role requires, and a module that fills
+/// every socket of the app entry.
+///
+/// The providers of the roles are those of this file: the package of
+/// flutter_core depends on no module, since the other modules render the
+/// apps of their tests with it.
 ModuleRegistry testRegistry() => ModuleRegistry(const [
       FlutterCoreModule(),
       TestRouterModule(),
+      TestTextsModule(),
+      TestPreferencesModule(),
       EverySocketModule(),
     ]);
 
@@ -107,6 +114,185 @@ final class _TestDelegate extends RouterDelegate<Object> with ChangeNotifier {
 }
 ''',
           }),
+        ),
+      ];
+}
+
+/// A provider of the localization role for the tests, which keeps the texts
+/// of the app in one Dart file: a getter for each text, which returns the
+/// text in the language of the texts, among the languages of the app, or in
+/// English. Its texts take their language from the locale of the context,
+/// so the root of the app gets no delegate for them.
+final class TestTextsModule extends SmfModule {
+  /// Creates the module.
+  const TestTextsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('test_texts');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The texts of the app for the tests',
+        kind: ModuleKinds.infrastructure,
+        providers: [_TestTextsProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('test_texts', {
+            LocalizationRole.textsFile: '''
+import 'package:flutter/widgets.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context.
+  TestTexts get l10n => TestTexts(Localizations.localeOf(this).languageCode);
+}
+
+/// The texts of the app in one language.
+class TestTexts {
+  /// Creates the texts in the language of the code [language].
+  const TestTexts(this.language);
+
+  /// The code of the language of the texts, such as `uk`.
+  final String language;
+
+{{{getters}}}
+}
+''',
+          }),
+        ),
+      ];
+}
+
+final class _TestTextsProvider extends RoleProvider<TextsData> {
+  const _TestTextsProvider();
+
+  @override
+  Role<TextsData> get role => localizationRole;
+
+  @override
+  RoleOutput render(RoleHookInput<TextsData> input) {
+    final locales = localizationRole.localesIn(input);
+    return RoleOutput(
+      vars: {
+        'getters': Fragment(
+          [
+            for (final text in localizationRole.textsIn(input))
+              _getterOf(text, locales),
+          ].join('\n\n'),
+        ),
+      },
+    );
+  }
+
+  /// The getter of [text] in the class of the texts, which returns its
+  /// translation into the language of the texts, among [locales], or its
+  /// English text.
+  String _getterOf(AppText text, List<String> locales) {
+    final translations = {
+      for (final language in locales)
+        if (text.text.translations[language] case final translation?)
+          language: SmfNames.dartString(translation),
+    };
+    return [
+      '  /// The $text.',
+      '  String get ${text.getter} => switch (language) {',
+      for (final MapEntry(key: language, value: translation)
+          in translations.entries)
+        "        '$language' => $translation,",
+      '        _ => ${SmfNames.dartString(text.text.en)},',
+      '      };',
+    ].join('\n');
+  }
+}
+
+/// A provider of the preferences role for the tests, which the localization
+/// role requires: its preferences keep the settings in memory.
+final class TestPreferencesModule extends SmfModule {
+  /// Creates the module.
+  const TestPreferencesModule();
+
+  /// The id of the module.
+  static const id = ModuleId('test_preferences');
+
+  static const _file = ImportRef.app(
+    'core/preferences/test_app_preferences.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Preferences in memory for the tests',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(preferencesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('test_preferences', {
+            'lib/core/preferences/test_app_preferences.dart': '''
+import 'app_preferences.dart';
+
+/// Opens the preferences of the tests, which have nothing saved.
+AppPreferences createTestAppPreferences() => TestAppPreferences();
+
+/// The preferences of the tests, in memory.
+final class TestAppPreferences implements AppPreferences {
+  final Map<String, Object> _values = {};
+
+  T? _read<T>(String key) => switch (_values[key]) {
+        final T value => value,
+        _ => null,
+      };
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => _read<List<String>>(key);
+
+  @override
+  Future<void> setString(String key, String value) async =>
+      _values[key] = value;
+
+  @override
+  Future<void> setBool(String key, bool value) async => _values[key] = value;
+
+  @override
+  Future<void> setInt(String key, int value) async => _values[key] = value;
+
+  @override
+  Future<void> setDouble(String key, double value) async =>
+      _values[key] = value;
+
+  @override
+  Future<void> setStringList(String key, List<String> value) async =>
+      _values[key] = List.of(value);
+
+  @override
+  Future<void> remove(String key) async => _values.remove(key);
+}
+''',
+          }),
+        ),
+        preferencesRole.data(
+          const RoleImplementation(
+            type: TypeRef('TestAppPreferences', import: _file),
+            create: FactoryRef('createTestAppPreferences', import: _file),
+          ),
         ),
       ];
 }
