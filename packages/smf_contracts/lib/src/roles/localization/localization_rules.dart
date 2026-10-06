@@ -199,11 +199,37 @@ bool _readsTexts(ContributionOrigin owner, ModuleDescriptor? module) =>
       PipelineOrigin() => true,
     };
 
-/// Whether [owner] is the template of a role other than this one, whose
-/// data may have texts of the modules (see [DataWithTexts]): the data of
-/// this role are the texts themselves.
-bool _rendersDataOfModules(ContributionOrigin owner) =>
-    owner is RoleTemplateOrigin && !identical(owner.role, localizationRole);
+/// The role whose data the code of [owner] renders with texts of the
+/// modules: the role of the template that [owner] is, unless it is this
+/// role, whose data are the texts themselves. A module has none: it reads
+/// the texts of the modules it depends on.
+Role? _roleWithTextsOf(ContributionOrigin owner) => switch (owner) {
+      RoleTemplateOrigin(:final role) when !identical(role, localizationRole) =>
+        role,
+      _ => null,
+    };
+
+/// The texts of the modules that the template of [role] may read besides
+/// its own, each as its owner and its name: the texts of the data of
+/// [role] and of the roles that it requires or uses (see [DataWithTexts]),
+/// such as the labels of the destinations for the layout role.
+///
+/// The hooks of the role render that data, so they know which texts these
+/// are; the rule reads them from what those hooks get.
+Set<(ContributionOrigin, String)> _textsOfDataFor(
+  StructuralRuleInput<TextsData> input,
+  Role role,
+) {
+  final seen = input.inputOf(role);
+  return {
+    for (final read in {role, ...role.visibleRoles})
+      for (final data in read.dataIn(seen))
+        // Every data that a hook gets has an origin.
+        if (data.value case final DataWithTexts value)
+          for (final text in value.shownTexts)
+            (_ownerOf(data.origin!), text.name),
+  };
+}
 
 /// Whether [target], the expression before a dot, is the texts of the app,
 /// as code names them: `context.l10n`, or a variable called `l10n`.
@@ -225,19 +251,23 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
       _ => null,
     };
     if (!_readsTexts(owner, module)) continue;
+    final readable = {
+      owner,
+      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
+        ModuleOrigin(dependency),
+    };
     // The template of another role renders what the modules give that role,
-    // so it reads the texts of their data too: which texts those are, only
-    // its role knows.
-    final readable = _rendersDataOfModules(owner)
-        ? null
-        : {
-            owner,
-            for (final dependency in module?.dependsOn ?? const <ModuleId>{})
-              ModuleOrigin(dependency),
-          };
-    final own = owner is ModuleOrigin
-        ? 'its own texts and those of the modules it depends on'
-        : 'its own texts';
+    // so it reads the texts of their data too.
+    final rendered = _roleWithTextsOf(owner);
+    final ofData = rendered == null
+        ? const <(ContributionOrigin, String)>{}
+        : _textsOfDataFor(input, rendered);
+    final own = switch (owner) {
+      ModuleOrigin() => 'its own texts and those of the modules it depends on',
+      _ when rendered != null => 'its own texts and those that the modules '
+          'give its role in their data',
+      _ => 'its own texts',
+    };
     for (final access in file.memberAccesses) {
       if (!_isTexts(access.target)) continue;
       final read = '${access.target}.${access.name}';
@@ -255,12 +285,18 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
             path: path,
           ),
         );
-      } else if (readable != null && !readable.contains(text.owner)) {
+      } else if (!readable.contains(text.owner) &&
+          !ofData.contains((text.owner, text.text.name))) {
         issues.add(
           SmfIssue(
             '$path reads $read, the $text, but ${_named(owner)} may only '
             'read $own.',
-            hint: 'Give the role a text of your own.',
+            hint: rendered != null
+                ? 'Give the role a text of your own. A text of a module comes '
+                    'with the data that the module gives your role, a '
+                    'DataWithTexts, and the code that reads it from '
+                    'LocalizationRole.expressionOf().'
+                : 'Give the role a text of your own.',
             origin: owner,
             path: path,
           ),

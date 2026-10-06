@@ -272,12 +272,17 @@ final class LocalizationRole extends Role<TextsData> {
           description: 'Code of a module with the role among its roles '
               'reads only its own texts and those of the modules it depends '
               'on, each through its getter. Code of the template of a role '
-              'that requires or uses the role reads its own texts and those '
-              'that the modules give its role in their data, such as the '
-              'label of a destination: of these the rule checks only that '
-              'the app has each. The rule sees a text that code reads from '
-              'context.l10n or from a variable called l10n, and no text that '
-              'it reads through another expression.',
+              'that requires or uses the role reads its own texts and, of '
+              'the texts of the modules, those that the modules give in '
+              'their data to its role or to a role that its role requires '
+              'or uses, such as the label of a destination. The rule does '
+              'not tell a read that a template of a brick has in its own '
+              'code from one that a render hook wrote for that data, so a '
+              'template that names such a text of a module passes in an '
+              'app with the module; in an app without it, the app lacks the '
+              'text and the rule reports the read. The rule sees a text '
+              'that code reads from context.l10n or from a variable called '
+              'l10n, and no text that it reads through another expression.',
           check: _checkTextAccess,
         ),
         StructuralRule(
