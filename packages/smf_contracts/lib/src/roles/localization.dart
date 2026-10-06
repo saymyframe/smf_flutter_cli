@@ -380,7 +380,8 @@ final class LocalizationRole extends Role<TextsData> {
     if (languages.isEmpty || module.roles.contains(this)) return problems;
     final one = languages.length == 1;
     problems.add(
-      'The $text has ${one ? 'a translation' : 'translations'} into '
+      'The text "${text.name}" has '
+      '${one ? 'a translation' : 'translations'} into '
       '${languages.join(', ')}, but the module ${module.id} does not list '
       'the $this among its roles, so every app would show the text in '
       'English. Add the role to the uses of the module and give it the text '

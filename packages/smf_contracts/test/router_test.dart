@@ -1628,7 +1628,7 @@ void main() {
         expect(
           _routeProblems([route(home)]).single,
           ofLabel(
-            'The text label has a translation into uk, but the module home '
+            'The text "label" has a translation into uk, but the module home '
             'does not list the localization role among its roles, so every '
             'app would show the text in English. Add the role to the uses of '
             'the module and give it the text among the texts of the module, '

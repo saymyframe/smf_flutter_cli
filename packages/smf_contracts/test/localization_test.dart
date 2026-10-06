@@ -894,11 +894,11 @@ void main() {
         'texts every app shows in English', () {
       expect(
         localizationRole.dataTextProblems(module(), label).single,
-        'The text label has a translation into uk, but the module home does '
-        'not list the localization role among its roles, so every app would '
-        'show the text in English. Add the role to the uses of the module '
-        'and give it the text among the texts of the module, or leave the '
-        'translation out.',
+        'The text "label" has a translation into uk, but the module home '
+        'does not list the localization role among its roles, so every app '
+        'would show the text in English. Add the role to the uses of the '
+        'module and give it the text among the texts of the module, or leave '
+        'the translation out.',
       );
       expect(
         localizationRole
@@ -912,7 +912,7 @@ void main() {
             )
             .single,
         allOf(
-          startsWith('The text label has translations into uk, de, but the '),
+          startsWith('The text "label" has translations into uk, de, but the '),
           endsWith('or leave the translations out.'),
         ),
       );
@@ -1385,9 +1385,9 @@ void main() {
 
       expect(
         issues.single.message,
-        'The module gives the router role the text label in its data, but '
-        'not the localization role, so the app would show it in English in '
-        'every language.',
+        'The module gives the router role the text "label" in its data, '
+        'but not the localization role, so the app would show it in '
+        'English in every language.',
       );
       expect(
         issues.single.hint,
@@ -1408,9 +1408,9 @@ void main() {
         'reports a label that differs from the text of its name that the '
         'module gave the role', () {
       String differs(String other) =>
-          'The module gives the router role the text label in its data, and '
-          'the localization role a text of that name that differs from it: '
-          "'Home', uk: 'Головна' and $other.";
+          'The module gives the router role the text "label" in its data, '
+          'and the localization role a text of that name that differs from '
+          "it: 'Home', uk: 'Головна' and $other.";
 
       for (final (given, shown) in const [
         (LocalizedText('label', en: 'Start'), "'Start'"),
@@ -1446,6 +1446,60 @@ void main() {
         );
         expect(issue.origin, const ModuleOrigin(home));
       }
+    });
+
+    test(
+        'reports two labels of one name that differ, of which the app would '
+        'show one for both', () {
+      const cart = LocalizedText(
+        'label',
+        en: 'Cart',
+        translations: {'uk': 'Кошик'},
+      );
+      String differ(int count, String texts) =>
+          'The module gives the router role $count texts named "label" in '
+          'its data that differ: $texts. The app reads a text of a module by '
+          'its name, so it would show the same text for each of them.';
+      const first = "'Home', uk: 'Головна'";
+      const second = "'Cart', uk: 'Кошик'";
+
+      // The module gave the role the first of them, and the app would show
+      // it for the second too. A text that the data has twice counts once.
+      final issue = check(
+        const [label],
+        [
+          routes(const [label, cart, label]),
+        ],
+      ).single;
+      expect(issue.message, differ(2, '$first; $second'));
+      expect(
+        issue.hint,
+        'Give each of these texts a name of its own, and the role each of '
+        'them among the texts of the module.',
+      );
+      expect(issue.origin, const ModuleOrigin(home));
+
+      // In the order of the data, whichever of them the module gave the
+      // role, if any, and across the data that the module gives the role.
+      expect(
+        check(
+          const [cart],
+          [
+            routes(const [cart]),
+            routes(const [label, LocalizedText('label', en: 'Start')]),
+          ],
+        ).single.message,
+        differ(3, "$second; $first; 'Start'"),
+      );
+      expect(
+        check(
+          const [_title],
+          [
+            routes(const [label, cart]),
+          ],
+        ).single.message,
+        differ(2, '$first; $second'),
+      );
     });
 
     test(

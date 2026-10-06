@@ -26,25 +26,43 @@ List<SmfIssue> _checkTexts(ModuleRuleInput<TextsData> input) {
 
 /// The problems of the texts that the module of [input] gives other roles
 /// in its data (see [DataWithTexts]), such as the label of a destination,
-/// against [texts], those that it gives this role: one that is not among
-/// them, which the app would show in English in every language though the
-/// module lists this role, and one that differs from the text of its name
-/// among them, which the app would show otherwise with the role than
-/// without it. Each text is reported once for a role.
+/// against [texts], those that it gives this role:
+/// - texts of one name in the data of a role that differ, for each of which
+///   the app would show the text of that name that the module gives this
+///   role;
+/// - a text that is not among [texts], which the app would show in English
+///   in every language though the module lists this role;
+/// - a text that differs from the one of its name among [texts], which the
+///   app would show otherwise with the role than without it.
+///
+/// A text that the data of a role has several times counts once.
 List<SmfIssue> _dataTextIssues(
   ModuleRuleInput<TextsData> input,
   List<LocalizedText> texts,
   ModuleOrigin origin,
 ) {
   final issues = <SmfIssue>[];
-  final seen = <(Role, String)>{};
-  for (final data in input.contributions.whereType<RoleData<Object>>()) {
-    final value = data.value;
-    if (value is! DataWithTexts) continue;
-    for (final text in value.shownTexts) {
-      if (!seen.add((data.role, text.name))) continue;
-      final given = texts.where((own) => own.name == text.name).firstOrNull;
-      final what = 'The module gives the ${data.role} the $text in its data';
+  for (final MapEntry(key: role, value: byName)
+      in _dataTextsOf(input.contributions).entries) {
+    for (final MapEntry(key: name, value: named) in byName.entries) {
+      final gives = 'The module gives the $role';
+      if (named.length > 1) {
+        issues.add(
+          SmfIssue(
+            '$gives ${named.length} texts named "$name" in its data that '
+            'differ: ${named.map(_shown).join('; ')}. The app reads a text '
+            'of a module by its name, so it would show the same text for '
+            'each of them.',
+            hint: 'Give each of these texts a name of its own, and the role '
+                'each of them among the texts of the module.',
+            origin: origin,
+          ),
+        );
+        continue;
+      }
+      final text = named.single;
+      final given = texts.where((own) => own.name == name).firstOrNull;
+      final what = '$gives the text "$name" in its data';
       if (given == null) {
         issues.add(
           SmfIssue(
@@ -68,6 +86,25 @@ List<SmfIssue> _dataTextIssues(
     }
   }
   return issues;
+}
+
+/// The texts of the data with texts among [contributions], those of a
+/// module, by the role of the data and by their name, in the order of the
+/// data: under each name the texts that differ, each once.
+Map<Role, Map<String, List<LocalizedText>>> _dataTextsOf(
+  List<Contribution> contributions,
+) {
+  final texts = <Role, Map<String, List<LocalizedText>>>{};
+  for (final data in contributions.whereType<RoleData<Object>>()) {
+    final value = data.value;
+    if (value is! DataWithTexts) continue;
+    final byName = texts.putIfAbsent(data.role, () => {});
+    for (final text in value.shownTexts) {
+      final named = byName.putIfAbsent(text.name, () => []);
+      if (!named.any((other) => _sameText(other, text))) named.add(text);
+    }
+  }
+  return texts;
 }
 
 /// Whether [a] and [b] read the same in every language.
