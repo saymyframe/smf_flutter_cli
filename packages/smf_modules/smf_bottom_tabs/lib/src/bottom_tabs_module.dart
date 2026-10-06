@@ -6,11 +6,22 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// bottom, and so a provider of the layout role.
 ///
 /// It generates `AppShell` in `lib/core/layout/app_shell.dart`: a
-/// `Scaffold` with the screen of the selected destination as its body and a
-/// Material 3 `NavigationBar` with a tab for each destination of the app,
-/// with its icon and label. With one destination there is nothing to switch
-/// to, so the bar is hidden. Selecting a tab calls `onSelect` with its
-/// index.
+/// `Scaffold` with the screen of the selected destination as its body and,
+/// below it, a bar that the file draws itself, with a tab for each
+/// destination of the app: its icon over its label, below a hairline. The
+/// selected tab differs from the others only in its colour, the secondary
+/// colour of the theme, which it takes over a moment, so no tab changes its
+/// size. A tap on a tab calls `onSelect` with its index, with the tick of a
+/// selection on the device when it is another tab, and the screen of the
+/// new destination fades in while it rises a little. With one destination
+/// there is nothing to switch to, so the bar is hidden.
+///
+/// The bar brings what a bar of Flutter would. Each tab is one button for a
+/// screen reader, with the label of its destination, selected or not. The
+/// bar is 64 high and grows with labels that need more. The text size of
+/// the device scales a label at most 1.3 times, and a long press on a tab
+/// shows its label in a tooltip at the full size. For a user who asks for
+/// less motion, the tab and the screen change at once.
 ///
 /// The router of the app builds the shell from the destinations that the
 /// features declare, in the order of the features, and keeps the stack of
@@ -28,7 +39,8 @@ final class BottomTabsModule extends SmfModule {
   static const id = ModuleId('bottom_tabs');
 
   /// The most destinations the bar shows, as the guidelines of Material
-  /// Design advise for a navigation bar.
+  /// Design advise for a bar at the bottom: more tabs get too narrow for
+  /// their labels on a phone.
   static const maxDestinations = 5;
 
   @override
