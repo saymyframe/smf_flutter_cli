@@ -4,8 +4,11 @@ description: "The settings screen of an SMF app: an entry for each setting of it
 # A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the
 # has_<role> flags, the rendered sockets of its tags, and the variables of
-# the module: title, the title of the screen as a Dart string, and entries,
-# the widgets of the entries with the imports of their files.
+# the module: text_title, the code that reads the title of the screen, which
+# is a text of the app in an app with the localization role and the English
+# text as a Dart string in an app without it, where the widget of the title
+# is a constant (has_localization), and entries, the widgets of the entries
+# with the imports of their files.
 version: 0.1.0+1
 
 environment:

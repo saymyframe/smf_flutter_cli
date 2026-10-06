@@ -1081,6 +1081,7 @@ final class SettingsRoutes {
 }
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
@@ -1091,7 +1092,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
+    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
     body: ListView(
       children: const [
         entry0.LanguageSetting(),
@@ -1106,12 +1107,14 @@ class SettingsScreen extends StatelessWidget {
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
   "@@locale": "en",
+  "settingsTitle": "Settings",
   "localizationLanguage": "Language",
   "localizationSystem": "System"
 }
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
   "@@locale": "uk",
+  "settingsTitle": "Налаштування",
   "localizationLanguage": "Мова",
   "localizationSystem": "Як у системі"
 }

@@ -197,8 +197,8 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -279,8 +279,8 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -447,8 +447,8 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -505,8 +505,8 @@ void main() {
       'Settings screen: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'Events: which module provides it?',
@@ -529,9 +529,9 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the localization after '
-      'the theme, and offers gen_l10n, which keeps the texts of the app in '
-      'ARB files and brings the preferences, in which the app remembers its '
-      'language', () async {
+      'the state management and before the theme, and offers gen_l10n, which '
+      'keeps the texts of the app in ARB files and brings the preferences, '
+      'in which the app remembers its language', () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
@@ -551,15 +551,19 @@ void main() {
     final localization = messages.indexOf(
       'Localization: which module provides it?',
     );
-    // The roles come in the order of the list of modules, and gen_l10n is
-    // after material_theme and before get_it.
+    // The roles come in the order in which the modules of the list name
+    // them: settings, which uses the localization for the title of its
+    // screen, is before material_theme, which provides the theme.
     expect(
       localization,
-      messages.indexOf('Theme: which module provides it?') + 1,
+      messages.indexOf('State management: which module provides it?') + 1,
     );
     expect(
-      messages[localization + 1],
-      'Dependency injection: which module provides it?',
+      messages.sublist(localization + 1, localization + 3),
+      [
+        'Theme: which module provides it?',
+        'Dependency injection: which module provides it?',
+      ],
     );
     expect(run.asked[localization].shown, [
       'gen_l10n — Texts in ARB files with gen-l10n of Flutter',
@@ -759,7 +763,7 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the preferences after '
-      'the theme and the localization, which require them, and offers '
+      'the localization and the theme, which require them, and offers '
       'shared_preferences, which the start-up opens and the DI container '
       'registers', () async {
     final run = await _create({
@@ -784,15 +788,15 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list name
-    // them, and material_theme and gen_l10n, whose roles require the
-    // preferences, are before get_it. So the question of the preferences
-    // knows whether the answers on the theme and on the localization need
-    // them.
+    // them, and settings, which names the localization, and material_theme,
+    // whose roles require the preferences, are before get_it. So the
+    // question of the preferences knows whether the answers on the
+    // localization and on the theme need them.
     expect(
       messages.sublist(preferences - 2, preferences + 1),
       [
-        'Theme: which module provides it?',
         'Localization: which module provides it?',
+        'Theme: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -843,7 +847,7 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the theme after the '
-      'state management, and offers material_theme, which brings the '
+      'localization, and offers material_theme, which brings the '
       'preferences that remember the theme mode without a question, and '
       'whose mode the settings screen lets the user select', () async {
     final run = await _create({
@@ -865,7 +869,7 @@ void main() {
     final theme = messages.indexOf('Theme: which module provides it?');
     expect(
       theme,
-      messages.indexOf('State management: which module provides it?') + 1,
+      messages.indexOf('Localization: which module provides it?') + 1,
     );
     expect(run.asked[theme].shown, [
       'material_theme — Light and dark Material 3 themes from one seed colour',

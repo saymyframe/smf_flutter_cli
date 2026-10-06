@@ -208,8 +208,10 @@ void main() {
         'flutter_core with router',
         'flutter_core',
         'shared_preferences',
+        // The settings screen reads its title from the texts of the app, and
+        // the localization has its setting on that screen: one app.
+        'settings with localization',
         'settings',
-        'gen_l10n with settings_screen',
         'gen_l10n',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
