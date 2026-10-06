@@ -943,10 +943,10 @@ jobs:
       # of the nightly run with the latest Flutter (the input
       # save_swiftpm_cache). The tool lists every plugin with iOS code,
       # whether its Swift package names a remote package or not. So the apps
-      # that CI starts without Firebase, whose only such plugin,
-      # shared_preferences_foundation, downloads nothing, have a key too:
-      # their builds add nothing to save under it, and each of their jobs
-      # restores the newest cache of any app, which its build does not use.
+      # that CI starts without Firebase, whose plugins with iOS code download
+      # nothing, have a key too: their builds add nothing to save under it,
+      # and each of their jobs restores the newest cache of any app, which
+      # its build does not use.
       - name: Find what the app builds with for iOS
         run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/ios" build/native_build/ios.txt
 
