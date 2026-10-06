@@ -27,13 +27,15 @@ final class GoRoutes {
   /// With a main navigation and destinations, the destinations go into a
   /// `StatefulShellRoute.indexedStack`, a branch for each, in their order,
   /// with the routes below them: its builder shows the `AppShell` of the
-  /// layout with the destinations as constants, the index of the selected
-  /// branch, and `goBranch` to select another. It comes right after `/`, so
-  /// the router matches the destinations first, and the other top-level
-  /// routes follow it, outside the main navigation. Each branch starts on
-  /// its destination and creates observers of its own, and so does the
-  /// root navigator; the branches do not notify the observers of the root
-  /// navigator, which would see their pages twice otherwise.
+  /// layout with the list of the destinations that the layout role
+  /// generates in the same order, each with its label and its icon, the
+  /// index of the selected branch, and `goBranch` to select another. It
+  /// comes right after `/`, so the router matches the destinations first,
+  /// and the other top-level routes follow it, outside the main
+  /// navigation. Each branch starts on its destination and creates
+  /// observers of its own, and so does the root navigator; the branches do
+  /// not notify the observers of the root navigator, which would see their
+  /// pages twice otherwise.
   ///
   /// A screen gets the values of its parameters from the location, parsed
   /// with `tryParse`: a path parameter from the path, including one of a
@@ -70,7 +72,7 @@ final class GoRoutes {
         imports: [
           if (start == null) fallback.importRef,
           ...code.screens.values,
-          if (destinations.isNotEmpty) ..._layoutImports(destinations),
+          if (destinations.isNotEmpty) ..._layoutImports,
         ],
       ),
       valueChecks: Fragment(code.checksValues ? _checkValues : ''),
@@ -120,20 +122,18 @@ final class GoRoutes {
   static String _argumentOf(RouteParam param) =>
       param.isRequired ? '${_valueOf(param)}!' : _valueOf(param);
 
-  /// The constant `Destination` of the layout for [destination].
-  static String _destinationOf(Destination destination) =>
-      '${LayoutRole.destination.name}('
-      'label: ${SmfNames.dartString(destination.label)}, '
-      'icon: ${destination.icon.code})';
-
-  /// The imports of the layout's `AppShell` and `Destination`, and of the
-  /// icons of [destinations].
-  static List<ImportRef> _layoutImports(List<FacadeRoute> destinations) => [
-        for (final symbol in [LayoutRole.appShell, LayoutRole.destination])
-          ImportRef.app(symbol.importRef.uri, show: [symbol.name]),
-        for (final route in destinations)
-          ...route.route.destination!.icon.imports,
-      ];
+  /// The imports of the `AppShell` of the layout and of the list of the
+  /// destinations of the app, which the layout role generates.
+  static final List<ImportRef> _layoutImports = [
+    ImportRef.app(
+      LayoutRole.appShell.importRef.uri,
+      show: [LayoutRole.appShell.name],
+    ),
+    ImportRef.app(
+      LayoutRole.destination.importRef.uri,
+      show: const [LayoutRole.appDestinations],
+    ),
+  ];
 
   static String _indented(String code, String indent) =>
       code.split('\n').map((line) => '$indent$line').join('\n');
@@ -232,10 +232,7 @@ final class _RouteCode {
         '  // observers of the root navigator are not told about its pages.',
         '  notifyRootObserver: false,',
         '  builder: (context, state, shell) => ${LayoutRole.appShell.name}(',
-        '    destinations: const [',
-        for (final route in destinations)
-          '      ${GoRoutes._destinationOf(route.route.destination!)},',
-        '    ],',
+        '    destinations: ${LayoutRole.appDestinations},',
         '    currentIndex: shell.currentIndex,',
         '    onSelect: shell.goBranch,',
         '    body: shell,',

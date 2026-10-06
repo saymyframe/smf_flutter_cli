@@ -1325,12 +1325,25 @@ void main() {
         expect(branch.namedArguments, contains('observers'));
       }
       expect(index.declaration('_observers')?.kind, DeclarationKind.function);
-      // The shell and the destinations of the layout role, in the order of
-      // the branches.
+      // The shell, with the list of the destinations of the layout role,
+      // which the file of the role declares with a destination for each
+      // branch.
       final appShell = index.invocationsOf(LayoutRole.appShell.name).single;
       expect(appShell.namedArguments, contains('destinations'));
       expect(
-        index.invocationsOf(LayoutRole.destination.name),
+        index.references.map((reference) => reference.name),
+        contains(LayoutRole.appDestinations),
+      );
+      final ofLayout = DartFileIndexer.index(
+        LayoutRole.destinationFile,
+        app.files[LayoutRole.destinationFile]!.text,
+      );
+      expect(
+        ofLayout.declaration(LayoutRole.appDestinations)?.kind,
+        DeclarationKind.variable,
+      );
+      expect(
+        ofLayout.invocationsOf(LayoutRole.destination.name),
         hasLength(branches.length),
       );
       for (final name in [
@@ -1340,6 +1353,8 @@ void main() {
         'destinations',
         LayoutRole.appShell.name,
         LayoutRole.destination.name,
+        LayoutRole.appDestinations,
+        LayoutRole.destinationFile,
       ]) {
         expect(mainNavigationAgentNote, contains('`$name`'), reason: name);
       }
@@ -1389,6 +1404,8 @@ void main() {
         'observers: _observers()',
         'builder',
         LayoutRole.appShell.name,
+        LayoutRole.appDestinations,
+        LayoutRole.destinationFile,
         'shell.currentIndex',
         'shell.goBranch',
         'body',
@@ -1398,6 +1415,8 @@ void main() {
       ]) {
         expect(firstDestinationAgentNote, contains('`$name`'), reason: name);
       }
+      // The list of the role, which the shell gets as its destinations.
+      expect(text, contains('destinations: ${LayoutRole.appDestinations},'));
     });
 
     test('has a branch for each destination, with the routes below it', () {
@@ -1429,16 +1448,17 @@ void main() {
       );
     });
 
-    test('shows the shell of the layout with the destinations as constants',
-        () {
+    test(
+        'shows the shell of the layout with the destinations that the layout '
+        'role generates, and renders neither their labels nor their icons', () {
       expect(
         _argument(shell, 'builder')!.toSource(),
-        '(context, state, shell) => AppShell(destinations: const '
-        "[Destination(label: 'Catalog', icon: Icons.list), "
-        "Destination(label: 'Settings', icon: Icons.settings)], "
+        '(context, state, shell) => AppShell(destinations: appDestinations, '
         'currentIndex: shell.currentIndex, onSelect: shell.goBranch, body: '
         'shell)',
       );
+      // The list of the role, and no icons, which the features give the
+      // layout role with the labels.
       expect(
         {
           for (final added in app.files[_factory]!.addedImports)
@@ -1450,11 +1470,19 @@ void main() {
           'package:contract_app/core/layout/app_shell.dart':
               'show AppShell for go_router',
           'package:contract_app/core/layout/destination.dart':
-              'show Destination for go_router',
-          'package:flutter/material.dart': 'show Icons for go_router',
+              'show appDestinations for go_router',
           'package:contract_app/core/observing/test_observer.dart':
               'show  for observing',
         },
+      );
+      // The list has the destinations in the order of the branches.
+      expect(
+        [
+          for (final route
+              in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
+            route.fullPath,
+        ],
+        [for (final branch in _branchesOf(shell)) branch.initialLocation],
       );
     });
 
@@ -1539,13 +1567,19 @@ void main() {
         [for (final branch in _branchesOf(shell)) branch.initialLocation],
         ['/settings', '/profile', '/catalog'],
       );
+      // As the destinations of the list that the shell gets, which the
+      // layout role generates from the same routes.
+      expect(
+        [
+          for (final route
+              in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
+            route.fullPath,
+        ],
+        ['/settings', '/profile', '/catalog'],
+      );
       expect(
         _argument(shell, 'builder')!.toSource(),
-        contains(
-          "[Destination(label: 'Settings', icon: Icons.settings), "
-          "Destination(label: 'Profile', icon: Icons.person), "
-          "Destination(label: 'Catalog', icon: Icons.list)]",
-        ),
+        contains('destinations: appDestinations,'),
       );
     });
 
@@ -1603,11 +1637,9 @@ void main() {
       );
       expect(
         _argument(shell, 'builder')!.toSource(),
-        contains(
-          "destinations: const [Destination(label: 'Catalog', icon: "
-          'Icons.list)]',
-        ),
+        contains('destinations: appDestinations,'),
       );
+      expect(await analysisProblems(result.app!), isEmpty);
     });
 
     test('has no shell without destinations', () async {
