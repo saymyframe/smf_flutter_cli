@@ -20,7 +20,8 @@ import 'package:{{app_name}}/features/onboarding/onboarding_status.dart';
 bool onboardingIsUnderTest = false;
 
 /// Finishes the onboarding before the app starts, as the user does with
-/// Done, unless the test file is one of the onboarding itself.
+/// the button of its last page, unless the test file is one of the
+/// onboarding itself.
 ///
 /// The preferences of the app are not open yet, so this changes only
 /// memory and saves nothing, whichever module provides the preferences.

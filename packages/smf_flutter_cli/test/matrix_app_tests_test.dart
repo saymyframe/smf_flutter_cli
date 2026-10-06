@@ -1543,7 +1543,7 @@ void main() {
         "    'ready': 'Enjoy the app.',\n"
         "    'skip': 'Skip',\n"
         "    'next': 'Next',\n"
-        "    'done': 'Done',\n";
+        "    'done': 'Get started',\n";
 
     // The names are those that first_launch_test.dart of the app test looks
     // each text up by: a new text of the module needs a look there.
@@ -1566,7 +1566,7 @@ void main() {
         "    'ready': 'Приємного користування!',\n"
         "    'skip': 'Пропустити',\n"
         "    'next': 'Далі',\n"
-        "    'done': 'Готово',\n"
+        "    'done': 'Почати',\n"
         '  },\n'
         "  'en': {\n"
         '$english'
