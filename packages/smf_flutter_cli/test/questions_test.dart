@@ -1013,6 +1013,8 @@ void main() {
           .childFile('lib/features/onboarding/onboarding_pages.dart')
           .readAsStringSync(),
       allOf(
+        // The symbol and the name of the app that the run names.
+        contains("symbol: 'Ma',"),
         contains("title: 'My App',"),
         contains("text: 'Welcome! We are glad you are here.',"),
       ),

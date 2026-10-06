@@ -11,7 +11,7 @@ While the pages turn, the cells move at different speeds, the background blends 
 The module generates three files in `lib/features/onboarding/`:
 
 - `onboarding_screen.dart` has `OnboardingScreen`, at `/onboarding`, which shows the pages one at a time, with Skip, the marks and the button around them.
-- `onboarding_pages.dart` has the pages: the list that `onboardingPages()` returns, and `OnboardingPage`, the widget of a page, which takes a `symbol` or an `icon` for its cell, a title and a text. Replace the pages with your own, and the screen keeps what is around them.
+- `onboarding_pages.dart` has the pages: the list that `onboardingPages()` returns, and `OnboardingPage`, the widget of a page, which takes a `symbol` or an `icon` for its cell, a title and a text. Replace the pages with your own, and the screen keeps what is around them. The screen puts an `OnboardingPageScope` around each page. Its `turned` tells how far the pages are turned away from the page, so a page of your own can move with them, as `OnboardingPage` does.
 - `onboarding_status.dart` has `onboardingStatus`, which knows whether the user has finished the onboarding. Its `complete()` finishes the onboarding at once and saves that, and its `restart()` starts it again.
 
 The screen does not navigate. The guard keeps the user in the onboarding until it is finished, and the router leaves it then.
