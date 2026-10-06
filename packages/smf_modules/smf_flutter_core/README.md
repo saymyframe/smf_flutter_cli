@@ -9,7 +9,7 @@ The SMF module that creates the Flutter app every SMF app starts from. It provid
 - the fallback start screen, which an app shows while it has no screen to start on, with a widget test;
 - `pubspec.yaml` with the dependencies of all modules, and `analysis_options.yaml`, which leaves `build/` out of the analysis.
 
-The fallback start screen is for the developer of the app. It shows a cell with a symbol and a number made from the name of the app, the name itself, a hint that the app has no start screen yet, and the path of its own file, which a tap copies. An app with a feature that has a start route never shows it. The hint and the word that confirms the copy are in English and in Ukrainian. In an app with a module for the languages of the app, such as `gen_l10n`, the screen reads them from the texts of the app; in any other app they are in English.
+The fallback start screen is for the developer of the app. It shows a cell with a symbol and a number made from the name of the app, the name itself, a hint that the app has no start screen yet, and the path of its own file, which a tap copies. An app with a feature whose route can start the app never shows it. The hint and the word that confirms the copy are in English and in Ukrainian. In an app with a module for the languages of the app, such as `gen_l10n`, the screen reads them from the texts of the app; in any other app they are in English.
 
 The app runs on iOS 15 or newer. For iOS builds with Xcode 27, use Flutter 3.47 or newer; see [troubleshooting](https://doc.saymyframe.com/guides/troubleshooting#ios-builds-with-xcode-27).
 
