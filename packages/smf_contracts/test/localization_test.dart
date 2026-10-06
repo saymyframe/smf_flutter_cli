@@ -1313,7 +1313,13 @@ void main() {
               requires: {routerRole},
               uses: {localizationRole},
             ),
-            contributions: contributions,
+            // Every contribution of the module, as the pipeline gives them
+            // to the rule: its texts too, which are data without texts of
+            // another role.
+            contributions: [
+              if (texts.isNotEmpty) localizationRole.data(TextsData(texts)),
+              ...contributions,
+            ],
           ),
         );
 
