@@ -348,7 +348,7 @@ class AppShell extends StatelessWidget {
   );
 
   /// Selects the destination of the tab at [index], which the user tapped.
-  /// The device gives a light tick when it is another one than the selected.
+  /// The device gives a light tick when that tab is not the selected one.
   void _tapped(int index) {
     if (index != currentIndex) HapticFeedback.selectionClick();
     onSelect(index);
@@ -414,7 +414,8 @@ class _Tab extends StatelessWidget {
     // Read here each time the tab builds, so the label follows the language
     // of the app.
     final label = destination.label(context);
-    // An app that asks for less motion changes the tab at once.
+    // For a user who asks the device for less motion, the tab changes at
+    // once.
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : Durations.medium2;
@@ -498,7 +499,8 @@ class _BranchTransitionState extends State<_BranchTransition>
   void didUpdateWidget(_BranchTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index == widget.index) return;
-    // An app that asks for less motion shows the screen at once.
+    // For a user who asks the device for less motion, the screen is shown
+    // at once.
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
     } else {

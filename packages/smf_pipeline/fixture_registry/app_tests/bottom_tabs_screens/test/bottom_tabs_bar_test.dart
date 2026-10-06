@@ -626,13 +626,13 @@ void main() {
         isEmpty,
         reason: 'A long press on a tab selects nothing.',
       );
-      // The tooltip goes away by itself.
+      // The tooltip goes away after a while, with no tap.
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(
         find.text('Inbox'),
         findsOneWidget,
-        reason: 'The tooltip of a tab goes away by itself.',
+        reason: 'The tooltip of a tab goes away after a while.',
       );
 
       // With labels that are taller than the bar, here from the theme, the
