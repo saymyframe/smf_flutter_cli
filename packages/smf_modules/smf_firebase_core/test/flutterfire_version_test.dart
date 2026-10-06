@@ -15,28 +15,34 @@ import 'package:test/test.dart';
 
 void main() {
   test(
-      'prints the version of flutterfire_cli that the module activates and '
-      'the name of its check of the machine, on one line of JSON', () async {
-    final packageConfig = await Isolate.packageConfig;
+    'prints the version of flutterfire_cli that the module activates and '
+    'the name of its check of the machine, on one line of JSON',
+    () async {
+      final packageConfig = await Isolate.packageConfig;
 
-    final result = await Process.run(
-      Platform.resolvedExecutable,
-      [
-        'run',
-        '--packages=${packageConfig!.toFilePath()}',
-        'tool/flutterfire_version.dart',
-      ],
-      stdoutEncoding: utf8,
-      stderrEncoding: utf8,
-    );
+      final result = await Process.run(
+        Platform.resolvedExecutable,
+        [
+          'run',
+          '--packages=${packageConfig!.toFilePath()}',
+          'tool/flutterfire_version.dart',
+        ],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
 
-    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
-    // The workflows read the standard output as JSON.
-    final lines = const LineSplitter().convert('${result.stdout}');
-    expect(lines, hasLength(1));
-    expect(jsonDecode(lines.single), {
-      'version': flutterfireVersion,
-      'check': const FlutterfireCliCheck().description,
-    });
-  });
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      // The workflows read the standard output as JSON.
+      final lines = const LineSplitter().convert('${result.stdout}');
+      expect(lines, hasLength(1));
+      expect(jsonDecode(lines.single), {
+        'version': flutterfireVersion,
+        'check': const FlutterfireCliCheck().description,
+      });
+    },
+    // The test starts another Dart VM, which compiles the tool first: on a
+    // busy machine that alone took longer than the 30 seconds that a test
+    // gets by default.
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 }
