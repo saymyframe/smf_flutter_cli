@@ -261,6 +261,7 @@ void main() {
       analyticsRole,
       crashReportingRole,
       preferencesRole,
+      settingsScreenRole,
       themeRole,
     ];
 

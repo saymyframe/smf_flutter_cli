@@ -8,6 +8,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_settings/src/agents.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 
@@ -171,6 +172,17 @@ String _titleOf(RenderedApp app) {
   return _argument(bar, 'title').toSource();
 }
 
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
+/// The methods and getters that the class [name] of [unit] declares.
+Set<String> _membersOf(CompilationUnit unit, String name) => {
+      for (final member in _classOf(unit, name).body.members)
+        if (member is MethodDeclaration) member.name.lexeme,
+    };
+
 /// The modules that provide [role] in the app of [result], whichever they
 /// are.
 Set<ModuleId> _providersOf(ContractResult result, Role role) => {
@@ -320,14 +332,19 @@ void main() {
 
     test(
         'gets the brick of the screen with its title, the title as a text of '
-        'the module, the route and its name for the role, and nothing else',
-        () {
+        'the module, the route and its name for the role, and the note of '
+        'the module for coding agents, and nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(SettingsModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(4));
+      expect(contributions, hasLength(5));
+      final note = contributions.whereType<SocketContribution>().single;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, settingsScreenRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       final brick = contributions.whereType<BrickContribution>().single;
       expect(brick.bundle.name, 'settings');
       expect(brick.bundle.files.map((file) => file.path), [_screen]);
@@ -352,6 +369,8 @@ void main() {
       // router.
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
         if (path == RouterRole.navigationFile) continue;
+        // The guide for coding agents gets the section of the screen.
+        if (path == AppEntryRole.agentsFile) continue;
         if (file.owner case ModuleOrigin(:final module)
             when router.contains(module)) {
           continue;
@@ -440,6 +459,119 @@ void main() {
       );
       // No blank line where the entries would be.
       expect(text, contains('children: const [\n        AboutListTile('));
+    });
+  });
+
+  group('the note of the module for coding agents', () {
+    late ContractResult result;
+    late RenderedApp app;
+    late RenderedApp withEntries;
+
+    setUpAll(() async {
+      result = await _rendered(const [SettingsModule.id]);
+      app = result.app!;
+      withEntries =
+          (await _rendered([_feed.id, SettingsModule.id, _look.id])).app!;
+    });
+
+    test(
+        'is in the section of the settings screen of the guide, after what '
+        'the role says, and only the section is new in the guide', () async {
+      const settings = ModuleOrigin(SettingsModule.id);
+      const role = RoleTemplateOrigin(settingsScreenRole);
+      final heading = settingsScreenRole.description;
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+
+      // The section has what the role says and what the module adds.
+      final ofRole = notes.singleWhere((note) => note.$1 == role).$3;
+      expect(ofRole.isOfRole, isTrue);
+      expect(
+        notes.where((note) => note.$2 == heading),
+        unorderedEquals([
+          (role, heading, ofRole),
+          (settings, heading, AgentNote(agentNote)),
+        ]),
+      );
+      expect(
+        app.files[AppEntryRole.agentsFile]!.text,
+        contains(
+          '\n## $heading\n'
+          '\n'
+          '${ofRole.text}\n'
+          '\n'
+          '${agentNote.trim()}\n',
+        ),
+      );
+
+      // The other notes are those of the app without the module.
+      final without = (await _rendered(const [GoRouterModule.id])).app!;
+      expect(
+        without.files[AppEntryRole.agentsFile]!.text,
+        isNot(contains('## $heading')),
+      );
+      expect(
+        notes.where((note) => note.$2 != heading),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+    });
+
+    test(
+        'names in inline code only the screen with its file and its route, '
+        'the prefixes of the files of the entries, and the two calls of the '
+        'navigation', () {
+      final route = settingsScreenRole
+          .screenIn(settingsScreenRole.hookInput(result.hook!))!;
+      final screen = route.route.screen;
+
+      // Every name of code in the note, so that it cannot name more, such
+      // as another file of the app or a class of a router.
+      expect(_codeOf(agentNote), {
+        screen.className,
+        screen.file,
+        route.fullName,
+        route.fullPath,
+        'entry0',
+        'entry1',
+        'context.nav.settings.settings().push<void>()',
+        'go()',
+      });
+    });
+
+    test(
+        'names the screen with its file and its route, and the prefixes of '
+        'the files of the entries, as the app has them', () {
+      final route = settingsScreenRole
+          .screenIn(settingsScreenRole.hookInput(result.hook!))!;
+      final screen = route.route.screen;
+
+      // The screen and its route, as the roles have them; the file of the
+      // screen declares its class.
+      expect(screen.file, _screen);
+      expect(_classOf(_parsed(app, _screen), screen.className), isNotNull);
+      expect(
+        agentNote,
+        startsWith(
+          '- `${screen.className}` in `${screen.file}`, the route '
+          '`${route.fullName}` at `${route.fullPath}`, ',
+        ),
+      );
+      // The prefixes of the files of the entries, in an app with two such
+      // files.
+      expect(
+        _importsOf(withEntries).values.whereType<String>(),
+        unorderedEquals(['entry0', 'entry1']),
+      );
+    });
+
+    test(
+        'tells how code opens the screen in an app without a main '
+        'navigation, through the navigation of the router role', () {
+      final navigation = _parsed(app, RouterRole.navigationFile);
+
+      // What the call names is what the navigation of the app declares.
+      expect(_membersOf(navigation, 'AppNav'), contains('settings'));
+      expect(_membersOf(navigation, 'SettingsRoutes'), contains('settings'));
+      expect(_membersOf(navigation, 'NavLink'), containsAll(['push', 'go']));
     });
   });
 
