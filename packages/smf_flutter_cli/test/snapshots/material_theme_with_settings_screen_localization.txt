@@ -1,0 +1,1363 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+- A new language also needs its name in `_names` in `lib/core/l10n/language_setting.dart`: the setting of the language on the settings screen shows a language by that name, and by its code without one.
+
+With `gen-l10n` of Flutter:
+
+- The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
+- Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- Do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+
+With `go_router`:
+
+- `lib/core/router/app_router_factory.dart` has the one `GoRouter` of the app. A route is a `GoRoute` in its `routes`, or in the `routes` of its parent: `path` is the full path of a top-level route and the path from its parent otherwise, and `name` is `<feature>.<route>`. The values of a route come from `state.pathParameters` and `state.uri.queryParameters`. Parse one that is not a `String` with `tryParse`, and throw a `GoException` in the `redirect` of the route when a required value is missing or does not parse, so that the router shows its error screen.
+- The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
+- To follow the screen that the user sees, add a function to `_screenListeners`.
+
+## Theme
+
+- `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
+- The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
+- Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
+
+- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` whose colours `ColorScheme.fromSeed` derives from `seedColor`. Change `seedColor` for other colours.
+- Give that `ThemeData` what both themes share, such as the typography or the theme of a component. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+## Texts
+
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
+
+The texts of a new language, such as German, go into a file of their own:
+
+1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
+2. Run `flutter gen-l10n`.
+
+The section "Languages" tells where else the new language goes.
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again. The entry `LanguageSetting` of the settings screen, in `lib/core/l10n/language_setting.dart`, lets the user choose.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+3. Add `'de': 'Deutsch'` to `_names` in `lib/core/l10n/language_setting.dart`, the name that the setting shows for the language. Without it, the setting shows `de`.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
+</dict>
+</plist>
+=== l10n.yaml (gen_l10n) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+nullable-getter: false
+use-escaping: false
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/theme/app_theme.dart';
+import 'package:my_app/core/theme/theme_mode.dart';
+import 'package:my_app/l10n/app_localizations.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'My App',
+    theme: createLightTheme(context),
+    darkTheme: createDarkTheme(context),
+    themeMode: AppThemeModeScope.of(context),
+    locale: AppLocaleScope.of(context),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: [...appLocales],
+    routerConfig: appRouter.config,
+    builder: (context, child) => child!,
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/preferences/app_preferences.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await initPreferences();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on when no route of the app can start it.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('My App')));
+}
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (gen_l10n) ===
+import 'package:flutter/widgets.dart';
+
+import '../../l10n/app_localizations.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  ///
+  /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
+  AppLocalizations get l10n => AppLocalizations.of(this);
+}
+=== lib/core/l10n/language_setting.dart (role:localization) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_locale.dart';
+
+/// The names of the languages of the app, each in its own language, by the
+/// code of the language. The setting shows a language of the app without a
+/// name here by its code: add the name of such a language.
+const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
+
+/// The setting of the language of the app, an entry of the settings screen:
+/// it shows the language that the user chose, and lets the user choose one
+/// of the languages of the app, or follow the languages of the device.
+class LanguageSetting extends StatelessWidget {
+  /// Creates the setting.
+  const LanguageSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = AppLocaleScope.of(context);
+    return ListTile(
+      leading: const Icon(Icons.language),
+      title: Text(context.l10n.localizationLanguage),
+      subtitle: Text(
+        chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      ),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (context) => const _LanguageDialog(),
+      ),
+    );
+  }
+}
+
+/// The name of the language of [locale] in that language, or its code.
+String _nameOf(Locale locale) =>
+    _names[locale.languageCode] ?? locale.languageCode;
+
+/// The choice between the languages of the app and those of the device.
+class _LanguageDialog extends StatelessWidget {
+  const _LanguageDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = AppLocaleScope.of(context);
+    return SimpleDialog(
+      title: Text(context.l10n.localizationLanguage),
+      children: [
+        for (final Locale? locale in [null, ...appLocales])
+          ListTile(
+            title: Text(
+              locale == null
+                  ? context.l10n.localizationSystem
+                  : _nameOf(locale),
+            ),
+            selected: locale == chosen,
+            trailing: locale == chosen ? const Icon(Icons.check) : null,
+            onTap: () async {
+              Navigator.of(context).pop();
+              await appLocale.choose(locale);
+            },
+          ),
+      ],
+    );
+  }
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+import 'package:my_app/core/theme/theme_mode.dart';
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+  restoreAppThemeMode,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, the reads of
+/// this run return the value all the same, and the next launch reads none.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
+  void replace(AppLocation location);
+}
+=== lib/core/router/app_router_factory.dart (go_router) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+import 'package:my_app/features/settings/settings_screen.dart' as screen0;
+
+import 'app_router.dart' show AppNavigator, AppRouter;
+import 'navigation.dart' show AppLocation;
+
+/// Creates the router of the app: a [GoRouter] with the routes of the
+/// modules of the app.
+AppRouter createAppRouter() => _GoAppRouter();
+
+/// The router of the app with go_router, which navigates between the
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
+final class _GoAppRouter implements AppRouter, AppNavigator {
+  /// The router, created once, on first use. Navigation goes through it
+  /// rather than through the router above a context, so that any context
+  /// can navigate, even one above the router.
+  @override
+  late final GoRouter config = GoRouter(
+    initialLocation: '/',
+    observers: _observers(),
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings.settings',
+        builder: (context, state) => const screen0.SettingsScreen(),
+      ),
+    ],
+  )..routerDelegate.addListener(_pagesChanged);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
+
+  /// The pages that pushes showed, by their keys, as the router last saw
+  /// them among the pages of go_router.
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  /// For each completer that go_router gave a pushed page anew, the
+  /// completer of the push that showed the page.
+  final Expando<Completer<Object?>> _pushes = Expando();
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => this;
+
+  @override
+  void go(AppLocation location) => config.go(location.path);
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    return config.push<T>(location.path);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Follows the pages of go_router, whose delegate notifies its listeners
+  /// of each change of them: keeps each push completing with the value of
+  /// its page, and tells the listeners of the screen about the page on top.
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  /// Lets each push complete with the value that its page returns when it
+  /// closes, whatever completer go_router gives the page.
+  ///
+  /// go_router completes a push with the completer that it gives the page
+  /// it pushed, which the page completes when it closes. When go_router
+  /// shows its pages anew from their encoded form, as on [GoRouter.refresh],
+  /// such as when its `refreshListenable` notifies, it gives each pushed
+  /// page a new completer, though the page keeps its key and its location,
+  /// so the push would never complete
+  /// (https://github.com/flutter/flutter/issues/128122). So when a page
+  /// comes back at its location with another completer, the router passes
+  /// on the value of that completer to that of the push. A branch of the
+  /// main navigation that is not selected keeps its pages as they were, so
+  /// a page that comes back with its branch passes on its value as before.
+  /// Once go_router keeps the completers of its pages, this does nothing
+  /// and can go.
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  /// The pages that pushes showed among [matches], in the stacks of the
+  /// main navigation too.
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      _callAlone(listener, top?.route.name, location);
+    }
+  }
+}
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[]) create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// The location of `settings.settings`: `/settings`.
+final class SettingsSettingsLocation extends AppLocation {
+  /// Creates the location.
+  const SettingsSettingsLocation();
+
+  @override
+  String get routeName => 'settings.settings';
+
+  @override
+  String get path => '/settings';
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => AppNav._(this);
+}
+
+/// The routes of the app by module, as `context.nav`.
+final class AppNav {
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `settings`.
+  SettingsRoutes get settings => SettingsRoutes._(_context);
+}
+
+/// The routes of the module `settings`.
+final class SettingsRoutes {
+  const SettingsRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `settings.settings`: `/settings`.
+  NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
+}
+=== lib/core/theme/app_theme.dart (material_theme) ===
+import 'package:flutter/material.dart';
+
+/// The colour that the light and the dark theme of the app derive their
+/// colours from. Change it to give the app another look.
+const Color seedColor = Colors.deepPurple;
+
+/// The light theme of the app.
+///
+/// The root of the app calls it each time it builds, so a change of this
+/// file shows on a hot reload. [context] is the context of the root, above
+/// its `MaterialApp`: it has neither the theme nor the localizations of the
+/// app.
+ThemeData createLightTheme(BuildContext context) => _themeOf(Brightness.light);
+
+/// The dark theme of the app; see [createLightTheme].
+ThemeData createDarkTheme(BuildContext context) => _themeOf(Brightness.dark);
+
+/// The Material 3 theme of [brightness] in the colours of [seedColor]. What
+/// both themes of the app share goes here, such as the shape of its
+/// buttons.
+ThemeData _themeOf(Brightness brightness) => ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: seedColor,
+    brightness: brightness,
+  ),
+);
+=== lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/material.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The theme mode that the user selected for the app, which the app
+/// remembers between its launches: whether the app is light, dark, or
+/// follows the device.
+///
+/// The root of the app reads it through [AppThemeModeScope], and rebuilds
+/// in the new mode when the choice changes.
+final appThemeMode = AppThemeModeController._();
+
+/// Keeps the theme mode that the user selected for the app, tells its
+/// listeners when the mode changes, and saves each choice in the
+/// preferences of the app. The app has one, [appThemeMode].
+final class AppThemeModeController extends ChangeNotifier {
+  AppThemeModeController._();
+
+  /// The key of the mode in the preferences, which keep it by its name.
+  static const _key = 'theme.mode';
+
+  /// The preferences that remember the mode, once the app opened them.
+  AppPreferences? _preferences;
+
+  ThemeMode _mode = ThemeMode.system;
+
+  /// The mode of the app: [ThemeMode.system], which follows the device,
+  /// unless the user selected another.
+  ThemeMode get value => _mode;
+
+  /// Chooses [mode] as the mode of the app, at once, and saves the choice:
+  /// the future completes once the mode is saved. Until the app opened its
+  /// preferences for the first time, it changes only memory; from then on
+  /// it saves through the preferences that the app opened last.
+  ///
+  /// If the preferences fail to save the mode, the future completes with
+  /// their error. The app is in [mode] by then and stays in it while it
+  /// runs, but its next launch has the mode that was saved before. The
+  /// same choice again saves it.
+  Future<void> choose(ThemeMode mode) async {
+    if (mode != _mode) {
+      _mode = mode;
+      notifyListeners();
+    }
+    await _preferences?.setString(_key, mode.name);
+  }
+
+  /// Takes the mode that [preferences] have saved, and keeps the current
+  /// one when they have none, or one that the app does not know. It keeps
+  /// [preferences] for the choices to come.
+  void _restore(AppPreferences preferences) {
+    _preferences = preferences;
+    final saved = ThemeMode.values.asNameMap()[preferences.getString(_key)];
+    if (saved == null || saved == _mode) return;
+    _mode = saved;
+    notifyListeners();
+  }
+}
+
+/// Restores the theme mode that the user selected from [preferences], which
+/// the app opened, and keeps them for the choices to come: a restorer of
+/// the preferences, which the app calls before its first frame.
+void restoreAppThemeMode(AppPreferences preferences) =>
+    appThemeMode._restore(preferences);
+
+/// Gives the root of the app the theme mode that the user selected, and
+/// rebuilds the root, and any other widget below that reads the mode, when
+/// the choice changes.
+class AppThemeModeScope extends InheritedNotifier<AppThemeModeController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppThemeModeScope({
+    required AppThemeModeController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The theme mode that the user selected; the widget of [context]
+  /// rebuilds when the choice changes.
+  static ThemeMode of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppThemeModeScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/theme/theme_mode_setting.dart (role:theme) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'theme_mode.dart';
+
+/// The setting of the theme mode of the app, an entry of the settings
+/// screen: it shows the mode that the user selected, and lets the user
+/// select whether the app is light, dark, or follows the device.
+///
+/// The entry does not wait until a choice is saved. If the preferences fail
+/// to save it, the app shows the selected mode while it runs, its next
+/// launch has the mode that was saved before, and the error is one that
+/// nothing here catches: it reaches the handlers of the uncaught errors of
+/// the app.
+class ThemeModeSetting extends StatelessWidget {
+  /// Creates the setting.
+  const ThemeModeSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => RadioGroup<ThemeMode>(
+    groupValue: AppThemeModeScope.of(context),
+    onChanged: (mode) {
+      if (mode != null) appThemeMode.choose(mode);
+    },
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.brightness_6_outlined),
+          title: Text(context.l10n.themeTitle),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.system,
+          title: Text(context.l10n.themeSystem),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.light,
+          title: Text(context.l10n.themeLight),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.dark,
+          title: Text(context.l10n.themeDark),
+        ),
+      ],
+    ),
+  );
+}
+=== lib/features/settings/settings_screen.dart (settings) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/language_setting.dart' as entry1;
+import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
+
+/// The settings of the app: an entry for each setting that a module of the
+/// app has, and what the app is, with its licenses.
+class SettingsScreen extends StatelessWidget {
+  /// Creates the screen.
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Settings')),
+    body: ListView(
+      children: const [
+        entry0.ThemeModeSetting(),
+        entry1.LanguageSetting(),
+        AboutListTile(
+          icon: Icon(Icons.info_outline),
+          applicationName: 'My App',
+        ),
+      ],
+    ),
+  );
+}
+=== lib/l10n/app_en.arb (gen_l10n) ===
+{
+  "@@locale": "en",
+  "themeTitle": "Theme",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "localizationLanguage": "Language",
+  "localizationSystem": "System"
+}
+=== lib/l10n/app_uk.arb (gen_l10n) ===
+{
+  "@@locale": "uk",
+  "themeTitle": "Тема",
+  "themeSystem": "Системна",
+  "themeLight": "Світла",
+  "themeDark": "Темна",
+  "localizationLanguage": "Мова",
+  "localizationSystem": "Як у системі"
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/theme/theme_mode.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(
+    AppLocaleScope(
+      notifier: appLocale,
+      child: AppThemeModeScope(notifier: appThemeMode, child: const App()),
+    ),
+  );
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  go_router: "^17.5.0"
+  intl: "any"
+  shared_preferences: "^2.5.5"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+  generate: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('My App'), findsOneWidget);
+  });
+}

@@ -1,5 +1,6 @@
-/// The providers of roles with one known bug each, in the fixture package
-/// `fake_broken`, and the apps that show that the tests of their roles fail
+/// The providers of roles with one known bug each, those of the fixture
+/// package `fake_broken` and the app entry that this library makes of
+/// flutter_core, and the apps that show that the tests of their roles fail
 /// on each bug, and on nothing else; `tool/broken_providers_matrix.dart`
 /// generates the apps and runs their tests.
 ///
@@ -27,6 +28,42 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_settings/smf_settings.dart';
+
+/// The app entry that builds its root once: flutter_core, the app entry of
+/// the fixtures, whose `App` keeps the `MaterialApp` that its `build`
+/// created first and returns it each time it builds again. So the arguments
+/// of the root are read once, and the root does not follow an inherited
+/// widget that they read from its context, such as the theme mode that the
+/// user selects.
+///
+/// The root is still created in a `build` with the context of `App`, as
+/// the rule `app_entry.root_in_build` of the role wants, and the app
+/// analyzes: only a running app shows the bug.
+///
+/// No fixture provides the app entry, so the broken one changes the module
+/// of the CLI. It is made here, in the package that depends on that module,
+/// and not in `fake_broken`, whose fixtures depend on no module of the CLI.
+/// Each of its two changes takes a text of one line of the template of the
+/// root, so that a line of the template that is wrapped anew still has it.
+const _appEntryBuildingRootOnce = BrokenModule(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_builds_root_once'),
+  description: 'Flutter app whose root is built once (fixture)',
+  file: 'lib/app.dart',
+  changes: [
+    (
+      '  const App({super.key});',
+      '  const App({super.key});\n'
+          '\n'
+          '  /// The root that it built first.\n'
+          '  static Widget? _root;',
+    ),
+    (
+      'Widget build(BuildContext context) =>',
+      'Widget build(BuildContext context) => _root ??=',
+    ),
+  ],
+);
 
 /// A provider of a role with one known bug, and the tests of the role that
 /// must fail on it in its app.
@@ -56,6 +93,8 @@ final class BrokenProvider {
   /// whose files the other tests that apply to the app import, such as the
   /// fixture providers of the analytics role and of the crash reporting
   /// role, which the tests of these roles look at in an app with either.
+  /// The app entry of the app is that of the fixtures, or [module] itself
+  /// if it provides the app entry.
   final List<ModuleId> app;
 
   /// The tests of the role that must fail on the bug in the app, each with
@@ -72,7 +111,8 @@ final class BrokenProvider {
         module,
       ];
 
-  /// The registry of the app: its app entry, [module] and the modules of
+  /// The registry of the app: its app entry, that of the fixtures unless
+  /// [module] provides the app entry itself, [module] and the modules of
   /// [app], and then the other providers that these have variants for,
   /// which a registry must have, all from the registries of the fixtures
   /// ([fixtureModules]) and of several providers ([severalProvidersModules]),
@@ -83,8 +123,9 @@ final class BrokenProvider {
         other.descriptor.id: other,
     };
     final ofApp = [
-      for (final other in fixtureModules())
-        if (other.descriptor.provides.contains(appEntryRole)) other,
+      if (!module.descriptor.provides.contains(appEntryRole))
+        for (final other in fixtureModules())
+          if (other.descriptor.provides.contains(appEntryRole)) other,
       module,
       for (final id in app) fixtures[id]!,
     ];
@@ -373,7 +414,9 @@ List<BrokenProvider> brokenProviders() => const [
         role: preferencesRole,
         bug: 'Its writes never reach its disk, so the next start of the app '
             'reads nothing of what was saved.',
-        app: [FakePreferencesUserModule.id],
+        // The fixture setting and the fixture theme, whose role remembers
+        // the theme mode in the preferences: the next start has neither.
+        app: [FakePreferencesUserModule.id, FakeThemeModule.id],
         failures: [
           MatrixExpectedFailure(
             'test/preferences_role_test.dart',
@@ -385,6 +428,13 @@ List<BrokenProvider> brokenProviders() => const [
             'test/preferences_restorers_test.dart',
             'a restorer reads at the next start what its module saved',
             'Each restorer reads at the next start what was saved.',
+          ),
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_remembered_test.dart',
+            'the next start of the app has the mode that is saved under the '
+                'key of the role',
+            'The next start restores the mode whose name is saved under the '
+                'key of the role.',
           ),
         ],
       ),
@@ -572,12 +622,19 @@ List<BrokenProvider> brokenProviders() => const [
         role: settingsScreenRole,
         bug: 'Its screen creates the widget of every entry of the role, but '
             'shows them all but the last one.',
-        // A feature and a module without screens, each with a setting, so
-        // the screen has an entry to show and one to leave out.
+        // A feature and a module without screens, each with a setting, and
+        // the fixture theme, with the preferences that its role requires:
+        // the entry of the theme mode, which the template of the theme role
+        // contributes, comes after those of the modules, so it is the one
+        // that the screen leaves out. The app has no provider of the
+        // localization role, whose template would add the setting of the
+        // language after it.
         app: [
           FakeRouterModule.id,
           FakeSecondModule.id,
           FakeScreenLogModule.id,
+          FakeThemeModule.id,
+          FakePreferencesModule.id,
         ],
         failures: [
           MatrixExpectedFailure(
@@ -585,6 +642,61 @@ List<BrokenProvider> brokenProviders() => const [
             'the settings screen shows every entry of the modules once, one '
                 'below the other in the order of the role',
             'Every entry of the modules is on the settings screen once.',
+          ),
+          MatrixExpectedFailure(
+            'test/theme_setting/theme_setting_test.dart',
+            'the settings screen shows the entry of the theme mode, which '
+                'shows the mode of the app and chooses the mode that the '
+                'user taps',
+            'The settings screen shows the entry of the theme mode once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.themeWithLightDarkTheme,
+        role: themeRole,
+        bug: 'Its createDarkTheme() returns a light theme, the one that its '
+            'createLightTheme() returns, so the app is light in the dark '
+            'mode.',
+        // The preferences, which the theme role requires.
+        app: [FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_test.dart',
+            'the app shows the mode that is chosen: its root takes the mode, '
+                'and the screen below it gets the light or the dark theme of '
+                'the app',
+            'In the dark mode, the theme of the app is dark.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _appEntryBuildingRootOnce,
+        role: appEntryRole,
+        bug: 'Its App keeps the MaterialApp that it built first and returns '
+            'it each time it builds again, so the root does not follow an '
+            'inherited widget that its arguments read from its context.',
+        // A provider of the theme role, whose mode the arguments of the root
+        // read from its context, and the preferences that the role requires.
+        app: [FakeThemeModule.id, FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_test.dart',
+            'the app shows the mode that is chosen: its root takes the mode, '
+                'and the screen below it gets the light or the dark theme of '
+                'the app',
+            'The root of the app rebuilds when the mode that its arguments '
+                'read from its context changes, and takes the mode that was '
+                'chosen.',
+          ),
+          // The themes of the fixture theme read its colour from the
+          // context of the root too.
+          MatrixExpectedFailure(
+            'test/theme_look_test.dart',
+            'the screens get the themes of the colour that the fixture '
+                'theme keeps, and those of another colour once it changes',
+            'The root of the app rebuilds in the new colours when the widget '
+                'that its themes read the colour from notifies.',
           ),
         ],
       ),

@@ -38,8 +38,9 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the DI role, '
       'of the events role, of the preferences role, of the settings screen '
-      'role and of the localization role with every provider of each, which '
-      'they tell apart by the roles of the app only', () {
+      'role, of the theme role, of the localization role and of the app '
+      'entry role with every provider of each, which they tell apart by the '
+      'roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -48,6 +49,8 @@ void main() {
         eventsRole,
         preferencesRole,
         settingsScreenRole,
+        themeRole,
+        appEntryRole,
         localizationRole,
       ]),
     );
@@ -57,6 +60,10 @@ void main() {
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
+    // The test of the theme role checks that the root of the app, which the
+    // provider of the app entry builds, follows the theme mode.
+    expect(named('theme_role').roles, {themeRole, appEntryRole});
+    expect(named('theme_setting').roles, {themeRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('language_setting').roles, {localizationRole});
 
@@ -423,7 +430,12 @@ void main() {
           if (named('preferences_role').appliesTo(app)) app.name,
       ],
       [
-        // The localization role requires the preferences.
+        // The theme role and the localization role require the
+        // preferences.
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'material_theme with localization',
+        'material_theme',
         'gen_l10n with settings_screen',
         'gen_l10n',
         'shared_preferences with di',
@@ -502,8 +514,8 @@ void main() {
     expect(test.appliesTo(appWith(localizationRole)), isTrue);
     expect(test.appliesTo(appWith(preferencesRole)), isFalse);
     // The matrix of the CLI runs it in every app with the role: the apps
-    // of gen_l10n, with a settings screen and without, and the apps with
-    // every module.
+    // of gen_l10n and those of material_theme with the localization, with
+    // a settings screen and without, and the apps with every module.
     final registered = named('localization_role');
     expect(registered.roles, test.roles);
     expect(registered.startProbe!.path, test.startProbe!.path);
@@ -523,6 +535,8 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'material_theme with settings_screen, localization',
+        'material_theme with localization',
         'gen_l10n with settings_screen',
         'gen_l10n',
         'every module (bloc)',
@@ -532,16 +546,25 @@ void main() {
     // What the test has to check there. An app with a settings screen has
     // the texts of the setting of the language, which the role gives it in
     // English and in Ukrainian, so the test reads texts in two languages
-    // with the provider of the CLI. The app of gen_l10n alone has no
-    // module with a text: there the test checks the languages of the root
-    // and the choice that the app saves and restores.
+    // with the provider of the CLI. Without a settings screen an app may
+    // have no text at all, as the app of gen_l10n alone: there the test
+    // checks the languages of the root and the choice that the app saves
+    // and restores.
     final localized = [
       for (final app in apps)
         if (registered.appliesTo(app) &&
             app.hook!.presentRoles.contains(settingsScreenRole))
           app,
     ];
-    expect(localized, hasLength(3));
+    expect(
+      [for (final app in localized) app.name],
+      [
+        'material_theme with settings_screen, localization',
+        'gen_l10n with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
     for (final app in localized) {
       final input = localizationRole.hookInput(app.hook!);
       expect(
@@ -867,6 +890,7 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'material_theme with settings_screen, localization',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
@@ -1277,6 +1301,8 @@ void main() {
       ],
       [
         'settings',
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
@@ -1285,6 +1311,32 @@ void main() {
     // They run in a test of the app only, so they have no probe for a
     // check on a device, where the walk of the routes goes to the screen.
     expect(settings.startProbe, isNull);
+    // The entries of each app, as the role gives them: none in the app of
+    // the settings module alone, whose modules have no setting; the entry
+    // of the theme mode, which the template of the theme role contributes,
+    // in the apps with the theme; and the setting of the language, which
+    // the template of the localization role contributes, in the apps with
+    // the localization, after that of the theme, as the modules that
+    // provide the two roles are in the list of the CLI.
+    List<SettingsEntry> entriesOf(MatrixApp app) =>
+        settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
+    expect(
+      {
+        for (final app in apps.where(settings.appliesTo))
+          app.name: [for (final entry in entriesOf(app)) entry.widget.name],
+      },
+      {
+        'settings': isEmpty,
+        'material_theme with settings_screen, localization': [
+          'ThemeModeSetting',
+          'LanguageSetting',
+        ],
+        'material_theme with settings_screen': ['ThemeModeSetting'],
+        'gen_l10n with settings_screen': ['LanguageSetting'],
+        'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
+        'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
+      },
+    );
 
     for (final app in apps.where(settings.appliesTo)) {
       final files = settings.generatedFiles!(app, 'my_app');
@@ -1295,18 +1347,17 @@ void main() {
       // The screen of the provider, as the role finds it.
       final screen =
           settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
-      // The one setting among the modules and the roles of the CLI is the
-      // setting of the language, which the localization role gives an app
-      // with a settings screen.
-      final localized = app.hook!.presentRoles.contains(localizationRole);
+      // The file of each entry, with a prefix of its own, in the order of
+      // the entries; the imports are sorted.
+      final entries = entriesOf(app);
       expect(
         [for (final import in index.imports) '${import.uri} ${import.prefix}'],
         [
-          if (localized)
-            'package:my_app/core/l10n/language_setting.dart entry0',
           'package:my_app/core/router/navigation.dart null',
+          for (final (index, entry) in entries.indexed)
+            '${entry.widget.import!.resolveUri('my_app')} entry$index',
           '${screen.route.screen.import.resolveUri('my_app')} screen',
-        ],
+        ]..sort(),
         reason: app.name,
       );
       expect(
@@ -1326,7 +1377,10 @@ void main() {
           ),
           contains(
             'const List<Type> settingsEntries = [\n'
-            '${localized ? '  entry0.LanguageSetting,\n' : ''}'
+            '${[
+              for (final (index, entry) in entries.indexed)
+                '  entry$index.${entry.widget.name},\n',
+            ].join()}'
             '];',
           ),
         ),
@@ -1445,6 +1499,276 @@ void main() {
   });
 
   test(
+      'the test of the theme role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and gets the key of the theme mode that the role publishes', () async {
+    final theme = named('theme_role');
+
+    expect(
+      [
+        for (final app in apps)
+          if (theme.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(themeRole)) app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (theme.appliesTo(app)) app.name,
+      ],
+      [
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'material_theme with localization',
+        'material_theme',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+    for (final app in apps.where(theme.appliesTo)) {
+      expect(
+        theme.values!(app),
+        {'mode_key': ThemeRole.modeKey},
+        reason: app.name,
+      );
+    }
+    expect(theme.generatedFiles, isNull);
+    // On a device the mode is the same Dart state as in a test, so the test
+    // has no probe for the start check.
+    expect(theme.startProbe, isNull);
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await themeRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (everyModule.appliesTo(app)) app.name,
+      ],
+      ['every module (bloc)', 'every module (riverpod)'],
+    );
+  });
+
+  test(
+      'the test of the entry of the theme mode applies to the apps with the '
+      'theme role and the settings screen role, and gets the location of '
+      'the settings screen and the type of the entry from the data of the '
+      'settings screen role, and the key of the mode', () {
+    final setting = named('theme_setting');
+
+    expect(
+      [
+        for (final app in apps)
+          if (setting.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll([themeRole, settingsScreenRole]))
+            app.name,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (setting.appliesTo(app)) app.name,
+      ],
+      [
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
+        'every module (bloc)',
+        'every module (riverpod)',
+      ],
+    );
+    // It opens the settings screen with the location that the matrix writes
+    // for it, so it needs no file of the tests of the settings screen role.
+    expect(setting.startProbe, isNull);
+
+    for (final app in apps.where(setting.appliesTo)) {
+      expect(
+        setting.values!(app),
+        {'mode_key': ThemeRole.modeKey},
+        reason: app.name,
+      );
+      final files = setting.generatedFiles!(app, 'my_app');
+      expect(files.keys, [themeSettingFile]);
+      final text = files[themeSettingFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(themeSettingFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        [for (final import in index.imports) '${import.uri} ${import.prefix}'],
+        [
+          'package:my_app/core/router/navigation.dart null',
+          'package:my_app/core/theme/theme_mode_setting.dart entry',
+        ],
+        reason: app.name,
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['settingsLocation', 'themeModeEntry'],
+        reason: app.name,
+      );
+      // The screen of the provider, as the settings screen role finds it.
+      final screen =
+          settingsScreenRole.screenIn(settingsScreenRole.hookInput(app.hook!))!;
+      expect(
+        text,
+        allOf(
+          contains(
+            'const AppLocation settingsLocation = ${screen.locationClass}();',
+          ),
+          contains('const Type themeModeEntry = entry.ThemeModeSetting;'),
+        ),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the file of the test of the entry of the theme mode names the entry '
+      'that the template of the theme role contributes, among those of the '
+      'modules and of other roles, and needs that one entry and the route of '
+      'the screen', () {
+    const routes = RoutesData([
+      Route(
+        '/options',
+        name: 'options',
+        screen: ScreenRef(
+          'OptionsScreen',
+          import: ImportRef.app('features/options/options_screen.dart'),
+        ),
+      ),
+    ]);
+    const options = ModuleOrigin(ModuleId('options'));
+    RoleData<Object> entry(
+      String widget,
+      String file,
+      ContributionOrigin origin,
+    ) =>
+        settingsScreenRole
+            .data(
+              SettingsEntry(
+                widget: TypeRef(widget, import: ImportRef.app(file)),
+              ),
+            )
+            .withOrigin(origin);
+    MatrixApp appOf(List<RoleData<Object>> data) => MatrixApp(
+          'options',
+          const [ModuleId('options')],
+          hook: RoleHookRequest(
+            data: data,
+            presentRoles: {routerRole, settingsScreenRole, themeRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final screen = [
+      routerRole.data(routes).withOrigin(options),
+      settingsScreenRole
+          .data(const SettingsScreenRoute('options'))
+          .withOrigin(options),
+    ];
+    // A setting of a module, of the provider of the theme, such as a colour,
+    // and of the template of another role, before and after the entry of
+    // the theme mode.
+    final others = [
+      entry('FeedSetting', 'features/options/feed_setting.dart', options),
+      entry(
+        'ColourSetting',
+        'core/theme/colour_setting.dart',
+        const ModuleOrigin(ModuleId('look')),
+      ),
+    ];
+    final ofTheme = entry(
+      'ModeSetting',
+      'core/theme/mode_setting.dart',
+      const RoleTemplateOrigin(themeRole),
+    );
+    final ofLanguage = entry(
+      'LanguageSetting',
+      'core/l10n/language_setting.dart',
+      const RoleTemplateOrigin(localizationRole),
+    );
+    final setting = named('theme_setting');
+    String fileOf(List<RoleData<Object>> entries) => setting.generatedFiles!(
+          appOf([...screen, ...entries]),
+          'my_app',
+        )[themeSettingFile]!;
+
+    final text = fileOf([...others, ofTheme, ofLanguage]);
+
+    final (:index, :errors) = DartFileIndexer.parse(themeSettingFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      [
+        'package:my_app/core/router/navigation.dart as null',
+        'package:my_app/core/theme/mode_setting.dart as entry',
+      ],
+    );
+    expect(
+      text,
+      allOf(
+        contains(
+          'const AppLocation settingsLocation = OptionsOptionsLocation();',
+        ),
+        contains('const Type themeModeEntry = entry.ModeSetting;'),
+      ),
+    );
+
+    // The test taps the modes of one entry: an app in which the template of
+    // the theme role gives the settings screen none, or two, is no app of
+    // the matrix.
+    for (final (entries, count) in [
+      ([...others, ofLanguage], 0),
+      (
+        [
+          ofTheme,
+          entry(
+            'ContrastSetting',
+            'core/theme/contrast_setting.dart',
+            const RoleTemplateOrigin(themeRole),
+          ),
+        ],
+        2,
+      ),
+    ]) {
+      expect(
+        () => fileOf(entries),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The template of the theme role gives the settings screen of '
+                'options $count entries, rather than the entry of the theme '
+                'mode alone.',
+          ),
+        ),
+        reason: '$count',
+      );
+    }
+    // Nor is an app whose provider of the settings screen names no route of
+    // its own: the rules of the role report it first.
+    expect(
+      () => setting.generatedFiles!(
+        appOf([routerRole.data(routes).withOrigin(options), ofTheme]),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of options names a route of its own as the settings '
+              'screen.',
+        ),
+      ),
+    );
+  });
+
+  test(
       'the test of the settings module applies to the apps with the module, '
       'whatever else they have', () {
     expect(
@@ -1454,6 +1778,8 @@ void main() {
       ],
       [
         'settings',
+        'material_theme with settings_screen, localization',
+        'material_theme with settings_screen',
         'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',

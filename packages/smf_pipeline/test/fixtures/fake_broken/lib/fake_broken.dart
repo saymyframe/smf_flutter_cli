@@ -20,11 +20,28 @@ import 'package:fake_router/fake_router.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
-/// A fixture module with one known bug, which a change of the code that it
-/// renders brings in: the rest of it is the fixture module [of], under
-/// another id. The fixture has no sockets of its own, which would be those
-/// of its id.
+/// A module with one known bug, which a change of the code that it renders
+/// brings in: the rest of it is the module [of], under another id. The
+/// module [of] has no sockets of its own, which would be those of its id.
+///
+/// The broken modules of this package change fixture modules. The package
+/// depends on no module of the CLI, so that the app tests of the fixture
+/// registry, which may use what the fixture modules generate, know none of
+/// those either. A package that depends on such a module makes a broken
+/// one of it itself, with [BrokenModule.new].
 final class BrokenModule extends SmfModule {
+  /// Creates the module [id], which [description] describes: the module
+  /// [of] under that id, with the [changes] of its file [file], the path
+  /// of a file of one of its bricks. Each change is a text that the file
+  /// has once, and the text that takes its place.
+  const BrokenModule(
+    SmfModule of, {
+    required ModuleId id,
+    required String description,
+    required String file,
+    required List<(String, String)> changes,
+  }) : this._(of, id, description, file, changes);
+
   const BrokenModule._(
     this.of,
     this.id,
@@ -303,6 +320,22 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture theme whose dark theme is light: `createDarkTheme()`
+  /// returns the theme that `createLightTheme()` does, so an app in the dark
+  /// mode looks as it does in the light one.
+  static const themeWithLightDarkTheme = BrokenModule._(
+    FakeThemeModule(),
+    ModuleId('broken_theme_dark_is_light'),
+    'A light and a dark theme that are both light (fixture)',
+    ThemeRole.appThemeFile,
+    [
+      (
+        '_themeOf(context, Brightness.dark)',
+        '_themeOf(context, Brightness.light)',
+      ),
+    ],
+  );
+
   /// The service log of the fixtures whose analytics service notes each
   /// call twice, as a service does that sends each event twice: to the
   /// tests of the analytics role, each call of the analytics service of the
@@ -344,7 +377,7 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
-  /// The fixture module with the bug.
+  /// The module with the bug.
   final SmfModule of;
 
   /// The id of the module.

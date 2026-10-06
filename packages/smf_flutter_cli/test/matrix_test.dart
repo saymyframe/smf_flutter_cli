@@ -216,10 +216,12 @@ void main() {
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
       'manager, the app of home and the app of settings, which get the '
-      'router, the apps of the localization with the settings screen and '
-      'without, which get the preferences, the app of the DI container, '
-      'the apps of the events and of the preferences with the DI container '
-      'and without, the app of Firebase, the app of Crashlytics '
+      'router, the apps of the theme with the settings screen and the '
+      'localization and without each, and the apps of the localization with '
+      'the settings screen and without, which all get the preferences, the '
+      'app of the DI container, the apps of the events and of the '
+      'preferences with the DI container and without, the app of Firebase, '
+      'the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, and one of every module for each state manager',
@@ -229,8 +231,9 @@ void main() {
         '(gen_l10n, settings, flutter_core, shared_preferences, go_router)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, gen_l10n, get_it, event_bus, shared_preferences, '
-        'firebase_core, firebase_crashlytics, firebase_analytics)';
+        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
+        'shared_preferences, firebase_core, firebase_crashlytics, '
+        'firebase_analytics)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -241,6 +244,19 @@ void main() {
       'riverpod (riverpod, flutter_core)',
       'home (home, flutter_core, go_router)',
       'settings (settings, flutter_core, go_router)',
+      equals(
+        'material_theme with settings_screen, localization (material_theme, '
+        'settings, gen_l10n, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'material_theme with settings_screen (material_theme, settings, '
+        'flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'material_theme with localization (material_theme, gen_l10n, '
+        'flutter_core, shared_preferences)',
+      ),
+      'material_theme (material_theme, flutter_core, shared_preferences)',
       localizedWithSettings,
       'gen_l10n (gen_l10n, flutter_core, shared_preferences)',
       'get_it (get_it, flutter_core)',
@@ -416,8 +432,8 @@ void main() {
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, gen_l10n, get_it, event_bus, shared_preferences, '
-        'local)';
+        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
+        'shared_preferences, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -1420,6 +1436,7 @@ Type type() => Types;
               'home',
               'settings',
               'bottom_tabs',
+              'material_theme',
               'gen_l10n',
               'get_it',
               'event_bus',
