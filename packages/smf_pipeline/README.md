@@ -17,7 +17,7 @@ exitCode = await runSmf(
 );
 ```
 
-`smf create` renders the app in memory, finishes it in a temporary directory (`flutter pub get`, code generation, the steps of the modules, `dart fix` and `dart format`), and then moves it into place. `package:smf_pipeline/testing.dart` has the contract test harness, which checks that modules follow the rules of their roles and renders the apps they make. It also has `ModulePackage`, which checks what the package of a module imports and depends on, and `roleClassNameProblems`, which checks that the code of modules takes the names of the classes that roles require from the roles, such as `LayoutRole.appShell.name`, instead of spelling them out in strings.
+`smf create` renders the app in memory, finishes it in a temporary directory (`flutter pub get`, code generation, the steps of the modules, `dart fix` and `dart format`), and then moves it into place. `package:smf_pipeline/testing.dart` has the contract test harness, which checks that modules follow the rules of their roles and renders the apps they make. It also has `ModulePackage`, which checks what the package of a module imports and depends on, and `roleClassNameProblems`, which checks that the code of modules takes the names of the classes that roles require from the roles, such as `LayoutRole.appShell.name`, instead of spelling them out in strings. `roleNoteProblems` checks the notes of the roles, such as those in the guide for coding agents of an app: the note of a role names nothing that only a module that provides the role has, such as its id or a class of its package.
 
 ## Documentation
 

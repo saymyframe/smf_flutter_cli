@@ -1,9 +1,10 @@
 /// The contract test harness of the module model: checks that modules and
 /// role templates follow the rules of their roles, and renders the apps
 /// they make in memory. `ModulePackage` checks what the package of a module
-/// imports and depends on, and `roleClassNameProblems` that the code of
+/// imports and depends on, `roleClassNameProblems` that the code of
 /// packages of modules takes the names of the classes of roles from the
-/// roles.
+/// roles, and `roleNoteProblems` that what the template of a role says in a
+/// socket of notes names nothing that only a provider of the role has.
 ///
 /// It runs without `package:test`, so both the tests of this package and the
 /// contract tests of the CLI can use it.
@@ -34,4 +35,5 @@ export 'src/testing/file_indexer.dart';
 export 'src/testing/harness.dart';
 export 'src/testing/module_package.dart';
 export 'src/testing/role_class_names.dart';
+export 'src/testing/role_notes.dart';
 export 'src/validation.dart' show ValidationResult;
