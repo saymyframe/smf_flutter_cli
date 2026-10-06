@@ -12,7 +12,7 @@ SMF (Say My Frame) is a Flutter CLI (`smf create`) that generates apps from inde
 
   | Package | Module (`-m`) | What it is |
   | --- | --- | --- |
-  | `smf_flutter_core` | `flutter_core` | Provides the app entry, which every app has exactly one of (`FlutterCoreModule`, brick `bricks/flutter_core`). Its fallback start screen, which an app without a route to start on shows, names the app and tells its developer where the first screen goes; it uses the localization role for the two texts of that screen. |
+  | `smf_flutter_core` | `flutter_core` | Provides the app entry, which every app has exactly one of (`FlutterCoreModule`, brick `bricks/flutter_core`). Its fallback start screen, which an app without a route to start on shows, names the app and tells its developer where the first screen goes. The module uses the localization role for the two texts of that screen. |
   | `smf_go_router` | `go_router` | Provides the router role. |
   | `smf_bloc`, `smf_riverpod` | `bloc`, `riverpod` | Provide the state management role; an app has at most one. |
   | `smf_home_flutter` | `home` | The feature `home` (`HomeModule`), the start screen at `/home`: a welcome to the developer of the app, with the name of the app, a greeting by the time of the day, a card in the colours of Say My Frame and three next steps, each with a path that a tap copies. It requires the router role, and uses the localization role for the texts of its screen and the label of its destination. The module makes the symbol and the number of the cell on the card from the name of the app, and keeps the image of the mark that the screen shows in the folder of the feature, `lib/features/home/assets/`, which it declares in the pubspec of the app. |
