@@ -107,6 +107,16 @@ With `go_router`:
 - `lib/core/router/app_router_factory.dart` has the one `GoRouter` of the app. A route is a `GoRoute` in its `routes`, or in the `routes` of its parent: `path` is the full path of a top-level route and the path from its parent otherwise, and `name` is `<feature>.<route>`. The values of a route come from `state.pathParameters` and `state.uri.queryParameters`. Parse one that is not a `String` with `tryParse`, and throw a `GoException` in the `redirect` of the route when a required value is missing or does not parse, so that the router shows its error screen.
 - The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
 - To follow the screen that the user sees, add a function to `_screenListeners`.
+
+## Theme
+
+- `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
+- The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
+- Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
+
+- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` whose colours `ColorScheme.fromSeed` derives from `seedColor`. Change `seedColor` for other colours.
+- Give that `ThemeData` what both themes share, such as the typography or the theme of a component. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -354,6 +364,8 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === lib/app.dart (flutter_core) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:fixture_app/core/theme/app_theme.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -367,6 +379,9 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Fixture App',
+    theme: createLightTheme(context),
+    darkTheme: createDarkTheme(context),
+    themeMode: AppThemeModeScope.of(context),
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       FixtureTexts.delegate,
@@ -1556,6 +1571,30 @@ class FixtureTexts {
     _ => 'Second setting',
   };
 
+  /// The text title of the template of the theme role.
+  String get themeTitle => switch (language) {
+    'uk' => 'Тема',
+    _ => 'Theme',
+  };
+
+  /// The text system of the template of the theme role.
+  String get themeSystem => switch (language) {
+    'uk' => 'Системна',
+    _ => 'System',
+  };
+
+  /// The text light of the template of the theme role.
+  String get themeLight => switch (language) {
+    'uk' => 'Світла',
+    _ => 'Light',
+  };
+
+  /// The text dark of the template of the theme role.
+  String get themeDark => switch (language) {
+    'uk' => 'Темна',
+    _ => 'Dark',
+  };
+
   /// The text language of the template of the localization role.
   String get localizationLanguage => switch (language) {
     'uk' => 'Мова',
@@ -1655,6 +1694,7 @@ class _LanguageDialog extends StatelessWidget {
 import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/preferences/shared_app_preferences.dart'
     as impl0;
+import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/foundation.dart';
 
 /// The settings of the app that are no secret, which it remembers between
@@ -1743,6 +1783,7 @@ Future<void> initPreferences() async {
 /// again, with preferences that were opened anew.
 final List<void Function(AppPreferences preferences)> _restorers = [
   restoreAppLocale,
+  restoreAppThemeMode,
 ];
 
 /// Calls each of [_restorers] with [preferences] on its own: what one
@@ -2240,6 +2281,166 @@ final class SettingsRoutes {
   /// The route `settings.settings`: `/settings`.
   NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
 }
+=== lib/core/theme/app_theme.dart (material_theme) ===
+import 'package:flutter/material.dart';
+
+/// The colour that the light and the dark theme of the app derive their
+/// colours from. Change it to give the app another look.
+const Color seedColor = Colors.deepPurple;
+
+/// The light theme of the app.
+///
+/// The root of the app calls it each time it builds, so a change of this
+/// file shows on a hot reload. [context] is the context of the root, above
+/// its `MaterialApp`: it has neither the theme nor the localizations of the
+/// app.
+ThemeData createLightTheme(BuildContext context) => _themeOf(Brightness.light);
+
+/// The dark theme of the app; see [createLightTheme].
+ThemeData createDarkTheme(BuildContext context) => _themeOf(Brightness.dark);
+
+/// The Material 3 theme of [brightness] in the colours of [seedColor]. What
+/// both themes of the app share goes here, such as the shape of its
+/// buttons.
+ThemeData _themeOf(Brightness brightness) => ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: seedColor,
+    brightness: brightness,
+  ),
+);
+=== lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/material.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The theme mode that the user selected for the app, which the app
+/// remembers between its launches: whether the app is light, dark, or
+/// follows the device.
+///
+/// The root of the app reads it through [AppThemeModeScope], and rebuilds
+/// in the new mode when the choice changes.
+final appThemeMode = AppThemeModeController._();
+
+/// Keeps the theme mode that the user selected for the app, tells its
+/// listeners when the mode changes, and saves each choice in the
+/// preferences of the app. The app has one, [appThemeMode].
+final class AppThemeModeController extends ChangeNotifier {
+  AppThemeModeController._();
+
+  /// The key of the mode in the preferences, which keep it by its name.
+  static const _key = 'theme.mode';
+
+  /// The preferences that remember the mode, once the app opened them.
+  AppPreferences? _preferences;
+
+  ThemeMode _mode = ThemeMode.system;
+
+  /// The mode of the app: [ThemeMode.system], which follows the device,
+  /// unless the user selected another.
+  ThemeMode get value => _mode;
+
+  /// Chooses [mode] as the mode of the app, at once, and saves the choice:
+  /// the future completes once the mode is saved. Until the app opened its
+  /// preferences for the first time, it changes only memory; from then on
+  /// it saves through the preferences that the app opened last.
+  ///
+  /// If the preferences fail to save the mode, the future completes with
+  /// their error. The app is in [mode] by then and stays in it while it
+  /// runs, but its next launch has the mode that was saved before. The
+  /// same choice again saves it.
+  Future<void> choose(ThemeMode mode) async {
+    if (mode != _mode) {
+      _mode = mode;
+      notifyListeners();
+    }
+    await _preferences?.setString(_key, mode.name);
+  }
+
+  /// Takes the mode that [preferences] have saved, and keeps the current
+  /// one when they have none, or one that the app does not know. It keeps
+  /// [preferences] for the choices to come.
+  void _restore(AppPreferences preferences) {
+    _preferences = preferences;
+    final saved = ThemeMode.values.asNameMap()[preferences.getString(_key)];
+    if (saved == null || saved == _mode) return;
+    _mode = saved;
+    notifyListeners();
+  }
+}
+
+/// Restores the theme mode that the user selected from [preferences], which
+/// the app opened, and keeps them for the choices to come: a restorer of
+/// the preferences, which the app calls before its first frame.
+void restoreAppThemeMode(AppPreferences preferences) =>
+    appThemeMode._restore(preferences);
+
+/// Gives the root of the app the theme mode that the user selected, and
+/// rebuilds the root, and any other widget below that reads the mode, when
+/// the choice changes.
+class AppThemeModeScope extends InheritedNotifier<AppThemeModeController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppThemeModeScope({
+    required AppThemeModeController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The theme mode that the user selected; the widget of [context]
+  /// rebuilds when the choice changes.
+  static ThemeMode of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppThemeModeScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/theme/theme_mode_setting.dart (role:theme) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+
+import 'theme_mode.dart';
+
+/// The setting of the theme mode of the app, an entry of the settings
+/// screen: it shows the mode that the user selected, and lets the user
+/// select whether the app is light, dark, or follows the device.
+///
+/// The entry does not wait until a choice is saved. If the preferences fail
+/// to save it, the app shows the selected mode while it runs, its next
+/// launch has the mode that was saved before, and the error is one that
+/// nothing here catches: it reaches the handlers of the uncaught errors of
+/// the app.
+class ThemeModeSetting extends StatelessWidget {
+  /// Creates the setting.
+  const ThemeModeSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => RadioGroup<ThemeMode>(
+    groupValue: AppThemeModeScope.of(context),
+    onChanged: (mode) {
+      if (mode != null) appThemeMode.choose(mode);
+    },
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.brightness_6_outlined),
+          title: Text(context.l10n.themeTitle),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.system,
+          title: Text(context.l10n.themeSystem),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.light,
+          title: Text(context.l10n.themeLight),
+        ),
+        RadioListTile<ThemeMode>(
+          value: ThemeMode.dark,
+          title: Text(context.l10n.themeDark),
+        ),
+      ],
+    ),
+  );
+}
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
@@ -2292,7 +2493,8 @@ class FixtureSetting extends StatelessWidget {
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
     as entry1;
-import 'package:fixture_app/core/l10n/language_setting.dart' as entry2;
+import 'package:fixture_app/core/l10n/language_setting.dart' as entry3;
+import 'package:fixture_app/core/theme/theme_mode_setting.dart' as entry2;
 import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
     as entry0;
 import 'package:flutter/material.dart';
@@ -2310,7 +2512,8 @@ class SettingsScreen extends StatelessWidget {
       children: const [
         entry0.FixtureSetting(),
         entry1.FixtureSetting(),
-        entry2.LanguageSetting(),
+        entry2.ThemeModeSetting(),
+        entry3.LanguageSetting(),
         AboutListTile(
           icon: Icon(Icons.info_outline),
           applicationName: 'Fixture App',
@@ -2379,6 +2582,7 @@ class DefaultFirebaseOptions {
 }
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app.dart';
@@ -2387,7 +2591,12 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(AppLocaleScope(notifier: appLocale, child: const App()));
+  runApp(
+    AppLocaleScope(
+      notifier: appLocale,
+      child: AppThemeModeScope(notifier: appThemeMode, child: const App()),
+    ),
+  );
 }
 === pubspec.yaml (flutter_core) ===
 name: fixture_app

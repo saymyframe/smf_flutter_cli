@@ -145,6 +145,26 @@ Future<MatrixAppTests> smfAppTests() async {
         generatedFiles: _settingsOf,
         roles: {settingsScreenRole},
       ),
+      // The theme mode of the apps with the theme role, whichever module
+      // provides it: the root of the app takes the mode that is chosen, and
+      // the screen below it gets the light or the dark theme of the
+      // provider; a choice is saved under the key of the role; and the next
+      // start has the mode that is saved. A test of the app entry role too,
+      // whose provider builds the root.
+      await themeRoleAppTest(),
+      // The entry of the theme mode on the settings screen, in the apps
+      // with the theme role and the settings screen role, whichever modules
+      // provide them: the screen shows the entry, which shows the mode of
+      // the app, also one that other code chose, and a tap on a mode
+      // chooses it.
+      MatrixAppTest(
+        '$cli/theme_setting',
+        appliesTo: (app) => app.hook!.presentRoles
+            .containsAll(const [themeRole, settingsScreenRole]),
+        values: _themeValuesOf,
+        generatedFiles: _themeSettingOf,
+        roles: {themeRole},
+      ),
       // The languages and the texts of the apps with the localization
       // role, whichever module provides it: the root supports the languages
       // of the app, with a delegate of each kind for each of them, the app
@@ -162,14 +182,18 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the settings screen role and of the localization role gets
-    // the tests of its role.
+    // role, of the settings screen role, of the theme role and of the
+    // localization role gets the tests of its role. Each provider of the
+    // app entry role gets the test of the theme role, which checks that
+    // its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
       settingsScreenRole,
+      themeRole,
+      appEntryRole,
       localizationRole,
     },
   );
@@ -465,6 +489,104 @@ $ofDevice};
   };
 }
 
+/// The test of the theme role that the CLI keeps in its
+/// `app_tests/theme_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them. Once the app started
+/// with `main()`, it follows the device; a choice of a mode with
+/// `appThemeMode.choose()` reaches the root `MaterialApp`, which takes the
+/// mode, and the screen below it gets the light theme of the provider in
+/// the light mode and its dark theme in the dark mode, the same colour
+/// schemes that `createLightTheme()` and `createDarkTheme()` return for the
+/// context of the root. A choice is saved under the key of the role, as
+/// the name of the mode, and the next start, `initPreferences()` again,
+/// has the mode whose name the test wrote under that key.
+///
+/// It is a test of the app entry role too. The root gets the mode from an
+/// inherited widget around it, which its arguments read from its context,
+/// so the test fails on a provider of the app entry whose root does not
+/// rebuild when that widget notifies.
+///
+/// The test knows only the roles. The matrix fills in the key, which the
+/// role publishes ([ThemeRole.modeKey]). It has no probe for the start
+/// check: on a device the mode is the same Dart state as in a test, and the
+/// platform side of the preferences, which does differ there, has the
+/// probes of the preferences role and of its provider. The matrix of the
+/// fixtures runs the test only in its apps with every module, which run
+/// other tests already.
+Future<MatrixAppTest> themeRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/theme_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(themeRole) &&
+          (among?.call(app) ?? true),
+      values: _themeValuesOf,
+      roles: {themeRole, appEntryRole},
+    );
+
+/// The values of the files of the tests of the theme role, the same in
+/// every app: `mode_key`, the key of the theme mode in the preferences, as
+/// the role publishes it.
+Map<String, String> _themeValuesOf(MatrixApp app) =>
+    const {'mode_key': ThemeRole.modeKey};
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// of the theme mode that the CLI keeps in its `app_tests/theme_setting`:
+/// `settingsLocation`, the location of the route that the provider of the
+/// settings screen role names as the settings screen
+/// ([SettingsScreenRole.screenIn]), created as `const` from its class of
+/// the navigation of the router role, and `themeModeEntry`, the type of the
+/// widget of the entry that the template of the theme role gives the
+/// settings screen.
+const themeSettingFile = 'test/theme_setting/theme_setting.dart';
+
+/// The file at [themeSettingFile] of [app], an app of the matrix with the
+/// theme role and the settings screen role, whose package is [packageName].
+///
+/// It imports the navigation of the router role without a prefix, and the
+/// file of the entry with the prefix `entry`. Throws a [StateError] if the
+/// provider of the settings screen role names no route of its own, or if
+/// the template of the theme role gives the settings screen no entry or
+/// more than one: the test taps the modes of one entry.
+Map<String, String> _themeSettingOf(MatrixApp app, String packageName) {
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final route = _settingsRouteOf(app, input);
+  final entries = [
+    for (final RoleData(:value, :origin) in input.data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(themeRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $themeRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'theme mode alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  // The template of the settings screen role rejects an entry whose widget
+  // is not in a file of the app, so it has an import.
+  final entry = widget.import!.resolveUri(packageName);
+  return {
+    themeSettingFile: '''
+// The settings screen of the app and the entry of the theme mode, which the
+// matrix of SMF writes from the data of the settings screen role of the app
+// for the test of the entry, theme_setting_test.dart.
+import '${_navigationOf(packageName)}';
+import '$entry' as entry;
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${route.locationClass}();
+
+/// The type of the widget of the entry of the theme mode on the settings
+/// screen.
+const Type themeModeEntry = ${widget.codeWith('entry')};
+''',
+  };
+}
+
 /// The test of the router role that the CLI keeps in its
 /// `app_tests/router_walk`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them: it starts the app
@@ -659,13 +781,7 @@ const settingsScreenFile = 'test/settings_screen_role/settings.dart';
 /// own, which the rules of the role report in an app of the matrix.
 Map<String, String> _settingsOf(MatrixApp app, String packageName) {
   final input = settingsScreenRole.hookInput(app.hook!);
-  final route = settingsScreenRole.screenIn(input);
-  if (route == null) {
-    throw StateError(
-      'No module of ${app.name} names a route of its own as the settings '
-      'screen.',
-    );
-  }
+  final route = _settingsRouteOf(app, input);
   final screen = route.route.screen;
   final prefixes = {screen.import.resolveUri(packageName): 'screen'};
   final entries = StringBuffer();
@@ -679,11 +795,8 @@ Map<String, String> _settingsOf(MatrixApp app, String packageName) {
     );
     entries.writeln('  ${widget.codeWith(prefix)},');
   }
-  final navigation = ImportRef.app(
-    RouterRole.navigationFile.substring('lib/'.length),
-  ).resolveUri(packageName);
   final imports = [
-    "import '$navigation';",
+    "import '${_navigationOf(packageName)}';",
     for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
       "import '$uri' as $prefix;",
   ]..sort();
@@ -708,6 +821,30 @@ $entries];
 ''',
   };
 }
+
+/// The route that the provider of the settings screen role names as the
+/// settings screen in [input], the input of the role in [app]. Throws a
+/// [StateError] if it names no route of its own, which the rules of the
+/// role report in an app of the matrix.
+FacadeRoute _settingsRouteOf(
+  MatrixApp app,
+  RoleHookInput<SettingsData> input,
+) {
+  final route = settingsScreenRole.screenIn(input);
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the settings '
+      'screen.',
+    );
+  }
+  return route;
+}
+
+/// The URI of the navigation of the router role in the app whose package
+/// is [packageName], which has the classes of the locations of the app.
+String _navigationOf(String packageName) => ImportRef.app(
+      RouterRole.navigationFile.substring('lib/'.length),
+    ).resolveUri(packageName);
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
 /// for the apps with the role, whichever module provides it, whose modules

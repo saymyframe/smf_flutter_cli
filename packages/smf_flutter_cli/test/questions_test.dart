@@ -181,6 +181,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['None'],
       'State management': ['bloc'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -196,6 +197,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Theme: which module provides it?',
       'Localization: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -261,6 +263,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['None'],
       'State management': ['riverpod'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -276,6 +279,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Theme: which module provides it?',
       'Localization: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -317,6 +321,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['settings'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -384,6 +389,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -425,6 +431,7 @@ void main() {
       'Layout': ['bottom_tabs'],
       'Settings screen': ['None'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -440,6 +447,7 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'State management: which module provides it?',
+      'Theme: which module provides it?',
       'Localization: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -480,6 +488,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -496,6 +505,7 @@ void main() {
       'Settings screen: which module provides it?',
       'Router: which module provides it?',
       'State management: which module provides it?',
+      'Theme: which module provides it?',
       'Localization: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -519,15 +529,16 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the localization after '
-      'the state management, and offers gen_l10n, which keeps the texts of '
-      'the app in ARB files and brings the preferences, in which the app '
-      'remembers its language', () async {
+      'the theme, and offers gen_l10n, which keeps the texts of the app in '
+      'ARB files and brings the preferences, in which the app remembers its '
+      'language', () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -541,10 +552,10 @@ void main() {
       'Localization: which module provides it?',
     );
     // The roles come in the order of the list of modules, and gen_l10n is
-    // after the modules of the state management and before get_it.
+    // after material_theme and before get_it.
     expect(
       localization,
-      messages.indexOf('State management: which module provides it?') + 1,
+      messages.indexOf('Theme: which module provides it?') + 1,
     );
     expect(
       messages[localization + 1],
@@ -632,6 +643,7 @@ void main() {
       'Layout': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -692,6 +704,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
@@ -746,8 +759,9 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the preferences after '
-      'the localization, which requires them, and offers shared_preferences, '
-      'which the start-up opens and the DI container registers', () async {
+      'the theme and the localization, which require them, and offers '
+      'shared_preferences, which the start-up opens and the DI container '
+      'registers', () async {
     final run = await _create({
       'Features': [],
       'Infrastructure': [],
@@ -755,6 +769,7 @@ void main() {
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
+      'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -769,12 +784,17 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list name
-    // them, and gen_l10n, whose role requires the preferences, is before
-    // get_it. So the question of the preferences knows whether the answer
-    // on the localization needs them.
+    // them, and material_theme and gen_l10n, whose roles require the
+    // preferences, are before get_it. So the question of the preferences
+    // knows whether the answers on the theme and on the localization need
+    // them.
     expect(
-      preferences,
-      messages.indexOf('Localization: which module provides it?') + 1,
+      messages.sublist(preferences - 2, preferences + 1),
+      [
+        'Theme: which module provides it?',
+        'Localization: which module provides it?',
+        'Preferences: which module provides it?',
+      ],
     );
     expect(
       preferences,
@@ -822,6 +842,91 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the theme after the '
+      'state management, and offers material_theme, which brings the '
+      'preferences that remember the theme mode without a question, and '
+      'whose mode the settings screen lets the user select', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Infrastructure': [],
+      'Layout': ['bottom_tabs'],
+      'Settings screen': ['settings'],
+      'State management': ['None'],
+      'Theme': ['material_theme'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final theme = messages.indexOf('Theme: which module provides it?');
+    expect(
+      theme,
+      messages.indexOf('State management: which module provides it?') + 1,
+    );
+    expect(run.asked[theme].shown, [
+      'material_theme — Light and dark Material 3 themes from one seed colour',
+      'None',
+    ]);
+    // The theme role requires the preferences, and shared_preferences is the
+    // only module that provides them, so the run does not ask for them.
+    expect(messages, isNot(contains(startsWith('Preferences'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which material_theme requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    DartFileIndex indexOf(String path) =>
+        DartFileIndexer.index(path, app.childFile(path).readAsStringSync());
+    // The file of the module, with the two themes that the root of the app
+    // takes, and the files of the role, with the mode and its entry.
+    expect(
+      [
+        for (final declaration
+            in indexOf('lib/core/theme/app_theme.dart').declarations)
+          declaration.name,
+      ],
+      containsAll(['seedColor', 'createLightTheme', 'createDarkTheme']),
+    );
+    expect(
+      indexOf('lib/core/theme/theme_mode.dart').declaration('appThemeMode'),
+      isNotNull,
+    );
+    expect(
+      indexOf('lib/app.dart')
+          .invocations
+          .singleWhere((invocation) => invocation.target == 'MaterialApp')
+          .namedArguments,
+      containsAll(['theme', 'darkTheme', 'themeMode']),
+    );
+    // The settings screen shows the entry of the theme mode.
+    expect(
+      [
+        for (final invocation
+            in indexOf('lib/features/settings/settings_screen.dart')
+                .invocations)
+          invocation.name,
+      ],
+      contains('ThemeModeSetting'),
+    );
+    expect(
+      indexOf('lib/core/theme/theme_mode_setting.dart')
+          .declaration('ThemeModeSetting'),
+      isNotNull,
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      contains('  shared_preferences: '),
+    );
+  });
+
+  test(
       'a run in a terminal asks for the infrastructure after the features, '
       'and offers Firebase, which a run that skips external setup leaves for '
       'later', () async {
@@ -833,6 +938,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -897,6 +1003,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1002,6 +1109,7 @@ void main() {
         'Layout': ['bottom_tabs'],
         'Settings screen': ['None'],
         'State management': ['None'],
+        'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1101,6 +1209,7 @@ void main() {
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
+        'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],

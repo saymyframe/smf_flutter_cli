@@ -48,9 +48,10 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the layout '
-      'role, of the DI role, of the events role, of the preferences role and '
-      'of the localization role with every provider of each, which they '
-      'tell apart by the roles of the app only', () {
+      'role, of the DI role, of the events role, of the preferences role, '
+      'of the localization role, of the theme role and of the app entry role '
+      'with every provider of each, which they tell apart by the roles of '
+      'the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -60,6 +61,8 @@ void main() {
         eventsRole,
         preferencesRole,
         localizationRole,
+        themeRole,
+        appEntryRole,
       ]),
     );
     expect(named('localization_role').roles, {localizationRole});
@@ -77,6 +80,12 @@ void main() {
     expect(named('preferences_restorers').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
     expect(named('router_walk_guards').roles, {routerRole});
+    // The test of the theme role checks that the root of the app, which
+    // the provider of the app entry builds, follows the theme mode.
+    expect(named('theme_role').roles, {themeRole, appEntryRole});
+    // The test of the look of the fixture theme checks that the root
+    // follows a widget that the themes of a provider read from its context.
+    expect(named('theme_look').roles, {appEntryRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -134,9 +143,9 @@ void main() {
 
   test(
       'the tests of the events role, of the preferences role, of the '
-      'localization role and of the walk of the routes apply only to the '
-      'apps with every module, which have the roles and run flutter test '
-      'for other tests already', () {
+      'localization role, of the theme role and of the walk of the routes '
+      'apply only to the apps with every module, which have the roles and '
+      'run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -145,9 +154,16 @@ void main() {
     expect(appsOf(named('events_role')), [
       for (final app in everyModule) app.name,
     ]);
-    // So do the test of the preferences that the CLI keeps and the test of
-    // the restorers of the fixture setting, which every such app has.
-    for (final name in ['preferences_role', 'preferences_restorers']) {
+    // So do the test of the preferences that the CLI keeps, the test of
+    // the restorers of the fixture setting, which every such app has, the
+    // test of the theme role that the CLI keeps, for the fixture theme,
+    // and the test of the look of that theme, which every such app has.
+    for (final name in [
+      'preferences_role',
+      'preferences_restorers',
+      'theme_role',
+      'theme_look',
+    ]) {
       expect(
         appsOf(named(name)),
         [for (final app in everyModule) app.name],
@@ -180,12 +196,12 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        containsAll([eventsRole, preferencesRole]),
+        containsAll([eventsRole, preferencesRole, themeRole]),
         reason: app.name,
       );
       expect(
         app.modules,
-        contains(FakePreferencesUserModule.id),
+        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
@@ -399,9 +415,10 @@ void main() {
 
     test(
         'gets the app tests of the modules of the CLI, the tests of the DI '
-        'role, of the events role and of the preferences role, the mocks of '
-        'the fixture providers and the tests of the roles of several '
-        'providers, which all apply to it', () {
+        'role, of the events role, of the preferences role, of the settings '
+        'screen role and of the theme role, the mocks of the fixture '
+        'providers and the tests of the roles of several providers, which '
+        'all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -416,6 +433,8 @@ void main() {
           'preferences_role',
           'router_walk',
           'settings_screen_role',
+          'theme_role',
+          'theme_setting',
           'fake_crash',
           'fake_analytics',
           'analytics_role',
