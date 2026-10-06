@@ -235,7 +235,8 @@ void main() {
             reason: 'The snack bar of a copy is on the screen of a small '
                 'phone, below the inset at its top: ${step.code}.',
           );
-          // The snack bar goes away by itself, and covers no step then.
+          // After a moment, the snack bar goes away on its own, and covers no step
+          // then.
           await tester.pump(const Duration(seconds: 5));
           await tester.pumpAndSettle();
         }

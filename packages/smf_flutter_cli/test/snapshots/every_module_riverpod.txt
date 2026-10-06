@@ -2771,8 +2771,9 @@ const _appSymbol = 'Ma';
 /// has.
 const _appNumber = 5;
 
-/// The mark of Say My Frame, an image of the app. Flutter takes the file
-/// in `2.0x/` or in `3.0x/` next to it on a screen with more pixels.
+/// The mark of Say My Frame, an image that `pubspec.yaml` declares among
+/// the assets of the app. Flutter takes the file of the same name in `2.0x/`
+/// or in `3.0x/` next to it on a screen with more pixels.
 const _mark = 'lib/features/home/assets/smf_mark.png';
 
 /// The colours of Say My Frame, which the card of the screen keeps in the

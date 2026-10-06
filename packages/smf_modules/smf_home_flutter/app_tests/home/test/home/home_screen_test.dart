@@ -268,7 +268,7 @@ void main() {
                 'so in $language, in place of the one of the tap before.',
           );
         }
-        // The snack bar goes away by itself.
+        // After a moment, the snack bar goes away on its own.
         await tester.pump(const Duration(seconds: 5));
         await tester.pumpAndSettle();
         expect(
