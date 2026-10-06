@@ -117,8 +117,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // screen log, and each navigator of a branch has observers of its
       // own. And the router refuses to push a location in the main
       // navigation from the page outside it of the second fixture feature,
-      // shown over it, or to replace that page with one. The apps they apply
-      // to have the tests of router_screens, whose helpers they use.
+      // shown over it, or to replace that page with one. And the labels of
+      // the destinations follow the language of the app: the matrix writes
+      // them for the test in each language of the app, from the data of the
+      // layout role and of the localization role, or in English alone for
+      // an app without texts. The apps they apply to have the tests of
+      // router_screens, whose helpers they use.
       MatrixAppTest(
         '$appTests/layout_screens',
         appliesTo: (app) =>
@@ -126,6 +130,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.hook!.presentRoles.contains(layoutRole) &&
             app.modules.contains(const ModuleId('fake_second')) &&
             app.modules.contains(const ModuleId('fake_screen_log')),
+        generatedFiles: _destinationLabelsOf,
         roles: {routerRole, layoutRole},
       ),
       // What only go_router does: notifications of its delegate that leave
@@ -141,16 +146,19 @@ Future<MatrixAppTests> fixtureAppTests() async {
             _hearsScreens(app) &&
             app.modules.contains(const ModuleId('go_router')),
       ),
-      // What only bottom_tabs does: a tap on a tab of its bar selects the
-      // destination. It checks no role, so it names its module, as
-      // `tools/app_tests_test.dart` lets it. The apps it applies to have the
-      // tests of router_screens, whose helpers it uses, and both fixture
-      // features, whose destinations it taps.
+      // What only bottom_tabs does: its bar shows a tab with the label of
+      // each destination, in the language of the app, and a tap on a tab
+      // selects the destination. It checks no role, so it names its module,
+      // as `tools/app_tests_test.dart` lets it. The apps it applies to have
+      // the tests of router_screens, whose helpers it uses, those of
+      // layout_screens, whose labels of the destinations it reads, and both
+      // fixture features, whose destinations it taps.
       MatrixAppTest(
         '$appTests/bottom_tabs_screens',
         appliesTo: (app) =>
             _hearsScreens(app) &&
             app.modules.contains(const ModuleId('fake_second')) &&
+            app.modules.contains(const ModuleId('fake_screen_log')) &&
             app.modules.contains(const ModuleId('bottom_tabs')),
       ),
       // The services of the apps with the DI role, whichever module provides
@@ -255,6 +263,104 @@ Future<MatrixAppTests> fixtureAppTests() async {
     },
   );
 }
+
+/// The path in an app of what the matrix writes for the tests of the labels
+/// of the destinations of the main navigation: `labelLanguages`, the codes
+/// of the languages that the tests read the labels in, those of the app in
+/// their order ([LocalizationRole.localesIn]), or English alone for an app
+/// without the localization role, whose labels are in English;
+/// `destinationLabels`, the labels of the destinations in the order of the
+/// main navigation ([LayoutRole.destinationsIn]) in each of these languages,
+/// by its code; and `chooseLanguage()` and `followDevice()`, which put the
+/// app into one of these languages and let it follow the device again, and
+/// do nothing in an app without the localization role, which has nothing of
+/// what that role generates.
+const destinationLabelsFile = 'test/destination_labels.dart';
+
+/// The file at [destinationLabelsFile] of [app], an app of the matrix with
+/// the layout role, whose package is [packageName].
+///
+/// A destination has the label that the app shows for it in a language:
+/// the text of its module in that language, or in English when the text has
+/// no translation into it, if the module gave the localization role the
+/// text ([LocalizationRole.appTextOf]); and its English text otherwise, as
+/// for a module that does not list that role.
+Map<String, String> _destinationLabelsOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final input = layoutRole.hookInput(hook);
+  final localized = hook.presentRoles.contains(localizationRole);
+  final languages = localized
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  String labelOf(FacadeRoute route, String language) {
+    final label = route.route.destination!.label;
+    final text = localizationRole
+        .appTextOf(input, ModuleOrigin(route.feature.module), label)
+        ?.text;
+    return text?.textIn(language) ?? label.en;
+  }
+
+  final labels = StringBuffer();
+  for (final language in languages) {
+    labels.writeln("  '$language': [");
+    for (final route in layoutRole.destinationsIn(input)) {
+      labels.writeln('    ${SmfNames.dartString(labelOf(route, language))},');
+    }
+    labels.writeln('  ],');
+  }
+  final codes = [for (final language in languages) "'$language'"].join(', ');
+  // The file of the language of the app, which only an app with the
+  // localization role has.
+  final appLocale =
+      ImportRef.app(LocalizationRole.appLocaleFile.substring('lib/'.length))
+          .resolveUri(packageName);
+  final imports = localized
+      ? "import 'package:flutter/widgets.dart';\nimport '$appLocale';\n\n"
+      : '';
+  return {
+    destinationLabelsFile: '''
+// The labels of the destinations of the main navigation of the app in each
+// of its languages, which the matrix of SMF writes from the data of the
+// layout role and of the localization role of the app for the tests of the
+// labels, destination_labels_test.dart.
+$imports/// The codes of the languages that the tests read the labels in: those of
+/// the app, in their order, or English alone for an app without the
+/// localization role.
+const List<String> labelLanguages = [$codes];
+
+/// The labels of the destinations, in the order of the main navigation, in
+/// each language of [labelLanguages], by the code of the language.
+const Map<String, List<String>> destinationLabels = {
+$labels};
+${localized ? _withLanguages : _withoutLanguages}''',
+  };
+}
+
+/// What [destinationLabelsFile] has in an app with the localization role,
+/// to put the app into a language.
+const _withLanguages = '''
+
+/// Puts the app into [language], one of [labelLanguages], as a choice of
+/// the user does.
+Future<void> chooseLanguage(String language) =>
+    appLocale.choose(Locale(language));
+
+/// Lets the app follow the languages of the device again.
+Future<void> followDevice() => appLocale.choose(null);
+''';
+
+/// What [destinationLabelsFile] has in an app without the localization
+/// role, which is in English, the one language of `labelLanguages`.
+const _withoutLanguages = '''
+
+/// Does nothing: the app has no localization role, so its labels are in
+/// English, the one language of [labelLanguages].
+Future<void> chooseLanguage(String language) async {}
+
+/// Does nothing: the app has no localization role, so no language was
+/// chosen.
+Future<void> followDevice() async {}
+''';
 
 /// Whether the tests of the listeners of the screen can hear the screens of
 /// [app]: it has a router, whichever module provides it, the fixture

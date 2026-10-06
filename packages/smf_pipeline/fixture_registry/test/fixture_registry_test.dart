@@ -2,6 +2,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:fake_broken/fake_broken.dart';
+import 'package:fake_di/fake_di.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
@@ -625,7 +626,8 @@ void main() {
 
     test(
         'with bottom tabs, builds the main navigation of the layout, with the '
-        'destinations of the features in their order', () async {
+        'destinations of the features in their order, which the layout role '
+        'lists with their labels and icons', () async {
       final router = await routerOf([
         ...everyFixture(),
         const ModuleId('bottom_tabs'),
@@ -638,13 +640,79 @@ void main() {
       ]);
       expect(
         shell,
-        [
-          'AppShell(destinations: const [',
-          "Destination(label: 'Fixture', icon: Icons.star), ",
-          "Destination(label: 'Second', icon: Icons.looks_two)], ",
-          'currentIndex: index, onSelect: onSelect, body: body)',
-        ].join(),
+        'AppShell(destinations: appDestinations, currentIndex: index, '
+        'onSelect: onSelect, body: body)',
       );
+    });
+
+    test(
+        'with bottom tabs, shows the label of the second feature in the '
+        'language of the app, a text that the feature gives the '
+        'localization role, and that of the first in English, which does '
+        'not list that role, with each router', () async {
+      /// The list of the destinations and the functions of their labels in
+      /// the file of the layout role of the app of [modules], each as its
+      /// code by its name.
+      Future<Map<String, String>> destinationsOf(List<ModuleId> modules) async {
+        final result = await harness.check(
+          ContractCase('fixture destinations', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final unit = parseString(
+          content: result.app!.files[LayoutRole.destinationFile]!.text,
+        ).unit;
+        return {
+          for (final declaration in unit.declarations)
+            if (declaration case FunctionDeclaration(:final name))
+              name.lexeme: declaration.toSource()
+            else if (declaration
+                case TopLevelVariableDeclaration(:final variables))
+              variables.variables.single.name.lexeme: declaration.toSource(),
+        };
+      }
+
+      const items = [
+        'Destination(label: _fakeFeatureHomeLabel, icon: Icons.star)',
+        'Destination(label: _fakeSecondSecondLabel, icon: Icons.looks_two)',
+      ];
+      final list =
+          'const List<Destination> appDestinations = [${items.join(', ')}];';
+      const first = 'String _fakeFeatureHomeLabel(BuildContext context) => '
+          "'Fixture';";
+      const second = 'String _fakeSecondSecondLabel(BuildContext context) => ';
+      for (final router in [FakeRouterModule.id, GoRouterModule.id]) {
+        // The fixtures have the fixture texts, a provider of the
+        // localization role.
+        expect(
+          await destinationsOf([
+            ...everyFixture(router: router),
+            const ModuleId('bottom_tabs'),
+          ]),
+          {
+            LayoutRole.appDestinations: list,
+            '_fakeFeatureHomeLabel': first,
+            '_fakeSecondSecondLabel': '${second}context.l10n.fakeSecondLabel;',
+          },
+          reason: '$router',
+        );
+        // Without texts, every label is its English text.
+        expect(
+          await destinationsOf([
+            FakeFeatureModule.id,
+            FakeSecondModule.id,
+            router,
+            FakeBlocModule.id,
+            FakeDiModule.id,
+            const ModuleId('bottom_tabs'),
+          ]),
+          {
+            LayoutRole.appDestinations: list,
+            '_fakeFeatureHomeLabel': first,
+            '_fakeSecondSecondLabel': "$second'Second';",
+          },
+          reason: '$router',
+        );
+      }
     });
 
     test('without a layout or without destinations, has no main navigation',
@@ -889,6 +957,8 @@ void main() {
         [
           'fakeSecondTitle: text title of the module fake_second',
           'fakeSecondOutside: text outside of the module fake_second',
+          // The label of the destination of the feature.
+          'fakeSecondLabel: text label of the module fake_second',
         ],
       );
       // The app is in no language in which Flutter has no texts for its
@@ -1003,6 +1073,7 @@ void main() {
         [
           'fakeSecondTitle',
           'fakeSecondOutside',
+          'fakeSecondLabel',
           'fakeSecondSetting',
           // The texts of the setting of the language, which the template
           // of the role gives it in such an app.
@@ -1034,7 +1105,10 @@ void main() {
       // setting nor its text.
       final without = await checked(withRole);
       expect(without.app!.files.keys, isNot(contains(setting)));
-      expect(gettersOf(without), ['fakeSecondTitle', 'fakeSecondOutside']);
+      expect(
+        gettersOf(without),
+        ['fakeSecondTitle', 'fakeSecondOutside', 'fakeSecondLabel'],
+      );
     });
 
     test(
@@ -1548,6 +1622,8 @@ const _cases = [
   'fake_clock_badge',
   'fake_clock_user with clock, badge',
   'fake_clock_user',
+  'bottom_tabs (fake_router) with localization',
+  'bottom_tabs (go_router) with localization',
 ];
 
 /// Collects the code of the first argument of each `Text(...)`.
