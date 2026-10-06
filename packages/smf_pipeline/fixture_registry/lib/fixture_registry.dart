@@ -122,10 +122,10 @@ List<ModuleId> everyFixture({
 /// with the two fixtures that have a setting, a feature and a module
 /// without screens, so that those tests check a screen with entries on a
 /// provider that must work; and the fixture texts, a provider of the
-/// localization role, so that the app has the setting of the language,
-/// which the template of that role gives a settings screen, for the test
-/// of the setting that the CLI keeps, with the texts of the fixture feature
-/// in two languages.
+/// localization role, for the two tests of that role that the CLI keeps:
+/// the test of the role itself, with the texts of the fixture feature in
+/// two languages, and the test of the setting of the language, which the
+/// template of the role gives the settings screen of the app.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their

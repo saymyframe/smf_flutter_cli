@@ -246,10 +246,10 @@ bool _hearsScreens(MatrixApp app) =>
 /// the app does, with the mocks of the platform side of those fixtures; and
 /// the tests of the roles that an app can have several providers of, the
 /// analytics role and the crash reporting role, whose contract they check
-/// with every provider. The test of the setting of the language that the
-/// CLI keeps is among the first: that app has the fixture texts and the
-/// settings module of the CLI, so the setting is checked with a second
-/// provider of the localization role there.
+/// with every provider. The two tests of the localization role that the
+/// CLI keeps are among the first: that app has the fixture texts and the
+/// settings module of the CLI, so the role and the setting of the language
+/// are checked with a second provider of the role there.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
