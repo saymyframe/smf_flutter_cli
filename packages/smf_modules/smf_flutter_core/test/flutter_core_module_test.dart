@@ -199,7 +199,7 @@ void main() {
     });
 
     // The cell of the app on the fallback start screen, like that of an
-    // element in a table of elements.
+    // element of the periodic table.
     for (final (name, symbol, number, why) in [
       ('my_app', 'Ma', 5, 'the first letters of its first two words'),
       ('my_first_app', 'Mf', 10, 'the first letters of its first two words'),

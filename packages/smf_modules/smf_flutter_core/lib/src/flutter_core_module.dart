@@ -28,19 +28,19 @@ import 'package:smf_flutter_core/src/agents.dart';
 /// newer.
 ///
 /// The fallback start screen is for the developer of the app, who sees it
-/// until the app has a screen to start on. It shows a cell like that of a
-/// table of elements, with a symbol and a number that the module makes from
-/// the name of the app ([_symbolOf] and [_numberOf]), then the name of the
-/// app, a hint that the app has no start screen yet, and the path of the
-/// file of the screen, which a tap copies. The hint and the word that the
-/// screen says once the path is copied are texts of the module, in English
-/// and in Ukrainian, which the module gives the localization role, a role
-/// that it uses: with the role, the screen reads them from the texts of
-/// the app, in the language of the app, and without it they are the
-/// English texts. `FallbackStartScreen` only reads the two texts and gives
-/// them to `FallbackStartView`, which shows the rest. So the widget test of
-/// the app shows the view with texts of its own, in an app with the role
-/// too, where only the root of the app has the texts.
+/// until the app has a screen to start on. It shows a cell like that of an
+/// element of the periodic table, with a symbol and a number that the
+/// module makes from the name of the app ([_symbolOf] and [_numberOf]),
+/// then the name of the app, a hint that the app has no start screen yet,
+/// and the path of the file of the screen, which a tap copies. The hint and
+/// the word that the screen says once the path is copied are texts of the
+/// module, in English and in Ukrainian, which the module gives the
+/// localization role, a role that it uses: with the role, the screen reads
+/// them from the texts of the app, in the language of the app, and without
+/// it they are the English texts. `FallbackStartScreen` only reads the two
+/// texts and gives them to `FallbackStartView`, which shows the rest. So
+/// the widget test of the app shows the view with texts of its own, in an
+/// app with the role too, where only the root of the app has the texts.
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// app entry what its files bring: the root widget and where its arguments
@@ -82,20 +82,23 @@ final class FlutterCoreModule extends SmfModule {
   /// The texts of the module, which it gives the localization role.
   static const _texts = TextsData([_hint, _copied]);
 
-  /// The symbol of the app in its cell on the fallback start screen, made
-  /// as the symbol of an element from [name], the package name of the app
-  /// in snake_case: the first letter of its first word in upper case, and
-  /// then the first letter of its second word, or the second letter of a
+  /// The symbol of the app in its cell on the fallback start screen, as an
+  /// element of the periodic table has one: `Ma` for `my_app`.
+  ///
+  /// [name] is the package name of the app, in snake_case. The symbol is
+  /// the first letter of its first word in upper case, and then the first
+  /// letter of its second word in lower case, or the second letter of a
   /// name of one word. A name of one letter has that letter alone.
   static String _symbolOf(String name) {
     final words = name.split('_');
     final letters = words.length > 1 ? words[0][0] + words[1][0] : words[0];
     final second = letters.length > 1 ? letters[1] : '';
-    return '${letters[0].toUpperCase()}$second';
+    return '${letters[0].toUpperCase()}${second.toLowerCase()}';
   }
 
-  /// The number of the app in its cell on the fallback start screen: how
-  /// many letters and digits [name], the package name of the app, has.
+  /// The number of the app in its cell on the fallback start screen, where
+  /// an element has its atomic number: how many letters and digits [name],
+  /// the package name of the app, has, 5 for `my_app`.
   static int _numberOf(String name) => name.replaceAll('_', '').length;
 
   @override
