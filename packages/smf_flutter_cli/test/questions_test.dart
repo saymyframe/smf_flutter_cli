@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_contracts/core.dart';
@@ -206,7 +208,7 @@ void main() {
       'Analytics: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
-      'home — Start screen with the name of the app',
+      'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(run.asked[1].shown, [
@@ -360,7 +362,7 @@ void main() {
     ]);
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
-      'home — Start screen with the name of the app',
+      'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(
@@ -606,16 +608,22 @@ void main() {
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
-    // The one text of the app is the label of the start screen in a main
-    // navigation, in English and in Ukrainian, so the app is in both.
-    expect(
-      app.childFile('lib/l10n/app_en.arb').readAsStringSync(),
-      '{\n  "@@locale": "en",\n  "homeLabel": "Home"\n}\n',
-    );
-    expect(
-      app.childFile('lib/l10n/app_uk.arb').readAsStringSync(),
-      '{\n  "@@locale": "uk",\n  "homeLabel": "Головна"\n}\n',
-    );
+    // The texts of the app are those of the start screen, after the label
+    // of that screen in a main navigation, in English and in Ukrainian, so
+    // the app is in both.
+    for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
+      final texts = jsonDecode(
+        app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(texts.keys.take(2), ['@@locale', 'homeLabel'], reason: language);
+      expect(texts['@@locale'], language);
+      expect(texts['homeLabel'], label);
+      expect(
+        texts.keys.skip(1),
+        everyElement(startsWith('home')),
+        reason: language,
+      );
+    }
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())

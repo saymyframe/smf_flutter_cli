@@ -30,6 +30,9 @@ dependencies:
   smf_flutter_core: ^0.3.0
   smf_get_it: ^0.3.0
   smf_go_router: ^0.3.0
+  # The start screen of the CLI, for its app test in the app of several
+  # providers, which starts on another screen.
+  smf_home_flutter: ^0.3.0
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
   smf_material_theme: ^0.3.0

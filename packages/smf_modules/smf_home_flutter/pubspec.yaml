@@ -1,5 +1,5 @@
 name: smf_home_flutter
-description: The SMF module of the start screen of the Flutter app that SMF generates. The screen shows the name of the app, and the app can open on it at /home.
+description: The SMF module of the start screen of the Flutter app that SMF generates. The screen welcomes the developer with the next steps, and the app can open on it at /home.
 version: 0.3.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_home_flutter
@@ -21,8 +21,8 @@ dev_dependencies:
   analyzer: ^14.4.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.3.0
-  # The texts of the app, which the label of the destination of the module
-  # is one of.
+  # The texts of the app, which the texts of the screen of the module and
+  # the label of its destination are among.
   smf_gen_l10n: ^0.3.0
   # The router that the tests render the route of the module with.
   smf_go_router: ^0.3.0
@@ -32,3 +32,4 @@ dev_dependencies:
   smf_shared_preferences: ^0.3.0
   test: ^1.32.0
   very_good_analysis: ^10.3.0
+  yaml: ^3.1.2
