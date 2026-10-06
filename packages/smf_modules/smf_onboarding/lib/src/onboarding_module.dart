@@ -1,27 +1,42 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_onboarding/bundles/onboarding_bundle.dart';
 import 'package:smf_onboarding/src/agents.dart';
+import 'package:smf_onboarding/src/app_symbol.dart';
 
 /// The module of the onboarding of the app: a feature with one route, whose
 /// screen, `OnboardingScreen`, a new user goes through on the first launch
 /// of the app, before every other screen.
 ///
 /// The screen shows two neutral pages, a welcome with the name of the app
-/// and a page that ends the onboarding, with Skip and Next below them, and
-/// Done on the last page. The pages are the list that `onboardingPages()`
-/// returns in `lib/features/onboarding/onboarding_pages.dart`, which the
-/// app replaces with its own.
+/// and a page that ends the onboarding. A page is a cell of a table of
+/// elements among smaller cells, with a title and a text below them. The
+/// cell of the first page has the symbol of the app, such as `Ma` for
+/// `my_app`, which the module computes from the name of the app when it
+/// generates the app, and that of the last page has an icon. Skip is above
+/// the pages. Below them are a mark for each page and one button: Next,
+/// and Get started on the last page, where Skip is gone. The pages are the
+/// list that `onboardingPages()` returns in
+/// `lib/features/onboarding/onboarding_pages.dart`, which the app replaces
+/// with its own.
+///
+/// While the pages turn, the cells and the texts of a page move at their
+/// own pace, the background blends into that of the last page, and the
+/// marks follow. Each of these motions ends. In an app that asks for less
+/// motion, Next shows the next page at once, and so do the cells when a
+/// page is first shown. The screen takes its colours and its text styles
+/// from the theme of the app, whichever module provides it, and names no
+/// font but the monospaced one of the device for the number of a cell.
 ///
 /// The route is `/` of the module, so its full path is `/onboarding`. It is
 /// no destination of the main navigation, and the app cannot start on it.
 /// The module declares a guard of the routes, `firstRun`, whose target is
 /// that route (see [RouteGuard]): until the user has finished the
 /// onboarding, the router shows it in place of every other screen of the
-/// app, whichever module provides the router. Skip and Done only finish the
-/// onboarding, and the router leaves it for the location that the guard
-/// kept the user from: on a first launch, the screen that the app starts
-/// on, or the fallback screen of the app entry in an app that no route can
-/// start. The next launches of the app start there.
+/// app, whichever module provides the router. Skip and the last button
+/// only finish the onboarding, and the router leaves it for the location
+/// that the guard kept the user from: on a first launch, the screen that
+/// the app starts on, or the fallback screen of the app entry in an app
+/// that no route can start. The next launches of the app start there.
 ///
 /// Whether the user has finished the onboarding is in `onboardingStatus`, a
 /// top-level object of `lib/features/onboarding/onboarding_status.dart`,
@@ -51,7 +66,8 @@ import 'package:smf_onboarding/src/agents.dart';
 /// onboarding is not finished, and nothing navigates to it. When something
 /// else shows the screen although the onboarding is finished, such as a
 /// link to its route, the screen starts the onboarding again once its first
-/// frame is over, and Skip and Done leave it as on a first launch.
+/// frame is over, and Skip and the last button leave it as on a first
+/// launch.
 ///
 /// The texts of the screen, [texts], are in English and in Ukrainian. The
 /// module only uses the localization role: in an app with the role they are
@@ -79,7 +95,8 @@ final class OnboardingModule extends SmfModule {
   static const completedKey = 'onboarding.completed';
 
   /// The texts of the screen: what its two pages say, but for the name of
-  /// the app, and its buttons.
+  /// the app, and its buttons. `done` is the label of the button on the
+  /// last page.
   static const texts = TextsData([
     LocalizedText(
       'welcome',
@@ -98,7 +115,7 @@ final class OnboardingModule extends SmfModule {
     ),
     LocalizedText('skip', en: 'Skip', translations: {'uk': 'Пропустити'}),
     LocalizedText('next', en: 'Next', translations: {'uk': 'Далі'}),
-    LocalizedText('done', en: 'Done', translations: {'uk': 'Готово'}),
+    LocalizedText('done', en: 'Get started', translations: {'uk': 'Почати'}),
   ]);
 
   /// The name of the route of the screen, the target of the guard.
@@ -125,6 +142,7 @@ final class OnboardingModule extends SmfModule {
           onboardingBundle,
           vars: {
             'completed_key': SmfNames.dartString(completedKey),
+            'symbol': SmfNames.dartString(appSymbolOf(context.appName)),
             ...localizationRole.varsOf(id, texts),
           },
         ),

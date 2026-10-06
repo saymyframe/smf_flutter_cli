@@ -5,7 +5,9 @@ description: "The onboarding of an SMF app: the pages that a new user goes throu
 # generated app. The pipeline renders it with app_name, org_name, the
 # has_<role> flags, the rendered sockets of its tags, and the variables of
 # the module: completed_key, the key of the preferences as a Dart string,
-# and text_<name> for each text of the module, the code that reads it.
+# symbol, the symbol of the app in the cell of the first page as a Dart
+# string, and text_<name> for each text of the module, the code that reads
+# it.
 version: 0.1.0+1
 
 environment:
