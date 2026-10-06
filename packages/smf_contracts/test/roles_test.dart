@@ -250,19 +250,13 @@ void main() {
       }
     });
 
-    // The roles whose templates have a note in the guide for coding agents.
-    const withNotes = <Role>[
-      appEntryRole,
-      routerRole,
-      layoutRole,
-      localizationRole,
-      diRole,
-      eventsRole,
-      analyticsRole,
-      crashReportingRole,
-      preferencesRole,
-      settingsScreenRole,
-      themeRole,
+    // The roles whose templates have nothing to tell a coding agent, each
+    // with the reason. The template of every other role has a note in the
+    // guide for coding agents.
+    const withoutNote = <Role, String>{};
+    final withNotes = [
+      for (final role in withTemplates)
+        if (!withoutNote.containsKey(role)) role,
     ];
 
     /// The notes of the template of [role] for the guide for coding agents.
@@ -277,6 +271,14 @@ void main() {
         'say in the guide for coding agents what their roles guarantee, '
         'under the descriptions of the roles', () {
       const socket = AppEntryRole.agentSections;
+      for (final MapEntry(key: role, value: reason) in withoutNote.entries) {
+        expect(
+          notesOf(role),
+          isEmpty,
+          reason: 'The $role is in `withoutNote` ("$reason"), but its '
+              'template has a note. Remove it from `withoutNote`.',
+        );
+      }
       for (final role in withNotes) {
         final notes = notesOf(role);
 
@@ -284,7 +286,14 @@ void main() {
         expect(
           notes.where((note) => note.when.isEmpty),
           hasLength(1),
-          reason: role.id,
+          reason: 'The template of the $role contributes one note for every '
+              'app with the role, an `AgentNote.ofRole` for '
+              '`AppEntryRole.agentSections` under the description of the '
+              'role, with what the role guarantees whichever module '
+              'provides it. A role with nothing to tell a coding agent goes '
+              'into `withoutNote` of this test with the reason. The '
+              'convention of the notes is in the AGENTS.md of the '
+              'repository, under "Every app gets `AGENTS.md`".',
         );
         for (final note in notes) {
           expect(note.entryKey, role.description, reason: role.id);
