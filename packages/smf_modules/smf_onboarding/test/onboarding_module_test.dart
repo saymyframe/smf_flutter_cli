@@ -140,11 +140,11 @@ MethodDeclaration _methodOf(CompilationUnit unit, String type, String name) =>
         .whereType<MethodDeclaration>()
         .singleWhere((method) => method.name.lexeme == name);
 
-/// The local variables that [method] declares, each with the code of its
-/// value, by their names.
-Map<String, String> _variablesOf(MethodDeclaration method) {
+/// The local variables that [function] declares, a method or a function,
+/// each with the code of its value, by their names.
+Map<String, String> _variablesOf(AstNode function) {
   final visitor = _Variables();
-  method.accept(visitor);
+  function.accept(visitor);
   return visitor.values;
 }
 
@@ -983,7 +983,8 @@ void main() {
 
     test(
         'changes only memory when it starts again before the preferences '
-        'are open', () async {
+        'are open, which a start that finds it saved as finished undoes',
+        () async {
       final sent = await _run(app, '''
   await onboardingStatus.complete();
   await onboardingStatus.restart();
@@ -992,6 +993,15 @@ void main() {
     [...heard],
     savedPreferences.containsKey(key),
   ];
+
+  // The start-up takes what an earlier launch saved.
+  savedPreferences[key] = true;
+  await initPreferences();
+  result['a start with it saved as finished'] = [
+    completed.value,
+    [...heard],
+    savedPreferences[key],
+  ];
 ''');
 
       expect(sent, {
@@ -999,6 +1009,11 @@ void main() {
           false,
           [true, false],
           false,
+        ],
+        'a start with it saved as finished': [
+          true,
+          [true, false, true],
+          true,
         ],
       });
     });
@@ -1178,6 +1193,14 @@ void main() {
       );
       expect(
         restart.thisOrAncestorMatching((node) => node == callback),
+        isNotNull,
+      );
+      // The screen may be gone by the end of that frame: only one that is
+      // still mounted starts the onboarding again.
+      final whenMounted = restart.thisOrAncestorOfType<IfStatement>()!;
+      expect(whenMounted.expression.toSource(), 'mounted');
+      expect(
+        whenMounted.thisOrAncestorMatching((node) => node == callback),
         isNotNull,
       );
       // Nothing else of the screen starts it again, and its build neither
@@ -1552,6 +1575,68 @@ void main() {
         _importsOf(mocks),
         contains(
           'package:{{app_name}}/features/onboarding/onboarding_status.dart',
+        ),
+      );
+    });
+  });
+
+  group('the probe of the module for the start check', () {
+    late FunctionDeclaration probe;
+
+    setUpAll(() {
+      probe = _functionOf(
+        parseString(
+          content: File(
+            'app_tests/onboarding/integration_test/onboarding/probe.dart',
+          ).readAsStringSync(),
+        ).unit,
+        'probeOnboarding',
+      );
+    });
+
+    test(
+        'expects what redirectOf() of the router role says of the route of '
+        'the onboarding, which it asks before it goes there: the screen of '
+        'the onboarding, or none of it while a guard before that of the '
+        'module keeps the user from the route', () {
+      final variables = _variablesOf(probe);
+      final asked = _calls(probe, RouterRole.redirectOf).single;
+      final go = _calls(probe, 'go').single;
+
+      expect(variables['location'], 'OnboardingOnboardingLocation()');
+      expect(
+        asked.argumentList.arguments.single.toSource(),
+        'location.routeName',
+      );
+      expect(go.argumentList.arguments.single.toSource(), 'location');
+      expect(asked.offset, lessThan(go.offset));
+      expect(
+        variables,
+        containsPair('kept', 'redirectOf(location.routeName) != null'),
+      );
+      // What the route must show depends on it.
+      final conditions = <String, String?>{
+        for (final added in _calls(probe, 'add'))
+          if (added.thisOrAncestorOfType<IfStatement>() case final condition?)
+            condition.expression.toSource():
+                (added.argumentList.arguments.single as StringLiteral)
+                    .stringValue,
+      };
+      expect(
+        conditions,
+        containsPair(
+          'kept && _shows<OnboardingScreen>()',
+          'A guard of the routes before that of the onboarding keeps the '
+              'user from its route, but the route shows the screen of the '
+              'onboarding.',
+        ),
+      );
+      expect(
+        conditions,
+        containsPair(
+          '!kept && !_shows<OnboardingScreen>()',
+          'While the onboarding is not finished, its route does not show '
+              'its screen.',
         ),
       );
     });

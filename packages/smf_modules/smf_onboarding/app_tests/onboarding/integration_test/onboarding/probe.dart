@@ -15,6 +15,14 @@
 // router must leave the screen. So it leaves the app with the onboarding
 // finished, as a user does.
 //
+// The app may have a guard of the routes before that of the onboarding
+// that does not allow on a device, such as one that asks for a signed-in
+// user, which no check can open there. The router then shows the target of
+// that guard in place of the route of the onboarding. So the probe asks
+// redirectOf() of the router role about the route before it goes there, as
+// the router does, and expects what it says: the screen of the onboarding,
+// or none of it.
+//
 // The start check as a whole does not end that way. The walk of the
 // routes, whose probe runs after this one, goes to the route of the
 // onboarding last, as it does to every route in the flow of a guard. The
@@ -54,11 +62,20 @@ Future<List<String>> probeOnboarding(Future<void> Function() settle) async {
     ];
   }
   final problems = <String>[];
+  const location = OnboardingOnboardingLocation();
+  // Whether a guard before that of the onboarding keeps the user from the
+  // route of the onboarding, whose target the router then shows instead.
+  final kept = redirectOf(location.routeName) != null;
   // From whichever screen the app shows: the route of the onboarding is the
   // one that its guard lets the user see.
-  appRouter.navigatorOf(from.context).go(const OnboardingOnboardingLocation());
+  appRouter.navigatorOf(from.context).go(location);
   await settle();
-  if (!_shows<OnboardingScreen>()) {
+  if (kept && _shows<OnboardingScreen>()) {
+    problems.add(
+      'A guard of the routes before that of the onboarding keeps the user '
+      'from its route, but the route shows the screen of the onboarding.',
+    );
+  } else if (!kept && !_shows<OnboardingScreen>()) {
     problems.add(
       'While the onboarding is not finished, its route does not show its '
       'screen.',

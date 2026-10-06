@@ -300,11 +300,11 @@ void main() {
       // about the largest that the settings of a device have, in each
       // language of the app, whose texts differ in length.
       for (final language in languages) {
-        await useLanguage(tester, language);
-        // The onboarding first, and the small phone then: whether the
-        // screen that the app starts on fits such a phone is for the tests
-        // of its own module.
+        // The onboarding first, and its language and the small phone then:
+        // whether the screen that the app starts on fits such a phone, or
+        // another language, is for the tests of its own module.
         await restartOnboarding(tester);
+        await useLanguage(tester, language);
         const insets = FakeViewPadding(top: _inset, bottom: _inset);
         tester.view
           ..physicalSize = const Size(320, 480)
@@ -343,11 +343,11 @@ void main() {
               'size, where a tap reaches it, in $language.',
         );
         expectOutOfInsets(tester, [done()]);
-        // The screen of the test again, before the app shows the screen
-        // that it starts on.
+        // The screen and the language of the test again, before the app
+        // shows the screen that it starts on.
         tester.view.reset();
         tester.platformDispatcher.clearTextScaleFactorTestValue();
-        await tester.pumpAndSettle();
+        await useLanguage(tester, languages.first);
         await tester.tap(done());
         await tester.pumpAndSettle();
         await expectFinished(tester, 'Done after a small phone, in $language,');

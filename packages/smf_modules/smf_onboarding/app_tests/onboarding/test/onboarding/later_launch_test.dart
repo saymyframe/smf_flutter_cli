@@ -4,11 +4,14 @@
 // to the screen that it starts on, or to the fallback screen of the app
 // entry in an app that no route can start, and never builds the onboarding.
 //
-// The onboarding starts again when something shows its screen although it
-// is finished, as a link to its route does, so that Skip and Done leave
-// the screen; when the app asks for it, with restart() of its status,
-// which shows the onboarding without a navigation; and when the
-// preferences that the app opens have it saved as not finished.
+// The onboarding starts again in three cases:
+// - something shows its screen although it is finished, as a link to its
+//   route does, so that Skip and Done leave the screen. push() counts too:
+//   it shows the screen over another, which the router then has to take
+//   out of its stack;
+// - the app asks for it, with restart() of its status, which shows the
+//   onboarding without a navigation;
+// - the preferences that the app opens have it saved as not finished.
 //
 // It also runs the probe of the module, which the start check runs on a
 // device (integration_test/onboarding/probe.dart): without a navigator on
@@ -19,6 +22,8 @@
 //
 // The test starts the app once, since the start-up of an app may not run
 // twice, and each expectation gives its reason.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/preferences/app_preferences.dart';
@@ -158,6 +163,44 @@ void main() {
         tester,
         'Skip on an onboarding whose screen was shown although it was '
         'finished',
+      );
+
+      // The same over another screen, with push(). The guard keeps the user
+      // from the screen below once the onboarding starts again, so the
+      // router takes it out of its stack, which it cannot do while a frame
+      // is built: Flutter reports a navigation in a build as an error,
+      // which fails the test. So the screen starts the onboarding again
+      // only once its first frame is over.
+      unawaited(
+        appRouter
+            .navigatorOf(tester.element(find.byType(startScreen)))
+            .push<Object?>(const OnboardingOnboardingLocation()),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        onboarding,
+        findsOneWidget,
+        reason: 'push() of the route of the onboarding shows its screen, '
+            'also once the onboarding is finished.',
+      );
+      expect(
+        onboardingStatus.completed.value,
+        isFalse,
+        reason: 'The screen of the onboarding starts the onboarding again '
+            'when push() shows it although the onboarding is finished.',
+      );
+      expect(
+        find.byType(startScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'While the onboarding is not finished again, the app keeps '
+            'no other screen below the onboarding.',
+      );
+      await tester.tap(skip);
+      await tester.pumpAndSettle();
+      await expectFinished(
+        tester,
+        'Skip on an onboarding that push() showed over the screen that the '
+        'app starts on',
       );
 
       // The app starts the onboarding again, as for a user who asks to see
