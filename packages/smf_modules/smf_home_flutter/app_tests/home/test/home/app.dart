@@ -181,6 +181,11 @@ Future<void> closeNewHome(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The cells that the card of the screen draws next to the cell of the app:
+/// what paints them.
+Finder cells(Finder card) =>
+    find.descendant(of: card, matching: find.byType(CustomPaint));
+
 /// How far each part of the screen has come in, from 0 for a part that is
 /// not shown yet to 1 for one that is there.
 List<double> entrance(WidgetTester tester) => [

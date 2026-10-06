@@ -4,14 +4,18 @@
 // have, in each language of the app. The list of the screen scrolls to
 // each step and to the last line, which ends above the inset at the bottom
 // of the screen. The cell of the app in the card is a picture, so its
-// symbol and its number keep their size. The path of a step is no larger
+// symbol and its number keep their size, and the card draws next to it
+// only the cells that have room there. The path of a step is no larger
 // than one and a half times its size, takes as many lines as it needs and
-// is not cut, and a tap on the step still copies it.
+// is not cut, and a tap on the step still copies it and says so in a snack
+// bar that fits the phone.
 //
-// The phone is that small only while the screen of the module is shown:
-// whether another screen of the app fits such a phone is a matter for the
-// tests of its own module. The test starts the app once, since the start-up
-// of an app may not run twice, and each expectation gives its reason.
+// The phone is that small only while a screen of the module covers it:
+// whether what is around the screen of its route, such as the main
+// navigation of the app, or another screen of the app fits such a phone is
+// a matter for the tests of its own module. The test starts the app once,
+// since the start-up of an app may not run twice, and each expectation
+// gives its reason.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -133,6 +137,19 @@ void main() {
           tester.getSize(shown(find.text(appSymbol))).height,
           lessThan(2 * 42),
           reason: 'The symbol of the app is on one line of its cell.',
+        );
+
+        expect(
+          cells(
+            find.ancestor(
+              of: text('readyTitle'),
+              matching: find.byType(ClipRRect),
+            ),
+          ),
+          paintsExactlyCountTimes(#drawRect, 9),
+          reason: 'On a narrow phone, the card draws only the two columns '
+              'of cells that have room next to the cell of the app, and '
+              'lights up the three of the five cells that are in them.',
         );
 
         // Each step, with its path, which a tap still copies.

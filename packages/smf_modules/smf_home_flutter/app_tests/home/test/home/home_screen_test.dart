@@ -167,6 +167,14 @@ void main() {
           );
         }
 
+        expect(
+          cells(card()),
+          paintsExactlyCountTimes(#drawRect, 17),
+          reason: 'On a phone of the usual width, the card draws four '
+              'columns of three cells next to the cell of the app, and '
+              'lights up five of them.',
+        );
+
         // The steps, in their order.
         expect(
           text('nextTitle'),
