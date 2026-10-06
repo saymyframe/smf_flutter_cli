@@ -2,19 +2,25 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_home_flutter/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 
 /// The modules of the tests: flutter_core, which creates the app, go_router,
-/// which routes it, and this one.
+/// which routes it, this one, gen_l10n, which keeps the texts of the app,
+/// for the label of the destination of the screen, and shared_preferences,
+/// in which the app remembers its language.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
   HomeModule(),
+  GenL10nModule(),
+  SharedPreferencesModule(),
 ];
 
 /// The path of the screen of the module in the app.
@@ -120,7 +126,9 @@ void main() {
   const module = HomeModule();
 
   group('HomeModule', () {
-    test('is a feature without variants, which requires the router', () {
+    test(
+        'is a feature without variants, which requires the router and uses '
+        'the localization role', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, const ModuleId('home'));
@@ -129,7 +137,8 @@ void main() {
       // The kind makes a feature require the router.
       expect(descriptor.requires, isEmpty);
       expect(descriptor.effectiveRequires, {routerRole});
-      expect(descriptor.uses, isEmpty);
+      // For the label of its destination, in an app with texts.
+      expect(descriptor.effectiveUses, {localizationRole});
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.variants, isNull);
     });
@@ -157,7 +166,7 @@ void main() {
       expect(route.children, isEmpty);
       expect(route.startCandidate, isTrue);
       final destination = route.destination!;
-      expect(destination.label, 'Home');
+      expect(destination.label.en, 'Home');
       // A constant, so that the main navigation can be one.
       expect(destination.icon.code, 'Icons.home');
       final import = destination.icon.imports.single;
@@ -174,11 +183,16 @@ void main() {
       results = await ContractHarness(ModuleRegistry(_modules)).checkAll();
     });
 
-    test('builds the apps with and without home', () {
+    test(
+        'builds the apps with and without home, and the app of home with '
+        'and without the texts of the app', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router',
         'flutter_core',
+        'home with localization',
         'home',
+        'gen_l10n',
+        'shared_preferences',
       ]);
     });
 
@@ -222,20 +236,30 @@ void main() {
     });
 
     test(
-        'gets the brick of the screen, the route and the note for coding '
-        'agents, and nothing else', () {
+        'gets the brick of the screen, the label of its destination as a '
+        'text of the module, the route and the note for coding agents, and '
+        'nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(HomeModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(4));
       final brick = contributions.first as BrickContribution;
       expect(brick.bundle.name, 'home');
       expect(brick.bundle.files.map((file) => file.path), [_screen]);
       expect(brick.vars, isEmpty);
+      final texts = contributions.whereType<RoleData<TextsData>>().single;
+      expect(texts.role, localizationRole);
+      expect(texts.when, isEmpty);
       expect(
-        (contributions[1] as RoleData<RoutesData>).value.routes.single.name,
+        contributions
+            .whereType<RoleData<RoutesData>>()
+            .single
+            .value
+            .routes
+            .single
+            .name,
         'home',
       );
       final note = contributions.last as SocketContribution;
@@ -363,6 +387,62 @@ void main() {
       expect(
         _returnedBy(screen, 'build').toSource(),
         "Scaffold(appBar: AppBar(title: const Text('Contract App')))",
+      );
+    });
+  });
+
+  group('the label of the destination of the screen', () {
+    /// The label as the layout role gets it from the routes of the module,
+    /// whichever module provides the role.
+    LocalizedText labelOf(ContractResult result) => routerRole
+        .facadeOf(routerRole.hookInput(result.hook!))
+        .destinations
+        .single
+        .route
+        .destination!
+        .label;
+
+    test(
+        'is a text of the module, in English and in Ukrainian, which the '
+        'module gives the localization role', () async {
+      final result = await _rendered(const [HomeModule.id, GenL10nModule.id]);
+      final input = localizationRole.hookInput(result.hook!);
+
+      final label = localizationRole.textsIn(input).single;
+      expect(label.owner, const ModuleOrigin(HomeModule.id));
+      expect(label.getter, 'homeLabel');
+      expect(label.text.en, 'Home');
+      expect(label.text.translations, {'uk': 'Головна'});
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+      // The text of the label of the destination is that text, so the main
+      // navigation of an app with texts reads it from them.
+      expect(labelOf(result), same(label.text));
+      expect(
+        localizationRole
+            .appTextOf(
+              localizationRole.hookInput(result.hook!),
+              const ModuleOrigin(HomeModule.id),
+              labelOf(result),
+            )
+            ?.getter,
+        'homeLabel',
+      );
+    });
+
+    test(
+        'is its English text in an app without the localization role, whose '
+        'screen is the same', () async {
+      final without = await _rendered(const [HomeModule.id]);
+      final withTexts =
+          await _rendered(const [HomeModule.id, GenL10nModule.id]);
+
+      expect(without.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(labelOf(without).en, 'Home');
+      // The screen shows the name of the app, which is no text of the
+      // module, so it reads nothing from the texts of the app.
+      expect(
+        withTexts.app!.files[_screen]!.text,
+        without.app!.files[_screen]!.text,
       );
     });
   });

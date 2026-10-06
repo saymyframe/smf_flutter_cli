@@ -19,10 +19,13 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// When a module provides the layout role and the app has destinations,
 /// they form the main navigation: a `StatefulShellRoute.indexedStack` with
 /// a branch for each destination, in the order of the features, which
-/// shows the `AppShell` of the layout. Each branch keeps its stack, with the
-/// routes below its destination, while another is selected, and the app
-/// opens on the branch of its start route. The other top-level routes stay
-/// outside the main navigation, which the router matches first.
+/// shows the `AppShell` of the layout. The shell gets `appDestinations`,
+/// the list that the layout role generates with the label and the icon of
+/// each destination, in the order of the branches, so the module renders
+/// neither. Each branch keeps its stack, with the routes below its
+/// destination, while another is selected, and the app opens on the branch
+/// of its start route. The other top-level routes stay outside the main
+/// navigation, which the router matches first.
 ///
 /// Screens get the values of their parameters from the location, parsed
 /// with `tryParse`, a `bool` being `true` or `false` exactly: an optional

@@ -82,7 +82,9 @@ With `event_bus`:
 ## Layout
 
 - `AppShell` of `lib/core/layout/app_shell.dart` only shows the main navigation around the screen of the selected destination. The router creates it, with its `destinations`, `currentIndex`, `onSelect` and `body`, and keeps the stack of each destination, so keep these parameters. Without destinations, the router creates no `AppShell`.
-- A destination is a `Destination` of `lib/core/layout/destination.dart`, a label and an icon, for a top-level route that needs no values. The routes below it stay in its stack, and every other top-level route shows over the main navigation.
+- A destination is a `Destination` in `appDestinations` of `lib/core/layout/destination.dart`, an icon and a label, for a top-level route that needs no values. The routes below it stay in its stack, and every other top-level route shows over the main navigation.
+- The label of a `Destination` is a top-level function that takes a `BuildContext` and returns the text, so that `appDestinations` stays `const`. Show a label with `destination.label(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a destination, add its `Destination` to `appDestinations` with a function for its label, and give the router a branch for it at the same index.
 - `go()` to a location in the main navigation selects its destination. From a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError`: use `go()`.
 
 - `AppShell` hides its `NavigationBar` while the app has fewer than two destinations. Keep to five destinations, the most that a navigation bar should have.
@@ -142,7 +144,7 @@ With `go_router`:
 - The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
 - To follow the screen that the user sees, add a function to `_screenListeners`.
 
-- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of the `destinations` of `AppShell`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index. A route outside the main navigation goes after the shell route.
+- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of `appDestinations` in `lib/core/layout/destination.dart`, which `AppShell` gets as its `destinations`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index of that list. A route outside the main navigation goes after the shell route.
 
 ## Settings screen
 
@@ -1311,26 +1313,42 @@ class AppShell extends StatelessWidget {
               for (final destination in destinations)
                 NavigationDestination(
                   icon: Icon(destination.icon),
-                  label: destination.label,
+                  label: destination.label(context),
                 ),
             ],
           ),
   );
 }
 === lib/core/layout/destination.dart (role:layout) ===
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 
 /// An item of the main navigation of the app, such as a tab of a bottom bar.
 final class Destination {
-  /// Creates an item labelled [label] with [icon].
+  /// Creates an item with [label] and [icon].
   const Destination({required this.label, required this.icon});
 
-  /// The text of the item.
-  final String label;
+  /// Returns the text of the item in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) label;
 
   /// The icon of the item.
   final IconData icon;
 }
+
+/// The destinations of the main navigation, in the order in which the
+/// router has their branches.
+const List<Destination> appDestinations = [
+  Destination(label: _homeHomeLabel, icon: Icons.home),
+  Destination(label: _settingsSettingsLabel, icon: Icons.settings),
+];
+
+String _homeHomeLabel(BuildContext context) => context.l10n.homeLabel;
+
+String _settingsSettingsLabel(BuildContext context) =>
+    context.l10n.settingsTitle;
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:flutter/foundation.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
@@ -1768,13 +1786,12 @@ final class GuardedNavigation<L> {
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_app/core/analytics/firebase_analytics_service.dart'
     show logFirebaseScreenView;
 import 'package:my_app/core/layout/app_shell.dart' show AppShell;
-import 'package:my_app/core/layout/destination.dart' show Destination;
+import 'package:my_app/core/layout/destination.dart' show appDestinations;
 import 'package:my_app/features/home/home_screen.dart' as screen0;
 import 'package:my_app/features/onboarding/onboarding_screen.dart' as screen2;
 import 'package:my_app/features/settings/settings_screen.dart' as screen1;
@@ -1813,10 +1830,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         // observers of the root navigator are not told about its pages.
         notifyRootObserver: false,
         builder: (context, state, shell) => AppShell(
-          destinations: const [
-            Destination(label: 'Home', icon: Icons.home),
-            Destination(label: 'Settings', icon: Icons.settings),
-          ],
+          destinations: appDestinations,
           currentIndex: shell.currentIndex,
           onSelect: shell.goBranch,
           body: shell,
@@ -2768,6 +2782,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
   "@@locale": "en",
+  "homeLabel": "Home",
   "settingsTitle": "Settings",
   "onboardingWelcome": "Welcome! We are glad you are here.",
   "onboardingReadyTitle": "You are all set",
@@ -2785,6 +2800,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
   "@@locale": "uk",
+  "homeLabel": "Головна",
   "settingsTitle": "Налаштування",
   "onboardingWelcome": "Вітаємо! Раді, що ви з нами.",
   "onboardingReadyTitle": "Усе готово",

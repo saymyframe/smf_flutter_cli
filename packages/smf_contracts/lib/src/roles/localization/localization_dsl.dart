@@ -30,12 +30,31 @@ final class TextsData {
   final List<LocalizedText> texts;
 }
 
+/// The data of a role other than the [LocalizationRole] with texts that a
+/// user sees, such as the routes of a module, whose destinations of the
+/// main navigation have labels.
+///
+/// The role that takes such data requires or uses the [LocalizationRole],
+/// and its template reads each text with [LocalizationRole.expressionOf],
+/// as a text of the module that gave the data. A module that lists the
+/// [LocalizationRole] among its roles gives that role each of these texts
+/// too, among its [TextsData], and the app then shows the text in its
+/// language: the rule `localization.texts` reports a text of such data that
+/// the module did not give the role, or gave it otherwise. The texts of a
+/// module that does not list the role are in English in every app, so they
+/// have no translations: the module rule of the role of the data reports
+/// one that has, with [LocalizationRole.dataTextProblems].
+abstract interface class DataWithTexts {
+  /// The texts of the data that a user sees.
+  Iterable<LocalizedText> get shownTexts;
+}
+
 /// A text of the app that a user sees, in English and in the other
 /// languages of its owner.
 ///
 /// It has no parameters and no plural forms, so neither its English text
 /// nor a translation has a `{` or a `}`, which mark a parameter in the
-/// formats of translations.
+/// formats of translations. A text of nothing but spaces is no text.
 @immutable
 final class LocalizedText {
   /// Creates the text [name] that reads [en] in English.
@@ -84,7 +103,7 @@ final class LocalizedText {
         'title.',
       );
     }
-    if (en.isEmpty) problems.add('$what has no English text.');
+    if (en.trim().isEmpty) problems.add('$what has no English text.');
     for (final language in translations.keys) {
       if (language == _english) {
         problems.add(
@@ -97,7 +116,7 @@ final class LocalizedText {
           'of a language: two or three lowercase letters, such as uk.',
         );
       }
-      if (translations[language]!.isEmpty) {
+      if (translations[language]!.trim().isEmpty) {
         problems.add(
           '$what has an empty translation into $language; leave a language '
           'out to read the text in English there.',

@@ -67,8 +67,11 @@ void main() {
       );
       final shell = tester.widget<AppShell>(_shells());
       final first = shell.currentIndex;
+      // The label of the destination, in the language of the app, which
+      // is English on the device of a test.
+      final context = tester.element(_shells());
       final second = shell.destinations.indexWhere(
-        (destination) => destination.label == 'Second',
+        (destination) => destination.label(context) == 'Second',
       );
       expect(second, isNonNegative, reason: 'The AppShell has Second.');
       shell.onSelect(second);

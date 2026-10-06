@@ -18,13 +18,23 @@ import 'package:smf_pipeline/src/validation.dart';
 /// with who contributed the fragment.
 final class AddedImport {
   /// Creates the record of [import], needed by [contributor].
-  const AddedImport(this.import, this.contributor);
+  const AddedImport(this.import, this.contributor, {this.fromHook = false});
 
   /// The import, as the fragment gave it.
   final ImportRef import;
 
   /// Who contributed the fragment that needs it.
   final ContributionOrigin contributor;
+
+  /// Whether a render hook of [contributor] gave the fragment, one of
+  /// [RoleOutput.fragments] or a fragment variable of [RoleOutput.vars],
+  /// which the hook wrote from the data of its role.
+  ///
+  /// The other fragments are those of the contributions of [contributor]:
+  /// a fragment for a socket, and the code of a variable of a brick that
+  /// depends on a role (see [RoleVar]). They are the same whatever the
+  /// modules of the app give the roles.
+  final bool fromHook;
 }
 
 /// A file of the app that stage 8 rendered.
@@ -439,6 +449,7 @@ RenderedFile _withImports(
             show: import.import.show,
           ),
           import.contributor,
+          fromHook: import.fromHook,
         ),
   ]);
 }
@@ -579,6 +590,7 @@ final class _RenderHooks {
         origin,
         applies: fragment.when.every(present.contains) &&
             (socket.role == null || present.contains(socket.role)),
+        fromHook: true,
       );
       issues.addAll(contributionIssues(collected, registry, resolution));
       if (collected.applies) output.fragments.add(collected);
@@ -656,7 +668,13 @@ final class _SocketTexts {
     for (final collected in order.contributions) {
       final fragment = (collected.contribution as SocketContribution).fragment;
       for (final import in fragment?.imports ?? const <ImportRef>[]) {
-        added.add(AddedImport(import, collected.origin));
+        added.add(
+          AddedImport(
+            import,
+            collected.origin,
+            fromHook: collected.fromHook,
+          ),
+        );
       }
     }
   }
@@ -750,6 +768,7 @@ final class _CodeVar {
   const _CodeVar(
     this.fragment, {
     required this.contributor,
+    required this.fromHook,
     required this.inSection,
     this.elsewhere = const [],
   });
@@ -759,6 +778,10 @@ final class _CodeVar {
 
   /// Who contributed the code.
   final ContributionOrigin contributor;
+
+  /// Whether the variable is a fragment variable of a render hook, rather
+  /// than a variable of the brick.
+  final bool fromHook;
 
   /// What a message tells a template that reads the variable inside a
   /// mustache section, as a sentence: what decides the code that the
@@ -865,6 +888,7 @@ final class _BrickRenderer {
         key: _CodeVar(
           value,
           contributor: owner,
+          fromHook: true,
           inSection: 'the render hook decides what the variable holds '
               'instead.',
         ),
@@ -892,6 +916,7 @@ final class _BrickRenderer {
       code[key] = _CodeVar(
         fragment,
         contributor: origin,
+        fromHook: false,
         inSection: 'the presence of the ${value.role} alone decides what '
             'the variable holds, so code that needs another role too goes '
             'into a brick of its own, contributed with when.',
@@ -1175,7 +1200,11 @@ bool _readFragmentVariables(
     variables.names.putIfAbsent(file, () => {}).add(name);
     variables.imports.putIfAbsent(file, () => []).addAll([
       for (final import in variable.fragment.imports)
-        AddedImport(import, variable.contributor),
+        AddedImport(
+          import,
+          variable.contributor,
+          fromHook: variable.fromHook,
+        ),
     ]);
     variables.elsewhere.putIfAbsent(file, () => []).addAll(variable.elsewhere);
   }

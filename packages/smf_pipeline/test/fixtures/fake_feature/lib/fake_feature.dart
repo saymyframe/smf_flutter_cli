@@ -4,13 +4,15 @@
 /// parameter, a destination of the main navigation, a variant for each
 /// fake state manager, and a composition file that resolves a service, so
 /// it uses the navigation facade, the annotation sockets of the router, and
-/// the rules for resolving services. The second has another start route
-/// with a destination, so an app with both has two screens that can start
-/// it and two destinations, a route outside the main navigation, whose
-/// page a router shows over it, and a setting for the settings screen of
-/// an app that has one. Its screens and its setting show texts of the
-/// module, which it gives the localization role: in the language of the
-/// app with the role, and in English without it. The third has two guards
+/// the rules for resolving services. It does not list the localization
+/// role, so the label of its destination is in English in every app. The
+/// second has another start route with a destination, so an app with both
+/// has two screens that can start it and two destinations, a route outside
+/// the main navigation, whose page a router shows over it, and a setting
+/// for the settings screen of an app that has one. Its screens, its setting
+/// and the label of its destination are texts of the module, which it gives
+/// the localization role: in the language of the app with the role, and in
+/// English without it. The third has two guards
 /// over gates that a test opens and closes, each with a route to show while
 /// its gate is closed, the first with a route below it. It depends on one
 /// of the two fake state managers, so the apps with every fixture come with
@@ -70,8 +72,10 @@ final class FakeFeatureModule extends SmfModule {
                 'FixtureHomeScreen',
                 import: ImportRef.app('$_folder/fixture_home_screen.dart'),
               ),
+              // The module does not list the localization role, so its
+              // label is in English in every app.
               destination: Destination(
-                label: 'Fixture',
+                label: LocalizedText('label', en: 'Fixture'),
                 icon: Fragment(
                   'Icons.star',
                   imports: [ImportRef('package:flutter/material.dart')],
@@ -103,7 +107,8 @@ final class FakeFeatureModule extends SmfModule {
 /// navigation, and a screen outside the main navigation, which a router
 /// shows over it.
 ///
-/// It uses the localization role: each screen shows a text of the module.
+/// It uses the localization role: each screen shows a text of the module,
+/// and the label of its destination is one too.
 ///
 /// It uses the settings screen role too: in an app with a settings screen,
 /// it generates the widget of a setting, which shows a text of the module
@@ -132,6 +137,15 @@ final class FakeSecondModule extends SmfModule {
     LocalizedText('outside', en: "Outside the app's main navigation"),
   ]);
 
+  /// The label of the destination of the start screen, in English and in
+  /// Ukrainian, which the module gives the localization role too: the main
+  /// navigation shows it in the language of an app with that role.
+  static const label = LocalizedText(
+    'label',
+    en: 'Second',
+    translations: {'uk': 'Другий'},
+  );
+
   /// The text of the setting, which only an app with a settings screen has.
   static const settingTexts = TextsData([
     LocalizedText(
@@ -158,6 +172,7 @@ final class FakeSecondModule extends SmfModule {
           vars: localizationRole.varsOf(id, texts),
         ),
         localizationRole.data(texts),
+        localizationRole.data(const TextsData([label])),
         routerRole.data(
           const RoutesData([
             Route(
@@ -168,7 +183,7 @@ final class FakeSecondModule extends SmfModule {
                 import: ImportRef.app('$_folder/fixture_second_screen.dart'),
               ),
               destination: Destination(
-                label: 'Second',
+                label: label,
                 icon: Fragment(
                   'Icons.looks_two',
                   imports: [

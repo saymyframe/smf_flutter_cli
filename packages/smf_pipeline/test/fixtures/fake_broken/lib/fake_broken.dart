@@ -13,6 +13,7 @@ library;
 import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
+import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
@@ -478,27 +479,50 @@ final class BrokenModule extends SmfModule {
   }
 }
 
-/// A layout with one known bug: its `AppShell` shows a tab at the bottom
-/// for each destination, but gives only the first one to the code that
-/// reads its `destinations`, as code that knows only the layout role does.
+/// A layout with one known bug: a bar at the bottom with a tab for each
+/// destination, whose `AppShell` breaks what the layout role says of it in
+/// one way.
 final class BrokenLayoutModule extends SmfModule {
-  /// Creates the module.
-  const BrokenLayoutModule();
+  /// The layout whose `AppShell` shows a tab for each destination, but
+  /// gives only the first one to the code that reads its `destinations`, as
+  /// code that knows only the layout role does.
+  const BrokenLayoutModule.givingFirstDestination()
+      : id = const ModuleId('broken_layout_first_destination'),
+        _description = 'Tabs at the bottom that hide a destination (fixture)',
+        _keepsLabels = false;
+
+  /// The layout whose `AppShell` reads the label of each destination when
+  /// it is first built and keeps it, rather than reading it each time it
+  /// builds: once the app is in another language, its tabs still show the
+  /// labels in the language of before.
+  const BrokenLayoutModule.keepingLabels()
+      : id = const ModuleId('broken_layout_keeps_labels'),
+        _description = 'Tabs at the bottom with the labels of the first '
+            'build (fixture)',
+        _keepsLabels = true;
 
   /// The id of the module.
-  static const id = ModuleId('broken_layout_first_destination');
+  final ModuleId id;
+
+  final String _description;
+
+  /// Whether the bug is that of [BrokenLayoutModule.keepingLabels].
+  final bool _keepsLabels;
 
   @override
-  ModuleDescriptor get descriptor => const ModuleDescriptor(
+  ModuleDescriptor get descriptor => ModuleDescriptor(
         id: id,
-        description: 'Tabs at the bottom that hide a destination (fixture)',
+        description: _description,
         kind: ModuleKinds.layout,
-        providers: [_BrokenLayoutProvider()],
+        providers: const [_BrokenLayoutProvider()],
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      [BrickContribution(brokenLayoutBundle)];
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          _keepsLabels ? brokenLayoutLabelsBundle : brokenLayoutBundle,
+        ),
+      ];
 }
 
 /// Provides the layout role, with any number of destinations.

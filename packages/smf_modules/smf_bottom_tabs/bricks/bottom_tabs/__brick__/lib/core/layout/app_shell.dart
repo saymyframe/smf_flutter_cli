@@ -43,7 +43,7 @@ class AppShell extends StatelessWidget {
               for (final destination in destinations)
                 NavigationDestination(
                   icon: Icon(destination.icon),
-                  label: destination.label,
+                  label: destination.label(context),
                 ),
             ],
           ),

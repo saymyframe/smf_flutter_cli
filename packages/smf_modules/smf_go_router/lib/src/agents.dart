@@ -14,11 +14,11 @@ With `go_router`:
 /// the section of the router: what the first destination needs, since the
 /// file of the module then has no main navigation to add it to.
 final String firstDestinationAgentNote = '''
-- The app has no destination yet, so that file has no main navigation. For the first one, add after the route `/` a `StatefulShellRoute.indexedStack` with `notifyRootObserver: false`, a `StatefulShellBranch` with `observers: _observers()` for each destination, and a `builder` that returns `${LayoutRole.appShell.name}` with the `${LayoutRole.destination.name}`s, `shell.currentIndex`, `shell.goBranch` and `shell` as its `body`. Then make `push()` and `replace()` throw a `StateError` for a location in the main navigation while a page is shown over it.
+- The app has no destination yet, so that file has no main navigation. For the first one, add after the route `/` a `StatefulShellRoute.indexedStack` with `notifyRootObserver: false`, a `StatefulShellBranch` with `observers: _observers()` for each destination, and a `builder` that returns `${LayoutRole.appShell.name}` with `${LayoutRole.appDestinations}` of `${LayoutRole.destinationFile}`, `shell.currentIndex`, `shell.goBranch` and `shell` as its `body`. Then make `push()` and `replace()` throw a `StateError` for a location in the main navigation while a page is shown over it.
 ''';
 
 /// The note of the module for an app with a main navigation, in the section
 /// of the router: where the destinations are among the routes.
 final String mainNavigationAgentNote = '''
-- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of the `destinations` of `${LayoutRole.appShell.name}`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `${LayoutRole.destination.name}` at the same index. A route outside the main navigation goes after the shell route.
+- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of `${LayoutRole.appDestinations}` in `${LayoutRole.destinationFile}`, which `${LayoutRole.appShell.name}` gets as its `destinations`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `${LayoutRole.destination.name}` at the same index of that list. A route outside the main navigation goes after the shell route.
 ''';

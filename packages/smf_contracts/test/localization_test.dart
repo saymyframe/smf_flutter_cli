@@ -50,6 +50,15 @@ RoleData<Object> _ofVariant(
           ModuleOrigin(ModuleId(module), variant: ModuleId(variant)),
         );
 
+/// The data of a role of the tests with texts that a user sees, as the
+/// routes of a module have the labels of their destinations.
+final class _Shown implements DataWithTexts {
+  const _Shown(this.shownTexts);
+
+  @override
+  final List<LocalizedText> shownTexts;
+}
+
 /// The messages of [issues].
 List<String> _messages(List<SmfIssue> issues) =>
     [for (final issue in issues) issue.message];
@@ -129,12 +138,18 @@ void main() {
       }
     });
 
-    test('needs an English text', () {
-      expect(
-        const LocalizedText('title', en: '', translations: {'uk': 'Назва'})
-            .problems(),
-        ['The text "title" has no English text.'],
-      );
+    test('needs an English text, which nothing but spaces is not', () {
+      for (final english in ['', ' ', '\n\t ']) {
+        expect(
+          LocalizedText(
+            'title',
+            en: english,
+            translations: const {'uk': 'Назва'},
+          ).problems(),
+          ['The text "title" has no English text.'],
+          reason: '"$english"',
+        );
+      }
     });
 
     test('takes translations by the code of a language other than en', () {
@@ -167,14 +182,19 @@ void main() {
       );
     });
 
-    test('has no empty translation', () {
-      expect(
-        const LocalizedText('title', en: 'Title', translations: {'uk': ''})
-            .problems()
-            .single,
-        'The text "title" has an empty translation into uk; leave a language '
-        'out to read the text in English there.',
-      );
+    test('has no empty translation, nor one of nothing but spaces', () {
+      for (final translation in ['', '  ']) {
+        expect(
+          LocalizedText(
+            'title',
+            en: 'Title',
+            translations: {'uk': translation},
+          ).problems().single,
+          'The text "title" has an empty translation into uk; leave a '
+          'language out to read the text in English there.',
+          reason: '"$translation"',
+        );
+      }
     });
 
     test('has no braces, which mark the parameters that it does not take', () {
@@ -672,37 +692,152 @@ void main() {
   group('the code that reads a text', () {
     const home = ModuleOrigin(ModuleId('home'));
 
-    test('is its getter of context.l10n in an app with the role', () {
-      final own = localizationRole.expressionOf(
-        inputOf(localizationRole),
-        home,
-        _title,
-      );
+    test(
+        'is the getter of context.l10n in an app with the role, for a text '
+        'of the template of a role', () {
       final ofTemplate = localizationRole.expressionOf(
+        // The template gave the role no text yet: the code reads the
+        // getter, so that a rule of the role reports what is missing.
         inputOf(_themeRole, present: {localizationRole}),
         RoleTemplateOrigin(_themeRole),
         const LocalizedText('mode', en: 'Theme'),
       );
+      final own = localizationRole.expressionOf(
+        inputOf(localizationRole),
+        const RoleTemplateOrigin(localizationRole),
+        _title,
+      );
 
-      expect(own.code, 'context.l10n.homeTitle');
-      expect(own.imports, [_texts]);
       expect(ofTemplate.code, 'context.l10n.appThemeMode');
       expect(ofTemplate.imports, [_texts]);
+      expect(own.code, 'context.l10n.localizationTitle');
+      expect(own.imports, [_texts]);
+    });
+
+    test(
+        'is the getter of context.l10n for a text of a module only when the '
+        'module gave the role the text', () {
+      final input = inputOf(
+        _themeRole,
+        data: [
+          _of('home', const [_title]),
+          // The variant of a module gives texts of the module.
+          _ofVariant('feed', 'bloc', const [_openDetails]),
+        ],
+        present: {localizationRole},
+      );
+      Fragment read(String module, LocalizedText text) =>
+          localizationRole.expressionOf(
+            input,
+            ModuleOrigin(ModuleId(module)),
+            text,
+          );
+
+      expect(read('home', _title).code, 'context.l10n.homeTitle');
+      expect(read('home', _title).imports, [_texts]);
+      expect(read('feed', _openDetails).code, 'context.l10n.feedOpenDetails');
+      // A text that the module did not give the role, and the text of a
+      // module that gave it none, as one that does not list the role: the
+      // app has no getter for them, so the code is the English text.
+      expect(read('home', _openDetails).code, "'Open'");
+      expect(read('home', _openDetails).imports, isEmpty);
+      expect(read('plain', _title).code, "'Settings'");
+      expect(read('plain', _title).imports, isEmpty);
+    });
+
+    test(
+        'tells which text of the app a text of an owner is, if the owner '
+        'gave the role one of its name', () {
+      final input = inputOf(
+        _themeRole,
+        data: [
+          _of('home', const [_title]),
+          _ofVariant('feed', 'bloc', const [_openDetails]),
+          _ofTemplate(_themeRole, const [LocalizedText('mode', en: 'Theme')]),
+        ],
+        present: {localizationRole},
+      );
+      const home = ModuleOrigin(ModuleId('home'));
+
+      final title = localizationRole.appTextOf(input, home, _title)!;
+      expect(title.owner, home);
+      expect(title.text, same(_title));
+      expect(title.getter, 'homeTitle');
+      // By the name of the text, for the module of a variant too.
+      expect(
+        localizationRole
+            .appTextOf(
+              input,
+              const ModuleOrigin(ModuleId('feed'), variant: ModuleId('bloc')),
+              const LocalizedText('openDetails', en: 'Other'),
+            )!
+            .text,
+        same(_openDetails),
+      );
+      expect(
+        localizationRole
+            .appTextOf(
+              input,
+              RoleTemplateOrigin(_themeRole),
+              const LocalizedText('mode', en: 'Theme'),
+            )!
+            .getter,
+        'appThemeMode',
+      );
+      // Not the text of another owner, and none in an app without the
+      // role.
+      expect(localizationRole.appTextOf(input, home, _openDetails), isNull);
+      expect(
+        localizationRole.appTextOf(
+          input,
+          const ModuleOrigin(ModuleId('plain')),
+          _title,
+        ),
+        isNull,
+      );
+      expect(
+        localizationRole.appTextOf(
+          inputOf(
+            _themeRole,
+            data: [
+              _of('home', const [_title]),
+            ],
+          ),
+          home,
+          _title,
+        ),
+        isNull,
+      );
     });
 
     test('is the English text in an app without the role', () {
+      const text = LocalizedText(
+        'mode',
+        en: r"The app's $theme",
+        translations: {'uk': 'Тема'},
+      );
       final fragment = localizationRole.expressionOf(
         inputOf(_themeRole),
         RoleTemplateOrigin(_themeRole),
-        const LocalizedText(
-          'mode',
-          en: r"The app's $theme",
-          translations: {'uk': 'Тема'},
+        text,
+      );
+      // The text of a module too, which gave the role the text: its data
+      // does not apply in an app without the role.
+      final ofModule = localizationRole.expressionOf(
+        inputOf(
+          _themeRole,
+          data: [
+            _of('home', const [text]),
+          ],
         ),
+        home,
+        text,
       );
 
       expect(fragment.code, r"'The app\'s \$theme'");
       expect(fragment.imports, isEmpty);
+      expect(ofModule.code, fragment.code);
+      expect(ofModule.imports, isEmpty);
     });
 
     test('is for a role that requires or uses the role, and for an owner', () {
@@ -724,6 +859,95 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('the problems of a text that a module gives another role', () {
+    const label = LocalizedText(
+      'label',
+      en: 'Home',
+      translations: {'uk': 'Головна'},
+    );
+
+    ModuleDescriptor module({
+      Set<Role> uses = const {},
+      Set<Role> requires = const {},
+      List<RoleProvider> providers = const [],
+    }) =>
+        ModuleDescriptor(
+          id: const ModuleId('home'),
+          description: 'Home',
+          kind: plainKind,
+          uses: uses,
+          requires: requires,
+          providers: providers,
+        );
+
+    test('are those of the text itself', () {
+      const bad = LocalizedText('Label', en: '');
+
+      for (final descriptor in [
+        module(),
+        module(uses: {localizationRole}),
+      ]) {
+        expect(
+          localizationRole.dataTextProblems(descriptor, bad),
+          bad.problems(),
+        );
+      }
+      expect(bad.problems(), hasLength(2));
+    });
+
+    test(
+        'are its translations in a module that does not list the role, whose '
+        'texts every app shows in English', () {
+      expect(
+        localizationRole.dataTextProblems(module(), label).single,
+        'The text "label" has a translation into uk, but the module home '
+        'does not list the localization role among its roles, so every app '
+        'would show the text in English. Add the role to the uses of the '
+        'module and give it the text among the texts of the module, or leave '
+        'the translation out.',
+      );
+      expect(
+        localizationRole
+            .dataTextProblems(
+              module(uses: {routerRole}),
+              const LocalizedText(
+                'label',
+                en: 'Home',
+                translations: {'uk': 'Головна', 'de': 'Start'},
+              ),
+            )
+            .single,
+        allOf(
+          startsWith('The text "label" has translations into uk, de, but the '),
+          endsWith('or leave the translations out.'),
+        ),
+      );
+      // In English alone, it is the text of every app.
+      expect(
+        localizationRole.dataTextProblems(
+          module(),
+          const LocalizedText('label', en: 'Home'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('are none in a module that uses, requires or provides the role', () {
+      for (final descriptor in [
+        module(uses: {localizationRole}),
+        module(requires: {localizationRole}),
+        module(providers: const [RoleProvider.plain(localizationRole)]),
+        // The provider of a role that uses the role lists it too.
+        module(providers: [RoleProvider.plain(_themeRole)]),
+      ]) {
+        expect(
+          localizationRole.dataTextProblems(descriptor, label),
+          isEmpty,
+        );
+      }
     });
   });
 
@@ -1038,6 +1262,296 @@ void main() {
     });
   });
 
+  group('the rule localization.texts, for the texts of the data of a module',
+      () {
+    const home = ModuleId('home');
+    const label = LocalizedText(
+      'label',
+      en: 'Home',
+      translations: {'uk': 'Головна'},
+    );
+    const icon = Fragment('Icons.home');
+
+    /// The routes of the module, with a destination labelled with each of
+    /// [labels].
+    RoleData<RoutesData> routes(List<LocalizedText> labels) => routerRole.data(
+          RoutesData([
+            for (final (index, label) in labels.indexed)
+              Route(
+                '/tab$index',
+                name: 'tab$index',
+                screen: ScreenRef(
+                  'Tab${index}Screen',
+                  import: ImportRef.app('features/home/tab$index.dart'),
+                ),
+                destination: Destination(label: label, icon: icon),
+              ),
+            const Route(
+              '/plain',
+              name: 'plain',
+              screen: ScreenRef(
+                'PlainScreen',
+                import: ImportRef.app('features/home/plain.dart'),
+              ),
+            ),
+          ]),
+        );
+
+    /// The issues of the module `home`, which gives the role [texts] and
+    /// the other roles [contributions], in an app with the roles [present].
+    List<SmfIssue> check(
+      List<LocalizedText> texts,
+      List<Contribution> contributions, {
+      Set<Role> present = const {routerRole},
+    }) =>
+        localizationRole.checkModule(
+          ModuleRuleRequest(
+            hook: RoleHookRequest(
+              data: [
+                if (texts.isNotEmpty) _of('home', texts),
+                // The texts of another module are not those of this one.
+                _of('feed', const [label]),
+              ],
+              presentRoles: {localizationRole, ...present},
+              context: testContext,
+            ),
+            module: const ModuleDescriptor(
+              id: home,
+              description: 'Home',
+              kind: plainKind,
+              requires: {routerRole},
+              uses: {localizationRole},
+            ),
+            // Every contribution of the module, as the pipeline gives them
+            // to the rule: its texts too, which are data without texts of
+            // another role.
+            contributions: [
+              if (texts.isNotEmpty) localizationRole.data(TextsData(texts)),
+              ...contributions,
+            ],
+          ),
+        );
+
+    test('the routes of a module have the labels of their destinations', () {
+      const other = LocalizedText('other', en: 'Other');
+
+      expect(routes(const [label, other]).value.shownTexts, [label, other]);
+      expect(routes(const []).value.shownTexts, isEmpty);
+      expect(routes(const [label]).value, isA<DataWithTexts>());
+    });
+
+    test(
+        'passes the label of a destination that is one of the texts of the '
+        'module', () {
+      expect(
+        check(
+          const [_title, label],
+          [
+            routes(const [label, label]),
+          ],
+        ),
+        isEmpty,
+      );
+      // The same text, also when it is another object.
+      expect(
+        check(
+          const [label],
+          [
+            routes([
+              LocalizedText(
+                'label',
+                en: 'Home',
+                translations: {'uk': 'Головна'.substring(0)},
+              ),
+            ]),
+          ],
+        ),
+        isEmpty,
+      );
+      // Routes without destinations, and data of other roles without texts.
+      expect(
+        check(
+          const [_title],
+          [
+            routes(const []),
+            settingsScreenRole.data(const SettingsScreenRoute('plain')),
+          ],
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'reports the label of a destination that the module did not give '
+        'the role, which the app would show in English only', () {
+      final issues = check(
+        const [_title],
+        [
+          // Twice in the routes, and reported once.
+          routes(const [label, label]),
+        ],
+      );
+
+      expect(
+        issues.single.message,
+        'The module gives the router role the text "label" in its data, '
+        'but not the localization role, so the app would show it in '
+        'English in every language.',
+      );
+      expect(
+        issues.single.hint,
+        'Give the role the text among the texts of the module: '
+        'localizationRole.data(TextsData([...])).',
+      );
+      expect(issues.single.origin, const ModuleOrigin(home));
+      // A module that gives the role no text at all, too.
+      expect(
+        check(const [], [
+          routes(const [label]),
+        ]),
+        hasLength(1),
+      );
+    });
+
+    test(
+        'reports a label that differs from the text of its name that the '
+        'module gave the role', () {
+      String differs(String other) =>
+          'The module gives the router role the text "label" in its data, '
+          'and the localization role a text of that name that differs from '
+          "it: 'Home', uk: 'Головна' and $other.";
+
+      for (final (given, shown) in const [
+        (LocalizedText('label', en: 'Start'), "'Start'"),
+        (LocalizedText('label', en: 'Home'), "'Home'"),
+        (
+          LocalizedText('label', en: 'Home', translations: {'uk': 'Дім'}),
+          "'Home', uk: 'Дім'",
+        ),
+        (
+          LocalizedText('label', en: 'Home', translations: {'de': 'Start'}),
+          "'Home', de: 'Start'",
+        ),
+        (
+          LocalizedText(
+            'label',
+            en: 'Home',
+            translations: {'uk': 'Головна', 'de': 'Start'},
+          ),
+          "'Home', uk: 'Головна', de: 'Start'",
+        ),
+      ]) {
+        final issue = check(
+          [given],
+          [
+            routes(const [label]),
+          ],
+        ).single;
+
+        expect(issue.message, differs(shown));
+        expect(
+          issue.hint,
+          'Give both roles the same text, such as one constant.',
+        );
+        expect(issue.origin, const ModuleOrigin(home));
+      }
+    });
+
+    test(
+        'reports two labels of one name that differ, of which the app would '
+        'show one for both', () {
+      const cart = LocalizedText(
+        'label',
+        en: 'Cart',
+        translations: {'uk': 'Кошик'},
+      );
+      String differ(int count, String texts) =>
+          'The module gives the router role $count texts named "label" in '
+          'its data that differ: $texts. The app reads a text of a module by '
+          'its name, so it would show the same text for each of them.';
+      const first = "'Home', uk: 'Головна'";
+      const second = "'Cart', uk: 'Кошик'";
+
+      // The module gave the role the first of them, and the app would show
+      // it for the second too. A text that the data has twice counts once.
+      final issue = check(
+        const [label],
+        [
+          routes(const [label, cart, label]),
+        ],
+      ).single;
+      expect(issue.message, differ(2, '$first; $second'));
+      expect(
+        issue.hint,
+        'Give each of these texts a name of its own, and the localization '
+        'role each of them among the texts of the module.',
+      );
+      expect(issue.origin, const ModuleOrigin(home));
+
+      // In the order of the data, whichever of them the module gave the
+      // role, if any, and across the data that the module gives the role.
+      expect(
+        check(
+          const [cart],
+          [
+            routes(const [cart]),
+            routes(const [label, LocalizedText('label', en: 'Start')]),
+          ],
+        ).single.message,
+        differ(3, "$second; $first; 'Start'"),
+      );
+      expect(
+        check(
+          const [_title],
+          [
+            routes(const [label, cart]),
+          ],
+        ).single.message,
+        differ(2, '$first; $second'),
+      );
+    });
+
+    test(
+        'compares the texts of the data of each role on their own: a text '
+        'of a name that the data of two roles have is one of each', () {
+      final shelf = TestRole<_Shown>('shelf');
+      const other = LocalizedText('label', en: 'Shelf');
+
+      // The label of the routes is the text that the module gave the role,
+      // and the text of that name of the other role is not.
+      expect(
+        check(
+          const [label],
+          [
+            routes(const [label]),
+            shelf.data(const _Shown([other, other])),
+          ],
+          present: {routerRole, shelf},
+        ).single.message,
+        'The module gives the shelf role the text "label" in its data, and '
+        'the localization role a text of that name that differs from it: '
+        "'Shelf' and 'Home', uk: 'Головна'.",
+      );
+    });
+
+    test(
+        'leaves the data of a role that the app lacks alone, which the rule '
+        'does not get', () {
+      // The request has every contribution of the module; the rule gets
+      // those that apply.
+      expect(
+        check(
+          const [_title],
+          [
+            routes(const [label]),
+          ],
+          present: const {},
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('the template checks the texts of all owners', () {
     List<String> validate(List<RoleData<Object>> data) => [
           for (final issue in localizationRole.template
@@ -1179,6 +1693,15 @@ void main() {
       kind: plainKind,
       providers: [RoleProvider.plain(_themeRole)],
     );
+    // A provider of that role that lists the localization role itself,
+    // for texts of its own.
+    final tabs = ModuleDescriptor(
+      id: const ModuleId('tabs'),
+      description: 'Tabs',
+      kind: plainKind,
+      providers: [RoleProvider.plain(_themeRole)],
+      uses: const {localizationRole},
+    );
     final data = [
       _of('home', const [_title]),
       _of('shared', const [LocalizedText('ok', en: 'OK')]),
@@ -1187,17 +1710,20 @@ void main() {
     ];
 
     /// The issues of an app whose file at `lib/file.dart`, generated by
-    /// [owner], has [accesses] and [invocations].
+    /// [owner], has [accesses] and [invocations]. The app also has the
+    /// roles [present], and [more] data.
     List<SmfIssue> check(
       ContributionOrigin? owner, {
       List<IndexedMemberAccess> accesses = const [],
       List<IndexedInvocation> invocations = const [],
+      List<RoleData<Object>> more = const [],
+      Set<Role> present = const {},
     }) =>
         localizationRole.checkStructure(
           StructuralRuleRequest(
             hook: RoleHookRequest(
-              data: data,
-              presentRoles: {localizationRole},
+              data: [...data, ...more],
+              presentRoles: {localizationRole, ...present},
               context: testContext,
             ),
             files: {
@@ -1211,13 +1737,14 @@ void main() {
             // role asks.
             texts: const {
               LocalizationRole.textsFile:
-                  'homeTitle sharedOk feedEmpty appThemeMode',
+                  'homeTitle sharedOk feedEmpty appThemeMode boardHeading '
+                      'homeOther feedTitle',
             },
             owners: {
               if (owner != null) 'lib/file.dart': owner,
               LocalizationRole.textsFile: const ModuleOrigin(ModuleId('texts')),
             },
-            modules: [home, shared, feed, plain, provider, settings],
+            modules: [home, shared, feed, plain, provider, settings, tabs],
           ),
         );
 
@@ -1312,25 +1839,173 @@ void main() {
       expect(issues.first.hint, 'Give the role a text of your own.');
     });
 
-    test('lets the template of a role read only its own texts', () {
-      final ofTheme = RoleTemplateOrigin(_themeRole);
+    group('for the template of a role that requires or uses the role', () {
+      // Roles whose data has texts, and a role whose template shows the
+      // texts of its own data and of the data of the first: it requires
+      // that role, and uses one that the app lacks.
+      final shelf = TestRole<_Shown>('shelf');
+      final crate = TestRole<_Shown>('crate');
+      final absent = TestRole<_Shown>('absent');
+      final board = TestRole<_Shown>(
+        'board',
+        requires: {shelf},
+        uses: {localizationRole, absent},
+      );
+      final ofBoard = RoleTemplateOrigin(board);
+      const ok = LocalizedText('ok', en: 'OK');
+      const empty = LocalizedText('empty', en: 'Nothing here');
+      final heading = _ofTemplate(
+        board,
+        const [LocalizedText('heading', en: 'Board')],
+      );
+      String refused(String getter, String text) =>
+          'lib/file.dart reads context.l10n.$getter, the $text, but the '
+          'template of the board role may only read its own texts and those '
+          'that the modules give its role in their data.';
+
+      test(
+          'lets it read its own texts, and the texts of a module that are '
+          'in the data of its role or of a role that it requires or uses', () {
+        expect(
+          check(
+            ofBoard,
+            accesses: const [
+              IndexedMemberAccess('context.l10n', 'boardHeading'),
+              // Such as the label of a destination, a text of a module
+              // that the layout role shows.
+              IndexedMemberAccess('context.l10n', 'homeTitle'),
+              IndexedMemberAccess('context.l10n', 'feedEmpty'),
+            ],
+            more: [
+              heading,
+              dataOf(shelf, const _Shown([_title])),
+              dataOf(board, const _Shown([empty]), module: 'feed'),
+            ],
+            present: {shelf, board},
+          ),
+          isEmpty,
+        );
+      });
+
+      test('reports a text of a module that is in no such data', () {
+        final issues = check(
+          ofBoard,
+          accesses: const [
+            IndexedMemberAccess('context.l10n', 'homeTitle'),
+            IndexedMemberAccess('context.l10n', 'homeOther'),
+            IndexedMemberAccess('context.l10n', 'feedTitle'),
+            IndexedMemberAccess('context.l10n', 'feedEmpty'),
+            IndexedMemberAccess('context.l10n', 'sharedOk'),
+            IndexedMemberAccess('context.l10n', 'appThemeMode'),
+          ],
+          more: [
+            heading,
+            _of('home', const [LocalizedText('other', en: 'Other')]),
+            _of('feed', const [LocalizedText('title', en: 'Feed')]),
+            // The title of home, and no other text of home or of that name.
+            dataOf(shelf, const _Shown([_title])),
+            // Data of a role that the role of the template does not see,
+            // and of one that the app lacks.
+            dataOf(crate, const _Shown([empty]), module: 'feed'),
+            dataOf(absent, const _Shown([ok]), module: 'shared'),
+          ],
+          present: {shelf, board, crate},
+        );
+
+        expect(_messages(issues), [
+          refused('homeOther', 'text other of the module home'),
+          refused('feedTitle', 'text title of the module feed'),
+          refused('feedEmpty', 'text empty of the module feed'),
+          refused('sharedOk', 'text ok of the module shared'),
+          refused(
+            'appThemeMode',
+            'text mode of the template of the app_theme role',
+          ),
+        ]);
+        expect(issues.first.origin, ofBoard);
+        expect(issues.first.path, 'lib/file.dart');
+        expect(
+          issues.first.hint,
+          'Give the role a text of your own. A text of a module comes with '
+          'the data that the module gives your role, a DataWithTexts, and '
+          'the code that reads it from LocalizationRole.expressionOf().',
+        );
+      });
+
+      test('reports a text of a module when no data has texts', () {
+        // The role of the template gets no data at all.
+        final ofTheme = RoleTemplateOrigin(_themeRole);
+
+        expect(
+          check(
+            ofTheme,
+            accesses: const [
+              IndexedMemberAccess('context.l10n', 'appThemeMode'),
+            ],
+            present: {_themeRole},
+          ),
+          isEmpty,
+        );
+        expect(
+          check(
+            ofTheme,
+            accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+            present: {_themeRole},
+          ).single.message,
+          'lib/file.dart reads context.l10n.homeTitle, the text title of the '
+          'module home, but the template of the app_theme role may only read '
+          'its own texts and those that the modules give its role in their '
+          'data.',
+        );
+      });
+
+      test('reports a getter that no text of the app has', () {
+        final issue = check(
+          ofBoard,
+          accesses: const [IndexedMemberAccess('context.l10n', 'homeLabel')],
+          more: [
+            dataOf(shelf, const _Shown([LocalizedText('label', en: 'Home')])),
+          ],
+          present: {shelf, board},
+        ).single;
+
+        // The module gave the role of the template the text, but not the
+        // localization role, so the app has no such text.
+        expect(
+          issue.message,
+          'lib/file.dart reads context.l10n.homeLabel, but no text of the '
+          'app has the getter homeLabel.',
+        );
+        expect(issue.origin, ofBoard);
+      });
+    });
+
+    test(
+        'tells a provider of a role that reads a text of a module that the '
+        'template of its role reads the texts of the data of the role', () {
+      const ofTabs = ModuleOrigin(ModuleId('tabs'));
+      final issue = check(
+        ofTabs,
+        accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+      ).single;
 
       expect(
-        check(
-          ofTheme,
-          accesses: const [IndexedMemberAccess('context.l10n', 'appThemeMode')],
-        ),
-        isEmpty,
+        issue.message,
+        'lib/file.dart reads context.l10n.homeTitle, the text title of the '
+        'module home, but the module tabs may only read its own texts and '
+        'those of the modules it depends on.',
       );
       expect(
-        check(
-          ofTheme,
-          accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
-        ).single.message,
-        'lib/file.dart reads context.l10n.homeTitle, the text title of the '
-        'module home, but the template of the app_theme role may only read '
-        'its own texts.',
+        issue.hint,
+        'Give the role a text of your own. A text that a module gives the '
+        'app_theme role in its data is read by the template of that role, '
+        'and a provider of the role shows it through what the template '
+        'generates.',
       );
+      expect(issue.origin, ofTabs);
+    });
+
+    test('lets the pipeline, which has no texts, read none', () {
       expect(
         check(
           const PipelineOrigin(),
@@ -1419,7 +2094,8 @@ void main() {
         ),
         isEmpty,
       );
-      // The template of the role itself reads its own texts.
+      // The template of the role itself reads its own texts only: the data
+      // of the role are the texts, so no module gives it one to show.
       expect(
         check(
           const RoleTemplateOrigin(localizationRole),

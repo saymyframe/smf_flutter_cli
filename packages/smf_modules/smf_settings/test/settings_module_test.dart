@@ -156,11 +156,11 @@ FacadeRoute? _startRouteOf(ContractResult result) =>
     routerRole.startIn(routerRole.hookInput(result.hook!));
 
 /// The labels of the destinations of the main navigation of the app of
-/// [result], in their order, as the layout role gives them to the router.
+/// [result] in English, in their order, as the layout role has them.
 List<String> _labelsOf(ContractResult result) => [
       for (final route
           in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
-        route.route.destination!.label,
+        route.route.destination!.label.en,
     ];
 
 /// The title of the settings screen of [app], as the app bar of the screen
@@ -233,7 +233,7 @@ void main() {
       expect(route.children, isEmpty);
       expect(route.startCandidate, isFalse);
       final destination = route.destination!;
-      expect(destination.label, 'Settings');
+      expect(destination.label.en, 'Settings');
       // A constant, so that the main navigation can be one.
       expect(destination.icon.code, 'Icons.settings');
       final import = destination.icon.imports.single;
@@ -269,6 +269,7 @@ void main() {
         'flutter_core with router',
         'flutter_core',
         'go_router with layout',
+        'bottom_tabs with localization',
         'feed with settings_screen',
         'feed',
         'settings with localization',
@@ -631,23 +632,73 @@ void main() {
       expect(_titleOf(result.app!), "const Text('Settings')");
       expect(_importsOf(result.app!).keys, ['package:flutter/material.dart']);
     });
+  });
 
-    test('is the label of the destination of the screen too, in English', () {
-      final routes = [
-        for (final contribution
-            in module.contribute(ContractHarness.defaultContext))
-          if (contribution is RoleData<RoutesData>) contribution,
-      ].single;
-      final texts = [
-        for (final contribution
-            in module.contribute(ContractHarness.defaultContext))
-          if (contribution is RoleData<TextsData>) contribution,
-      ].single;
+  group('the label of the destination of the screen', () {
+    /// The label as the layout role gets it from the routes of the module,
+    /// whichever module provides the role.
+    LocalizedText labelOf(ContractResult result) => routerRole
+        .facadeOf(routerRole.hookInput(result.hook!))
+        .destinations
+        .single
+        .route
+        .destination!
+        .label;
 
+    test(
+        'is the title of the screen, the one text that the module gives the '
+        'localization role', () async {
+      final result =
+          await _rendered(const [SettingsModule.id, GenL10nModule.id]);
+      final input = localizationRole.hookInput(result.hook!);
+
+      // The role has texts of its own too, for its entry of the screen.
+      final title = localizationRole
+          .textsIn(input)
+          .where((text) => text.owner == const ModuleOrigin(SettingsModule.id))
+          .single;
+      // The label of the destination is that text, so the main navigation
+      // of an app with texts reads it from them.
+      expect(labelOf(result), same(title.text));
       expect(
-        routes.value.routes.single.destination!.label,
-        texts.value.texts.single.en,
+        localizationRole
+            .appTextOf(
+              input,
+              const ModuleOrigin(SettingsModule.id),
+              labelOf(result),
+            )
+            ?.getter,
+        'settingsTitle',
       );
+    });
+
+    test('is its English text in an app without the localization role',
+        () async {
+      final result = await _rendered(const [SettingsModule.id]);
+
+      expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(labelOf(result).en, 'Settings');
+    });
+
+    test(
+        'is read from the texts of the app by the main navigation of an app '
+        'with a layout and texts, and is the English text without texts',
+        () async {
+      String labelsOf(ContractResult result) =>
+          result.app!.files[LayoutRole.destinationFile]!.text;
+      const function = 'String _settingsSettingsLabel(BuildContext context)';
+
+      final withTexts = await _rendered(
+        const [SettingsModule.id, BottomTabsModule.id, GenL10nModule.id],
+      );
+      expect(
+        labelsOf(withTexts),
+        contains('$function => context.l10n.settingsTitle;'),
+      );
+
+      final without =
+          await _rendered(const [SettingsModule.id, BottomTabsModule.id]);
+      expect(labelsOf(without), contains("$function => 'Settings';"));
     });
   });
 
