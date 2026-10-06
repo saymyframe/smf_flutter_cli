@@ -22,10 +22,13 @@ import 'package:smf_onboarding/src/app_symbol.dart';
 /// While the pages turn, the cells and the texts of a page move at their
 /// own pace, the background blends into that of the last page, and the
 /// marks follow. Each of these motions ends. In an app that asks for less
-/// motion, Next shows the next page at once, and so do the cells when a
-/// page is first shown. The screen takes its colours and its text styles
-/// from the theme of the app, whichever module provides it, and names no
-/// font but the monospaced one of the device for the number of a cell.
+/// motion, Next shows the next page at once, and the cells of a page are
+/// there at once when the page is first shown. The letters and the number
+/// of a cell keep their size at a large text size, since the cell is a
+/// picture that does not grow. The screen takes its colours and its text
+/// styles from the theme of the app, whichever module provides it, and
+/// names no font but the monospaced one of the device, for the number of a
+/// cell.
 ///
 /// The route is `/` of the module, so its full path is `/onboarding`. It is
 /// no destination of the main navigation, and the app cannot start on it.

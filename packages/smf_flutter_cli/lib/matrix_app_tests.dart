@@ -100,10 +100,11 @@ Future<MatrixAppTests> smfAppTests() async {
       ),
       // The onboarding of the module: on its first launch, the app shows
       // it in place of the screen that it starts on (see
-      // _startScreenFileOf), and Done or Skip saves that it is finished and
-      // shows that screen; an app that finds it finished goes straight
-      // there. The onboarding has its texts in each language of the app,
-      // as the device asks for it (see _onboardingTextsFileOf). The router
+      // _startScreenFileOf), and the button of its last page or Skip saves
+      // that it is finished and shows that screen; an app that finds it
+      // finished goes straight there. The onboarding has its texts in each
+      // language of the app, as the device asks for it (see
+      // _onboardingTextsFileOf). The router
       // leaves the onboarding, whichever module provides it, as the router
       // role says of the guards of the routes: a test of the router role
       // too. The mocks finish the onboarding before the app starts, in

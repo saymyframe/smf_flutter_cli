@@ -2,12 +2,16 @@
 
 The SMF module of the onboarding of the app. It is a feature: a screen with its route, which the module that provides the router renders, and a guard of the routes, which that module asks.
 
-On its first launch, the app shows the onboarding in place of every other screen. The onboarding has two pages: a welcome with the name of the app, and a page that ends it. Below them are Skip and Next, and on the last page Done alone. Skip and Done finish the onboarding. The app then shows the screen that it starts on, and later launches start there.
+On its first launch, the app shows the onboarding in place of every other screen. The onboarding has two pages: a welcome with the name of the app, and a page that ends it. A page is a picture with a title and a text below it. The picture is a cell of a table of elements among smaller cells, over a grid that fades at its edges. The cell of the first page has the symbol of the app, which SMF makes from its name: `Ma` for `my_app`. The cell of the last page has an icon.
+
+Skip is above the pages. Below them are a mark for each page and one button of the whole width: Next, and Get started on the last page, where Skip is gone. Skip and Get started finish the onboarding. The app then shows the screen that it starts on, and later launches start there.
+
+While the pages turn, the cells move at different speeds, the background blends into the colour of the last page, and the marks follow. Every animation ends. On a device that asks for less motion, the cells are there at once and Next shows the next page without the turn.
 
 The module generates three files in `lib/features/onboarding/`:
 
-- `onboarding_screen.dart` has `OnboardingScreen`, at `/onboarding`, which shows the pages one at a time and the buttons below them.
-- `onboarding_pages.dart` has the pages: the list that `onboardingPages()` returns. Replace them with your own, and the screen keeps its buttons.
+- `onboarding_screen.dart` has `OnboardingScreen`, at `/onboarding`, which shows the pages one at a time, with Skip, the marks and the button around them.
+- `onboarding_pages.dart` has the pages: the list that `onboardingPages()` returns, and `OnboardingPage`, the widget of a page, which takes a `symbol` or an `icon` for its cell, a title and a text. Replace the pages with your own, and the screen keeps what is around them.
 - `onboarding_status.dart` has `onboardingStatus`, which knows whether the user has finished the onboarding. Its `complete()` finishes the onboarding at once and saves that, and its `restart()` starts it again.
 
 The screen does not navigate. The guard keeps the user in the onboarding until it is finished, and the router leaves it then.
@@ -18,7 +22,11 @@ While you edit the pages, the app shows the onboarding once for each install. To
 
 The module requires a module that provides the preferences, which remember that the onboarding is finished. The app saves it under `onboarding.completed` and reads it before its first frame, so a later launch never shows the onboarding first. Nothing is saved before the user finishes: an app that is closed in the middle of the onboarding starts it from its first page the next time.
 
-The page that the user sees is the state of a `PageController` in the screen, so the module works with any module that manages state, or with none. It adds no package to the app. A page scrolls when it is too small for what it shows, and the buttons go one below the other when they do not fit side by side, as with a large text size on a small phone. A screen reader announces the title of each page as a header.
+The page that the user sees is the state of a `PageController` in the screen, so the module works with any module that manages state, or with none. It adds no package to the app.
+
+The screen takes its colours and its text styles from the theme of the app, in its light and in its dark mode, so it follows a theme of your own. It names no font but the monospaced one of the device, for the number in a cell.
+
+A page scrolls when it is too small for what it shows, as with a large text size on a small phone, and the buttons grow with their texts. The letters and the number in a cell keep their size, since they are part of the picture. A screen reader announces the title of each page as a header and passes over the picture.
 
 The texts of the screen are in English and in Ukrainian. In an app with a module that provides localization, they follow the language of the app. An app without such a module shows them in English.
 
