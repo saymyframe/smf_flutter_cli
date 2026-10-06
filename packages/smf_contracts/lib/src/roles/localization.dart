@@ -119,6 +119,15 @@ const localizationRole = LocalizationRole._();
 /// [varsOf], and the template of a role through a fragment of
 /// [expressionOf]: either is `context.l10n.<getter>` in an app with the
 /// role, and the English text as a literal in an app without it.
+///
+/// The data that a module gives another role may have texts too, such as
+/// the label of a destination of the main navigation in its routes (see
+/// [DataWithTexts]). The template of that role reads such a text with
+/// [expressionOf] as well, as a text of the module. A module that lists
+/// this role among its roles gives it each of these texts too, among its
+/// [TextsData], and the app shows them in its language. The texts of a
+/// module that does not are in English in every app, so they take no
+/// translations (see [dataTextProblems]).
 final class LocalizationRole extends Role<TextsData> {
   const LocalizationRole._();
 
@@ -249,7 +258,9 @@ final class LocalizationRole extends Role<TextsData> {
               'differ, an English text, translations by the code of their '
               'language, and no braces. A variable of a brick of the module '
               'that reads a text of the app reads one that the app has, and '
-              'is its English text in an app without the role.',
+              'is its English text in an app without the role. A text that '
+              'the module gives another role in its data, such as the label '
+              'of a destination, is one of the texts that it gives the role.',
           check: _checkTexts,
         ),
       ];
@@ -260,11 +271,18 @@ final class LocalizationRole extends Role<TextsData> {
           id: 'localization.text_access',
           description: 'Code of a module with the role among its roles '
               'reads only its own texts and those of the modules it depends '
-              'on, and code of the template of a role that requires or uses '
-              'the role only the texts of that template, each through its '
-              'getter. The rule sees a text that code reads from context.l10n '
-              'or from a variable called l10n, and no text that it reads '
-              'through another expression.',
+              'on, each through its getter. Code of the template of a role '
+              'that requires or uses the role reads its own texts and, of '
+              'the texts of the modules, those that the modules give in '
+              'their data to its role or to a role that its role requires '
+              'or uses, such as the label of a destination. The rule does '
+              'not tell a read that a template of a brick has in its own '
+              'code from one that a render hook wrote for that data, so a '
+              'template that names such a text of a module passes in an '
+              'app with the module; in an app without it, the app lacks the '
+              'text and the rule reports the read. The rule sees a text '
+              'that code reads from context.l10n or from a variable called '
+              'l10n, and no text that it reads through another expression.',
           check: _checkTextAccess,
         ),
         StructuralRule(
@@ -291,17 +309,48 @@ final class LocalizationRole extends Role<TextsData> {
         _ => _languagesOf(textsIn(input)),
       };
 
-  /// The code that reads [text] of [owner], a module or the template of a
-  /// role, for [input], the input of a hook of this role or of a role that
-  /// requires or uses this role: `context.l10n.<getter>`, with the import
-  /// of [textsFile], in an app with this role, and the English text as a
-  /// literal in an app without it.
+  /// The text of the app in [input], the input of a hook of this role or
+  /// of a role that requires or uses this role, that [owner] gave this role
+  /// under the name of [text], or `null` if it gave none: as in an app
+  /// without this role, and as a module that does not list this role among
+  /// its roles.
+  ///
+  /// So the app shows [text] of [owner] in its language when this returns a
+  /// text, and in English in every language when it returns `null`.
+  AppText? appTextOf(
+    RoleHookInput<Object> input,
+    ContributionOrigin owner,
+    LocalizedText text,
+  ) {
+    final of = _ownerOf(owner);
+    for (final given in textsIn(input)) {
+      if (given.owner == of && given.text.name == text.name) return given;
+    }
+    return null;
+  }
+
+  /// The code that reads [text] of [owner], for [input], the input of a
+  /// hook of this role or of a role that requires or uses this role:
+  /// `context.l10n.<getter>`, with the import of [textsFile], or the
+  /// English text as a literal.
   ///
   /// The template of a role gives its brick the code as a fragment variable
   /// of its render hook, where its brick has a `BuildContext context` below
   /// the root `MaterialApp`, and not inside a `const` expression, since the
-  /// code of an app with the role is no constant. The owner gives the role
-  /// the text as data too, or the provider has no getter for it.
+  /// code of an app with the role is no constant. Which of the two the code
+  /// is depends on whose text it is:
+  /// - A text of the template itself, which [owner] then is, reads from the
+  ///   texts of the app in every app with this role. The template gives
+  ///   this role the text as data too, or the provider has no getter for
+  ///   it, which the rule `localization.text_access` reports.
+  /// - A text of a module, which the module gave the role of the template
+  ///   in its data (see [DataWithTexts]), such as the label of a
+  ///   destination, reads from the texts of the app only when the module
+  ///   gave this role the text too (see [appTextOf]). The text of a module
+  ///   that does not list this role among its roles is the literal in
+  ///   every app, so the app never reads a text that it lacks.
+  ///
+  /// In an app without this role, the code is the literal for both.
   ///
   /// Throws an [ArgumentError] if the role of [input] neither requires nor
   /// uses this role, if [owner] is the pipeline, which has no texts, or
@@ -315,9 +364,36 @@ final class LocalizationRole extends Role<TextsData> {
     final problems = text.problems();
     if (problems.isNotEmpty) throw ArgumentError(problems.join(' '));
     final getter = _getterOf(owner, text.name);
-    return input.has(this)
-        ? _read(getter)
-        : Fragment(SmfNames.dartString(text.en));
+    final reads = switch (owner) {
+      ModuleOrigin() => appTextOf(input, owner, text) != null,
+      _ => input.has(this),
+    };
+    return reads ? _read(getter) : Fragment(SmfNames.dartString(text.en));
+  }
+
+  /// The problems of [text], a text that the module [module] gives another
+  /// role in its data (see [DataWithTexts]), for the module rule of that
+  /// role: those of the text itself, and translations that no app would
+  /// show, since [module] does not list this role among its roles, so that
+  /// its texts are in English in every app.
+  ///
+  /// A module that lists this role gives it the text too, which the rule
+  /// `localization.texts` of this role checks in every app with this role.
+  List<String> dataTextProblems(ModuleDescriptor module, LocalizedText text) {
+    final problems = text.problems();
+    final languages = text.translations.keys;
+    if (languages.isEmpty || module.roles.contains(this)) return problems;
+    final one = languages.length == 1;
+    problems.add(
+      'The text "${text.name}" has '
+      '${one ? 'a translation' : 'translations'} into '
+      '${languages.join(', ')}, but the module ${module.id} does not list '
+      'the $this among its roles, so every app would show the text in '
+      'English. Add the role to the uses of the module and give it the text '
+      'among the texts of the module, or leave the '
+      '${one ? 'translation' : 'translations'} out.',
+    );
+    return problems;
   }
 
   /// The variables that read the [texts] of [module] in a brick of the

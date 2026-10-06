@@ -371,26 +371,47 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenLayoutModule(),
+        BrokenLayoutModule.givingFirstDestination(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '
             'the first one to the code that reads its destinations.',
-        app: [
-          FakeRouterModule.id,
-          FakeFeatureModule.id,
-          FakeSecondModule.id,
-          FakeBlocModule.id,
-          FakeDiModule.id,
-          FakeAnalyticsModule.id,
-          FakeCrashModule.id,
-          FakeServiceLogModule.id,
-          FakeScreenLogModule.id,
-        ],
+        app: _appWithMainNavigation,
         failures: [
           MatrixExpectedFailure(
             'test/layout_screens_test.dart',
             'each switch to another destination is heard of once',
             'The AppShell has the destination of each feature.',
+          ),
+          // The test of the labels reads them from the destinations of the
+          // shell too.
+          MatrixExpectedFailure(
+            'test/destination_labels_test.dart',
+            _labelsTest,
+            'While the app follows a device in English, each destination '
+                'gives its label in English.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenLayoutModule.keepingLabels(),
+        role: layoutRole,
+        bug: 'Its AppShell reads the label of each destination when it is '
+            'first built and keeps it, so its tabs show the labels in the '
+            'language of before once the app is in another language.',
+        // The fixture texts, with the preferences that their role requires,
+        // so that the app has two languages, and the second fixture
+        // feature, whose label has a translation.
+        app: [
+          ..._appWithMainNavigation,
+          FakeL10nModule.id,
+          FakePreferencesModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/destination_labels_test.dart',
+            _labelsTest,
+            'The layout shows no label of a destination in a language that '
+                'the app is not in.',
           ),
         ],
       ),
@@ -801,6 +822,25 @@ const List<ModuleId> _appWithGates = [
   FakeCrashModule.id,
   FakeServiceLogModule.id,
 ];
+
+/// The other modules of the app of a broken layout: a router, the two
+/// fixture features, whose destinations the main navigation shows, and what
+/// the first of them and the tests of the listeners of the screen need.
+const List<ModuleId> _appWithMainNavigation = [
+  FakeRouterModule.id,
+  FakeFeatureModule.id,
+  FakeSecondModule.id,
+  FakeBlocModule.id,
+  FakeDiModule.id,
+  FakeAnalyticsModule.id,
+  FakeCrashModule.id,
+  FakeServiceLogModule.id,
+  FakeScreenLogModule.id,
+];
+
+/// The name of the test of the labels of the destinations.
+const _labelsTest =
+    'the labels of the destinations follow the language of the app';
 
 /// The names of three tests of the localization role, and the reason of
 /// one of their expectations: that the root of the app can be in each

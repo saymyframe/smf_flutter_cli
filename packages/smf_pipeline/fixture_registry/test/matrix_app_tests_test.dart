@@ -5,10 +5,13 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -458,6 +461,133 @@ void main() {
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the test of the tabs of bottom_tabs applies only to the apps with the '
+      'tests of the layout, whose labels of the destinations it reads', () {
+    final tabs = appsOf(named('bottom_tabs_screens'));
+
+    expect(tabs, isNotEmpty);
+    expect(appsOf(named('layout_screens')), containsAll(tabs));
+  });
+
+  group(
+      'the labels of the destinations that the matrix writes for the tests '
+      'of the layout', () {
+    /// The top-level declarations of the Dart [code] by name, each as its
+    /// source, and the URIs of its imports under the name `import`.
+    Map<String, String> declarationsOf(String code) {
+      final unit = parseString(content: code).unit;
+      return {
+        'import': [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ].join(', '),
+        for (final declaration in unit.declarations)
+          if (declaration case FunctionDeclaration(:final name))
+            name.lexeme: declaration.toSource()
+          else if (declaration
+              case TopLevelVariableDeclaration(:final variables))
+            variables.variables.single.name.lexeme: declaration.toSource(),
+      };
+    }
+
+    /// The file of the labels of [app], whose package is `my_app`.
+    Map<String, String> labelsOf(MatrixApp app) {
+      final files = named('layout_screens').generatedFiles!(app, 'my_app');
+      expect(files.keys, [destinationLabelsFile]);
+      return declarationsOf(files[destinationLabelsFile]!);
+    }
+
+    test(
+        'are in each language of an app with the localization role: the '
+        'label of a feature that gave the role its text in that language, '
+        'and that of a feature that does not list the role in English', () {
+      final everyModule = [
+        for (final app in apps)
+          if (app.everyModuleWith != null) app,
+      ];
+
+      expect(everyModule, isNotEmpty);
+      for (final app in everyModule) {
+        expect(named('layout_screens').appliesTo(app), isTrue);
+        expect(
+          labelsOf(app),
+          {
+            'import': 'package:flutter/widgets.dart, '
+                'package:my_app/core/l10n/app_locale.dart',
+            'labelLanguages': "const List<String> labelLanguages = ['en', "
+                "'uk'];",
+            'destinationLabels': 'const Map<String, List<String>> '
+                "destinationLabels = {'en' : ['Fixture', 'Second'], "
+                "'uk' : ['Fixture', 'Другий']};",
+            'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+                '=> appLocale.choose(Locale(language));',
+            'followDevice': 'Future<void> followDevice() => '
+                'appLocale.choose(null);',
+          },
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'are in English alone for an app without the localization role, '
+        'whose file names nothing of that role', () async {
+      // The app of a broken layout, which has both fixture features and no
+      // texts.
+      final provider = brokenProviders().firstWhere(
+        (provider) =>
+            identical(provider.role, layoutRole) &&
+            !provider.app.contains(FakeL10nModule.id),
+      );
+      final (:app, :problems) = await provider.failingApp.check();
+      expect(problems, isEmpty);
+      expect(app!.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(named('layout_screens').appliesTo(app), isTrue);
+
+      expect(labelsOf(app), {
+        'import': '',
+        'labelLanguages': "const List<String> labelLanguages = ['en'];",
+        'destinationLabels': 'const Map<String, List<String>> '
+            "destinationLabels = {'en' : ['Fixture', 'Second']};",
+        'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+            'async {}',
+        'followDevice': 'Future<void> followDevice() async {}',
+      });
+    });
+
+    test(
+        'are in the languages of the app only, with the English text of a '
+        'label that has no translation into one of them', () async {
+      // The app of the broken layout with texts, in the languages of
+      // --locales.
+      final provider = brokenProviders().firstWhere(
+        (provider) =>
+            identical(provider.role, layoutRole) &&
+            provider.app.contains(FakeL10nModule.id),
+      );
+      final (apps: all, :failed) = await matrixOf(
+        provider.modules,
+        roleOptions: const {'locales': 'en'},
+      );
+      expect(failed, isEmpty);
+      final app = all.firstWhere(named('layout_screens').appliesTo);
+
+      final labels = labelsOf(app);
+      expect(
+        labels['labelLanguages'],
+        "const List<String> labelLanguages = ['en'];",
+      );
+      expect(
+        labels['destinationLabels'],
+        'const Map<String, List<String>> destinationLabels = '
+        "{'en' : ['Fixture', 'Second']};",
+      );
+      // The app has the role, so the file puts it into a language.
+      expect(labels['chooseLanguage'], contains('appLocale.choose('));
+    });
   });
 
   group('the app of several providers', () {

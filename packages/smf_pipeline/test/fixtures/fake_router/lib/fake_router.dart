@@ -2,7 +2,8 @@
 ///
 /// It implements the router role with plain `Navigator`s whose stacks are
 /// lists of locations. With a layout, the destinations form the main
-/// navigation: the `AppShell` of the layout around a navigator for each
+/// navigation: the `AppShell` of the layout, with the list of the
+/// destinations that the layout role generates, around a navigator for each
 /// branch, which it creates when the branch is first selected. It calls
 /// every observer factory once for each navigator, tells the screen
 /// listeners about the page on top whenever another is on top, each on its
@@ -133,35 +134,31 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
     );
   }
 
-  /// The layout of the main navigation with [destinations], with the
-  /// imports of the layout and of the icons, or only the navigator of the
-  /// branch without destinations, when the app has no main navigation.
+  /// The layout of the main navigation of an app with [destinations], with
+  /// the imports of the layout and of the list of the destinations that the
+  /// layout role generates, or only the navigator of the branch without
+  /// destinations, when the app has no main navigation.
   static Fragment _shellOf(List<FacadeRoute> destinations) {
     if (destinations.isEmpty) return const Fragment('body');
     return Fragment(
       [
         '${LayoutRole.appShell.name}(',
-        '  destinations: const [',
-        for (final route in destinations)
-          '    ${_destinationOf(route.route.destination!)},',
-        '  ],',
+        '  destinations: ${LayoutRole.appDestinations},',
         '  currentIndex: index,',
         '  onSelect: onSelect,',
         '  body: body,',
         ')',
       ].join('\n'),
       imports: [
-        for (final symbol in [LayoutRole.appShell, LayoutRole.destination])
-          ImportRef.app(symbol.importRef.uri, show: [symbol.name]),
-        for (final route in destinations)
-          ...route.route.destination!.icon.imports,
+        ImportRef.app(
+          LayoutRole.appShell.importRef.uri,
+          show: [LayoutRole.appShell.name],
+        ),
+        ImportRef.app(
+          LayoutRole.destination.importRef.uri,
+          show: const [LayoutRole.appDestinations],
+        ),
       ],
     );
   }
-
-  /// The constant `Destination` of the layout for [destination].
-  static String _destinationOf(Destination destination) =>
-      '${LayoutRole.destination.name}('
-      'label: ${SmfNames.dartString(destination.label)}, '
-      'icon: ${destination.icon.code})';
 }

@@ -20,7 +20,7 @@ ScreenRef _screen(String name, String feature) => ScreenRef(
     );
 
 const _homeDestination = Destination(
-  label: 'Home',
+  label: LocalizedText('label', en: 'Home'),
   icon: Fragment(
     'Icons.home',
     imports: [ImportRef('package:flutter/material.dart')],
@@ -1291,11 +1291,12 @@ two guards with one target
           'router.screen_constructors',
           'router.guard_functions',
           'router.guards_asked',
+          'router.destinations_shown',
         ],
       );
-      // The last one says what a provider uses of the role.
+      // The last one of the guards says what a provider uses of the role.
       expect(
-        routerRole.structuralRules.last.description,
+        routerRole.structuralRules[3].description,
         'In an app with guards, the files of the provider of the role create '
         'a GuardedNavigation and read guardChanges.',
       );

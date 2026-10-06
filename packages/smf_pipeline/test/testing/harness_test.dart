@@ -1549,6 +1549,363 @@ void main() {
       });
 
       test(
+          'what a render hook of the template or of a provider of a role '
+          'gives may import the files of the modules that give data to the '
+          'role, or to a role that it requires or uses, and the template of '
+          'a brick may not', () async {
+        // As the layout role shows the destinations of the router role,
+        // with the icons that the features give them.
+        final shelf = TestRole<String>('shelf');
+        final label = TestRole<String>('label');
+        // A role that the role of the test neither requires nor uses.
+        final stock = TestRole<String>('stock');
+        const code = {
+          'code': Fragment(
+            'final a = a0.A();\n'
+            'final item = i0.Item();\n'
+            'final tag = t0.Tag();\n'
+            'final crate = c0.Crate();',
+            imports: [
+              ImportRef.app('a/a.dart', prefix: 'a0'),
+              ImportRef.app('item/item.dart', prefix: 'i0'),
+              ImportRef.app('tag/tag.dart', prefix: 't0'),
+              ImportRef.app('crate/crate.dart', prefix: 'c0'),
+            ],
+          ),
+        };
+        // A file of a render hook, and the template of a brick, each with
+        // the same imports by hand.
+        const byHand = "import '../a/a.dart';\n"
+            "import '../item/item.dart';\n"
+            "import '../tag/tag.dart';\n"
+            "import '../crate/crate.dart';\n";
+        final display = TestRole<String>(
+          'display',
+          requires: {shelf},
+          uses: {label},
+          template: _VarsTemplate(
+            code,
+            [
+              dart('lib/display/display.dart', '{{{code}}}\n'),
+              dart('lib/display/written.dart', byHand),
+            ],
+            files: const {'lib/display/hooked.dart': byHand},
+          ),
+        );
+        final harness = ContractHarness(
+          ModuleRegistry([
+            ...modules,
+            TestModule('store', providers: [RoleProvider.plain(shelf)]),
+            TestModule('labels', providers: [RoleProvider.plain(label)]),
+            TestModule('depot', providers: [RoleProvider.plain(stock)]),
+            TestModule(
+              'screen',
+              providers: [
+                _VarsProvider(
+                  display,
+                  code,
+                  files: const {'lib/screen/hooked.dart': byHand},
+                ),
+              ],
+              contributions: [
+                dart('lib/screen/screen.dart', '{{{code}}}\n'),
+                dart('lib/screen/written.dart', byHand),
+              ],
+            ),
+            TestModule(
+              'item',
+              requires: {shelf},
+              contributions: [
+                shelf.data('item'),
+                dart('lib/item/item.dart', 'class Item {}\n'),
+              ],
+            ),
+            TestModule(
+              'tag',
+              uses: {label},
+              contributions: [
+                label.data('tag'),
+                dart('lib/tag/tag.dart', 'class Tag {}\n'),
+              ],
+            ),
+            TestModule(
+              'crate',
+              requires: {stock},
+              contributions: [
+                stock.data('crate'),
+                dart('lib/crate/crate.dart', 'class Crate {}\n'),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'screen',
+            requested: [
+              ModuleId('screen'),
+              ModuleId('store'),
+              ModuleId('labels'),
+              ModuleId('depot'),
+              ModuleId('lib_a'),
+              ModuleId('item'),
+              ModuleId('tag'),
+              ModuleId('crate'),
+            ],
+          ),
+        );
+
+        // What each of the two may not import: for a fragment and in a
+        // file of its render hook, the file of a module that gives none of
+        // these roles data, and the file of one that gives data to another
+        // role; in the template of a brick, the file of every module.
+        String refused(
+          String file,
+          String target,
+          String how,
+          String who, {
+          bool hint = false,
+        }) =>
+            '$file imports lib/$target/$target.dart $how $who, but that file '
+            'is of $target, which $who neither depends on nor knows through '
+            'a role.${hint ? ' (with a hint)' : ''}';
+        const ofA = 'lib_a';
+        expect(
+          [
+            for (final issue in result.errors)
+              '${issue.message}${issue.hint == null ? '' : ' (with a hint)'}'
+                  // The file of lib_a is not named after its module.
+                  .replaceAll('lib/a/a.dart', 'lib/$ofA/$ofA.dart'),
+          ],
+          unorderedEquals([
+            for (final (who, directory) in [
+              ('role:display', 'display'),
+              ('screen', 'screen'),
+            ]) ...[
+              for (final target in [ofA, 'crate']) ...[
+                refused(
+                  'lib/$directory/$directory.dart',
+                  target,
+                  'for a fragment of',
+                  who,
+                ),
+                refused(
+                  'lib/$directory/hooked.dart',
+                  target,
+                  'in a file of the render hook of',
+                  who,
+                ),
+                refused(
+                  'lib/$directory/written.dart',
+                  target,
+                  'in the template of',
+                  who,
+                ),
+              ],
+              for (final target in ['item', 'tag'])
+                refused(
+                  'lib/$directory/written.dart',
+                  target,
+                  'in the template of',
+                  who,
+                  hint: true,
+                ),
+            ],
+          ]),
+        );
+        const hint = 'The owner of that file gives data to a role that '
+            'screen renders. Code may use the file only where a render hook '
+            'of screen gives the import with the code that needs it: as an '
+            'import of a fragment of the hook, for a variable or for a '
+            'socket, or in a file that the hook generates. Of any other '
+            'import, the harness cannot tell that it follows the data.';
+        expect(
+          {
+            for (final issue in result.errors)
+              if (issue.origin == const ModuleOrigin(ModuleId('screen')))
+                if (issue.hint case final hint?) hint,
+          },
+          {hint},
+        );
+      });
+
+      test(
+          'a fragment of a contribution opens no file through the data of a '
+          'role, as a fragment of a render hook does: neither the code of a '
+          'variable that depends on a role, nor a fragment for a socket; and '
+          'an export follows the same rule as an import', () async {
+        final shelf = TestRole<String>('shelf');
+        // The same imports with the code of a contribution, which is the
+        // same whatever the modules give the role, and with the code of a
+        // render hook, which the hook wrote from what they gave.
+        const item = ImportRef.app('item/item.dart', prefix: 'i0');
+        const tag = ImportRef.app('tag/tag.dart', prefix: 't0');
+        List<Contribution> contributed(String owner, Role role) => [
+              BrickContribution(
+                bundle(
+                  '${owner}_bricks',
+                  files: {
+                    'lib/$owner/contributed.dart': 'final item = {{{item}}};\n',
+                    'lib/$owner/hooked.dart': 'final tag = {{{tag}}};\n',
+                    'lib/$owner/exported.dart': "export '../tag/tag.dart';\n",
+                  },
+                ),
+                vars: {
+                  'item': RoleVar(
+                    role,
+                    present: const Fragment('i0.Item()', imports: [item]),
+                    absent: 'null',
+                  ),
+                },
+              ),
+              const SocketContribution.code(
+                AppEntryRole.bootstrapLate,
+                Fragment('i0.Item();', imports: [item]),
+              ),
+            ];
+        const hookVars = {
+          'tag': Fragment('t0.Tag()', imports: [tag]),
+        };
+        // A fragment of a hook needs the import of the contributions too:
+        // the import is still one that a contribution needs.
+        const hookFragments = [
+          SocketContribution.code(
+            AppEntryRole.bootstrapLate,
+            Fragment('t0.Tag(); i0.Item();', imports: [tag, item]),
+          ),
+        ];
+        // A file of a render hook that exports a file of a module.
+        const relay = "export '../tag/tag.dart';\n";
+        late final TestRole<String> display;
+        display = TestRole<String>(
+          'display',
+          requires: {shelf},
+          template: _VarsTemplate(
+            hookVars,
+            // The role of the variable is that of the template, which
+            // every app of the template has.
+            [],
+            files: const {'lib/display/relay.dart': relay},
+            fragments: hookFragments,
+            contributionsOf: () => contributed('display', display),
+          ),
+        );
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule('store', providers: [RoleProvider.plain(shelf)]),
+            TestModule(
+              'screen',
+              providers: [
+                _VarsProvider(
+                  display,
+                  hookVars,
+                  files: const {'lib/screen/relay.dart': relay},
+                  fragments: hookFragments,
+                ),
+              ],
+              contributions: contributed('screen', display),
+            ),
+            // Both give data to the role that the role of the two requires.
+            for (final (module, type) in [('item', 'Item'), ('tag', 'Tag')])
+              TestModule(
+                module,
+                requires: {shelf},
+                contributions: [
+                  shelf.data(module),
+                  dart('lib/$module/$module.dart', 'class $type {}\n'),
+                ],
+              ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'screen',
+            requested: [
+              ModuleId('screen'),
+              ModuleId('store'),
+              ModuleId('item'),
+              ModuleId('tag'),
+            ],
+          ),
+        );
+
+        String refused(String use, String who, String owner) =>
+            '$use $who, but that file is of $owner, which $who neither '
+            'depends on nor knows through a role.';
+        expect(
+          [for (final issue in result.errors) issue.message],
+          unorderedEquals([
+            for (final (who, directory) in [
+              ('role:display', 'display'),
+              ('screen', 'screen'),
+            ]) ...[
+              refused(
+                'lib/$directory/contributed.dart imports lib/item/item.dart '
+                    'for a fragment of',
+                who,
+                'item',
+              ),
+              refused(
+                'lib/bootstrap.dart imports lib/item/item.dart for a '
+                    'fragment of',
+                who,
+                'item',
+              ),
+              refused(
+                'lib/$directory/exported.dart exports lib/tag/tag.dart in '
+                    'the template of',
+                who,
+                'tag',
+              ),
+            ],
+          ]),
+        );
+        String hintFor(String who) =>
+            'The owner of that file gives data to a role that $who renders. '
+            'Code may use the file only where a render hook of $who gives '
+            'the import with the code that needs it: as an import of a '
+            'fragment of the hook, for a variable or for a socket, or in a '
+            'file that the hook generates. Of any other import, the harness '
+            'cannot tell that it follows the data.';
+        expect(
+          {for (final issue in result.errors) issue.hint},
+          {hintFor('role:display'), hintFor('screen')},
+        );
+        // The pipeline tells the harness which fragments a render hook
+        // gave.
+        String shown(AddedImport added) =>
+            '${added.import.uri.split('/').last} of ${added.contributor}'
+            '${added.fromHook ? ', of its render hook' : ''}';
+        String added(String path) =>
+            result.app!.files[path]!.addedImports.map(shown).join('; ');
+        expect(added('lib/screen/contributed.dart'), 'item.dart of screen');
+        expect(
+          added('lib/screen/hooked.dart'),
+          'tag.dart of screen, of its render hook',
+        );
+        expect(
+          added('lib/display/contributed.dart'),
+          'item.dart of role:display',
+        );
+        expect(
+          added('lib/display/hooked.dart'),
+          'tag.dart of role:display, of its render hook',
+        );
+        expect(
+          added('lib/bootstrap.dart').split('; '),
+          unorderedEquals([
+            for (final who in ['screen', 'role:display']) ...[
+              'item.dart of $who',
+              'item.dart of $who, of its render hook',
+              'tag.dart of $who, of its render hook',
+            ],
+          ]),
+        );
+      });
+
+      test(
           'imports of a variable that depends on a role belong to the module '
           'of its brick', () async {
         final harness = ContractHarness(
@@ -2056,7 +2413,9 @@ void main() {
         );
       });
 
-      test('roles and the data of roles open the files of others', () async {
+      test(
+          'roles open the files of others to the template of a brick, and '
+          'the data of roles does not', () async {
         final shelf = TestRole<String>(
           'shelf',
           template: TestTemplate(
@@ -2103,15 +2462,26 @@ void main() {
           ),
         );
 
+        // The provider renders the data of the role, but the template of
+        // its brick is the same in an app without the module of that data.
         expect(
           [for (final issue in result.errors) issue.message],
           [
+            equals(
+              'lib/store/store.dart imports lib/book/book.dart in the template '
+              'of store, but that file is of book, which store neither '
+              'depends on nor knows through a role.',
+            ),
             equals(
               'lib/store/store.dart imports lib/other/other.dart in the template '
               'of store, but that file is of other, which store neither '
               'depends on nor knows through a role.',
             ),
           ],
+        );
+        expect(
+          [for (final issue in result.errors) issue.hint],
+          [startsWith('The owner of that file gives data to a role '), null],
         );
       });
 
@@ -2818,7 +3188,12 @@ final class _CuriousTemplate extends RoleTemplate<String> {
 
 /// A provider whose render hook returns [vars] and generates [files].
 final class _VarsProvider extends RoleProvider<String> {
-  _VarsProvider(this.role, this.vars, {this.files = const {}});
+  _VarsProvider(
+    this.role,
+    this.vars, {
+    this.files = const {},
+    this.fragments = const [],
+  });
 
   @override
   final Role<String> role;
@@ -2827,9 +3202,42 @@ final class _VarsProvider extends RoleProvider<String> {
 
   final Map<String, String> files;
 
+  final List<SocketContribution> fragments;
+
   @override
   RoleOutput render(RoleHookInput<String> input) =>
-      RoleOutput(vars: vars, files: files);
+      RoleOutput(vars: vars, files: files, fragments: fragments);
+}
+
+/// The template of a role with [contributions] of its own, and those of
+/// [contributionsOf], for contributions that name the role of the template.
+/// Its render hook sets [vars], generates [files] and gives [fragments].
+final class _VarsTemplate extends RoleTemplate<String> {
+  _VarsTemplate(
+    this.vars,
+    this.contributions, {
+    this.files = const {},
+    this.fragments = const [],
+    this.contributionsOf,
+  });
+
+  final Map<String, Object?> vars;
+
+  final List<Contribution> contributions;
+
+  final Map<String, String> files;
+
+  final List<SocketContribution> fragments;
+
+  final List<Contribution> Function()? contributionsOf;
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      [...contributions, ...?contributionsOf?.call()];
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) =>
+      RoleOutput(vars: vars, files: files, fragments: fragments);
 }
 
 /// A provider whose render hook generates [files].

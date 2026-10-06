@@ -694,6 +694,101 @@ void main() {
       expect(spy.structuralRules.single.id, 'spy.input');
       expect(spy.structuralRules.single.description, 'Keeps its input.');
     });
+
+    test(
+        'gives the rules what the hooks of a role of the app that requires '
+        'or uses their role get, and of no other role', () {
+      late StructuralRuleInput<String> seen;
+      final spy = TestRole<String>(
+        'spy',
+        structuralRules: [
+          StructuralRule(
+            id: 'spy.input',
+            description: 'Keeps its input.',
+            check: (input) {
+              seen = input;
+              return const [];
+            },
+          ),
+        ],
+      );
+      final shelf = TestRole<String>('shelf');
+      final absent = TestRole<String>('absent');
+      final user = TestRole<String>(
+        'user',
+        requires: {shelf},
+        uses: {spy, absent},
+      );
+      final stranger = TestRole<String>('stranger');
+      // A role that sees another role of the app, but not that of the rule.
+      final neighbour = TestRole<String>('neighbour', uses: {shelf});
+      // A role that the app lacks, though it uses the role of the rule and
+      // a module gave it data: such as one that a rule makes up to read the
+      // data of the roles that it names.
+      final lens = TestRole<String>('lens', uses: {spy, shelf, stranger});
+
+      spy.checkStructure(
+        StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: [
+              for (final role in [
+                spy,
+                shelf,
+                absent,
+                user,
+                stranger,
+                neighbour,
+                lens,
+              ])
+                RoleData<String>(role, 'of ${role.id}'),
+            ],
+            presentRoles: {spy, shelf, user, stranger, neighbour},
+            context: testContext,
+          ),
+          files: files,
+        ),
+      );
+      List<String> dataOf(Role<String> role, RoleHookInput<Object> input) =>
+          [for (final data in role.dataIn(input)) data.value];
+
+      // The data of the role, and of the roles that it requires or uses,
+      // as its hooks get them: none of a role that the app lacks.
+      final ofUser = seen.inputOf(user);
+      expect(ofUser.role, same(user));
+      expect(dataOf(user, ofUser), ['of user']);
+      expect(dataOf(shelf, ofUser), ['of shelf']);
+      expect(dataOf(spy, ofUser), ['of spy']);
+      expect(dataOf(absent, ofUser), isEmpty);
+      expect(ofUser.has(absent), isFalse);
+      expect(() => stranger.dataIn(ofUser), throwsArgumentError);
+      // Of no role that does not build on the role of the rule, whether
+      // it sees other roles or none.
+      for (final other in [shelf, stranger, neighbour, spy]) {
+        expect(
+          () => seen.inputOf(other),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              'The $other neither requires nor uses the $spy, so the rules '
+                  'of the $spy cannot read what its hooks get',
+            ),
+          ),
+        );
+      }
+      // Nor of a role that the app lacks, whose hooks do not run.
+      expect(
+        () => seen.inputOf(lens),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'The app does not have the $lens, so its hooks get nothing for '
+                'the rules of the $spy to read',
+          ),
+        ),
+      );
+    });
   });
 
   group('Role.checkModule', () {

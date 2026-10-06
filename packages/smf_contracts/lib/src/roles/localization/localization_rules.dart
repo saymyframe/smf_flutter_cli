@@ -20,8 +20,109 @@ List<SmfIssue> _checkTexts(ModuleRuleInput<TextsData> input) {
     for (final problem in _textProblems(texts))
       SmfIssue(problem, origin: origin),
     ..._variableIssues(input, origin),
+    ..._dataTextIssues(input, texts, origin),
   ];
 }
+
+/// The problems of the texts that the module of [input] gives other roles
+/// in its data (see [DataWithTexts]), such as the label of a destination,
+/// against [texts], those that it gives this role:
+/// - texts of one name in the data of a role that differ, for each of which
+///   the app would show the text of that name that the module gives this
+///   role;
+/// - a text that is not among [texts], which the app would show in English
+///   in every language though the module lists this role;
+/// - a text that differs from the one of its name among [texts], which the
+///   app would show otherwise with the role than without it.
+///
+/// A text that the data of a role has several times counts once.
+List<SmfIssue> _dataTextIssues(
+  ModuleRuleInput<TextsData> input,
+  List<LocalizedText> texts,
+  ModuleOrigin origin,
+) {
+  final issues = <SmfIssue>[];
+  for (final MapEntry(key: role, value: byName)
+      in _dataTextsOf(input.contributions).entries) {
+    for (final MapEntry(key: name, value: named) in byName.entries) {
+      final gives = 'The module gives the $role';
+      if (named.length > 1) {
+        issues.add(
+          SmfIssue(
+            '$gives ${named.length} texts named "$name" in its data that '
+            'differ: ${named.map(_shown).join('; ')}. The app reads a text '
+            'of a module by its name, so it would show the same text for '
+            'each of them.',
+            hint: 'Give each of these texts a name of its own, and the '
+                '$localizationRole each of them among the texts of the module.',
+            origin: origin,
+          ),
+        );
+        continue;
+      }
+      final text = named.single;
+      final given = texts.where((own) => own.name == name).firstOrNull;
+      final what = '$gives the text "$name" in its data';
+      if (given == null) {
+        issues.add(
+          SmfIssue(
+            '$what, but not the $localizationRole, so the app would show it '
+            'in English in every language.',
+            hint: 'Give the role the text among the texts of the module: '
+                'localizationRole.data(TextsData([...])).',
+            origin: origin,
+          ),
+        );
+      } else if (!_sameText(given, text)) {
+        issues.add(
+          SmfIssue(
+            '$what, and the $localizationRole a text of that name that '
+            'differs from it: ${_shown(text)} and ${_shown(given)}.',
+            hint: 'Give both roles the same text, such as one constant.',
+            origin: origin,
+          ),
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+/// The texts of the data with texts among [contributions], those of a
+/// module, by the role of the data and by their name, in the order of the
+/// data: under each name the texts that differ, each once.
+Map<Role, Map<String, List<LocalizedText>>> _dataTextsOf(
+  List<Contribution> contributions,
+) {
+  final texts = <Role, Map<String, List<LocalizedText>>>{};
+  for (final data in contributions.whereType<RoleData<Object>>()) {
+    final value = data.value;
+    if (value is! DataWithTexts) continue;
+    final byName = texts.putIfAbsent(data.role, () => {});
+    for (final text in value.shownTexts) {
+      final named = byName.putIfAbsent(text.name, () => []);
+      if (!named.any((other) => _sameText(other, text))) named.add(text);
+    }
+  }
+  return texts;
+}
+
+/// Whether [a] and [b] read the same in every language.
+bool _sameText(LocalizedText a, LocalizedText b) =>
+    a.en == b.en &&
+    a.translations.length == b.translations.length &&
+    a.translations.entries.every(
+      (translation) => b.translations[translation.key] == translation.value,
+    );
+
+/// [text] as a message shows it: its English text, and its translations by
+/// the code of their language.
+String _shown(LocalizedText text) => [
+      SmfNames.dartString(text.en),
+      for (final MapEntry(key: language, value: translation)
+          in text.translations.entries)
+        '$language: ${SmfNames.dartString(translation)}',
+    ].join(', ');
 
 /// The code of [value], a value of a [RoleVar]: a fragment or a string of
 /// code.
@@ -98,6 +199,72 @@ bool _readsTexts(ContributionOrigin owner, ModuleDescriptor? module) =>
       PipelineOrigin() => true,
     };
 
+/// The role whose data the code of [owner] renders with texts of the
+/// modules: the role of the template that [owner] is, unless it is this
+/// role, whose data are the texts themselves. A module has none: it reads
+/// the texts of the modules it depends on.
+Role? _roleWithTextsOf(ContributionOrigin owner) => switch (owner) {
+      RoleTemplateOrigin(:final role) when !identical(role, localizationRole) =>
+        role,
+      _ => null,
+    };
+
+/// The roles that [module] provides whose templates render data with
+/// texts of the modules: those that require or use this role, but for this
+/// role itself. The texts of that data are for the template of the role to
+/// read, not for the module.
+Iterable<Role> _rolesWithTextsOf(ModuleDescriptor? module) => [
+      for (final role in module?.provides ?? const <Role>{})
+        if (!identical(role, localizationRole) &&
+            role.visibleRoles.contains(localizationRole))
+          role,
+    ];
+
+/// What to do about a text of another owner that code reads: for the
+/// template of the role [rendered], which renders data with texts of the
+/// modules, and for a module [module] that provides such roles, also where
+/// those texts are read.
+String _ownTextHint(Role? rendered, ModuleDescriptor? module) {
+  final hint = StringBuffer('Give the role a text of your own.');
+  if (rendered != null) {
+    hint.write(
+      ' A text of a module comes with the data that the module gives your '
+      'role, a DataWithTexts, and the code that reads it from '
+      'LocalizationRole.expressionOf().',
+    );
+  }
+  for (final role in _rolesWithTextsOf(module)) {
+    hint.write(
+      ' A text that a module gives the $role in its data is read by the '
+      'template of that role, and a provider of the role shows it through '
+      'what the template generates.',
+    );
+  }
+  return '$hint';
+}
+
+/// The texts of the modules that the template of [role] may read besides
+/// its own, each as its owner and its name: the texts of the data of
+/// [role] and of the roles that it requires or uses (see [DataWithTexts]),
+/// such as the labels of the destinations for the layout role.
+///
+/// The hooks of the role render that data, so they know which texts these
+/// are; the rule reads them from what those hooks get.
+Set<(ContributionOrigin, String)> _textsOfDataFor(
+  StructuralRuleInput<TextsData> input,
+  Role role,
+) {
+  final seen = input.inputOf(role);
+  return {
+    for (final read in {role, ...role.visibleRoles})
+      for (final data in read.dataIn(seen))
+        // Every data that a hook gets has an origin.
+        if (data.value case final DataWithTexts value)
+          for (final text in value.shownTexts)
+            (_ownerOf(data.origin!), text.name),
+  };
+}
+
 /// Whether [target], the expression before a dot, is the texts of the app,
 /// as code names them: `context.l10n`, or a variable called `l10n`.
 bool _isTexts(String? target) =>
@@ -123,9 +290,18 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
       for (final dependency in module?.dependsOn ?? const <ModuleId>{})
         ModuleOrigin(dependency),
     };
-    final own = owner is ModuleOrigin
-        ? 'its own texts and those of the modules it depends on'
-        : 'its own texts';
+    // The template of another role renders what the modules give that role,
+    // so it reads the texts of their data too.
+    final rendered = _roleWithTextsOf(owner);
+    final ofData = rendered == null
+        ? const <(ContributionOrigin, String)>{}
+        : _textsOfDataFor(input, rendered);
+    final own = switch (owner) {
+      ModuleOrigin() => 'its own texts and those of the modules it depends on',
+      _ when rendered != null => 'its own texts and those that the modules '
+          'give its role in their data',
+      _ => 'its own texts',
+    };
     for (final access in file.memberAccesses) {
       if (!_isTexts(access.target)) continue;
       final read = '${access.target}.${access.name}';
@@ -143,12 +319,13 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
             path: path,
           ),
         );
-      } else if (!readable.contains(text.owner)) {
+      } else if (!readable.contains(text.owner) &&
+          !ofData.contains((text.owner, text.text.name))) {
         issues.add(
           SmfIssue(
             '$path reads $read, the $text, but ${_named(owner)} may only '
             'read $own.',
-            hint: 'Give the role a text of your own.',
+            hint: _ownTextHint(rendered, module),
             origin: owner,
             path: path,
           ),

@@ -70,7 +70,7 @@ final class CatalogFeature extends SmfModule {
   static const _more = ImportRef.app('$_folder/more_screens.dart');
 
   static const _catalog = Destination(
-    label: 'Catalog',
+    label: LocalizedText('label', en: 'Catalog'),
     icon: Fragment('Icons.list', imports: [_icons]),
   );
 
@@ -231,7 +231,7 @@ final class SettingsFeature extends SmfModule {
               name: 'settings',
               screen: ScreenRef('SettingsScreen', import: ImportRef.app(_file)),
               destination: Destination(
-                label: 'Settings',
+                label: LocalizedText('label', en: 'Settings'),
                 icon: Fragment('Icons.settings', imports: [_icons]),
               ),
               children: [
@@ -282,7 +282,7 @@ final class ProfileFeature extends SmfModule {
               name: 'profile',
               screen: ScreenRef('ProfileScreen', import: ImportRef.app(_file)),
               destination: Destination(
-                label: 'Profile',
+                label: LocalizedText('label', en: 'Profile'),
                 icon: Fragment('Icons.person', imports: [_icons]),
               ),
               startCandidate: true,

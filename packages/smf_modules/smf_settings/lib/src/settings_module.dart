@@ -17,11 +17,11 @@ import 'package:smf_settings/src/agents.dart';
 ///
 /// The title of the screen is a text of the module, in English and in
 /// Ukrainian, which the module gives the localization role, a role that it
-/// uses. With the role, the screen reads the title from the texts of the
-/// app, in the language of the app; without it, the title is the English
-/// text. The label of the destination is the English text in every app.
-/// The About row is a widget of Flutter, whose words follow the language of
-/// the app by themselves.
+/// uses. It is the label of the destination of the screen in the main
+/// navigation too. With the role, the screen reads the title, and the main
+/// navigation the label, from the texts of the app, in the language of the
+/// app; without it, both are the English text. The About row is a widget
+/// of Flutter, whose words follow the language of the app by themselves.
 ///
 /// The route is `/` of the module, so its full path is `/settings`. The
 /// main navigation of the app, when a module provides it, shows the route
@@ -61,11 +61,17 @@ final class SettingsModule extends SmfModule {
   /// destination in the main navigation too.
   static const _title = 'Settings';
 
-  /// The text of the title of the screen, which the screen reads from the
+  /// The text of the title of the screen, which is the label of its
+  /// destination too: the screen and the main navigation read it from the
   /// texts of the app in an app with the localization role.
-  static const _texts = TextsData([
-    LocalizedText('title', en: _title, translations: {'uk': 'Налаштування'}),
-  ]);
+  static const _titleText = LocalizedText(
+    'title',
+    en: _title,
+    translations: {'uk': 'Налаштування'},
+  );
+
+  /// The texts of the module, which it gives the localization role.
+  static const _texts = TextsData([_titleText]);
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -93,7 +99,7 @@ final class SettingsModule extends SmfModule {
                 import: ImportRef.app('features/settings/settings_screen.dart'),
               ),
               destination: Destination(
-                label: _title,
+                label: _titleText,
                 icon: Fragment(
                   'Icons.settings',
                   imports: [

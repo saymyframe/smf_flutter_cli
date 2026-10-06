@@ -1586,6 +1586,12 @@ class FixtureTexts {
   /// The text outside of the module fake_second.
   String get fakeSecondOutside => 'Outside the app\'s main navigation';
 
+  /// The text label of the module fake_second.
+  String get fakeSecondLabel => switch (language) {
+    'uk' => 'Другий',
+    _ => 'Second',
+  };
+
   /// The text setting of the module fake_second.
   String get fakeSecondSetting => switch (language) {
     'uk' => 'Друге налаштування',

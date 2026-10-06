@@ -109,7 +109,7 @@ final class SettingsFeature extends SmfModule {
             name: name,
             screen: ScreenRef(_screen, import: ImportRef.app(_screenFile)),
             destination: Destination(
-              label: label,
+              label: LocalizedText('label', en: label),
               icon: const Fragment(
                 'Icons.star',
                 imports: [

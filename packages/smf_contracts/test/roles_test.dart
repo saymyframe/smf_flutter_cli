@@ -73,7 +73,7 @@ void main() {
     expect(shape(layoutRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
-      'uses': <String>{},
+      'uses': {'localization'},
     });
     expect(shape(localizationRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -361,6 +361,8 @@ void main() {
       final known = {
         'facade',
         'guards',
+        'destinations',
+        'labels',
         'locales',
         'locale_key',
         'locale_names',

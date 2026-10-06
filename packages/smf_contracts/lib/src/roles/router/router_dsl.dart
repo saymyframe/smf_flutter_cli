@@ -7,7 +7,7 @@ part of '../router.dart';
 /// path `/<module id>`: the route `/` of the module `home` is `/home`, and
 /// its route `/settings` is `/home/settings`.
 @immutable
-final class RoutesData {
+final class RoutesData implements DataWithTexts {
   /// Creates the data with the top-level [routes] of a module and its
   /// [guards].
   const RoutesData(this.routes, {this.guards = const []});
@@ -29,6 +29,14 @@ final class RoutesData {
   /// The guards of the module, in the order the app asks them; see
   /// [RouteGuard].
   final List<RouteGuard> guards;
+
+  /// The texts of the routes that a user sees: the labels of their
+  /// destinations of the main navigation (see [Destination.label]).
+  @override
+  Iterable<LocalizedText> get shownTexts => [
+        for (final route in routes)
+          if (route.destination case final destination?) destination.label,
+      ];
 }
 
 /// A gate over the whole app: a condition without which the user sees a
@@ -275,18 +283,54 @@ final class ScreenRef {
 ///
 /// The layout role shows the destinations of all features in the order of
 /// the features; see [LayoutRole].
+///
+/// ```dart
+/// static const _label = LocalizedText(
+///   'label',
+///   en: 'Home',
+///   translations: {'uk': 'Головна'},
+/// );
+///
+/// // The descriptor of the module has uses: {localizationRole}.
+/// localizationRole.data(const TextsData([_label])),
+/// routerRole.data(
+///   const RoutesData([
+///     Route(
+///       '/',
+///       name: 'home',
+///       screen: ScreenRef('HomeScreen', ...),
+///       destination: Destination(
+///         label: _label,
+///         icon: Fragment('Icons.home', imports: [...]),
+///       ),
+///     ),
+///   ]),
+/// ),
+/// ```
 @immutable
 final class Destination {
   /// Creates a destination labelled [label] with [icon].
   const Destination({required this.label, required this.icon});
 
-  /// The text of the item, such as `Home`.
-  final String label;
+  /// The text of the item, such as `Home`, which the app shows in its
+  /// language.
+  ///
+  /// It is a text of the module. A module that lists the [LocalizationRole]
+  /// among its roles gives that role the same text, among its [TextsData]:
+  /// in an app with that role the label then reads from the texts of the
+  /// app, in the language of the app, and in an app without it the label
+  /// is the English text. The rule `localization.texts` reports a label
+  /// that such a module did not give the role.
+  ///
+  /// A module that does not list the role gives the label its English text
+  /// alone, which every app shows: the rule `router.routes` reports a
+  /// translation there, which no app would show.
+  final LocalizedText label;
 
   /// A constant expression of type `IconData`, such as `Icons.home`, with
   /// the imports it needs.
   ///
-  /// Routers create the destinations as constants, so a release build can
-  /// tree-shake the icon fonts.
+  /// The layout role creates the destinations as constants, so a release
+  /// build can tree-shake the icon fonts.
   final Fragment icon;
 }
