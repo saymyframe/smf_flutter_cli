@@ -16,7 +16,8 @@ import 'package:smf_flutter_core/src/agents.dart';
 ///   its `build`, so the arguments that the modules give it read the
 ///   `BuildContext` of `App`, below the root wrappers, and `App` rebuilds
 ///   when an inherited widget that they read notifies;
-/// - `lib/core/app/fallback_start_screen.dart` and a widget test of it;
+/// - `lib/core/app/fallback_start_screen.dart`, the screen that an app
+///   without a route to start on shows, and a widget test of it;
 /// - `pubspec.yaml` with the dependencies of all modules, and the lints of
 ///   a new Flutter app.
 ///
@@ -25,6 +26,21 @@ import 'package:smf_flutter_core/src/agents.dart';
 /// of the role. The native projects follow `flutter create` of Flutter 3.44,
 /// so the app needs Flutter 3.44 or newer, and iOS [minimumIosVersion] or
 /// newer.
+///
+/// The fallback start screen is for the developer of the app, who sees it
+/// until the app has a screen to start on. It shows a cell like that of an
+/// element of the periodic table, with a symbol and a number that the
+/// module makes from the name of the app ([_symbolOf] and [_numberOf]),
+/// then the name of the app, a hint that the app has no start screen yet,
+/// and the path of the file of the screen, which a tap copies. The hint and
+/// the word that the screen says once the path is copied are texts of the
+/// module, in English and in Ukrainian, which the module gives the
+/// localization role, a role that it uses: with the role, the screen reads
+/// them from the texts of the app, in the language of the app, and without
+/// it they are the English texts. `FallbackStartScreen` only reads the two
+/// texts and gives them to `FallbackStartView`, which shows the rest. So
+/// the widget test of the app shows the view with texts of its own, in an
+/// app with the role too, where only the root of the app has the texts.
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// app entry what its files bring: the root widget and where its arguments
@@ -43,12 +59,54 @@ final class FlutterCoreModule extends SmfModule {
   /// template of Flutter 3.47; the template of Flutter 3.44 still has 13.0.
   static const minimumIosVersion = '15.0';
 
+  /// The hint of the fallback start screen, which tells the developer of
+  /// the app that it has no start screen yet.
+  static const _hint = LocalizedText(
+    'fallbackHint',
+    en: 'No start screen yet. Add a feature with a route, or replace this '
+        'screen.',
+    translations: {
+      'uk': 'Стартового екрана ще немає. Додайте фічу з маршрутом або '
+          'замініть цей екран.',
+    },
+  );
+
+  /// What the fallback start screen says before the path of its file once
+  /// a tap copied the path.
+  static const _copied = LocalizedText(
+    'fallbackCopied',
+    en: 'Copied',
+    translations: {'uk': 'Скопійовано'},
+  );
+
+  /// The texts of the module, which it gives the localization role.
+  static const _texts = TextsData([_hint, _copied]);
+
+  /// The symbol of the app in its cell on the fallback start screen, as an
+  /// element of the periodic table has one: `Ma` for `my_app`.
+  ///
+  /// [name] is the package name of the app, in snake_case. The symbol is
+  /// the first letter of its first word in upper case, and then the first
+  /// letter of its second word in lower case, or the second letter of a
+  /// name of one word. A name of one letter has that letter alone.
+  static String _symbolOf(String name) {
+    final words = name.split('_');
+    final letters = words.length > 1 ? words[0][0] + words[1][0] : words[0];
+    final second = letters.length > 1 ? letters[1] : '';
+    return '${letters[0].toUpperCase()}${second.toLowerCase()}';
+  }
+
+  /// The number of the app in its cell on the fallback start screen, where
+  /// an element has its atomic number: how many letters and digits [name],
+  /// the package name of the app, has, 5 for `my_app`.
+  static int _numberOf(String name) => name.replaceAll('_', '').length;
+
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
         description: 'Flutter app for Android and iOS',
         kind: ModuleKinds.scaffold,
-        uses: {routerRole},
+        uses: {routerRole, localizationRole},
         providers: [RoleProvider.plain(appEntryRole)],
       );
 
@@ -66,8 +124,12 @@ final class FlutterCoreModule extends SmfModule {
           'android_package_path':
               identity.androidNamespace.replaceAll('.', '/'),
           'ios_bundle_id': identity.iosBundleId,
+          'app_symbol': _symbolOf(context.appName),
+          'app_number': _numberOf(context.appName),
+          ...localizationRole.varsOf(id, _texts),
         },
       ),
+      localizationRole.data(_texts),
       AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
       const PubspecContribution.environment(
         sdk: '^3.12.0',

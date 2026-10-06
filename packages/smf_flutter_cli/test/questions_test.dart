@@ -611,8 +611,9 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, in English and in Ukrainian, so
-    // the app is in both.
+    // of that screen in a main navigation, and then the two of the fallback
+    // start screen of the app entry, in English and in Ukrainian, so the
+    // app is in both.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -622,7 +623,11 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        everyElement(startsWith('home')),
+        [
+          ...texts.keys.where((key) => key.startsWith('home')),
+          'flutterCoreFallbackHint',
+          'flutterCoreFallbackCopied',
+        ],
         reason: language,
       );
     }

@@ -111,6 +111,18 @@ Map<String, List<(String, Object?)>> _arbFilesOf(RenderedApp app) => {
           ],
     };
 
+/// The texts that the app entry gives the app of [result], which an app
+/// has after those of its modules, as the entries of the ARB file of
+/// [language]: each text that is in the language, by its getter.
+List<(String, Object?)> _ofAppEntry(ContractResult result, String language) => [
+      for (final text in localizationRole.textsIn(
+        localizationRole.hookInput(result.hook!),
+      ))
+        if (text.owner == const ModuleOrigin(FlutterCoreModule.id))
+          if (text.text.textIn(language) case final translation?)
+            (text.getter, translation),
+    ];
+
 /// What the contributors of the app of [result] put into [socket], each as
 /// its origin and the code of its fragment or its key, in the order that
 /// the pipeline rendered them.
@@ -200,9 +212,10 @@ void main() {
 
     test('builds the apps of the modules with texts with the module', () {
       expect(results.map((result) => result.contractCase.name), [
+        // The app of the module alone, with the texts of the app entry.
+        'flutter_core with localization',
         'flutter_core',
         'shared_preferences',
-        'gen_l10n',
         'greeting with localization',
         'greeting',
         'tabs with localization',
@@ -244,7 +257,7 @@ void main() {
     });
   });
 
-  group('an app whose modules have no texts', () {
+  group('an app whose modules have no texts but the app entry', () {
     late ContractResult result;
     late RenderedApp app;
     late RenderedApp without;
@@ -256,7 +269,14 @@ void main() {
       without = (await _rendered(const [_preferences])).app!;
     });
 
-    test('has the options of gen-l10n, the extension and the English file', () {
+    test(
+        'has the options of gen-l10n, the extension, and a file for each '
+        'language of the texts of the app entry, the English one first', () {
+      final languages = localizationRole.localesIn(
+        localizationRole.hookInput(result.hook!),
+      );
+
+      expect(languages.first, 'en');
       expect(
         {
           for (final file in app.files.values)
@@ -267,16 +287,22 @@ void main() {
           'l10n.yaml': 'gen_l10n',
           LocalizationRole.appLocaleFile: 'role:localization',
           _accessor: 'gen_l10n',
-          GenL10nModule.templateArbFile: 'gen_l10n',
+          for (final language in languages)
+            '${GenL10nModule.arbDirectory}/app_$language.arb': 'gen_l10n',
         },
       );
       expect(app.files[GenL10nModule.templateArbFile]!.fromHook, isTrue);
     });
 
-    test('has a template of gen-l10n without texts, in English', () {
+    test(
+        'has a template of gen-l10n with the texts of the app entry alone, '
+        'in English', () {
+      final entry = _ofAppEntry(result, 'en');
+
+      expect(entry, isNotEmpty);
       expect(
-        app.files[GenL10nModule.templateArbFile]!.text,
-        '{\n  "@@locale": "en"\n}\n',
+        _arbFilesOf(app)[GenL10nModule.templateArbFile],
+        [('@@locale', 'en'), ...entry],
       );
     });
 
@@ -336,15 +362,22 @@ void main() {
         'role names it, in the order of the role', () {
       final input = localizationRole.hookInput(result.hook!);
 
+      final entry = _ofAppEntry(result, 'en');
       expect(_arbFilesOf(app)[GenL10nModule.templateArbFile], [
         ('@@locale', 'en'),
         ('greetingHello', 'Hello'),
         ('greetingBye', _bye),
         ('tabsFirst', 'First'),
+        ...entry,
       ]);
       expect(
         [for (final text in localizationRole.textsIn(input)) text.getter],
-        ['greetingHello', 'greetingBye', 'tabsFirst'],
+        [
+          'greetingHello',
+          'greetingBye',
+          'tabsFirst',
+          for (final (getter, _) in entry) getter,
+        ],
       );
     });
 
@@ -357,10 +390,12 @@ void main() {
         ('@@locale', 'uk'),
         ('greetingHello', 'Вітаю'),
         ('tabsFirst', 'Перша'),
+        ..._ofAppEntry(result, 'uk'),
       ]);
       expect(files['lib/l10n/app_de.arb'], [
         ('@@locale', 'de'),
         ('greetingHello', 'Hallo'),
+        ..._ofAppEntry(result, 'de'),
       ]);
     });
 
