@@ -83,9 +83,10 @@ const localizationRole = LocalizationRole._();
 /// In an app with a settings screen, which the role uses (see
 /// [SettingsScreenRole]), the template adds [languageSettingFile] with
 /// `LanguageSetting`, an entry of the settings screen that shows the choice
-/// and lets the user change it: one of the languages of the app, or the
-/// languages of the device. It reads the choice from `AppLocaleScope` and
-/// changes it with `appLocale.choose()`. The texts of the entry,
+/// as the value of its row, and opens a sheet in which the user changes it:
+/// one of the languages of the app, or the languages of the device. It
+/// reads the choice from `AppLocaleScope` and changes it with
+/// `appLocale.choose()`. The texts of the entry,
 /// [languageSettingTitle] and [languageOfDevice], are texts of the template
 /// of the role, which it gives the role only in such an app.
 ///

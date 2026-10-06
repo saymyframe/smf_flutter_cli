@@ -580,7 +580,7 @@ List<BrokenProvider> brokenProviders() => const [
           MatrixExpectedFailure(
             'test/language_setting/language_setting_test.dart',
             'the setting of the language shows the choice of the user, and '
-                'its dialog chooses a language of the app or the languages '
+                'its sheet chooses a language of the app or the languages '
                 'of the device',
             'The setting shows its texts in the language that the user '
                 'chose.',

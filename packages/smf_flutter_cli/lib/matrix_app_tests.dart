@@ -245,7 +245,7 @@ Future<MatrixAppTests> smfAppTests() async {
       await localizationRoleAppTest(),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
-      // modules provide them: its dialog chooses a language of the app,
+      // modules provide them: its sheet chooses a language of the app,
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
@@ -456,19 +456,21 @@ $list
 /// the localization role gives the settings screen, which the CLI keeps in
 /// its `app_tests/language_setting`, for the apps with the localization
 /// role and the settings screen role, whichever modules provide them. On
-/// the settings screen, the setting shows its title and the choice of the
-/// user, the languages of the device while the user chose none. A tap opens
-/// a dialog with an option for the languages of the device and one for each
+/// the settings screen, the setting shows its title and, as the value of
+/// its row, the choice of the user, the languages of the device while the
+/// user chose none. A tap opens a sheet over the main navigation of the
+/// app, with an option for the languages of the device and one for each
 /// language of the app, by its name in that language, or its code, with
 /// the chosen one selected and checked. A tap on an option closes the
-/// dialog: the app and the texts of the setting are in the language of the
+/// sheet: the app and the texts of the setting are in the language of the
 /// option, which is saved under [LocalizationRole.localeKey], and the
-/// option of the device removes what was saved. A second file of the test
-/// starts the app on a device that prefers the last language of the app:
-/// the app and the setting follow the device, the setting names a choice
-/// of that same language that code makes, the next start restores the
-/// language that was saved, and the dialog has no option but those of the
-/// app and of the device.
+/// option of the device removes what was saved. On a small phone with a
+/// large text size, the choice is below the title of the setting, and the
+/// sheet scrolls. A second file of the test starts the app on a device
+/// that prefers the last language of the app: the app and the setting
+/// follow the device, the setting names a choice of that same language
+/// that code makes, the next start restores the language that was saved,
+/// and the sheet has no option but those of the app and of the device.
 ///
 /// The test knows only the two roles. The matrix writes the widget of the
 /// entry for it into [languageSettingFile], from the entries of the

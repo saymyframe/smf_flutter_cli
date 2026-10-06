@@ -1322,8 +1322,9 @@ import 'app_locale.dart';
 const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
 
 /// The setting of the language of the app, an entry of the settings screen:
-/// it shows the language that the user chose, and lets the user choose one
-/// of the languages of the app, or follow the languages of the device.
+/// it shows the language that the user chose, and opens a sheet in which
+/// the user chooses one of the languages of the app, or follows the
+/// languages of the device.
 ///
 /// The entry does not wait until a choice is saved. If the preferences fail
 /// to save it, the app is in the chosen language while it runs, its next
@@ -1336,16 +1337,33 @@ class LanguageSetting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
+    final choice = Text(
+      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+    );
+    final arrow = Icon(Icons.chevron_right, color: muted);
+    // At a large text size, the choice goes below the title, where it has
+    // the width of the row.
+    final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
       title: Text(context.l10n.localizationLanguage),
-      subtitle: Text(
-        chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      ),
-      onTap: () => showDialog<void>(
+      subtitle: below ? choice : null,
+      trailing: below
+          ? arrow
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [choice, const SizedBox(width: 4), arrow],
+            ),
+      onTap: () => showModalBottomSheet<void>(
         context: context,
-        builder: (context) => const _LanguageDialog(),
+        // Over the main navigation of the app too.
+        useRootNavigator: true,
+        showDragHandle: true,
+        builder: (context) => const _LanguageSheet(),
       ),
     );
   }
@@ -1355,31 +1373,60 @@ class LanguageSetting extends StatelessWidget {
 String _nameOf(Locale locale) =>
     _names[locale.languageCode] ?? locale.languageCode;
 
-/// The choice between the languages of the app and those of the device.
-class _LanguageDialog extends StatelessWidget {
-  const _LanguageDialog();
+/// The sheet of the setting: the choice between the languages of the app
+/// and those of the device. It scrolls where its options do not fit.
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet();
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final chosen = AppLocaleScope.of(context);
-    return SimpleDialog(
-      title: Text(context.l10n.localizationLanguage),
-      children: [
-        for (final Locale? locale in [null, ...appLocales])
-          ListTile(
-            title: Text(
-              locale == null
-                  ? context.l10n.localizationSystem
-                  : _nameOf(locale),
+    return SafeArea(
+      child: ListView(
+        // A drag of options that fit closes the sheet, as a drag of its
+        // handle does.
+        primary: false,
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Semantics(
+              header: true,
+              child: Text(
+                context.l10n.localizationLanguage,
+                style: theme.textTheme.headlineSmall,
+              ),
             ),
-            selected: locale == chosen,
-            trailing: locale == chosen ? const Icon(Icons.check) : null,
-            onTap: () async {
-              Navigator.of(context).pop();
-              await appLocale.choose(locale);
-            },
           ),
-      ],
+          for (final Locale? locale in [null, ...appLocales])
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 4,
+              ),
+              title: Text(
+                locale == null
+                    ? context.l10n.localizationSystem
+                    : _nameOf(locale),
+                // Larger than the text of a row of the screen.
+                style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+              ),
+              selected: locale == chosen,
+              trailing: locale == chosen
+                  ? Icon(
+                      Icons.check_rounded,
+                      color: theme.colorScheme.secondary,
+                    )
+                  : null,
+              onTap: () async {
+                Navigator.of(context).pop();
+                await appLocale.choose(locale);
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }
