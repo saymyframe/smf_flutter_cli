@@ -55,7 +55,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up, the root widget, and the screen that an app shows while it has no screen to start on. Every app has it. |
 | [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
-| [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
+| [`home`](https://doc.saymyframe.com/modules/home) | A start screen that welcomes the developer of the app, with the name of the app and the next steps. |
 | [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
 | [`onboarding`](https://doc.saymyframe.com/modules/onboarding) | An onboarding that a new user goes through on the first launch, before every other screen. |
 | [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme with a palette and a bundled font, and the theme mode that the user selects, which the app remembers. |

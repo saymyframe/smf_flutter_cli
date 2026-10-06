@@ -13,8 +13,8 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
-/// The codes of the languages of the file of the texts of the onboarding
-/// that the matrix writes for an app, [file], in the order of the file.
+/// The codes of the languages of the file of the texts of a module that
+/// the matrix writes for an app, [file], in the order of the file.
 List<String> _languagesOf(String file) => [
       for (final language
           in RegExp(r"^  '(\w+)': \{$", multiLine: true).allMatches(file))
@@ -1546,7 +1546,7 @@ void main() {
         "    'ready': 'Enjoy the app.',\n"
         "    'skip': 'Skip',\n"
         "    'next': 'Next',\n"
-        "    'done': 'Done',\n";
+        "    'done': 'Get started',\n";
 
     // The names are those that first_launch_test.dart of the app test looks
     // each text up by: a new text of the module needs a look there.
@@ -1569,7 +1569,7 @@ void main() {
         "    'ready': 'Приємного користування!',\n"
         "    'skip': 'Пропустити',\n"
         "    'next': 'Далі',\n"
-        "    'done': 'Готово',\n"
+        "    'done': 'Почати',\n"
         '  },\n'
         "  'en': {\n"
         '$english'
@@ -2208,6 +2208,160 @@ void main() {
         );
       }
     }
+  });
+
+  test(
+      'the test of the home module applies to the apps with the module, '
+      'whatever else they have, with neither mocks nor a probe, and gets '
+      'the texts of the screen of the module in each language of the app', () {
+    final test = named('home');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('home'))) app.name,
+      ],
+    );
+    // It tests the module, not a role, and its screen reaches no platform
+    // side that another test would have to mock. The walk of the routes
+    // goes to its screen on a device.
+    expect(test.roles, isEmpty);
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+
+    final languages = <String, List<String>>{};
+    for (final app in apps.where(test.appliesTo)) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [homeTextsFile], reason: app.name);
+      languages[app.name] = _languagesOf(files[homeTextsFile]!);
+    }
+    // The languages of the localization role of the app, which are those
+    // of the texts of its modules, and English alone without the role.
+    expect(languages, {
+      'home with localization': ['en', 'uk'],
+      'home': ['en'],
+      'every module (bloc)': ['en', 'uk'],
+      'every module (riverpod)': ['en', 'uk'],
+    });
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        languages[app.name],
+        app.hook!.presentRoles.contains(localizationRole)
+            ? localizationRole.localesIn(
+                localizationRole.hookInput(app.hook!),
+              )
+            : ['en'],
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the test of the home module gets each text of the screen by its name, '
+      'in each language of the app in the order of the localization role, '
+      'in English where the module has no translation, and in English alone '
+      'in an app without the role', () {
+    final test = named('home');
+    String textsOf({List<String>? languages}) => test.generatedFiles!(
+          MatrixApp(
+            'texts',
+            const [ModuleId('home')],
+            hook: RoleHookRequest(
+              data: const [],
+              presentRoles: {
+                routerRole,
+                if (languages != null) localizationRole,
+              },
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          ),
+          'my_app',
+        )[homeTextsFile]!;
+    const english = "    'greetingMorning': 'Good morning',\n"
+        "    'greetingAfternoon': 'Good afternoon',\n"
+        "    'greetingEvening': 'Good evening',\n"
+        "    'readyTitle': 'Your app is ready',\n"
+        "    'readyText': 'Generated with Say My Frame. Everything you see is "
+        "yours to change.',\n"
+        "    'nextTitle': 'Next steps',\n"
+        "    'stepScreenTitle': 'Make this screen yours',\n"
+        "    'stepScreenText': 'Replace this welcome with the first screen of "
+        "your app.',\n"
+        "    'stepFeatureTitle': 'Add a feature',\n"
+        "    'stepFeatureText': 'A feature keeps its screens and routes in a "
+        "folder of its own.',\n"
+        "    'stepDocsTitle': 'Read the docs',\n"
+        "    'stepDocsText': 'Guides for every module, and for writing your "
+        "own.',\n"
+        "    'copied': 'Copied',\n"
+        "    'footer': 'Built with Say My Frame',\n";
+
+    // The names are those that the files of the app test look each text up
+    // by, which the tests of the module check.
+    final localized = textsOf(languages: ['uk', 'en', 'de']);
+    final (:index, :errors) = DartFileIndexer.parse(homeTextsFile, localized);
+    expect(errors, isEmpty);
+    expect(index.imports, isEmpty);
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      ['homeTexts'],
+    );
+    expect(
+      localized,
+      endsWith(
+        'const Map<String, Map<String, String>> homeTexts = {\n'
+        "  'uk': {\n"
+        "    'greetingMorning': 'Доброго ранку',\n"
+        "    'greetingAfternoon': 'Добрий день',\n"
+        "    'greetingEvening': 'Добрий вечір',\n"
+        "    'readyTitle': 'Ваш застосунок готовий',\n"
+        "    'readyText': 'Згенеровано з Say My Frame. Усе, що ви бачите, "
+        "можна змінити.',\n"
+        "    'nextTitle': 'Що далі',\n"
+        "    'stepScreenTitle': 'Зробіть цей екран своїм',\n"
+        "    'stepScreenText': 'Замініть це привітання першим екраном вашого "
+        "застосунку.',\n"
+        "    'stepFeatureTitle': 'Додайте фічу',\n"
+        "    'stepFeatureText': 'Фіча тримає свої екрани й маршрути у власній "
+        "теці.',\n"
+        "    'stepDocsTitle': 'Почитайте документацію',\n"
+        "    'stepDocsText': 'Настанови до кожного модуля і до написання "
+        "власного.',\n"
+        "    'copied': 'Скопійовано',\n"
+        "    'footer': 'Зроблено з Say My Frame',\n"
+        '  },\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        // The module has no German texts.
+        "  'de': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
+    expect(_languagesOf(localized), ['uk', 'en', 'de']);
+
+    expect(
+      textsOf(),
+      endsWith(
+        'const Map<String, Map<String, String>> homeTexts = {\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
   });
 
   test(

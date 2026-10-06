@@ -2,7 +2,11 @@
 
 The SMF module of the main navigation of the app as tabs in a bar at the bottom. It provides the layout role of SMF.
 
-Features declare which of their routes are destinations of the main navigation, each with a label and an icon. This module generates `AppShell`, a `Scaffold` with a Material 3 `NavigationBar` that has a tab for each destination, and the router builds the main navigation around it, with a stack of its own for each tab. With one destination, the bar is hidden.
+Features declare which of their routes are destinations of the main navigation, each with a label and an icon. This module generates `AppShell`, a `Scaffold` with a bar at the bottom that has a tab for each destination, and the router builds the main navigation around it, with a stack of its own for each tab. With one destination, the bar is hidden.
+
+The generated file draws the bar itself, in the colours of the theme of the app, so that file is where you change its look. A hairline separates the bar from the screen. The icon and the label of the selected tab are in the colour that the theme gives the selected destination of a navigation bar (`NavigationBarThemeData.iconTheme`), or in the primary colour of the theme, and a tab keeps its size when it is selected. When the user switches to another tab, its screen fades in while it rises a little.
+
+Each tab is a button for a screen reader, with the label of its destination. The text size of the device scales the labels up to 1.3 times, and a long press on a tab shows its label in a tooltip at the full size. For a user who asks the device for less motion, the tab and the screen change at once.
 
 The label of a tab is a text of its feature. When a module provides the texts of the app, such as `gen_l10n`, the bar shows each label in the language of the app, also after the user chooses another language. Without such a module the labels are in English.
 

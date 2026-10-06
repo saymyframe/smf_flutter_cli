@@ -9,17 +9,13 @@
 // destinations in each language of the app that the matrix writes for the
 // tests of layout_screens, with what puts the app into a language; every
 // app that it applies to has both.
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_second_screen.dart';
 
+import 'bottom_tabs_bar.dart';
 import 'destination_labels.dart';
 import 'screens.dart';
-
-/// The tab of the bar that shows [label].
-Finder _tab(String label) =>
-    find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,20 +40,20 @@ void main() {
       final labels = destinationLabels[language]!;
       for (final label in labels) {
         expect(
-          _tab(label),
+          tab(tester, label),
           findsOneWidget,
           reason: 'In $language, the bar shows a tab with the label of each '
               'destination in that language.',
         );
       }
 
-      await tester.tap(_tab(labels[second]));
+      await tester.tap(tab(tester, labels[second]));
       await tester.pumpAndSettle();
       expect(find.byType(FixtureSecondScreen), findsOneWidget);
       expect(find.byType(FixtureHomeScreen), findsNothing);
       expect(heard(), [('fake_second.second', '/fake_second')]);
 
-      await tester.tap(_tab(labels[fixture]));
+      await tester.tap(tab(tester, labels[fixture]));
       await tester.pumpAndSettle();
       expect(find.byType(FixtureHomeScreen), findsOneWidget);
       expect(find.byType(FixtureSecondScreen), findsNothing);

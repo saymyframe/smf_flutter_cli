@@ -13,6 +13,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_onboarding/bundles/onboarding_bundle.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_onboarding/src/agents.dart';
+import 'package:smf_onboarding/src/app_symbol.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -53,7 +54,7 @@ const _texts = {
   'onboardingReady': 'Enjoy the app.',
   'onboardingSkip': 'Skip',
   'onboardingNext': 'Next',
-  'onboardingDone': 'Done',
+  'onboardingDone': 'Get started',
 };
 
 /// The Ukrainian texts of the module, by the same getters.
@@ -63,7 +64,7 @@ const _ukrainian = {
   'onboardingReady': 'Приємного користування!',
   'onboardingSkip': 'Пропустити',
   'onboardingNext': 'Далі',
-  'onboardingDone': 'Готово',
+  'onboardingDone': 'Почати',
 };
 
 /// The annotation that [_Annotating] gives the class of the screen.
@@ -384,9 +385,9 @@ void main() {
     });
 
     test(
-        'contributes its brick with the key of the preferences and the '
-        'texts, its route with the guard, its restorer, its texts and its '
-        'note for coding agents, and nothing else', () {
+        'contributes its brick with the key of the preferences, the symbol '
+        'of the app and the texts, its route with the guard, its restorer, '
+        'its texts and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
       expect(contributions, hasLength(5));
@@ -400,6 +401,7 @@ void main() {
       expect(brick.when, isEmpty);
       expect(brick.vars.keys, [
         'completed_key',
+        'symbol',
         'text_welcome',
         'text_ready_title',
         'text_ready',
@@ -409,6 +411,9 @@ void main() {
       ]);
       expect(brick.vars['completed_key'], "'onboarding.completed'");
       expect(OnboardingModule.completedKey, 'onboarding.completed');
+      // The symbol of the app of the context, contract_app, as a Dart
+      // string.
+      expect(brick.vars['symbol'], "'Ca'");
       // Each text is a text of the app with the localization role, and its
       // English text without it.
       expect(
@@ -443,6 +448,31 @@ void main() {
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
       expect(note.when, isEmpty);
+    });
+  });
+
+  group('the symbol of the app', () {
+    test(
+        'is the first letter of the first word of its name in upper case '
+        'and the first letter of the second word in lower case', () {
+      expect(appSymbolOf('my_app'), 'Ma');
+      expect(appSymbolOf('bird_watch'), 'Bw');
+      // The words after the second add nothing.
+      expect(appSymbolOf('every_module_bloc'), 'Em');
+    });
+
+    test('is the first two letters of a name of one word', () {
+      expect(appSymbolOf('notes'), 'No');
+      expect(appSymbolOf('ab'), 'Ab');
+    });
+
+    test('is the one letter of a name of one letter', () {
+      expect(appSymbolOf('x'), 'X');
+    });
+
+    test('takes a digit as it is', () {
+      expect(appSymbolOf('app_2go'), 'A2');
+      expect(appSymbolOf('v2'), 'V2');
     });
   });
 
@@ -1105,67 +1135,181 @@ void main() {
 
     test(
         'only finishes the onboarding and does not navigate: it knows '
-        'neither the router nor the navigation of the app', () {
+        'neither the router nor the navigation of the app, and no package '
+        'but Flutter', () {
       expect(_importsOf(unit), [
+        'dart:ui',
         'package:flutter/material.dart',
+        'package:flutter/services.dart',
         'onboarding_pages.dart',
         'onboarding_status.dart',
       ]);
     });
 
     test(
-        'has Skip, which finishes the onboarding, before a button that '
-        'shows the next page as Next, and finishes the onboarding as Done on '
-        'the last page', () {
+        'has Skip, which finishes the onboarding, above the pages, and one '
+        'button of the whole width below them, which shows the next page as '
+        'Next and finishes the onboarding as Get started on the last page', () {
       expect(_buttonsOf(unit), [
-        ('TextButton', 'onboardingStatus.complete', "Text('Skip')"),
+        ('TextButton', 'onboardingStatus.complete', "'Skip'"),
         (
           'FilledButton',
           'isLast ? onboardingStatus.complete : _next',
-          "Text(isLast ? 'Done' : 'Next')",
+          "isLast ? 'Get started' : 'Next'",
         ),
       ]);
-      // Skip is not on the last page.
-      final skip = _buttonCalls(unit).first;
-      expect((skip.parent! as IfElement).expression.toSource(), '!isLast');
+      // In the order of the column of the screen.
+      final pages = _calls(unit, 'PageView').single;
+      final [skip, button] = _buttonCalls(unit);
+      expect(skip.offset, lessThan(pages.offset));
+      expect(pages.offset, lessThan(button.offset));
+      // The column of the button stretches it to its width.
+      expect(
+        _argument(_enclosing(button, 'Column'), 'crossAxisAlignment')
+            .toSource(),
+        'CrossAxisAlignment.stretch',
+      );
     });
 
     test(
-        'shows the pages of the list of the pages, however many it has: the '
-        'last page and the dots come from its length, and Next shows the '
-        'page after the one that the user sees', () {
+        'takes Skip out of its tree on the last page, once it has faded '
+        'away, and lets no tap reach it there', () {
+      final skip = _buttonCalls(unit).first;
+
+      final onLastPage = skip.parent! as ConditionalExpression;
+      expect(onLastPage.condition.toSource(), 'isLast');
+      expect(onLastPage.thenExpression.toSource(), 'const SizedBox.shrink()');
+      expect(onLastPage.elseExpression, skip);
+      // What fades the one out and the other in, and keeps only the one
+      // that it faded in.
+      final switcher = _enclosing(skip, 'AnimatedSwitcher');
+      expect(_argument(switcher, 'child'), onLastPage);
+      final ignoring = _enclosing(switcher, 'IgnorePointer');
+      expect(_argument(ignoring, 'ignoring').toSource(), 'isLast');
+      expect(_argument(ignoring, 'child'), switcher);
+    });
+
+    test(
+        'shows the pages of the list of the pages, however many it has, '
+        'each in the scope of its place among them: the last page and the '
+        'marks come from the length of the list, and Next shows the page '
+        'after the one that the user sees', () {
       final pageView = _calls(unit, 'PageView').single;
       final pages = _calls(unit, 'onboardingPages').single;
 
-      expect(_argument(pageView, 'children').toSource(), 'pages');
       // The list of the pages, in the context of the screen.
       expect(pages.toSource(), 'onboardingPages(context)');
       expect(
         (pages.parent! as VariableDeclaration).name.lexeme,
         'pages',
       );
+      // Each page in a scope with its index and the controller of the
+      // pages, from which the parts of a page read how far the pages are
+      // turned.
+      final build = _methodOf(unit, '_OnboardingScreenState', 'build');
+      final each = _forElementsOf(build).single;
+      expect(
+        (_argument(pageView, 'children') as ListLiteral).elements,
+        [each],
+      );
+      expect(
+        each.forLoopParts.toSource(),
+        'final (index, page) in pages.indexed',
+      );
+      expect(
+        each.body.toSource(),
+        'OnboardingPageScope(index: index, controller: _controller, '
+        'child: page)',
+      );
+      expect(_argument(pageView, 'controller').toSource(), '_controller');
       // The page that the user sees, also after a swipe.
       expect(
-        _argument(pageView, 'onPageChanged').toSource(),
-        '(page) => setState(() => _page = page)',
+        _calls(_argument(pageView, 'onPageChanged'), 'setState')
+            .single
+            .toSource(),
+        'setState(() => _page = page)',
       );
-      final build = _methodOf(unit, '_OnboardingScreenState', 'build');
       expect(
         _variablesOf(build),
         containsPair('isLast', '_page == pages.length - 1'),
       );
-      // A dot for each page, with the one of the page that the user sees
-      // in another colour.
-      final dots = _forElementsOf(build).single;
+      // A mark for each page, which follow the controller of the pages.
       expect(
-        dots.forLoopParts.toSource(),
-        'var index = 0; index < pages.length; index++',
+        _calls(build, '_PageMarks').single.argumentList.toSource(),
+        '(controller: _controller, count: pages.length)',
       );
-      expect(dots.body.toSource(), contains('index == _page ? '));
       expect(
-        _methodOf(unit, '_OnboardingScreenState', '_next').body.toSource(),
-        startsWith('=> _controller.nextPage('),
+        _forElementsOf(_methodOf(unit, '_PageMarks', 'build'))
+            .single
+            .forLoopParts
+            .toSource(),
+        'var index = 0; index < count; index++',
       );
+      expect(
+        _calls(_methodOf(unit, '_OnboardingScreenState', '_next'), 'nextPage')
+            .single
+            .toSource(),
+        startsWith('_controller.nextPage('),
+      );
+    });
+
+    test(
+        'changes what it shows at once in an app that asks for less motion: '
+        'the page that Next shows, Skip and the label of the button', () {
+      final build = _methodOf(unit, '_OnboardingScreenState', 'build');
+      final next = _methodOf(unit, '_OnboardingScreenState', '_next');
+
+      expect(
+        _variablesOf(build),
+        containsPair(
+          'fade',
+          'MediaQuery.disableAnimationsOf(context) ? Duration.zero : '
+              'Durations.short4',
+        ),
+      );
+      // Skip, and the label of the button.
+      expect(
+        [
+          for (final switcher in _calls(build, 'AnimatedSwitcher'))
+            _argument(switcher, 'duration').toSource(),
+        ],
+        ['fade', 'fade'],
+      );
+      final whenLess = (next.body as BlockFunctionBody).block.statements.single
+          as IfStatement;
+      expect(
+        whenLess.expression.toSource(),
+        'MediaQuery.disableAnimationsOf(context)',
+      );
+      expect(
+        _calls(whenLess.thenStatement, 'jumpToPage').single.toSource(),
+        '_controller.jumpToPage(_page + 1)',
+      );
+      expect(_calls(whenLess.elseStatement!, 'nextPage'), hasLength(1));
+    });
+
+    test(
+        'tells the system which icons of the status bar its background '
+        'needs, by the brightness of the theme, since it has no app bar', () {
+      final region = _calls(unit, 'AnnotatedRegion').single;
+
+      expect(region.typeArguments!.toSource(), '<SystemUiOverlayStyle>');
+      expect(
+        _argument(region, 'value').toSource(),
+        'theme.brightness == Brightness.dark ? SystemUiOverlayStyle.light : '
+        'SystemUiOverlayStyle.dark',
+      );
+      // The whole screen is in it.
+      expect(
+        (_argument(region, 'child') as MethodInvocation).methodName.name,
+        'Scaffold',
+      );
+      expect(_calls(unit, 'AppBar'), isEmpty);
+    });
+
+    test('names no font: its texts take that of the theme of the app', () {
+      expect(_namedArguments(unit, 'fontFamily'), isEmpty);
+      expect(_namedArguments(unit, 'fontFamilyFallback'), isEmpty);
     });
 
     test(
@@ -1237,8 +1381,8 @@ void main() {
     });
 
     test(
-        'are one list of the app: a welcome with the name of the app, and a '
-        'page that ends the onboarding', () {
+        'are one list of the app: a welcome with the symbol and the name of '
+        'the app, and a page with an icon that ends the onboarding', () {
       final pages = _functionOf(unit, 'onboardingPages');
 
       expect(app.files[_pages]!.text, isNot(contains('{{')));
@@ -1248,22 +1392,22 @@ void main() {
         '${pages.functionExpression.parameters}',
         '(BuildContext context)',
       );
-      expect(
-        [
-          for (final page in _calls(unit, 'OnboardingPage'))
-            (
-              _argument(page, 'title').toSource(),
-              _argument(page, 'text').toSource(),
-            ),
-        ],
-        [
-          ("'Contract App'", "'Welcome! We are glad you are here.'"),
-          ("'You are all set'", "'Enjoy the app.'"),
-        ],
-      );
+      expect(_pageArguments(unit), [
+        {
+          'symbol': "'Ca'",
+          'title': "'Contract App'",
+          'text': "'Welcome! We are glad you are here.'",
+        },
+        {
+          'icon': 'Icons.check_rounded',
+          'title': "'You are all set'",
+          'text': "'Enjoy the app.'",
+        },
+      ]);
     });
 
-    test('name the app as the context names it', () async {
+    test('name the app, and give its symbol, as the context names it',
+        () async {
       final result = await _rendered(
         const [OnboardingModule.id],
         context: const ModuleContext(
@@ -1278,14 +1422,15 @@ void main() {
         ),
       );
 
-      final first =
-          _calls(_parsed(result.app!, _pages), 'OnboardingPage').first;
-      expect(_argument(first, 'title').toSource(), "'Bird Watch'");
+      final first = _pageArguments(_parsed(result.app!, _pages)).first;
+      expect(first, containsPair('title', "'Bird Watch'"));
+      expect(first, containsPair('symbol', "'Bw'"));
     });
 
     test(
-        'are widgets with a constant constructor, which scroll when the '
-        'page is too small for them', () {
+        'are widgets with a constant constructor, which take a symbol or an '
+        'icon for their cell, and scroll when the page is too small for '
+        'them', () {
       final page = _classOf(unit, 'OnboardingPage');
 
       expect(page.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
@@ -1294,17 +1439,34 @@ void main() {
       expect(constructor.constKeyword, isNotNull);
       expect(
         constructor.parameters.toSource(),
-        '({required this.icon, required this.title, required this.text, '
+        '({required this.title, required this.text, this.symbol, this.icon, '
         'super.key})',
       );
-      final scroll = _calls(unit, 'SingleChildScrollView').single;
+      // A page shows one of the two.
       expect(
-        (scroll.parent!.parent!.parent! as MethodInvocation).methodName.name,
-        'Center',
+        (constructor.initializers.single as AssertInitializer)
+            .condition
+            .toSource(),
+        'symbol != null || icon != null',
+      );
+      // The page is at least as high as the room that the screen gives it,
+      // of which the cells take what the texts leave, and scrolls in less.
+      final scroll = _calls(unit, 'SingleChildScrollView').single;
+      final box = _argument(scroll, 'child') as MethodInvocation;
+      expect(box.methodName.name, 'ConstrainedBox');
+      expect(
+        _argument(box, 'constraints').toSource(),
+        'BoxConstraints(minHeight: constraints.maxHeight)',
+      );
+      expect(
+        _argument(_enclosing(scroll, 'LayoutBuilder'), 'builder').toSource(),
+        startsWith('(context, constraints) => SingleChildScrollView('),
       );
     });
 
-    test('have their title as a header for a screen reader', () {
+    test(
+        'have their title as a header for a screen reader, which passes '
+        'over the cells, a picture', () {
       final header = _calls(unit, 'Semantics').single;
 
       expect(_argument(header, 'header').toSource(), 'true');
@@ -1313,11 +1475,152 @@ void main() {
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
       expect(
-        [
-          for (final shown in _calls(unit, 'Text'))
-            shown.argumentList.arguments.first.toSource(),
-        ],
+        _textsOf(_methodOf(unit, 'OnboardingPage', '_build')),
         ['title', 'text'],
+      );
+      // The cells, with the symbol and the number of the page.
+      final picture = _calls(unit, 'ExcludeSemantics').single;
+      expect(
+        (_argument(picture, 'child') as MethodInvocation).methodName.name,
+        '_Cells',
+      );
+      expect(_calls(unit, '_Cells'), hasLength(1));
+    });
+
+    test(
+        'stand still outside the screen of the onboarding, and move with '
+        'its pages in the scope that the screen puts around each', () {
+      final scope = _classOf(unit, 'OnboardingPageScope');
+      final build = _methodOf(unit, 'OnboardingPage', 'build');
+
+      expect(scope.extendsClause!.superclass.name.lexeme, 'InheritedWidget');
+      expect(
+        scope.body.members
+            .whereType<ConstructorDeclaration>()
+            .single
+            .parameters
+            .toSource(),
+        '({required this.index, required this.controller, '
+        'required super.child, super.key})',
+      );
+      expect(
+        _variablesOf(build),
+        containsPair('scope', 'OnboardingPageScope.maybeOf(context)'),
+      );
+      final withoutScope = (build.body as BlockFunctionBody)
+          .block
+          .statements
+          .whereType<IfStatement>()
+          .single;
+      expect(withoutScope.expression.toSource(), 'scope == null');
+      expect(
+        withoutScope.thenStatement.toSource(),
+        'return _build(context, turned: 0, index: 0);',
+      );
+      // With a scope, the page follows the controller of the pages.
+      final following = _calls(build, 'AnimatedBuilder').single;
+      expect(_argument(following, 'animation').toSource(), 'scope.controller');
+      expect(
+        _calls(following, '_build').single.argumentList.toSource(),
+        '(context, turned: scope.turned, index: scope.index)',
+      );
+    });
+
+    test(
+        'read how far the pages are turned from their controller whenever '
+        'it knows its page, so that a page built right after the pages got '
+        'a new scroll position stays where it is', () {
+      // A new scroll position has the page of the old one, but no
+      // dimensions of its own before its first layout: code that waits for
+      // those takes a page that the user sees for one not reached yet.
+      expect(
+        _methodOf(unit, 'OnboardingPageScope', 'turnedOf').body.toSource(),
+        '=> (controller.hasClients ? controller.page : null) ?? '
+        'controller.initialPage.toDouble();',
+      );
+      expect(
+        _methodOf(unit, 'OnboardingPageScope', 'turned').body.toSource(),
+        '=> (turnedOf(controller) - index).clamp(-1, 1);',
+      );
+      // The background and the marks of the screen read it the same way.
+      expect(
+        [
+          for (final read in _calls(_parsed(app, _screen), 'turnedOf'))
+            read.toSource(),
+        ],
+        [
+          'OnboardingPageScope.turnedOf(_controller)',
+          'OnboardingPageScope.turnedOf(controller)',
+        ],
+      );
+      for (final path in [_pages, _screen]) {
+        expect(
+          app.files[path]!.text,
+          isNot(contains('haveDimensions')),
+          reason: path,
+        );
+      }
+    });
+
+    test(
+        'keep the letters and the number of their cell at their size, '
+        'whatever the text size of the device, since the cell does not grow',
+        () {
+      final cell = _methodOf(unit, '_Cell', 'build');
+      final unscaled = _calls(cell, 'withNoTextScaling').single;
+
+      expect(unscaled.toSource(), startsWith('MediaQuery.withNoTextScaling('));
+      // The cell of a fixed size, with both of its texts.
+      final box = _argument(unscaled, 'child') as MethodInvocation;
+      expect(box.methodName.name, 'Container');
+      expect(
+        [
+          for (final side in ['width', 'height'])
+            _argument(box, side).toSource(),
+        ],
+        ['164', '164'],
+      );
+      expect(_textsOf(box), [r"'$number'", 'symbol!']);
+      // No other text of the file is kept from the text size of the device.
+      expect(_calls(unit, 'withNoTextScaling'), [unscaled]);
+      expect(_textsOf(unit), ['title', 'text', r"'$number'", 'symbol!']);
+    });
+
+    test(
+        'name no font but the monospaced one of the device, for the number '
+        'of a cell: every other text takes the font of the theme of the app',
+        () {
+      final family = _namedArguments(unit, 'fontFamily').single;
+
+      // Android has its monospaced font under the first name, and iOS under
+      // the next.
+      expect(family.argumentExpression.toSource(), "'monospace'");
+      expect(
+        _namedArguments(unit, 'fontFamilyFallback')
+            .single
+            .argumentExpression
+            .toSource(),
+        "const ['Menlo', 'Courier']",
+      );
+      final styled = family.thisOrAncestorMatching<MethodInvocation>(
+        (node) => node is MethodInvocation && node.methodName.name == 'Text',
+      )!;
+      expect(styled.argumentList.arguments.first.toSource(), r"'$number'");
+    });
+
+    test(
+        'bring their cells in once, and at once in an app that asks for '
+        'less motion', () {
+      final entering = _calls(unit, 'TweenAnimationBuilder').single;
+
+      expect(
+        _argument(entering, 'tween').toSource(),
+        'Tween(begin: 0, end: 1)',
+      );
+      expect(
+        _argument(entering, 'duration').toSource(),
+        'MediaQuery.disableAnimationsOf(context) ? Duration.zero : '
+        'const Duration(milliseconds: 1000)',
       );
     });
   });
@@ -1379,31 +1682,31 @@ void main() {
         'onboardingDone',
         'onboardingNext',
       ]);
-      expect(
-        [
-          for (final page in _calls(pages, 'OnboardingPage'))
-            (
-              _argument(page, 'title').toSource(),
-              _argument(page, 'text').toSource(),
-            ),
-        ],
-        [
-          // The name of the app is the same in every language.
-          ("'Contract App'", 'context.l10n.onboardingWelcome'),
-          ('context.l10n.onboardingReadyTitle', 'context.l10n.onboardingReady'),
-        ],
-      );
+      expect(_pageArguments(pages), [
+        // The symbol and the name of the app are the same in every
+        // language.
+        {
+          'symbol': "'Ca'",
+          'title': "'Contract App'",
+          'text': 'context.l10n.onboardingWelcome',
+        },
+        {
+          'icon': 'Icons.check_rounded',
+          'title': 'context.l10n.onboardingReadyTitle',
+          'text': 'context.l10n.onboardingReady',
+        },
+      ]);
       expect(_buttonsOf(screen), [
         (
           'TextButton',
           'onboardingStatus.complete',
-          'Text(context.l10n.onboardingSkip)',
+          'context.l10n.onboardingSkip',
         ),
         (
           'FilledButton',
           'isLast ? onboardingStatus.complete : _next',
-          'Text(isLast ? context.l10n.onboardingDone : '
-              'context.l10n.onboardingNext)',
+          'isLast ? context.l10n.onboardingDone : '
+              'context.l10n.onboardingNext',
         ),
       ]);
       // Without the role, no code reads the texts of an app.
@@ -1498,9 +1801,10 @@ void main() {
     });
 
     test(
-        'names the list of the pages, the status with what finishes the '
-        'onboarding and what starts it again, and the key of the module, as '
-        'the files of the app declare them', () {
+        'names the list of the pages, the widget of a page with what its '
+        'cell takes, the status with what finishes the onboarding and what '
+        'starts it again, and the key of the module, as the files of the '
+        'app declare them', () {
       final code = _codeOf(agentNote);
 
       expect(
@@ -1508,6 +1812,9 @@ void main() {
         containsAll([
           'onboardingPages()',
           _pages,
+          'OnboardingPage',
+          'symbol',
+          'icon',
           'onboardingStatus',
           _status,
           'complete()',
@@ -1516,10 +1823,18 @@ void main() {
           OnboardingModule.completedKey,
         ]),
       );
+      final pages = _indexOf(app, _pages);
       expect(
-        _indexOf(app, _pages).declaration('onboardingPages')?.kind,
+        pages.declaration('onboardingPages')?.kind,
         DeclarationKind.function,
       );
+      final page = pages.declaration('OnboardingPage')!;
+      expect(page.kind, DeclarationKind.classType);
+      final ofCell = {
+        for (final member in page.members) member.name: member.kind,
+      };
+      expect(ofCell, containsPair('symbol', MemberKind.field));
+      expect(ofCell, containsPair('icon', MemberKind.field));
       final status = _indexOf(app, _status);
       expect(
         status.declaration('onboardingStatus')?.kind,
@@ -1665,14 +1980,61 @@ List<MethodInvocation> _buttonCalls(CompilationUnit unit) {
 }
 
 /// The buttons of the screen in [unit], in the order of the code: the
-/// widget of each, what a tap on it calls, and what it shows.
+/// widget of each, what a tap on it calls, and the text that it shows.
 List<(String, String, String)> _buttonsOf(CompilationUnit unit) => [
       for (final button in _buttonCalls(unit))
         (
           button.methodName.name,
           _argument(button, 'onPressed').toSource(),
-          _argument(button, 'child').toSource(),
+          _textsOf(_argument(button, 'child')).single,
         ),
+    ];
+
+/// What the `Text` widgets that [node] creates show, in the order of the
+/// code: the code of the first argument of each.
+List<String> _textsOf(AstNode node) => [
+      for (final text in _calls(node, 'Text'))
+        text.argumentList.arguments.first.toSource(),
+    ];
+
+/// The call of [name] that [node] is in, such as the creation of the widget
+/// around that of [node].
+MethodInvocation _enclosing(AstNode node, String name) =>
+    node.parent!.thisOrAncestorMatching<MethodInvocation>(
+      (ancestor) =>
+          ancestor is MethodInvocation && ancestor.methodName.name == name,
+    )!;
+
+/// The arguments named [name] in [unit], in the order of the code.
+List<NamedArgument> _namedArguments(CompilationUnit unit, String name) {
+  final visitor = _NamedArguments(name);
+  unit.accept(visitor);
+  return visitor.found;
+}
+
+final class _NamedArguments extends RecursiveAstVisitor<void> {
+  _NamedArguments(this.name);
+
+  final String name;
+
+  final List<NamedArgument> found = [];
+
+  @override
+  void visitNamedArgument(NamedArgument node) {
+    if (node.name.lexeme == name) found.add(node);
+    super.visitNamedArgument(node);
+  }
+}
+
+/// The pages that the list of the pages in [unit] creates, in its order:
+/// the code of each argument of each `OnboardingPage`, by its name.
+List<Map<String, String>> _pageArguments(CompilationUnit unit) => [
+      for (final page in _calls(unit, 'OnboardingPage'))
+        {
+          for (final argument
+              in page.argumentList.arguments.whereType<NamedArgument>())
+            argument.name.lexeme: argument.argumentExpression.toSource(),
+        },
     ];
 
 final class _Buttons extends RecursiveAstVisitor<void> {

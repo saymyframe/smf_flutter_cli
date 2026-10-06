@@ -1,5 +1,6 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_bottom_tabs/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -72,6 +73,74 @@ Future<ContractResult> _rendered(
 /// The parsed file [path] of [app].
 CompilationUnit _parsed(RenderedApp app, String path) =>
     parseString(content: app.files[path]!.text).unit;
+
+/// The class [name] of [unit].
+ClassDeclaration _classOf(CompilationUnit unit, String name) =>
+    unit.declarations.whereType<ClassDeclaration>().singleWhere(
+          (declaration) => declaration.namePart.typeName.lexeme == name,
+        );
+
+/// The method [name] of [declaration].
+MethodDeclaration _methodOf(ClassDeclaration declaration, String name) =>
+    declaration.body.members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == name);
+
+/// The calls in a piece of code by what they call, such as `Semantics` or
+/// `MediaQuery.withClampedTextScaling`: the widgets that a build method
+/// creates, with or without `const`, and the functions that it calls.
+final class _Calls extends RecursiveAstVisitor<void> {
+  final Map<String, List<ArgumentList>> byName = {};
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    final target = node.realTarget;
+    final name = node.methodName.name;
+    byName
+        .putIfAbsent(
+          target == null ? name : '${target.toSource()}.$name',
+          () => [],
+        )
+        .add(node.argumentList);
+    super.visitMethodInvocation(node);
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    byName
+        .putIfAbsent(node.constructorName.toSource(), () => [])
+        .add(node.argumentList);
+    super.visitInstanceCreationExpression(node);
+  }
+}
+
+/// The calls in [node], by what they call.
+Map<String, List<ArgumentList>> _callsIn(AstNode node) {
+  final calls = _Calls();
+  node.accept(calls);
+  return calls.byName;
+}
+
+/// The arguments of [call], each as its code: a named one under its name,
+/// and the others under their positions.
+Map<String, String> _argumentsOf(ArgumentList call) {
+  var position = 0;
+  return {
+    for (final argument in call.arguments)
+      if (argument case NamedArgument(:final name, :final argumentExpression))
+        name.lexeme: argumentExpression.toSource()
+      else
+        '${position++}': argument.argumentExpression.toSource(),
+  };
+}
+
+/// The value of the top-level constant [name] of [unit], as its code.
+String _constantOf(CompilationUnit unit, String name) => unit.declarations
+    .whereType<TopLevelVariableDeclaration>()
+    .expand((declaration) => declaration.variables.variables)
+    .singleWhere((variable) => variable.name.lexeme == name)
+    .initializer!
+    .toSource();
 
 /// The labels of the destinations of the main navigation of the app of
 /// [result] in English, in their order, as the layout role has them, whose
@@ -212,17 +281,61 @@ void main() {
     });
 
     test(
-        'tells coding agents of the bar that its shell has, and of the most '
-        'destinations that it takes', () {
-      final index = DartFileIndexer.index(_shell, app.files[_shell]!.text);
+        'tells coding agents of the bar that its shell draws, of where the '
+        'bar takes its colours, of what a tab says to a screen reader and of '
+        'the most destinations that it takes', () {
+      final text = app.files[_shell]!.text;
+      final index = DartFileIndexer.index(_shell, text);
 
-      // The bar of the shell, which the shell leaves out with fewer than
-      // two destinations.
-      expect(index.invocationsOf('NavigationBar'), hasLength(1));
-      expect(app.files[_shell]!.text, contains('destinations.length < 2'));
-      expect(agentNote, contains('`NavigationBar`'));
-      expect(agentNote, contains('`${LayoutRole.appShell.name}`'));
+      // The bar of the shell and its tabs, which the shell leaves out with
+      // fewer than two destinations.
+      expect(index.invocationsOf('_TabBar', within: 'AppShell'), hasLength(1));
+      expect(index.invocationsOf('_Tab', within: '_TabBar'), hasLength(1));
+      expect(text, contains('destinations.length < 2'));
       expect(agentNote, contains('fewer than two'));
+      // The names that the note gives as code are names of the file.
+      for (final name in [LayoutRole.appShell.name, '_TabBar', '_Tab']) {
+        expect(agentNote, contains('`$name`'), reason: name);
+        expect(index.declaration(name), isNotNull, reason: name);
+      }
+      // The colours of a tab and of the bar, which each reads from the
+      // theme that the app has for a navigation bar, and from the colour
+      // scheme for what that theme does not set.
+      const colours = {
+        '_Tab': ['iconTheme', 'colorScheme', 'primary', 'onSurfaceVariant'],
+        '_TabBar': ['backgroundColor', 'colorScheme', 'surface'],
+      };
+      for (final MapEntry(key: widget, value: names) in colours.entries) {
+        for (final name in names) {
+          expect(agentNote, contains('`$name`'), reason: name);
+          expect(
+            index.memberAccesses.where(
+              (access) =>
+                  access.name == name && access.enclosingDeclaration == widget,
+            ),
+            isNotEmpty,
+            reason: '$name in $widget',
+          );
+        }
+        expect(
+          [
+            for (final call in index.invocationsOf('of', within: widget))
+              if (call.target == 'NavigationBarTheme') call.target,
+          ],
+          hasLength(1),
+          reason: widget,
+        );
+      }
+      expect(agentNote, contains('`NavigationBarTheme.of(context)`'));
+      // The bar is drawn by the file: it reads the theme of a navigation
+      // bar of Flutter, and creates none.
+      expect(
+        index.invocations.map((invocation) => invocation.name),
+        isNot(anyElement(endsWith('NavigationBar'))),
+      );
+      // What a tab says to a screen reader.
+      expect(agentNote, contains('`Semantics`'));
+      expect(index.invocationsOf('Semantics', within: '_Tab'), hasLength(1));
       // As many as the module lets smf create put into the app.
       expect(BottomTabsModule.maxDestinations, 5);
       expect(agentNote, contains('Keep to five destinations'));
@@ -303,20 +416,32 @@ void main() {
 
     test(
         'shows a bar with a tab for each destination below the screen of the '
-        'selected one', () {
+        'selected one, and no bar with fewer than two', () {
       final unit = _parsed(app, _shell);
-      final shell = unit.declarations.whereType<ClassDeclaration>().singleWhere(
-            (declaration) => declaration.namePart.typeName.lexeme == 'AppShell',
-          );
+      final shell = _classOf(unit, 'AppShell');
 
       expect(
         unit.directives.map((directive) => directive.toSource()),
         [
           "import 'package:flutter/material.dart';",
+          "import 'package:flutter/services.dart';",
           "import 'destination.dart';",
         ],
       );
-      expect(unit.declarations, [shell]);
+      // The shell, which the role requires, and what it is made of, all
+      // private to the file.
+      expect(
+        unit.declarations
+            .whereType<ClassDeclaration>()
+            .map((declaration) => declaration.namePart.typeName.lexeme),
+        [
+          'AppShell',
+          '_TabBar',
+          '_Tab',
+          '_BranchTransition',
+          '_BranchTransitionState',
+        ],
+      );
       expect(shell.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
       final constructor =
           shell.body.members.whereType<ConstructorDeclaration>().single;
@@ -340,32 +465,258 @@ void main() {
           'body': 'Widget',
         },
       );
-      final build = shell.body.members
-          .whereType<MethodDeclaration>()
-          .singleWhere((method) => method.name.lexeme == 'build');
+      // The screen of the selected destination, which the shell lets fade
+      // in when the destination changes, above the bar.
       expect(
-        (build.body as ExpressionFunctionBody).expression.toSource(),
-        'Scaffold(body: body, bottomNavigationBar: destinations.length < 2 ? '
-        'null : NavigationBar(selectedIndex: currentIndex, '
-        'onDestinationSelected: onSelect, destinations: [for (final '
-        'destination in destinations) NavigationDestination(icon: '
-        'Icon(destination.icon), label: destination.label(context))]))',
+        (_methodOf(shell, 'build').body as ExpressionFunctionBody)
+            .expression
+            .toSource(),
+        'Scaffold(body: _BranchTransition(index: currentIndex, child: body), '
+        'bottomNavigationBar: destinations.length < 2 ? null : '
+        '_TabBar(destinations: destinations, currentIndex: currentIndex, '
+        'onTap: _tapped))',
+      );
+      // A tab for each destination, in their order, which share the width
+      // of the bar. The tab of the selected destination knows it.
+      final bar = _callsIn(_methodOf(_classOf(unit, '_TabBar'), 'build'));
+      expect(
+        bar['Row']!.single.arguments.single.toSource(),
+        'children: [for (final (index, destination) in destinations.indexed) '
+        'Expanded(child: _Tab(destination: destination, selected: index == '
+        'currentIndex, onTap: () => onTap(index)))]',
       );
     });
 
     test(
+        'draws the bar in the colours that the theme has for a navigation '
+        'bar, or else in those of its colour scheme, with a hairline above '
+        'the tabs and the selected tab in the primary colour', () {
+      final unit = _parsed(app, _shell);
+      final bar = _callsIn(_methodOf(_classOf(unit, '_TabBar'), 'build'));
+      final tab = _callsIn(_methodOf(_classOf(unit, '_Tab'), 'build'));
+
+      // A Material of its own, on which the ink of a tab shows, above the
+      // inset at the bottom of the device.
+      expect(_argumentsOf(bar['Material']!.single), {
+        'color': 'NavigationBarTheme.of(context).backgroundColor ?? '
+            'colors.surface',
+        'shape': 'Border(top: BorderSide(color: colors.outlineVariant))',
+        'child': startsWith('SafeArea(top: false, child: Row('),
+      });
+      // The icon and the label take their colour over time, and nothing
+      // else of a tab depends on whether it is selected, so a tab keeps
+      // its size.
+      expect(_argumentsOf(tab['ColorTween']!.single), {'end': 'color'});
+      expect(
+        _methodOf(_classOf(unit, '_Tab'), 'build').toSource(),
+        contains(
+          'final ofTheme = NavigationBarTheme.of(context).iconTheme; '
+          'final color = selected '
+          '? ofTheme?.resolve(const {WidgetState.selected})?.color ?? '
+          'colors.primary '
+          ': ofTheme?.resolve(const {})?.color ?? colors.onSurfaceVariant;',
+        ),
+      );
+      expect(
+        _argumentsOf(tab['Icon']!.single),
+        {'0': 'destination.icon', 'size': '24', 'color': 'color'},
+      );
+      expect(_argumentsOf(tab['Text']!.single), {
+        '0': 'label',
+        'maxLines': '1',
+        'overflow': 'TextOverflow.ellipsis',
+        'style': 'theme.textTheme.labelMedium?.copyWith(color: color)',
+      });
+      final index = DartFileIndexer.index(_shell, app.files[_shell]!.text);
+      expect(
+        index.references.where(
+          (reference) =>
+              reference.name == 'selected' &&
+              reference.enclosingDeclaration == '_Tab',
+        ),
+        // In the tween of the colour and in what the tab says to a screen
+        // reader.
+        hasLength(2),
+      );
+    });
+
+    test(
+        'gives the device a tick when the user taps the tab of another '
+        'destination, and the router each tap', () {
+      final unit = _parsed(app, _shell);
+      final tapped = _methodOf(_classOf(unit, 'AppShell'), '_tapped');
+
+      expect(tapped.parameters!.toSource(), '(int index)');
+      expect(
+        tapped.body.toSource(),
+        '{if (index != currentIndex) HapticFeedback.selectionClick(); '
+        'onSelect(index);}',
+      );
+      // The tab takes a tap on the whole of it, with the ink of the theme.
+      final tab = _callsIn(_methodOf(_classOf(unit, '_Tab'), 'build'));
+      expect(
+        _argumentsOf(tab['InkResponse']!.single),
+        containsPair('onTap', 'onTap'),
+      );
+    });
+
+    test(
+        'says each tab to a screen reader as one button with the label of '
+        'its destination, selected or not', () {
+      final unit = _parsed(app, _shell);
+      final tab = _callsIn(_methodOf(_classOf(unit, '_Tab'), 'build'));
+
+      final semantics = _argumentsOf(tab['Semantics']!.single);
+      expect(semantics.keys, [
+        'container',
+        'button',
+        'selected',
+        'label',
+        'child',
+      ]);
+      expect(
+        {...semantics}..remove('child'),
+        {
+          'container': 'true',
+          'button': 'true',
+          'selected': 'selected',
+          'label': 'label',
+        },
+      );
+      // The tap of the tab is below that node, and so is what the tab
+      // shows, which a screen reader does not read a second time.
+      expect(semantics['child'], contains('InkResponse(onTap: onTap,'));
+      final excluded = tab['ExcludeSemantics']!.single.toSource();
+      expect(excluded, contains('Icon(destination.icon,'));
+      expect(excluded, contains('Text(label,'));
+      // The tooltip of the tab says its label a second time, so it stays
+      // out of what the tab says.
+      expect(
+        _argumentsOf(tab['Tooltip']!.single),
+        containsPair('excludeFromSemantics', 'true'),
+      );
+    });
+
+    test(
+        'fits large text: the bar grows from 64 with its labels, which the '
+        'text size of the device scales at most 1.3 times, and a long press '
+        'shows a label in a tooltip', () {
+      final unit = _parsed(app, _shell);
+      final tab = _callsIn(_methodOf(_classOf(unit, '_Tab'), 'build'));
+
+      expect(_constantOf(unit, '_barHeight'), '64');
+      expect(_constantOf(unit, '_maxLabelScale'), '1.3');
+      // The least height of a tab, and so of the bar, which has no height
+      // of its own.
+      expect(
+        _argumentsOf(tab['BoxConstraints']!.single),
+        {'minHeight': '_barHeight'},
+      );
+      expect(
+        app.files[_shell]!.text,
+        isNot(anyOf(contains('height: _barHeight'), contains('height: 64'))),
+      );
+      // The column of the icon and the label is as high as they are, in
+      // the middle of the tab.
+      expect(_argumentsOf(tab['Column']!.single), {
+        'mainAxisSize': 'MainAxisSize.min',
+        'mainAxisAlignment': 'MainAxisAlignment.center',
+        'children': anything,
+      });
+      final clamped =
+          _argumentsOf(tab['MediaQuery.withClampedTextScaling']!.single);
+      expect(clamped['maxScaleFactor'], '_maxLabelScale');
+      expect(clamped['child'], startsWith('Text(label,'));
+      // The tooltip is above the bar, with the label that the tab builds
+      // with.
+      final tooltip = _argumentsOf(tab['Tooltip']!.single);
+      expect(tooltip['message'], 'label');
+      expect(tooltip['preferBelow'], 'false');
+    });
+
+    test(
+        'moves nothing for a user who asks for less motion, and nothing '
+        'without an end', () {
+      final text = app.files[_shell]!.text;
+      final unit = _parsed(app, _shell);
+      final index = DartFileIndexer.index(_shell, text);
+
+      // The tab and the transition of the screen ask.
+      expect(
+        [
+          for (final invocation in index.invocationsOf('disableAnimationsOf'))
+            (
+              invocation.target,
+              invocation.enclosingDeclaration,
+              invocation.enclosingMember,
+            ),
+        ],
+        [
+          ('MediaQuery', '_Tab', 'build'),
+          ('MediaQuery', '_BranchTransitionState', 'didUpdateWidget'),
+        ],
+      );
+      final tab = _methodOf(_classOf(unit, '_Tab'), 'build');
+      expect(
+        tab.toSource(),
+        contains(
+          'final duration = MediaQuery.disableAnimationsOf(context) ? '
+          'Duration.zero : Durations.medium2;',
+        ),
+      );
+      expect(
+        _argumentsOf(_callsIn(tab)['TweenAnimationBuilder']!.single),
+        containsPair('duration', 'duration'),
+      );
+      // The screen of another destination fades in once, from the start,
+      // or is shown at once. The same destination moves nothing.
+      expect(
+        _methodOf(_classOf(unit, '_BranchTransitionState'), 'didUpdateWidget')
+            .body
+            .toSource(),
+        '{super.didUpdateWidget(oldWidget); if (oldWidget.index == '
+        'widget.index) return; if (MediaQuery.disableAnimationsOf(context)) '
+        '{_controller.value = 1;} else {_controller.forward(from: 0);}}',
+      );
+      // The controller of the transition starts at its end, so the first
+      // screen is shown as it is, and nothing runs it but that forward.
+      expect(
+        _argumentsOf(_callsIn(unit)['AnimationController']!.single),
+        {'vsync': 'this', 'duration': 'Durations.medium2', 'value': '1'},
+      );
+      expect(
+        index.invocations
+            .where((invocation) => invocation.target == '_controller')
+            .map((invocation) => invocation.name),
+        ['forward', 'dispose'],
+      );
+      expect(index.invocationsOf('repeat'), isEmpty);
+    });
+
+    test(
         'shows the label of each destination as the destination returns it '
-        'when the shell builds, so in the language that the app is in', () {
+        'when its tab builds, so in the language that the app is in', () {
       final index = DartFileIndexer.index(_shell, app.files[_shell]!.text);
 
-      // In the build of the shell, with its context, and nowhere else: the
-      // shell keeps no label.
+      // In the build of the tab, with its context, and nowhere else: the
+      // shell keeps no label. The text of the tab, its tooltip and what it
+      // says to a screen reader all take the label from there.
       final labels = index.invocationsOf('label');
       expect(labels.single.target, 'destination');
+      expect(labels.single.enclosingDeclaration, '_Tab');
       expect(labels.single.enclosingMember, 'build');
       expect(
         app.files[_shell]!.text,
-        contains('label: destination.label(context),'),
+        contains('final label = destination.label(context);'),
+      );
+      // A tab has no state to keep a label in.
+      expect(
+        _classOf(_parsed(app, _shell), '_Tab')
+            .extendsClause!
+            .superclass
+            .name
+            .lexeme,
+        'StatelessWidget',
       );
     });
 

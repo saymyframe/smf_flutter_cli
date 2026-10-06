@@ -20,21 +20,23 @@ The module writes three files into `lib/features/onboarding/`. The pages are a l
 ```dart
 List<Widget> onboardingPages(BuildContext context) => [
   OnboardingPage(
-    icon: Icons.waving_hand_outlined,
+    symbol: 'Ma',
     title: 'My App',
     text: 'Welcome! We are glad you are here.',
   ),
   OnboardingPage(
-    icon: Icons.check_circle_outline,
+    icon: Icons.check_rounded,
     title: 'You are all set',
     text: 'Enjoy the app.',
   ),
 ];
 ```
 
-Change this list to change what the onboarding shows. A page is any widget. `OnboardingScreen` in `onboarding_screen.dart` shows the pages one at a time, with Skip and Next below them, and Done on the last page.
+An `OnboardingPage` is a cell of the periodic table among smaller cells, with a title and a text below it. The cell has a `symbol`, here the one that SMF makes from the name of the app, or an `icon`. Change this list to change what the onboarding shows. A page is any widget.
 
-Skip and Done call `onboardingStatus.complete()` of `onboarding_status.dart`, which finishes the onboarding and saves that in the preferences, under `onboarding.completed`. The screen does not navigate. On the first launch, the app shows the onboarding at `/onboarding` in place of the start screen at `/home`: a guard of the routes keeps the user there. Once the onboarding is finished, the router shows the start screen, and later launches open on it.
+`OnboardingScreen` in `onboarding_screen.dart` shows the pages one at a time. Skip is above them. Below them are a mark for each page and one button: Next, and Get started on the last page. While the pages turn, the cells move at different speeds and the background blends into the colour of the last page. The screen takes its colours and its text styles from the theme of the app.
+
+Skip and Get started call `onboardingStatus.complete()` of `onboarding_status.dart`, which finishes the onboarding and saves that in the preferences, under `onboarding.completed`. The screen does not navigate. On the first launch, the app shows the onboarding at `/onboarding` in place of the start screen at `/home`: a guard of the routes keeps the user there. Once the onboarding is finished, the router shows the start screen, and later launches open on it.
 
 To show the onboarding again, call `onboardingStatus.restart()`. The app shows it at once. Once it is finished, the user is back on the screen that they were on, or, from a page pushed over another screen, on the screen below the pushed pages. A link to `/onboarding` starts the onboarding again too. The app remembers that the onboarding is finished, so while you edit the pages, a call in `main()` after `bootstrap()` is how you see them again.
 
