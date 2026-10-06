@@ -154,19 +154,26 @@ void main() {
         read(app, 'integration_test/start_check.dart'),
         contains("import 'package:start_app/main.dart' as app;"),
       );
-      // The probes of the tests of the app, those of the preferences among
-      // them: the apps without external steps have their provider too.
+      // The probes of the tests of the app, those of the preferences and
+      // of the onboarding among them: the apps without external steps have
+      // their modules too.
       final list = read(app, startProbesFile);
+      expect(list, contains("('onboarding', probe0.probeOnboarding),"));
       expect(
         list,
-        contains("('shared_preferences', probe0.probeSharedPreferences),"),
+        contains("('shared_preferences', probe1.probeSharedPreferences),"),
       );
-      expect(list, contains("('di_role', probe1.probeServices),"));
+      expect(list, contains("('di_role', probe2.probeServices),"));
       expect(
         list,
-        contains("('preferences_role', probe2.probePreferences),"),
+        contains("('preferences_role', probe3.probePreferences),"),
       );
-      expect(list, contains("('router_walk', probe3.probeRoutes),"));
+      expect(list, contains("('router_walk', probe4.probeRoutes),"));
+      const status = 'features/onboarding/onboarding_status.dart';
+      expect(
+        read(app, 'integration_test/onboarding/probe.dart'),
+        contains("import 'package:start_app/$status';"),
+      );
       expect(
         read(app, 'integration_test/preferences_role/probe.dart'),
         contains(
@@ -186,7 +193,12 @@ void main() {
       expect(call, startsWith(pubAdd), reason: reason);
       expect(_resolved(call.substring(pubAdd.length).trim()), _resolved(app));
       final files = generated[withoutExternalSteps] = {
-        for (final test in [named('di_role'), named('router_walk')])
+        for (final test in [
+          named('di_role'),
+          named('router_walk'),
+          // The test of the onboarding comes with its probe.
+          named('onboarding'),
+        ])
           ...test.generatedFiles!(matrixApp, 'start_app'),
       };
       for (final MapEntry(key: path, value: text) in files.entries) {

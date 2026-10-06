@@ -13,6 +13,14 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
+/// The codes of the languages of the file of the texts of the onboarding
+/// that the matrix writes for an app, [file], in the order of the file.
+List<String> _languagesOf(String file) => [
+      for (final language
+          in RegExp(r"^  '(\w+)': \{$", multiLine: true).allMatches(file))
+        language[1]!,
+    ];
+
 /// The full names of the routes of the locations that the walk of the
 /// routes goes to, in its order, from the file that the matrix writes for
 /// it, [file].
@@ -68,6 +76,7 @@ void main() {
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
+    expect(named('onboarding').roles, {routerRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
@@ -554,6 +563,9 @@ void main() {
         'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
+        // The onboarding requires the preferences.
+        'onboarding with localization',
+        'onboarding',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -629,7 +641,8 @@ void main() {
     expect(test.appliesTo(appWith(preferencesRole)), isFalse);
     // The matrix of the CLI runs it in every app with the role: the apps
     // of gen_l10n and those of material_theme with the localization, with
-    // a settings screen and without, and the apps with every module.
+    // a settings screen and without, the app of the onboarding with the
+    // role, and the apps with every module.
     final registered = named('localization_role');
     expect(registered.roles, test.roles);
     expect(registered.startProbe!.path, test.startProbe!.path);
@@ -653,6 +666,7 @@ void main() {
         'material_theme with settings_screen, localization',
         'material_theme with localization',
         'gen_l10n',
+        'onboarding with localization',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1289,10 +1303,10 @@ void main() {
   test(
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
-      'preferences of the role and those of shared_preferences once they '
-      'are opened again, and the languages of the localization role, each a '
-      'function of a file of its tests that takes the one that waits until '
-      'the screen settles', () async {
+      'preferences of the role, those of shared_preferences once they are '
+      'opened again, the onboarding of a first launch and the languages '
+      'of the localization role, each a function of a file of its tests '
+      'that takes the one that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -1301,6 +1315,7 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
         'di_role': 'integration_test/di_role/probe.dart probeServices',
@@ -1332,13 +1347,17 @@ void main() {
     }
 
     // With the start check, an app with every module gets the probes of
-    // all of them, which the list of the probes names.
+    // all of them, which the list of the probes names. That of the
+    // onboarding comes before the walk of the routes: it finishes the
+    // onboarding that a first launch shows, and the walk then goes through
+    // the routes of the app past it.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'onboarding',
         'shared_preferences',
         'di_role',
         'preferences_role',
@@ -1375,21 +1394,191 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: shared_preferences/probe.dart',
-        'probe1: di_role/probe.dart',
-        'probe2: preferences_role/probe.dart',
-        'probe3: router_walk/walk.dart',
-        'probe4: localization_role/probe.dart',
+        'probe0: onboarding/probe.dart',
+        'probe1: shared_preferences/probe.dart',
+        'probe2: di_role/probe.dart',
+        'probe3: preferences_role/probe.dart',
+        'probe4: router_walk/walk.dart',
+        'probe5: localization_role/probe.dart',
       ],
     );
+    expect(list, contains("('onboarding', probe0.probeOnboarding),"));
     expect(
       list,
-      contains("('shared_preferences', probe0.probeSharedPreferences),"),
+      contains("('shared_preferences', probe1.probeSharedPreferences),"),
     );
-    expect(list, contains("('di_role', probe1.probeServices),"));
-    expect(list, contains("('preferences_role', probe2.probePreferences),"));
-    expect(list, contains("('router_walk', probe3.probeRoutes),"));
-    expect(list, contains("('localization_role', probe4.probeLanguages),"));
+    expect(list, contains("('di_role', probe2.probeServices),"));
+    expect(list, contains("('preferences_role', probe3.probePreferences),"));
+    expect(list, contains("('router_walk', probe4.probeRoutes),"));
+    expect(list, contains("('localization_role', probe5.probeLanguages),"));
+  });
+
+  test(
+      'the test of the onboarding applies to the apps with the module, '
+      'whatever else they have, declares the mocks that finish the '
+      'onboarding for the tests of every module of those apps, and expects '
+      'the screen that the router role chose for the app to start on, or '
+      'the fallback screen of the app entry, and the texts of the module in '
+      'each language of the app', () {
+    final test = named('onboarding');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('onboarding'))) app.name,
+      ],
+    );
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    expect(test.mocks!.path, 'test/onboarding_mocks.dart');
+    expect(test.mocks!.function, 'finishOnboarding');
+    final mocks = DartFileIndexer.parse(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    expect(mocks.errors, isEmpty);
+    final function = mocks.index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
+
+    final screens = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in apps.where(test.appliesTo)) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(
+        files.keys,
+        [onboardingStartScreenFile, onboardingTextsFile],
+        reason: app.name,
+      );
+      languages[app.name] = _languagesOf(files[onboardingTextsFile]!);
+      final text = files[onboardingStartScreenFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(onboardingStartScreenFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['startScreen'],
+        reason: app.name,
+      );
+      final import = index.imports.single;
+      expect(import.prefix, 'screen', reason: app.name);
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+    }
+    expect(screens, {
+      // No route can start the app, since the onboarding cannot.
+      for (final name in ['onboarding with localization', 'onboarding'])
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      // The start screen of home.
+      for (final name in ['every module (bloc)', 'every module (riverpod)'])
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    // The languages of the localization role of the app, which are those
+    // of the texts of its modules, and English alone without the role.
+    expect(languages, {
+      'onboarding with localization': ['en', 'uk'],
+      'onboarding': ['en'],
+      'every module (bloc)': ['en', 'uk'],
+      'every module (riverpod)': ['en', 'uk'],
+    });
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        languages[app.name],
+        app.hook!.presentRoles.contains(localizationRole)
+            ? localizationRole.localesIn(
+                localizationRole.hookInput(app.hook!),
+              )
+            : ['en'],
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the test of the onboarding gets each text of the module by its name, '
+      'in each language of the app in the order of the localization role, '
+      'in English where the module has no translation, and in English alone '
+      'in an app without the role', () {
+    final test = named('onboarding');
+    String textsOf({List<String>? languages}) => test.generatedFiles!(
+          MatrixApp(
+            'texts',
+            const [ModuleId('onboarding')],
+            hook: RoleHookRequest(
+              data: const [],
+              presentRoles: {
+                routerRole,
+                if (languages != null) localizationRole,
+              },
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          ),
+          'my_app',
+        )[onboardingTextsFile]!;
+    const english = "    'welcome': 'Welcome! We are glad you are here.',\n"
+        "    'readyTitle': 'You are all set',\n"
+        "    'ready': 'Enjoy the app.',\n"
+        "    'skip': 'Skip',\n"
+        "    'next': 'Next',\n"
+        "    'done': 'Done',\n";
+
+    // The names are those that first_launch_test.dart of the app test looks
+    // each text up by: a new text of the module needs a look there.
+    final localized = textsOf(languages: ['uk', 'en', 'de']);
+    final (:index, :errors) =
+        DartFileIndexer.parse(onboardingTextsFile, localized);
+    expect(errors, isEmpty);
+    expect(index.imports, isEmpty);
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      ['onboardingTexts'],
+    );
+    expect(
+      localized,
+      endsWith(
+        'const Map<String, Map<String, String>> onboardingTexts = {\n'
+        "  'uk': {\n"
+        "    'welcome': 'Вітаємо! Раді, що ви з нами.',\n"
+        "    'readyTitle': 'Усе готово',\n"
+        "    'ready': 'Приємного користування!',\n"
+        "    'skip': 'Пропустити',\n"
+        "    'next': 'Далі',\n"
+        "    'done': 'Готово',\n"
+        '  },\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        // The module has no German texts.
+        "  'de': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
+    expect(_languagesOf(localized), ['uk', 'en', 'de']);
+
+    expect(
+      textsOf(),
+      endsWith(
+        'const Map<String, Map<String, String>> onboardingTexts = {\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
   });
 
   test(

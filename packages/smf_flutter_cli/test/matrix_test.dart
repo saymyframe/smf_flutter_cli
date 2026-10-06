@@ -221,8 +221,10 @@ void main() {
       'each, and the app of the localization, which get the preferences as '
       'the app of settings with the localization does, the '
       'app of the DI container, the apps of the events and of the '
-      'preferences with the DI container and without, the app of Firebase, '
-      'the app of Crashlytics '
+      'preferences with the DI container and without, the apps of the '
+      'onboarding with the localization and without, which get the '
+      'preferences and the router, the app of Firebase, the app of '
+      'Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, and one of every module for each state manager',
@@ -235,8 +237,8 @@ void main() {
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, firebase_core, firebase_crashlytics, '
-        'firebase_analytics)';
+        'shared_preferences, onboarding, firebase_core, '
+        'firebase_crashlytics, firebase_analytics)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -267,6 +269,11 @@ void main() {
       'event_bus (event_bus, flutter_core)',
       'shared_preferences with di (shared_preferences, get_it, flutter_core)',
       'shared_preferences (shared_preferences, flutter_core)',
+      equals(
+        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       'firebase_core (firebase_core, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -436,7 +443,7 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, local)';
+        'shared_preferences, onboarding, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -1444,6 +1451,7 @@ Type type() => Types;
               'get_it',
               'event_bus',
               'shared_preferences',
+              'onboarding',
             ].join(','),
             '-o',
             '/apps',
