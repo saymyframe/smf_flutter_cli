@@ -14,6 +14,13 @@ import 'package:smf_settings/bundles/settings_bundle.dart';
 /// the about dialog of Flutter, and from there the licenses of the packages
 /// of the app. An app whose modules have no settings has that row alone.
 ///
+/// The label of the destination of the screen in the main navigation is
+/// the title of the screen, a text of the module, in English and in
+/// Ukrainian, which the module gives the localization role, a role that it
+/// uses. With the role, the main navigation reads the label from the texts
+/// of the app, in the language of the app; without it, the label is the
+/// English text.
+///
 /// The route is `/` of the module, so its full path is `/settings`. The
 /// main navigation of the app, when a module provides it, shows the route
 /// as Settings with the settings icon, after the destinations of the
@@ -44,9 +51,21 @@ final class SettingsModule extends SmfModule {
   /// The name of the route of the screen.
   static const _route = 'settings';
 
-  /// The title of the screen, and the label of its destination in the main
-  /// navigation.
+  /// The title of the screen in English, which is the label of its
+  /// destination in the main navigation too.
   static const _title = 'Settings';
+
+  /// The text of the title of the screen, which the main navigation reads
+  /// as the label of its destination from the texts of the app, in an app
+  /// with the localization role.
+  static const _titleText = LocalizedText(
+    'title',
+    en: _title,
+    translations: {'uk': 'Налаштування'},
+  );
+
+  /// The texts of the module, which it gives the localization role.
+  static const _texts = TextsData([_titleText]);
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
@@ -54,6 +73,7 @@ final class SettingsModule extends SmfModule {
         description: 'Settings screen with the settings of the modules',
         kind: ModuleKinds.feature,
         providers: [_SettingsProvider()],
+        uses: {localizationRole},
       );
 
   @override
@@ -62,6 +82,7 @@ final class SettingsModule extends SmfModule {
           settingsBundle,
           vars: {'title': SmfNames.dartString(_title)},
         ),
+        localizationRole.data(_texts),
         routerRole.data(
           const RoutesData([
             Route(
@@ -72,7 +93,7 @@ final class SettingsModule extends SmfModule {
                 import: ImportRef.app('features/settings/settings_screen.dart'),
               ),
               destination: Destination(
-                label: _title,
+                label: _titleText,
                 icon: Fragment(
                   'Icons.settings',
                   imports: [
