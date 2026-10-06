@@ -6,9 +6,9 @@
 // setting are in the language of the device. A choice of that same
 // language, which code makes, leaves the app in the language it is in, and
 // the setting names it. The next start of the app restores the language
-// that was saved, which the app and the setting then show. The dialog has
-// an option for the languages of the device, one for each language of the
-// app, and no other.
+// that was saved, which the app and the setting then show. The sheet of the
+// setting has an option for the languages of the device, one for each
+// language of the app, and no other.
 //
 // It knows only the two roles, and starts the app once, since the start-up
 // of an app may not run twice: so it is a file of its own. The matrix
@@ -45,7 +45,7 @@ void main() {
       await openSettings(tester);
 
       final setting = find.byType(languageSetting);
-      final dialog = find.byType(Dialog);
+      final sheet = find.byType(BottomSheet);
       Finder inSetting(String text) =>
           find.descendant(of: setting, matching: find.text(text));
       // The language that the app is in where the setting is.
@@ -135,9 +135,9 @@ void main() {
       await tester.tap(setting);
       await tester.pumpAndSettle();
       expect(
-        find.descendant(of: dialog, matching: find.byType(ListTile)),
+        find.descendant(of: sheet, matching: find.byType(ListTile)),
         findsNWidgets(appLocales.length + 1),
-        reason: 'The dialog has the option of the languages of the device, '
+        reason: 'The sheet has the option of the languages of the device, '
             'one for each language of the app, and no other.',
       );
     },

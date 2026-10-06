@@ -156,7 +156,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Its list has the entries and then About, the last row, which is the screen's own. The file imports the files of the entries as `entry0`, `entry1` and so on.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -1559,8 +1559,9 @@ import 'app_locale.dart';
 const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
 
 /// The setting of the language of the app, an entry of the settings screen:
-/// it shows the language that the user chose, and lets the user choose one
-/// of the languages of the app, or follow the languages of the device.
+/// it shows the language that the user chose, and opens a sheet in which
+/// the user chooses one of the languages of the app, or follows the
+/// languages of the device.
 ///
 /// The entry does not wait until a choice is saved. If the preferences fail
 /// to save it, the app is in the chosen language while it runs, its next
@@ -1573,16 +1574,33 @@ class LanguageSetting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
+    final choice = Text(
+      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+    );
+    final arrow = Icon(Icons.chevron_right, color: muted);
+    // At a large text size, the choice goes below the title, where it has
+    // the width of the row.
+    final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
       title: Text(context.l10n.localizationLanguage),
-      subtitle: Text(
-        chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      ),
-      onTap: () => showDialog<void>(
+      subtitle: below ? choice : null,
+      trailing: below
+          ? arrow
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [choice, const SizedBox(width: 4), arrow],
+            ),
+      onTap: () => showModalBottomSheet<void>(
         context: context,
-        builder: (context) => const _LanguageDialog(),
+        // Over the main navigation of the app too.
+        useRootNavigator: true,
+        showDragHandle: true,
+        builder: (context) => const _LanguageSheet(),
       ),
     );
   }
@@ -1592,31 +1610,60 @@ class LanguageSetting extends StatelessWidget {
 String _nameOf(Locale locale) =>
     _names[locale.languageCode] ?? locale.languageCode;
 
-/// The choice between the languages of the app and those of the device.
-class _LanguageDialog extends StatelessWidget {
-  const _LanguageDialog();
+/// The sheet of the setting: the choice between the languages of the app
+/// and those of the device. It scrolls where its options do not fit.
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet();
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final chosen = AppLocaleScope.of(context);
-    return SimpleDialog(
-      title: Text(context.l10n.localizationLanguage),
-      children: [
-        for (final Locale? locale in [null, ...appLocales])
-          ListTile(
-            title: Text(
-              locale == null
-                  ? context.l10n.localizationSystem
-                  : _nameOf(locale),
+    return SafeArea(
+      child: ListView(
+        // A drag of options that fit closes the sheet, as a drag of its
+        // handle does.
+        primary: false,
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Semantics(
+              header: true,
+              child: Text(
+                context.l10n.localizationLanguage,
+                style: theme.textTheme.headlineSmall,
+              ),
             ),
-            selected: locale == chosen,
-            trailing: locale == chosen ? const Icon(Icons.check) : null,
-            onTap: () async {
-              Navigator.of(context).pop();
-              await appLocale.choose(locale);
-            },
           ),
-      ],
+          for (final Locale? locale in [null, ...appLocales])
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 4,
+              ),
+              title: Text(
+                locale == null
+                    ? context.l10n.localizationSystem
+                    : _nameOf(locale),
+                // Larger than the text of a row of the screen.
+                style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+              ),
+              selected: locale == chosen,
+              trailing: locale == chosen
+                  ? Icon(
+                      Icons.check_rounded,
+                      color: theme.colorScheme.secondary,
+                    )
+                  : null,
+              onTap: () async {
+                Navigator.of(context).pop();
+                await appLocale.choose(locale);
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }
@@ -3148,34 +3195,86 @@ class ThemeModeSetting extends StatelessWidget {
   const ThemeModeSetting({super.key});
 
   @override
-  Widget build(BuildContext context) => RadioGroup<ThemeMode>(
-    groupValue: AppThemeModeScope.of(context),
-    onChanged: (mode) {
-      if (mode != null) appThemeMode.choose(mode);
-    },
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.brightness_6_outlined),
-          title: Text(context.l10n.themeTitle),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.system,
-          title: Text(context.l10n.themeSystem),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.light,
-          title: Text(context.l10n.themeLight),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.dark,
-          title: Text(context.l10n.themeDark),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.brightness_6_outlined,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  context.l10n.themeTitle,
+                  style: theme.textTheme.bodyLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // The names of the modes share the width of the entry, so at a
+          // large text size they grow only by half.
+          MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.5,
+            child: SegmentedButton<ThemeMode>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                ),
+              ),
+              segments: [
+                for (final (mode, icon, name) in [
+                  (
+                    ThemeMode.system,
+                    Icons.brightness_auto_outlined,
+                    context.l10n.themeSystem,
+                  ),
+                  (
+                    ThemeMode.light,
+                    Icons.light_mode_outlined,
+                    context.l10n.themeLight,
+                  ),
+                  (
+                    ThemeMode.dark,
+                    Icons.dark_mode_outlined,
+                    context.l10n.themeDark,
+                  ),
+                ])
+                  ButtonSegment(
+                    value: mode,
+                    // The icon above the name, so that a long name of a
+                    // mode has the width of its segment.
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 20),
+                        const SizedBox(height: 4),
+                        // On one line, and scaled down where it is wider
+                        // than its segment.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(name, maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              selected: {AppThemeModeScope.of(context)},
+              onSelectionChanged: (modes) => appThemeMode.choose(modes.single),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 === lib/features/home/assets/2.0x/smf_mark.png (home) ===
 <7096 bytes>
@@ -4559,27 +4658,84 @@ void restoreOnboarding(AppPreferences preferences) =>
     onboardingStatus._restore(preferences);
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry1;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
-/// app has, and what the app is, with its licenses.
+/// app has, one below the other in one group.
+///
+/// As a destination of the main navigation, the screen has no app bar.
+/// Shown on top of another screen, it has one, for the back button.
 class SettingsScreen extends StatelessWidget {
   /// Creates the screen.
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
-    body: ListView(
-      children: const [
-        entry0.ThemeModeSetting(),
-        entry1.LanguageSetting(),
-        AboutListTile(
-          icon: Icon(Icons.info_outline),
-          applicationName: 'My App',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Semantics(
+        header: true,
+        // A title that is too long for its line, as with a large text
+        // size, gets smaller rather than break inside a word.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            context.l10n.settingsTitle,
+            style: theme.textTheme.headlineLarge,
+          ),
         ),
+      ),
+    );
+    // Whether a screen below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    // Without an app bar, the screen itself tells the system which colour
+    // the icons of the status bar have.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: theme.brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        appBar: back ? AppBar() : null,
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            children: [
+              title,
+              const SizedBox(height: 20),
+              const _Group(
+                children: [entry0.ThemeModeSetting(), entry1.LanguageSetting()],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The group of the entries of the screen: its [children] one below the
+/// other on a card, with a line between them.
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, child) in children.indexed) ...[
+          if (index > 0) const Divider(height: 1, indent: 56),
+          child,
+        ],
       ],
     ),
   );

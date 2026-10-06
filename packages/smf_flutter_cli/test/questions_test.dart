@@ -379,7 +379,9 @@ void main() {
           .readAsStringSync(),
       allOf(
         contains('class SettingsScreen extends StatelessWidget'),
-        contains("applicationName: 'My App',"),
+        // No module of this app has a setting, so the screen has its note
+        // for the developer of the app.
+        contains('class _NoSettings extends StatelessWidget'),
       ),
     );
     // The tabs are Home and Settings, in the order of the list of modules,
