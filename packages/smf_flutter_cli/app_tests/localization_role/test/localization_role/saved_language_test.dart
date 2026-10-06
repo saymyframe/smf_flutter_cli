@@ -12,8 +12,10 @@
 // initPreferences() of the preferences role again, which opens the
 // preferences anew and runs the restorer of the language: the test writes
 // the key through the preferences first, while no language is chosen, so
-// only that start can bring the language. Each expectation gives its
-// reason.
+// only that start can bring the language. It goes through the first and
+// the last language of the app, each on a device that prefers the other
+// one, so that the screen shows a language only once the app restored it.
+// Each expectation gives its reason.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/l10n/app_locale.dart';
@@ -33,34 +35,46 @@ void main() {
       await startApp(tester);
       // The next start puts the app into the language that was saved.
       expectEachLanguageSupported();
-      final locale = appLocales.last;
-      String? saved;
-      String? afterDevice;
-      Locale? beforeStart;
-      Locale? restored;
+      // The first and the last language of the app, which are one in an
+      // app in one language.
+      final languages = {appLocales.first, appLocales.last};
+      final saved = <String, String?>{};
+      final afterDevice = <String, String?>{};
+      final beforeStart = <String, Locale?>{};
+      final restored = <String, Locale?>{};
+      final onScreen = <String, String?>{};
       Locale? afterUnknown;
 
-      await inRealTime(tester, 'choosing a language', () async {
-        await appLocale.choose(locale);
-        saved = createAppPreferences().getString(savedLanguageKey);
-        await appLocale.choose(null);
-        afterDevice = createAppPreferences().getString(savedLanguageKey);
-        beforeStart = appLocale.value;
-      });
-      // The screen settles first, so that only the next start can change
-      // what the app shows.
-      await tester.pumpAndSettle();
-      await inRealTime(tester, 'starting again', () async {
-        // What an earlier run of the app saved.
-        await createAppPreferences().setString(
-          savedLanguageKey,
-          locale.languageCode,
+      for (final locale in languages) {
+        final code = locale.languageCode;
+        // The device prefers the other language, so that only a choice,
+        // or a start that restores one, puts the app into this one.
+        final other = languages.firstWhere(
+          (other) => other != locale,
+          orElse: () => locale,
         );
-        await initPreferences();
-        restored = appLocale.value;
-      });
-      await tester.pumpAndSettle();
-      final onScreen = languageOnScreen();
+        tester.platformDispatcher.localesTestValue = [other];
+        await tester.pumpAndSettle();
+        await inRealTime(tester, 'choosing $code', () async {
+          await appLocale.choose(locale);
+          saved[code] = createAppPreferences().getString(savedLanguageKey);
+          await appLocale.choose(null);
+          afterDevice[code] =
+              createAppPreferences().getString(savedLanguageKey);
+          beforeStart[code] = appLocale.value;
+        });
+        // The screen settles first, so that only the next start can change
+        // what the app shows.
+        await tester.pumpAndSettle();
+        await inRealTime(tester, 'starting again with $code saved', () async {
+          // What an earlier run of the app saved.
+          await createAppPreferences().setString(savedLanguageKey, code);
+          await initPreferences();
+          restored[code] = appLocale.value;
+        });
+        await tester.pumpAndSettle();
+        onScreen[code] = languageOnScreen();
+      }
       await inRealTime(tester, 'starting with another code saved', () async {
         await createAppPreferences().setString(savedLanguageKey, 'zz');
         await initPreferences();
@@ -70,34 +84,40 @@ void main() {
 
       expect(
         saved,
-        locale.languageCode,
+        {
+          for (final locale in languages)
+            locale.languageCode: locale.languageCode
+        },
         reason: 'A choice is saved under the key of the role, as the code of '
             'its language.',
       );
       expect(
         afterDevice,
-        isNull,
+        {for (final locale in languages) locale.languageCode: null},
         reason: 'Following the device again removes what was saved.',
       );
       expect(
         beforeStart,
-        isNull,
+        {for (final locale in languages) locale.languageCode: null},
         reason: 'No language is chosen before the next start, so only that '
             'start can bring one.',
       );
       expect(
         restored,
-        locale,
+        {for (final locale in languages) locale.languageCode: locale},
         reason: 'The next start restores the language that was saved.',
       );
       expect(
         onScreen,
-        locale.languageCode,
+        {
+          for (final locale in languages)
+            locale.languageCode: locale.languageCode
+        },
         reason: 'The app is in the language that the next start restored.',
       );
       expect(
         afterUnknown,
-        locale,
+        languages.last,
         reason: 'A saved code that is no language of the app leaves the '
             'choice as it is.',
       );
