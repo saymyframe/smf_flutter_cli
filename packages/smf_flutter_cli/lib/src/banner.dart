@@ -7,7 +7,7 @@ ${cyan.wrap('Created an SMF App! ✨')}
 ${green.wrap('''
 +--------------------------------------------------------------+
 | Want help or ideas? Join our Discord and meet the community! |
-| Star the repo if this helped you - it motivates us ❤️        |
+| Please star the repo - it motivates us!                      |
 | Docs: https://doc.saymyframe.com                             |
 | Discord: https://saymyframe.com/discord                      |
 | GitHub: https://github.com/saymyframe/smf_flutter_cli        |
