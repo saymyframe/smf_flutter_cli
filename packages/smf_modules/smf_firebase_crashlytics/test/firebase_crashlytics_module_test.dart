@@ -11,6 +11,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/bundles/firebase_crashlytics_bundle.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_crashlytics/src/agents.dart';
 import 'package:smf_firebase_crashlytics/src/crashlytics_phase.dart';
 import 'package:smf_firebase_crashlytics/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -167,21 +168,25 @@ Set<ModuleId> _providersOf(ContractResult result, Role role) => {
 List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
     diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
 
+/// The owners of the code of the crash reporting: this module and the
+/// template of its role.
+final Set<ContributionOrigin> _crashReporting = {
+  const ModuleOrigin(FirebaseCrashlyticsModule.id),
+  const RoleTemplateOrigin(crashReportingRole),
+};
+
 /// Whether the pipeline put code of the crash reporting, of this module or
 /// of the template of its role, into [file], whose imports it added to the
 /// file.
-bool _holdsCodeOfCrashReporting(RenderedFile file) => file.addedImports.any(
-      (added) => const [
-        ModuleOrigin(FirebaseCrashlyticsModule.id),
-        RoleTemplateOrigin(crashReportingRole),
-      ].contains(added.contributor),
-    );
+bool _holdsCodeOfCrashReporting(RenderedFile file) => file.addedImports
+    .any((added) => _crashReporting.contains(added.contributor));
 
 /// Checks that [app] is [without] but for the files of the crash reporting,
 /// the dependency on firebase_crashlytics, the files that hold code of the
 /// crash reporting, such as the start-up, the section of the module in the
-/// README, after those of [without], and the files that the modules
-/// [changedBy] generate.
+/// README, after those of [without], the section of the crash reporting in
+/// the guide for coding agents, and the files that the modules [changedBy]
+/// generate.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -202,6 +207,7 @@ void _expectTheAppWithout(
   for (final MapEntry(key: path, value: file) in without.files.entries) {
     if (path == 'pubspec.yaml' ||
         path == AppEntryRole.readmeFile ||
+        path == AppEntryRole.agentsFile ||
         _holdsCodeOfCrashReporting(app.files[path]!)) {
       continue;
     }
@@ -225,6 +231,40 @@ void _expectTheAppWithout(
     '## Crashlytics\n'
     '\n'
     '$readmeSection',
+  );
+  // The guide has the notes of the app without the crash reporting, and
+  // those of the crash reporting under the heading of the role.
+  final notes = app.entriesOf(AppEntryRole.agentSections);
+  expect(
+    notes.where((note) => !_crashReporting.contains(note.$1)),
+    without.entriesOf(AppEntryRole.agentSections),
+  );
+  expect(
+    [
+      for (final (origin, heading, note) in notes)
+        if (_crashReporting.contains(origin)) (origin, heading, note.isOfRole),
+    ],
+    // The template of a role contributes after its providers; the guide
+    // shows what the role says first.
+    [
+      (
+        const ModuleOrigin(FirebaseCrashlyticsModule.id),
+        crashReportingRole.description,
+        false,
+      ),
+      (
+        const RoleTemplateOrigin(crashReportingRole),
+        crashReportingRole.description,
+        true,
+      ),
+    ],
+  );
+  expect(
+    [
+      for (final (origin, _, note) in notes)
+        if (origin == const ModuleOrigin(FirebaseCrashlyticsModule.id)) note,
+    ],
+    [AgentNote(agentNote)],
   );
 }
 
@@ -342,10 +382,16 @@ void main() {
     test(
         'contributes its brick, firebase_crashlytics, its implementation of '
         'the reporter, created without waiting, the fix of the build phase '
-        'for Crashlytics and its section of the README, and nothing else', () {
+        'for Crashlytics, its section of the README and its note for coding '
+        'agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(5));
+      expect(contributions, hasLength(6));
+      final note = contributions[5] as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, crashReportingRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseCrashlyticsBundle));
       expect(brick.bundle.name, 'firebase_crashlytics');
@@ -574,6 +620,61 @@ void main() {
                   added.import.uri,
         ],
         ['package:contract_app/core/crash_reporting/crash_reporter.dart'],
+      );
+    });
+
+    test(
+        'tells coding agents to report through the reporter of the app, '
+        'which its file implements on Crashlytics without printing, and '
+        'where the fix of the build phase is', () {
+      final index = DartFileIndexer.index(
+        _implementation,
+        withCrashlytics.files[_implementation]!.text,
+      );
+
+      // The interface of the role, and the instance of Crashlytics that the
+      // reporter of the module reports to without printing the reports.
+      expect(
+        DartFileIndexer.index(
+          CrashReportingRole.file,
+          withCrashlytics.files[CrashReportingRole.file]!.text,
+        ).declaration('CrashReporter')?.kind,
+        DeclarationKind.classType,
+      );
+      expect(
+        [
+          for (final access in index.memberAccesses)
+            '${access.target}.${access.name}',
+        ],
+        contains('FirebaseCrashlytics.instance'),
+      );
+      final reports = index.invocationsOf('recordError');
+      expect(reports, isNotEmpty);
+      for (final report in reports) {
+        expect(report.namedArguments, contains('printDetails'));
+      }
+      // The reporter does not present the errors of Flutter, as
+      // recordFlutterError of Crashlytics would.
+      expect(index.invocationsOf('recordFlutterError'), isEmpty);
+      expect(agentNote, startsWith('With `firebase_crashlytics`:\n'));
+      expect(
+        agentNote,
+        contains(
+          'Report through `CrashReporter`, not through '
+          '`FirebaseCrashlytics.instance`',
+        ),
+      );
+      // The section of the README with the fix, which the note points to.
+      expect(
+        withCrashlytics.files[AppEntryRole.readmeFile]!.text,
+        contains('\n## $readmeHeading\n'),
+      );
+      expect(
+        agentNote,
+        contains(
+          'the fix of the section $readmeHeading of '
+          '`${AppEntryRole.readmeFile}`.',
+        ),
       );
     });
 

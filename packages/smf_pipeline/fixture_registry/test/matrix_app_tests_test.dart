@@ -5,12 +5,33 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_router/fake_router.dart';
+import 'package:fake_state/fake_state.dart';
+import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_app_tests.dart' show routerWalkFile;
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:test/test.dart';
+
+/// The full names of the routes of the locations that the walk of the
+/// routes goes to, in its order, from the file that the matrix writes for
+/// it, [file].
+List<String> _walkedRoutesOf(String file) {
+  const start = 'const List<WalkedLocation> walkedLocations = [';
+  final list = file.substring(file.indexOf(start) + start.length);
+  return [
+    for (final route in RegExp(r"^    route: '([\w.]+)',$", multiLine: true)
+        .allMatches(list.substring(0, list.indexOf('\n];'))))
+      route[1]!,
+  ];
+}
 
 void main() {
   late MatrixAppTests appTests;
@@ -47,20 +68,44 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the layout '
-      'role, of the DI role and of the events role with every provider of '
-      'each, which they tell apart by the roles of the app only', () {
+      'role, of the DI role, of the events role, of the preferences role, '
+      'of the localization role, of the theme role and of the app entry role '
+      'with every provider of each, which they tell apart by the roles of '
+      'the app only', () {
     expect(
       appTests.testedRoles,
-      containsAll([routerRole, layoutRole, diRole, eventsRole]),
+      containsAll([
+        routerRole,
+        layoutRole,
+        diRole,
+        eventsRole,
+        preferencesRole,
+        localizationRole,
+        themeRole,
+        appEntryRole,
+      ]),
     );
+    expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
+    expect(named('router_guards').roles, {routerRole});
+    expect(named('router_guards_fallback').roles, {routerRole});
+    expect(named('layout_guards').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
     expect(named('layout_screens').roles, {routerRole, layoutRole});
     expect(named('di_role').roles, {diRole});
     expect(named('di_disposal').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('preferences_restorers').roles, {preferencesRole});
     expect(named('router_walk').roles, {routerRole});
+    expect(named('router_walk_guards').roles, {routerRole});
+    // The test of the theme role checks that the root of the app, which
+    // the provider of the app entry builds, follows the theme mode.
+    expect(named('theme_role').roles, {themeRole, appEntryRole});
+    // The test of the look of the fixture theme checks that the root
+    // follows a widget that the themes of a provider read from its context.
+    expect(named('theme_look').roles, {appEntryRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -117,9 +162,10 @@ void main() {
   });
 
   test(
-      'the tests of the events role and of the walk of the routes apply '
-      'only to the apps with every module, which have the roles and run '
-      'flutter test for other tests already', () {
+      'the tests of the events role, of the preferences role, of the '
+      'localization role, of the theme role and of the walk of the routes '
+      'apply only to the apps with every module, which have the roles and '
+      'run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -128,6 +174,37 @@ void main() {
     expect(appsOf(named('events_role')), [
       for (final app in everyModule) app.name,
     ]);
+    // So do the test of the preferences that the CLI keeps, the test of
+    // the restorers of the fixture setting, which every such app has, the
+    // test of the theme role that the CLI keeps, for the fixture theme,
+    // and the test of the look of that theme, which every such app has.
+    for (final name in [
+      'preferences_role',
+      'preferences_restorers',
+      'theme_role',
+      'theme_look',
+    ]) {
+      expect(
+        appsOf(named(name)),
+        [for (final app in everyModule) app.name],
+        reason: name,
+      );
+    }
+    // So does the test of the localization role that the CLI keeps: each
+    // such app has the texts of the second fixture feature, in two
+    // languages of the app.
+    expect(appsOf(named('localization_role')), [
+      for (final app in everyModule) app.name,
+    ]);
+    for (final app in everyModule) {
+      final input = localizationRole.hookInput(app.hook!);
+      expect(
+        localizationRole.localesIn(input),
+        ['en', 'uk'],
+        reason: app.name,
+      );
+      expect(localizationRole.textsIn(input), isNotEmpty, reason: app.name);
+    }
     // So does the walk of the routes, which goes to the start screens of
     // both fixture features, destinations of the main navigation, with
     // each router and each layout.
@@ -139,11 +216,233 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        contains(eventsRole),
+        containsAll([eventsRole, preferencesRole, themeRole]),
+        reason: app.name,
+      );
+      expect(
+        app.modules,
+        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
     }
+  });
+
+  /// The modules of the fixtures that provide the router role.
+  List<ModuleId> routers() => [
+        for (final module in fixtureModules())
+          if (module.descriptor.provides.contains(routerRole))
+            module.descriptor.id,
+      ];
+
+  test(
+      'the apps with every module come with the fixture gates and without '
+      'them, with each router: the gates are in the apps with the state '
+      'manager that they depend on, whichever the other providers are, so '
+      'every covering of the pairs of providers has both kinds for each '
+      'router', () {
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+    bool hasGates(MatrixApp app) => app.modules.contains(FakeGateModule.id);
+
+    expect(routers(), hasLength(greaterThan(1)));
+    for (final app in everyModule) {
+      expect(
+        hasGates(app),
+        app.modules.contains(FakeGateModule.stateManager),
+        reason: app.name,
+      );
+    }
+    // A state manager is a role that takes one provider and has two here,
+    // so each router is in an app with each of them.
+    for (final router in routers()) {
+      final ofRouter = everyModule.where((app) => app.modules.contains(router));
+      expect(ofRouter.where(hasGates), isNotEmpty, reason: '$router');
+      expect(
+        ofRouter.where((app) => !hasGates(app)),
+        isNotEmpty,
+        reason: '$router',
+      );
+    }
+  });
+
+  test(
+      'the tests of the listeners of the screen, of the layout and of the '
+      'walk of the routes run in apps without guards too, with each router '
+      'and a main navigation, which is what most apps are', () {
+    for (final name in [
+      'router_screens',
+      'router_listeners',
+      'layout_screens',
+      'router_walk',
+    ]) {
+      final test = named(name);
+      for (final router in routers()) {
+        expect(
+          [
+            for (final app in apps)
+              if (test.appliesTo(app) &&
+                  app.modules.contains(router) &&
+                  app.hook!.presentRoles.contains(layoutRole) &&
+                  routerRole
+                      .facadeOf(routerRole.hookInput(app.hook!))
+                      .guards
+                      .isEmpty)
+                app.name,
+          ],
+          isNotEmpty,
+          reason: '$name runs in no app of $router without guards and with '
+              'a main navigation.',
+        );
+      }
+    }
+  });
+
+  test(
+      'the tests of the guards of the routes apply to the apps with every '
+      'module that have the fixture gates, with each router, which run '
+      'flutter test for other tests already; with a page over the main '
+      'navigation, to those of them with a layout', () {
+    final guards = named('router_guards');
+    final withLayout = named('layout_guards');
+
+    expect(appsOf(guards), [
+      for (final app in apps)
+        if (app.everyModuleWith != null &&
+            app.modules.contains(FakeGateModule.id))
+          app.name,
+    ]);
+    // The test with the main navigation uses the helpers of the tests of
+    // the guards.
+    expect(appsOf(guards), containsAll(appsOf(withLayout)));
+    for (final test in [guards, withLayout]) {
+      for (final router in routers()) {
+        expect(
+          [
+            for (final app in apps)
+              if (test.appliesTo(app) && app.modules.contains(router)) app.name,
+          ],
+          isNotEmpty,
+          reason: 'No app with $router has ${nameOf(test)}.',
+        );
+      }
+    }
+  });
+
+  test(
+      'the test of the guards over the fallback screen applies to the apps '
+      'with the fixture gates in which no route starts the app, with each '
+      'router', () {
+    final fallback = named('router_guards_fallback');
+
+    expect(appsOf(fallback), [
+      for (final router in routers()) 'fake_gate ($router)',
+    ]);
+    for (final app in apps) {
+      if (!fallback.appliesTo(app)) continue;
+      expect(
+        routerRole.startIn(routerRole.hookInput(app.hook!)),
+        isNull,
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the app of the fixture setting without the preferences gets no test '
+      'of the preferences', () {
+    final without = apps.singleWhere(
+      (app) => app.name == 'fake_preferences_user',
+    );
+
+    expect(without.hook!.presentRoles, isNot(contains(preferencesRole)));
+    for (final name in ['preferences_role', 'preferences_restorers']) {
+      expect(named(name).appliesTo(without), isFalse, reason: name);
+    }
+  });
+
+  test(
+      'the test of the walk of the routes while a guard keeps the user out '
+      'applies to the apps with the walk and the fixture gates, with each '
+      'router', () {
+    final walkGuards = named('router_walk_guards');
+
+    expect(appsOf(walkGuards), isNotEmpty);
+    // It runs the walk that the CLI keeps, with the file that the matrix
+    // writes for it.
+    expect(appsOf(named('router_walk')), containsAll(appsOf(walkGuards)));
+    for (final app in apps) {
+      if (!walkGuards.appliesTo(app)) continue;
+      expect(
+        app.modules,
+        contains(const ModuleId('fake_gate')),
+        reason: app.name,
+      );
+    }
+    for (final module in fixtureModules()) {
+      if (!module.descriptor.provides.contains(routerRole)) continue;
+      expect(
+        [
+          for (final app in apps)
+            if (walkGuards.appliesTo(app) &&
+                app.modules.contains(module.descriptor.id))
+              app.name,
+        ],
+        isNotEmpty,
+        reason: 'No app with ${module.descriptor.id} has the test of the walk '
+            'while a guard keeps the user out.',
+      );
+    }
+  });
+
+  test(
+      'the walk of the routes goes to the routes of the fixture gates, the '
+      'flows of their guards, after the routes of the other fixtures, also '
+      'in an app whose gates are listed before them', () async {
+    const gates = ['fake_gate.gate', 'fake_gate.step', 'fake_gate.second'];
+    List<String> walkedIn(MatrixApp app) => _walkedRoutesOf(
+          named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!,
+        );
+    // The apps with every fixture, where the gates are listed after the
+    // fixtures with routes.
+    final withGates = apps.where(named('router_walk_guards').appliesTo);
+    expect(withGates, isNotEmpty);
+    for (final app in withGates) {
+      expect(
+        walkedIn(app),
+        [
+          'fake_feature.home',
+          'fake_second.second',
+          'fake_second.outside',
+          ...gates,
+        ],
+        reason: app.name,
+      );
+    }
+
+    // Fixtures with the gates listed first: the walk goes to the routes in
+    // the order of the modules, but for those of the flows.
+    final (apps: reordered, :failed) = await matrixOf(const [
+      FlutterCoreModule(),
+      FakeRouterModule(),
+      FakeBlocModule(),
+      FakeGateModule(),
+      FakeSecondModule(),
+    ]);
+    expect(failed, isEmpty);
+    final everyModule =
+        reordered.singleWhere((app) => app.everyModuleWith != null);
+    expect(
+      everyModule.modules.indexOf(FakeGateModule.id),
+      lessThan(everyModule.modules.indexOf(FakeSecondModule.id)),
+    );
+    expect(walkedIn(everyModule), [
+      'fake_second.second',
+      'fake_second.outside',
+      ...gates,
+    ]);
   });
 
   test(
@@ -153,12 +452,142 @@ void main() {
 
     for (final name in [
       'router_listeners',
+      'router_guards',
+      'layout_guards',
+      'router_walk_guards',
       'layout_screens',
       'go_router_screens',
       'bottom_tabs_screens',
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the test of the tabs of bottom_tabs applies only to the apps with the '
+      'tests of the layout, whose labels of the destinations it reads', () {
+    final tabs = appsOf(named('bottom_tabs_screens'));
+
+    expect(tabs, isNotEmpty);
+    expect(appsOf(named('layout_screens')), containsAll(tabs));
+  });
+
+  group(
+      'the labels of the destinations that the matrix writes for the tests '
+      'of the layout', () {
+    /// The top-level declarations of the Dart [code] by name, each as its
+    /// source, and the URIs of its imports under the name `import`.
+    Map<String, String> declarationsOf(String code) {
+      final unit = parseString(content: code).unit;
+      return {
+        'import': [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ].join(', '),
+        for (final declaration in unit.declarations)
+          if (declaration case FunctionDeclaration(:final name))
+            name.lexeme: declaration.toSource()
+          else if (declaration
+              case TopLevelVariableDeclaration(:final variables))
+            variables.variables.single.name.lexeme: declaration.toSource(),
+      };
+    }
+
+    /// The file of the labels of [app], whose package is `my_app`.
+    Map<String, String> labelsOf(MatrixApp app) {
+      final files = named('layout_screens').generatedFiles!(app, 'my_app');
+      expect(files.keys, [destinationLabelsFile]);
+      return declarationsOf(files[destinationLabelsFile]!);
+    }
+
+    test(
+        'are in each language of an app with the localization role: the '
+        'label of a feature that gave the role its text in that language, '
+        'and that of a feature that does not list the role in English', () {
+      final everyModule = [
+        for (final app in apps)
+          if (app.everyModuleWith != null) app,
+      ];
+
+      expect(everyModule, isNotEmpty);
+      for (final app in everyModule) {
+        expect(named('layout_screens').appliesTo(app), isTrue);
+        expect(
+          labelsOf(app),
+          {
+            'import': 'package:flutter/widgets.dart, '
+                'package:my_app/core/l10n/app_locale.dart',
+            'labelLanguages': "const List<String> labelLanguages = ['en', "
+                "'uk'];",
+            'destinationLabels': 'const Map<String, List<String>> '
+                "destinationLabels = {'en' : ['Fixture', 'Second'], "
+                "'uk' : ['Fixture', 'Другий']};",
+            'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+                '=> appLocale.choose(Locale(language));',
+            'followDevice': 'Future<void> followDevice() => '
+                'appLocale.choose(null);',
+          },
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'are in English alone for an app without the localization role, '
+        'whose file names nothing of that role', () async {
+      // The app of a broken layout, which has both fixture features and no
+      // texts.
+      final provider = brokenProviders().firstWhere(
+        (provider) =>
+            identical(provider.role, layoutRole) &&
+            !provider.app.contains(FakeL10nModule.id),
+      );
+      final (:app, :problems) = await provider.failingApp.check();
+      expect(problems, isEmpty);
+      expect(app!.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(named('layout_screens').appliesTo(app), isTrue);
+
+      expect(labelsOf(app), {
+        'import': '',
+        'labelLanguages': "const List<String> labelLanguages = ['en'];",
+        'destinationLabels': 'const Map<String, List<String>> '
+            "destinationLabels = {'en' : ['Fixture', 'Second']};",
+        'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+            'async {}',
+        'followDevice': 'Future<void> followDevice() async {}',
+      });
+    });
+
+    test(
+        'are in the languages of the app only, with the English text of a '
+        'label that has no translation into one of them', () async {
+      // The app of the broken layout with texts, in the languages of
+      // --locales.
+      final provider = brokenProviders().firstWhere(
+        (provider) =>
+            identical(provider.role, layoutRole) &&
+            provider.app.contains(FakeL10nModule.id),
+      );
+      final (apps: all, :failed) = await matrixOf(
+        provider.modules,
+        roleOptions: const {'locales': 'en'},
+      );
+      expect(failed, isEmpty);
+      final app = all.firstWhere(named('layout_screens').appliesTo);
+
+      final labels = labelsOf(app);
+      expect(
+        labels['labelLanguages'],
+        "const List<String> labelLanguages = ['en'];",
+      );
+      expect(
+        labels['destinationLabels'],
+        'const Map<String, List<String>> destinationLabels = '
+        "{'en' : ['Fixture', 'Second']};",
+      );
+      // The app has the role, so the file puts it into a language.
+      expect(labels['chooseLanguage'], contains('appLocale.choose('));
+    });
   });
 
   group('the app of several providers', () {
@@ -180,9 +609,11 @@ void main() {
         severalProviders.tests.singleWhere((test) => nameOf(test) == name);
 
     test(
-        'gets the app tests of the modules of the CLI, the test of the DI '
-        'role, the mocks of the fixture providers and the tests of the roles '
-        'of several providers, which all apply to it', () {
+        'gets the app tests of the modules of the CLI, the tests of the DI '
+        'role, of the events role, of the preferences role, of the settings '
+        'screen role and of the theme role, the mocks of the fixture '
+        'providers and the tests of the roles of several providers, which '
+        'all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -190,17 +621,63 @@ void main() {
           'firebase_crashlytics',
           'firebase_analytics',
           'screen_views',
+          'onboarding',
+          'settings',
+          'shared_preferences',
           'di_role',
           'events_role',
+          'preferences_role',
           'router_walk',
+          'settings_screen_role',
+          'theme_role',
+          'theme_setting',
           'fake_crash',
           'fake_analytics',
           'analytics_role',
           'crash_reporting_role',
+          'localization_role',
+          'language_setting',
         ]),
       );
       for (final test in severalProviders.tests) {
         expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
+      }
+    });
+
+    test(
+        'has the setting of the language, with texts in two languages: its '
+        'app has the localization role and the settings screen role, and '
+        'the test of the setting, a test of the localization role, applies '
+        'to it with the helper of the tests of the settings screen', () {
+      final hook = everyModule.hook!;
+      final setting = ofSeveral('language_setting');
+
+      expect(
+        hook.presentRoles,
+        containsAll([localizationRole, settingsScreenRole, preferencesRole]),
+      );
+      expect(
+        localizationRole.localesIn(localizationRole.hookInput(hook)),
+        ['en', 'uk'],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(hook)))
+            entry.file,
+        ],
+        contains(LocalizationRole.languageSettingFile),
+      );
+      expect(setting.roles, {localizationRole});
+      expect(setting.appliesTo(everyModule), isTrue);
+      // It opens the settings screen with the helper of those tests, which
+      // every app that it applies to has.
+      for (final app in matrix.where(setting.appliesTo)) {
+        expect(
+          ofSeveral('settings_screen_role').appliesTo(app),
+          isTrue,
+          reason: app.name,
+        );
       }
     });
 

@@ -868,9 +868,9 @@ void main() {
 
   group('the plan of the jobs of CI', () {
     test(
-        'of the CLI checks a pairwise covering of the apps with every module '
-        'in one shard, builds and starts each app of pairwise coverings, and '
-        'one app for each app entry', () async {
+        'of the CLI checks its matrix, with a pairwise covering of the apps '
+        'with every module, in two shards, builds and starts each app of '
+        'pairwise coverings, and one app for each app entry', () async {
       final (:plan, :problems) = await matrixPlanOf(
         smfModules,
         native: appEntryRole,
@@ -879,7 +879,9 @@ void main() {
       expect(problems, isEmpty);
       expect(plan, {
         'combinations': 'pairwise',
-        'shards': ['1/1'],
+        // More apps than a shard checks (appsPerShard): those of the
+        // matrix, and the apps with every module once more.
+        'shards': ['1/2', '2/2'],
         'apps': ['every module (bloc)', 'every module (riverpod)'],
         'start': ['every module (bloc)', 'every module (riverpod)'],
         'entries': ['every module (bloc)'],

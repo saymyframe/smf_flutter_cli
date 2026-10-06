@@ -1,0 +1,15 @@
+name: settings
+description: "The settings screen of an SMF app: an entry for each setting of its modules, and what the app is."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: text_title, the code that reads the title of the screen, which
+# is a text of the app in an app with the localization role and the English
+# text as a Dart string in an app without it, where the widget of the title
+# is a constant (has_localization), and entries, the widgets of the entries
+# with the imports of their files.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

@@ -3,6 +3,7 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
+import 'package:smf_firebase_core/src/agents.dart';
 import 'package:smf_firebase_core/src/configure.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
@@ -277,8 +278,8 @@ void main() {
     });
 
     test(
-        'is the app without Firebase but for its options, start-up, README '
-        'and firebase_core', () {
+        'is the app without Firebase but for its options, start-up, README, '
+        'guide for coding agents and firebase_core', () {
       expect(
         withFirebase.files.keys.toSet(),
         {...without.files.keys, _options},
@@ -291,6 +292,7 @@ void main() {
         // The file that starts Firebase, which the tests below check.
         if (path == 'pubspec.yaml' ||
             path == AppEntryRole.readmeFile ||
+            path == AppEntryRole.agentsFile ||
             _holdsCodeOfModule(withFirebase.files[path]!)) {
           continue;
         }
@@ -347,6 +349,61 @@ void main() {
       expect(
         readme.text,
         isNot(anyOf(contains('ruby -e'), contains('flutter build ipa'))),
+      );
+    });
+
+    test(
+        'has a section of its own in the guide for coding agents, which '
+        'names the options and the section of the README as the app has '
+        'them', () {
+      const firebase = ModuleOrigin(FirebaseCoreModule.id);
+      final notes = withFirebase.entriesOf(AppEntryRole.agentSections);
+
+      // The guide of the app without Firebase, and the section of Firebase.
+      expect(
+        notes.where((note) => note.$1 != firebase),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        notes.where((note) => note.$1 == firebase),
+        [(firebase, 'Firebase', AgentNote(agentNote))],
+      );
+      expect(
+        module
+            .contribute(ContractHarness.defaultContext)
+            .whereType<SocketContribution>()
+            .singleWhere((c) => c.socket == AppEntryRole.agentSections)
+            .when,
+        isEmpty,
+      );
+      expect(
+        withFirebase.files[AppEntryRole.agentsFile]!.text,
+        endsWith('\n## Firebase\n\n$agentNote'),
+      );
+      // The class of the options in their file, which is a placeholder,
+      // and the section of the README with the command.
+      final options = withFirebase.files[_options]!.text;
+      expect(
+        DartFileIndexer.index(_options, options)
+            .declaration('DefaultFirebaseOptions')
+            ?.kind,
+        DeclarationKind.classType,
+      );
+      expect(options, contains('throw UnsupportedError('));
+      expect(
+        agentNote,
+        contains('with `DefaultFirebaseOptions` of `$_options`.'),
+      );
+      expect(agentNote, contains('with an `UnsupportedError` until then'));
+      expect(
+        withFirebase.files[AppEntryRole.readmeFile]!.text,
+        contains('\n## $readmeHeading\n'),
+      );
+      expect(
+        agentNote,
+        contains(
+          'the section $readmeHeading of `${AppEntryRole.readmeFile}`.',
+        ),
       );
     });
 

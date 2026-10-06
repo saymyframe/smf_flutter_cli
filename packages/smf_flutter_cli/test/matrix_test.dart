@@ -215,16 +215,30 @@ void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
-      'manager, the app of home, which gets the router, the app of the DI '
-      'container, the app of the events with the DI container and without, '
-      'the app of Firebase, the app of Crashlytics with the DI container and '
-      'without, which gets Firebase, the apps of Firebase Analytics with and '
-      'without the DI container and the router, which get Firebase, and one '
-      'of every module for each state manager', () async {
+      'manager, the apps of home, of settings and of the layout with the '
+      'localization, which get the router and the preferences, the apps of '
+      'home and of settings without it, the apps of the theme with the '
+      'settings screen and the localization and without each, and the app '
+      'of the localization, which all get the preferences, the app of the '
+      'DI container, the apps of the events and of the preferences with the '
+      'DI container and without, the apps of the onboarding with the '
+      'localization and without, which get the preferences and the router, '
+      'the app of Firebase, the app of Crashlytics '
+      'with the DI container and without, which gets Firebase, the apps of '
+      'Firebase Analytics with and without the DI container and the router, '
+      'which get Firebase, and one of every module for each state manager',
+      () async {
     final (:apps, :failed) = await matrixOf(smfModules);
+    // The modules whose labels and titles are texts of the app, each with
+    // the provider of the texts. The app of settings with it is the app of
+    // the localization with the settings screen too.
+    String localized(String module) => '$module with localization '
+        '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
-        'event_bus, firebase_core, firebase_crashlytics, firebase_analytics)';
+        '(flutter_core, go_router, $stateManager, home, settings, '
+        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
+        'shared_preferences, onboarding, firebase_core, '
+        'firebase_crashlytics, firebase_analytics)';
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -233,10 +247,35 @@ void main() {
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
       'bloc (bloc, flutter_core)',
       'riverpod (riverpod, flutter_core)',
+      localized('home'),
       'home (home, flutter_core, go_router)',
+      localized('settings'),
+      'settings (settings, flutter_core, go_router)',
+      localized('bottom_tabs'),
+      equals(
+        'material_theme with settings_screen, localization (material_theme, '
+        'settings, gen_l10n, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'material_theme with settings_screen (material_theme, settings, '
+        'flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'material_theme with localization (material_theme, gen_l10n, '
+        'flutter_core, shared_preferences)',
+      ),
+      'material_theme (material_theme, flutter_core, shared_preferences)',
+      'gen_l10n (gen_l10n, flutter_core, shared_preferences)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
       'event_bus (event_bus, flutter_core)',
+      'shared_preferences with di (shared_preferences, get_it, flutter_core)',
+      'shared_preferences (shared_preferences, flutter_core)',
+      equals(
+        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       'firebase_core (firebase_core, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -404,8 +443,9 @@ void main() {
 
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, bottom_tabs, get_it, '
-        'event_bus, local)';
+        '(flutter_core, go_router, $stateManager, home, settings, '
+        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
+        'shared_preferences, onboarding, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -907,7 +947,7 @@ Type type() => Types;
       {'module': 'home', 'package': 'smf_home_flutter', 'apps': withHome},
     ]);
     expect(usesOf(report[2]), {
-      'home': ['home'],
+      'home': ['home with localization', 'home'],
     });
     expect(
       usesOf(report[3]).keys,
@@ -1406,9 +1446,14 @@ Type type() => Types;
               'go_router',
               stateManager,
               'home',
+              'settings',
               'bottom_tabs',
+              'material_theme',
+              'gen_l10n',
               'get_it',
               'event_bus',
+              'shared_preferences',
+              'onboarding',
             ].join(','),
             '-o',
             '/apps',

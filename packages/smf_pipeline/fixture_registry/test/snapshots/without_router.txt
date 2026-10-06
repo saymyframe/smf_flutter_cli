@@ -1,3 +1,50 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+## Events
+
+- An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
+- The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
+
+## Fixture
+
+The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
+
+The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/readme.txt`, and the Dart files of the fixtures in the directories `lib/core/fixture_*/`.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
 === README.md (flutter_core) ===
 # fixture_app
 
@@ -231,12 +278,7 @@ IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 	</array>
 </dict>
 </plist>
-=== l10n.yaml (fake_sockets) ===
-arb-dir: lib/l10n
-template-arb-file: app_en.arb
-output-localization-file: app_localizations.dart
 === lib/app.dart (flutter_core) ===
-import 'package:fixture_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -250,13 +292,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Fixture App',
-    theme: ThemeData(fontFamily: "FixtureSans"),
-    darkTheme: ThemeData.dark(),
-    localizationsDelegates: [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-    ],
-    supportedLocales: [Locale('en')],
+    localizationsDelegates: [GlobalMaterialLocalizations.delegate],
     home: const FallbackStartScreen(),
     builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
   );
@@ -301,6 +337,10 @@ class FallbackStartScreen extends StatelessWidget {
 String clockUserText() {
   return 'No badge';
 }
+
+/// The time zones that the clock user shows: those of the clock when the
+/// app has one.
+List<String> clockUserZones() => const <String>[];
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -607,12 +647,23 @@ void _openAlerts() {
 }
 
 void _openNews() {}
-=== lib/l10n/app_en.arb (fake_sockets) ===
-{
-  "@@locale": "en",
-  "fixtureTitle": "Fixture",
-  "@fixtureTitle": {
-    "description": "A string of the fixture that uses every socket."
+=== lib/core/fixture_setting/fixture_setting.dart (fake_preferences_user) ===
+/// The setting of the fixture: a number that the app remembers between its
+/// launches when it has preferences.
+final fixtureSetting = FixtureSetting();
+
+/// A number, 0 until something sets it.
+final class FixtureSetting {
+  int _value = 0;
+
+  /// The number.
+  int get value => _value;
+
+  /// Sets the number to [value]. In an app with preferences, it saves the
+  /// number too, once the app opened them: before that, it changes only
+  /// memory.
+  Future<void> set(int value) async {
+    _value = value;
   }
 }
 === lib/main.dart (flutter_core) ===
@@ -642,7 +693,6 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  intl: "any"
   json_annotation: "^4.9.0"
 
 dev_dependencies:
@@ -654,7 +704,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  generate: true
   assets:
     - "assets/fixture/"
   fonts:

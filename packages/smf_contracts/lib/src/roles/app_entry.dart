@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:meta/meta.dart';
+import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
 import 'package:smf_contracts/core.dart';
 
+part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
 
 /// The app entry role; see [AppEntryRole].
@@ -28,6 +30,27 @@ const appEntryRole = AppEntryRole._();
 /// `MaterialApp`, or a `MaterialApp.router` when the router role is present.
 /// So the screens of every module have the Material ancestors they rely
 /// on, such as the theme of the app and `MaterialLocalizations`.
+///
+/// The provider creates that `MaterialApp` in the `build` of a widget and
+/// evaluates the expressions of the [appArgs] there. So `context` in such
+/// an expression is the `BuildContext` of that widget, which is below the
+/// [rootWrappers], and the root rebuilds when an inherited widget that the
+/// expression read notifies. The rules of the role check both places. Its
+/// module rules check that the tags of the [rootWrappers] are in the body
+/// of `main()` in [mainFile], which runs the root widget inside them. Its
+/// structural rules check that the provider creates a `MaterialApp`, and
+/// every one of its code in `lib/` in a method
+/// `build(BuildContext context)` of a class, since they cannot tell which
+/// of them is the root.
+///
+/// The role's template generates the guide for coding agents that work on
+/// the app, whichever module provides the role: [agentsFile], with a
+/// section for each role and module of the app that has notes for them
+/// (see [agentSections]), and [claudeFile], which gives the same guide to
+/// the agents that read that file instead. The structural rule
+/// `app_entry.agent_guide_paths` checks the paths that the guide names
+/// below the top-level directories of a Flutter project, and its paths to
+/// Dart files: each is a file or a directory of the app.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -69,6 +92,14 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The path of the guide for coding agents that work on the app; see
+  /// [agentSections].
+  static const agentsFile = 'AGENTS.md';
+
+  /// The path of the file that gives [agentsFile] to the agents that read
+  /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
+  static const claudeFile = 'CLAUDE.md';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -127,6 +158,12 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// Widgets around the root widget in `runApp()`, such as Riverpod's
   /// `ProviderScope(child: ` and `)`; the first contribution is outermost.
+  ///
+  /// The provider has the tags of the socket in the body of `main()` in
+  /// [mainFile], around the root widget that `main()` runs. So the widget
+  /// that creates the root `MaterialApp` is below the wrappers, and the
+  /// expressions of the [appArgs] can read an inherited widget among them
+  /// from `context`.
   static const rootWrappers = SocketRef<WrapperSocket>.role(
     appEntryRole,
     'root_wrappers',
@@ -157,16 +194,36 @@ final class AppEntryRole extends Role<NoDsl> {
     CodeSocket(),
   );
 
-  /// Arguments of the root `MaterialApp`: `theme` and `darkTheme` take one
-  /// value, `localizationsDelegates` and `supportedLocales` take list items.
+  /// Arguments of the root `MaterialApp`: `theme`, `darkTheme`, `themeMode`
+  /// and `locale` take one value, `localizationsDelegates` takes the list
+  /// items of every contributor, and `supportedLocales` takes the list
+  /// items of one contributor ([ArgShape.listOfOneContributor]).
+  ///
+  /// Every delegate of the root has to support each of its locales, so a
+  /// module that added a locale next to another contributor would break
+  /// the delegates of the other. So the pipeline reports the items of a
+  /// second contributor of `supportedLocales` as a conflict. In an app with
+  /// the localization role, the template of that role is the contributor.
+  ///
+  /// The provider evaluates the expression of an argument in the `build` of
+  /// the widget that creates the root `MaterialApp`. So the expression may
+  /// read `context`, the `BuildContext` of that widget, which is below the
+  /// [rootWrappers]: an argument can take its value from an inherited
+  /// widget that a module put around the root, such as the theme mode or
+  /// the locale that the user chose, and the root rebuilds with the new
+  /// value when that widget notifies. That context is above the
+  /// `MaterialApp`, so it has neither the theme nor the localizations of
+  /// the app.
   static const appArgs = SocketRef<ArgsSocket>.role(
     appEntryRole,
     'app_args',
     ArgsSocket({
       'theme': ArgShape.scalar,
       'darkTheme': ArgShape.scalar,
+      'themeMode': ArgShape.scalar,
+      'locale': ArgShape.scalar,
       'localizationsDelegates': ArgShape.list,
-      'supportedLocales': ArgShape.list,
+      'supportedLocales': ArgShape.listOfOneContributor,
     }),
   );
 
@@ -297,6 +354,57 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Sections of [agentsFile], the guide for coding agents that work on the
+  /// app, keyed by their heading, each with an [AgentNote] in Markdown.
+  ///
+  /// A note tells what the code of the app does not show: a rule that holds
+  /// across files, an order, what not to do and what to do instead, a
+  /// placeholder, a step that needs a person. The section of a role has the
+  /// [Role.description] of the role as its heading: the template of the
+  /// role tells there, with [AgentNote.ofRole], what holds whichever module
+  /// provides the role, and a provider adds what its package brings under
+  /// the same heading. A module without a role has a heading of its own.
+  ///
+  /// The sections follow the introduction of the guide as `## <heading>`
+  /// sections: that of this role first, then the others in the order of
+  /// their headings. A section has the notes of the roles first, then the
+  /// others in the order of the ids of their contributors, each once, with
+  /// an empty line between two notes. So replacing the provider of a role
+  /// changes only its own note. The socket does not follow the order edges
+  /// of its contributors (see [SocketKind.followsOrderEdges]): a role in
+  /// the [Contribution.when] of a note adds no edge, so no note can make
+  /// the app impossible to generate.
+  ///
+  /// A heading is one line without spaces around it. A note has text,
+  /// starts neither a title nor a section, with a line that starts with
+  /// `# ` or `## ` or a line of `=` or `-` under a line of text, and closes
+  /// its fenced code blocks. Only the template of a role contributes a
+  /// note of a role ([AgentNote.ofRole]).
+  ///
+  /// A note names a file or a directory of the app in backticks, by its
+  /// path from the root of the app, such as `lib/core/di/`. The structural
+  /// rule `app_entry.agent_guide_paths` reads the paths below a top-level
+  /// directory of a Flutter project, such as `lib/`, `test/` or `android/`,
+  /// whether the app has that directory or not, and the paths to Dart
+  /// files, and reports one that the app does not have. It does not read
+  /// the name of a file at the root of the app, such as `pubspec.yaml`,
+  /// which nothing tells from other names. So what a note tells of a file
+  /// of a role that the app may lack is a contribution of its own, with
+  /// that role in its [Contribution.when], and what depends on the data of
+  /// a role comes from the render hook of the role or of its provider. A
+  /// file that a later step writes, such as one of a tool that runs after
+  /// generation, is named as a pattern, with `<…>` or `*`, or left to the
+  /// README.
+  static const agentSections = SocketRef<KeyedSocket<AgentNote>>.role(
+    appEntryRole,
+    'agent_sections',
+    KeyedSocket(
+      policy: _AgentNotePolicy(),
+      renderer: _renderAgentSections,
+      followsOrderEdges: false,
+    ),
+  );
+
   @override
   String get id => 'app_entry';
 
@@ -328,12 +436,17 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleAppPlugins,
         gradleAppDependencies,
         readmeSections,
+        agentSections,
       ];
 
   @override
   RoleInterface get interface => const RoleInterface(
+        files: [agentsFile, claudeFile],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
+
+  @override
+  RoleTemplate<NoDsl> get template => const _AppEntryTemplate();
 
   @override
   List<ModuleRule<NoDsl>> get moduleRules => const [
@@ -343,6 +456,14 @@ final class AppEntryRole extends Role<NoDsl> {
               'of bootstrap() in lib/bootstrap.dart, in the order early, '
               'platform, di, late.',
           check: _checkBootstrapPhases,
+        ),
+        ModuleRule(
+          id: 'app_entry.root_wrappers_in_main',
+          description: 'The tags of the root wrappers are in the body of '
+              'main() in lib/main.dart, which runs the root widget inside '
+              'them, so the widget that creates the root MaterialApp is '
+              'below the widgets that the modules put around the root.',
+          check: _checkRootWrappersInMain,
         ),
         ModuleRule(
           id: 'app_entry.tag_lines',
@@ -376,12 +497,29 @@ final class AppEntryRole extends Role<NoDsl> {
           check: _checkMaterialRoot,
         ),
         StructuralRule(
+          id: 'app_entry.root_in_build',
+          description: 'The provider creates every MaterialApp of lib/, one '
+              'of which is the root of the app, in a method '
+              'build(BuildContext context) of a class, so the arguments '
+              'that the modules give the root read the context of that '
+              'build.',
+          check: _checkRootInBuild,
+        ),
+        StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
               'the top-level dictionary of Info.plist, the permissions and '
               'the meta-data of the application in the Android manifest, and '
               'the plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.agent_guide_paths',
+          description: 'A path that the guide for coding agents names in '
+              'inline code below a top-level directory of a Flutter '
+              'project, or to a Dart file, is a file or a directory of the '
+              'app, written from the root of the app.',
+          check: _checkAgentGuidePaths,
         ),
       ];
 }
@@ -416,48 +554,70 @@ List<SmfIssue> _checkBootstrapPhases(ModuleRuleInput<NoDsl> input) {
   final templates = _templatesOf(input.contributions);
   final text = templates[path] ?? '';
   final tags = [for (final socket in phases) '{{{${socket.tag}}}}'];
-  final issues = <SmfIssue>[
-    for (final tag in tags)
-      if (!text.contains(tag) &&
-          templates.values.any((template) => template.contains(tag)))
-        SmfIssue(
-          'The tag $tag is not in $path, where bootstrap() runs the phases '
-          'of start-up.',
-          origin: origin,
-          path: path,
-        ),
-  ];
   final offsets = [
     for (final tag in tags)
       if (text.indexOf(tag) case final offset when offset >= 0) offset,
   ];
-  final body = _bodyOf(text, AppEntryRole.bootstrap.name);
-  for (final tag in tags) {
-    final offset = text.indexOf(tag);
-    if (offset < 0 ||
-        (body != null && offset > body.start && offset < body.end)) {
-      continue;
-    }
-    issues.add(
-      SmfIssue(
-        'The tag $tag is in $path, but not in the body of bootstrap(), which '
-        'runs the phases of start-up.',
-        origin: origin,
-        path: path,
-      ),
-    );
-  }
-  if (!_ascending(offsets)) {
-    issues.add(
+  return [
+    ..._tagsOutsideBodyOf(
+      AppEntryRole.bootstrap.name,
+      path: path,
+      does: 'runs the phases of start-up',
+      tags: tags,
+      templates: templates,
+      origin: origin,
+    ),
+    if (!_ascending(offsets))
       SmfIssue(
         'The tags of the phases of start-up in $path are not in the order '
         'early, platform, di, late.',
         origin: origin,
         path: path,
       ),
+  ];
+}
+
+List<SmfIssue> _checkRootWrappersInMain(ModuleRuleInput<NoDsl> input) =>
+    _tagsOutsideBodyOf(
+      AppEntryRole.main.name,
+      path: AppEntryRole.mainFile,
+      does: 'runs the root widget inside the root wrappers',
+      tags: [for (final tag in AppEntryRole.rootWrappers.tags) '{{{$tag}}}'],
+      templates: _templatesOf(input.contributions),
+      origin: ModuleOrigin(input.module.id),
     );
-  }
-  return issues;
+
+/// The problems of [tags], the tags of sockets that belong in the body of
+/// the function [function] of the template at [path], among the [templates]
+/// of a module: first each tag that the module has in another template
+/// only, then each that is in that template outside the body. [does] says
+/// what the function does there, such as `runs the phases of start-up`.
+List<SmfIssue> _tagsOutsideBodyOf(
+  String function, {
+  required String path,
+  required String does,
+  required List<String> tags,
+  required Map<String, String> templates,
+  required ContributionOrigin origin,
+}) {
+  final text = templates[path] ?? '';
+  final body = _bodyOf(text, function);
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: origin, path: path);
+  return [
+    for (final tag in tags)
+      if (!text.contains(tag) &&
+          templates.values.any((template) => template.contains(tag)))
+        issue('The tag $tag is not in $path, where $function() $does.'),
+    for (final tag in tags)
+      if (text.indexOf(tag) case final offset
+          when offset >= 0 &&
+              (body == null || offset <= body.start || offset >= body.end))
+        issue(
+          'The tag $tag is in $path, but not in the body of $function(), '
+          'which $does.',
+        ),
+  ];
 }
 
 /// Whether none of [offsets] is before the one in front of it.
@@ -582,16 +742,26 @@ bool _createsMaterialApp(IndexedInvocation invocation) =>
       _ => false,
     };
 
-List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
-  ModuleId? provider;
+/// The Dart files in `lib/` of the provider of the app entry among the files
+/// of [input], each with its path and the id of the provider: the root is
+/// in the code of the app, not in its tests.
+Iterable<(String, DartFileIndex, ModuleId)> _filesOfProvider(
+  StructuralRuleInput<NoDsl> input,
+) sync* {
   for (final MapEntry(key: path, value: file) in input.files.entries) {
     final owner = input.owners[path];
-    // The root is in the code of the app, not in its tests.
     if (owner is! ModuleOrigin || !path.startsWith('lib/')) continue;
     final module = input.module(owner.module);
     if (!(module?.provides.contains(appEntryRole) ?? false)) continue;
+    yield (path, file, owner.module);
+  }
+}
+
+List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
+  ModuleId? provider;
+  for (final (_, file, module) in _filesOfProvider(input)) {
     if (file.invocations.any(_createsMaterialApp)) return const [];
-    provider = owner.module;
+    provider = module;
   }
   // The required symbols report the files of a provider that are missing.
   if (provider == null) return const [];
@@ -606,3 +776,53 @@ List<SmfIssue> _checkMaterialRoot(StructuralRuleInput<NoDsl> input) {
     ),
   ];
 }
+
+/// The index cannot tell which `MaterialApp` of the provider is the root of
+/// the app, so the rule asks the same of every one that the provider
+/// creates in `lib/`: one in a helper of a widget or in a function, such as
+/// an app for tests, is reported too.
+List<SmfIssue> _checkRootInBuild(StructuralRuleInput<NoDsl> input) => [
+      for (final (path, file, provider) in _filesOfProvider(input))
+        for (final invocation in file.invocations)
+          if (_createsMaterialApp(invocation) && !_inBuild(file, invocation))
+            SmfIssue(
+              '$path creates a MaterialApp outside a method '
+              'build(BuildContext context) of a class. Every MaterialApp '
+              'that the provider creates in lib/ counts, since each may be '
+              'the root of the app, whose arguments from the modules read '
+              'the context of such a build.',
+              hint: 'Create it in the build(BuildContext context) of a '
+                  'widget. main() runs the widget that creates the root '
+                  'inside the root wrappers.',
+              origin: ModuleOrigin(provider),
+              path: path,
+            ),
+    ];
+
+/// Whether [invocation] of [file] is in a method `build` of a class whose
+/// first parameter is `BuildContext context`.
+bool _inBuild(DartFileIndex file, IndexedInvocation invocation) =>
+    invocation.enclosingMember == 'build' &&
+    file.declarations.any(
+      (declaration) =>
+          declaration.name == invocation.enclosingDeclaration &&
+          declaration.members.any(_isBuildWithContext),
+    );
+
+/// Whether [member] is a method `build`, not a getter or a setter of that
+/// name, whose first parameter is the positional `BuildContext context`.
+bool _isBuildWithContext(IndexedMember member) =>
+    member.name == 'build' &&
+    member.kind == MemberKind.method &&
+    switch (member.parameters) {
+      [
+        IndexedParameter(
+          name: 'context',
+          type: 'BuildContext',
+          kind: ParameterKind(isNamed: false),
+        ),
+        ...,
+      ] =>
+        true,
+      _ => false,
+    };

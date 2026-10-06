@@ -13,17 +13,36 @@ library;
 import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
+import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
+import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
-/// A fixture module with one known bug, which a change of the code that it
-/// renders brings in: the rest of it is the fixture module [of], under
-/// another id. The fixture has no sockets of its own, which would be those
-/// of its id.
+/// A module with one known bug, which a change of the code that it renders
+/// brings in: the rest of it is the module [of], under another id. The
+/// module [of] has no sockets of its own, which would be those of its id.
+///
+/// The broken modules of this package change fixture modules. The package
+/// depends on no module of the CLI, so that the app tests of the fixture
+/// registry, which may use what the fixture modules generate, know none of
+/// those either. A package that depends on such a module makes a broken
+/// one of it itself, with [BrokenModule.new].
 final class BrokenModule extends SmfModule {
+  /// Creates the module [id], which [description] describes: the module
+  /// [of] under that id, with the [changes] of its file [file], the path
+  /// of a file of one of its bricks. Each change is a text that the file
+  /// has once, and the text that takes its place.
+  const BrokenModule(
+    SmfModule of, {
+    required ModuleId id,
+    required String description,
+    required String file,
+    required List<(String, String)> changes,
+  }) : this._(of, id, description, file, changes);
+
   const BrokenModule._(
     this.of,
     this.id,
@@ -135,6 +154,70 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that asks the guards of the routes about the screen
+  /// that the app starts on, and again when one of them starts or stops
+  /// allowing, but not about the locations that `go()`, `push()` and
+  /// `replace()` are asked to show: it shows a location that a guard keeps
+  /// the user from.
+  static const routerAskingGuardsOnlyAtStart = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_asks_guards_at_start'),
+    'A plain navigator that asks the guards only as it starts (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '  bool _redirected(AppLocation location) {\n'
+            '    final guarded = _guards.asked(location.routeName, location);\n'
+            '    if (guarded == null) return false;\n'
+            '    _go(guarded.location);\n'
+            '    return true;\n'
+            '  }\n',
+        '  bool _redirected(AppLocation location) => false;\n',
+      ),
+    ],
+  );
+
+  /// The fake router that tells the guards of the routes of its pages when
+  /// one of them starts or stops allowing, and does not show what they
+  /// answer. So the target of a guard stays once the guard allows, and the
+  /// pages of the stack stay when a guard stops allowing.
+  static const routerIgnoringGuardChanges = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_ignores_guard_changes'),
+    'A plain navigator that ignores the changes of the guards (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    final shown = _guards.changed(_pages);\n'
+            '    if (shown != null) _go(shown.location);\n',
+        '    _guards.changed(_pages);\n',
+      ),
+    ],
+  );
+
+  /// The fake router whose `replace()` asks the guards of the routes about
+  /// its location, and leaves the stack as it is when a guard keeps the
+  /// user from the location, rather than showing the target of the guard
+  /// in place of the whole stack: from a page of the flow that is not the
+  /// target, the user stays on that page.
+  static const routerKeepingPageOnGuardedReplace = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_page_on_guarded_replace'),
+    'A plain navigator whose guarded replace() shows nothing (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    {{#guards}}if (_redirected(location)) return;\n'
+            '    {{/guards}}final branch = _branchOf(location);\n'
+            "    _checkMainNavigation(location, branch, 'replace');\n",
+        '    {{#guards}}if (_guards.asked(location.routeName, location) != '
+            'null) return;\n'
+            '    {{/guards}}final branch = _branchOf(location);\n'
+            "    _checkMainNavigation(location, branch, 'replace');\n",
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.
@@ -147,6 +230,109 @@ final class BrokenModule extends SmfModule {
       (
         '_events.stream.where((event) => event is T).cast<T>()',
         '_events.stream.cast<T>()',
+      ),
+    ],
+  );
+
+  /// The fixture preferences whose writes never reach their disk: a
+  /// value that was saved is read back as long as the app runs, and gone at
+  /// its next start.
+  static const preferencesForgettingWrites = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_forget_writes'),
+    'Preferences in memory that save nothing (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [('    fixturePreferencesDisk[key] = _copyOf(value);\n', '')],
+  );
+
+  /// The fixture preferences that never copy a list: they keep the list
+  /// that they are given, and a read returns the list that they keep. So a
+  /// later change of the list that was saved, or of one that was read,
+  /// changes what they read.
+  static const preferencesNeverCopyingLists = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_never_copy_lists'),
+    'Preferences in memory that never copy a list (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [
+      ('      _save(key, List.of(value));\n', '      _save(key, value);\n'),
+      (
+        '    final List<String> list => List.of(list),\n',
+        '    final List<String> list => list,\n',
+      ),
+    ],
+  );
+
+  /// The fixture preferences whose reads cast the value of a key to the
+  /// type they ask for, rather than returning `null` for a value of another
+  /// type: such a read throws a `TypeError`.
+  static const preferencesCastingValues = BrokenModule._(
+    FakePreferencesModule(),
+    ModuleId('broken_preferences_cast_values'),
+    'Preferences in memory whose reads cast (fixture)',
+    'lib/core/fixture_preferences/fixture_preferences.dart',
+    [
+      (
+        '  T? _read<T>(String key) => switch (_values[key]) {\n'
+            '    final T value => value,\n'
+            '    _ => null,\n'
+            '  };\n',
+        '  T? _read<T>(String key) => _values[key] as T?;\n',
+      ),
+    ],
+  );
+
+  /// The fixture texts whose delegate supports English only, whatever the
+  /// languages of the app: in another language of the app, the root of the
+  /// app loads no texts of the app, and the code that reads one throws.
+  static const textsDelegateForEnglishOnly = BrokenModule._(
+    FakeL10nModule(),
+    ModuleId('broken_texts_delegate_for_english_only'),
+    'The texts of the app with a delegate for English only (fixture)',
+    LocalizationRole.textsFile,
+    [
+      ("import 'app_locale.dart';\n\n", ''),
+      (
+        '  bool isSupported(Locale locale) => appLocales.any(\n'
+            '        (supported) => supported.languageCode == '
+            'locale.languageCode,\n'
+            '      );\n',
+        "  bool isSupported(Locale locale) => locale.languageCode == 'en';\n",
+      ),
+    ],
+  );
+
+  /// The fixture texts that are always in the first language of the app,
+  /// whatever language the root of the app is in: the delegate of the texts
+  /// supports each language of the app, and loads the texts of the first
+  /// one for it.
+  static const textsInFirstLanguage = BrokenModule._(
+    FakeL10nModule(),
+    ModuleId('broken_texts_in_first_language'),
+    'The texts of the app, always in its first language (fixture)',
+    LocalizationRole.textsFile,
+    [
+      (
+        '      SynchronousFuture(FixtureTexts(locale.languageCode));\n',
+        '      SynchronousFuture(\n'
+            '        FixtureTexts(appLocales.first.languageCode),\n'
+            '      );\n',
+      ),
+    ],
+  );
+
+  /// The fixture theme whose dark theme is light: `createDarkTheme()`
+  /// returns the theme that `createLightTheme()` does, so an app in the dark
+  /// mode looks as it does in the light one.
+  static const themeWithLightDarkTheme = BrokenModule._(
+    FakeThemeModule(),
+    ModuleId('broken_theme_dark_is_light'),
+    'A light and a dark theme that are both light (fixture)',
+    ThemeRole.appThemeFile,
+    [
+      (
+        '_themeOf(context, Brightness.dark)',
+        '_themeOf(context, Brightness.light)',
       ),
     ],
   );
@@ -192,7 +378,7 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
-  /// The fixture module with the bug.
+  /// The module with the bug.
   final SmfModule of;
 
   /// The id of the module.
@@ -293,27 +479,50 @@ final class BrokenModule extends SmfModule {
   }
 }
 
-/// A layout with one known bug: its `AppShell` shows a tab at the bottom
-/// for each destination, but gives only the first one to the code that
-/// reads its `destinations`, as code that knows only the layout role does.
+/// A layout with one known bug: a bar at the bottom with a tab for each
+/// destination, whose `AppShell` breaks what the layout role says of it in
+/// one way.
 final class BrokenLayoutModule extends SmfModule {
-  /// Creates the module.
-  const BrokenLayoutModule();
+  /// The layout whose `AppShell` shows a tab for each destination, but
+  /// gives only the first one to the code that reads its `destinations`, as
+  /// code that knows only the layout role does.
+  const BrokenLayoutModule.givingFirstDestination()
+      : id = const ModuleId('broken_layout_first_destination'),
+        _description = 'Tabs at the bottom that hide a destination (fixture)',
+        _keepsLabels = false;
+
+  /// The layout whose `AppShell` reads the label of each destination when
+  /// it is first built and keeps it, rather than reading it each time it
+  /// builds: once the app is in another language, its tabs still show the
+  /// labels in the language of before.
+  const BrokenLayoutModule.keepingLabels()
+      : id = const ModuleId('broken_layout_keeps_labels'),
+        _description = 'Tabs at the bottom with the labels of the first '
+            'build (fixture)',
+        _keepsLabels = true;
 
   /// The id of the module.
-  static const id = ModuleId('broken_layout_first_destination');
+  final ModuleId id;
+
+  final String _description;
+
+  /// Whether the bug is that of [BrokenLayoutModule.keepingLabels].
+  final bool _keepsLabels;
 
   @override
-  ModuleDescriptor get descriptor => const ModuleDescriptor(
+  ModuleDescriptor get descriptor => ModuleDescriptor(
         id: id,
-        description: 'Tabs at the bottom that hide a destination (fixture)',
+        description: _description,
         kind: ModuleKinds.layout,
-        providers: [_BrokenLayoutProvider()],
+        providers: const [_BrokenLayoutProvider()],
       );
 
   @override
-  List<Contribution> contribute(ModuleContext context) =>
-      [BrickContribution(brokenLayoutBundle)];
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          _keepsLabels ? brokenLayoutLabelsBundle : brokenLayoutBundle,
+        ),
+      ];
 }
 
 /// Provides the layout role, with any number of destinations.
@@ -404,6 +613,87 @@ final class _BrokenDiProvider extends DiProvider {
           lines.join('\n'),
           imports: registrations.imports,
         ),
+      },
+      files: output.files,
+    );
+  }
+}
+
+/// A provider of the settings screen role with one known bug: a feature
+/// whose screen creates the widget of every entry of the role, in a list of
+/// its file, but shows them all but the last one.
+///
+/// The file of the screen still creates the widget of every entry, as the
+/// rule `settings_screen.entries_rendered` of the role wants, and the app
+/// analyzes: only a running app shows the bug.
+final class BrokenSettingsModule extends SmfModule {
+  /// Creates the module.
+  const BrokenSettingsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_settings_hides_last_entry');
+
+  /// The name of the route of the screen.
+  static const _route = 'settings';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A settings screen that hides its last entry (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [_BrokenSettingsProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenSettingsBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'BrokenSettingsScreen',
+                import: ImportRef.app(
+                  'features/broken_settings_hides_last_entry/'
+                  'broken_settings_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        settingsScreenRole.data(const SettingsScreenRoute(_route)),
+      ];
+}
+
+/// Renders the widgets of the entries of the settings screen role as the
+/// items of the list of the file of the screen, in the order of the role,
+/// each through an import of its file with a prefix of its own.
+final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
+  const _BrokenSettingsProvider();
+
+  @override
+  Role<SettingsData> get role => settingsScreenRole;
+
+  @override
+  RoleOutput render(RoleHookInput<SettingsData> input) {
+    final files = <String, ImportRef>{};
+    final items = <String>[];
+    for (final entry in settingsScreenRole.entriesIn(input)) {
+      // The template of the role rejects an entry outside the app, so each
+      // has an import.
+      final import = entry.widget.import!;
+      final prefix = files
+          .putIfAbsent(
+            import.uri,
+            () => import.withPrefix('entry${files.length}'),
+          )
+          .prefix;
+      items.add('  ${entry.widget.codeWith(prefix)}(),');
+    }
+    return RoleOutput(
+      vars: {
+        'entries': Fragment(items.join('\n'), imports: [...files.values]),
       },
     );
   }

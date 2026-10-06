@@ -1,0 +1,1410 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Onboarding
+
+- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
+- The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, and the screen keeps Skip, Next and Done below the pages.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and Done call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
+- In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+
+- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
+- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+
+With `go_router`:
+
+- `lib/core/router/app_router_factory.dart` has the one `GoRouter` of the app. A route is a `GoRoute` in its `routes`, or in the `routes` of its parent: `path` is the full path of a top-level route and the path from its parent otherwise, and `name` is `<feature>.<route>`. The values of a route come from `state.pathParameters` and `state.uri.queryParameters`. Parse one that is not a `String` with `tryParse`, and throw a `GoException` in the `redirect` of the route when a required value is missing or does not parse, so that the router shows its error screen.
+- The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
+- To follow the screen that the user sees, add a function to `_screenListeners`.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'My App',
+    routerConfig: appRouter.config,
+    builder: (context, child) => child!,
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/preferences/app_preferences.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await initPreferences();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on when no route of the app can start it.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('My App')));
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+import 'package:my_app/features/onboarding/onboarding_status.dart';
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreOnboarding,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/features/onboarding/onboarding_status.dart' as guard0;
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
+  void replace(AppLocation location);
+}
+
+/// A guard of the routes of the app: while it does not allow, the router
+/// shows its target in place of every location outside its flow.
+///
+/// `go()`, `push()` and `replace()` of such a location show the target
+/// too, and `push()` completes with `null`. Once the guard allows, the
+/// router shows the location that the user last asked for, or the one that
+/// the guard took the user from, or else the screen that the app starts
+/// on.
+final class RouteGuard {
+  /// Creates the guard [name].
+  const RouteGuard(
+    this.name, {
+    required this.allows,
+    required this.redirectTo,
+    required this.flow,
+  });
+
+  /// The full name of the guard: its module and its name there.
+  final String name;
+
+  /// Whether the guard lets the user see the locations outside its [flow];
+  /// it notifies its listeners when that changes.
+  final ValueListenable<bool> allows;
+
+  /// The target of the guard: the location that the router shows while the
+  /// guard does not allow.
+  final AppLocation redirectTo;
+
+  /// The full names of the routes that the user may see while the guard
+  /// does not allow: the route of [redirectTo] and the routes below it.
+  final Set<String> flow;
+}
+
+/// The guards of the routes of the app, in the order the app asks them.
+final List<RouteGuard> routeGuards = [
+  RouteGuard(
+    'onboarding.firstRun',
+    allows: guard0.onboardingCompleted(),
+    redirectTo: const OnboardingOnboardingLocation(),
+    flow: const {'onboarding.onboarding'},
+  ),
+];
+
+/// The location that the router shows in place of the route [routeName],
+/// or `null` if the guards let the user see it.
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, such as the error screen of the router. The first
+/// guard that does not allow decides, and no guard after it is asked: it
+/// shows its target in place of every route outside its flow.
+AppLocation? redirectOf(String? routeName) {
+  for (final guard in routeGuards) {
+    if (guard.allows.value) continue;
+    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+  }
+  return null;
+}
+
+/// Notifies its listeners when a guard starts or stops allowing, so that
+/// the router tells its [GuardedNavigation] of its pages.
+final Listenable guardChanges = Listenable.merge([
+  for (final guard in routeGuards) guard.allows,
+]);
+
+/// The guards of the routes as the router of the app asks them, with what
+/// they make it remember: the location that the user comes back to once
+/// the guards allow it.
+///
+/// [L] is how the router knows a location that it can show as `go()`
+/// does, such as its URI. The router asks [asked] before it shows a
+/// location, and [changed] when [guardChanges] notifies. It shows the
+/// location that either answers in place of its whole stack, as `go()` to
+/// it does. An answer is a record with the location, so that `null` is no
+/// answer also for a router whose [L] is nullable.
+final class GuardedNavigation<L> {
+  /// Creates the guards for a router whose location `/`, the screen that
+  /// the app starts on, is [start], and which knows a location of the
+  /// navigation, such as the target of a guard, as [locationOf] says.
+  GuardedNavigation({required this.start, required this.locationOf});
+
+  /// The location `/` of the router: the screen that the app starts on.
+  final L start;
+
+  /// The location of the router for a location of the navigation.
+  final L Function(AppLocation location) locationOf;
+
+  /// The location that the user comes back to once the guards allow it,
+  /// with the full name of its route, or `null` if there is none.
+  ({String? route, L location})? _remembered;
+
+  /// Whether each guard allowed when the router last told of its pages.
+  List<bool> _allowed = _allowedNow();
+
+  /// What the router shows in place of [location], whose route has the
+  /// full name [route], or `null` to show it; see [redirectOf].
+  ///
+  /// The router asks before it shows a location: the one the app starts
+  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
+  /// and each one from the platform. A location that a guard keeps the
+  /// user from is remembered in place of the one before it, so the user
+  /// comes back to the latest one that they or the platform asked for. A
+  /// location in the flow of a guard is never remembered: once that guard
+  /// allows, its flow is over.
+  ({L location})? asked(String? route, L location) {
+    final target = redirectOf(route);
+    if (target == null) return null;
+    if (!_inAFlow(route)) _remembered = (route: route, location: location);
+    return (location: locationOf(target));
+  }
+
+  /// What the router shows in place of its stack now that a guard started
+  /// or stopped allowing, or `null` to leave the stack as it is.
+  ///
+  /// [pages] are the pages that the user can get back to, the one on top
+  /// first: those of the root navigator and of the selected branch of the
+  /// main navigation, each with the full name of its route, its location,
+  /// and whether `push()` showed it; none for a router that has no page
+  /// yet. The answer is the first of these:
+  /// - the target of the guard that keeps the user from one of the pages.
+  ///   The location below the pages that pushes showed is then remembered,
+  ///   or [start] if pushes showed them all, unless one is remembered
+  ///   already or it is in the flow of a guard;
+  /// - the remembered location, once the guards allow it, which is then
+  ///   forgotten;
+  /// - [start], when a guard started allowing while a page of its flow is
+  ///   on top, every guard allows and nothing is remembered: its flow is
+  ///   over.
+  ({L location})? changed(
+    Iterable<({String? route, L location, bool pushed})> pages,
+  ) {
+    final before = _allowed;
+    _allowed = _allowedNow();
+    for (final page in pages) {
+      final target = redirectOf(page.route);
+      if (target == null) continue;
+      final below = pages.where((other) => !other.pushed).firstOrNull;
+      if (_remembered == null && !_inAFlow(below?.route)) {
+        _remembered = (
+          route: below?.route,
+          location: below == null ? start : below.location,
+        );
+      }
+      return (location: locationOf(target));
+    }
+    if (_remembered case final remembered?) {
+      if (redirectOf(remembered.route) != null) return null;
+      _remembered = null;
+      return (location: remembered.location);
+    }
+    final top = pages.firstOrNull?.route;
+    for (final (index, guard) in routeGuards.indexed) {
+      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
+        return _allowed.contains(false) ? null : (location: start);
+      }
+    }
+    return null;
+  }
+
+  /// Whether each guard allows now, in the order of [routeGuards].
+  static List<bool> _allowedNow() => [
+    for (final guard in routeGuards) guard.allows.value,
+  ];
+
+  /// Whether [route] is in the flow of a guard, of whichever guard.
+  static bool _inAFlow(String? route) =>
+      routeGuards.any((guard) => guard.flow.contains(route));
+}
+=== lib/core/router/app_router_factory.dart (go_router) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+import 'package:my_app/features/onboarding/onboarding_screen.dart' as screen0;
+
+import 'app_router.dart'
+    show AppNavigator, AppRouter, GuardedNavigation, guardChanges;
+import 'navigation.dart' show AppLocation;
+
+/// Creates the router of the app: a [GoRouter] with the routes of the
+/// modules of the app.
+AppRouter createAppRouter() => _GoAppRouter();
+
+/// The router of the app with go_router, which navigates between the
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
+final class _GoAppRouter implements AppRouter, AppNavigator {
+  /// Creates the router, which tells the guards of the app of its pages
+  /// when one of them starts or stops allowing.
+  _GoAppRouter() {
+    guardChanges.addListener(_guardsChanged);
+  }
+
+  /// The router, created once, on first use. Navigation goes through it
+  /// rather than through the router above a context, so that any context
+  /// can navigate, even one above the router.
+  @override
+  late final GoRouter config = GoRouter(
+    initialLocation: '/',
+    observers: _observers(),
+    redirect: (context, state) =>
+        _guards.asked(state.topRoute?.name, '${state.uri}')?.location,
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding.onboarding',
+        builder: (context, state) => const screen0.OnboardingScreen(),
+      ),
+    ],
+  )..routerDelegate.addListener(_pagesChanged);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
+
+  /// The pages that pushes showed, by their keys, as the router last saw
+  /// them among the pages of go_router.
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  /// For each completer that go_router gave a pushed page anew, the
+  /// completer of the push that showed the page.
+  final Expando<Completer<Object?>> _pushes = Expando();
+
+  /// The guards of the app as the router asks them, which keep the location
+  /// that the user comes back to once they allow it. The router knows a
+  /// location by its URI, and `/` is the screen that the app starts on.
+  ///
+  /// go_router asks them about every location that it parses, in its
+  /// `redirect`: the one the app starts on, those of [go] and those of the
+  /// platform, and goes to the location that they answer. [push] and
+  /// [replace] ask them before they hand a location to go_router, which
+  /// would put the target of the guard on top of the stack.
+  final GuardedNavigation<String> _guards = GuardedNavigation(
+    start: '/',
+    locationOf: (location) => location.path,
+  );
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => this;
+
+  @override
+  void go(AppLocation location) => config.go(location.path);
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    final guarded = _guards.asked(location.routeName, location.path);
+    if (guarded != null) {
+      config.go(guarded.location);
+      return Future.value();
+    }
+    return config.push<T>(location.path);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    final guarded = _guards.asked(location.routeName, location.path);
+    if (guarded != null) return config.go(guarded.location);
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Tells the guards of the pages of the router when one of them starts
+  /// or stops allowing, and goes to the location that they answer: the
+  /// target of the guard that keeps the user from one of the pages, or the
+  /// location that the user comes back to once the guards allow it.
+  ///
+  /// The pages of the router are those that pushes showed, the one on top
+  /// first, and, below them, the location that go_router went to last. A
+  /// page that [replace] showed over other pages is one that a push showed
+  /// to go_router. The router listens to the guards itself rather than
+  /// through the `refreshListenable` of go_router, whose refresh asks only
+  /// about the location below the pushed pages.
+  void _guardsChanged() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    // Before its first location, the router has no page to tell of. The
+    // guards still take note of what they allow, so that a notification
+    // without a change does not look like one later.
+    if (configuration.isEmpty && !configuration.isError) {
+      _guards.changed(const []);
+      return;
+    }
+    final below = config.configuration.findMatch(configuration.uri);
+    final shown = _guards.changed([
+      for (final page in _pushedPages(configuration.matches).toList().reversed)
+        (route: page.route.name, location: '${page.matches.uri}', pushed: true),
+      (
+        route: below.lastOrNull?.route.name,
+        location: '${configuration.uri}',
+        pushed: false,
+      ),
+    ]);
+    if (shown != null) config.go(shown.location);
+  }
+
+  /// Follows the pages of go_router, whose delegate notifies its listeners
+  /// of each change of them: keeps each push completing with the value of
+  /// its page, and tells the listeners of the screen about the page on top.
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  /// Lets each push complete with the value that its page returns when it
+  /// closes, whatever completer go_router gives the page.
+  ///
+  /// go_router completes a push with the completer that it gives the page
+  /// it pushed, which the page completes when it closes. When go_router
+  /// shows its pages anew from their encoded form, as on [GoRouter.refresh],
+  /// such as when its `refreshListenable` notifies, it gives each pushed
+  /// page a new completer, though the page keeps its key and its location,
+  /// so the push would never complete
+  /// (https://github.com/flutter/flutter/issues/128122). So when a page
+  /// comes back at its location with another completer, the router passes
+  /// on the value of that completer to that of the push. A branch of the
+  /// main navigation that is not selected keeps its pages as they were, so
+  /// a page that comes back with its branch passes on its value as before.
+  /// Once go_router keeps the completers of its pages, this does nothing
+  /// and can go.
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  /// The pages that pushes showed among [matches], in the stacks of the
+  /// main navigation too.
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      _callAlone(listener, top?.route.name, location);
+    }
+  }
+}
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[]) create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// The location of `onboarding.onboarding`: `/onboarding`.
+final class OnboardingOnboardingLocation extends AppLocation {
+  /// Creates the location.
+  const OnboardingOnboardingLocation();
+
+  @override
+  String get routeName => 'onboarding.onboarding';
+
+  @override
+  String get path => '/onboarding';
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => AppNav._(this);
+}
+
+/// The routes of the app by module, as `context.nav`.
+final class AppNav {
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `onboarding`.
+  OnboardingRoutes get onboarding => OnboardingRoutes._(_context);
+}
+
+/// The routes of the module `onboarding`.
+final class OnboardingRoutes {
+  const OnboardingRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `onboarding.onboarding`: `/onboarding`.
+  NavLink onboarding() =>
+      NavLink(_context, const OnboardingOnboardingLocation());
+}
+=== lib/features/onboarding/onboarding_pages.dart (onboarding) ===
+import 'package:flutter/material.dart';
+
+/// The pages of the onboarding, in the order in which the user goes through
+/// them: a welcome with the name of the app, and a page that ends it.
+///
+/// To change what the onboarding shows, change this list. A page is any
+/// widget, such as an [OnboardingPage]. The screen of the onboarding shows
+/// them one at a time, and adds Skip, Next and Done below them.
+List<Widget> onboardingPages(BuildContext context) => [
+  OnboardingPage(
+    icon: Icons.waving_hand_outlined,
+    title: 'My App',
+    text: 'Welcome! We are glad you are here.',
+  ),
+  OnboardingPage(
+    icon: Icons.check_circle_outline,
+    title: 'You are all set',
+    text: 'Enjoy the app.',
+  ),
+];
+
+/// A page of the onboarding: an icon, a title and a text below them, in the
+/// middle of the page. It scrolls when the page is too small for them, as
+/// with a large text size on a small phone. A screen reader announces the
+/// title as a header.
+class OnboardingPage extends StatelessWidget {
+  /// Creates the page.
+  const OnboardingPage({
+    required this.icon,
+    required this.title,
+    required this.text,
+    super.key,
+  });
+
+  /// The icon at the top of the page.
+  final IconData icon;
+
+  /// The title of the page.
+  final String title;
+
+  /// What the page says below its title.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(icon, size: 96, color: theme.colorScheme.primary),
+            const SizedBox(height: 24),
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: theme.textTheme.headlineMedium,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              style: theme.textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/features/onboarding/onboarding_screen.dart (onboarding) ===
+import 'package:flutter/material.dart';
+
+import 'onboarding_pages.dart';
+import 'onboarding_status.dart';
+
+/// The onboarding of the app, which the app shows on its first launch in
+/// place of every other screen: the pages of [onboardingPages], with Skip
+/// and Next below them, and Done on the last page.
+///
+/// Skip and Done finish the onboarding. The screen does not navigate, and
+/// nothing navigates to it: the router shows it while the onboarding is not
+/// finished, and then the screen that the app starts on. The next launches
+/// of the app start there.
+///
+/// When something shows the screen although the onboarding is finished,
+/// such as a link to its route, the onboarding starts again, as
+/// [OnboardingStatus.restart] has it: Skip and Done then leave the screen.
+class OnboardingScreen extends StatefulWidget {
+  /// Creates the screen.
+  const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  final _controller = PageController();
+
+  /// The index of the page that the user sees.
+  var _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // The router shows the screen while the onboarding is not finished.
+    // Shown although it is finished, the screen starts the onboarding
+    // again, so that the router leaves the screen once Skip or Done
+    // finishes it. The router acts on that at once, which it must not do
+    // while a frame is built.
+    if (onboardingStatus.completed.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) onboardingStatus.restart();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Shows the page after the one that the user sees.
+  void _next() => _controller.nextPage(
+    duration: const Duration(milliseconds: 300),
+    curve: Curves.easeInOut,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = onboardingPages(context);
+    final isLast = _page == pages.length - 1;
+    final colors = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView(
+                controller: _controller,
+                onPageChanged: (page) => setState(() => _page = page),
+                children: pages,
+              ),
+            ),
+            // A dot for each page, with the one of the page that the user
+            // sees in the primary colour.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var index = 0; index < pages.length; index++)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: index == _page
+                          ? colors.primary
+                          : colors.outlineVariant,
+                    ),
+                  ),
+              ],
+            ),
+            // The buttons go one below the other when they do not fit
+            // side by side, as with a large text size.
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: OverflowBar(
+                alignment: MainAxisAlignment.end,
+                spacing: 8,
+                overflowAlignment: OverflowBarAlignment.end,
+                overflowSpacing: 8,
+                children: [
+                  if (!isLast)
+                    TextButton(
+                      onPressed: onboardingStatus.complete,
+                      child: Text('Skip'),
+                    ),
+                  FilledButton(
+                    onPressed: isLast ? onboardingStatus.complete : _next,
+                    child: Text(isLast ? 'Done' : 'Next'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/features/onboarding/onboarding_status.dart (onboarding) ===
+import 'package:flutter/foundation.dart';
+
+import '../../core/preferences/app_preferences.dart';
+
+/// Whether the user has finished the onboarding of the app, which the app
+/// remembers between its launches.
+///
+/// Until the user has, the router shows the onboarding in place of every
+/// other screen: the guard of the routes of the onboarding asks
+/// [onboardingCompleted]. So the app shows the onboarding exactly while it
+/// is not finished, and nothing navigates to it: [OnboardingStatus.restart]
+/// shows it again.
+final onboardingStatus = OnboardingStatus._();
+
+/// Keeps whether the user has finished the onboarding, tells its listeners
+/// when that changes, and saves it in the preferences of the app. The app
+/// has one, [onboardingStatus].
+final class OnboardingStatus {
+  OnboardingStatus._();
+
+  /// The key in the preferences under which it is saved.
+  static const _key = 'onboarding.completed';
+
+  /// The preferences that remember it, once the app opened them.
+  AppPreferences? _preferences;
+
+  final ValueNotifier<bool> _completed = ValueNotifier(false);
+
+  /// Whether the user has finished the onboarding. It notifies its
+  /// listeners when that changes.
+  ValueListenable<bool> get completed => _completed;
+
+  /// Finishes the onboarding, at once, and saves that: the future completes
+  /// once it is saved. Until the app opened its preferences for the first
+  /// time, it changes only memory.
+  ///
+  /// The router leaves the onboarding as soon as this is called, so call it
+  /// outside the build of a frame, such as in the handler of a tap.
+  ///
+  /// If the preferences fail to save it, the future completes with their
+  /// error. The app has left the onboarding by then, and its next launch
+  /// shows the onboarding again.
+  Future<void> complete() async {
+    _completed.value = true;
+    await _preferences?.setBool(_key, true);
+  }
+
+  /// Starts the onboarding again, at once, and saves that: the future
+  /// completes once it is saved. Call it where the user asks to see the
+  /// onboarding again, such as in the handler of a tap on a row of the
+  /// settings, and navigate nowhere.
+  ///
+  /// The router shows the onboarding as soon as this is called, in place of
+  /// the screen that the user is on. Once the onboarding is finished again,
+  /// the router shows that screen again. If the user was on a page pushed
+  /// over another screen, it shows the screen below the pushed pages
+  /// instead. An app that is closed before that shows the onboarding on its
+  /// next launch.
+  ///
+  /// Call it outside the build of a frame, where the router cannot
+  /// navigate. In a build, Flutter reports an error, and the app shows the
+  /// onboarding only at its next navigation.
+  ///
+  /// Call it after `bootstrap()`. Until the app opened its preferences for
+  /// the first time, it changes only memory, and the start-up then takes
+  /// what the preferences have saved.
+  ///
+  /// If the preferences fail to save it, the future completes with their
+  /// error, and the next launch of the app finds the onboarding finished.
+  Future<void> restart() async {
+    _completed.value = false;
+    await _preferences?.setBool(_key, false);
+  }
+
+  /// Takes what [preferences] have saved, and keeps the current value when
+  /// they have nothing saved. It keeps [preferences] for [complete] and
+  /// [restart].
+  void _restore(AppPreferences preferences) {
+    _preferences = preferences;
+    _completed.value = preferences.getBool(_key) ?? _completed.value;
+  }
+}
+
+/// Whether the user has finished the onboarding, as the guard of the routes
+/// of the onboarding asks it: while the value is `false`, the router shows
+/// the onboarding in place of every other screen.
+ValueListenable<bool> onboardingCompleted() => onboardingStatus.completed;
+
+/// Restores from [preferences], which the app opened, whether the user has
+/// finished the onboarding, and keeps them for when that changes: a
+/// restorer of the preferences, which the app calls before its first frame.
+void restoreOnboarding(AppPreferences preferences) =>
+    onboardingStatus._restore(preferences);
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  go_router: "^17.5.0"
+  shared_preferences: "^2.5.5"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('My App'), findsOneWidget);
+  });
+}

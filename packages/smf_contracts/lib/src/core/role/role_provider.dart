@@ -27,8 +27,8 @@ abstract base class RoleProvider<D extends Object> {
   /// `null`.
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
-  /// Returns the fragments and brick variables of the module's bricks that
-  /// depend on the data, such as the routes of a router.
+  /// Returns the fragments, the variables of the module's bricks and the
+  /// files that depend on the data, such as the routes of a router.
   RoleOutput render(RoleHookInput<D> input) => const RoleOutput();
 }
 

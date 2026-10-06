@@ -8,6 +8,9 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -23,6 +26,11 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final onboarding = await appTestsDirectoryOf('smf_onboarding');
+  final settings = await appTestsDirectoryOf('smf_settings');
+  final sharedPreferences = await appTestsDirectoryOf(
+    'smf_shared_preferences',
+  );
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -90,22 +98,151 @@ Future<MatrixAppTests> smfAppTests() async {
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
       ),
+      // The onboarding of the module: on its first launch, the app shows
+      // it in place of the screen that it starts on (see
+      // _startScreenFileOf), and Done or Skip saves that it is finished and
+      // shows that screen; an app that finds it finished goes straight
+      // there. The onboarding has its texts in each language of the app,
+      // as the device asks for it (see _onboardingTextsFileOf). The router
+      // leaves the onboarding, whichever module provides it, as the router
+      // role says of the guards of the routes: a test of the router role
+      // too. The mocks finish the onboarding before the app starts, in
+      // memory, and the matrix sets them up for the tests of every module
+      // of the app, which expect the screens that the guard of the
+      // onboarding would keep them from. Its probe goes through the
+      // onboarding on a device, where a first launch finds nothing saved,
+      // unless the onboarding is finished there. The test comes before the
+      // walk of the routes in this list, whose probe then goes through the
+      // routes of an app past its onboarding. The walk goes to the route of
+      // the onboarding last, as it does to every route in the flow of a
+      // guard. By then the onboarding is finished, so its screen starts it
+      // again, and on a device the start check leaves the app in that
+      // state.
+      MatrixAppTest(
+        '$onboarding/onboarding',
+        appliesTo: _has(OnboardingModule.id),
+        generatedFiles: (app, packageName) => {
+          ..._startScreenFileOf(app, packageName),
+          ..._onboardingTextsFileOf(app),
+        },
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/onboarding_mocks.dart',
+          'finishOnboarding',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/onboarding/probe.dart',
+          'probeOnboarding',
+        ),
+      ),
+      // The last row of the settings screen of the module, which tells
+      // what the app is: it opens the about dialog of Flutter with the name
+      // of the app, and the dialog the licenses of its packages. The title
+      // of the screen and that row are in the language of the app. The test
+      // goes through the languages of the app that the module has its
+      // title in: the matrix writes the languages that the localization
+      // role gives the app, and English alone for an app without the role.
+      MatrixAppTest(
+        '$settings/settings',
+        appliesTo: _has(SettingsModule.id),
+        generatedFiles: _settingsLanguagesOf,
+      ),
+      // The preferences of the module reach shared_preferences, and read
+      // what it has when they are opened, lists in the form that each
+      // platform returns them in. The mocks keep the platform side of the
+      // package in memory, and the matrix sets them up for the tests of
+      // every module of the app, since the start-up of the app opens the
+      // preferences. Its probe opens the preferences again on a device,
+      // where the platform side is the real one, and reads back what it
+      // saved.
+      MatrixAppTest(
+        '$sharedPreferences/shared_preferences',
+        appliesTo: _has(SharedPreferencesModule.id),
+        devDependencies: const ['shared_preferences_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/shared_preferences_mocks.dart',
+          'mockSharedPreferences',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/shared_preferences/probe.dart',
+          'probeSharedPreferences',
+        ),
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
       // The events of the apps with the events role, whichever module
       // provides it.
       await eventsRoleAppTest(),
+      // The preferences of the apps with the preferences role, whichever
+      // module provides it.
+      await preferencesRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
       await routerWalkAppTest(),
+      // The settings screen of the apps with the settings screen role,
+      // whichever module provides it: the route that the provider names
+      // shows the screen, and the screen shows every entry that the
+      // modules of the app give the role once, one below the other in the
+      // order of the role.
+      MatrixAppTest(
+        '$cli/settings_screen_role',
+        appliesTo: (app) => app.hook!.presentRoles.contains(settingsScreenRole),
+        generatedFiles: _settingsOf,
+        roles: {settingsScreenRole},
+      ),
+      // The theme mode of the apps with the theme role, whichever module
+      // provides it: the root of the app takes the mode that is chosen, and
+      // the screen below it gets the light or the dark theme of the
+      // provider; a choice is saved under the key of the role; and the next
+      // start has the mode that is saved. A test of the app entry role too,
+      // whose provider builds the root.
+      await themeRoleAppTest(),
+      // The entry of the theme mode on the settings screen, in the apps
+      // with the theme role and the settings screen role, whichever modules
+      // provide them: the screen shows the entry, which shows the mode of
+      // the app, also one that other code chose, and a tap on a mode
+      // chooses it.
+      MatrixAppTest(
+        '$cli/theme_setting',
+        appliesTo: (app) => app.hook!.presentRoles
+            .containsAll(const [themeRole, settingsScreenRole]),
+        values: _themeValuesOf,
+        generatedFiles: _themeSettingOf,
+        roles: {themeRole},
+      ),
+      // The languages and the texts of the apps with the localization
+      // role, whichever module provides it: the root supports the languages
+      // of the app, with a delegate of each kind for each of them, the app
+      // and its texts follow the language that the user chose, and the
+      // choice is saved and restored. Its probe goes through the languages
+      // on a device.
+      await localizationRoleAppTest(),
+      // The setting of the language on the settings screen of the apps
+      // with the localization role and the settings screen role, whichever
+      // modules provide them: its dialog chooses a language of the app,
+      // which the app is then in and remembers, or the languages of the
+      // device.
+      await languageSettingAppTest(),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
-    // provider of the DI role and of the events role gets the test of its
-    // role.
-    testedRoles: {routerRole, diRole, eventsRole},
+    // provider of the DI role, of the events role, of the preferences
+    // role, of the settings screen role, of the theme role and of the
+    // localization role gets the tests of its role. Each provider of the
+    // app entry role gets the test of the theme role, which checks that
+    // its root rebuilds.
+    testedRoles: {
+      routerRole,
+      diRole,
+      eventsRole,
+      preferencesRole,
+      settingsScreenRole,
+      themeRole,
+      appEntryRole,
+      localizationRole,
+    },
   );
 }
 
@@ -133,6 +270,375 @@ Future<MatrixAppTest> eventsRoleAppTest({
       roles: {eventsRole},
     );
 
+/// The test of the preferences role that the CLI keeps in its
+/// `app_tests/preferences_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them: once the
+/// start-up of the app opened the preferences, a value of each type is read
+/// back as it was saved, and as `null` by the reads of the other types,
+/// which do not throw; a key that was removed has no value; a write
+/// replaces what its key had, a value of another type too; the preferences
+/// keep a copy of a list that they are given, and a read returns a copy of
+/// it; and the next start, `initPreferences()` again, reads what was saved
+/// and nothing that was removed.
+///
+/// The test knows only the role, and writes keys of its own. Its probe,
+/// `probePreferences()` of `integration_test/preferences_role/probe.dart`,
+/// runs the checks of one run on a device for the start check, where the
+/// platform side of the provider is the real one, and the test runs the
+/// probe too. The matrix of the fixtures runs the test only in its apps
+/// with every module, which run other tests already.
+Future<MatrixAppTest> preferencesRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/preferences_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(preferencesRole) &&
+          (among?.call(app) ?? true),
+      roles: {preferencesRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/preferences_role/probe.dart',
+        'probePreferences',
+      ),
+    );
+
+/// The test of the localization role that the CLI keeps in its
+/// `app_tests/localization_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them: the root of
+/// the app supports the languages of the app and no other, and has, for
+/// each of them, a delegate of each kind of localizations that supports
+/// it; once the user chose a language, the app is in it, and each text of
+/// the app reads in it, or in English when it has no translation into it;
+/// while the user chose none, the app and its texts are in the language
+/// that the device prefers among those of the app; a choice is saved under
+/// [LocalizationRole.localeKey], and removed when the app follows the
+/// device again; and the next start, `initPreferences()` again, restores
+/// the language that was saved.
+///
+/// The test knows only the role. The matrix writes the languages and the
+/// texts of each app for it, from the data of its localization role, into
+/// [languagesAndTextsFile], next to the probe of the test in
+/// `integration_test/localization_role/probe.dart`, `probeLanguages()`. On
+/// a device, for the start check, the probe checks the texts in the
+/// language that it finds, goes through the first languages of the app, at
+/// most [languagesProbeLimit], and puts back the choice that it found. The
+/// matrix of the fixtures runs the test only in its apps with every module,
+/// which run other tests already.
+Future<MatrixAppTest> localizationRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/localization_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(localizationRole) &&
+          (among?.call(app) ?? true),
+      generatedFiles: _languagesAndTextsOf,
+      roles: {localizationRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/localization_role/probe.dart',
+        'probeLanguages',
+      ),
+    );
+
+/// The path in an app of the languages and the texts of the app, which the
+/// matrix writes for the test of the localization role: `appLanguages`, the
+/// codes of the languages that the role chose, in their order;
+/// `probedLanguages`, the first of them, at most [languagesProbeLimit],
+/// which the probe of the role goes through on a device;
+/// `savedLanguageKey`, the key of the role in the preferences of the app
+/// ([LocalizationRole.localeKey]); and `appTextChecks`, the texts of the
+/// app in the order of the role ([LocalizationRole.textsIn]), each with its
+/// name, such as `text title of the module settings`, a function that reads
+/// it through `context.l10n` of the role, and what it reads in each
+/// language of the app: its translation, or its English text.
+const languagesAndTextsFile = 'integration_test/localization_role/texts.dart';
+
+/// The most languages that the probe of the test of the localization role
+/// goes through on a device, the first of the app: for each, the screen
+/// settles once, and the probes of an app share a minute.
+const languagesProbeLimit = 10;
+
+/// The file at [languagesAndTextsFile] of [app], an app of the matrix with
+/// the localization role, whose package is [packageName].
+///
+/// It imports the file of the texts of the role only in an app with texts,
+/// where it reads them.
+Map<String, String> _languagesAndTextsOf(MatrixApp app, String packageName) {
+  final input = localizationRole.hookInput(app.hook!);
+  final languages = localizationRole.localesIn(input);
+  final checks = StringBuffer();
+  for (final text in localizationRole.textsIn(input)) {
+    checks
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString('$text')},')
+      ..writeln('    read: (context) => context.l10n.${text.getter},')
+      ..writeln('    expected: {');
+    for (final language in languages) {
+      final expected = text.text.textIn(language) ?? text.text.en;
+      checks.writeln(
+        "      '$language': ${SmfNames.dartString(expected)},",
+      );
+    }
+    checks
+      ..writeln('    },')
+      ..writeln('  ),');
+  }
+  final texts = LocalizationRole.appTexts.importRef.resolveUri(packageName);
+  final imports = [
+    "import 'package:flutter/widgets.dart';",
+    if (checks.isNotEmpty) "import '$texts';",
+  ];
+  String codesOf(Iterable<String> languages) =>
+      [for (final language in languages) "'$language'"].join(', ');
+  final key = SmfNames.dartString(LocalizationRole.localeKey);
+  final list = checks.isEmpty
+      ? 'const List<AppTextCheck> appTextChecks = [];'
+      : 'final List<AppTextCheck> appTextChecks = [\n$checks];';
+  return {
+    languagesAndTextsFile: '''
+// The languages and the texts of the app, and the key of the language that
+// the user chose, which the matrix of SMF writes from the data of the
+// localization role of the app for the tests of the role, in
+// test/localization_role, and their probe.
+${imports.join('\n')}
+
+/// The codes of the languages of the app, in their order.
+const List<String> appLanguages = [${codesOf(languages)}];
+
+/// The codes of the languages that the probe of the role goes through on a
+/// device: the first of the app, at most $languagesProbeLimit.
+const List<String> probedLanguages = [${codesOf(languages.take(languagesProbeLimit))}];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the localization role has it.
+const String savedLanguageKey = $key;
+
+/// A text of the app: its name, a function that reads it at a context below
+/// the root of the app, and what it reads in each language of the app, by
+/// the code of the language.
+typedef AppTextCheck = ({
+  String name,
+  String Function(BuildContext context) read,
+  Map<String, String> expected,
+});
+
+/// The texts of the app, in the order of the localization role.
+$list
+''',
+  };
+}
+
+/// The test of the setting of the language, the entry that the template of
+/// the localization role gives the settings screen, which the CLI keeps in
+/// its `app_tests/language_setting`, for the apps with the localization
+/// role and the settings screen role, whichever modules provide them. On
+/// the settings screen, the setting shows its title and the choice of the
+/// user, the languages of the device while the user chose none. A tap opens
+/// a dialog with an option for the languages of the device and one for each
+/// language of the app, by its name in that language, or its code, with
+/// the chosen one selected and checked. A tap on an option closes the
+/// dialog: the app and the texts of the setting are in the language of the
+/// option, which is saved under [LocalizationRole.localeKey], and the
+/// option of the device removes what was saved. A second file of the test
+/// starts the app on a device that prefers the last language of the app:
+/// the app and the setting follow the device, the setting names a choice
+/// of that same language that code makes, the next start restores the
+/// language that was saved, and the dialog has no option but those of the
+/// app and of the device.
+///
+/// The test knows only the two roles. The matrix writes the widget of the
+/// entry for it into [languageSettingFile], from the entries of the
+/// settings screen role of the app, with the labels of the languages of the
+/// app and the texts of the setting in each of them, from the localization
+/// role. It opens the settings screen with the helper of the tests of the
+/// settings screen role that the CLI keeps, which every app with the
+/// settings screen role has too.
+Future<MatrixAppTest> languageSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/language_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll({localizationRole, settingsScreenRole}),
+      generatedFiles: _languageSettingOf,
+      roles: {localizationRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the setting
+/// of the language: `languageSetting`, the type of the widget of the entry
+/// that the template of the localization role gives the settings screen
+/// role; `savedLanguageKey`, the key of the role in the preferences of the
+/// app ([LocalizationRole.localeKey]); `languageLabels`, what the setting
+/// shows for each language of the app, by the code of the language, its
+/// name in that language ([LocalizationRole.languageNames]) or its code;
+/// and `settingTitles` and `deviceOptions`, the title of the setting and
+/// its option of the languages of the device in each language of the app.
+const languageSettingFile = 'test/language_setting/setting.dart';
+
+/// The file at [languageSettingFile] of [app], an app of the matrix with
+/// the localization role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. The entry is
+/// the one of the settings screen role whose widget is in
+/// [LocalizationRole.languageSettingFile]. Throws a [StateError] if the
+/// role has no such entry, which the template of the localization role
+/// gives it in every app with both roles.
+Map<String, String> _languageSettingOf(MatrixApp app, String packageName) {
+  final languages =
+      localizationRole.localesIn(localizationRole.hookInput(app.hook!));
+  final entries = [
+    for (final entry in settingsScreenRole
+        .entriesIn(settingsScreenRole.hookInput(app.hook!)))
+      if (entry.file == LocalizationRole.languageSettingFile) entry,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The settings screen of ${app.name} has ${entries.length} entries in '
+      '${LocalizationRole.languageSettingFile}, the file of the setting of '
+      'the language, rather than one.',
+    );
+  }
+  final widget = entries.single.widget;
+  String byLanguage(String Function(String language) text) => [
+        for (final language in languages)
+          "  '$language': ${SmfNames.dartString(text(language))},\n",
+      ].join();
+  String Function(String language) textOf(LocalizedText text) =>
+      (language) => text.textIn(language) ?? text.en;
+  final key = SmfNames.dartString(LocalizationRole.localeKey);
+  final labels = byLanguage(
+    (language) => LocalizationRole.languageNames[language] ?? language,
+  );
+  final titles = byLanguage(textOf(LocalizationRole.languageSettingTitle));
+  final ofDevice = byLanguage(textOf(LocalizationRole.languageOfDevice));
+  return {
+    languageSettingFile: '''
+// The setting of the language of the app, which the matrix of SMF writes
+// from the data of the settings screen role and of the localization role
+// of the app for the test of the setting, language_setting_test.dart.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the setting, an entry of the settings screen.
+const Type languageSetting = ${widget.codeWith('entry')};
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the localization role has it.
+const String savedLanguageKey = $key;
+
+/// What the setting shows for each language of the app, by the code of the
+/// language: its name in that language, or its code.
+const Map<String, String> languageLabels = {
+$labels};
+
+/// The title of the setting in each language of the app, by the code of
+/// the language.
+const Map<String, String> settingTitles = {
+$titles};
+
+/// The option of the setting with which the app follows the languages of
+/// the device, in each language of the app, by the code of the language.
+const Map<String, String> deviceOptions = {
+$ofDevice};
+''',
+  };
+}
+
+/// The test of the theme role that the CLI keeps in its
+/// `app_tests/theme_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them. Once the app started
+/// with `main()`, it follows the device; a choice of a mode with
+/// `appThemeMode.choose()` reaches the root `MaterialApp`, which takes the
+/// mode, and the screen below it gets the light theme of the provider in
+/// the light mode and its dark theme in the dark mode, the same colour
+/// schemes that `createLightTheme()` and `createDarkTheme()` return for the
+/// context of the root. A choice is saved under the key of the role, as
+/// the name of the mode, and the next start, `initPreferences()` again,
+/// has the mode whose name the test wrote under that key.
+///
+/// It is a test of the app entry role too. The root gets the mode from an
+/// inherited widget around it, which its arguments read from its context,
+/// so the test fails on a provider of the app entry whose root does not
+/// rebuild when that widget notifies.
+///
+/// The test knows only the roles. The matrix fills in the key, which the
+/// role publishes ([ThemeRole.modeKey]). It has no probe for the start
+/// check: on a device the mode is the same Dart state as in a test, and the
+/// platform side of the preferences, which does differ there, has the
+/// probes of the preferences role and of its provider. The matrix of the
+/// fixtures runs the test only in its apps with every module, which run
+/// other tests already.
+Future<MatrixAppTest> themeRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/theme_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(themeRole) &&
+          (among?.call(app) ?? true),
+      values: _themeValuesOf,
+      roles: {themeRole, appEntryRole},
+    );
+
+/// The values of the files of the tests of the theme role, the same in
+/// every app: `mode_key`, the key of the theme mode in the preferences, as
+/// the role publishes it.
+Map<String, String> _themeValuesOf(MatrixApp app) =>
+    const {'mode_key': ThemeRole.modeKey};
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// of the theme mode that the CLI keeps in its `app_tests/theme_setting`:
+/// `settingsLocation`, the location of the route that the provider of the
+/// settings screen role names as the settings screen
+/// ([SettingsScreenRole.screenIn]), created as `const` from its class of
+/// the navigation of the router role, and `themeModeEntry`, the type of the
+/// widget of the entry that the template of the theme role gives the
+/// settings screen.
+const themeSettingFile = 'test/theme_setting/theme_setting.dart';
+
+/// The file at [themeSettingFile] of [app], an app of the matrix with the
+/// theme role and the settings screen role, whose package is [packageName].
+///
+/// It imports the navigation of the router role without a prefix, and the
+/// file of the entry with the prefix `entry`. Throws a [StateError] if the
+/// provider of the settings screen role names no route of its own, or if
+/// the template of the theme role gives the settings screen no entry or
+/// more than one: the test taps the modes of one entry.
+Map<String, String> _themeSettingOf(MatrixApp app, String packageName) {
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final route = _settingsRouteOf(app, input);
+  final entries = [
+    for (final RoleData(:value, :origin) in input.data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(themeRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $themeRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'theme mode alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  // The template of the settings screen role rejects an entry whose widget
+  // is not in a file of the app, so it has an import.
+  final entry = widget.import!.resolveUri(packageName);
+  return {
+    themeSettingFile: '''
+// The settings screen of the app and the entry of the theme mode, which the
+// matrix of SMF writes from the data of the settings screen role of the app
+// for the test of the entry, theme_setting_test.dart.
+import '${_navigationOf(packageName)}';
+import '$entry' as entry;
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${route.locationClass}();
+
+/// The type of the widget of the entry of the theme mode on the settings
+/// screen.
+const Type themeModeEntry = ${widget.codeWith('entry')};
+''',
+  };
+}
+
 /// The test of the router role that the CLI keeps in its
 /// `app_tests/router_walk`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them: it starts the app
@@ -142,12 +648,28 @@ Future<MatrixAppTest> eventsRoleAppTest({
 /// innermost navigator on the screen, and the screen of the route, without
 /// an `ErrorWidget` on the screen or an error that Flutter reports.
 ///
+/// In an app with guards of the routes, the walk expects what the role
+/// says: for a location that a guard keeps the user from, the page and the
+/// screen of the target of that guard (`redirectOf()` of the role). So its
+/// probe, `probeRoutes()`, which the start check runs on a device, holds
+/// whichever guards allow there, where no test can open one, such as a
+/// guard that asks for a signed-in user. The test itself first fails on
+/// each guard that does not allow, by its name: under `flutter test`, the
+/// module of a guard opens it for the tests of the app, in the mocks of its
+/// app test ([MatrixAppTest.mocks]), so that the walk reaches every route
+/// and the tests of the other modules see the screens that they expect.
+///
+/// The walk goes to the locations in the flows of the guards last (see
+/// [routerWalkFile]): a screen of a flow may change what its guard allows
+/// when it is shown, and the router then shows the target of that guard in
+/// place of each location that the walk goes to after it.
+///
 /// The test knows only the role. The matrix writes the locations of each
-/// app for it, from the routes of its router role, into [routerWalkFile],
-/// next to the walk in `integration_test/router_walk/walk.dart`, whose
-/// probe, `probeRoutes()`, the start check runs on a device. The matrix of
-/// the fixtures runs it too, only in the apps with every module, which run
-/// other tests already.
+/// app for it, from the routes and the guards of its router role, into
+/// [routerWalkFile], next to the walk in
+/// `integration_test/router_walk/walk.dart`. The matrix of the fixtures
+/// runs it too, only in the apps with every module, which run other tests
+/// already.
 Future<MatrixAppTest> routerWalkAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>
@@ -166,15 +688,43 @@ Future<MatrixAppTest> routerWalkAppTest({
 
 /// The path in an app of the locations that the walk of the test of the
 /// router role goes to, which the matrix writes: `walkedLocations`, the
-/// locations of the routes that need no values, in the order of the routes
-/// of the app ([RouterFacade.routes]), each with the full name of its route
-/// ([FacadeRoute.fullName]), the location, created as `const` from its
-/// class of the navigation of the role, and the type of the screen that the
-/// route shows.
+/// locations of the routes that need no values, each with the full name of
+/// its route ([FacadeRoute.fullName]), the location, created as `const`
+/// from its class of the navigation of the role, and the type of the screen
+/// that the route shows.
+///
+/// The locations are in the order of the routes of the app
+/// ([RouterFacade.routes]), but for those of the routes in the flow of a
+/// guard ([FacadeGuard.flow]), which come after every other, in the same
+/// order among themselves. A screen of a flow may change what its guard
+/// allows when it is shown: one that is shown although its flow is over
+/// may start the flow again, for example. From then on the router shows
+/// the target of that guard in place of each location outside its flow.
+/// The walk expects what `redirectOf()` says, so it would pass without
+/// seeing the screens of the locations that come after. With the flows
+/// last, it has seen every other location by then. The order does not
+/// help among the flows themselves: once a screen of one flow has made its
+/// guard stop allowing, the walk checks the locations of the flows of the
+/// other guards only against `redirectOf()`.
+///
+/// The file also says what the guards of the routes of the app
+/// ([RouterFacade.guards]) do to the walk, with two functions that every
+/// app gets, so that the walk is the same in an app with guards and in one
+/// without, which has nothing of what the role generates for them:
+/// - `shownFor(walked)`, the location that the router shows when it is
+///   asked to show `walked`: `walked` itself, or the target of the guard
+///   that keeps the user from it, as `redirectOf()` of the role says. In an
+///   app without guards it returns `walked`. The targets are in
+///   `guardTargets`, in the order of the guards, also those that are not
+///   among the first [routerWalkLimit] locations;
+/// - `closedGuards()`, the full names of the guards that do not allow, in
+///   the order of `routeGuards` of the role; none in an app without guards.
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
-/// to, the first of the app.
+/// to, the first of [routerWalkFile]. The locations in the flows of the
+/// guards count among them and are the last of the file, so the walk
+/// leaves them out first in an app with more locations than it goes to.
 const routerWalkLimit = 20;
 
 /// The file at [routerWalkFile] of [app], an app of the matrix with the
@@ -183,41 +733,58 @@ const routerWalkLimit = 20;
 /// It imports the navigation of the role without a prefix, since the names
 /// of its classes differ from those of the file, and the file of every
 /// screen once, with a prefix of its own, `screen0`, `screen1`, ..., so
-/// that no name clashes.
+/// that no name clashes. In an app with guards it imports the file of the
+/// role that has them too, without a prefix either.
 Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
-  final routes = [
-    for (final route
-        in routerRole.facadeOf(routerRole.hookInput(app.hook!)).routes)
+  final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
+  // The routes in the flow of a guard, which the walk goes to last: their
+  // screens may change what their guard allows when they are shown.
+  final inFlows = {
+    for (final guard in facade.guards)
+      for (final route in guard.flow) route.fullName,
+  };
+  final walkable = [
+    for (final route in facade.routes)
       if (!route.hasRequiredParams) route,
+  ];
+  final routes = [
+    ...walkable.where((route) => !inFlows.contains(route.fullName)),
+    ...walkable.where((route) => inFlows.contains(route.fullName)),
   ].take(routerWalkLimit);
   final screens = <String, String>{};
-  final locations = StringBuffer();
-  for (final route in routes) {
+  String walked(FacadeRoute route) {
     final screen = route.route.screen;
     final prefix = screens.putIfAbsent(
       screen.import.resolveUri(packageName),
       () => 'screen${screens.length}',
     );
-    locations
-      ..writeln('  (')
-      ..writeln('    route: ${SmfNames.dartString(route.fullName)},')
-      ..writeln('    location: ${route.locationClass}(),')
-      ..writeln('    screen: $prefix.${screen.className},')
-      ..writeln('  ),');
+    return '  (\n'
+        '    route: ${SmfNames.dartString(route.fullName)},\n'
+        '    location: ${route.locationClass}(),\n'
+        '    screen: $prefix.${screen.className},\n'
+        '  ),\n';
   }
-  final navigation = ImportRef.app(
-    RouterRole.navigationFile.substring('lib/'.length),
-  ).resolveUri(packageName);
+
+  final locations = routes.map(walked).join();
+  // Each target once: two guards may show the same one.
+  final targets = {for (final guard in facade.guards) guard.target};
+  final guards = targets.isEmpty
+      ? _withoutGuards
+      : _withGuards(targets.map(walked).join());
+  String ofRole(String file) =>
+      ImportRef.app(file.substring('lib/'.length)).resolveUri(packageName);
   final imports = [
-    "import '$navigation';",
+    "import '${ofRole(RouterRole.navigationFile)}';",
+    if (targets.isNotEmpty) "import '${ofRole(RouterRole.appRouterFile)}';",
     for (final MapEntry(key: uri, value: prefix) in screens.entries)
       "import '$uri' as $prefix;",
   ]..sort();
   return {
     routerWalkFile: '''
 // The locations of the app that need no values, at most $routerWalkLimit,
-// which the matrix of SMF writes from the data of the router role of the
-// app for the walk of its routes, walk.dart.
+// and what the guards of its routes show in their place, which the matrix
+// of SMF writes from the data of the router role of the app for the walk of
+// its routes, walk.dart.
 ${imports.join('\n')}
 
 /// A location of the app that needs no values: the full name of its route,
@@ -225,9 +792,203 @@ ${imports.join('\n')}
 typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 
 /// The locations of the app that need no values, in the order of the
-/// routes of the app.
+/// routes of the app, with those in the flow of a guard after the others:
+/// a screen of a flow may change what its guard allows when it is shown.
 const List<WalkedLocation> walkedLocations = [
 $locations];
+$guards''',
+  };
+}
+
+/// What [routerWalkFile] says of the guards in an app without guards, which
+/// has neither `redirectOf()` nor `routeGuards` of the router role.
+const _withoutGuards = '''
+
+/// The location that the router shows when it is asked to show [walked]:
+/// [walked] itself, since no module of the app has a guard of the routes.
+WalkedLocation shownFor(WalkedLocation walked) => walked;
+
+/// The full names of the guards of the routes that do not allow: none,
+/// since no module of the app has a guard.
+List<String> closedGuards() => const [];
+''';
+
+/// What [routerWalkFile] says of the guards in an app with guards, whose
+/// targets are [targets], each as a location of the walk.
+String _withGuards(String targets) => '''
+
+/// The targets of the guards of the routes of the app, in the order of the
+/// guards: the location that the router shows while a guard does not
+/// allow.
+const List<WalkedLocation> guardTargets = [
+$targets];
+
+/// The location that the router shows when it is asked to show [walked]:
+/// [walked] itself, or the target of the guard that keeps the user from it,
+/// as redirectOf() of the router role says.
+WalkedLocation shownFor(WalkedLocation walked) {
+  final target = ${RouterRole.redirectOf}(walked.route);
+  if (target == null) return walked;
+  return guardTargets.firstWhere(
+    (shown) => shown.route == target.routeName,
+  );
+}
+
+/// The full names of the guards of the routes that do not allow, in the
+/// order of the guards.
+List<String> closedGuards() => [
+  for (final guard in ${RouterRole.routeGuards})
+    if (!guard.allows.value) guard.name,
+];
+''';
+
+/// The path in an app of what the matrix writes for the tests of the
+/// settings screen role that the CLI keeps in its
+/// `app_tests/settings_screen_role`: `settingsLocation`, the location of the
+/// route that the provider of the role names as the settings screen
+/// ([SettingsScreenRole.screenIn]), created as `const` from its class of
+/// the navigation of the router role, `settingsScreen`, the type of the
+/// screen that the route shows, and `settingsEntries`, the types of the
+/// widgets of the entries of the screen, in the order of the role
+/// ([SettingsScreenRole.entriesIn]).
+const settingsScreenFile = 'test/settings_screen_role/settings.dart';
+
+/// The file at [settingsScreenFile] of [app], an app of the matrix with
+/// the settings screen role, whose package is [packageName].
+///
+/// It imports the navigation of the router role without a prefix, since the
+/// names of its classes differ from those of the file, the file of the
+/// screen with the prefix `screen`, and the file of every entry once, with a
+/// prefix of its own, `entry0`, `entry1`, ..., so that no name clashes.
+/// Throws a [StateError] if the provider of the role names no route of its
+/// own, which the rules of the role report in an app of the matrix.
+Map<String, String> _settingsOf(MatrixApp app, String packageName) {
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final route = _settingsRouteOf(app, input);
+  final screen = route.route.screen;
+  final prefixes = {screen.import.resolveUri(packageName): 'screen'};
+  final entries = StringBuffer();
+  for (final entry in settingsScreenRole.entriesIn(input)) {
+    final widget = entry.widget;
+    // The template of the role rejects an entry whose widget is not in a
+    // file of the app, so each has an import.
+    final prefix = prefixes.putIfAbsent(
+      widget.import!.resolveUri(packageName),
+      () => 'entry${prefixes.length - 1}',
+    );
+    entries.writeln('  ${widget.codeWith(prefix)},');
+  }
+  final imports = [
+    "import '${_navigationOf(packageName)}';",
+    for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  return {
+    settingsScreenFile: '''
+// The settings screen of the app and its entries, which the matrix of SMF
+// writes from the data of the settings screen role of the app for the
+// tests of the role, settings_screen_test.dart and
+// settings_entries_test.dart.
+${imports.join('\n')}
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${route.locationClass}();
+
+/// The type of the settings screen.
+const Type settingsScreen = screen.${screen.className};
+
+/// The types of the widgets of the entries of the settings screen, in the
+/// order in which the screen shows them.
+const List<Type> settingsEntries = [
+$entries];
+''',
+  };
+}
+
+/// The route that the provider of the settings screen role names as the
+/// settings screen in [input], the input of the role in [app]. Throws a
+/// [StateError] if it names no route of its own, which the rules of the
+/// role report in an app of the matrix.
+FacadeRoute _settingsRouteOf(
+  MatrixApp app,
+  RoleHookInput<SettingsData> input,
+) {
+  final route = settingsScreenRole.screenIn(input);
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the settings '
+      'screen.',
+    );
+  }
+  return route;
+}
+
+/// The URI of the navigation of the router role in the app whose package
+/// is [packageName], which has the classes of the locations of the app.
+String _navigationOf(String packageName) => ImportRef.app(
+      RouterRole.navigationFile.substring('lib/'.length),
+    ).resolveUri(packageName);
+
+/// The path in an app of what the matrix writes for the test of the
+/// language of the settings screen that the settings module keeps in its
+/// `app_tests/settings`: `appLanguages`, the codes of the languages of the
+/// app ([LocalizationRole.localesIn]), and `chooseLanguage()`, which
+/// chooses one of them for the app as its user does and completes once the
+/// app saved the choice.
+const settingsLanguagesFile = 'test/settings_languages.dart';
+
+/// The file at [settingsLanguagesFile] of [app], an app of the matrix whose
+/// package is [packageName].
+///
+/// In an app with the localization role, the languages are those of the
+/// role, and choosing one goes through `appLocale` of the file of the role,
+/// which the root of the app follows and which saves the choice in the
+/// preferences of the app. An app without the role is in English, and has
+/// no language to choose.
+Map<String, String> _settingsLanguagesOf(MatrixApp app, String packageName) {
+  const about = '''
+// The languages of the app, which the matrix of SMF writes from the
+// localization role of the app for the test of the language of the
+// settings screen, settings_language_test.dart.''';
+  final hook = app.hook!;
+  if (!hook.presentRoles.contains(localizationRole)) {
+    return {
+      settingsLanguagesFile: '''
+$about
+
+/// The codes of the languages of the app: it has no texts in other
+/// languages, so it is in English.
+const List<String> appLanguages = ['en'];
+
+/// The app has one language, so there is none to choose.
+Future<void> chooseLanguage(String language) async {}
+''',
+    };
+  }
+  final languages = [
+    for (final language
+        in localizationRole.localesIn(localizationRole.hookInput(hook)))
+      SmfNames.dartString(language),
+  ];
+  final appLocale = ImportRef.app(
+    LocalizationRole.appLocaleFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  return {
+    settingsLanguagesFile: '''
+$about
+import 'dart:ui';
+
+import '$appLocale';
+
+/// The codes of the languages of the app, the first of which the app is in
+/// when the device asks for none of them.
+const List<String> appLanguages = [${languages.join(', ')}];
+
+/// Chooses [language], one of [appLanguages], as the language of the app,
+/// as its user does. The app saves the choice in its preferences, and the
+/// future completes once it did.
+Future<void> chooseLanguage(String language) =>
+    appLocale.choose(Locale(language));
 ''',
   };
 }
@@ -345,6 +1106,88 @@ $services];
 /// registration.
 List<DiRegistration> _servicesOf(MatrixApp app) =>
     diRole.graphOf(diRole.hookInput(app.hook!)).ordered;
+
+/// The path in an app of what the matrix writes for the tests of the
+/// onboarding module: `startScreen`, the type of the screen that the app
+/// starts on, which the app shows once the onboarding is finished.
+const onboardingStartScreenFile = 'test/onboarding/start_screen.dart';
+
+/// The file at [onboardingStartScreenFile] of [app], an app of the matrix
+/// with the router role, whose package is [packageName]: the screen of the
+/// route that the router role chose to start the app on, or the fallback
+/// start screen of the app entry role when no route of its modules can
+/// start it.
+///
+/// It imports the file of the screen with the prefix `screen`.
+Map<String, String> _startScreenFileOf(MatrixApp app, String packageName) {
+  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
+  final (import, screen) = switch (start?.screen) {
+    final screen? => (screen.import, screen.className),
+    null => (
+        AppEntryRole.fallbackStartScreen.importRef,
+        AppEntryRole.fallbackStartScreen.name,
+      ),
+  };
+  return {
+    onboardingStartScreenFile: '''
+// The screen that the app starts on, which the matrix of SMF writes from
+// the data of the router role of the app for the tests of the onboarding
+// module, first_launch_test.dart and later_launch_test.dart.
+import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the test of the first
+/// launch of the onboarding module: `onboardingTexts`, the texts of the
+/// module ([OnboardingModule.texts]), each by its name, in each language of
+/// the app, by the code of the language. The languages are those of the
+/// localization role of the app ([LocalizationRole.localesIn]), in its
+/// order, and English alone in an app without the role, whose onboarding
+/// has the English texts.
+const onboardingTextsFile = 'test/onboarding/texts.dart';
+
+/// The file at [onboardingTextsFile] of [app], an app of the matrix.
+///
+/// A text of the module without a translation into a language of the app
+/// is the English one there, as the localization role says of the texts of
+/// an app.
+Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in OnboardingModule.texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $name: $shown,');
+    }
+    texts.writeln('  },');
+  }
+  return {
+    onboardingTextsFile: '''
+// The texts of the onboarding in each language of the app, which the
+// matrix of SMF writes from the texts of the onboarding module and the
+// languages of the localization role of the app for the test of the
+// module, first_launch_test.dart.
+
+/// The texts of the onboarding by the code of each language of the app,
+/// the first of which the app uses when the device asks for none of them:
+/// each text by its name in the module. An app without the localization
+/// role has the English texts alone.
+const Map<String, Map<String, String>> onboardingTexts = {
+$texts};
+''',
+  };
+}
 
 /// The name under which the listener of Firebase Analytics logs the
 /// screen that [app] starts on: the full name of the route that the router

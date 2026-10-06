@@ -6,24 +6,58 @@ import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
+import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
+import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 const _material = ImportRef('package:flutter/material.dart');
 const _foundation = ImportRef('package:flutter/foundation.dart');
+
+/// The delegate of the texts of the Material widgets of Flutter, which are
+/// in every language that Flutter's widgets are translated into, so in
+/// each language of an app.
+const _materialDelegate = Fragment(
+  'GlobalMaterialLocalizations.delegate',
+  imports: [
+    ImportRef('package:flutter_localizations/flutter_localizations.dart'),
+  ],
+);
 
 /// The section of the README that [FakeSocketsModule] and
 /// [FakeOverlapModule] both add.
 const _readmeSection = 'The app has something in every socket of its entry, '
     'with `code` and a [link](https://example.com).';
 
+/// The note for coding agents that [FakeSocketsModule] and
+/// [FakeOverlapModule] both add.
+const _agentNote = 'The modules of the fixture fill the sockets of the app '
+    'entry, and the tests read what the sockets got.';
+
+/// The note for coding agents of [FakeSocketsModule] alone: its files by
+/// their paths, and the directories of the fixtures as a pattern.
+const _filesAgentNote = 'The assets of the fixture are in `assets/fixture/`, '
+    'such as `assets/fixture/readme.txt`, and the Dart files of the fixtures '
+    'in the directories `lib/core/fixture_*/`.';
+
 /// A module that puts something into every socket of the app entry that no
 /// real module uses yet, and into the `flutter:` section of the pubspec.
+///
+/// It gives the root of the app no theme and no theme mode: each takes one
+/// value, which the theme role gives in an app with a provider of it, so a
+/// module that set one could not be in such an app.
+///
+/// The delegate that it gives the root has no texts of the module: a module
+/// gives its texts to the localization role, whose provider knows the
+/// languages of the app.
 final class FakeSocketsModule extends SmfModule {
   /// Creates the module.
   const FakeSocketsModule();
@@ -42,7 +76,6 @@ final class FakeSocketsModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeSocketsBundle),
         const PubspecContribution.sdk('flutter_localizations'),
-        const PubspecContribution.hosted('intl', 'any'),
         const PubspecContribution.flutter(
           assets: ['assets/fixture/'],
           fonts: [
@@ -50,7 +83,6 @@ final class FakeSocketsModule extends SmfModule {
               PubspecFontAsset('fonts/FixtureSans.ttf', weight: 400),
             ]),
           ],
-          generate: true,
         ),
         const SocketContribution.code(
           AppEntryRole.topLevel,
@@ -85,41 +117,8 @@ final class FakeSocketsModule extends SmfModule {
         ),
         const SocketContribution.arg(
           AppEntryRole.appArgs,
-          'theme',
-          Fragment(
-            'ThemeData(fontFamily: "FixtureSans")',
-            imports: [_material],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'darkTheme',
-          Fragment('ThemeData.dark()', imports: [_material]),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
           'localizationsDelegates',
-          Fragment(
-            'AppLocalizations.delegate',
-            imports: [ImportRef.app('l10n/app_localizations.dart')],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'localizationsDelegates',
-          Fragment(
-            'GlobalMaterialLocalizations.delegate',
-            imports: [
-              ImportRef(
-                'package:flutter_localizations/flutter_localizations.dart',
-              ),
-            ],
-          ),
-        ),
-        const SocketContribution.arg(
-          AppEntryRole.appArgs,
-          'supportedLocales',
-          Fragment("Locale('en')", imports: [_material]),
+          _materialDelegate,
         ),
         const SocketContribution.wrap(
           AppEntryRole.appBuilder,
@@ -177,14 +176,20 @@ final class FakeSocketsModule extends SmfModule {
           '1.9.1',
         ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
+        AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
+        AppEntryRole.agentSections.entry(
+          'Fixture',
+          AgentNote(_filesAgentNote),
+        ),
       ];
 }
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
 /// them: equal permissions, meta-data, plist strings and README sections
-/// agree, the plist arrays are united, the highest versions win, and the
-/// supported locale appears once.
+/// agree, the plist arrays are united, the highest versions win, the
+/// delegate of the localizations appears once, and so does the note for
+/// coding agents that both have.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -201,10 +206,11 @@ final class FakeOverlapModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
+        const PubspecContribution.sdk('flutter_localizations'),
         const SocketContribution.arg(
           AppEntryRole.appArgs,
-          'supportedLocales',
-          Fragment("Locale('en')", imports: [_material]),
+          'localizationsDelegates',
+          _materialDelegate,
         ),
         AppEntryRole.iosDeploymentTarget.value('15.4'),
         AppEntryRole.androidManifestPermissions
@@ -231,7 +237,90 @@ final class FakeOverlapModule extends SmfModule {
           '1.8.0',
         ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
+        AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];
+}
+
+/// A provider of the localization role that keeps the texts of the app in
+/// one Dart file, with a delegate written by hand: no tool generates code
+/// from its files, as one does from the files of translations of a
+/// provider that has them.
+///
+/// Its render hook writes a getter for each text of the app, which returns
+/// the text in the language of the texts, among the languages of the app,
+/// or in English.
+final class FakeL10nModule extends SmfModule {
+  /// Creates the module.
+  const FakeL10nModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_l10n');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The texts of the app in one Dart file (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeL10nProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeL10nBundle),
+        SocketContribution.arg(
+          AppEntryRole.appArgs,
+          'localizationsDelegates',
+          Fragment(
+            'FixtureTexts.delegate',
+            imports: [LocalizationRole.appTexts.importRef],
+          ),
+        ),
+      ];
+}
+
+final class _FakeL10nProvider extends RoleProvider<TextsData> {
+  const _FakeL10nProvider();
+
+  @override
+  Role<TextsData> get role => localizationRole;
+
+  @override
+  RoleOutput render(RoleHookInput<TextsData> input) {
+    final locales = localizationRole.localesIn(input);
+    return RoleOutput(
+      vars: {
+        'getters': Fragment(
+          [
+            for (final text in localizationRole.textsIn(input))
+              _getterOf(text, locales),
+          ].join('\n\n'),
+        ),
+      },
+    );
+  }
+
+  /// The getter of [text] in the class of the texts, which returns its
+  /// translation into the language of the texts, among [locales], or its
+  /// English text.
+  String _getterOf(AppText text, List<String> locales) {
+    final translations = [
+      for (final language in locales)
+        if (text.text.translations[language] case final translation?)
+          "        '$language' => ${SmfNames.dartString(translation)},",
+    ];
+    final english = SmfNames.dartString(text.text.en);
+    return [
+      '  /// The $text.',
+      if (translations.isEmpty)
+        '  String get ${text.getter} => $english;'
+      else ...[
+        '  String get ${text.getter} => switch (language) {',
+        ...translations,
+        '        _ => $english,',
+        '      };',
+      ],
+    ].join('\n');
+  }
 }
 
 /// A provider of the analytics role whose service starts asynchronously and
@@ -284,7 +373,13 @@ final class FakeAnalyticsModule extends SmfModule {
 /// screen of the router role, which it requires, and has no routes: so an
 /// app with it and without routes to start on starts on the fallback screen
 /// of the app entry, and an app with it and the fixture analytics has two
-/// listeners of the screen.
+/// listeners of the screen. It uses the settings screen role: in an app
+/// with a settings screen, it generates the widget of its settings, two
+/// rows that belong together, and gives the role an entry for it. The
+/// widget has the class name of the setting of the second fixture feature,
+/// `FixtureSetting`, in a file of its own: an app with both analyzes only
+/// if the screen imports the file of each with a prefix of its own, as the
+/// role asks of every provider.
 final class FakeScreenLogModule extends SmfModule {
   /// Creates the module.
   const FakeScreenLogModule();
@@ -302,6 +397,7 @@ final class FakeScreenLogModule extends SmfModule {
         description: 'A log of the screens the user sees (fixture)',
         kind: ModuleKinds.infrastructure,
         requires: {routerRole},
+        uses: {settingsScreenRole},
       );
 
   @override
@@ -310,6 +406,22 @@ final class FakeScreenLogModule extends SmfModule {
         const SocketContribution.item(
           RouterRole.screenListeners,
           Fragment('noteFixtureScreenLog', imports: [_file]),
+        ),
+        // Only an app with a settings screen gets the widget of the
+        // setting, and only there does the entry apply.
+        BrickContribution(
+          fakeScreenLogSettingsBundle,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'FixtureSetting',
+              import: ImportRef.app(
+                'core/fixture_screen_log/fixture_screen_log_setting.dart',
+              ),
+            ),
+          ),
         ),
       ];
 }
@@ -455,6 +567,126 @@ final class FakeEventsModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureEvents', import: _file),
             init: FactoryRef('openFixtureEvents', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the preferences role, which has at most one provider,
+/// whose preferences are created with the app: they keep the settings in
+/// memory, over a map that stands for the disk of a device, which each start
+/// of the app reads anew.
+final class FakePreferencesModule extends SmfModule {
+  /// Creates the module.
+  const FakePreferencesModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_preferences');
+
+  static const _file = ImportRef.app(
+    'core/fixture_preferences/fixture_preferences.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Preferences in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(preferencesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePreferencesBundle),
+        preferencesRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixturePreferences', import: _file),
+            create: FactoryRef('createFixturePreferences', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that works with the preferences when the app has them: it
+/// keeps a setting, a number, which its restorer takes from the preferences
+/// when the app starts and which it saves there from then on. It gives the
+/// role two restorers, which note what they read and throw when a test says
+/// so. Without the preferences, the setting lasts only as long as the app
+/// runs.
+final class FakePreferencesUserModule extends SmfModule {
+  /// Creates the module.
+  const FakePreferencesUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_preferences_user');
+
+  static const _file = ImportRef.app(
+    'core/fixture_setting/fixture_setting.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A setting that the preferences remember (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {preferencesRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePreferencesUserBundle),
+        const SocketContribution.item(
+          PreferencesRole.restorers,
+          Fragment('noteFixtureSetting', imports: [_file]),
+          when: {preferencesRole},
+        ),
+        const SocketContribution.item(
+          PreferencesRole.restorers,
+          Fragment('restoreFixtureSetting', imports: [_file]),
+          when: {preferencesRole},
+        ),
+      ];
+}
+
+/// A provider of the theme role, which has at most one provider, whose look
+/// depends on state of its own: its light theme and its dark theme derive
+/// their colours from a colour that it keeps and that a test changes. The
+/// colour is one of its own at first, so its themes differ from those that
+/// Flutter gives an app without a theme.
+///
+/// The two functions of the themes read the colour from the context of the
+/// root of the app, which the role gives them, through an inherited widget
+/// that the module puts among the root wrappers: the root rebuilds in the
+/// new colours when the colour changes.
+///
+/// The template of the role does the rest in an app with it: the theme mode
+/// that the user selects, which the preferences of the app remember, and
+/// the entry of the settings screen that selects it.
+final class FakeThemeModule extends SmfModule {
+  /// Creates the module.
+  const FakeThemeModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_theme');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A light and a dark theme of a colour that it keeps '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(themeRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeThemeBundle),
+        SocketContribution.wrap(
+          AppEntryRole.rootWrappers,
+          Fragment.wrap(
+            'FixtureSeedScope(notifier: fixtureSeed, child: ',
+            ')',
+            imports: [ThemeRole.createLightTheme.importRef],
           ),
         ),
       ];

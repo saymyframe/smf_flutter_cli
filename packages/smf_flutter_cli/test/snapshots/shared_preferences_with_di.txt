@@ -1,0 +1,608 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Dependency injection
+
+- A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `registerDependencies()` in `lib/core/di/dependencies.dart` registers every service, and `bootstrap()` awaits it: a new service gets its line there.
+- Only the composition file of a feature, `lib/features/<feature>/<feature>_composition.dart`, calls `resolve<T>()` of `lib/core/di/service_locator.dart`, to create what the screens of the feature need, such as the object that holds their state.
+- A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
+
+With `get_it`:
+
+- `registerDependencies()` registers the services in `getIt`, a local name for `GetIt.instance`, with `registerLazySingleton`, `registerSingleton` or `registerFactory`. The function that creates a service gets each service it takes as `getIt<Type>()`, and one that disposes of it goes into `dispose:`.
+- A singleton created asynchronously takes `registerSingletonAsync`, and one that waits for such a service `registerSingletonWithDependencies`. `await getIt.allReady()` then ends the function.
+- No other file in `lib/` imports `get_it`. A test may import it to register its fakes in `GetIt.instance`.
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'My App',
+    home: const FallbackStartScreen(),
+    builder: (context, child) => child!,
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/di/dependencies.dart';
+import 'package:my_app/core/preferences/app_preferences.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await initPreferences();
+  await registerDependencies();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+
+/// The screen the app starts on when no route of the app can start it.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('My App')));
+}
+=== lib/core/di/dependencies.dart (get_it) ===
+import 'package:get_it/get_it.dart';
+import 'package:my_app/core/preferences/app_preferences.dart' as di0;
+
+import 'service_locator.dart';
+
+/// Creates the service locator of the app, which finds the services in the
+/// global instance of get_it, [GetIt.instance].
+ServiceLocator createServiceLocator() => _GetItServiceLocator(GetIt.instance);
+
+/// Registers the services of the modules of the app in get_it, each after
+/// the services it takes or waits for, and completes when all of them are
+/// ready.
+///
+/// [resetDependencies] removes them again.
+Future<void> registerDependencies() async {
+  final getIt = GetIt.instance;
+  getIt.registerLazySingleton<di0.AppPreferences>(
+    () => di0.createAppPreferences(),
+  );
+}
+
+/// Disposes of the services that get_it created, with the functions that
+/// dispose of them, in the reverse order of their registration, and removes
+/// every service from get_it, so that [registerDependencies] can register
+/// them again.
+Future<void> resetDependencies() => GetIt.instance.reset();
+
+/// Finds the services of the app in get_it.
+final class _GetItServiceLocator implements ServiceLocator {
+  _GetItServiceLocator(this._getIt);
+
+  final GetIt _getIt;
+
+  @override
+  T resolve<T extends Object>({String? instanceName}) =>
+      _getIt<T>(instanceName: instanceName);
+}
+=== lib/core/di/service_locator.dart (role:di) ===
+import 'dependencies.dart';
+
+/// The service locator of the app, created on first use.
+final ServiceLocator serviceLocator = createServiceLocator();
+
+/// Returns the service of type [T], or the one named [instanceName].
+///
+/// Only the composition file of a feature calls it, to create what the
+/// feature's screens need; other code receives its services as parameters.
+T resolve<T extends Object>({String? instanceName}) =>
+    serviceLocator.resolve<T>(instanceName: instanceName);
+
+/// Finds the services that `registerDependencies()` registers.
+abstract interface class ServiceLocator {
+  /// Returns the service of type [T], or the one named [instanceName].
+  T resolve<T extends Object>({String? instanceName});
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  get_it: "^9.3.0"
+  shared_preferences: "^2.5.5"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+void main() {
+  testWidgets('the fallback start screen shows the name of the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+
+    expect(find.text('My App'), findsOneWidget);
+  });
+}

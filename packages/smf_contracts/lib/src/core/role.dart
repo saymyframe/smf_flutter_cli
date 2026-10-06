@@ -134,7 +134,8 @@ abstract base class Role<D extends Object> {
   ///
   /// The pipeline sets it in the bricks of every module and role template
   /// that provides, requires or uses the role. Template code that refers to
-  /// a symbol of a used role must be inside `{{#has_<id>}}`.
+  /// a symbol of a used role must be inside `{{#has_<id>}}`, or be the
+  /// code of a variable for an app with the role (see [RoleVar]).
   @nonVirtual
   String get presenceFlag => 'has_$id';
 
@@ -220,6 +221,7 @@ abstract base class Role<D extends Object> {
   List<SmfIssue> checkStructure(StructuralRuleRequest request) {
     final input = StructuralRuleInput<D>._(
       roleInput: hookInput(request.hook),
+      hook: request.hook,
       files: Map.unmodifiable(request.files),
       texts: Map.unmodifiable(request.texts),
       owners: Map.unmodifiable(request.owners),
@@ -267,6 +269,7 @@ abstract base class Role<D extends Object> {
         for (final data in request.data)
           if (identical(data.role, this) && applies(data)) _typed(data),
       ]),
+      present: request.presentRoles,
       optionValues: {
         for (final option in options)
           option.name: request.optionValues[option.name],

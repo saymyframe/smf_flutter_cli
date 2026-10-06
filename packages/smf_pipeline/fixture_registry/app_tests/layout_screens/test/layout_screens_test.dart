@@ -6,13 +6,14 @@
 // those of the fixture analytics and of the fixture screen log, once for
 // each switch to another destination too, and gives the navigator of each
 // branch observers of its own (RouterRole.observers). It finds a
-// destination by the Destination that its feature declares, and selects it
-// as the layout does when the user selects it, with onSelect of AppShell,
-// so it depends neither on the router nor on how the layout shows the
-// destinations. It uses what the tests of router_screens share, which
-// every app that it applies to has. Each expectation gives its reason,
-// which a provider of a role with a known bug fails the test with
-// (brokenProviders of the fixture registry).
+// destination by the label and the icon that its feature declares, as the
+// Destination of the layout role gives them, and selects it as the layout
+// does when the user selects it, with onSelect of AppShell, so it depends
+// neither on the router nor on how the layout shows the destinations. It
+// uses what the tests of router_screens share, which every app that it
+// applies to has. Each expectation gives its reason, which a provider of a
+// role with a known bug fails the test with (brokenProviders of the fixture
+// registry).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/fixture_analytics/fixture_analytics.dart';
 import 'package:{{app_name}}/core/fixture_screen_log/fixture_screen_log.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
+import 'package:{{app_name}}/core/layout/destination.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_second_screen.dart';
@@ -29,11 +31,17 @@ import 'screens.dart';
 /// The main navigation that the user sees.
 AppShell _shell(WidgetTester tester) => tester.widget(find.byType(AppShell));
 
+/// The label of [destination] as the main navigation shows it: in the
+/// language of the app, which is English on the device of a test.
+String _labelOf(WidgetTester tester, Destination destination) =>
+    destination.label(tester.element(find.byType(AppShell)));
+
 /// The index of the destination labelled [label] with [icon] among those
 /// of the main navigation.
 int _destination(WidgetTester tester, String label, IconData icon) {
   final index = _shell(tester).destinations.indexWhere(
-        (destination) => destination.label == label && destination.icon == icon,
+        (destination) =>
+            _labelOf(tester, destination) == label && destination.icon == icon,
       );
   expect(index, isNonNegative, reason: 'The AppShell has $label.');
   return index;
@@ -67,7 +75,8 @@ void main() {
     );
     expect(
       [
-        for (final destination in _shell(tester).destinations) destination.label
+        for (final destination in _shell(tester).destinations)
+          _labelOf(tester, destination),
       ],
       containsAll(['Fixture', 'Second']),
       reason: 'The AppShell has the destination of each feature.',

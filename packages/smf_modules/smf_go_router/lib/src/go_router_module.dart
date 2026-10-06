@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_go_router/bundles/go_router_bundle.dart';
+import 'package:smf_go_router/src/agents.dart';
 import 'package:smf_go_router/src/go_routes.dart';
 
 /// The module that routes the app with go_router, and so provides the
@@ -18,10 +19,13 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// When a module provides the layout role and the app has destinations,
 /// they form the main navigation: a `StatefulShellRoute.indexedStack` with
 /// a branch for each destination, in the order of the features, which
-/// shows the `AppShell` of the layout. Each branch keeps its stack, with the
-/// routes below its destination, while another is selected, and the app
-/// opens on the branch of its start route. The other top-level routes stay
-/// outside the main navigation, which the router matches first.
+/// shows the `AppShell` of the layout. The shell gets `appDestinations`,
+/// the list that the layout role generates with the label and the icon of
+/// each destination, in the order of the branches, so the module renders
+/// neither. Each branch keeps its stack, with the routes below its
+/// destination, while another is selected, and the app opens on the branch
+/// of its start route. The other top-level routes stay outside the main
+/// navigation, which the router matches first.
 ///
 /// Screens get the values of their parameters from the location, parsed
 /// with `tryParse`, a `bool` being `true` or `false` exactly: an optional
@@ -55,6 +59,26 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the key and the location of the page. Once go_router keeps the
 /// completers of its pages, the router can leave this out.
 ///
+/// In an app whose modules declare guards, the router asks them as the
+/// router role says, through the `GuardedNavigation` of the role, which
+/// keeps the location that the user comes back to: the router remembers
+/// nothing of the guards itself. It knows a location by its URI. The
+/// top-level `redirect` of go_router asks about every location that
+/// go_router parses, such as the one the app starts on, those of `go()` and
+/// those of the platform, and sends the user to the target of the guard
+/// that keeps them from it. `push()` and `replace()` ask before they hand a
+/// location to go_router, which would put the target on top of the stack:
+/// they go to the target instead, and `push()` completes with `null`. The
+/// router listens to `guardChanges` itself. When a guard starts or stops
+/// allowing, it tells the role of the pages that pushes showed, the one on
+/// top first, and of the location below them, or of no pages before it
+/// showed its first location, and goes to the location that the role
+/// answers. A page that `replace()` showed over other pages
+/// counts as one that a push showed, as it is one to go_router. The router
+/// does not hand `guardChanges` to go_router as its `refreshListenable`: a
+/// refresh asks only about the location below the pushed pages, and gives
+/// each of those pages a new completer.
+///
 /// The router tells the listeners of the screen of the router role about
 /// the page on top of the app: the delegate of go_router hears of every
 /// change of its stacks, a switch of branches included, and the router
@@ -64,6 +88,10 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// each listener on its own: what one throws keeps no other listener from
 /// hearing the screen, and reaches neither the router nor the handlers of
 /// the errors of the app; in debug mode it is printed.
+///
+/// In the guide for coding agents, the module adds to the section of the
+/// router how its file writes a route, and, in an app with a main
+/// navigation, where the destinations are among the routes.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();
@@ -83,6 +111,10 @@ final class GoRouterModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(goRouterBundle),
         const PubspecContribution.hosted('go_router', '^17.5.0'),
+        AppEntryRole.agentSections.entry(
+          routerRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 
@@ -95,17 +127,33 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
 
   @override
   RoleOutput render(RoleHookInput<RoutesData> input) {
+    final facade = routerRole.facadeOf(input);
     final routes = GoRoutes.of(
-      routerRole.facadeOf(input),
+      facade,
       start: routerRole.startIn(input),
       mainNavigation: input.has(layoutRole),
     );
     return RoleOutput(
+      fragments: [
+        if (routes.hasMainNavigation)
+          AppEntryRole.agentSections.entry(
+            routerRole.description,
+            AgentNote(mainNavigationAgentNote),
+          )
+        else if (input.has(layoutRole))
+          AppEntryRole.agentSections.entry(
+            routerRole.description,
+            AgentNote(firstDestinationAgentNote),
+          ),
+      ],
       vars: {
         'initial_location': routes.initialLocation,
         'main_navigation': routes.hasMainNavigation,
         'routes': routes.routes,
         'value_checks': routes.valueChecks,
+        // Whether the modules of the app declare guards, which the router
+        // then asks.
+        'guards': facade.guards.isNotEmpty,
       },
     );
   }

@@ -7,6 +7,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
+import 'package:smf_event_bus/src/agents.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -83,8 +84,8 @@ List<RoleData<DiRegistration>> _registrationsOf(ContractResult result) =>
     diRole.graphOf(diRole.hookInput(result.hook!)).registrations;
 
 /// Checks that [app] is [without] but for the files of the events, the
-/// dependency on event_bus, and the files that the modules [changedBy]
-/// generate.
+/// dependency on event_bus, the section of the events in the guide for
+/// coding agents, and the files that the modules [changedBy] generate.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -103,7 +104,7 @@ void _expectTheAppWithout(
     const ModuleOrigin(EventBusModule.id),
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml') continue;
+    if (path == 'pubspec.yaml' || path == AppEntryRole.agentsFile) continue;
     if (file.owner case ModuleOrigin(:final module)
         when changedBy.contains(module)) {
       continue;
@@ -114,6 +115,32 @@ void _expectTheAppWithout(
   expect(
     _pubspecWithoutEventBus(app),
     _yamlOf(without.files['pubspec.yaml']!.text),
+  );
+  // The guide has the notes of the app without the events, and those of
+  // the events under the heading of the role.
+  final notes = app.entriesOf(AppEntryRole.agentSections);
+  expect(
+    notes.where((note) => !_events.contains(note.$1)),
+    without.entriesOf(AppEntryRole.agentSections),
+  );
+  expect(
+    [
+      for (final (origin, heading, note) in notes)
+        if (_events.contains(origin)) (origin, heading, note.isOfRole),
+    ],
+    // The template of a role contributes after its providers; the guide
+    // shows what the role says first.
+    [
+      (const ModuleOrigin(EventBusModule.id), eventsRole.description, false),
+      (const RoleTemplateOrigin(eventsRole), eventsRole.description, true),
+    ],
+  );
+  expect(
+    [
+      for (final (origin, _, note) in notes)
+        if (origin == const ModuleOrigin(EventBusModule.id)) note,
+    ],
+    [AgentNote(agentNote)],
   );
 }
 
@@ -203,11 +230,17 @@ void main() {
     });
 
     test(
-        'contributes its brick, event_bus and its implementation of the '
-        'service, created without waiting, and nothing else', () {
+        'contributes its brick, event_bus, its implementation of the '
+        'service, created without waiting, and its note for coding agents, '
+        'and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(4));
+      final note = contributions[3] as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, eventsRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       expect(
         (contributions[0] as BrickContribution).bundle.name,
         'event_bus',
@@ -376,6 +409,17 @@ void main() {
         // A listener gets only the events fired after it started.
         'late': ['Pong'],
       });
+      // What the note of the module tells coding agents of this run: no
+      // listener got an event before the code that fired it reached its
+      // next await or returned.
+      expect(agentNote, startsWith('With `event_bus`:\n'));
+      expect(
+        agentNote,
+        contains(
+          'once the code that fired it reaches its next `await` or returns, '
+          'not inside `fire()`.',
+        ),
+      );
     });
   });
 

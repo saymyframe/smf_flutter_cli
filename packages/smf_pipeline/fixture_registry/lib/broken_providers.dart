@@ -1,5 +1,6 @@
-/// The providers of roles with one known bug each, in the fixture package
-/// `fake_broken`, and the apps that show that the tests of their roles fail
+/// The providers of roles with one known bug each, those of the fixture
+/// package `fake_broken` and the app entry that this library makes of
+/// flutter_core, and the apps that show that the tests of their roles fail
 /// on each bug, and on nothing else; `tool/broken_providers_matrix.dart`
 /// generates the apps and runs their tests.
 ///
@@ -9,7 +10,9 @@
 /// exemption with its reason; the tests of this package check it. The
 /// broken providers are in no registry of apps that must work
 /// ([fixtureModules] and [severalProvidersModules]), so the matrices do not
-/// grow with them.
+/// grow with them. An expectation that the app tests have of every module,
+/// rather than of a role, has an app that must fail it in
+/// [brokenModuleApps].
 library;
 
 import 'package:fake_broken/fake_broken.dart';
@@ -23,6 +26,44 @@ import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_settings/smf_settings.dart';
+
+/// The app entry that builds its root once: flutter_core, the app entry of
+/// the fixtures, whose `App` keeps the `MaterialApp` that its `build`
+/// created first and returns it each time it builds again. So the arguments
+/// of the root are read once, and the root does not follow an inherited
+/// widget that they read from its context, such as the theme mode that the
+/// user selects.
+///
+/// The root is still created in a `build` with the context of `App`, as
+/// the rule `app_entry.root_in_build` of the role wants, and the app
+/// analyzes: only a running app shows the bug.
+///
+/// No fixture provides the app entry, so the broken one changes the module
+/// of the CLI. It is made here, in the package that depends on that module,
+/// and not in `fake_broken`, whose fixtures depend on no module of the CLI.
+/// Each of its two changes takes a text of one line of the template of the
+/// root, so that a line of the template that is wrapped anew still has it.
+const _appEntryBuildingRootOnce = BrokenModule(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_builds_root_once'),
+  description: 'Flutter app whose root is built once (fixture)',
+  file: 'lib/app.dart',
+  changes: [
+    (
+      '  const App({super.key});',
+      '  const App({super.key});\n'
+          '\n'
+          '  /// The root that it built first.\n'
+          '  static Widget? _root;',
+    ),
+    (
+      'Widget build(BuildContext context) =>',
+      'Widget build(BuildContext context) => _root ??=',
+    ),
+  ],
+);
 
 /// A provider of a role with one known bug, and the tests of the role that
 /// must fail on it in its app.
@@ -52,6 +93,8 @@ final class BrokenProvider {
   /// whose files the other tests that apply to the app import, such as the
   /// fixture providers of the analytics role and of the crash reporting
   /// role, which the tests of these roles look at in an app with either.
+  /// The app entry of the app is that of the fixtures, or [module] itself
+  /// if it provides the app entry.
   final List<ModuleId> app;
 
   /// The tests of the role that must fail on the bug in the app, each with
@@ -68,7 +111,8 @@ final class BrokenProvider {
         module,
       ];
 
-  /// The registry of the app: its app entry, [module] and the modules of
+  /// The registry of the app: its app entry, that of the fixtures unless
+  /// [module] provides the app entry itself, [module] and the modules of
   /// [app], and then the other providers that these have variants for,
   /// which a registry must have, all from the registries of the fixtures
   /// ([fixtureModules]) and of several providers ([severalProvidersModules]),
@@ -79,8 +123,9 @@ final class BrokenProvider {
         other.descriptor.id: other,
     };
     final ofApp = [
-      for (final other in fixtureModules())
-        if (other.descriptor.provides.contains(appEntryRole)) other,
+      if (!module.descriptor.provides.contains(appEntryRole))
+        for (final other in fixtureModules())
+          if (other.descriptor.provides.contains(appEntryRole)) other,
       module,
       for (final id in app) fixtures[id]!,
     ];
@@ -229,26 +274,144 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
-        BrokenLayoutModule(),
+        BrokenModule.routerAskingGuardsOnlyAtStart,
+        role: routerRole,
+        bug: 'It asks the guards of the routes about the screen that the app '
+            'starts on, and again when one of them changes, but not about the '
+            'locations that go(), push() and replace() are asked to show.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'go() to a location that a guard keeps the user from shows the '
+                'target of the guard.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_order_test.dart',
+            'the first guard that does not allow shows its target, and the '
+                'next one once it allows',
+            'While a guard does not allow, the target of a guard after it is '
+                'a route like any other.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_walk_guards_test.dart',
+            'the walk of the routes holds while a guard keeps the user out',
+            'While a guard does not allow, each location outside its flow '
+                'shows the target of the guard, and each location of its flow '
+                'its own screen.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerIgnoringGuardChanges,
+        role: routerRole,
+        bug: 'It tells the guards of the routes of its pages when one of '
+            'them starts or stops allowing, and does not show the location '
+            'that they answer.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'Once the guards allow, the router shows the latest location '
+                'that was asked for and that a guard kept the user from, with '
+                'its query.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_changes_test.dart',
+            'a guard that stops allowing shows its target, and the location '
+                'below the pushed pages once it allows again',
+            'When a guard stops allowing, the router shows its target in '
+                'place of the pages that it keeps the user from.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_order_test.dart',
+            'the first guard that does not allow shows its target, and the '
+                'next one once it allows',
+            'Once a guard allows, the next one that does not allow shows its '
+                'target.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_flow_test.dart',
+            'a guard that starts allowing while its flow is shown, with no '
+                'location to come back to, shows the screen that the app '
+                'starts on',
+            'When a guard starts allowing while a page of its flow is on top '
+                'and there is no location to come back to, the router shows '
+                'the screen that the app starts on.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_early_change_test.dart',
+            'a guard that changes before the router shows its first location '
+                'ends no flow later',
+            'With guards that allow when the app starts, the app starts on '
+                'its start screen.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerKeepingPageOnGuardedReplace,
+        role: routerRole,
+        bug: 'Its replace() asks the guards of the routes, and leaves the '
+            'stack as it is when a guard keeps the user from the location, '
+            'rather than showing the target of the guard in its place.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'replace() with a location that a guard keeps the user from '
+                'shows the target of the guard alone, from a page of its flow '
+                'too.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenLayoutModule.givingFirstDestination(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '
             'the first one to the code that reads its destinations.',
-        app: [
-          FakeRouterModule.id,
-          FakeFeatureModule.id,
-          FakeSecondModule.id,
-          FakeBlocModule.id,
-          FakeDiModule.id,
-          FakeAnalyticsModule.id,
-          FakeCrashModule.id,
-          FakeServiceLogModule.id,
-          FakeScreenLogModule.id,
-        ],
+        app: _appWithMainNavigation,
         failures: [
           MatrixExpectedFailure(
             'test/layout_screens_test.dart',
             'each switch to another destination is heard of once',
             'The AppShell has the destination of each feature.',
+          ),
+          // The test of the labels reads them from the destinations of the
+          // shell too.
+          MatrixExpectedFailure(
+            'test/destination_labels_test.dart',
+            _labelsTest,
+            'While the app follows a device in English, each destination '
+                'gives its label in English.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenLayoutModule.keepingLabels(),
+        role: layoutRole,
+        bug: 'Its AppShell reads the label of each destination when it is '
+            'first built and keeps it, so its tabs show the labels in the '
+            'language of before once the app is in another language.',
+        // The fixture texts, with the preferences that their role requires,
+        // so that the app has two languages, and the second fixture
+        // feature, whose label has a translation.
+        app: [
+          ..._appWithMainNavigation,
+          FakeL10nModule.id,
+          FakePreferencesModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/destination_labels_test.dart',
+            _labelsTest,
+            'The layout shows no label of a destination in a language that '
+                'the app is not in.',
           ),
         ],
       ),
@@ -268,6 +431,206 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.preferencesForgettingWrites,
+        role: preferencesRole,
+        bug: 'Its writes never reach its disk, so the next start of the app '
+            'reads nothing of what was saved.',
+        // The fixture setting and the fixture theme, whose role remembers
+        // the theme mode in the preferences: the next start has neither.
+        app: [FakePreferencesUserModule.id, FakeThemeModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the next start reads what was saved, and nothing that was '
+                'removed',
+            'The next start reads what was saved.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_restorers_test.dart',
+            'a restorer reads at the next start what its module saved',
+            'Each restorer reads at the next start what was saved.',
+          ),
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_remembered_test.dart',
+            'the next start of the app has the mode that is saved under the '
+                'key of the role',
+            'The next start restores the mode whose name is saved under the '
+                'key of the role.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesNeverCopyingLists,
+        role: preferencesRole,
+        bug: 'It never copies a list: it keeps the list that it is given, and '
+            'a read returns the list that it keeps. So a later change of the '
+            'list that was saved, or of one that was read, changes what it '
+            'reads.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the preferences keep a copy of a list that they are given',
+            'A change of a list that was saved changes nothing that the '
+                'preferences have.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read returns a copy of the list that the preferences have',
+            'A change of a list that was read changes nothing that the '
+                'preferences have.',
+          ),
+          // The probe of the role, which the start check runs on a device,
+          // has the checks of the lists too.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.preferencesCastingValues,
+        role: preferencesRole,
+        bug: 'Its reads cast the value of a key to the type they ask for, so '
+            'a read of a key with a value of another type throws a TypeError '
+            'rather than returning null.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a read of a key with a value of another type returns null, and '
+                'does not throw',
+            'A read returns null when the key has no value of the type it '
+                'asks for, and never throws.',
+          ),
+          // A value saved over one of another type is read by the type that
+          // the key had too, which then throws.
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'a write replaces what its key had, a value of another type too',
+            'A key has one value: a write replaces what the key had, '
+                'whatever its type.',
+          ),
+          MatrixExpectedFailure(
+            'test/preferences_role_test.dart',
+            'the probe of the role finds no problem',
+            'The probe finds no problem with preferences that keep the '
+                'contract of the role in one run of the app.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.textsDelegateForEnglishOnly,
+        role: localizationRole,
+        bug: 'The delegate of its texts supports English only, whatever the '
+            'languages of the app: in another language of the app, the root '
+            'loads no texts of the app.',
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakePreferencesModule.id,
+        ],
+        failures: [
+          // A test that puts the app into another language checks first
+          // that its root can be in each language of the app.
+          MatrixExpectedFailure(
+            'test/localization_role/languages_test.dart',
+            _languagesTest,
+            _eachLanguageSupported,
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/device_test.dart',
+            _deviceTest,
+            _eachLanguageSupported,
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/saved_language_test.dart',
+            'a choice of the user is saved under the key of the role, '
+                'removed when the app follows the device again, and restored '
+                'by the next start',
+            _eachLanguageSupported,
+          ),
+          // The probe of the role, which the start check runs on a device,
+          // has the check of the delegates too: the test fails with the
+          // problem that the probe finds.
+          MatrixExpectedFailure(
+            'test/localization_role/probe_test.dart',
+            _probeTest,
+            'No delegate of FixtureTexts of the root of the app supports '
+                'uk.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.textsInFirstLanguage,
+        role: localizationRole,
+        bug: 'Its texts are always in the first language of the app, '
+            'whatever language the root of the app is in.',
+        // A settings screen, which gets the setting of the language, and a
+        // feature with a text in two languages.
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakePreferencesModule.id,
+          SettingsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/language_setting/language_setting_test.dart',
+            'the setting of the language shows the choice of the user, and '
+                'its dialog chooses a language of the app or the languages '
+                'of the device',
+            'The setting shows its texts in the language that the user '
+                'chose.',
+          ),
+          // On a device in the last language of the app, the texts of the
+          // setting stay in the first one before the user chose anything.
+          MatrixExpectedFailure(
+            'test/language_setting/language_setting_device_test.dart',
+            'on a device in the last language of the app, the setting of '
+                'the language follows the device, names a choice that code '
+                'makes, shows the language that the next start restores, '
+                'and has no option but those of the app and of the device',
+            'While the app follows the device, the setting shows its texts '
+                'in the language of the device.',
+          ),
+          // The root can be in each language, so the tests of the role get
+          // to the texts, which do not follow it.
+          MatrixExpectedFailure(
+            'test/localization_role/languages_test.dart',
+            _languagesTest,
+            'The app and its texts follow the language that the user chose: '
+                'a text reads in it, or in English when it has no '
+                'translation into it.',
+          ),
+          MatrixExpectedFailure(
+            'test/localization_role/device_test.dart',
+            _deviceTest,
+            'While the app follows the device, each text of the app reads '
+                'in the language that the app is in.',
+          ),
+          // The probe finds the first text of the app that has a
+          // translation, in the language of that translation.
+          MatrixExpectedFailure(
+            'test/localization_role/probe_test.dart',
+            _probeTest,
+            'The text title of the module fake_second reads "Second screen" '
+                'in uk rather than "Другий екран".',
+          ),
+          // The title of the settings screen is a text of the module of
+          // the screen, so its own test finds it in the first language
+          // once the app is in the second.
+          MatrixExpectedFailure(
+            'test/settings_language_test.dart',
+            'the title of the settings screen and its last row are in the '
+                'language of the app',
+            'The title of the screen is in the language of the app, uk.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenDiModule(),
         role: diRole,
         bug: 'It registers every service but one, the last in the order of '
@@ -281,6 +644,89 @@ List<BrokenProvider> brokenProviders() => const [
                 'container is reset, and all once they are registered again',
             'FixtureReplica does not resolve: Bad state: FixtureReplica is '
                 'not registered.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenSettingsModule(),
+        role: settingsScreenRole,
+        bug: 'Its screen creates the widget of every entry of the role, but '
+            'shows them all but the last one.',
+        // A feature and a module without screens, each with a setting, and
+        // the fixture theme, with the preferences that its role requires:
+        // the entry of the theme mode, which the template of the theme role
+        // contributes, comes after those of the modules, so it is the one
+        // that the screen leaves out. The app has no provider of the
+        // localization role, whose template would add the setting of the
+        // language after it.
+        app: [
+          FakeRouterModule.id,
+          FakeSecondModule.id,
+          FakeScreenLogModule.id,
+          FakeThemeModule.id,
+          FakePreferencesModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/settings_screen_role/settings_entries_test.dart',
+            'the settings screen shows every entry of the modules once, one '
+                'below the other in the order of the role',
+            'Every entry of the modules is on the settings screen once.',
+          ),
+          MatrixExpectedFailure(
+            'test/theme_setting/theme_setting_test.dart',
+            'the settings screen shows the entry of the theme mode, which '
+                'shows the mode of the app and chooses the mode that the '
+                'user taps',
+            'The settings screen shows the entry of the theme mode once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.themeWithLightDarkTheme,
+        role: themeRole,
+        bug: 'Its createDarkTheme() returns a light theme, the one that its '
+            'createLightTheme() returns, so the app is light in the dark '
+            'mode.',
+        // The preferences, which the theme role requires.
+        app: [FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_test.dart',
+            'the app shows the mode that is chosen: its root takes the mode, '
+                'and the screen below it gets the light or the dark theme of '
+                'the app',
+            'In the dark mode, the theme of the app is dark.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _appEntryBuildingRootOnce,
+        role: appEntryRole,
+        bug: 'Its App keeps the MaterialApp that it built first and returns '
+            'it each time it builds again, so the root does not follow an '
+            'inherited widget that its arguments read from its context.',
+        // A provider of the theme role, whose mode the arguments of the root
+        // read from its context, and the preferences that the role requires.
+        app: [FakeThemeModule.id, FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/theme_role/theme_mode_test.dart',
+            'the app shows the mode that is chosen: its root takes the mode, '
+                'and the screen below it gets the light or the dark theme of '
+                'the app',
+            'The root of the app rebuilds when the mode that its arguments '
+                'read from its context changes, and takes the mode that was '
+                'chosen.',
+          ),
+          // The themes of the fixture theme read its colour from the
+          // context of the root too.
+          MatrixExpectedFailure(
+            'test/theme_look_test.dart',
+            'the screens get the themes of the colour that the fixture '
+                'theme keeps, and those of another colour once it changes',
+            'The root of the app rebuilds in the new colours when the widget '
+                'that its themes read the colour from notifies.',
           ),
         ],
       ),
@@ -362,6 +808,55 @@ List<BrokenProvider> brokenProviders() => const [
       ),
     ];
 
+/// The other modules of the app of a router that breaks what the role says
+/// of the guards of the routes: the fixture gates, whose guards the tests
+/// close and open, the fixture feature, whose screens the guards keep the
+/// user from, and what the fixture feature and the tests of the listeners
+/// of the screen need.
+const List<ModuleId> _appWithGates = [
+  FakeFeatureModule.id,
+  FakeGateModule.id,
+  FakeBlocModule.id,
+  FakeDiModule.id,
+  FakeAnalyticsModule.id,
+  FakeCrashModule.id,
+  FakeServiceLogModule.id,
+];
+
+/// The other modules of the app of a broken layout: a router, the two
+/// fixture features, whose destinations the main navigation shows, and what
+/// the first of them and the tests of the listeners of the screen need.
+const List<ModuleId> _appWithMainNavigation = [
+  FakeRouterModule.id,
+  FakeFeatureModule.id,
+  FakeSecondModule.id,
+  FakeBlocModule.id,
+  FakeDiModule.id,
+  FakeAnalyticsModule.id,
+  FakeCrashModule.id,
+  FakeServiceLogModule.id,
+  FakeScreenLogModule.id,
+];
+
+/// The name of the test of the labels of the destinations.
+const _labelsTest =
+    'the labels of the destinations follow the language of the app';
+
+/// The names of three tests of the localization role, and the reason of
+/// one of their expectations: that the root of the app can be in each
+/// language of the app.
+const _languagesTest =
+    'once the user chose a language, the app is in it, and each text of the '
+    'app reads in it, in each language of the app';
+const _deviceTest =
+    'while the user chose no language, the app is in the language that the '
+    'device prefers among its own, and in its first one when the device asks '
+    'for none of them';
+const _probeTest = 'the probe of the role finds no problem';
+const _eachLanguageSupported =
+    'For each language of the app, the root has a delegate of each kind of '
+    'localizations that supports it.';
+
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of
 /// several providers ([severalProvidersAppTests]), such as the tests of the
@@ -381,6 +876,40 @@ Future<List<MatrixAppTest>> brokenProviderAppTests() async {
   }
   return [...tests.values];
 }
+
+/// The apps whose tests must fail for what a module of the app does, rather
+/// than a provider of a role; `tool/broken_providers_matrix.dart` generates
+/// them and runs their tests with those of the broken providers.
+///
+/// The app of the fixture gates that start closed has guards that nothing
+/// opens for the tests of the app, as the mocks of the app test of their
+/// module would. The test of the walk of the routes must fail on them, by
+/// their names and with what the module of a guard does about it, and every
+/// other test of the app must pass.
+List<MatrixFailingApp> brokenModuleApps() => const [
+      MatrixFailingApp(
+        'fake_gate_stays_closed',
+        modules: [
+          FlutterCoreModule(),
+          FakeRouterModule(),
+          FakeBlocModule(),
+          FakeGateModule(open: false),
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_walk_test.dart',
+            'each location that needs no values shows the page and the '
+                'screen of its route',
+            'These guards of the routes do not allow, so the walk cannot '
+                'reach the routes outside their flows, and the tests of the '
+                'other modules of the app do not see the screens that they '
+                'expect. The module of a guard opens it for the tests of the '
+                'app in the mocks of its app test (MatrixAppTest.mocks), '
+                'before the app starts.',
+          ),
+        ],
+      ),
+    ];
 
 /// The roles whose contract the app tests check but no broken provider
 /// breaks, each with the reason.

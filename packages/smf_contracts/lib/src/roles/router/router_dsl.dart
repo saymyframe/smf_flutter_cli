@@ -7,9 +7,10 @@ part of '../router.dart';
 /// path `/<module id>`: the route `/` of the module `home` is `/home`, and
 /// its route `/settings` is `/home/settings`.
 @immutable
-final class RoutesData {
-  /// Creates the data with the top-level [routes] of a module.
-  const RoutesData(this.routes);
+final class RoutesData implements DataWithTexts {
+  /// Creates the data with the top-level [routes] of a module and its
+  /// [guards].
+  const RoutesData(this.routes, {this.guards = const []});
 
   /// The top-level routes of the module, in the order the app lists them.
   ///
@@ -24,6 +25,109 @@ final class RoutesData {
   /// navigation either. The module rule `router.routes` reports a route
   /// that another leaves unreachable in either order.
   final List<Route> routes;
+
+  /// The guards of the module, in the order the app asks them; see
+  /// [RouteGuard].
+  final List<RouteGuard> guards;
+
+  /// The texts of the routes that a user sees: the labels of their
+  /// destinations of the main navigation (see [Destination.label]).
+  @override
+  Iterable<LocalizedText> get shownTexts => [
+        for (final route in routes)
+          if (route.destination case final destination?) destination.label,
+      ];
+}
+
+/// A gate over the whole app: a condition without which the user sees a
+/// route of the module in place of every other screen of the app, such as
+/// the onboarding until the user went through it.
+///
+/// While the guard does not allow, the router shows the route [redirectTo]
+/// of the module, the target of the guard, in place of every location
+/// outside its flow: the target and the routes below it. That holds for the
+/// location the app starts on, for every location that `go()`, `push()` or
+/// `replace()` is asked to show, and for the routes of every module, which
+/// know nothing of the guard. Once the guard allows, the router shows the
+/// location that the user or the platform last asked for and the guards
+/// kept them from, or the location that the guard took the user from when
+/// it stopped allowing, or else the screen that the app starts on. So the
+/// screens of the flow only change what the guard reads: the router leaves
+/// the flow. See [RouterRole.guardedNavigation] for what every router does
+/// with the guards.
+///
+/// A module whose guard stops allowing by what its own screens do, such as
+/// a sign-out, decides whether the user comes back to where they were: if
+/// it goes to the target of the guard with `go()` before the guard stops
+/// allowing, the guard takes the user from no location, and once it allows
+/// again the router shows the screen that the app starts on.
+///
+/// A guard keeps the user from every route outside its flow. A condition
+/// that only some routes ask for, such as a paid screen, is not a guard:
+/// the role has nothing for it.
+///
+/// The app asks the guards of all modules in the order of the modules and
+/// of [RoutesData.guards]. The first one that does not allow decides, and
+/// no later one is asked, so the flows of the guards show one after
+/// another.
+///
+/// ```dart
+/// RoutesData(
+///   [Route('/', name: 'intro', screen: ScreenRef('IntroScreen', ...))],
+///   guards: [
+///     RouteGuard(
+///       name: 'firstRun',
+///       allows: FunctionRef(
+///         'introSeen',
+///         import: ImportRef.app('features/intro/intro_status.dart'),
+///       ),
+///       redirectTo: 'intro',
+///     ),
+///   ],
+/// )
+/// ```
+@immutable
+final class RouteGuard {
+  /// Creates the guard [name], which shows the route [redirectTo] of its
+  /// module until [allows] says otherwise.
+  const RouteGuard({
+    required this.name,
+    required this.allows,
+    required this.redirectTo,
+  });
+
+  /// The name of the guard in its module, a lowerCamelCase identifier such
+  /// as `firstRun`; the full name is `<module id>.<name>`.
+  final String name;
+
+  /// A top-level function of a file of the app, without parameters, that
+  /// returns a `ValueListenable<bool>` of `package:flutter/foundation.dart`:
+  /// whether the guard allows, which notifies its listeners when that
+  /// changes.
+  ///
+  /// The app calls the function once, when its router first asks the
+  /// guards, which is after `bootstrap()`, and then reads the value whenever
+  /// it asks the guard. So the value is known without waiting: a guard that
+  /// depends on something that loads, such as a setting on the device,
+  /// loads it in `bootstrap()`. The value changes outside the build of a
+  /// frame, such as in the handler of a tap, since the router navigates
+  /// when it does.
+  ///
+  /// The router role imports the file with a prefix of its own, so
+  /// [ImportRef.prefix] and [ImportRef.show] do not apply. A feature whose
+  /// guard needs a service keeps the function in its composition file,
+  /// which may resolve services (see [CompositionFile]).
+  final FunctionRef allows;
+
+  /// The name of the route of the module that the router shows while the
+  /// guard does not allow, such as `intro`: its target.
+  ///
+  /// It is a top-level route that needs no values and is outside the main
+  /// navigation. Neither it nor a route below it can start the app.
+  final String redirectTo;
+
+  @override
+  String toString() => 'guard $name';
 }
 
 /// A page of the app: where it is, the screen it shows and the values it
@@ -179,18 +283,54 @@ final class ScreenRef {
 ///
 /// The layout role shows the destinations of all features in the order of
 /// the features; see [LayoutRole].
+///
+/// ```dart
+/// static const _label = LocalizedText(
+///   'label',
+///   en: 'Home',
+///   translations: {'uk': 'Головна'},
+/// );
+///
+/// // The descriptor of the module has uses: {localizationRole}.
+/// localizationRole.data(const TextsData([_label])),
+/// routerRole.data(
+///   const RoutesData([
+///     Route(
+///       '/',
+///       name: 'home',
+///       screen: ScreenRef('HomeScreen', ...),
+///       destination: Destination(
+///         label: _label,
+///         icon: Fragment('Icons.home', imports: [...]),
+///       ),
+///     ),
+///   ]),
+/// ),
+/// ```
 @immutable
 final class Destination {
   /// Creates a destination labelled [label] with [icon].
   const Destination({required this.label, required this.icon});
 
-  /// The text of the item, such as `Home`.
-  final String label;
+  /// The text of the item, such as `Home`, which the app shows in its
+  /// language.
+  ///
+  /// It is a text of the module. A module that lists the [LocalizationRole]
+  /// among its roles gives that role the same text, among its [TextsData]:
+  /// in an app with that role the label then reads from the texts of the
+  /// app, in the language of the app, and in an app without it the label
+  /// is the English text. The rule `localization.texts` reports a label
+  /// that such a module did not give the role.
+  ///
+  /// A module that does not list the role gives the label its English text
+  /// alone, which every app shows: the rule `router.routes` reports a
+  /// translation there, which no app would show.
+  final LocalizedText label;
 
   /// A constant expression of type `IconData`, such as `Icons.home`, with
   /// the imports it needs.
   ///
-  /// Routers create the destinations as constants, so a release build can
-  /// tree-shake the icon fonts.
+  /// The layout role creates the destinations as constants, so a release
+  /// build can tree-shake the icon fonts.
   final Fragment icon;
 }

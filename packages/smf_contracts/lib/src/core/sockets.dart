@@ -25,6 +25,18 @@ sealed class SocketKind {
   /// minimum iOS version in each build configuration of `project.pbxproj`.
   bool get carriesImports;
 
+  /// Whether the pipeline puts the contributions of the socket in the order
+  /// of the edges between their contributors (see [SocketContribution]).
+  ///
+  /// Every kind renders its contributions in the order it gets them, so
+  /// most sockets need these edges: start-up code runs after what it
+  /// depends on. A cycle of the edges among the contributors of such a
+  /// socket is an error. A [KeyedSocket] whose renderer puts the entries in
+  /// an order of its own does without the edges: the pipeline then takes
+  /// its contributions by the ids of their contributors alone, so that no
+  /// condition of a contribution can make them impossible to order.
+  bool get followsOrderEdges => true;
+
   /// Describes what is wrong with the payload of [c], a contribution to
   /// [socket], a socket of this kind.
   List<String> _payloadProblems(SocketRef socket, SocketContribution c);
@@ -60,14 +72,20 @@ final class CodeSocket extends SocketKind {
       {tag: c.map((contribution) => contribution.fragment!.code).join('\n')};
 }
 
-/// Whether an argument of an [ArgsSocket] takes one value or a list.
+/// Whether an argument of an [ArgsSocket] takes one value or a list, and
+/// whose items a list takes.
 enum ArgShape {
   /// One value, such as `theme:`. Two different values conflict.
   scalar,
 
   /// A list that unites the items of all contributions, such as
-  /// `supportedLocales:`.
+  /// `localizationsDelegates:`.
   list,
+
+  /// A list of the items of one contributor, such as `supportedLocales:`.
+  /// The items of a second contributor conflict, also when they are the
+  /// same items.
+  listOfOneContributor,
 }
 
 /// A socket for named arguments of a call, such as the arguments of
@@ -77,6 +95,14 @@ enum ArgShape {
 /// `name: value,` lines in that order. Each contribution sets one argument
 /// to an expression; items of a list argument are united, dropping repeated
 /// expressions, and two different values of a scalar argument conflict.
+///
+/// A list of one contributor ([ArgShape.listOfOneContributor]) takes the
+/// items of one module, those of its variants included, or of the template
+/// of one role. A conflict names the items of one contributor and then
+/// those of the other, to which the pipeline reports it: the one that
+/// contributed second, but between a module and the template of a role the
+/// module, whichever contributed first, since the template gives its items
+/// for every module of the app.
 final class ArgsSocket extends SocketKind {
   /// Creates the kind for the arguments [args].
   const ArgsSocket(this.args);
@@ -107,6 +133,11 @@ final class ArgsSocket extends SocketKind {
       final name = contribution.argName!;
       final code = contribution.fragment!.code;
       final existing = byName.putIfAbsent(name, () => []);
+      if (args[name] == ArgShape.listOfOneContributor &&
+          existing.isNotEmpty &&
+          _contributorOf(existing.first) != _contributorOf(contribution)) {
+        throw _twoContributors(name, existing, contribution);
+      }
       if (existing.any((other) => other.fragment!.code == code)) continue;
       if (args[name] == ArgShape.scalar && existing.isNotEmpty) {
         throw MergeConflict(
@@ -134,6 +165,40 @@ final class ArgsSocket extends SocketKind {
       ].join('\n'),
     };
   }
+}
+
+/// Who [contribution] is from, for an argument that takes the items of one
+/// contributor: a module, whose variants contribute for it, the template of
+/// a role or the pipeline, or `null` for a contribution without an origin.
+Object? _contributorOf(SocketContribution contribution) =>
+    switch (contribution.origin) {
+      ModuleOrigin(:final module) => module,
+      final origin => origin,
+    };
+
+/// The conflict of [second] with [first], the items that another
+/// contributor gave the argument [name], which takes the items of one.
+///
+/// A module comes second in it, after the template of a role, whichever
+/// contributed first.
+MergeConflict _twoContributors(
+  String name,
+  List<SocketContribution> first,
+  SocketContribution second,
+) {
+  String codes(List<SocketContribution> items) =>
+      items.map((item) => item.fragment!.code).join(', ');
+  final swap =
+      second.origin is RoleTemplateOrigin && first.first.origin is ModuleOrigin;
+  final (existing, incoming) = swap ? ([second], first) : (first, [second]);
+  return MergeConflict(
+    name,
+    codes(existing),
+    codes(incoming),
+    'the argument takes the items of one contributor',
+    existingOrigin: existing.first.origin,
+    incomingOrigin: incoming.first.origin,
+  );
 }
 
 /// A socket that wraps a piece of code, such as the root widget of the app.
@@ -193,14 +258,25 @@ final class KeyedSocket<V extends Object> extends SocketKind {
   /// Creates the kind with a merge [policy] and a [renderer] of the merged
   /// entries, which gets them in the order their keys were first
   /// contributed, and the [reservedKeys] it does not take.
+  ///
+  /// A socket whose [renderer] puts the entries in an order of its own
+  /// passes `followsOrderEdges: false`: the pipeline then takes its
+  /// contributions by the ids of their contributors, each contributor's in
+  /// the order it gave them, instead of the order of the edges between the
+  /// contributors (see [SocketKind.followsOrderEdges]). The values of a key
+  /// reach the [policy] in that order.
   const KeyedSocket({
     required this.policy,
     required String Function(List<MapEntry<String, V>> entries) renderer,
     this.reservedKeys = const {},
+    this.followsOrderEdges = true,
   }) : _renderer = renderer;
 
   /// How two values for one key merge.
   final MergePolicy<V> policy;
+
+  @override
+  final bool followsOrderEdges;
 
   /// Keys that no contribution may have, each with the reason, such as the
   /// Gradle plugins that the template of every Flutter app declares.
@@ -226,7 +302,7 @@ final class KeyedSocket<V extends Object> extends SocketKind {
       return ['$socket does not take $key: $reason.'];
     }
     return [
-      if (policy.problemWith(key, value) case final problem?) problem,
+      if (policy.problemFrom(c.origin, key, value) case final problem?) problem,
     ];
   }
 
@@ -305,7 +381,8 @@ final class ValueSocket<V extends Object> extends SocketKind {
     }
     if (value is! V) return ['$socket takes values of type $V, not $value.'];
     return [
-      if (policy.problemWith(socket.tag, value) case final problem?) problem,
+      if (policy.problemFrom(c.origin, socket.tag, value) case final problem?)
+        problem,
     ];
   }
 

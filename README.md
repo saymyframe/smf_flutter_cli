@@ -50,6 +50,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--skip-external-setup` | Never install tools, log in or configure external services. |
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
+| `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
@@ -61,10 +62,15 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
 | [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
+| [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
+| [`onboarding`](https://doc.saymyframe.com/modules/onboarding) | An onboarding that a new user goes through on the first launch, before every other screen. |
+| [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme from one seed colour, and the theme mode that the user selects, which the app remembers. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
+| [`gen_l10n`](https://doc.saymyframe.com/modules/gen-l10n) | Localization with gen-l10n of Flutter: the texts of the modules in ARB files, one for each language of the app. |
 | [`get_it`](https://doc.saymyframe.com/modules/get-it) | Dependency injection: the services of the modules, registered in get_it. |
 | [`event_bus`](https://doc.saymyframe.com/modules/event-bus) | Events between parts of the app that do not know each other, with event_bus. |
+| [`shared_preferences`](https://doc.saymyframe.com/modules/shared-preferences) | The settings of the app that are no secret, such as the theme mode, remembered between its launches with shared_preferences. |
 | [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |

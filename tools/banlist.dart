@@ -66,7 +66,11 @@ final class _Exception {
 }
 
 final List<_Ban> _bans = [
-  // The contracts of the old module model.
+  // The contracts of the old module model. RouteGuard is not among them:
+  // the model has guards again, as data of the router role
+  // (RoutesData.guards) that every router asks, while a guard of the old
+  // model held code for each router, as GoRouteRedirect and AutoRouteGuard,
+  // which stay banned.
   for (final name in const [
     'ModuleProfile',
     'StateManager',
@@ -79,7 +83,6 @@ final List<_Ban> _bans = [
     'RouteMeta',
     'RouteScreenArgs',
     'ParameterSource',
-    'RouteGuard',
     'GoRouteRedirect',
     'AutoRouteGuard',
     'RoutingMode',
@@ -98,8 +101,8 @@ final List<_Ban> _bans = [
     // is the CompositionFile of the DI role, a rule in ModuleKind.roleRules.
     'compositionFile',
     'compositionFileOf',
-    // Not in the model yet: DI scopes and route conditions come with a
-    // module that needs them.
+    // Not in the model yet: DI scopes, and conditions that single routes
+    // ask for, come with a module that needs them.
     'DiScopes',
     'ConditionData',
     'DiRuntimeNeed',
@@ -174,9 +177,10 @@ final List<_Ban> _bans = [
   // what it gives the role through the data and the sockets of the role,
   // not in the files that the provider of the role renders: the file of
   // createAppRouter() of the router, of registerDependencies() of the DI
-  // container, or of AppShell of the layout; and the files of the app
-  // entry into which its provider renders the sockets of start-up, those
-  // of bootstrap() and main(), and lib/app.dart, which no role guarantees.
+  // container, of AppShell of the layout, or of the texts of the
+  // localization; and the files of the app entry into which its provider
+  // renders the sockets of start-up, those of bootstrap() and main(), and
+  // lib/app.dart, which no role guarantees.
   // A test may name such a file by its constant or its path only as the
   // key of a map, for the files of a provider of its own, and the package
   // of a provider tests its own files. The contribution engine is no
@@ -188,6 +192,7 @@ final List<_Ban> _bans = [
     ),
     ('DiRole.dependenciesFile', r'core/di/dependencies\.dart'),
     ('LayoutRole.appShellFile', r'core/layout/app_shell\.dart'),
+    ('LocalizationRole.textsFile', r'core/l10n/l10n\.dart'),
     ('AppEntryRole.bootstrapFile', r'(?:lib|package:\w+)/bootstrap\.dart'),
     ('AppEntryRole.mainFile', r'(?:lib|package:\w+)/main\.dart'),
     ('lib/app.dart', r'(?:lib|package:\w+)/app\.dart'),
@@ -229,6 +234,12 @@ const _lasting = [
     ['packages/smf_modules/smf_bottom_tabs/test/'],
     {'LayoutRole.appShellFile'},
     'smf_bottom_tabs provides the layout role, and its tests check its file.',
+  ),
+  _Exception(
+    ['packages/smf_modules/smf_gen_l10n/test/'],
+    {'LocalizationRole.textsFile'},
+    'smf_gen_l10n provides the localization role, and its tests check its '
+    'file.',
   ),
   _Exception(
     ['packages/smf_modules/smf_flutter_core/test/'],

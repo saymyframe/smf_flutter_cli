@@ -20,6 +20,36 @@ bool usesImported(DartFileIndex file, String name, ImportRef import) =>
         ? usesSymbols(file, {name}, 'lib/${import.uri}')
         : _uses(file, {name}, (uri) => uri == import.uri);
 
+/// Whether [file] invokes [name] of the library at [libraryPath], a path
+/// relative to the project root, through a prefix of its own: one that an
+/// import of the library has and no import of another library, as in
+/// `entry0.ThemeModeSetting()` after
+/// `import '…/theme_mode_setting.dart' as entry0;`.
+///
+/// So the name is of that library whatever other libraries declare. An
+/// import without a prefix, or with a prefix that the import of another
+/// library shares, does not count: a name that two such libraries declare
+/// is ambiguous there. Nor does a read or a tear-off of the name, which
+/// invokes nothing.
+bool invokesThroughOwnPrefix(
+  DartFileIndex file,
+  String name,
+  String libraryPath,
+) {
+  final own = <String>{};
+  final shared = <String>{};
+  for (final IndexedImport(:uri, :prefix) in file.imports) {
+    if (prefix == null) continue;
+    (_pathOf(uri, file.path) == libraryPath ? own : shared).add(prefix);
+  }
+  return file.invocations.any(
+    (call) =>
+        call.name == name &&
+        own.contains(call.target) &&
+        !shared.contains(call.target),
+  );
+}
+
 /// Whether [file] uses one of [names] from the libraries whose URIs
 /// [isLibrary] accepts; see [usesSymbols].
 bool _uses(

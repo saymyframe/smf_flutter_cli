@@ -174,10 +174,11 @@ ${[
   group('what an app builds its native side with', () {
     test(
         'has no plugins for an app without .flutter-plugins-dependencies, '
-        'which Flutter does not write for an app without plugins of its own, '
-        'once pub resolved the app', () {
-      // As the app of the start check without Firebase: its only plugin,
-      // integration_test, is a dev dependency from the Flutter SDK.
+        'which Flutter does not write for an app without any plugin, once '
+        'pub resolved the app', () {
+      // As an app of modules that bring no plugin. The tool reads the
+      // plugins from that file alone, so the packages of pubspec.lock,
+      // here one of the Flutter SDK, make none.
       packages(
         'app',
         plugins: {},
@@ -508,9 +509,10 @@ sdks:
     });
 
     test(
-        'writes no file for apps that download nothing for the platform, '
-        'such as the app of the start check for iOS, and removes the one '
-        'there, so that a key that hashes it is empty', () async {
+        'writes no file for apps with nothing to list for the platform, such '
+        'as an app whose only plugin with iOS code comes with the Flutter '
+        'SDK, and removes the one there, so that a key that hashes it is '
+        'empty', () async {
       // Its only plugin, integration_test, comes with the Flutter SDK.
       packages(
         'apps/start_app',
@@ -548,9 +550,8 @@ sdks:
 
     test(
         'writes the Gradle files of an app without '
-        '.flutter-plugins-dependencies, such as the app of the start check '
-        'for Android, which Flutter writes for no plugins of the SDK',
-        () async {
+        '.flutter-plugins-dependencies, such as an app of modules that '
+        'bring no plugin', () async {
       packages('apps/start_app', plugins: {});
       File('${temp.path}/apps/start_app/.flutter-plugins-dependencies')
           .deleteSync();

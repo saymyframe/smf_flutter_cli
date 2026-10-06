@@ -30,6 +30,18 @@ dependencies:
   smf_flutter_core: ^0.3.0
   smf_get_it: ^0.3.0
   smf_go_router: ^0.3.0
+  # The provider of the theme role in the registry of several providers, for
+  # the tests of the role that the CLI keeps.
+  smf_material_theme: ^0.3.0
+  # The onboarding of the CLI, for its app test in the app of several
+  # providers, whose other tests its mocks open its guard for.
+  smf_onboarding: ^0.3.0
+  # The settings screen of the CLI, for its app tests in the app of several
+  # providers.
+  smf_settings: ^0.3.0
+  # The provider of the preferences role in the registry of several
+  # providers, for the test of the role that the CLI keeps.
+  smf_shared_preferences: ^0.3.0
 
 dev_dependencies:
   analyzer: ^14.4.0

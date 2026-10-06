@@ -1,4 +1,5 @@
 import 'package:smf_bloc/smf_bloc.dart';
+import 'package:smf_bloc/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -96,16 +97,49 @@ void main() {
       without = (await _resultOf(const [FlutterCoreModule.id])).app!;
     });
 
-    test('gets flutter_bloc from it, and nothing else', () {
+    test(
+        'gets flutter_bloc and its note for coding agents from it, and '
+        'nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(BlocModule.id))
           collected.contribution,
       ];
 
-      final dependency = contributions.single as PubspecDependency;
+      expect(contributions, hasLength(2));
+      final dependency = contributions.first as PubspecDependency;
       expect(dependency.package, 'flutter_bloc');
       expect(dependency.constraint, '^9.1.1');
       expect(dependency.dev, isFalse);
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, stateManagementRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
+    });
+
+    test(
+        'has the section of the state management in its guide for coding '
+        'agents, which is the note of the module', () {
+      const bloc = ModuleOrigin(BlocModule.id);
+      final notes = withBloc.entriesOf(AppEntryRole.agentSections);
+
+      // The role has no template, so the module says all of the section.
+      expect(stateManagementRole.template, isNull);
+      expect(
+        notes.where((note) => note.$1 != bloc),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        notes.where((note) => note.$1 == bloc),
+        [(bloc, 'State management', AgentNote(agentNote))],
+      );
+      expect(
+        withBloc.files[AppEntryRole.agentsFile]!.text,
+        endsWith('\n## State management\n\n$agentNote'),
+      );
+      // The package of the module, whose classes the note names.
+      expect(agentNote, startsWith('With `flutter_bloc`:\n'));
+      expect(_pubspecOf(withBloc)['dependencies'], contains('flutter_bloc'));
     });
 
     test('depends on flutter_bloc 9', () {
@@ -115,10 +149,12 @@ void main() {
       });
     });
 
-    test('is the app without BLoC but for that dependency', () {
+    test(
+        'is the app without BLoC but for that dependency and the section of '
+        'the guide for coding agents', () {
       expect(withBloc.files.keys, orderedEquals(without.files.keys));
       for (final MapEntry(key: path, value: file) in without.files.entries) {
-        if (path == 'pubspec.yaml') continue;
+        if (path == 'pubspec.yaml' || path == AppEntryRole.agentsFile) continue;
         expect(withBloc.files[path]!.bytes, file.bytes, reason: path);
         expect(withBloc.files[path]!.owner, file.owner, reason: path);
       }

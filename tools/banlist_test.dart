@@ -44,6 +44,29 @@ void main() {
   });
 
   test(
+      'lets RouteGuard through, the guard of the routes of the router role, '
+      'but not the names of the old model next to it, nor what the model does '
+      'not have yet', () {
+    expect(
+      _names({
+        'packages/a/lib/a.dart': "const guard = RouteGuard(name: 'firstRun');\n"
+            'final class Guard extends AutoRouteGuard {}\n'
+            'final redirect = GoRouteRedirect();\n'
+            'final condition = ConditionData();\n'
+            'final scopes = DiScopes();\n'
+            'final need = DiRuntimeNeed();\n',
+      }),
+      [
+        'packages/a/lib/a.dart:2: AutoRouteGuard',
+        'packages/a/lib/a.dart:3: GoRouteRedirect',
+        'packages/a/lib/a.dart:4: ConditionData',
+        'packages/a/lib/a.dart:5: DiScopes',
+        'packages/a/lib/a.dart:6: DiRuntimeNeed',
+      ],
+    );
+  });
+
+  test(
       'finds a comment that leaves a whole file out of the coverage, but not '
       'a text that names it', () {
     expect(
@@ -159,6 +182,7 @@ void main() {
     const home = 'packages/smf_modules/smf_home_flutter/test/home_test.dart';
     const router = 'packages/smf_modules/smf_go_router/test/support/app.dart';
     const tabs = 'packages/smf_modules/smf_bottom_tabs/test/tabs_test.dart';
+    const texts = 'packages/smf_modules/smf_gen_l10n/test/texts_test.dart';
     expect(
       _names({
         home: 'const factory = RouterRole.appRouterFactoryFile;\n'
@@ -169,13 +193,21 @@ void main() {
             '  LayoutRole.appShellFile : [\n'
             "  'lib/core/router/app_router_factory.dart': '',\n"
             'final other = RouterRole.appRouterFactoryFileOf(app);\n'
-            'final named = MyDiRole.dependenciesFile;\n',
+            'final named = MyDiRole.dependenciesFile;\n'
+            'final texts = app.files[LocalizationRole.textsFile]!;\n'
+            "import 'package:contract_app/core/l10n/l10n.dart';\n"
+            // The file of the template of the role, and the import of the
+            // extension of the provider as the role gives it.
+            "const locale = 'lib/core/l10n/app_locale.dart';\n"
+            'final import = LocalizationRole.appTexts.importRef;\n',
         router: 'const factory = RouterRole.appRouterFactoryFile;\n'
             'final shell = app.files[LayoutRole.appShellFile]!;\n',
         'packages/smf_modules/smf_get_it/test/get_it_test.dart':
             'const file = DiRole.dependenciesFile;\n',
         tabs: 'const file = LayoutRole.appShellFile;\n'
             'const router = RouterRole.appRouterFactoryFile;\n',
+        texts: 'const file = LocalizationRole.textsFile;\n'
+            'const shell = LayoutRole.appShellFile;\n',
         // Code of modules, and the tests of other packages.
         'packages/smf_modules/smf_home_flutter/lib/home.dart':
             'const factory = RouterRole.appRouterFactoryFile;\n',
@@ -189,8 +221,11 @@ void main() {
         '$home:2: DiRole.dependenciesFile',
         '$home:3: LayoutRole.appShellFile',
         '$home:4: DiRole.dependenciesFile',
+        '$home:10: LocalizationRole.textsFile',
+        '$home:11: LocalizationRole.textsFile',
         '$router:2: LayoutRole.appShellFile',
         '$tabs:2: RouterRole.appRouterFactoryFile',
+        '$texts:2: LayoutRole.appShellFile',
       ],
     );
   });

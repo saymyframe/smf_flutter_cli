@@ -1,3 +1,101 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Analytics
+
+- Record what users do through `AnalyticsService` of `lib/core/analytics/analytics_service.dart`, never through the SDK of a provider. `createAnalyticsService()` returns the one service of the app. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead.
+- The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
+- A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
+
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+## Dependency injection
+
+- A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `registerDependencies()` in `lib/core/di/dependencies.dart` registers every service, and `bootstrap()` awaits it: a new service gets its line there.
+- Only the composition file of a feature, `lib/features/<feature>/<feature>_composition.dart`, calls `resolve<T>()` of `lib/core/di/service_locator.dart`, to create what the screens of the feature need, such as the object that holds their state.
+- A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
+
+With `get_it`:
+
+- `registerDependencies()` registers the services in `getIt`, a local name for `GetIt.instance`, with `registerLazySingleton`, `registerSingleton` or `registerFactory`. The function that creates a service gets each service it takes as `getIt<Type>()`, and one that disposes of it goes into `dispose:`.
+- A singleton created asynchronously takes `registerSingletonAsync`, and one that waits for such a service `registerSingletonWithDependencies`. `await getIt.allReady()` then ends the function.
+- No other file in `lib/` imports `get_it`. A test may import it to register its fakes in `GetIt.instance`.
+
+## Events
+
+- An event is a class that extends `AppEvent` of `lib/core/events/communication_service.dart`: `fire()` of `CommunicationService` sends it, and `on<T>()` listens to its type.
+- The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
+- Use events between parts of the app that do not import each other.
+
+## Fixture
+
+The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
+
+The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/readme.txt`, and the Dart files of the fixtures in the directories `lib/core/fixture_*/`.
+
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+
+- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
+- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+
+## Theme
+
+- `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds, for the `theme` and the `darkTheme` of the root `MaterialApp`. Leave those two arguments and its `themeMode` as they are.
+- The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
+- Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
 === README.md (flutter_core) ===
 # fixture_app
 
@@ -6,6 +104,15 @@ A new Flutter project.
 ## Fixture
 
 The app has something in every socket of its entry, with `code` and a [link](https://example.com).
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -229,14 +336,18 @@ IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 	<array>
 		<string>fixture</string>
 	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
 </dict>
 </plist>
-=== l10n.yaml (fake_sockets) ===
-arb-dir: lib/l10n
-template-arb-file: app_en.arb
-output-localization-file: app_localizations.dart
 === lib/app.dart (flutter_core) ===
-import 'package:fixture_app/l10n/app_localizations.dart';
+import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:fixture_app/core/theme/app_theme.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -250,13 +361,17 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Fixture App',
-    theme: ThemeData(fontFamily: "FixtureSans"),
-    darkTheme: ThemeData.dark(),
+    theme: createLightTheme(context),
+    darkTheme: createDarkTheme(context),
+    themeMode: AppThemeModeScope.of(context),
+    locale: AppLocaleScope.of(context),
     localizationsDelegates: [
-      AppLocalizations.delegate,
+      FixtureTexts.delegate,
       GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
     ],
-    supportedLocales: [Locale('en')],
+    supportedLocales: [...appLocales],
     routerConfig: appRouter.config,
     builder: (context, child) => MediaQuery.withNoTextScaling(child: child!),
   );
@@ -268,6 +383,7 @@ import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
 import 'package:fixture_app/core/di/dependencies.dart';
 import 'package:fixture_app/core/events/communication_service.dart';
 import 'package:fixture_app/core/fixture_parent/fixture_parent.dart';
+import 'package:fixture_app/core/preferences/app_preferences.dart';
 import 'package:flutter/foundation.dart';
 
 @pragma('vm:entry-point')
@@ -283,6 +399,7 @@ Future<void> bootstrap() async {
   await initCrashReporting();
   installCrashReporting();
   await initEvents();
+  await initPreferences();
   debugPrint('di');
   await registerDependencies();
   debugPrint(createBadge().labels.join());
@@ -490,6 +607,8 @@ void tick() {
   debugPrint('tick');
 }
 === lib/core/clock/clock_factory.dart (fake_clock_badge) ===
+import 'package:fixture_app/core/clock/zones/zone_1.dart';
+
 import 'clock.dart';
 
 /// Creates the clock of the app.
@@ -498,10 +617,16 @@ Clock createClock() => const _FixedClock();
 final class _FixedClock implements Clock {
   const _FixedClock();
 
+  // Each zone is a constant of a file of its own.
   @override
-  List<String> get zones => clockZones;
+  List<String> get zones => const [clockZone1];
 }
+=== lib/core/clock/zones/zone_1.dart (fake_clock_badge) ===
+/// A time zone that a module of the app asked for (fixture).
+const clockZone1 = 'Europe/Kyiv\'s zone';
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+import 'package:fixture_app/core/clock/clock_factory.dart';
+
 import '../badge/badge_factory.dart';
 
 /// The text that the clock user shows: the labels of the badge when the
@@ -509,6 +634,10 @@ import '../badge/badge_factory.dart';
 String clockUserText() {
   return createBadge().labels.join(', ');
 }
+
+/// The time zones that the clock user shows: those of the clock when the
+/// app has one.
+List<String> clockUserZones() => createClock().zones;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -674,10 +803,11 @@ final class _CrashReporters implements CrashReporter {
   }
 }
 === lib/core/di/dependencies.dart (get_it) ===
-import 'package:fixture_app/core/analytics/analytics_service.dart' as di3;
+import 'package:fixture_app/core/analytics/analytics_service.dart' as di4;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di1;
 import 'package:fixture_app/core/events/communication_service.dart' as di2;
 import 'package:fixture_app/core/fixture_services/fixture_services.dart' as di0;
+import 'package:fixture_app/core/preferences/app_preferences.dart' as di3;
 import 'package:get_it/get_it.dart';
 
 import 'service_locator.dart';
@@ -745,8 +875,11 @@ Future<void> registerDependencies() async {
   getIt.registerLazySingleton<di2.CommunicationService>(
     () => di2.createCommunicationService(),
   );
-  getIt.registerLazySingleton<di3.AnalyticsService>(
-    () => di3.createAnalyticsService(),
+  getIt.registerLazySingleton<di3.AppPreferences>(
+    () => di3.createAppPreferences(),
+  );
+  getIt.registerLazySingleton<di4.AnalyticsService>(
+    () => di4.createAnalyticsService(),
   );
   await getIt.allReady();
 }
@@ -1021,6 +1154,88 @@ void _openAlerts() {
 }
 
 void _openNews() {}
+=== lib/core/fixture_preferences/fixture_preferences.dart (fake_preferences) ===
+import '../preferences/app_preferences.dart';
+
+/// What the preferences of the fixture have saved: it stands for the disk
+/// of a device, which outlives the preferences that a start of the app
+/// opens. A list on it is a copy of the list that was saved.
+final Map<String, Object> fixturePreferencesDisk = {};
+
+/// Creates the preferences of the fixture, which read
+/// [fixturePreferencesDisk] into memory, as a start of the app does.
+AppPreferences createFixturePreferences() => FixturePreferences();
+
+/// The preferences of the fixture: the settings of the app that are no
+/// secret, in memory, over [fixturePreferencesDisk]. Nothing here is
+/// encrypted: never store a token, a password, an API key or an encryption
+/// key in them.
+final class FixturePreferences implements AppPreferences {
+  /// Reads [fixturePreferencesDisk] into memory.
+  FixturePreferences() {
+    for (final MapEntry(:key, :value) in fixturePreferencesDisk.entries) {
+      _values[key] = _copyOf(value);
+    }
+  }
+
+  final Map<String, Object> _values = {};
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_values[key]) {
+    final List<String> list => List.of(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) => _save(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) => _save(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _save(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) => _save(key, value);
+
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _save(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) async {
+    _values.remove(key);
+    fixturePreferencesDisk.remove(key);
+  }
+
+  /// The value of [key] in memory if it is a [T], or `null`.
+  T? _read<T>(String key) => switch (_values[key]) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// Keeps [value] under [key] in memory, and saves it to the disk.
+  Future<void> _save(String key, Object value) async {
+    _values[key] = value;
+    fixturePreferencesDisk[key] = _copyOf(value);
+  }
+
+  /// [value], or a copy of it if it is a list.
+  static Object _copyOf(Object value) =>
+      value is List<String> ? List.of(value) : value;
+}
 === lib/core/fixture_screen_log/fixture_screen_log.dart (fake_screen_log) ===
 /// The screens the user saw, as the screen listener of the fixture screen
 /// log heard of them: the full name of the route of each, or `null`, and
@@ -1190,7 +1405,367 @@ void closeFixtureCounter(FixtureCounter counter) {
   counter.count = 0;
   fixtureServiceEvents.add('close FixtureCounter');
 }
+=== lib/core/fixture_setting/fixture_setting.dart (fake_preferences_user) ===
+import '../preferences/app_preferences.dart';
+
+/// The setting of the fixture: a number that the app remembers between its
+/// launches when it has preferences.
+final fixtureSetting = FixtureSetting();
+
+/// A number, 0 until something sets it.
+final class FixtureSetting {
+  int _value = 0;
+
+  /// The preferences that remember the number, once the app opened them.
+  AppPreferences? _preferences;
+
+  /// The number.
+  int get value => _value;
+
+  /// Sets the number to [value]. In an app with preferences, it saves the
+  /// number too, once the app opened them: before that, it changes only
+  /// memory.
+  Future<void> set(int value) async {
+    _value = value;
+    await _preferences?.setInt(fixtureSettingKey, value);
+  }
+}
+
+/// The key of the setting of the fixture in the preferences.
+const fixtureSettingKey = 'fake_preferences_user.setting';
+
+/// What the restorers of the fixture read each time the app gave them the
+/// preferences, in the order they ran: the name of each and the number
+/// that was saved, or `null`.
+final List<(String, int?)> fixtureRestored = [];
+
+/// Whether the restorers of the fixture throw once they did their work, as
+/// a test that a restorer that throws keeps no other from restoring sets
+/// it: the first an error, and the second an exception, as a restorer does
+/// that cannot read what is saved.
+bool fixtureRestorersThrow = false;
+
+/// The first restorer of the fixture, which only notes in [fixtureRestored]
+/// what is saved, and then throws an error if [fixtureRestorersThrow].
+void noteFixtureSetting(AppPreferences preferences) {
+  fixtureRestored.add(('note', preferences.getInt(fixtureSettingKey)));
+  if (fixtureRestorersThrow) {
+    throw StateError('The first restorer of the fixture throws.');
+  }
+}
+
+/// The restorer of the setting of the fixture: takes the number that is
+/// saved, or keeps the current one when nothing is saved, and keeps
+/// [preferences] for the writes of the setting. It notes in
+/// [fixtureRestored] what is saved, and then throws an exception if
+/// [fixtureRestorersThrow].
+void restoreFixtureSetting(AppPreferences preferences) {
+  final saved = preferences.getInt(fixtureSettingKey);
+  fixtureSetting
+    .._value = saved ?? fixtureSetting._value
+    .._preferences = preferences;
+  fixtureRestored.add(('setting', saved));
+  if (fixtureRestorersThrow) {
+    throw const FormatException(
+      'The restorer of the setting of the fixture throws.',
+    );
+  }
+}
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (fake_l10n) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'app_locale.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  FixtureTexts get l10n => Localizations.of<FixtureTexts>(this, FixtureTexts)!;
+}
+
+/// The texts of the app in one language, each written out in this file: no
+/// tool generates them.
+class FixtureTexts {
+  /// Creates the texts in the language of the code [language].
+  const FixtureTexts(this.language);
+
+  /// The delegate that loads the texts for the root of the app, in each
+  /// language of the app.
+  static const LocalizationsDelegate<FixtureTexts> delegate =
+      _FixtureTextsDelegate();
+
+  /// The code of the language of the texts, such as `uk`.
+  final String language;
+
+  /// The text title of the module fake_second.
+  String get fakeSecondTitle => switch (language) {
+    'uk' => 'Другий екран',
+    _ => 'Second screen',
+  };
+
+  /// The text outside of the module fake_second.
+  String get fakeSecondOutside => 'Outside the app\'s main navigation';
+
+  /// The text label of the module fake_second.
+  String get fakeSecondLabel => switch (language) {
+    'uk' => 'Другий',
+    _ => 'Second',
+  };
+}
+
+class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
+  const _FixtureTextsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => appLocales.any(
+    (supported) => supported.languageCode == locale.languageCode,
+  );
+
+  @override
+  Future<FixtureTexts> load(Locale locale) =>
+      SynchronousFuture(FixtureTexts(locale.languageCode));
+
+  @override
+  bool shouldReload(_FixtureTextsDelegate old) => false;
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:fixture_app/core/fixture_preferences/fixture_preferences.dart'
+    as impl0;
+import 'package:fixture_app/core/fixture_setting/fixture_setting.dart';
+import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart';
+import 'package:flutter/foundation.dart';
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = impl0.createFixturePreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  noteFixtureSetting,
+  restoreFixtureSetting,
+  restoreAppLocale,
+  restoreAppThemeMode,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
 === lib/core/router/app_router.dart (role:router) ===
+import 'package:fixture_app/features/fake_gate/fixture_gates.dart' as guard0;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app_router_factory.dart';
@@ -1238,6 +1813,180 @@ abstract interface class AppNavigator {
   /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
 }
+
+/// A guard of the routes of the app: while it does not allow, the router
+/// shows its target in place of every location outside its flow.
+///
+/// `go()`, `push()` and `replace()` of such a location show the target
+/// too, and `push()` completes with `null`. Once the guard allows, the
+/// router shows the location that the user last asked for, or the one that
+/// the guard took the user from, or else the screen that the app starts
+/// on.
+final class RouteGuard {
+  /// Creates the guard [name].
+  const RouteGuard(
+    this.name, {
+    required this.allows,
+    required this.redirectTo,
+    required this.flow,
+  });
+
+  /// The full name of the guard: its module and its name there.
+  final String name;
+
+  /// Whether the guard lets the user see the locations outside its [flow];
+  /// it notifies its listeners when that changes.
+  final ValueListenable<bool> allows;
+
+  /// The target of the guard: the location that the router shows while the
+  /// guard does not allow.
+  final AppLocation redirectTo;
+
+  /// The full names of the routes that the user may see while the guard
+  /// does not allow: the route of [redirectTo] and the routes below it.
+  final Set<String> flow;
+}
+
+/// The guards of the routes of the app, in the order the app asks them.
+final List<RouteGuard> routeGuards = [
+  RouteGuard(
+    'fake_gate.first',
+    allows: guard0.fixtureGateOpen(),
+    redirectTo: const FakeGateGateLocation(),
+    flow: const {'fake_gate.gate', 'fake_gate.step'},
+  ),
+  RouteGuard(
+    'fake_gate.second',
+    allows: guard0.fixtureSecondGateOpen(),
+    redirectTo: const FakeGateSecondLocation(),
+    flow: const {'fake_gate.second'},
+  ),
+];
+
+/// The location that the router shows in place of the route [routeName],
+/// or `null` if the guards let the user see it.
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, such as the error screen of the router. The first
+/// guard that does not allow decides, and no guard after it is asked: it
+/// shows its target in place of every route outside its flow.
+AppLocation? redirectOf(String? routeName) {
+  for (final guard in routeGuards) {
+    if (guard.allows.value) continue;
+    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+  }
+  return null;
+}
+
+/// Notifies its listeners when a guard starts or stops allowing, so that
+/// the router tells its [GuardedNavigation] of its pages.
+final Listenable guardChanges = Listenable.merge([
+  for (final guard in routeGuards) guard.allows,
+]);
+
+/// The guards of the routes as the router of the app asks them, with what
+/// they make it remember: the location that the user comes back to once
+/// the guards allow it.
+///
+/// [L] is how the router knows a location that it can show as `go()`
+/// does, such as its URI. The router asks [asked] before it shows a
+/// location, and [changed] when [guardChanges] notifies. It shows the
+/// location that either answers in place of its whole stack, as `go()` to
+/// it does. An answer is a record with the location, so that `null` is no
+/// answer also for a router whose [L] is nullable.
+final class GuardedNavigation<L> {
+  /// Creates the guards for a router whose location `/`, the screen that
+  /// the app starts on, is [start], and which knows a location of the
+  /// navigation, such as the target of a guard, as [locationOf] says.
+  GuardedNavigation({required this.start, required this.locationOf});
+
+  /// The location `/` of the router: the screen that the app starts on.
+  final L start;
+
+  /// The location of the router for a location of the navigation.
+  final L Function(AppLocation location) locationOf;
+
+  /// The location that the user comes back to once the guards allow it,
+  /// with the full name of its route, or `null` if there is none.
+  ({String? route, L location})? _remembered;
+
+  /// Whether each guard allowed when the router last told of its pages.
+  List<bool> _allowed = _allowedNow();
+
+  /// What the router shows in place of [location], whose route has the
+  /// full name [route], or `null` to show it; see [redirectOf].
+  ///
+  /// The router asks before it shows a location: the one the app starts
+  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
+  /// and each one from the platform. A location that a guard keeps the
+  /// user from is remembered in place of the one before it, so the user
+  /// comes back to the latest one that they or the platform asked for. A
+  /// location in the flow of a guard is never remembered: once that guard
+  /// allows, its flow is over.
+  ({L location})? asked(String? route, L location) {
+    final target = redirectOf(route);
+    if (target == null) return null;
+    if (!_inAFlow(route)) _remembered = (route: route, location: location);
+    return (location: locationOf(target));
+  }
+
+  /// What the router shows in place of its stack now that a guard started
+  /// or stopped allowing, or `null` to leave the stack as it is.
+  ///
+  /// [pages] are the pages that the user can get back to, the one on top
+  /// first: those of the root navigator and of the selected branch of the
+  /// main navigation, each with the full name of its route, its location,
+  /// and whether `push()` showed it; none for a router that has no page
+  /// yet. The answer is the first of these:
+  /// - the target of the guard that keeps the user from one of the pages.
+  ///   The location below the pages that pushes showed is then remembered,
+  ///   or [start] if pushes showed them all, unless one is remembered
+  ///   already or it is in the flow of a guard;
+  /// - the remembered location, once the guards allow it, which is then
+  ///   forgotten;
+  /// - [start], when a guard started allowing while a page of its flow is
+  ///   on top, every guard allows and nothing is remembered: its flow is
+  ///   over.
+  ({L location})? changed(
+    Iterable<({String? route, L location, bool pushed})> pages,
+  ) {
+    final before = _allowed;
+    _allowed = _allowedNow();
+    for (final page in pages) {
+      final target = redirectOf(page.route);
+      if (target == null) continue;
+      final below = pages.where((other) => !other.pushed).firstOrNull;
+      if (_remembered == null && !_inAFlow(below?.route)) {
+        _remembered = (
+          route: below?.route,
+          location: below == null ? start : below.location,
+        );
+      }
+      return (location: locationOf(target));
+    }
+    if (_remembered case final remembered?) {
+      if (redirectOf(remembered.route) != null) return null;
+      _remembered = null;
+      return (location: remembered.location);
+    }
+    final top = pages.firstOrNull?.route;
+    for (final (index, guard) in routeGuards.indexed) {
+      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
+        return _allowed.contains(false) ? null : (location: start);
+      }
+    }
+    return null;
+  }
+
+  /// Whether each guard allows now, in the order of [routeGuards].
+  static List<bool> _allowedNow() => [
+    for (final guard in routeGuards) guard.allows.value,
+  ];
+
+  /// Whether [route] is in the flow of a guard, of whichever guard.
+  static bool _inAFlow(String? route) =>
+      routeGuards.any((guard) => guard.flow.contains(route));
+}
 === lib/core/router/app_router_factory.dart (fake_router) ===
 import 'dart:async';
 
@@ -1247,6 +1996,8 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
     as screen1;
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
+import 'package:fixture_app/features/fake_gate/fixture_gate_screens.dart'
+    as screen4;
 import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen3;
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
@@ -1297,6 +2048,12 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     for (final location in <AppLocation>[const FakeFeatureHomeLocation()]) {
       _show(location);
     }
+    // The guards are asked about the screen that the app starts on before
+    // the router builds it, and told of its pages when one of them changes.
+    final start = _guards.start;
+    final guarded = _guards.asked(start?.routeName, start);
+    if (guarded != null) _go(guarded.location);
+    guardChanges.addListener(_guardsChanged);
   }
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey();
@@ -1330,6 +2087,62 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// The page on top, as the listeners of the screen last heard of it, or
   /// `null` before the first screen; see [_top].
   (int, AppLocation?)? _shown;
+
+  /// The guards of the app as the router asks them, which keep the location
+  /// that the user comes back to once they allow it. The router knows a
+  /// location as an [AppLocation], and the fallback screen, which has none,
+  /// as `null`: the screen that the app starts on is its start route, or
+  /// the fallback screen.
+  final GuardedNavigation<AppLocation?> _guards = GuardedNavigation(
+    start: <AppLocation>[const FakeFeatureHomeLocation()].firstOrNull,
+    locationOf: (location) => location,
+  );
+
+  /// The pages that the user can get back to, the one on top first: those
+  /// of the root navigator and, in place of the main navigation, those of
+  /// its selected branch, or the fallback screen alone. A page is one that
+  /// a push showed while its push waits for the value that it closes with.
+  List<({String? route, AppLocation? location, bool pushed})> get _pages => [
+    if (_stack.isEmpty) (route: null, location: null, pushed: false),
+    for (final entry in _stack.reversed)
+      for (final location
+          in entry is AppLocation ? [entry] : _branches[_selected].reversed)
+        (
+          route: location.routeName,
+          location: location,
+          pushed: _results.containsKey(location),
+        ),
+  ];
+
+  /// Shows [location] in place of the whole stack and of the stacks of
+  /// every branch of the main navigation, each of which is back on its
+  /// destination; `null` is the fallback screen.
+  void _go(AppLocation? location) {
+    _stack.clear();
+    for (final (index, branch) in _branches.indexed) {
+      branch
+        ..clear()
+        ..add(_destinations[index]);
+    }
+    if (location != null) _show(location);
+    notifyListeners();
+  }
+
+  /// Shows what the guards show in place of [location], as [go] to it
+  /// does; `false` if the guards let the user see [location].
+  bool _redirected(AppLocation location) {
+    final guarded = _guards.asked(location.routeName, location);
+    if (guarded == null) return false;
+    _go(guarded.location);
+    return true;
+  }
+
+  /// Tells the guards of the pages of the router, as when one of them
+  /// starts or stops allowing, and shows the location that they answer.
+  void _guardsChanged() {
+    final shown = _guards.changed(_pages);
+    if (shown != null) _go(shown.location);
+  }
 
   /// The page on top: the branch it is in, or -1 for the root navigator,
   /// and its location, or `null` for the fallback screen.
@@ -1504,12 +2317,14 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
+    if (_redirected(location)) return;
     _show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
+    if (_redirected(location)) return Future.value();
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
@@ -1527,6 +2342,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
+    if (_redirected(location)) return;
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
     if (branch != null && _onMainNavigation) {
@@ -1583,6 +2399,9 @@ Widget _screen(AppLocation location) => switch (location) {
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
   FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
+  FakeGateGateLocation() => const screen4.FixtureGateScreen(),
+  FakeGateStepLocation() => const screen4.FixtureGateStepScreen(),
+  FakeGateSecondLocation() => const screen4.FixtureSecondGateScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -1715,6 +2534,45 @@ final class FakeSecondOutsideLocation extends AppLocation {
   String get path => '/fake_second/outside';
 }
 
+/// The location of `fake_gate.gate`: `/fake_gate`.
+final class FakeGateGateLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateGateLocation();
+
+  @override
+  String get routeName => 'fake_gate.gate';
+
+  @override
+  String get path => '/fake_gate';
+}
+
+/// The location of `fake_gate.step`: `/fake_gate/step`.
+final class FakeGateStepLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateStepLocation();
+
+  @override
+  String get routeName => 'fake_gate.step';
+
+  @override
+  String get path => '/fake_gate/step';
+
+  @override
+  AppLocation get parent => const FakeGateGateLocation();
+}
+
+/// The location of `fake_gate.second`: `/fake_gate/second`.
+final class FakeGateSecondLocation extends AppLocation {
+  /// Creates the location.
+  const FakeGateSecondLocation();
+
+  @override
+  String get routeName => 'fake_gate.second';
+
+  @override
+  String get path => '/fake_gate/second';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -1737,6 +2595,9 @@ final class AppNav {
 
   /// The routes of the module `fake_second`.
   FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
+
+  /// The routes of the module `fake_gate`.
+  FakeGateRoutes get fakeGate => FakeGateRoutes._(_context);
 }
 
 /// The routes of the module `fake_feature`.
@@ -1764,6 +2625,151 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.outside`: `/fake_second/outside`.
   NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+}
+
+/// The routes of the module `fake_gate`.
+final class FakeGateRoutes {
+  const FakeGateRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_gate.gate`: `/fake_gate`.
+  NavLink gate() => NavLink(_context, const FakeGateGateLocation());
+
+  /// The route `fake_gate.step`: `/fake_gate/step`.
+  NavLink step() => NavLink(_context, const FakeGateStepLocation());
+
+  /// The route `fake_gate.second`: `/fake_gate/second`.
+  NavLink second() => NavLink(_context, const FakeGateSecondLocation());
+}
+=== lib/core/theme/app_theme.dart (fake_theme) ===
+import 'package:flutter/material.dart';
+
+/// The colour that the themes of the fixture derive their colours from: one
+/// of its own at first, so that its themes differ from those that Flutter
+/// gives an app without a theme. A test changes it, and the root of the
+/// app, which reads it through [FixtureSeedScope], rebuilds in the new
+/// colours.
+final fixtureSeed = ValueNotifier<Color>(const Color(0xFF00695C));
+
+/// Gives the root of the app the colour of the seed of the fixture, and
+/// rebuilds the root when the colour changes. The fixture puts it around
+/// the root.
+class FixtureSeedScope extends InheritedNotifier<ValueNotifier<Color>> {
+  /// Creates the scope of [notifier] around [child].
+  const FixtureSeedScope({
+    required ValueNotifier<Color> super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The colour of the scope around [context]; the widget of [context]
+  /// rebuilds when the colour changes.
+  static Color of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<FixtureSeedScope>()!
+      .notifier!
+      .value;
+}
+
+/// The light theme of the fixture, in the colours of the seed around
+/// [context], the context of the root of the app.
+ThemeData createLightTheme(BuildContext context) =>
+    _themeOf(context, Brightness.light);
+
+/// The dark theme of the fixture, in the colours of the seed around
+/// [context], the context of the root of the app.
+ThemeData createDarkTheme(BuildContext context) =>
+    _themeOf(context, Brightness.dark);
+
+ThemeData _themeOf(BuildContext context, Brightness brightness) => ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: FixtureSeedScope.of(context),
+    brightness: brightness,
+  ),
+);
+=== lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/material.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The theme mode that the user selected for the app, which the app
+/// remembers between its launches: whether the app is light, dark, or
+/// follows the device.
+///
+/// The root of the app reads it through [AppThemeModeScope], and rebuilds
+/// in the new mode when the choice changes.
+final appThemeMode = AppThemeModeController._();
+
+/// Keeps the theme mode that the user selected for the app, tells its
+/// listeners when the mode changes, and saves each choice in the
+/// preferences of the app. The app has one, [appThemeMode].
+final class AppThemeModeController extends ChangeNotifier {
+  AppThemeModeController._();
+
+  /// The key of the mode in the preferences, which keep it by its name.
+  static const _key = 'theme.mode';
+
+  /// The preferences that remember the mode, once the app opened them.
+  AppPreferences? _preferences;
+
+  ThemeMode _mode = ThemeMode.system;
+
+  /// The mode of the app: [ThemeMode.system], which follows the device,
+  /// unless the user selected another.
+  ThemeMode get value => _mode;
+
+  /// Chooses [mode] as the mode of the app, at once, and saves the choice:
+  /// the future completes once the mode is saved. Until the app opened its
+  /// preferences for the first time, it changes only memory; from then on
+  /// it saves through the preferences that the app opened last.
+  ///
+  /// If the preferences fail to save the mode, the future completes with
+  /// their error. The app is in [mode] by then and stays in it while it
+  /// runs, but its next launch has the mode that was saved before. The
+  /// same choice again saves it.
+  Future<void> choose(ThemeMode mode) async {
+    if (mode != _mode) {
+      _mode = mode;
+      notifyListeners();
+    }
+    await _preferences?.setString(_key, mode.name);
+  }
+
+  /// Takes the mode that [preferences] have saved, and keeps the current
+  /// one when they have none, or one that the app does not know. It keeps
+  /// [preferences] for the choices to come.
+  void _restore(AppPreferences preferences) {
+    _preferences = preferences;
+    final saved = ThemeMode.values.asNameMap()[preferences.getString(_key)];
+    if (saved == null || saved == _mode) return;
+    _mode = saved;
+    notifyListeners();
+  }
+}
+
+/// Restores the theme mode that the user selected from [preferences], which
+/// the app opened, and keeps them for the choices to come: a restorer of
+/// the preferences, which the app calls before its first frame.
+void restoreAppThemeMode(AppPreferences preferences) =>
+    appThemeMode._restore(preferences);
+
+/// Gives the root of the app the theme mode that the user selected, and
+/// rebuilds the root, and any other widget below that reads the mode, when
+/// the choice changes.
+class AppThemeModeScope extends InheritedNotifier<AppThemeModeController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppThemeModeScope({
+    required AppThemeModeController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The theme mode that the user selected; the widget of [context]
+  /// rebuilds when the choice changes.
+  static ThemeMode of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppThemeModeScope>()!
+      .notifier!
+      .value;
 }
 === lib/features/fake_feature/fake_feature_composition.dart (fake_feature (fake_bloc)) ===
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1855,42 +2861,108 @@ class FixtureHomeScreen extends StatelessWidget {
     ),
   );
 }
+=== lib/features/fake_gate/fixture_gate_screens.dart (fake_gate) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// The screen that the first guard of the fixture shows in place of the
+/// other screens of the app while its gate is closed.
+@FixtureScreen('fake_gate.gate')
+class FixtureGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the gate screen, which the first guard of the fixture
+/// lets the user see too while its gate is closed.
+@FixtureScreen('fake_gate.step')
+class FixtureGateStepScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureGateStepScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// The screen that the second guard of the fixture shows while its gate is
+/// closed.
+@FixtureScreen('fake_gate.second')
+class FixtureSecondGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureSecondGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+=== lib/features/fake_gate/fixture_gates.dart (fake_gate) ===
+import 'package:flutter/foundation.dart';
+
+/// A gate of the fixture: whether it is open, which a test sets. A guard of
+/// the fixture allows while its gate is open.
+final class FixtureGate extends ValueNotifier<bool> {
+  /// Creates the gate, which is open unless the gates of the app start
+  /// closed.
+  FixtureGate() : super(true);
+
+  /// Notifies the listeners of the gate though it did not change, as a
+  /// guard may that notifies for more than what it allows.
+  void poke() => notifyListeners();
+}
+
+/// The first gate of the fixture: while it is closed, the first guard of
+/// the fixture shows the gate screen in place of the other screens of the
+/// app.
+final FixtureGate fixtureGate = FixtureGate();
+
+/// The second gate of the fixture, whose guard comes after the first and
+/// shows the second gate screen.
+final FixtureGate fixtureSecondGate = FixtureGate();
+
+/// Whether the first guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureGateOpen() => fixtureGate;
+
+/// Whether the second guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
-/// whose page a router shows over the main navigation.
+/// whose page a router shows over the main navigation, with a text of the
+/// feature that has no translation.
 @FixtureScreen('fake_second.outside')
 class FixtureOutsideScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureOutsideScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondOutside)));
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
 import 'package:flutter/material.dart';
 
-/// The screen of the second fixture feature, which can start the app too.
+/// The screen of the second fixture feature, which can start the app too,
+/// with a text of the feature in the language of the app.
 @FixtureScreen('fake_second.second')
 class FixtureSecondScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureSecondScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold();
-}
-=== lib/l10n/app_en.arb (fake_sockets) ===
-{
-  "@@locale": "en",
-  "fixtureTitle": "Fixture",
-  "@fixtureTitle": {
-    "description": "A string of the fixture that uses every socket."
-  }
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(context.l10n.fakeSecondTitle)));
 }
 === lib/main.dart (flutter_core) ===
+import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/theme/app_theme.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -1900,7 +2972,17 @@ import 'bootstrap.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
-  runApp(RepaintBoundary(child: const App()));
+  runApp(
+    RepaintBoundary(
+      child: FixtureSeedScope(
+        notifier: fixtureSeed,
+        child: AppLocaleScope(
+          notifier: appLocale,
+          child: AppThemeModeScope(notifier: appThemeMode, child: const App()),
+        ),
+      ),
+    ),
+  );
 }
 === pubspec.yaml (flutter_core) ===
 name: fixture_app
@@ -1919,7 +3001,6 @@ dependencies:
     sdk: flutter
   flutter_bloc: "^9.1.1"
   get_it: "^9.3.0"
-  intl: "any"
   json_annotation: "^4.9.0"
   meta: "any"
 
@@ -1932,7 +3013,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  generate: true
   assets:
     - "assets/fixture/"
   fonts:

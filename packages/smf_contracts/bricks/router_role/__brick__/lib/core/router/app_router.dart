@@ -45,3 +45,4 @@ abstract interface class AppNavigator {
   /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
 }
+{{{guards}}}

@@ -6,9 +6,9 @@
 /// modules take part where the fixtures need them:
 /// - flutter_core creates the app;
 /// - go_router routes the fake features too, so their routes compile with a
-///   real router, and bottom tabs provide the layout, so an app with the two
-///   fake features has a main navigation with either router, and two
-///   screens that can start it;
+///   real router, which asks their guards too, and bottom tabs provide the
+///   layout, so an app with the two fake features has a main navigation
+///   with either router, and two screens that can start it;
 /// - get_it registers the services of the fixtures too, so their
 ///   registrations compile with a real container.
 ///
@@ -31,6 +31,10 @@ import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_material_theme/smf_material_theme.dart';
+import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -49,12 +53,17 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeRiverpodModule(),
       const FakeFeatureModule(),
       const FakeSecondModule(),
+      const FakeGateModule(),
       const FakeSocketsModule(),
       const FakeOverlapModule(),
+      const FakeL10nModule(),
       const FakeAnalyticsModule(),
       const FakeScreenLogModule(),
       const FakeCrashModule(),
       const FakeEventsModule(),
+      const FakePreferencesModule(),
+      const FakePreferencesUserModule(),
+      const FakeThemeModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
       const FakeChildModule(),
@@ -64,9 +73,10 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const BottomTabsModule(),
     ];
 
-/// The modules to ask for so that an app has every fixture, with the
-/// state manager [stateManager], the router [router] and the DI container
-/// [di].
+/// The modules to ask for so that an app has every fixture that fits, with
+/// the state manager [stateManager], the router [router] and the DI
+/// container [di]: the fixture gates, and so the guards of the routes, are
+/// only in an app with the state manager that they depend on.
 List<ModuleId> everyFixture({
   ModuleId stateManager = FakeBlocModule.id,
   ModuleId router = FakeRouterModule.id,
@@ -75,16 +85,22 @@ List<ModuleId> everyFixture({
     [
       FakeFeatureModule.id,
       FakeSecondModule.id,
+      // The fixture gates depend on one of the state managers.
+      if (stateManager == FakeGateModule.stateManager) FakeGateModule.id,
       router,
       stateManager,
       di,
       FakeSocketsModule.id,
       FakeOverlapModule.id,
+      FakeL10nModule.id,
       FakeRegistrationsModule.id,
       FakeCodegenModule.id,
       FakeScreenLogModule.id,
       FakeCrashModule.id,
       FakeEventsModule.id,
+      FakePreferencesModule.id,
+      FakePreferencesUserModule.id,
+      FakeThemeModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
@@ -99,9 +115,26 @@ List<ModuleId> everyFixture({
 /// a fixture module whose start-up waits for a timer; flutter_core and
 /// go_router, the app entry and a router, for the screens that Firebase
 /// Analytics logs; get_it, a DI container, in which those roles register
-/// their services, for the test of the DI role that the CLI keeps; and the
+/// their services, for the test of the DI role that the CLI keeps; the
 /// fixture events, whose channel opens in the start-up, for the test of the
-/// events role that the CLI keeps.
+/// events role that the CLI keeps; shared_preferences, a provider of the
+/// preferences role, for the test of that role that the CLI keeps; the
+/// settings module of the CLI, for the app test that it keeps for its
+/// screen and for the tests of the settings screen role that the CLI keeps,
+/// with the two fixtures that have a setting, a feature and a module
+/// without screens, so that those tests check a screen with entries on a
+/// provider that must work; material_theme, a provider of the theme role,
+/// for the tests of that role that the CLI keeps: the theme mode, which
+/// shared_preferences remembers, and its entry, which the settings screen
+/// shows below those of the two fixtures; the fixture texts, a provider of
+/// the localization role, for the two tests of that role that the CLI
+/// keeps: the test of the role itself, with the texts of the fixture
+/// feature in two languages, and the test of the setting of the language,
+/// which the template of the role gives the settings screen of the app
+/// after the entry of the theme mode; and the onboarding module of the CLI,
+/// for the app test that it keeps, whose guard of the routes keeps the user
+/// from every other screen of the app until the mocks of that test open it
+/// for the tests of the other modules.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -120,5 +153,12 @@ List<SmfModule> severalProvidersModules() => const [
       FakeAnalyticsModule(),
       FakeServiceLogModule(),
       FakeEventsModule(),
+      SharedPreferencesModule(),
       FakeSlowStartModule(),
+      FakeSecondModule(),
+      FakeScreenLogModule(),
+      SettingsModule(),
+      MaterialThemeModule(),
+      FakeL10nModule(),
+      OnboardingModule(),
     ];

@@ -507,6 +507,113 @@ void main() {
     });
   });
 
+  group('RequiredExtension', () {
+    const symbol = RequiredExtension(
+      'AppTexts',
+      path: 'lib/texts.dart',
+      on: 'BuildContext',
+      getters: ['l10n'],
+    );
+
+    List<String> problemsOf(IndexedDeclaration declaration) => [
+          for (final issue in symbol.checkIn({
+            'lib/texts.dart': DartFileIndex(
+              path: 'lib/texts.dart',
+              declarations: [declaration],
+            ),
+          }))
+            issue.message,
+        ];
+
+    const prefix = 'extension AppTexts in lib/texts.dart must';
+
+    test('is satisfied by an extension on the type with the getters', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            // As written, with any spaces.
+            type: ' BuildContext ',
+            members: [
+              IndexedMember('l10n', kind: MemberKind.getter),
+              IndexedMember('other', kind: MemberKind.method),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+      expect(symbol.importRef, const ImportRef.app('texts.dart'));
+      expect('$symbol', 'extension AppTexts');
+      expect(symbol.namedParameters, isEmpty);
+      expect(symbol.positionalArguments, 0);
+    });
+
+    test('reports a missing file or declaration', () {
+      expect(
+        symbol.checkIn(const {}).single.message,
+        'lib/texts.dart is missing, so it cannot declare extension AppTexts.',
+      );
+      expect(
+        symbol
+            .checkIn({
+              'lib/texts.dart': const DartFileIndex(path: 'lib/texts.dart'),
+            })
+            .single
+            .message,
+        'lib/texts.dart does not declare extension AppTexts.',
+      );
+    });
+
+    test('reports a declaration that is not an extension', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.classType,
+            members: [IndexedMember('l10n', kind: MemberKind.getter)],
+          ),
+        ),
+        ['$prefix be an extension, not a classType.'],
+      );
+    });
+
+    test('reports an extension on another type', () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            type: 'State<StatefulWidget>',
+            members: [IndexedMember('l10n', kind: MemberKind.getter)],
+          ),
+        ),
+        ['$prefix be on BuildContext, not on State<StatefulWidget>.'],
+      );
+    });
+
+    test('takes neither a static getter nor a method or a setter for a getter',
+        () {
+      expect(
+        problemsOf(
+          const IndexedDeclaration(
+            name: 'AppTexts',
+            kind: DeclarationKind.extension,
+            type: 'BuildContext',
+            members: [
+              IndexedMember('l10n', kind: MemberKind.getter, isStatic: true),
+              IndexedMember('l10n', kind: MemberKind.method),
+              IndexedMember('l10n', kind: MemberKind.setter),
+              // An extension has only static fields.
+              IndexedMember('l10n', kind: MemberKind.field, isStatic: true),
+            ],
+          ),
+        ),
+        ['$prefix declare the instance getter l10n.'],
+      );
+    });
+  });
+
   group('Role.checkStructure', () {
     const home = ModuleOrigin(ModuleId('home'));
     final role = TestRole<String>(
@@ -586,6 +693,101 @@ void main() {
       expect(seen.module(const ModuleId('other')), isNull);
       expect(spy.structuralRules.single.id, 'spy.input');
       expect(spy.structuralRules.single.description, 'Keeps its input.');
+    });
+
+    test(
+        'gives the rules what the hooks of a role of the app that requires '
+        'or uses their role get, and of no other role', () {
+      late StructuralRuleInput<String> seen;
+      final spy = TestRole<String>(
+        'spy',
+        structuralRules: [
+          StructuralRule(
+            id: 'spy.input',
+            description: 'Keeps its input.',
+            check: (input) {
+              seen = input;
+              return const [];
+            },
+          ),
+        ],
+      );
+      final shelf = TestRole<String>('shelf');
+      final absent = TestRole<String>('absent');
+      final user = TestRole<String>(
+        'user',
+        requires: {shelf},
+        uses: {spy, absent},
+      );
+      final stranger = TestRole<String>('stranger');
+      // A role that sees another role of the app, but not that of the rule.
+      final neighbour = TestRole<String>('neighbour', uses: {shelf});
+      // A role that the app lacks, though it uses the role of the rule and
+      // a module gave it data: such as one that a rule makes up to read the
+      // data of the roles that it names.
+      final lens = TestRole<String>('lens', uses: {spy, shelf, stranger});
+
+      spy.checkStructure(
+        StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: [
+              for (final role in [
+                spy,
+                shelf,
+                absent,
+                user,
+                stranger,
+                neighbour,
+                lens,
+              ])
+                RoleData<String>(role, 'of ${role.id}'),
+            ],
+            presentRoles: {spy, shelf, user, stranger, neighbour},
+            context: testContext,
+          ),
+          files: files,
+        ),
+      );
+      List<String> dataOf(Role<String> role, RoleHookInput<Object> input) =>
+          [for (final data in role.dataIn(input)) data.value];
+
+      // The data of the role, and of the roles that it requires or uses,
+      // as its hooks get them: none of a role that the app lacks.
+      final ofUser = seen.inputOf(user);
+      expect(ofUser.role, same(user));
+      expect(dataOf(user, ofUser), ['of user']);
+      expect(dataOf(shelf, ofUser), ['of shelf']);
+      expect(dataOf(spy, ofUser), ['of spy']);
+      expect(dataOf(absent, ofUser), isEmpty);
+      expect(ofUser.has(absent), isFalse);
+      expect(() => stranger.dataIn(ofUser), throwsArgumentError);
+      // Of no role that does not build on the role of the rule, whether
+      // it sees other roles or none.
+      for (final other in [shelf, stranger, neighbour, spy]) {
+        expect(
+          () => seen.inputOf(other),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              'The $other neither requires nor uses the $spy, so the rules '
+                  'of the $spy cannot read what its hooks get',
+            ),
+          ),
+        );
+      }
+      // Nor of a role that the app lacks, whose hooks do not run.
+      expect(
+        () => seen.inputOf(lens),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'The app does not have the $lens, so its hooks get nothing for '
+                'the rules of the $spy to read',
+          ),
+        ),
+      );
     });
   });
 

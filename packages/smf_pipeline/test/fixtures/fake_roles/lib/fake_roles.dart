@@ -119,6 +119,9 @@ final class _BadgeTemplate extends RoleTemplate<String> {
 }
 
 /// The provider of both the clock and the badge role.
+///
+/// Its clock keeps each time zone in a file of its own, see
+/// [_FakeClockProvider].
 final class FakeClockBadgeModule extends SmfModule {
   /// Creates the module.
   const FakeClockBadgeModule();
@@ -132,7 +135,7 @@ final class FakeClockBadgeModule extends SmfModule {
         description: 'Clock and badge (fixture)',
         kind: ModuleKinds.infrastructure,
         providers: [
-          RoleProvider.plain(clockRole),
+          _FakeClockProvider(),
           RoleProvider.plain(badgeRole),
         ],
       );
@@ -142,10 +145,49 @@ final class FakeClockBadgeModule extends SmfModule {
       [BrickContribution(fakeClockBadgeBundle)];
 }
 
+/// Generates a file for each time zone that the modules of the app ask
+/// for, `lib/core/clock/zones/zone_<n>.dart` with the constant
+/// `clockZone<n>`, and gives the brick of the module the constants, with the
+/// imports of their files. A brick has the same files in every app, so only
+/// the render hook can generate as many files as the app has zones.
+final class _FakeClockProvider extends RoleProvider<String> {
+  const _FakeClockProvider();
+
+  @override
+  Role<String> get role => clockRole;
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) {
+    final zones = [
+      for (final (index, data) in input.data.indexed)
+        (number: index + 1, name: data.value),
+    ];
+    return RoleOutput(
+      vars: {
+        'zone_constants': Fragment(
+          [for (final zone in zones) 'clockZone${zone.number}'].join(', '),
+          imports: [
+            for (final zone in zones)
+              ImportRef.app('core/clock/zones/zone_${zone.number}.dart'),
+          ],
+        ),
+      },
+      files: {
+        for (final zone in zones)
+          'lib/core/clock/zones/zone_${zone.number}.dart':
+              '/// A time zone that a module of the app asked for (fixture).\n'
+                  'const clockZone${zone.number} = '
+                  '${SmfNames.dartString(zone.name)};\n',
+      },
+    );
+  }
+}
+
 /// A module that works with the clock and the badge when they are present:
 /// it contributes data to both roles, and code that refers to their
 /// symbols only under `when` or, in its brick, under the presence flag
-/// `{{#has_badge}}`.
+/// `{{#has_badge}}` or as the value of a variable for an app with the
+/// clock.
 final class FakeClockUserModule extends SmfModule {
   /// Creates the module.
   const FakeClockUserModule();
@@ -163,7 +205,21 @@ final class FakeClockUserModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(fakeClockUserBundle),
+        BrickContribution(
+          fakeClockUserBundle,
+          vars: {
+            // One line of the template for the apps with the clock and for
+            // those without it; only the first get the import.
+            'clock_zones': RoleVar(
+              clockRole,
+              present: Fragment(
+                'createClock().zones',
+                imports: [ClockRole.createClock.importRef],
+              ),
+              absent: 'const <String>[]',
+            ),
+          },
+        ),
         clockRole.data("Europe/Kyiv's zone"),
         badgeRole.data('New'),
         const SocketContribution.code(

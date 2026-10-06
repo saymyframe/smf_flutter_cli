@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
@@ -75,32 +77,50 @@ final RegExp _tag = RegExp(r'\{\{\{(smf_[a-z0-9_]+)\}\}\}');
 
 /// What rendering the template of a role produced.
 final class RenderedTemplate {
-  RenderedTemplate._(this.files, this.contributions, this.elsewhere);
+  RenderedTemplate._(
+    this.files,
+    this.contributions,
+    this.elsewhere,
+    this.notes,
+  );
 
   /// The generated files, by path relative to the project root.
   final Map<String, String> files;
 
-  /// What the template's `contribute` hook returned.
+  /// What the template's `contribute` hook returned that applies in the
+  /// app.
   final List<Contribution> contributions;
 
   /// Fragments of `render` for sockets whose tags are not in the template,
   /// such as the phases of `bootstrap()`.
   final List<SocketContribution> elsewhere;
+
+  /// The notes of the template for the guide for coding agents, whose tag
+  /// the template of the app entry role has.
+  final List<SocketContribution> notes;
 }
 
-/// Renders the template of [role] as the pipeline will: its bricks with the
-/// presence flags, the variables of its `render` hook, and the sockets of
-/// its files filled with the fragments of `render`, whose imports are added
-/// to the files that hold the sockets' tags, as are the imports of the
-/// fragment variables to the files that read them.
+/// Renders the template of [role] as the pipeline will, in an app with
+/// [role] and the roles in [present]: its bricks with the presence flags,
+/// the variables of its `render` hook, and the sockets of its files filled
+/// with the fragments of `render` and with [fromModules], what the modules
+/// of the app put into the sockets of the role, whose imports are added to
+/// the files that hold the sockets' tags, as are the imports of the
+/// fragment variables to the files that read them. A contribution of the
+/// template applies only when the roles of its [Contribution.when] are in
+/// the app.
 Future<RenderedTemplate> renderTemplate<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
   Set<Role> present = const {},
   Object? choice,
+  List<SocketContribution> fromModules = const [],
 }) async {
   final template = role.template!;
-  final contributions = template.contribute(testContext);
+  final contributions = [
+    for (final contribution in template.contribute(testContext))
+      if (contribution.when.every({role, ...present}.contains)) contribution,
+  ];
   final input = inputOf(role, data: data, present: present, choice: choice);
   final output = template.render(input);
 
@@ -108,6 +128,7 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
   for (final fragment in [
     ...contributions.whereType<SocketContribution>(),
     ...output.fragments,
+    ...fromModules,
   ]) {
     fragments.putIfAbsent(fragment.socket, () => []).add(fragment);
   }
@@ -161,14 +182,143 @@ Future<RenderedTemplate> renderTemplate<D extends Object>(
       files[path] = _withImports(text, imports);
     }
   }
+  final unplaced = [
+    for (final MapEntry(key: socket, value: contributed) in fragments.entries)
+      if (!placed.contains(socket)) ...contributed,
+  ];
+  bool isNote(SocketContribution contribution) =>
+      contribution.socket == AppEntryRole.agentSections;
   return RenderedTemplate._(
     files,
     contributions,
     [
-      for (final MapEntry(key: socket, value: contributed) in fragments.entries)
-        if (!placed.contains(socket)) ...contributed,
+      for (final contribution in unplaced)
+        if (!isNote(contribution)) contribution,
     ],
+    [...unplaced.where(isNote)],
   );
+}
+
+/// The note of [role] in the guide for coding agents: what its template
+/// contributes to the section of the role in every app with the role, or,
+/// with [when], in an app with those roles too.
+AgentNote agentNoteOf(Role role, {Set<Role> when = const {}}) => role.template!
+    .contribute(testContext)
+    .whereType<SocketContribution>()
+    .singleWhere(
+      (contribution) =>
+          contribution.socket == AppEntryRole.agentSections &&
+          contribution.when.length == when.length &&
+          contribution.when.containsAll(when),
+    )
+    .entryValue! as AgentNote;
+
+/// Fails unless [note] gives each of the [names] inside a span of inline
+/// code, and the file that the name is listed under, a Dart file of [files]
+/// by its path, declares it: a name as it is at the top level of the file,
+/// and `Type.member` as a member of that class, mixin, enum or extension.
+///
+/// These are the names of the code of an app that a note for coding agents
+/// relies on. The note gives a member by its own name, as it is or as a
+/// part of the span, such as `push` in `push<T>()`.
+void expectNamesOfCode(
+  AgentNote note,
+  Map<String, List<String>> names, {
+  required Map<String, String> files,
+}) {
+  final spans = codeSpansOf(note.text);
+  for (final MapEntry(key: file, value: ofFile) in names.entries) {
+    final declared = declarationsOf(files[file]!);
+    for (final name in ofFile) {
+      expect(declared, contains(name), reason: '$file does not declare $name.');
+      final given = name.split('.').last;
+      final word = RegExp('(?<![A-Za-z0-9_])${RegExp.escape(given)}'
+          '(?![A-Za-z0-9_])');
+      expect(
+        spans.any(word.hasMatch),
+        isTrue,
+        reason: 'The note does not give $given in inline code.',
+      );
+    }
+  }
+}
+
+/// The spans of inline code of the Markdown [text], outside its fenced code
+/// blocks: what stands between two backticks, in the order of the text.
+List<String> codeSpansOf(String text) => [
+      for (final span in RegExp('`([^`\n]+)`')
+          .allMatches(text.replaceAll(RegExp(r'```[\s\S]*?```'), '')))
+        span[1]!,
+    ];
+
+/// Whether the Dart [code] declares the class [name] as sealed.
+bool declaresSealedClass(String code, String name) => parseString(content: code)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .any(
+      (declaration) =>
+          declaration.namePart.typeName.lexeme == name &&
+          declaration.sealedKeyword != null,
+    );
+
+/// What the Dart [code] declares: the names of its top-level declarations,
+/// and the members of its classes, mixins, enums and extensions as
+/// `Type.member`.
+Set<String> declarationsOf(String code) {
+  final declarations = _Declarations();
+  parseString(content: code).unit.accept(declarations);
+  return declarations.names;
+}
+
+final class _Declarations extends RecursiveAstVisitor<void> {
+  final Set<String> names = {};
+
+  /// The type whose members the visitor is in, if any.
+  String? _type;
+
+  void _add(String name) => names.add(_type == null ? name : '$_type.$name');
+
+  void _members(String type, void Function() visit) {
+    names.add(type);
+    _type = type;
+    visit();
+    _type = null;
+  }
+
+  @override
+  void visitClassDeclaration(ClassDeclaration node) => _members(
+        node.namePart.typeName.lexeme,
+        () => super.visitClassDeclaration(node),
+      );
+
+  @override
+  void visitMixinDeclaration(MixinDeclaration node) =>
+      _members(node.name.lexeme, () => super.visitMixinDeclaration(node));
+
+  @override
+  void visitEnumDeclaration(EnumDeclaration node) => _members(
+        node.namePart.typeName.lexeme,
+        () => super.visitEnumDeclaration(node),
+      );
+
+  @override
+  void visitExtensionDeclaration(ExtensionDeclaration node) => _members(
+        node.name!.lexeme,
+        () => super.visitExtensionDeclaration(node),
+      );
+
+  // The bodies of functions and methods declare nothing of the file.
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) =>
+      _add(node.name.lexeme);
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) => _add(node.name.lexeme);
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) =>
+      _add(node.name.lexeme);
 }
 
 /// [text] with the [imports] after its last import directive, or at the top.

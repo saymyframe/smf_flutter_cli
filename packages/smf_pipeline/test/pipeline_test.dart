@@ -42,7 +42,7 @@ RoutesData _routes(String name) => RoutesData([
           import: ImportRef.app('features/$name/${name}_screen.dart'),
         ),
         destination: Destination(
-          label: name,
+          label: LocalizedText('label', en: name),
           icon: const Fragment('Icons.home'),
         ),
         startCandidate: name == 'home',
@@ -88,14 +88,19 @@ void main() {
       plan.resolution.modules.map((m) => m.id.value),
       ['home', 'scaffold', 'go'],
     );
-    expect(plan.choices, {nav: 'the start'});
+    // The template of the app entry role makes no choice.
+    expect(plan.choices, {nav: 'the start', appEntryRole: null});
     expect(plan.environment.sdk!.flutter, '/sdk/bin/flutter');
     expect(plan.environment.interactive, isFalse);
     expect(plan.preflight.results.single.passed, isTrue);
     expect(plan.leftOut, isEmpty);
     expect(plan.collection.roleData.single.value, '/home');
-    // The base value of the minimum iOS version, from the scaffold.
-    expect(plan.socketOrders.keys, [AppEntryRole.iosDeploymentTarget]);
+    // The base value of the minimum iOS version, from the scaffold, and the
+    // note of the app entry role for coding agents, from its template.
+    expect(plan.socketOrders.keys, [
+      AppEntryRole.iosDeploymentTarget,
+      AppEntryRole.agentSections,
+    ]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies.keys, ['flutter']);
     expect(plan.request.appName, 'my_app');
@@ -596,6 +601,108 @@ void main() {
     expect(host.prompter.done, isTrue);
   });
 
+  group('a module that generates the guide for coding agents itself', () {
+    for (final file in [AppEntryRole.agentsFile, AppEntryRole.claudeFile]) {
+      List<SmfModule> modules() => [
+            scaffold(),
+            TestModule(
+              'own_guide',
+              contributions: [
+                BrickContribution(
+                  bundle('own_guide', files: {file: 'My own guide.\n'}),
+                ),
+              ],
+            ),
+            TestModule('fine'),
+          ];
+
+      test('stops generation in strict mode, as the one at fault: $file',
+          () async {
+        await expectLater(
+          pipeline(modules(), FakeHost())
+              .plan(request(['own_guide', 'fine'], strict: true)),
+          throwsA(
+            isA<GenerationFailedException>().having(
+              (e) => [
+                for (final issue in e.issues)
+                  '${issue.origin}: ${issue.message}',
+              ],
+              'issues',
+              [
+                equals(
+                  'own_guide: Both own_guide and role:app_entry generate '
+                  '$file; every file has one brick.',
+                ),
+              ],
+            ),
+          ),
+        );
+      });
+
+      test('is left out in lenient mode, and the app has the guide: $file',
+          () async {
+        final host = FakeHost();
+
+        final plan = (await pipeline(modules(), host)
+            .plan(request(['own_guide', 'fine'])))!;
+
+        expect(plan.leftOut.single.module, const ModuleId('own_guide'));
+        expect(
+          plan.leftOut.single.reason,
+          'Both own_guide and role:app_entry generate $file; every file has '
+          'one brick.',
+        );
+        expect(
+          plan.resolution.modules.map((module) => module.id.value),
+          ['fine', 'scaffold'],
+        );
+      });
+    }
+  });
+
+  group('a module that contributes a note of a role to the guide', () {
+    List<SmfModule> modules() => [
+          scaffold(),
+          TestModule(
+            'as_a_role',
+            contributions: [
+              AppEntryRole.agentSections.entry(
+                'App entry',
+                AgentNote.ofRole('What only the role may say.'),
+              ),
+            ],
+          ),
+        ];
+    const problem = 'The module as_a_role contributes a note of a role to '
+        'the section "App entry" of the guide for coding agents. Only the '
+        'template of a role says what the role guarantees; a module '
+        'contributes AgentNote(text).';
+
+    test('stops generation in strict mode', () async {
+      await expectLater(
+        pipeline(modules(), FakeHost())
+            .plan(request(['as_a_role'], strict: true)),
+        throwsA(
+          isA<GenerationFailedException>().having(
+            (e) => [
+              for (final issue in e.issues) '${issue.origin}: ${issue.message}',
+            ],
+            'issues',
+            ['as_a_role: $problem'],
+          ),
+        ),
+      );
+    });
+
+    test('is left out in lenient mode', () async {
+      final plan =
+          (await pipeline(modules(), FakeHost()).plan(request(['as_a_role'])))!;
+
+      expect(plan.leftOut.single.module, const ModuleId('as_a_role'));
+      expect(plan.leftOut.single.reason, problem);
+    });
+  });
+
   test('strict mode fails on every error', () async {
     final modules = [
       scaffold(),
@@ -1031,6 +1138,40 @@ void main() {
           '    An interactive run offers to set it up.',
         ),
       );
+    });
+
+    test('lists no order for a socket that does not follow the order edges',
+        () async {
+      final host = FakeHost();
+      List<Contribution> both(String name) => [
+            AppEntryRole.agentSections.entry(name, AgentNote('The $name.')),
+            SocketContribution.code(
+              AppEntryRole.bootstrapLate,
+              Fragment('$name();'),
+            ),
+          ];
+      final modules = [
+        scaffold(contributions: both('scaffold')),
+        TestModule('home', contributions: both('home')),
+      ];
+
+      await pipeline(modules, host).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('home')],
+          explain: true,
+        ),
+      );
+
+      // The start-up code runs in the order of its contributors. The notes
+      // of the guide for coding agents are ordered by the renderer of their
+      // socket, so the report has no order to tell.
+      final report = host.logger.infos.join('\n');
+      expect(
+        report,
+        contains('  socket app_entry.bootstrap_late: home, scaffold'),
+      );
+      expect(report, isNot(contains('app_entry.agent_sections')));
     });
 
     test('prints the variant and a cycle', () {

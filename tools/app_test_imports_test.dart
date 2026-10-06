@@ -26,7 +26,10 @@
 // entry. The app tests of the fixture registry test the fixture modules,
 // fake modules that exist only for its tests and are never published
 // (`publish_to: none`), so they may import the files of the fixture
-// modules among the packages it depends on too.
+// modules among the packages it depends on too. A fixture module depends on
+// no published package of modules: the app tests of the fixture registry
+// would know that module with it, and could import the files of a provider
+// that another app does not have.
 import 'dart:io';
 import 'dart:mirrors';
 
@@ -404,5 +407,40 @@ import 'package:{{app_name}}/app.dart';
     final root = repositoryRoot();
 
     expect(problemsOf(root, workspacePackages(root), _roleFiles()), isEmpty);
+  });
+
+  test(
+      'no package of fixture modules depends on a published package of '
+      'modules, so the app tests of a package of no module know only '
+      'fixture modules', () {
+    final packages = workspacePackages(repositoryRoot());
+    final byName = {for (final package in packages) package.name: package};
+    List<String> published(WorkspacePackage package) => [
+          for (final module in knownModules(package, byName))
+            if (module.published) module.name,
+        ];
+    final fixtures = [
+      for (final package in packages)
+        if (package.declaresModules && !package.published) package,
+    ];
+
+    expect(fixtures, isNotEmpty);
+    for (final fixture in fixtures) {
+      expect(
+        published(fixture),
+        isEmpty,
+        reason: '${fixture.name}, a package of fixture modules, depends on '
+            'a published package of modules, itself or through another '
+            'fixture. The app tests of a package that depends on it, such '
+            'as the fixture registry, may then import the files of that '
+            'module, and its matrix tool may select apps by the id of the '
+            'module, though an app can have another provider of its role.',
+      );
+    }
+    // So the app tests of a package that declares no module know none.
+    for (final package in packages) {
+      if (package.declaresModules) continue;
+      expect(published(package), isEmpty, reason: package.name);
+    }
   });
 }

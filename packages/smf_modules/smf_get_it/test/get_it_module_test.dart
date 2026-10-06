@@ -8,6 +8,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
+import 'package:smf_get_it/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -407,18 +408,25 @@ void main() {
       without = (await renderedApp(const [FlutterCoreModule.id])).app!;
     });
 
-    test('gets get_it and the brick of the container, and nothing else', () {
+    test(
+        'gets get_it, the brick of the container and its note for coding '
+        'agents, and nothing else', () {
       final contributions = [
         for (final collected
             in result.collection!.ofModule(module.descriptor.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       expect((contributions.first as BrickContribution).bundle.name, 'get_it');
-      final dependency = contributions.last as PubspecDependency;
+      final dependency = contributions[1] as PubspecDependency;
       expect(dependency.package, 'get_it');
       expect(dependency.constraint, '^9.3.0');
+      final note = contributions.last as SocketContribution;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, diRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       expect(
         _yamlOf(withContainer.files['pubspec.yaml']!.text)['dependencies'],
         {
@@ -495,7 +503,9 @@ void main() {
       );
     });
 
-    test('is the app without a container but for the container', () {
+    test(
+        'is the app without a container but for the container and its '
+        'section in the guide for coding agents', () {
       expect(
         withContainer.files.keys.toSet(),
         {
@@ -512,6 +522,7 @@ void main() {
         // The file that awaits the registration, which the test above
         // checks.
         if (path == 'pubspec.yaml' ||
+            path == AppEntryRole.agentsFile ||
             _holdsCodeOfRole(withContainer.files[path]!)) {
           continue;
         }
@@ -524,6 +535,54 @@ void main() {
       expect(
         {...pubspec, 'dependencies': dependencies},
         _yamlOf(without.files['pubspec.yaml']!.text),
+      );
+      // The guide has the notes of the app without a container, and those
+      // of the container under the heading of the role.
+      final container = <ContributionOrigin>{
+        const RoleTemplateOrigin(diRole),
+        const ModuleOrigin(GetItModule.id),
+      };
+      final notes = withContainer.entriesOf(AppEntryRole.agentSections);
+      expect(
+        notes.where((note) => !container.contains(note.$1)),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+      expect(
+        [
+          for (final (origin, heading, note) in notes)
+            if (container.contains(origin)) (origin, heading, note.isOfRole),
+        ],
+        // The template of a role contributes after its providers; the
+        // guide shows what the role says first.
+        [
+          (const ModuleOrigin(GetItModule.id), diRole.description, false),
+          (const RoleTemplateOrigin(diRole), diRole.description, true),
+        ],
+      );
+      expect(
+        [
+          for (final (origin, _, note) in notes)
+            if (origin == const ModuleOrigin(GetItModule.id)) note,
+        ],
+        [AgentNote(agentNote)],
+      );
+      // This app registers nothing, so its file has no `getIt` for an
+      // agent to copy: the note says what the name stands for.
+      final index = DartFileIndexer.index(
+        _dependencies,
+        withContainer.files[_dependencies]!.text,
+      );
+      expect(
+        [
+          for (final call in index.invocations)
+            if (call.enclosingDeclaration == DiRole.registerDependencies.name)
+              call.name,
+        ],
+        isEmpty,
+      );
+      expect(
+        agentNote,
+        contains('in `getIt`, a local name for `GetIt.instance`,'),
       );
     });
   });
@@ -544,6 +603,70 @@ void main() {
         _function(unit, 'registerDependencies').toSource(),
         _expectedRegistrations,
       );
+    });
+
+    test(
+        'registers the services as the note of the module for coding agents '
+        'tells to register one by hand', () {
+      final index = DartFileIndexer.index(
+        _dependencies,
+        app.files[_dependencies]!.text,
+      );
+      final calls = {
+        for (final call in index.invocations)
+          if (call.enclosingDeclaration == DiRole.registerDependencies.name)
+            call.name: call,
+      };
+
+      // Each way to register a service that the note names, on the
+      // container that the function takes from get_it.
+      for (final method in const [
+        'registerLazySingleton',
+        'registerSingleton',
+        'registerFactory',
+        'registerSingletonAsync',
+        'registerSingletonWithDependencies',
+      ]) {
+        expect(calls[method]?.target, 'getIt', reason: method);
+        expect(agentNote, contains('`$method`'), reason: method);
+      }
+      expect(
+        [
+          for (final access in index.memberAccesses)
+            if (access.enclosingDeclaration == DiRole.registerDependencies.name)
+              '${access.target}.${access.name}',
+        ],
+        contains('GetIt.instance'),
+      );
+      expect(agentNote, contains('`GetIt.instance`'));
+      // A function gets its services from the container, a service is
+      // disposed of by a function, and the function waits for the
+      // services that are created asynchronously.
+      expect(calls['getIt']?.typeArguments, hasLength(1));
+      expect(agentNote, contains('`getIt<Type>()`'));
+      expect(
+        index.invocations.expand((call) => call.namedArguments),
+        contains('dispose'),
+      );
+      expect(agentNote, contains('`dispose:`'));
+      expect(calls['allReady']?.target, 'getIt');
+      expect(calls['allReady']?.awaited, isTrue);
+      expect(agentNote, contains('`await getIt.allReady()`'));
+      expect(index.imports.map((import) => import.prefix), contains('di0'));
+      expect(
+        agentNote,
+        contains('`${DiRole.registerDependencies.name}()` registers'),
+      );
+      // No other file of the app imports get_it; the app has the package
+      // among its dependencies, so a test may.
+      expect(
+        [
+          for (final file in app.files.values)
+            if (file.isText && file.text.contains('package:get_it/')) file.path,
+        ],
+        [_dependencies],
+      );
+      expect(agentNote, contains('No other file in `lib/` imports `get_it`'));
     });
 
     test('imports the file of each type and function once, with a prefix', () {

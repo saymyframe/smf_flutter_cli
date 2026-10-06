@@ -116,10 +116,12 @@ Iterable<IndexedDeclaration> _declarations(
         annotations: annotations,
         offset: offset,
       );
-    case ExtensionDeclaration(:final name?):
+    case ExtensionDeclaration(:final name?, :final onClause, :final body):
       yield IndexedDeclaration(
         name: name.lexeme,
         kind: DeclarationKind.extension,
+        type: onClause?.extendedType.toSource(),
+        members: _members(body.members),
         annotations: annotations,
         offset: offset,
       );
@@ -215,7 +217,7 @@ List<IndexedConstructor> _constructors(
 
 /// The members among [members] other than the constructors: a member for
 /// each variable of a field declaration, and one for each method, getter,
-/// setter and operator.
+/// setter and operator, with its parameters.
 List<IndexedMember> _members(NodeList<ClassMember> members) => [
       for (final member in members)
         if (member is FieldDeclaration)
@@ -230,6 +232,7 @@ List<IndexedMember> _members(NodeList<ClassMember> members) => [
             member.name.lexeme,
             kind: _memberKind(member),
             isStatic: member.isStatic,
+            parameters: _parameters(member.parameters),
           ),
     ];
 
@@ -309,6 +312,12 @@ String? _enclosing(AstNode node) {
   return null;
 }
 
+/// The name of the method, getter, setter or operator that contains [node],
+/// also in a closure or a local function of it, if any; the name of an
+/// operator is its symbol.
+String? _enclosingMember(AstNode node) =>
+    node.thisOrAncestorOfType<MethodDeclaration>()?.name.lexeme;
+
 /// The name of the variable among [variables] whose initializer holds
 /// [node].
 String? _variableOf(VariableDeclarationList variables, AstNode node) {
@@ -357,6 +366,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         typeArguments: _typeArguments(node.typeArguments),
         namedArguments: _namedArguments(node.argumentList),
         enclosingDeclaration: _enclosing(node),
+        enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
         offset: node.offset,
       ),
@@ -376,6 +386,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         typeArguments: _typeArguments(type.typeArguments),
         namedArguments: _namedArguments(node.argumentList),
         enclosingDeclaration: _enclosing(node),
+        enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
         offset: node.offset,
       ),

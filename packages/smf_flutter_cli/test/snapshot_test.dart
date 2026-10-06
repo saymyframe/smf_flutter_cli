@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_style/dart_style.dart';
@@ -55,8 +56,8 @@ Version _languageVersionOf(RenderedApp app) {
 /// The files of [app] as one text: each under a header with its path and
 /// owner. Every file of the modules is shown, and the files of the provider
 /// of the app entry among [_shownOfAppEntry]. Dart files are formatted as
-/// `dart format` formats the app, and the pubspec, XML and plist files must
-/// parse.
+/// `dart format` formats the app, and the YAML, XML and plist files, and
+/// the ARB files, which are JSON, must parse.
 String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
   final formatter = DartFormatter(languageVersion: _languageVersionOf(app));
   final buffer = StringBuffer();
@@ -75,6 +76,8 @@ String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
       XmlDocument.parse(text);
     } else if (path.endsWith('.yaml')) {
       loadYaml(text, sourceUrl: Uri.file(path));
+    } else if (path.endsWith('.arb')) {
+      jsonDecode(text);
     } else if (path == AppEntryRole.xcodeProjectFile) {
       text = [
         for (final line in text.split('\n'))

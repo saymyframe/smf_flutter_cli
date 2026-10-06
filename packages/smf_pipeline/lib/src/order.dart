@@ -50,6 +50,34 @@ String contributorName(ContributionOrigin origin) => switch (origin) {
       RoleTemplateOrigin() || PipelineOrigin() => '$origin',
     };
 
+/// Orders the [contributions] to [socket]: by the edges of
+/// [orderContributions], or, for a socket whose kind does not follow them
+/// (see [SocketKind.followsOrderEdges]), by the names of their contributors
+/// alone, each contributor's in the order it gave them. Such a socket has
+/// no edges, so nothing can make its contributions impossible to order.
+ContributionOrder orderSocket(
+  SocketRef socket,
+  List<Collected> contributions,
+  Resolution resolution,
+) {
+  if (socket.kind.followsOrderEdges) {
+    return orderContributions(contributions, resolution);
+  }
+  final byContributor = <String, List<Collected>>{};
+  for (final collected in contributions) {
+    byContributor
+        .putIfAbsent(contributorName(collected.origin), () => [])
+        .add(collected);
+  }
+  return ContributionOrder(
+    contributions: [
+      for (final name in byContributor.keys.toList()..sort())
+        ...byContributor[name]!,
+    ],
+    edges: const [],
+  );
+}
+
 /// Orders [contributions], all to one socket or all post-generation steps,
 /// by the rules of [SocketContribution]. The rules give edges between all
 /// modules of the app and the templates of its roles:

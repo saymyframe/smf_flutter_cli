@@ -154,7 +154,8 @@ final class IndexedDeclaration {
   final DeclarationKind kind;
 
   /// The declared type as written: the return type of a function or
-  /// getter, the type of a variable, or `null` if it is not written.
+  /// getter, the type of a variable, or the type that an extension is on;
+  /// `null` if it is not written.
   final String? type;
 
   /// The parameters of a function or setter.
@@ -165,9 +166,10 @@ final class IndexedDeclaration {
   final List<IndexedConstructor> constructors;
 
   /// The members declared in the body of a class other than its
-  /// constructors, in source order: its fields, getters, setters and
-  /// methods, static or not. The members it inherits are not among them,
-  /// and the index records no members of other declarations.
+  /// constructors, or in the body of an extension, in source order: its
+  /// fields, getters, setters and methods, static or not. The members that
+  /// a class inherits are not among them, and the index records no members
+  /// of other declarations.
   final List<IndexedMember> members;
 
   /// The annotations, as written, such as `@RoutePage(name: 'HomeRoute')`.
@@ -229,10 +231,16 @@ enum MemberKind {
   method,
 }
 
-/// A member of an indexed class other than a constructor.
+/// A member of an indexed class other than a constructor, or of an indexed
+/// extension.
 final class IndexedMember {
   /// Creates the index of the member [name].
-  const IndexedMember(this.name, {required this.kind, this.isStatic = false});
+  const IndexedMember(
+    this.name, {
+    required this.kind,
+    this.isStatic = false,
+    this.parameters = const [],
+  });
 
   /// The declared name; the name of an operator is its symbol, such as
   /// `==`.
@@ -243,6 +251,10 @@ final class IndexedMember {
 
   /// Whether the member is `static`.
   final bool isStatic;
+
+  /// The parameters of a method or a setter; a field and a getter have
+  /// none.
+  final List<IndexedParameter> parameters;
 }
 
 /// Kinds of parameters.
@@ -266,7 +278,7 @@ enum ParameterKind {
   bool get isRequired => this == requiredPositional || this == requiredNamed;
 }
 
-/// A parameter of an indexed function or constructor.
+/// A parameter of an indexed function, constructor, method or setter.
 final class IndexedParameter {
   /// Creates the index of the parameter [name].
   const IndexedParameter(
@@ -301,6 +313,7 @@ final class IndexedInvocation {
     this.typeArguments = const [],
     this.namedArguments = const [],
     this.enclosingDeclaration,
+    this.enclosingMember,
     this.awaited = false,
     this.offset = 0,
   });
@@ -321,6 +334,21 @@ final class IndexedInvocation {
   /// The name of the top-level declaration the invocation is in, or `null`
   /// outside any.
   final String? enclosingDeclaration;
+
+  /// The name of the method, getter, setter or operator of
+  /// [enclosingDeclaration] that the invocation is in, such as `build`, or
+  /// `null` outside any: in a top-level function or variable, in a
+  /// constructor, or in the initializer of a field.
+  ///
+  /// An invocation in a closure or in a local function of a member is in
+  /// that member. A getter and its setter have one name, and an operator
+  /// has its symbol for a name, as in [IndexedMember.name], so the unary
+  /// `-` and the binary one have the same.
+  ///
+  /// It is set in the members of a mixin, an enum and an extension type
+  /// too, which [IndexedDeclaration.members] does not list, and in those of
+  /// an extension without a name, where [enclosingDeclaration] is `null`.
+  final String? enclosingMember;
 
   /// Whether the invocation is the operand of an `await`.
   final bool awaited;

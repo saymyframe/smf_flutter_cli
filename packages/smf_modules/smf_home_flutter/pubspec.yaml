@@ -21,8 +21,14 @@ dev_dependencies:
   analyzer: ^14.4.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.3.0
+  # The texts of the app, which the label of the destination of the module
+  # is one of.
+  smf_gen_l10n: ^0.3.0
   # The router that the tests render the route of the module with.
   smf_go_router: ^0.3.0
   smf_pipeline: ^0.3.0
+  # The preferences that the localization role requires, in which an app
+  # remembers its language.
+  smf_shared_preferences: ^0.3.0
   test: ^1.32.0
   very_good_analysis: ^10.3.0

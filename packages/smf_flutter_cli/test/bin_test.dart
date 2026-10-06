@@ -153,7 +153,11 @@ void main() {
       expect(result.exitCode, 0);
       expect(
         result.stdout,
-        allOf(contains('--on-conflict'), contains('--start=<path>')),
+        allOf(
+          contains('--on-conflict'),
+          contains('--start=<path>'),
+          contains('--locales=<codes>'),
+        ),
       );
     },
     timeout: timeout,
@@ -499,6 +503,45 @@ void main() {
               contains('  Events: event_bus\n'),
               matches(
                 RegExp(r'^  event_bus \S+ \(event_bus\)$', multiLine: true),
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
+        '--explain shows the module chosen for the localization, and the '
+        'packages that Flutter generates the texts with',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'gen_l10n',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          expect(
+            result.stdout,
+            allOf(
+              contains('  gen_l10n: requested\n'),
+              contains('  Localization: gen_l10n\n'),
+              // Flutter pins the version of intl.
+              contains('  intl any (gen_l10n)\n'),
+              contains(
+                '  flutter_localizations from the flutter SDK '
+                '(role:localization)\n',
               ),
             ),
           );

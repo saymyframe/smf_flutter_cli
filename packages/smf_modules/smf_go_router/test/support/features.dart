@@ -8,14 +8,15 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
 /// The modules of the tests: flutter_core, which creates the app, this
-/// module, three features, a module with a navigator observer and a
-/// listener of the screen, and a layout.
+/// module, three features, a feature with a guard, a module with a
+/// navigator observer and a listener of the screen, and a layout.
 const List<SmfModule> testModules = [
   FlutterCoreModule(),
   GoRouterModule(),
   CatalogFeature(),
   SettingsFeature(),
   ProfileFeature(),
+  IntroFeature(),
   ObservingModule(),
   TabsLayout(),
 ];
@@ -69,7 +70,7 @@ final class CatalogFeature extends SmfModule {
   static const _more = ImportRef.app('$_folder/more_screens.dart');
 
   static const _catalog = Destination(
-    label: 'Catalog',
+    label: LocalizedText('label', en: 'Catalog'),
     icon: Fragment('Icons.list', imports: [_icons]),
   );
 
@@ -230,7 +231,7 @@ final class SettingsFeature extends SmfModule {
               name: 'settings',
               screen: ScreenRef('SettingsScreen', import: ImportRef.app(_file)),
               destination: Destination(
-                label: 'Settings',
+                label: LocalizedText('label', en: 'Settings'),
                 icon: Fragment('Icons.settings', imports: [_icons]),
               ),
               children: [
@@ -281,12 +282,87 @@ final class ProfileFeature extends SmfModule {
               name: 'profile',
               screen: ScreenRef('ProfileScreen', import: ImportRef.app(_file)),
               destination: Destination(
-                label: 'Profile',
+                label: LocalizedText('label', en: 'Profile'),
                 icon: Fragment('Icons.person', imports: [_icons]),
               ),
               startCandidate: true,
             ),
           ]),
+        ),
+      ];
+}
+
+/// A feature for the tests with a guard: until the user has seen the intro,
+/// the app shows it at `/intro` in place of its other screens, and its
+/// terms at `/intro/terms` below it.
+final class IntroFeature extends SmfModule {
+  /// Creates the module.
+  const IntroFeature();
+
+  /// The id of the module.
+  static const id = ModuleId('intro');
+
+  static const _folder = 'features/intro';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'An intro (test)',
+        kind: ModuleKinds.feature,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('intro', {
+            'lib/$_folder/intro_screen.dart':
+                screen(id, 'IntroScreen', const {}),
+            'lib/$_folder/terms_screen.dart':
+                screen(id, 'TermsScreen', const {}),
+            'lib/$_folder/intro_status.dart': [
+              "import 'package:flutter/foundation.dart';",
+              '',
+              'final ValueNotifier<bool> _seen = ValueNotifier(false);',
+              '',
+              '/// Whether the user has seen the intro.',
+              'ValueListenable<bool> introSeen() => _seen;',
+              '',
+            ].join('\n'),
+          }),
+        ),
+        routerRole.data(
+          const RoutesData(
+            [
+              Route(
+                '/',
+                name: 'intro',
+                screen: ScreenRef(
+                  'IntroScreen',
+                  import: ImportRef.app('$_folder/intro_screen.dart'),
+                ),
+                children: [
+                  Route(
+                    'terms',
+                    name: 'terms',
+                    screen: ScreenRef(
+                      'TermsScreen',
+                      import: ImportRef.app('$_folder/terms_screen.dart'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            guards: [
+              RouteGuard(
+                name: 'firstRun',
+                allows: FunctionRef(
+                  'introSeen',
+                  import: ImportRef.app('$_folder/intro_status.dart'),
+                ),
+                redirectTo: 'intro',
+              ),
+            ],
+          ),
         ),
       ];
 }

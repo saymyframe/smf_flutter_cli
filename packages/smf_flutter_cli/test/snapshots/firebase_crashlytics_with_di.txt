@@ -1,3 +1,61 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+With `firebase_crashlytics`:
+
+- Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
+- After `flutterfire configure` runs on macOS, `flutter build ipa` needs the fix of the section Crashlytics of `README.md`.
+
+## Dependency injection
+
+- A service is a type, usually an interface, and a top-level function that creates it from the services it takes as parameters. `registerDependencies()` in `lib/core/di/dependencies.dart` registers every service, and `bootstrap()` awaits it: a new service gets its line there.
+- Only the composition file of a feature, `lib/features/<feature>/<feature>_composition.dart`, calls `resolve<T>()` of `lib/core/di/service_locator.dart`, to create what the screens of the feature need, such as the object that holds their state.
+- A value known only at run time, such as an id, is a parameter of a function of the composition file, not a service.
+
+With `get_it`:
+
+- `registerDependencies()` registers the services in `getIt`, a local name for `GetIt.instance`, with `registerLazySingleton`, `registerSingleton` or `registerFactory`. The function that creates a service gets each service it takes as `getIt<Type>()`, and one that disposes of it goes into `dispose:`.
+- A singleton created asynchronously takes `registerSingletonAsync`, and one that waits for such a service `registerSingletonWithDependencies`. `await getIt.allReady()` then ends the function.
+- No other file in `lib/` imports `get_it`. A test may import it to register its fakes in `GetIt.instance`.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
+- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
+- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
 === README.md (flutter_core) ===
 # my_app
 

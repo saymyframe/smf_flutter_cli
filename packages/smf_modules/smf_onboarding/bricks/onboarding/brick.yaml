@@ -1,0 +1,12 @@
+name: onboarding
+description: "The onboarding of an SMF app: the pages that a new user goes through on the first launch, and whether the user has finished them."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: completed_key, the key of the preferences as a Dart string,
+# and text_<name> for each text of the module, the code that reads it.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

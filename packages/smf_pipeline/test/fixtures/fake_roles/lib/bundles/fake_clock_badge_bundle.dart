@@ -14,7 +14,7 @@ final fakeClockBadgeBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "lib/core/clock/clock_factory.dart",
       "data":
-          "aW1wb3J0ICdjbG9jay5kYXJ0JzsKCi8vLyBDcmVhdGVzIHRoZSBjbG9jayBvZiB0aGUgYXBwLgpDbG9jayBjcmVhdGVDbG9jaygpID0+IGNvbnN0IF9GaXhlZENsb2NrKCk7CgpmaW5hbCBjbGFzcyBfRml4ZWRDbG9jayBpbXBsZW1lbnRzIENsb2NrIHsKICBjb25zdCBfRml4ZWRDbG9jaygpOwoKICBAb3ZlcnJpZGUKICBMaXN0PFN0cmluZz4gZ2V0IHpvbmVzID0+IGNsb2NrWm9uZXM7Cn0K",
+          "aW1wb3J0ICdjbG9jay5kYXJ0JzsKCi8vLyBDcmVhdGVzIHRoZSBjbG9jayBvZiB0aGUgYXBwLgpDbG9jayBjcmVhdGVDbG9jaygpID0+IGNvbnN0IF9GaXhlZENsb2NrKCk7CgpmaW5hbCBjbGFzcyBfRml4ZWRDbG9jayBpbXBsZW1lbnRzIENsb2NrIHsKICBjb25zdCBfRml4ZWRDbG9jaygpOwoKICAvLyBFYWNoIHpvbmUgaXMgYSBjb25zdGFudCBvZiBhIGZpbGUgb2YgaXRzIG93bi4KICBAb3ZlcnJpZGUKICBMaXN0PFN0cmluZz4gZ2V0IHpvbmVzID0+IGNvbnN0IFt7e3t6b25lX2NvbnN0YW50c319fV07Cn0K",
       "type": "text"
     }
   ],

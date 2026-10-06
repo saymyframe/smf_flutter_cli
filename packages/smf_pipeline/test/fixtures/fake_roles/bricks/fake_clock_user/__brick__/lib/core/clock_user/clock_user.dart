@@ -12,3 +12,7 @@ String clockUserText() {
   return 'No badge';
 {{/has_badge}}
 }
+
+/// The time zones that the clock user shows: those of the clock when the
+/// app has one.
+List<String> clockUserZones() => {{{clock_zones}}};

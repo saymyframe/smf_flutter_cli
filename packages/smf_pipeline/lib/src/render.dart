@@ -18,13 +18,23 @@ import 'package:smf_pipeline/src/validation.dart';
 /// with who contributed the fragment.
 final class AddedImport {
   /// Creates the record of [import], needed by [contributor].
-  const AddedImport(this.import, this.contributor);
+  const AddedImport(this.import, this.contributor, {this.fromHook = false});
 
   /// The import, as the fragment gave it.
   final ImportRef import;
 
   /// Who contributed the fragment that needs it.
   final ContributionOrigin contributor;
+
+  /// Whether a render hook of [contributor] gave the fragment, one of
+  /// [RoleOutput.fragments] or a fragment variable of [RoleOutput.vars],
+  /// which the hook wrote from the data of its role.
+  ///
+  /// The other fragments are those of the contributions of [contributor]:
+  /// a fragment for a socket, and the code of a variable of a brick that
+  /// depends on a role (see [RoleVar]). They are the same whatever the
+  /// modules of the app give the roles.
+  final bool fromHook;
 }
 
 /// A file of the app that stage 8 rendered.
@@ -35,6 +45,7 @@ final class RenderedFile {
     required this.bytes,
     required this.owner,
     this.isText = true,
+    this.fromHook = false,
     this.addedImports = const [],
   });
 
@@ -44,11 +55,16 @@ final class RenderedFile {
   /// The content.
   final List<int> bytes;
 
-  /// Whether the file is text, which mason renders, or binary, which it
-  /// copies.
+  /// Whether the file is text, which mason renders in the file of a brick,
+  /// or binary, which it copies.
   final bool isText;
 
-  /// Who generated the file: the owner of its brick.
+  /// Whether a render hook generated the file ([RoleOutput.files]), as it
+  /// is, rather than a brick.
+  final bool fromHook;
+
+  /// Who generated the file: the owner of its brick, or of the render hook
+  /// that generated it.
   final ContributionOrigin owner;
 
   /// The imports the pipeline added to the file for the fragments of the
@@ -66,6 +82,7 @@ final class RenderedFile {
         bytes: utf8.encode(text),
         owner: owner,
         isText: isText,
+        fromHook: fromHook,
         addedImports: addedImports,
       );
 }
@@ -83,7 +100,8 @@ final class RenderedApp {
         }),
         socketOrders = Map.unmodifiable(socketOrders);
 
-  /// The files by path, relative to the root of the app, sorted by path.
+  /// The files by path, relative to the root of the app, sorted by path:
+  /// those of the bricks, and those that the render hooks generated.
   final Map<String, RenderedFile> files;
 
   /// The contributions of every socket that got any, in the order that the
@@ -96,6 +114,24 @@ final class RenderedApp {
   /// files. The sockets of the pipeline, which render the merged pubspec,
   /// are not among them.
   final Map<SocketRef, ContributionOrder> socketOrders;
+
+  /// What the contributors gave the keyed [socket], in the order the socket
+  /// got them: the contributor, the key and the value of each entry. Empty
+  /// for a socket that got nothing.
+  ///
+  /// A test reads with it what a module gave a socket whose template
+  /// belongs to a role, such as its note in the guide for coding agents,
+  /// without reading the file that the role renders.
+  List<(ContributionOrigin, String, V)> entriesOf<V extends Object>(
+    SocketRef<KeyedSocket<V>> socket,
+  ) =>
+      [
+        for (final collected
+            in socketOrders[socket]?.contributions ?? const <Collected>[])
+          if (collected.contribution
+              case SocketContribution(:final entryKey?, :final entryValue?))
+            (collected.origin, entryKey, entryValue as V),
+      ];
 
   /// The text of every text file, by path.
   Map<String, String> get texts => {
@@ -120,6 +156,10 @@ final class _HookOutput {
 
   /// The brick variables of each owner that are fragments of code, by name.
   final Map<ContributionOrigin, Map<String, Fragment>> fragmentVars = {};
+
+  /// The files that the hooks generate, each with the owner of its hook,
+  /// in the order of the hooks.
+  final List<RenderedFile> files = [];
 }
 
 /// The imports of the fragment variables that the templates of the bricks
@@ -127,6 +167,10 @@ final class _HookOutput {
 final class _VariableImports {
   /// The imports for each template file.
   final Map<(ContributionOrigin, String), List<AddedImport>> imports = {};
+
+  /// The imports that each template file gets only in an app with other
+  /// roles, for a variable whose code depends on a role (see [RoleVar]).
+  final Map<(ContributionOrigin, String), List<ImportRef>> elsewhere = {};
 
   /// The fragment variables with imports that each template file reads.
   final Map<(ContributionOrigin, String), Set<String>> names = {};
@@ -142,9 +186,13 @@ final class _VariableImports {
 ///    roles, with the results of [choices]. Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
 ///    not be reserved (see [isReservedVar]) or set twice for one owner. A
-///    variable may be a [Fragment] of code, see [RoleOutput.vars].
+///    variable may be a [Fragment] of code, see [RoleOutput.vars]. The path
+///    of a file that a hook generates ([RoleOutput.files]) must be one
+///    inside the app that is not of a file of one machine, that every
+///    machine can write, and where the kind of the module of a provider
+///    may generate files.
 /// 2. Orders the contributions of every socket, those of the render hooks
-///    included (see [orderContributions]), and renders each socket into the
+///    included (see [orderSocket]), and renders each socket into the
 ///    text of its tags. A socket that gets contributions but has no tag in
 ///    any brick is an error, since its code would be lost. The sockets of
 ///    the pipeline get the sections of the merged [pubspec], and the tags
@@ -161,10 +209,19 @@ final class _VariableImports {
 ///    and a template that is not Dart cannot read one with imports; a
 ///    fragment variable that no template of its owner reads is an error,
 ///    since its code would be lost, unless a brick of the owner that the
-///    app leaves out reads it.
-/// 4. Adds the imports of each socket's fragments to the Dart file that
+///    app leaves out reads it. A variable of the brick whose code depends
+///    on a role ([RoleVar]) has its code for the roles of the app. It is a
+///    fragment variable of the brick in every app, whichever value the app
+///    gets, but one that no template has to read.
+/// 4. Adds the files of the render hooks to those of the bricks, each as it
+///    is. A file that a brick or another hook generates too is an error,
+///    and so is one at a path that is a directory of another file of the
+///    app, or in what is a file of the app.
+/// 5. Adds the imports of each socket's fragments to the Dart file that
 ///    holds its tag, and those of each fragment variable to every Dart file
-///    of its owner that reads it; see [addImports].
+///    of its owner that reads it, or of its brick for a variable of the
+///    brick; see [addImports]. A file that reads a variable whose imports
+///    depend on a role must be able to take those of each of its values.
 ///
 /// Throws a [GenerationFailedException] with every problem found.
 RenderedApp renderApp({
@@ -214,6 +271,7 @@ RenderedApp renderApp({
   );
   collection.applyingOf<BrickContribution>().forEach(bricks.render);
   issues.addAll(_unreadVariableIssues(hooks, bricks.variables, collection));
+  hooks.files.forEach(bricks.addHookFile);
   _stopOnErrors(issues);
 
   final files = bricks.files;
@@ -231,6 +289,7 @@ RenderedApp renderApp({
         files[path]!,
         [...?texts.imports[template], ...?variables.imports[template]],
         context.appName,
+        elsewhere: variables.elsewhere[template] ?? const [],
       );
     } on ImportTargetException catch (error) {
       issues.addAll(
@@ -360,12 +419,17 @@ List<SmfIssue> _importTargetIssues(
 /// [file] with the imports of [added] that it does not have yet, and with
 /// them recorded, resolved in the app of [appName].
 ///
-/// Throws an [ImportTargetException] if the file cannot have imports.
+/// Throws an [ImportTargetException] if the file cannot have imports: those
+/// of [added], or those of [elsewhere], which it gets only in an app with
+/// other roles, so that a file is right in every app or in none.
 RenderedFile _withImports(
   RenderedFile file,
   List<AddedImport> added,
-  String appName,
-) {
+  String appName, {
+  List<ImportRef> elsewhere = const [],
+}) {
+  // Only whether the file can take them matters here.
+  addImports(file.text, path: file.path, imports: elsewhere, appName: appName);
   final result = addImports(
     file.text,
     path: file.path,
@@ -385,6 +449,7 @@ RenderedFile _withImports(
             show: import.import.show,
           ),
           import.contributor,
+          fromHook: import.fromHook,
         ),
   ]);
 }
@@ -446,6 +511,38 @@ final class _RenderHooks {
     }
     _addVars(origin, result);
     _addFragments(origin, result);
+    _addFiles(origin, result);
+  }
+
+  /// Records the files of [result], what the render hook of [origin]
+  /// returned, each as it is, and reports those whose path cannot be that
+  /// of a file of the app, is one that some machine cannot write, or is
+  /// where the kind of the module of [origin] generates no files.
+  void _addFiles(ContributionOrigin origin, RoleOutput result) {
+    for (final MapEntry(key: path, value: text) in result.files.entries) {
+      if (_pathProblem(path) ?? _unwritableProblem(path) case final problem?) {
+        issues.add(
+          SmfIssue(
+            'The render hook of $origin generates a file at '
+            '"${_shown(path)}", which $problem.',
+            origin: origin,
+          ),
+        );
+        continue;
+      }
+      if (_kindIssue(origin, path, resolution) case final issue?) {
+        issues.add(issue);
+        continue;
+      }
+      output.files.add(
+        RenderedFile(
+          path: path,
+          bytes: utf8.encode(text),
+          owner: origin,
+          fromHook: true,
+        ),
+      );
+    }
   }
 
   void _addVars(ContributionOrigin origin, RoleOutput result) {
@@ -493,6 +590,7 @@ final class _RenderHooks {
         origin,
         applies: fragment.when.every(present.contains) &&
             (socket.role == null || present.contains(socket.role)),
+        fromHook: true,
       );
       issues.addAll(contributionIssues(collected, registry, resolution));
       if (collected.applies) output.fragments.add(collected);
@@ -501,14 +599,14 @@ final class _RenderHooks {
 }
 
 /// The issues of [fragment], the value of the brick variable [name] of the
-/// render hook of [origin]; see [_fragmentVarProblems].
+/// render hook of [origin]; see [fragmentVarProblems].
 List<SmfIssue> _fragmentVarIssues(
   Fragment fragment,
   String name,
   ContributionOrigin origin,
 ) =>
     [
-      for (final problem in _fragmentVarProblems(fragment))
+      for (final problem in fragmentVarProblems(fragment))
         SmfIssue(
           'The fragment variable $name of the render hook of $origin '
           '$problem',
@@ -537,17 +635,6 @@ List<SmfIssue> _varValueIssues(
           'them, or a fragment of code.',
           origin: origin,
         ),
-    ];
-
-/// What is wrong with [fragment], the value of a brick variable, besides
-/// what [strippedVars] finds in its code: a wrapper, and imports that are
-/// not valid.
-List<String> _fragmentVarProblems(Fragment fragment) => [
-      if (fragment.isWrapper)
-        'is a Fragment.wrap, but a variable takes a Fragment of code.',
-      for (final import in fragment.imports)
-        for (final problem in import.problems())
-          'has an invalid import. $problem',
     ];
 
 /// The rendered sockets of an app: the text of every tag, and the imports
@@ -581,7 +668,13 @@ final class _SocketTexts {
     for (final collected in order.contributions) {
       final fragment = (collected.contribution as SocketContribution).fragment;
       for (final import in fragment?.imports ?? const <ImportRef>[]) {
-        added.add(AddedImport(import, collected.origin));
+        added.add(
+          AddedImport(
+            import,
+            collected.origin,
+            fromHook: collected.fromHook,
+          ),
+        );
       }
     }
   }
@@ -602,7 +695,7 @@ _SocketTexts _renderSockets({
   }
 
   for (final MapEntry(key: socket, value: collected) in bySocket.entries) {
-    final order = orderContributions(collected, resolution);
+    final order = orderSocket(socket, collected, resolution);
     if (order.cycle.isNotEmpty) {
       issues.add(
         SmfIssue(
@@ -667,15 +760,51 @@ Map<String, String>? _renderSocket(
   return null;
 }
 
+/// A variable of a brick that holds code, which the templates of the brick
+/// read as it is: a fragment variable of a render hook of the owner of the
+/// brick, or a variable of the brick whose code depends on a role (see
+/// [RoleVar]).
+final class _CodeVar {
+  const _CodeVar(
+    this.fragment, {
+    required this.contributor,
+    required this.fromHook,
+    required this.inSection,
+    this.elsewhere = const [],
+  });
+
+  /// The code of the variable in the app, with the imports it needs.
+  final Fragment fragment;
+
+  /// Who contributed the code.
+  final ContributionOrigin contributor;
+
+  /// Whether the variable is a fragment variable of a render hook, rather
+  /// than a variable of the brick.
+  final bool fromHook;
+
+  /// What a message tells a template that reads the variable inside a
+  /// mustache section, as a sentence: what decides the code that the
+  /// variable holds instead, and what to do about it.
+  final String inSection;
+
+  /// The imports of the code that the variable has in an app with other
+  /// roles: a file that reads the variable must take them too.
+  final List<ImportRef> elsewhere;
+
+  /// Whether a file that reads the variable gets imports, in the app or in
+  /// one with other roles.
+  bool get bringsImports => fragment.imports.isNotEmpty || elsewhere.isNotEmpty;
+}
+
 /// A brick that [_BrickRenderer] renders: who contributed it, its owner,
-/// its variables, and the fragment variables and module kind of its owner.
+/// its variables, and those among them that hold code.
 final class _Brick {
   _Brick({
     required this.origin,
     required this.name,
     required this.vars,
-    required this.fragments,
-    required this.kind,
+    required this.code,
   }) : owner = ownerOf(origin);
 
   final ContributionOrigin origin;
@@ -685,16 +814,18 @@ final class _Brick {
   final ContributionOrigin owner;
 
   final String name;
-  final Map<String, Object?> vars;
-  final Map<String, Fragment> fragments;
 
-  /// The kind of the module of the brick, if it has one.
-  final ModuleKind? kind;
+  /// The value of each variable as mason renders it: the code of a
+  /// variable that holds code.
+  final Map<String, Object?> vars;
+
+  /// The variables that hold code, by name.
+  final Map<String, _CodeVar> code;
 }
 
 /// Renders the bricks of an app into [files], with the text of every tag
-/// and the variables of the render hooks, and reports the problems to
-/// [issues].
+/// and the variables of the render hooks, takes the files of the render
+/// hooks among them, and reports the problems to [issues].
 final class _BrickRenderer {
   _BrickRenderer({
     required this.registry,
@@ -751,6 +882,17 @@ final class _BrickRenderer {
       ...texts,
       ...fromHooks,
     };
+    final code = {
+      for (final MapEntry(:key, :value)
+          in (hooks.fragmentVars[owner] ?? const <String, Fragment>{}).entries)
+        key: _CodeVar(
+          value,
+          contributor: owner,
+          fromHook: true,
+          inSection: 'the render hook decides what the variable holds '
+              'instead.',
+        ),
+    };
     for (final MapEntry(:key, :value) in brick.vars.entries) {
       if (fromHooks.containsKey(key)) {
         issues.add(
@@ -761,19 +903,27 @@ final class _BrickRenderer {
           ),
         );
       }
-      vars[key] = value;
+      if (value is! RoleVar) {
+        vars[key] = value;
+        continue;
+      }
+      // The variable holds code in every app, whichever of its values the
+      // app gets, so that the templates read it in the same way in all of
+      // them.
+      final (:here, :elsewhere) = _valuesOf(value, present);
+      final fragment = _fragmentOf(here);
+      vars[key] = fragment.code;
+      code[key] = _CodeVar(
+        fragment,
+        contributor: origin,
+        fromHook: false,
+        inSection: 'the presence of the ${value.role} alone decides what '
+            'the variable holds, so code that needs another role too goes '
+            'into a brick of its own, contributed with when.',
+        elsewhere: _fragmentOf(elsewhere).imports,
+      );
     }
-    return _Brick(
-      origin: origin,
-      name: name,
-      vars: vars,
-      fragments: hooks.fragmentVars[owner] ?? const <String, Fragment>{},
-      kind: switch (origin) {
-        ModuleOrigin(:final module) =>
-          resolution.module(module)?.descriptor.kind,
-        _ => null,
-      },
-    );
+    return _Brick(origin: origin, name: name, vars: vars, code: code);
   }
 
   void _renderFile(_Brick brick, MasonBundledFile file) {
@@ -799,7 +949,7 @@ final class _BrickRenderer {
       template,
       owner: owner,
       vars: brick.vars,
-      fragments: brick.fragments,
+      code: brick.code,
       read: (variable) => variables.read.add((owner, variable)),
     );
     for (final problem in pathProblems) {
@@ -828,7 +978,7 @@ final class _BrickRenderer {
       );
       return null;
     }
-    if (_pathProblem(path) case final problem?) {
+    if (_pathProblem(path) ?? _entityProblem(path) case final problem?) {
       issues.add(
         SmfIssue(
           'The path $template in the brick $name of $origin renders to '
@@ -839,17 +989,8 @@ final class _BrickRenderer {
       );
       return null;
     }
-    final kind = brick.kind;
-    if (origin case ModuleOrigin(:final module)
-        when kind != null && !kind.allowsFile(module, path)) {
-      issues.add(
-        SmfIssue(
-          'The module $module generates $path, where modules of the '
-          '${kind.id} kind may not.',
-          origin: origin,
-          path: path,
-        ),
-      );
+    if (_kindIssue(origin, path, resolution) case final issue?) {
+      issues.add(issue);
       return null;
     }
     return path;
@@ -867,14 +1008,14 @@ final class _BrickRenderer {
     final text = templateTextOf(file);
     if (text == null) return (bytes: bytes, isText: false);
     if (!masonTag.hasMatch(text)) return (bytes: bytes, isText: true);
-    final _Brick(:origin, :name, :vars, :fragments) = brick;
+    final _Brick(:origin, :name, :vars, :code) = brick;
     final scan = scanTemplate(template, text);
     if (!_readFragmentVariables(
       scan,
       template,
       brick: name,
       origin: origin,
-      fragments: fragments,
+      code: code,
       variables: variables,
       issues: issues,
     )) {
@@ -899,19 +1040,44 @@ final class _BrickRenderer {
     // data, which mustache renders.
     final rendered = _withoutEmptyLines(
       text,
-      (tag) => texts[tag] == '' || fragments[tag]?.code == '',
+      (tag) => texts[tag] == '' || code[tag]?.fragment.code == '',
     ).render(vars);
     return (bytes: utf8.encode(rendered), isText: true);
   }
 
+  /// Adds [file], which a render hook generated, to [files], unless a file
+  /// of a brick or of another hook is in its way, which it reports; see
+  /// [_clashOf].
+  void addHookFile(RenderedFile file) {
+    final RenderedFile(:path, owner: origin) = file;
+    for (final other in files.values) {
+      if (_clashOf(path, other) case final clash?) {
+        issues.add(
+          SmfIssue(
+            'The render hook of $origin generates $clash',
+            origin: origin,
+            path: path,
+          ),
+        );
+        return;
+      }
+    }
+    files[path] = file;
+  }
+
+  /// The file among [files] that is the file at [path] of the app, if there
+  /// is one.
+  ///
+  /// File systems that ignore case, as macOS and Windows do by default,
+  /// take paths that differ only in case for one file.
+  RenderedFile? _fileAt(String path) => files.values
+      .where((file) => file.path.toLowerCase() == path.toLowerCase())
+      .firstOrNull;
+
   /// Whether [origin] generates [path] although another file of the app
   /// already has it, which it reports.
   bool _isGeneratedTwice(ContributionOrigin origin, String path) {
-    // File systems that ignore case, as macOS and Windows do by default,
-    // take paths that differ only in case for one file.
-    final same = files.values
-        .where((file) => file.path.toLowerCase() == path.toLowerCase())
-        .firstOrNull;
+    final same = _fileAt(path);
     if (same == null) return false;
     final what = same.path == path
         ? path
@@ -950,20 +1116,20 @@ final RegExp _variableLine = RegExp(
 /// The problems with the variables that [template], the path of a file of
 /// a brick of [owner], reads: one that neither the brick nor a render hook
 /// of [owner] sets, among [vars], which mustache would render as nothing,
-/// and a fragment variable among [fragments], whose code a path cannot
-/// hold; the fragment variables it reads go to [read].
+/// and a fragment variable, one of those that hold [code], which a path
+/// cannot hold; the fragment variables it reads go to [read].
 List<String> _pathVariableProblems(
   String template, {
   required ContributionOrigin owner,
   required Map<String, Object?> vars,
-  required Map<String, Fragment> fragments,
+  required Map<String, _CodeVar> code,
   required void Function(String variable) read,
 }) {
   if (!masonTag.hasMatch(template)) return const [];
   final scan = scanTemplate(template, template);
-  final code = {
+  final fragments = {
     for (final tag in scan.tags)
-      if (fragments.containsKey(variableOf(tag.name))) variableOf(tag.name),
+      if (code.containsKey(variableOf(tag.name))) variableOf(tag.name),
   }..forEach(read);
   final unset = unsetNames(scan, vars);
   final problems = <String>[];
@@ -973,20 +1139,20 @@ List<String> _pathVariableProblems(
       'of $owner sets, so mustache would render nothing.',
     );
   }
-  if (code.isNotEmpty) {
-    final what = code.length == 1 ? 'variable' : 'variables';
+  if (fragments.isNotEmpty) {
+    final what = fragments.length == 1 ? 'variable' : 'variables';
     problems.add(
-      'reads the fragment $what ${code.join(', ')}, but a path takes plain '
-      'values only.',
+      'reads the fragment $what ${fragments.join(', ')}, but a path takes '
+      'plain values only.',
     );
   }
   return problems;
 }
 
-/// Reads the fragment variables among [fragments] that [scan], the scan of
-/// the template file [template] of the brick [brick] of [origin], reads:
-/// records them as read, and their imports for the file, and reports how
-/// the file reads them wrongly to [issues].
+/// Reads the fragment variables, those that hold [code], that [scan], the
+/// scan of the template file [template] of the brick [brick] of [origin],
+/// reads: records them as read, and their imports for the file, and reports
+/// how the file reads them wrongly to [issues].
 ///
 /// Returns `false` if the file reads one wrongly, so it is not rendered.
 bool _readFragmentVariables(
@@ -994,13 +1160,13 @@ bool _readFragmentVariables(
   String template, {
   required String brick,
   required ContributionOrigin origin,
-  required Map<String, Fragment> fragments,
+  required Map<String, _CodeVar> code,
   required _VariableImports variables,
   required List<SmfIssue> issues,
 }) {
-  if (fragments.isEmpty) return true;
+  if (code.isEmpty) return true;
   final owner = ownerOf(origin);
-  final reads = _fragmentReads(scan, fragments);
+  final reads = _fragmentReads(scan, code);
   // The template reads the variables, even if not as it should.
   for (final variable in reads.names) {
     variables.read.add((owner, variable));
@@ -1015,14 +1181,14 @@ bool _readFragmentVariables(
     );
   }
   if (reads.problems.isNotEmpty) return false;
-  for (final variable in reads.names) {
-    final imports = fragments[variable]!.imports;
-    if (imports.isEmpty) continue;
+  for (final name in reads.names) {
+    final variable = code[name]!;
+    if (!variable.bringsImports) continue;
     if (!template.endsWith('.dart')) {
       issues.add(
         SmfIssue(
           'The template $template in the brick $brick of $origin is not '
-          'Dart, but it reads the fragment variable $variable, whose '
+          'Dart, but it reads the fragment variable $name, whose '
           'imports can only go into a Dart file.',
           origin: origin,
           path: template,
@@ -1030,13 +1196,36 @@ bool _readFragmentVariables(
       );
       continue;
     }
-    variables.names.putIfAbsent((origin, template), () => {}).add(variable);
-    variables.imports.putIfAbsent((origin, template), () => []).addAll([
-      for (final import in imports) AddedImport(import, owner),
+    final file = (origin, template);
+    variables.names.putIfAbsent(file, () => {}).add(name);
+    variables.imports.putIfAbsent(file, () => []).addAll([
+      for (final import in variable.fragment.imports)
+        AddedImport(
+          import,
+          variable.contributor,
+          fromHook: variable.fromHook,
+        ),
     ]);
+    variables.elsewhere.putIfAbsent(file, () => []).addAll(variable.elsewhere);
   }
   return true;
 }
+
+/// The values of [variable] in an app with the roles [present]: the one
+/// that the app gets, and the one that an app gets where the role of the
+/// variable is absent when it is present here, or the other way round.
+({Object here, Object elsewhere}) _valuesOf(
+  RoleVar variable,
+  Set<Role> present,
+) =>
+    present.contains(variable.role)
+        ? (here: variable.present, elsewhere: variable.absent)
+        : (here: variable.absent, elsewhere: variable.present);
+
+/// The code of [value], a value of a variable whose code depends on a
+/// role: a fragment, or a string of code that needs no imports.
+Fragment _fragmentOf(Object value) =>
+    value is Fragment ? value : Fragment('$value');
 
 /// The names of the variables and sections that the templates of the
 /// bricks of [owner] read, those that this app leaves out included.
@@ -1059,21 +1248,21 @@ Set<String> _namesReadIn(BrickContribution brick) => {
           ],
     };
 
-/// The fragment variables among [fragments] that the template of [scan]
-/// reads, and the problems with how it reads them: each must be read as it
-/// is, `{{{name}}}`, which mustache does not escape, and outside mustache
-/// sections, since the render hook decides what the variable holds, and the
-/// imports of the fragment would otherwise go into the file for code that
-/// is not there.
+/// The fragment variables, those that hold [code], that the template of
+/// [scan] reads, and the problems with how it reads them: each must be read
+/// as it is, `{{{name}}}`, which mustache does not escape, and outside
+/// mustache sections, since the render hook, or the presence of one role,
+/// decides what the variable holds, and the imports of the fragment would
+/// otherwise go into the file for code that is not there.
 ({Set<String> names, List<String> problems}) _fragmentReads(
   TemplateScan scan,
-  Map<String, Fragment> fragments,
+  Map<String, _CodeVar> code,
 ) {
   final names = <String>{};
   final problems = <String>[];
   for (final tag in scan.tags) {
     final name = variableOf(tag.name);
-    if (!fragments.containsKey(name)) continue;
+    if (!code.containsKey(name)) continue;
     names.add(name);
     if (!tag.triple || tag.name != name) {
       final how = tag.name != name ? 'as ${tag.name}' : 'without three braces';
@@ -1085,14 +1274,14 @@ Set<String> _namesReadIn(BrickContribution brick) => {
     if (tag.sections.isNotEmpty) {
       problems.add(
         'reads the fragment variable $name inside the mustache section '
-        '${tag.sections.last} at line ${tag.line}; the render hook decides '
-        'what the variable holds instead.',
+        '${tag.sections.last} at line ${tag.line}; '
+        '${code[name]!.inSection}',
       );
     }
   }
   for (final section in scan.sections) {
     final name = variableOf(section.name);
-    if (!fragments.containsKey(name)) continue;
+    if (!code.containsKey(name)) continue;
     problems.add(
       'opens a section over the fragment variable $name at line '
       '${section.line}; read a fragment of code as it is, {{{$name}}}.',
@@ -1101,8 +1290,10 @@ Set<String> _namesReadIn(BrickContribution brick) => {
   return (names: names, problems: problems);
 }
 
-/// What is wrong with [path], a rendered path of a file of the app, or
-/// `null` if it is a path inside the app.
+/// What is wrong with [path], the path of a file of the app, or `null` if
+/// it is a path inside the app that a file of every app may have: the
+/// rendered path of a file of a brick, or the path of a file of a render
+/// hook.
 String? _pathProblem(String path) {
   if (path.isEmpty) return 'is empty';
   if (path.startsWith('/') ||
@@ -1115,10 +1306,117 @@ String? _pathProblem(String path) {
     return 'has an empty or "." segment';
   }
   if (segments.contains('..')) return 'leaves the directory of the app';
-  if (machineFileProblem(path) case final problem?) return problem;
-  if (_entity.hasMatch(path)) {
-    return 'has an HTML entity: mustache escapes variables in two braces, '
-        'so a variable with a slash needs three';
+  return machineFileProblem(path);
+}
+
+/// Why the file system of some machine cannot write a file at [path], the
+/// path of a file that a render hook generates, or `null` if each can. Such
+/// a path comes from the data of a role, and the app must be the same on
+/// every system: Windows allows no control character and none of
+/// `< > : " | ? *` in the name of a file, and removes a dot or a space at
+/// its end.
+String? _unwritableProblem(String path) {
+  if (_control.hasMatch(path)) return 'has a control character or a line break';
+  if (_forbiddenOnWindows.hasMatch(path)) {
+    return 'has a character that Windows allows in no name of a file: '
+        '< > : " | ? or *';
+  }
+  final segments = path.split('/');
+  if (segments.any((name) => name.endsWith('.') || name.endsWith(' '))) {
+    return 'has a segment that ends with a dot or a space, which Windows '
+        'removes';
+  }
+  return null;
+}
+
+/// A control character or a line break.
+final RegExp _control = RegExp(r'[\x00-\x1F\x7F-\x9F\u2028\u2029]');
+
+/// A character that Windows allows in no name of a file, besides the
+/// slashes and the control characters.
+final RegExp _forbiddenOnWindows = RegExp('[<>:"|?*]');
+
+/// [path] as a message shows it: a control character or a line break as
+/// its escape, such as `\u{a}`.
+String _shown(String path) => path.replaceAllMapped(
+      _control,
+      (match) => '\\u{${match[0]!.codeUnitAt(0).toRadixString(16)}}',
+    );
+
+/// Why the file at [path], which a render hook generates, cannot be in one
+/// app with [other], a file of a brick or of another hook, as the end of
+/// "The render hook of … generates"; `null` if it can:
+/// - they are one file;
+/// - [path] is a directory of [other], or a directory of [path] is the
+///   file [other]: a path of the app is a file or a directory, not both.
+///
+/// File systems that ignore case, as macOS and Windows do by default, take
+/// paths that differ only in case for one path, so the case does not
+/// matter.
+String? _clashOf(String path, RenderedFile other) {
+  final ours = path.toLowerCase();
+  final theirs = other.path.toLowerCase();
+  final who =
+      '${other.fromHook ? 'a render hook' : 'a brick'} of ${other.owner}';
+  if (ours == theirs) {
+    final what = other.path == path
+        ? path
+        : '$path, one file with ${other.path} where case does not matter';
+    return '$what, which $who generates too; every file of the app is '
+        'generated once.';
+  }
+  const either = 'a path of the app is a file or a directory, not both.';
+  // The same number of segments of each is the path that both have.
+  String start(String of, String like) =>
+      of.split('/').take(like.split('/').length).join('/');
+  if (theirs.startsWith('$ours/')) {
+    final directory = _spelled(start(other.path, path), path);
+    return '$path, but $directory is a directory of the app, in which $who '
+        'generates ${other.path}; $either';
+  }
+  if (ours.startsWith('$theirs/')) {
+    final file = _spelled(other.path, start(path, other.path));
+    return '$path, but $file is a file of the app, which $who generates; '
+        '$either';
+  }
+  return null;
+}
+
+/// [theirs], a path as a file of the app has it, as a message names it
+/// next to [ours], the same path as another file has it: with what makes
+/// them one path when they differ in case.
+String _spelled(String theirs, String ours) => theirs == ours
+    ? theirs
+    : '$theirs, one path with $ours where case does not matter,';
+
+/// What is wrong with [path], which mustache rendered from the path of a
+/// file of a brick, if it has an entity that mustache wrote for a character
+/// of a variable; otherwise `null`.
+String? _entityProblem(String path) => _entity.hasMatch(path)
+    ? 'has an HTML entity: mustache escapes variables in two braces, so a '
+        'variable with a slash needs three'
+    : null;
+
+/// The issue of [origin] if it generates the file at [path] where the kind
+/// of its module generates no files, as [resolution] tells; the template of
+/// a role has no kind.
+SmfIssue? _kindIssue(
+  ContributionOrigin origin,
+  String path,
+  Resolution resolution,
+) {
+  final kind = switch (origin) {
+    ModuleOrigin(:final module) => resolution.module(module)?.descriptor.kind,
+    _ => null,
+  };
+  if (origin case ModuleOrigin(:final module)
+      when kind != null && !kind.allowsFile(module, path)) {
+    return SmfIssue(
+      'The module $module generates $path, where modules of the ${kind.id} '
+      'kind may not.',
+      origin: origin,
+      path: path,
+    );
   }
   return null;
 }

@@ -13,8 +13,9 @@ final class RoleHookRequest {
     this.choices = const {},
   });
 
-  /// The data of all roles, each with its origin, in the order the modules
-  /// were selected.
+  /// The data of all roles, each with its origin: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -45,8 +46,10 @@ final class RoleHookInput<D extends Object> {
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] that applies in the app, each with its origin, in
-  /// the order the modules were selected.
+  /// The data of [role] that applies in the app, each with its origin: that
+  /// of the modules, in the order the modules were selected, and then that
+  /// of the templates of roles, in the order of the first provider of each
+  /// role.
   final List<RoleData<D>> data;
 
   /// The result of the role's [RoleTemplate.choose] hook, or `null` before
@@ -94,8 +97,9 @@ final class RoleChoiceRequest {
     required this.context,
   });
 
-  /// The data of all roles, each with its origin, in the order the modules
-  /// were selected.
+  /// The data of all roles, each with its origin: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -119,16 +123,19 @@ final class RoleChoiceContext<D extends Object> {
   RoleChoiceContext._({
     required this.role,
     required this.data,
+    required Set<Role> present,
     required Map<String, String?> optionValues,
     required this.environment,
     required this.context,
-  }) : _optionValues = optionValues;
+  })  : _present = present,
+        _optionValues = optionValues;
 
   /// The role whose hook runs.
   final Role<D> role;
 
-  /// The data of [role] that applies in the app, in the order the modules
-  /// were selected.
+  /// The data of [role] that applies in the app: that of the modules, in
+  /// the order the modules were selected, and then that of the templates of
+  /// roles, in the order of the first provider of each role.
   final List<RoleData<D>> data;
 
   /// The machine and the user; ask only if [SmfEnvironment.interactive].
@@ -137,7 +144,26 @@ final class RoleChoiceContext<D extends Object> {
   /// The app being generated.
   final ModuleContext context;
 
+  final Set<Role> _present;
   final Map<String, String?> _optionValues;
+
+  /// Whether [other] is present in the app.
+  ///
+  /// A hook may ask only about its own role and the roles it requires or
+  /// uses (see [Role.visibleRoles]), as [RoleHookInput.has] lets the other
+  /// hooks; throws an [ArgumentError] for any other.
+  bool has(Role other) {
+    if (identical(other, role)) return true;
+    if (!role.visibleRoles.contains(other)) {
+      throw ArgumentError.value(
+        other,
+        'other',
+        'The $role neither requires nor uses the $other, so its hooks cannot '
+            'check its presence',
+      );
+    }
+    return _present.contains(other);
+  }
 
   /// The value of the role's option [name], or `null` if it was not given.
   ///
@@ -155,7 +181,11 @@ final class RoleChoiceContext<D extends Object> {
 /// app.
 final class RoleOutput {
   /// Creates the output of a render hook.
-  const RoleOutput({this.fragments = const [], this.vars = const {}});
+  const RoleOutput({
+    this.fragments = const [],
+    this.vars = const {},
+    this.files = const {},
+  });
 
   /// Code and values for sockets, with the same access rules as the
   /// contributions of the hook's owner.
@@ -165,9 +195,11 @@ final class RoleOutput {
   /// the provider's module, the bricks of its variant included.
   ///
   /// They are plain data, such as strings, numbers, booleans and lists and
-  /// maps of them, and follow the rules of [BrickContribution.vars]. A
-  /// variable that two hooks of one module, or a hook and a brick of its
-  /// owner, both set is an error.
+  /// maps of them, and follow the rules of [BrickContribution.vars], but
+  /// none is a [RoleVar]: a hook asks for the presence of the roles that
+  /// its role requires or uses itself (see [RoleHookInput.has]). A variable
+  /// that two hooks of one module, or a hook and a brick of its owner, both
+  /// set is an error.
   ///
   /// A variable may also be a [Fragment] of code with the imports it needs,
   /// such as the routes a router renders from the data of its role. The
@@ -186,4 +218,47 @@ final class RoleOutput {
   ///   bricks of the variants of the owner for other providers do not
   ///   count.
   final Map<String, Object?> vars;
+
+  /// Text files of the hook's owner, the role's template or the provider's
+  /// module: the text of each by its path relative to the root of the app,
+  /// with forward slashes, such as `lib/core/clock/zones/zone_1.dart`.
+  ///
+  /// A brick has the same files in every app, so the files whose number or
+  /// paths depend on the data of the role or on its choice come from the
+  /// hook, such as one file for each item that the modules of the app give
+  /// the role. What every app of the owner has stays in a brick.
+  ///
+  /// The pipeline takes each file as it is, text and path: it renders no
+  /// mustache, fills no tag of a socket and adds no import, and mason,
+  /// which removes a backslash before a line break or a non-ASCII character
+  /// from what it renders, does not read it. Once the app is written,
+  /// `dart fix` and `dart format` go over a Dart file among them as over
+  /// the rest of the app. Otherwise it is a file of the app like those of
+  /// the bricks, and follows their rules:
+  /// - the path is inside the app, and is not of a file that belongs to one
+  ///   machine or one build, such as `.dart_tool/` or `pubspec.lock`;
+  /// - the file of a provider is where the kind of its module may generate
+  ///   files (see [ModuleKind.allowsFile]);
+  /// - every file of the app is generated once: a path that a brick or
+  ///   another hook generates too is an error, also when the paths differ
+  ///   only in case.
+  ///
+  /// The path comes from the data of the role, which the author of the
+  /// hook does not see as the author of a brick sees its paths, so two
+  /// more rules hold:
+  /// - every machine can write the file: the path has no control character
+  ///   or line break and none of `< > : " | ? *`, which Windows allows in
+  ///   no name of a file, and no segment of it ends with a dot or a space,
+  ///   which Windows removes;
+  /// - a path of the app is a file or a directory, not both: a file where
+  ///   another file of the app has a directory, or in what is a file of the
+  ///   app, is an error, whatever the case of the paths.
+  ///
+  /// The contract harness checks such a file like any other. A Dart file
+  /// among them parses and imports only what its owner may use: for a
+  /// provider, as for its fragments, also the files and the packages of the
+  /// modules whose data it renders. No file of the app, of a hook or of a
+  /// brick, is at a path where code generation or the localizations of
+  /// Flutter write theirs once the app is rendered.
+  final Map<String, String> files;
 }
