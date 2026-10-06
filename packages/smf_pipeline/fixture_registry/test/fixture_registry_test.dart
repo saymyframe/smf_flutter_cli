@@ -680,7 +680,14 @@ void main() {
       const first = 'String _fakeFeatureHomeLabel(BuildContext context) => '
           "'Fixture';";
       const second = 'String _fakeSecondSecondLabel(BuildContext context) => ';
-      for (final router in [FakeRouterModule.id, GoRouterModule.id]) {
+      // Every router of the registry, the fixture and those of the CLI.
+      final routers = [
+        for (final module in fixtureModules())
+          if (module.descriptor.provides.contains(routerRole))
+            module.descriptor.id,
+      ];
+      expect(routers, containsAll([FakeRouterModule.id, GoRouterModule.id]));
+      for (final router in routers) {
         // The fixtures have the fixture texts, a provider of the
         // localization role.
         expect(
