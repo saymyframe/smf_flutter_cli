@@ -38,7 +38,7 @@ The app is in the languages of `appLocales` in `${LocalizationRole.appLocaleFile
 
 To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
 
-1. Add `Locale('de')` to `appLocales`.
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
 2. Add `de` to `$_plistLanguages` in `${AppEntryRole.infoPlistFile}`, which tells iOS the languages of the app.
 ${withSetting ? "3. Add `'de': 'Deutsch'` to `_names` in `${LocalizationRole.languageSettingFile}`, the name that the setting shows for the language. Without it, the setting shows `de`.\n" : ''}''';
 
@@ -57,9 +57,11 @@ const _agentNote = '''
 
 /// What the role adds to its note for coding agents in an app with a
 /// settings screen: one more place of a new language, the file of the
-/// setting of the language, which only such an app has.
+/// setting of the language, which only such an app has. The names of the
+/// languages there are literals, which the note of every app with the role
+/// allows only for the name of the app, so this note tells of them.
 const _settingAgentNote = '''
-- A new language also needs its name in `_names` in `${LocalizationRole.languageSettingFile}`: the setting of the language on the settings screen shows a language by that name, and by its code without one.
+- A new language also needs its name in `_names` in `${LocalizationRole.languageSettingFile}`: the setting of the language on the settings screen shows a language by that name, and by its code without one. Each name there is a string literal, the name of the language in that language, which is the same whatever language the app is in.
 ''';
 
 /// The template of the [LocalizationRole]: the languages of the app, the

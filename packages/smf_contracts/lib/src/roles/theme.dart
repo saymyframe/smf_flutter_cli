@@ -206,7 +206,7 @@ const Map<String, LocalizedText> _texts = {
 /// app with the role has, and not the entry of the settings screen, which
 /// only some have.
 final String _agentNote = '''
-- `${ThemeRole.createLightTheme.name}(context)` and `${ThemeRole.createDarkTheme.name}(context)` in `${ThemeRole.appThemeFile}` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
+- `${ThemeRole.createLightTheme.name}(context)` and `${ThemeRole.createDarkTheme.name}(context)` in `${ThemeRole.appThemeFile}` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds, for the `theme` and the `darkTheme` of the root `MaterialApp`. Leave those two arguments and its `themeMode` as they are.
 - The theme mode is in `${ThemeRole.themeModeFile}`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `${ThemeRole.modeKey}` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 ''';

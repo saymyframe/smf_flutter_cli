@@ -12,6 +12,12 @@ const _names = <String, String>{
 /// The setting of the language of the app, an entry of the settings screen:
 /// it shows the language that the user chose, and lets the user choose one
 /// of the languages of the app, or follow the languages of the device.
+///
+/// The entry does not wait until a choice is saved. If the preferences fail
+/// to save it, the app is in the chosen language while it runs, its next
+/// launch starts with what was saved before, and the error is one that
+/// nothing here catches: it reaches the handlers of the uncaught errors of
+/// the app.
 class LanguageSetting extends StatelessWidget {
   /// Creates the setting.
   const LanguageSetting({super.key});

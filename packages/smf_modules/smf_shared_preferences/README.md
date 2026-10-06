@@ -23,4 +23,4 @@ SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is teste
 ## Documentation
 
 - [The shared_preferences module](https://doc.saymyframe.com/modules/shared-preferences)
-- [Services and state](https://doc.saymyframe.com/guides/services)
+- [Preferences](https://doc.saymyframe.com/guides/preferences)
