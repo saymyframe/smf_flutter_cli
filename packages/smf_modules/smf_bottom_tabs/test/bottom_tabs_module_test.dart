@@ -4,26 +4,33 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_bottom_tabs/src/agents.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 
 import 'support/features.dart';
 
 /// The features of the tests, whose destinations are Inbox, the start
-/// screen, and Search.
-const _inbox = TabFeature('inbox', startCandidate: true);
+/// screen, and Search. The first gives the localization role its label, a
+/// text in two languages, and the second does not list that role.
+const _inbox = TabFeature('inbox', startCandidate: true, localized: true);
 const _search = TabFeature('search');
 
 /// The modules of the tests: flutter_core, which creates the app, go_router,
-/// which builds its main navigation, this module and two features.
+/// which builds its main navigation, this module, two features, gen_l10n,
+/// which keeps the texts of the app, for the labels of the destinations,
+/// and shared_preferences, in which the app remembers its language.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
   BottomTabsModule(),
   _inbox,
   _search,
+  GenL10nModule(),
+  SharedPreferencesModule(),
 ];
 
 /// Four more features with destinations, which make six with [_modules].
@@ -67,13 +74,13 @@ CompilationUnit _parsed(RenderedApp app, String path) =>
     parseString(content: app.files[path]!.text).unit;
 
 /// The labels of the destinations of the main navigation of the app of
-/// [result], in their order, as the layout role gives them to the router,
-/// which builds the shell of the layout from them, whichever module provides
-/// it.
+/// [result] in English, in their order, as the layout role has them, whose
+/// list of the destinations the router gives the shell of the layout,
+/// whichever module provides it.
 List<String> _labelsOf(ContractResult result) => [
       for (final route
           in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
-        route.route.destination!.label,
+        route.route.destination!.label.en,
     ];
 
 /// The modules that provide [role] in the app of [result], whichever they
@@ -92,10 +99,12 @@ void main() {
       expect(descriptor.id, const ModuleId('bottom_tabs'));
       expect(descriptor.kind, ModuleKinds.layout);
       expect(descriptor.provides, {layoutRole});
-      // The layout role requires the router.
+      // The layout role requires the router, and uses the localization
+      // role, for the labels of the destinations.
       expect(descriptor.requires, isEmpty);
       expect(descriptor.effectiveRequires, {routerRole});
       expect(descriptor.uses, isEmpty);
+      expect(descriptor.effectiveUses, {localizationRole});
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.variants, isNull);
     });
@@ -112,15 +121,30 @@ void main() {
       results = await ContractHarness(ModuleRegistry(_modules)).checkAll();
     });
 
-    test('builds the apps with and without the layout', () {
+    test(
+        'builds the apps with and without the layout, and the app of the '
+        'layout with and without the texts of the app', () {
       // The app of this module is the app of go_router with the layout.
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router',
         'flutter_core',
         'go_router with layout',
+        'bottom_tabs with localization',
+        'inbox with localization',
         'inbox',
         'search',
+        'gen_l10n',
+        'shared_preferences',
       ]);
+    });
+
+    test(
+        'checks each module with the provider of each role it requires or '
+        'uses', () async {
+      expect(
+        await ContractHarness(ModuleRegistry(_modules)).uncheckedProviders(),
+        isEmpty,
+      );
     });
 
     test('finds no errors in any app, rendered code included', () {
@@ -323,7 +347,78 @@ void main() {
         'null : NavigationBar(selectedIndex: currentIndex, '
         'onDestinationSelected: onSelect, destinations: [for (final '
         'destination in destinations) NavigationDestination(icon: '
-        'Icon(destination.icon), label: destination.label)]))',
+        'Icon(destination.icon), label: destination.label(context))]))',
+      );
+    });
+
+    test(
+        'shows the label of each destination as the destination returns it '
+        'when the shell builds, so in the language that the app is in', () {
+      final index = DartFileIndexer.index(_shell, app.files[_shell]!.text);
+
+      // In the build of the shell, with its context, and nowhere else: the
+      // shell keeps no label.
+      final labels = index.invocationsOf('label');
+      expect(labels.single.target, 'destination');
+      expect(labels.single.enclosingMember, 'build');
+      expect(
+        app.files[_shell]!.text,
+        contains('label: destination.label(context),'),
+      );
+    });
+
+    test(
+        'gets the label of a feature from the texts of the app in an app '
+        'with them, when the feature gave them its label, and in English '
+        'otherwise', () async {
+      final withTexts = await _rendered([
+        _inbox.id,
+        _search.id,
+        BottomTabsModule.id,
+        GenL10nModule.id,
+      ]);
+      // The texts of the app, as the localization role has them: the label
+      // of the feature that gave it one.
+      final input = localizationRole.hookInput(withTexts.hook!);
+      expect(
+        [for (final text in localizationRole.textsIn(input)) text.getter],
+        ['inboxLabel'],
+      );
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+
+      // The list of the destinations of the layout role, which the router
+      // gives the shell.
+      String labelsOf(RenderedApp app) =>
+          app.files[LayoutRole.destinationFile]!.text;
+      expect(
+        labelsOf(withTexts.app!),
+        allOf(
+          contains(
+            'String _inboxInboxLabel(BuildContext context) => '
+            'context.l10n.inboxLabel;',
+          ),
+          contains(
+            "String _searchSearchLabel(BuildContext context) => 'Search';",
+          ),
+        ),
+      );
+      // Without the texts of the app, each label is its English text.
+      expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(
+        labelsOf(app),
+        allOf(
+          contains(
+            "String _inboxInboxLabel(BuildContext context) => 'Inbox';",
+          ),
+          contains(
+            "String _searchSearchLabel(BuildContext context) => 'Search';",
+          ),
+        ),
+      );
+      // The shell is the same in both apps.
+      expect(
+        withTexts.app!.files[_shell]!.text,
+        app.files[_shell]!.text,
       );
     });
 
