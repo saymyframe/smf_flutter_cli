@@ -512,6 +512,17 @@ List<BrokenProvider> brokenProviders() => const [
             'The setting shows its texts in the language that the user '
                 'chose.',
           ),
+          // On a device in the last language of the app, the texts of the
+          // setting stay in the first one before the user chose anything.
+          MatrixExpectedFailure(
+            'test/language_setting/language_setting_device_test.dart',
+            'on a device in the last language of the app, the setting of '
+                'the language follows the device, names a choice that code '
+                'makes, shows the language that the next start restores, '
+                'and has no option but those of the app and of the device',
+            'While the app follows the device, the setting shows its texts '
+                'in the language of the device.',
+          ),
           // The root can be in each language, so the tests of the role get
           // to the texts, which do not follow it.
           MatrixExpectedFailure(
