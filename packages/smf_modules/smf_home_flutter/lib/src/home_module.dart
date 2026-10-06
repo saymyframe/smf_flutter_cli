@@ -12,6 +12,11 @@ import 'package:smf_home_flutter/src/agents.dart';
 /// main navigation of the app, when a module provides it, shows the route
 /// as Home with the home icon.
 ///
+/// That label is a text of the module, in English and in Ukrainian, which
+/// the module gives the localization role, a role that it uses. With the
+/// role, the main navigation reads the label from the texts of the app, in
+/// the language of the app; without it, the label is the English text.
+///
 /// As a feature, the module requires the router role, whichever module
 /// provides it, and keeps its file in `lib/features/home/`. The screen has
 /// no state, so the module has no variants for the modules that manage
@@ -27,16 +32,28 @@ final class HomeModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('home');
 
+  /// The label of the destination of the screen in the main navigation.
+  static const _label = LocalizedText(
+    'label',
+    en: 'Home',
+    translations: {'uk': 'Головна'},
+  );
+
+  /// The texts of the module, which it gives the localization role.
+  static const _texts = TextsData([_label]);
+
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
         description: 'Start screen with the name of the app',
         kind: ModuleKinds.feature,
+        uses: {localizationRole},
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(homeBundle),
+        localizationRole.data(_texts),
         routerRole.data(
           const RoutesData([
             Route(
@@ -47,7 +64,7 @@ final class HomeModule extends SmfModule {
                 import: ImportRef.app('features/home/home_screen.dart'),
               ),
               destination: Destination(
-                label: 'Home',
+                label: _label,
                 icon: Fragment(
                   'Icons.home',
                   imports: [
