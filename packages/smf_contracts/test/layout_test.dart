@@ -427,11 +427,13 @@ void main() {
       final rendered = await renderTemplate(
         layoutRole,
         data: [
-          // A module that lists the localization role and gave it the
-          // labels, and a module that does not list it, whose label has no
-          // translation.
+          // Two modules that list the localization role and gave it their
+          // labels, one of which both name alike, and a module that does not
+          // list it, whose label has no translation.
           _feature('home', ['feed', 'inbox'], translated: true),
           _labels('home', ['feed', 'inbox']),
+          _feature('shop', ['feed'], translated: true),
+          _labels('shop', ['feed']),
           _feature('plain', ['about']),
         ],
         present: {routerRole, localizationRole},
@@ -448,6 +450,13 @@ void main() {
         declarations['_homeInboxLabel'],
         'String _homeInboxLabel(BuildContext context) => '
         'context.l10n.homeInboxLabel;',
+      );
+      // The text of the module of the destination, not the text of that
+      // name of another module.
+      expect(
+        declarations['_shopFeedLabel'],
+        'String _shopFeedLabel(BuildContext context) => '
+        'context.l10n.shopFeedLabel;',
       );
       expect(
         declarations['_plainAboutLabel'],
@@ -468,11 +477,16 @@ void main() {
       expect(
         await _destinationsOf(
           code,
-          texts: _textsFile(['homeFeedLabel', 'homeInboxLabel']),
+          texts: _textsFile([
+            'homeFeedLabel',
+            'homeInboxLabel',
+            'shopFeedLabel',
+          ]),
         ),
         [
           'en homeFeedLabel | uk homeFeedLabel | 1',
           'en homeInboxLabel | uk homeInboxLabel | 1',
+          'en shopFeedLabel | uk shopFeedLabel | 1',
           'about | about | 1',
         ],
       );
