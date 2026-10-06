@@ -86,8 +86,9 @@ With `go_router`:
 - The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 
-- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` whose colours `ColorScheme.fromSeed` derives from `seedColor`. Change `seedColor` for other colours.
-- Give that `ThemeData` what both themes share, such as the typography or the theme of a component. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` with the colours of `_schemeOf`, the text styles of `_textThemeOf` and the themes of the components, such as `cardTheme`. Give that `ThemeData` what both themes share. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- `_schemeOf` has the colours of each theme. It sets most of them itself, and `ColorScheme.fromSeed` derives the others from `seedColor`. For another look, change the colours there. Keep the colour of what stands on a colour readable on it, such as `onPrimary` on `primary`.
+- The font of the themes is the family `_fontFamily`, which `pubspec.yaml` declares with the files in `assets/fonts/geist/`, in the weights 400, 500 and 600. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily`. `assets/fonts/geist/OFL.txt` is the licence of the font, which the app bundles as an asset: keep it while the app has the font.
 - Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
@@ -240,6 +241,106 @@ plugins {
 }
 
 include(":app")
+=== assets/fonts/geist/Geist-Medium.ttf (material_theme) ===
+<66576 bytes>
+=== assets/fonts/geist/Geist-Regular.ttf (material_theme) ===
+<66560 bytes>
+=== assets/fonts/geist/Geist-SemiBold.ttf (material_theme) ===
+<66596 bytes>
+=== assets/fonts/geist/OFL.txt (material_theme) ===
+Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://openfontlicense.org
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded, 
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -1119,11 +1220,30 @@ final class SettingsRoutes {
   NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
-/// The colour that the light and the dark theme of the app derive their
-/// colours from. Change it to give the app another look.
-const Color seedColor = Colors.deepPurple;
+/// The accent of the app, and the colour that `ColorScheme.fromSeed` derives
+/// the colours from that [_schemeOf] does not set itself, such as those of
+/// an error. The colours of the app are in [_schemeOf]: change them there
+/// to give the app another look.
+const Color seedColor = Color(0xFF15803D);
+
+/// The deep green that the themes pair with [seedColor]: the primary colour
+/// of the light theme, and the colour of what stands on the primary colour
+/// of the dark one.
+const Color _deepGreen = Color(0xFF0F3326);
+
+/// The cream that goes with [_deepGreen]: the primary colour of the dark
+/// theme, and the colour of what stands on the primary colour of the light
+/// one.
+const Color _cream = Color(0xFFF1F1E8);
+
+/// The font of the app: the family that `pubspec.yaml` declares with the
+/// files in `assets/fonts/geist/`, in the weights 400, 500 and 600. A text
+/// of another weight gets the nearest of them. For another font, add its
+/// files, declare its family in `pubspec.yaml` and name it here.
+const String _fontFamily = 'Geist';
 
 /// The light theme of the app.
 ///
@@ -1136,15 +1256,244 @@ ThemeData createLightTheme(BuildContext context) => _themeOf(Brightness.light);
 /// The dark theme of the app; see [createLightTheme].
 ThemeData createDarkTheme(BuildContext context) => _themeOf(Brightness.dark);
 
-/// The Material 3 theme of [brightness] in the colours of [seedColor]. What
-/// both themes of the app share goes here, such as the shape of its
-/// buttons.
-ThemeData _themeOf(Brightness brightness) => ThemeData(
-  colorScheme: ColorScheme.fromSeed(
+/// The colours of [brightness]: those that `ColorScheme.fromSeed` derives
+/// from [seedColor], with neutral surfaces, hairlines for borders, and the
+/// deep green and the cream as the primary pair.
+ColorScheme _schemeOf(Brightness brightness) {
+  final seeded = ColorScheme.fromSeed(
     seedColor: seedColor,
     brightness: brightness,
-  ),
-);
+    dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+  );
+  return switch (brightness) {
+    Brightness.light => seeded.copyWith(
+      primary: _deepGreen,
+      onPrimary: _cream,
+      primaryContainer: const Color(0xFFDDEDE3),
+      onPrimaryContainer: _deepGreen,
+      secondary: seedColor,
+      onSecondary: Colors.white,
+      secondaryContainer: const Color(0xFFDCFCE7),
+      onSecondaryContainer: const Color(0xFF14532D),
+      tertiary: const Color(0xFFB45309),
+      onTertiary: Colors.white,
+      tertiaryContainer: const Color(0xFFFEF3C7),
+      onTertiaryContainer: const Color(0xFF78350F),
+      surface: const Color(0xFFFAFAF9),
+      onSurface: const Color(0xFF0C0A09),
+      onSurfaceVariant: const Color(0xFF57534E),
+      surfaceContainerLowest: Colors.white,
+      surfaceContainerLow: Colors.white,
+      surfaceContainer: const Color(0xFFF5F5F4),
+      surfaceContainerHigh: const Color(0xFFEEEDEB),
+      surfaceContainerHighest: const Color(0xFFE7E5E4),
+      outline: const Color(0xFFA8A29E),
+      outlineVariant: const Color(0xFFE7E5E4),
+      inverseSurface: const Color(0xFF1C1917),
+      onInverseSurface: const Color(0xFFFAFAF9),
+      surfaceTint: Colors.transparent,
+    ),
+    Brightness.dark => seeded.copyWith(
+      primary: _cream,
+      onPrimary: _deepGreen,
+      primaryContainer: const Color(0xFF143D2F),
+      onPrimaryContainer: const Color(0xFFD9EFE2),
+      secondary: const Color(0xFF4ADE80),
+      onSecondary: const Color(0xFF052E16),
+      secondaryContainer: const Color(0xFF133422),
+      onSecondaryContainer: const Color(0xFFBBF7D0),
+      tertiary: const Color(0xFFFBBF24),
+      onTertiary: const Color(0xFF451A03),
+      tertiaryContainer: const Color(0xFF3A2A0A),
+      onTertiaryContainer: const Color(0xFFFDE68A),
+      surface: const Color(0xFF0A0A0A),
+      onSurface: const Color(0xFFEDEDED),
+      onSurfaceVariant: const Color(0xFFA3A3A3),
+      surfaceContainerLowest: const Color(0xFF060606),
+      surfaceContainerLow: const Color(0xFF111111),
+      surfaceContainer: const Color(0xFF161616),
+      surfaceContainerHigh: const Color(0xFF1C1C1C),
+      surfaceContainerHighest: const Color(0xFF262626),
+      outline: const Color(0xFF525252),
+      outlineVariant: const Color(0xFF262626),
+      inverseSurface: const Color(0xFFEDEDED),
+      onInverseSurface: const Color(0xFF0A0A0A),
+      surfaceTint: Colors.transparent,
+    ),
+  };
+}
+
+/// The text styles of the app in its font, in the colours of [scheme]:
+/// tight, heavy headlines and calm body text.
+TextTheme _textThemeOf(ColorScheme scheme) {
+  final base = ThemeData(
+    colorScheme: scheme,
+    fontFamily: _fontFamily,
+  ).textTheme;
+  TextStyle? style(
+    TextStyle? from,
+    FontWeight weight, {
+    double? spacing,
+    double? height,
+  }) => from?.copyWith(
+    fontWeight: weight,
+    letterSpacing: spacing,
+    height: height,
+  );
+  return base.copyWith(
+    displayLarge: style(base.displayLarge, FontWeight.w600, spacing: -2.2),
+    displayMedium: style(base.displayMedium, FontWeight.w600, spacing: -1.8),
+    displaySmall: style(base.displaySmall, FontWeight.w600, spacing: -1.4),
+    headlineLarge: style(base.headlineLarge, FontWeight.w600, spacing: -1.1),
+    headlineMedium: style(base.headlineMedium, FontWeight.w600, spacing: -0.9),
+    headlineSmall: style(base.headlineSmall, FontWeight.w600, spacing: -0.6),
+    titleLarge: style(base.titleLarge, FontWeight.w600, spacing: -0.5),
+    titleMedium: style(base.titleMedium, FontWeight.w600, spacing: -0.2),
+    titleSmall: style(base.titleSmall, FontWeight.w600, spacing: -0.1),
+    bodyLarge: style(
+      base.bodyLarge,
+      FontWeight.w400,
+      spacing: -0.1,
+      height: 1.5,
+    ),
+    bodyMedium: style(
+      base.bodyMedium,
+      FontWeight.w400,
+      spacing: 0,
+      height: 1.45,
+    ),
+    bodySmall: style(base.bodySmall, FontWeight.w400, spacing: 0, height: 1.4),
+    labelLarge: style(base.labelLarge, FontWeight.w600, spacing: -0.1),
+    labelMedium: style(base.labelMedium, FontWeight.w500, spacing: 0),
+    labelSmall: style(base.labelSmall, FontWeight.w500, spacing: 0.1),
+  );
+}
+
+/// The theme of [brightness]. What both themes of the app share goes here:
+/// its colours, its font and text styles, and the look of its components.
+ThemeData _themeOf(Brightness brightness) {
+  final scheme = _schemeOf(brightness);
+  final text = _textThemeOf(scheme);
+  final hairline = BorderSide(color: scheme.outlineVariant);
+  return ThemeData(
+    colorScheme: scheme,
+    fontFamily: _fontFamily,
+    textTheme: text,
+    scaffoldBackgroundColor: scheme.surface,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    appBarTheme: AppBarThemeData(
+      backgroundColor: scheme.surface,
+      foregroundColor: scheme.onSurface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      height: 68,
+      elevation: 0,
+      backgroundColor: scheme.surface,
+      indicatorColor: scheme.secondaryContainer,
+      labelTextStyle: WidgetStateProperty.fromMap({
+        WidgetState.selected: text.labelMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+        WidgetState.any: text.labelMedium?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      }),
+      iconTheme: WidgetStateProperty.fromMap({
+        WidgetState.selected: IconThemeData(
+          size: 24,
+          color: scheme.onSecondaryContainer,
+        ),
+        WidgetState.any: IconThemeData(
+          size: 24,
+          color: scheme.onSurfaceVariant,
+        ),
+      }),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: scheme.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: hairline,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(64, 60),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        textStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        textStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: SegmentedButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        selectedForegroundColor: scheme.onSecondaryContainer,
+        selectedBackgroundColor: scheme.secondaryContainer,
+        side: hairline,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: text.labelLarge,
+        minimumSize: const Size(0, 44),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: scheme.onSurfaceVariant,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      titleTextStyle: text.bodyLarge?.copyWith(color: scheme.onSurface),
+    ),
+    dividerTheme: DividerThemeData(
+      color: scheme.outlineVariant,
+      thickness: 1,
+      space: 1,
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: text.bodyMedium?.copyWith(
+        color: scheme.onInverseSurface,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+}
 === lib/core/theme/theme_mode.dart (role:theme) ===
 import 'package:flutter/material.dart';
 
@@ -1372,6 +1721,17 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - "assets/fonts/geist/OFL.txt"
+  fonts:
+    - family: "Geist"
+      fonts:
+        - asset: "assets/fonts/geist/Geist-Regular.ttf"
+          weight: 400
+        - asset: "assets/fonts/geist/Geist-Medium.ttf"
+          weight: 500
+        - asset: "assets/fonts/geist/Geist-SemiBold.ttf"
+          weight: 600
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

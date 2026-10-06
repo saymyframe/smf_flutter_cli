@@ -2,7 +2,9 @@
 
 The SMF module of the Material 3 theme of the app. It provides the theme role of SMF: the app has a light and a dark theme, and shows the one that the user selects.
 
-The module generates `lib/core/theme/app_theme.dart`, the file that you edit to change the look of the app. Its `seedColor` is the colour that both themes derive their colours from, with `ColorScheme.fromSeed`. Its functions `createLightTheme` and `createDarkTheme` return the two themes, and the root of the app calls them each time it builds, so a change of the file shows on a hot reload. The themes are those of the material library of Flutter, so the module adds no package to the app.
+The module generates `lib/core/theme/app_theme.dart`, the file that you edit to change the look of the app. One function there builds both themes, so they differ only in their colours. `_schemeOf` has the colours: a deep green and a cream as the primary pair, a green accent, and neutral surfaces with hairlines for borders. `_textThemeOf` has the text styles, and `_themeOf` the look of the components, such as cards and buttons. The functions `createLightTheme` and `createDarkTheme` return the two themes, and the root of the app calls them each time it builds, so a change of the file shows on a hot reload.
+
+The font of the themes is [Geist](https://github.com/vercel/geist-font), which has Latin and Cyrillic letters. Its files are part of the app: they are in `assets/fonts/geist/` in the weights 400, 500 and 600, next to their licence, the SIL Open Font License, and `pubspec.yaml` declares the family. The app loads no font from the network, and the module adds no package to it. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily` of the file of the themes.
 
 The theme role adds the theme mode, whichever module provides the role. The app follows the device until the user selects the light or the dark mode. It shows the selected mode at once and saves it in its preferences, so the next launch starts in it. In an app with a settings screen, the screen has an entry in which the user selects the mode: System, Light or Dark.
 
