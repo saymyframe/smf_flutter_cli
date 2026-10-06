@@ -73,7 +73,7 @@ final class TestFeature extends SmfModule {
             screen: ScreenRef(_screen, import: ImportRef.app(_file)),
             destination: destination
                 ? Destination(
-                    label: name,
+                    label: LocalizedText('label', en: name),
                     icon: Fragment(
                       'Icons.$name',
                       imports: const [
