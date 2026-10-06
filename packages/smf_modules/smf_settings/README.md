@@ -8,7 +8,7 @@ The title of the screen is a text of the module, in English and in Ukrainian. Wh
 
 The main navigation of the app, when there is one, shows the screen as Settings with the settings icon. The label is the title of the screen, so it follows the language of the app as the title does. Without a main navigation, nothing that SMF generates opens the screen. Open it from your own code with `context.nav.settings.settings().push<void>()`, which puts the screen on top of the current one, so its back button leads back. `go()` would replace the stack with the settings screen alone, and nothing would lead back from it.
 
-The screen is not a start screen: the app starts on it only if you name it with `--start /settings`. So an app whose only screen is this one starts on the fallback screen, even with a layout. With `-m settings,bottom_tabs`, the fallback screen is outside the main navigation, and `bottom_tabs` shows no bar for a single destination, so nothing opens the settings screen there either. Add a feature with a start screen, such as `home`.
+The screen is not a start screen: the app starts on it only if you name it with `--start /settings`. So an app whose only screen is this one starts on the fallback screen, even with a layout. The fallback screen is outside the main navigation, so nothing opens the settings screen there either. Add a feature with a start screen, such as `home`.
 
 ## Use with the SMF CLI
 
