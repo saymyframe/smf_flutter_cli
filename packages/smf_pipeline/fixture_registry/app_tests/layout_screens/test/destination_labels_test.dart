@@ -14,13 +14,15 @@
 // the layout role and of the localization role, with what puts the app
 // into a language. It reads the label of a destination as the layout does,
 // with label() of the Destination for a context below the root of the app,
-// and looks for the labels in what the AppShell shows: its texts, the
-// messages of its tooltips, and what it says to the semantics of the app.
-// So it depends neither on the router nor on how the layout shows a
-// destination. It uses what the tests of router_screens share, which every
-// app that it applies to has. Each expectation gives its reason, which a
-// provider of a role with a known bug fails the test with (brokenProviders
-// of the fixture registry).
+// and looks for the labels in what the layout shows: the texts of the
+// AppShell, the messages of its tooltips, and what it says to the semantics
+// of the app, but for what is below a navigator under the shell. Those are
+// the screens of the branches, which the features build, and their words
+// are not the layout's. So it depends neither on the router nor on how the
+// layout shows a destination. It uses what the tests of router_screens
+// share, which every app that it applies to has. Each expectation gives its
+// reason, which a provider of a role with a known bug fails the test with
+// (brokenProviders of the fixture registry).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
@@ -52,11 +54,27 @@ bool _says(Element element, String text) {
       .any((said) => said.split('\n').contains(text));
 }
 
-/// How the main navigation shows [text]: as a text, as the message of a
-/// tooltip, to the semantics of the app, or not at all.
+/// Whether [element], one below the main navigation, is of a screen of a
+/// branch rather than of the layout: below a navigator under the shell, in
+/// which the router keeps the stack of a branch.
+bool _ofBranch(Element element) {
+  var ofBranch = false;
+  element.visitAncestorElements((ancestor) {
+    if (ancestor.widget is AppShell) return false;
+    ofBranch = ancestor.widget is Navigator;
+    return !ofBranch;
+  });
+  return ofBranch;
+}
+
+/// How the layout shows [text] in the main navigation: as a text, as the
+/// message of a tooltip, to the semantics of the app, or not at all. What
+/// the screens of the branches show does not count.
 List<String> _shownAs(String text) {
-  bool has(Finder finder) =>
-      find.descendant(of: _shell(), matching: finder).evaluate().isNotEmpty;
+  bool has(Finder finder) => find
+      .descendant(of: _shell(), matching: finder)
+      .evaluate()
+      .any((element) => !_ofBranch(element));
   return [
     if (has(find.text(text, findRichText: true))) 'as a text',
     if (has(find.byTooltip(text))) 'in a tooltip',
@@ -65,10 +83,10 @@ List<String> _shownAs(String text) {
   ];
 }
 
-/// The labels that the main navigation shows though the app is in
-/// [language]: those of the destinations in another language of the app
-/// that are no label in [language], each with the code of its language and
-/// with how the main navigation shows it.
+/// The labels that the layout shows though the app is in [language]: those
+/// of the destinations in another language of the app that are no label in
+/// [language], each with the code of its language and with how the layout
+/// shows it.
 List<String> _labelsOfAnotherLanguage(String language) {
   final current = destinationLabels[language]!;
   return [
