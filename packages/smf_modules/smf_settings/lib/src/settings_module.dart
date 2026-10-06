@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_settings/bundles/settings_bundle.dart';
+import 'package:smf_settings/src/agents.dart';
 
 /// The module of the settings screen of the app: a feature with one route,
 /// whose screen, `SettingsScreen`, shows the settings that the modules of
@@ -14,12 +15,13 @@ import 'package:smf_settings/bundles/settings_bundle.dart';
 /// the about dialog of Flutter, and from there the licenses of the packages
 /// of the app. An app whose modules have no settings has that row alone.
 ///
-/// The label of the destination of the screen in the main navigation is
-/// the title of the screen, a text of the module, in English and in
+/// The title of the screen is a text of the module, in English and in
 /// Ukrainian, which the module gives the localization role, a role that it
-/// uses. With the role, the main navigation reads the label from the texts
-/// of the app, in the language of the app; without it, the label is the
-/// English text.
+/// uses. It is the label of the destination of the screen in the main
+/// navigation too. With the role, the screen reads the title, and the main
+/// navigation the label, from the texts of the app, in the language of the
+/// app; without it, both are the English text. The About row is a widget
+/// of Flutter, whose words follow the language of the app by themselves.
 ///
 /// The route is `/` of the module, so its full path is `/settings`. The
 /// main navigation of the app, when a module provides it, shows the route
@@ -41,6 +43,10 @@ import 'package:smf_settings/bundles/settings_bundle.dart';
 /// has no state of its own, since each entry keeps the state of its
 /// setting, so the module has no variants for the modules that manage
 /// state, and it adds no package to the app.
+///
+/// In the guide for coding agents of the app, the module adds to the section
+/// of the settings screen where the screen is and how code opens it in an
+/// app without a main navigation ([agentNote]).
 final class SettingsModule extends SmfModule {
   /// Creates the module.
   const SettingsModule();
@@ -55,9 +61,9 @@ final class SettingsModule extends SmfModule {
   /// destination in the main navigation too.
   static const _title = 'Settings';
 
-  /// The text of the title of the screen, which the main navigation reads
-  /// as the label of its destination from the texts of the app, in an app
-  /// with the localization role.
+  /// The text of the title of the screen, which is the label of its
+  /// destination too: the screen and the main navigation read it from the
+  /// texts of the app in an app with the localization role.
   static const _titleText = LocalizedText(
     'title',
     en: _title,
@@ -80,7 +86,7 @@ final class SettingsModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
           settingsBundle,
-          vars: {'title': SmfNames.dartString(_title)},
+          vars: localizationRole.varsOf(id, _texts),
         ),
         localizationRole.data(_texts),
         routerRole.data(
@@ -105,6 +111,10 @@ final class SettingsModule extends SmfModule {
           ]),
         ),
         settingsScreenRole.data(const SettingsScreenRoute(_route)),
+        AppEntryRole.agentSections.entry(
+          settingsScreenRole.description,
+          AgentNote(agentNote),
+        ),
       ];
 }
 

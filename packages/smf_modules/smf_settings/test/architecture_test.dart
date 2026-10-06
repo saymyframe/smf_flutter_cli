@@ -13,10 +13,10 @@ void main() {
         dependencies: {'mason'},
         // The app entry of the apps that the tests render, the router that
         // renders the route of the module, the layout whose main
-        // navigation shows it, the provider of the texts that the title of
-        // the screen is one of, and the preferences that the localization
-        // role requires. They test with features and texts of their own, so
-        // none of them tests with this module.
+        // navigation shows it, the provider of the texts that the screen
+        // reads its title from, and the preferences in which an app with
+        // texts remembers its language. They test with features, texts and
+        // settings of their own, so none of them tests with this module.
         testModules: {
           'smf_bottom_tabs',
           'smf_flutter_core',

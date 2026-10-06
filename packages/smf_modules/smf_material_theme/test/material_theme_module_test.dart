@@ -208,7 +208,8 @@ void main() {
         'flutter_core with router',
         'flutter_core',
         'shared_preferences',
-        // The settings module uses the localization role for its title.
+        // The settings screen reads its title from the texts of the app, and
+        // the localization has its setting on that screen: one app.
         'settings with localization',
         'settings',
         'gen_l10n',

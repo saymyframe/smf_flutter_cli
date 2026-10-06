@@ -621,6 +621,7 @@ void main() {
           'firebase_crashlytics',
           'firebase_analytics',
           'screen_views',
+          'onboarding',
           'settings',
           'shared_preferences',
           'di_role',

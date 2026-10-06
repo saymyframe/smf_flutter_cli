@@ -9,7 +9,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text({{{title}}})),
+    appBar: AppBar(title: {{^has_localization}}const {{/has_localization}}Text({{{text_title}}})),
     body: ListView(
       children: const [
 {{{entries}}}

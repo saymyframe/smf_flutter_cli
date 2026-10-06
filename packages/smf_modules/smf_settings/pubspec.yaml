@@ -23,8 +23,8 @@ dev_dependencies:
   smf_bottom_tabs: ^0.3.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.3.0
-  # The texts of the app, which the main navigation reads the label of the
-  # screen of the module from.
+  # The texts of the app, which the screen of the module reads its title
+  # from, and the main navigation the label of the screen.
   smf_gen_l10n: ^0.3.0
   # The router that the tests render the route of the module with.
   smf_go_router: ^0.3.0

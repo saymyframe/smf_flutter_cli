@@ -482,11 +482,62 @@ void main() {
     });
   });
 
+  group('the note of the settings screen role for coding agents', () {
+    test(
+        'names in inline code nothing of a provider: no file of the app, '
+        'since the screen is a file of the provider and an entry a file of '
+        'its owner, no class of the screen and no route', () {
+      // Every name of code in the note, so that it cannot name more.
+      expect(
+        codeSpansOf(agentNoteOf(settingsScreenRole).text).toSet(),
+        {
+          // The two directories where the code of an app is, as patterns:
+          // the app entry role tells of them.
+          'lib/core/<concern>/',
+          'lib/features/<feature>/',
+          // What `settings_screen.entry_widgets` checks of the constructor
+          // of an entry.
+          'const',
+          // What the screen gives an entry, which a running app shows, and
+          // what an entry can be on it.
+          'Material',
+          'ListTile',
+          'Column',
+        },
+      );
+    });
+
+    test(
+        'tells what the rules of the role hold an entry and the screen to: '
+        'a widget in a file of its own with a const constructor that '
+        'requires nothing, and an import of that file with a prefix of its '
+        'own', () {
+      final text = agentNoteOf(settingsScreenRole).text;
+
+      // What `settings_screen.entry_widgets` checks of an entry.
+      expect(text, contains('constructor that requires no arguments'));
+      expect(text, contains('not in the file of the screen'));
+      // What `settings_screen.entries_rendered` checks of the screen.
+      expect(
+        text,
+        contains('with a prefix that no other import there has'),
+      );
+    });
+  });
+
   group('the template of the settings screen role', () {
     final template = settingsScreenRole.template;
 
-    test('adds nothing to the app: it only checks the data of the role', () {
-      expect(template.contribute(testContext), isEmpty);
+    test(
+        'generates no file: it gives the guide for coding agents the note of '
+        'the role, and checks the data of the role', () {
+      final contributions = template.contribute(testContext);
+
+      expect(contributions, hasLength(1));
+      expect(
+        (contributions.single as SocketContribution).socket,
+        AppEntryRole.agentSections,
+      );
       expect(template.render(_input([_screenRoute('settings')])).vars, isEmpty);
     });
 

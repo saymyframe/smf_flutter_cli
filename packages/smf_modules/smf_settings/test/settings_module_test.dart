@@ -8,6 +8,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_settings/smf_settings.dart';
+import 'package:smf_settings/src/agents.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:test/test.dart';
 
@@ -25,8 +26,8 @@ const _look = SettingsInfrastructure(
 /// destinations, this module, the contributors of settings, which are a
 /// feature, a library, and the provider of a role whose template has a
 /// setting, gen_l10n, which keeps the texts of the app, for the title of
-/// the screen, and shared_preferences, in which the app remembers its
-/// language.
+/// the screen, and shared_preferences, in which an app with texts remembers
+/// its language.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -161,6 +162,26 @@ List<String> _labelsOf(ContractResult result) => [
           in layoutRole.destinationsIn(layoutRole.hookInput(result.hook!)))
         route.route.destination!.label.en,
     ];
+
+/// The title of the settings screen of [app], as the app bar of the screen
+/// creates it.
+String _titleOf(RenderedApp app) {
+  final screen = _classOf(_parsed(app, _screen), 'SettingsScreen');
+  final bar = _argument(_returnedBy(screen, 'build'), 'appBar');
+  expect((bar as MethodInvocation).methodName.name, 'AppBar');
+  return _argument(bar, 'title').toSource();
+}
+
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
+/// The methods and getters that the class [name] of [unit] declares.
+Set<String> _membersOf(CompilationUnit unit, String name) => {
+      for (final member in _classOf(unit, name).body.members)
+        if (member is MethodDeclaration) member.name.lexeme,
+    };
 
 /// The modules that provide [role] in the app of [result], whichever they
 /// are.
@@ -312,18 +333,28 @@ void main() {
 
     test(
         'gets the brick of the screen with its title, the title as a text of '
-        'the module, the route and its name for the role, and nothing else',
-        () {
+        'the module, the route and its name for the role, and the note of '
+        'the module for coding agents, and nothing else', () {
       final contributions = [
         for (final collected in result.collection!.ofModule(SettingsModule.id))
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(4));
+      expect(contributions, hasLength(5));
+      final note = contributions.whereType<SocketContribution>().single;
+      expect(note.socket, AppEntryRole.agentSections);
+      expect(note.entryKey, settingsScreenRole.description);
+      expect(note.entryValue, AgentNote(agentNote));
+      expect(note.when, isEmpty);
       final brick = contributions.whereType<BrickContribution>().single;
       expect(brick.bundle.name, 'settings');
       expect(brick.bundle.files.map((file) => file.path), [_screen]);
-      expect(brick.vars, {'title': "'Settings'"});
+      // The title depends on whether the app has texts.
+      expect(brick.vars.keys, ['text_title']);
+      final title = brick.vars['text_title']! as RoleVar;
+      expect(title.role, localizationRole);
+      expect(title.absent, "'Settings'");
+      expect((title.present as Fragment).code, 'context.l10n.settingsTitle');
       expect(contributions.whereType<RoleData<RoutesData>>(), hasLength(1));
       expect(contributions.whereType<RoleData<SettingsData>>(), hasLength(1));
       expect(contributions.whereType<RoleData<TextsData>>(), hasLength(1));
@@ -339,6 +370,8 @@ void main() {
       // router.
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
         if (path == RouterRole.navigationFile) continue;
+        // The guide for coding agents gets the section of the screen.
+        if (path == AppEntryRole.agentsFile) continue;
         if (file.owner case ModuleOrigin(:final module)
             when router.contains(module)) {
           continue;
@@ -430,6 +463,177 @@ void main() {
     });
   });
 
+  group('the note of the module for coding agents', () {
+    late ContractResult result;
+    late RenderedApp app;
+    late RenderedApp withEntries;
+
+    setUpAll(() async {
+      result = await _rendered(const [SettingsModule.id]);
+      app = result.app!;
+      withEntries =
+          (await _rendered([_feed.id, SettingsModule.id, _look.id])).app!;
+    });
+
+    test(
+        'is in the section of the settings screen of the guide, after what '
+        'the role says, and only the section is new in the guide', () async {
+      const settings = ModuleOrigin(SettingsModule.id);
+      const role = RoleTemplateOrigin(settingsScreenRole);
+      final heading = settingsScreenRole.description;
+      final notes = app.entriesOf(AppEntryRole.agentSections);
+
+      // The section has what the role says and what the module adds.
+      final ofRole = notes.singleWhere((note) => note.$1 == role).$3;
+      expect(ofRole.isOfRole, isTrue);
+      expect(
+        notes.where((note) => note.$2 == heading),
+        unorderedEquals([
+          (role, heading, ofRole),
+          (settings, heading, AgentNote(agentNote)),
+        ]),
+      );
+      expect(
+        app.files[AppEntryRole.agentsFile]!.text,
+        contains(
+          '\n## $heading\n'
+          '\n'
+          '${ofRole.text}\n'
+          '\n'
+          '${agentNote.trim()}\n',
+        ),
+      );
+
+      // The other notes are those of the app without the module.
+      final without = (await _rendered(const [GoRouterModule.id])).app!;
+      expect(
+        without.files[AppEntryRole.agentsFile]!.text,
+        isNot(contains('## $heading')),
+      );
+      expect(
+        notes.where((note) => note.$2 != heading),
+        without.entriesOf(AppEntryRole.agentSections),
+      );
+    });
+
+    test(
+        'names in inline code only the screen with its file and its route, '
+        'the prefixes of the files of the entries, and the two calls of the '
+        'navigation', () {
+      final route = settingsScreenRole
+          .screenIn(settingsScreenRole.hookInput(result.hook!))!;
+      final screen = route.route.screen;
+
+      // Every name of code in the note, so that it cannot name more, such
+      // as another file of the app or a class of a router.
+      expect(_codeOf(agentNote), {
+        screen.className,
+        screen.file,
+        route.fullName,
+        route.fullPath,
+        'entry0',
+        'entry1',
+        'context.nav.settings.settings().push<void>()',
+        'go()',
+      });
+    });
+
+    test(
+        'names the screen with its file and its route, and the prefixes of '
+        'the files of the entries, as the app has them', () {
+      final route = settingsScreenRole
+          .screenIn(settingsScreenRole.hookInput(result.hook!))!;
+      final screen = route.route.screen;
+
+      // The screen and its route, as the roles have them; the file of the
+      // screen declares its class.
+      expect(screen.file, _screen);
+      expect(_classOf(_parsed(app, _screen), screen.className), isNotNull);
+      expect(
+        agentNote,
+        startsWith(
+          '- `${screen.className}` in `${screen.file}`, the route '
+          '`${route.fullName}` at `${route.fullPath}`, ',
+        ),
+      );
+      // The prefixes of the files of the entries, in an app with two such
+      // files.
+      expect(
+        _importsOf(withEntries).values.whereType<String>(),
+        unorderedEquals(['entry0', 'entry1']),
+      );
+    });
+
+    test(
+        'tells how code opens the screen in an app without a main '
+        'navigation, through the navigation of the router role', () {
+      final navigation = _parsed(app, RouterRole.navigationFile);
+
+      // What the call names is what the navigation of the app declares.
+      expect(_membersOf(navigation, 'AppNav'), contains('settings'));
+      expect(_membersOf(navigation, 'SettingsRoutes'), contains('settings'));
+      expect(_membersOf(navigation, 'NavLink'), containsAll(['push', 'go']));
+    });
+  });
+
+  group('the title of the settings screen', () {
+    test(
+        'is a text that the module gives the localization role, in English '
+        'and in Ukrainian', () async {
+      final result =
+          await _rendered(const [SettingsModule.id, GenL10nModule.id]);
+      final input = localizationRole.hookInput(result.hook!);
+
+      // The role has texts of its own too, for its entry of the screen.
+      final title = localizationRole
+          .textsIn(input)
+          .where((text) => text.owner == const ModuleOrigin(SettingsModule.id))
+          .single;
+      expect(title.getter, 'settingsTitle');
+      expect(title.text.en, 'Settings');
+      expect(title.text.translations, {'uk': 'Налаштування'});
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+    });
+
+    test(
+        'is read from the texts of the app by the screen in an app with the '
+        'localization role', () async {
+      final result =
+          await _rendered(const [SettingsModule.id, GenL10nModule.id]);
+      final app = result.app!;
+
+      // No constant: the text depends on the language of the context.
+      expect(_titleOf(app), 'Text(context.l10n.settingsTitle)');
+      // The file of the texts of the app, which the pipeline imports for
+      // the code of the title, next to the library of the widgets. The
+      // imports with a prefix are those of the entries of the screen.
+      expect(
+        [
+          for (final MapEntry(key: uri, value: prefix)
+              in _importsOf(app).entries)
+            if (prefix == null) uri,
+        ],
+        [
+          LocalizationRole.appTexts.importRef
+              .resolveUri(ContractHarness.defaultContext.appName),
+          'package:flutter/material.dart',
+        ],
+      );
+      // The rows stay constants.
+      expect(_rowsOf(app).constKeyword, isNotNull);
+    });
+
+    test(
+        'is its English text, as a constant, in an app without the '
+        'localization role', () async {
+      final result = await _rendered(const [SettingsModule.id]);
+
+      expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
+      expect(_titleOf(result.app!), "const Text('Settings')");
+      expect(_importsOf(result.app!).keys, ['package:flutter/material.dart']);
+    });
+  });
+
   group('the label of the destination of the screen', () {
     /// The label as the layout role gets it from the routes of the module,
     /// whichever module provides the role.
@@ -442,20 +646,17 @@ void main() {
         .label;
 
     test(
-        'is the title of the screen, a text of the module in English and in '
-        'Ukrainian, which the module gives the localization role', () async {
+        'is the title of the screen, the one text that the module gives the '
+        'localization role', () async {
       final result =
           await _rendered(const [SettingsModule.id, GenL10nModule.id]);
       final input = localizationRole.hookInput(result.hook!);
 
-      // The title is the first of the texts of the app: the template of the
-      // localization role adds those of the setting of the language.
-      final title = localizationRole.textsIn(input).first;
-      expect(title.owner, const ModuleOrigin(SettingsModule.id));
-      expect(title.getter, 'settingsTitle');
-      expect(title.text.en, 'Settings');
-      expect(title.text.translations, {'uk': 'Налаштування'});
-      expect(localizationRole.localesIn(input), ['en', 'uk']);
+      // The role has texts of its own too, for its entry of the screen.
+      final title = localizationRole
+          .textsIn(input)
+          .where((text) => text.owner == const ModuleOrigin(SettingsModule.id))
+          .single;
       // The label of the destination is that text, so the main navigation
       // of an app with texts reads it from them.
       expect(labelOf(result), same(title.text));

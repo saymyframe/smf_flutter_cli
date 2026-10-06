@@ -32,6 +32,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
+import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 
@@ -125,12 +126,15 @@ List<ModuleId> everyFixture({
 /// provider that must work; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
-/// shows below those of the two fixtures; and the fixture texts, a provider
-/// of the localization role, for the two tests of that role that the CLI
+/// shows below those of the two fixtures; the fixture texts, a provider of
+/// the localization role, for the two tests of that role that the CLI
 /// keeps: the test of the role itself, with the texts of the fixture
 /// feature in two languages, and the test of the setting of the language,
 /// which the template of the role gives the settings screen of the app
-/// after the entry of the theme mode.
+/// after the entry of the theme mode; and the onboarding module of the CLI,
+/// for the app test that it keeps, whose guard of the routes keeps the user
+/// from every other screen of the app until the mocks of that test open it
+/// for the tests of the other modules.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -156,4 +160,5 @@ List<SmfModule> severalProvidersModules() => const [
       SettingsModule(),
       MaterialThemeModule(),
       FakeL10nModule(),
+      OnboardingModule(),
     ];
