@@ -64,6 +64,11 @@ Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
 /// that keeps the user from it, as the router role says: [shownFor], which
 /// the walk asks before it goes to the location, as the router does.
 ///
+/// The locations in the flows of the guards are the last of
+/// [walkedLocations]. A screen of a flow may change what its guard allows
+/// when it is shown, and the walk then expects the target of that guard
+/// for each location outside its flow that it goes to afterwards.
+///
 /// The errors that Flutter reports while it walks come to it; it puts back
 /// the handler of the errors of Flutter that it found when it returns.
 Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {

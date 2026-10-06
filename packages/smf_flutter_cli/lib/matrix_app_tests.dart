@@ -612,6 +612,11 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// app test ([MatrixAppTest.mocks]), so that the walk reaches every route
 /// and the tests of the other modules see the screens that they expect.
 ///
+/// The walk goes to the locations in the flows of the guards last (see
+/// [routerWalkFile]): a screen of a flow may change what its guard allows
+/// when it is shown, and the router then shows the target of that guard in
+/// place of each location that the walk goes to after it.
+///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes and the guards of its router role, into
 /// [routerWalkFile], next to the walk in
@@ -636,11 +641,24 @@ Future<MatrixAppTest> routerWalkAppTest({
 
 /// The path in an app of the locations that the walk of the test of the
 /// router role goes to, which the matrix writes: `walkedLocations`, the
-/// locations of the routes that need no values, in the order of the routes
-/// of the app ([RouterFacade.routes]), each with the full name of its route
-/// ([FacadeRoute.fullName]), the location, created as `const` from its
-/// class of the navigation of the role, and the type of the screen that the
-/// route shows.
+/// locations of the routes that need no values, each with the full name of
+/// its route ([FacadeRoute.fullName]), the location, created as `const`
+/// from its class of the navigation of the role, and the type of the screen
+/// that the route shows.
+///
+/// The locations are in the order of the routes of the app
+/// ([RouterFacade.routes]), but for those of the routes in the flow of a
+/// guard ([FacadeGuard.flow]), which come after every other, in the same
+/// order among themselves. A screen of a flow may change what its guard
+/// allows when it is shown: one that is shown although its flow is over
+/// may start the flow again, for example. From then on the router shows
+/// the target of that guard in place of each location outside its flow.
+/// The walk expects what `redirectOf()` says, so it would pass without
+/// seeing the screens of the locations that come after. With the flows
+/// last, it has seen every other location by then. The order does not
+/// help among the flows themselves: once a screen of one flow has made its
+/// guard stop allowing, the walk checks the locations of the flows of the
+/// other guards only against `redirectOf()`.
 ///
 /// The file also says what the guards of the routes of the app
 /// ([RouterFacade.guards]) do to the walk, with two functions that every
@@ -657,7 +675,9 @@ Future<MatrixAppTest> routerWalkAppTest({
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
-/// to, the first of the app.
+/// to, the first of [routerWalkFile]. The locations in the flows of the
+/// guards count among them and are the last of the file, so the walk
+/// leaves them out first in an app with more locations than it goes to.
 const routerWalkLimit = 20;
 
 /// The file at [routerWalkFile] of [app], an app of the matrix with the
@@ -670,9 +690,19 @@ const routerWalkLimit = 20;
 /// role that has them too, without a prefix either.
 Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
   final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
-  final routes = [
+  // The routes in the flow of a guard, which the walk goes to last: their
+  // screens may change what their guard allows when they are shown.
+  final inFlows = {
+    for (final guard in facade.guards)
+      for (final route in guard.flow) route.fullName,
+  };
+  final walkable = [
     for (final route in facade.routes)
       if (!route.hasRequiredParams) route,
+  ];
+  final routes = [
+    ...walkable.where((route) => !inFlows.contains(route.fullName)),
+    ...walkable.where((route) => inFlows.contains(route.fullName)),
   ].take(routerWalkLimit);
   final screens = <String, String>{};
   String walked(FacadeRoute route) {
@@ -715,7 +745,8 @@ ${imports.join('\n')}
 typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 
 /// The locations of the app that need no values, in the order of the
-/// routes of the app.
+/// routes of the app, with those in the flow of a guard after the others:
+/// a screen of a flow may change what its guard allows when it is shown.
 const List<WalkedLocation> walkedLocations = [
 $locations];
 $guards''',
