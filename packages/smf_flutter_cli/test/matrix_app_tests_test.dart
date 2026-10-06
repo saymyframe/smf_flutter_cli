@@ -544,13 +544,15 @@ void main() {
           if (named('preferences_role').appliesTo(app)) app.name,
       ],
       [
-        // The theme role and the localization role require the
+        // The localization role and the theme role require the
         // preferences.
+        'home with localization',
+        'settings with localization',
+        'bottom_tabs with localization',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'gen_l10n with settings_screen',
         'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
@@ -649,9 +651,13 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        // The apps of the modules with texts, and of the layout, which
+        // shows the labels of the destinations in the language of the app.
+        'home with localization',
+        'settings with localization',
+        'bottom_tabs with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'gen_l10n with settings_screen',
         'gen_l10n',
         'every module (bloc)',
         'every module (riverpod)',
@@ -659,34 +665,38 @@ void main() {
     );
     // What the test has to check there. An app with a settings screen has
     // the texts of the setting of the language, which the role gives it in
-    // English and in Ukrainian, so the test reads texts in two languages
-    // with the provider of the CLI. Without a settings screen an app may
-    // have no text at all, as the app of gen_l10n alone: there the test
-    // checks the languages of the root and the choice that the app saves
-    // and restores.
-    final localized = [
-      for (final app in apps)
-        if (registered.appliesTo(app) &&
-            app.hook!.presentRoles.contains(settingsScreenRole))
-          app,
-    ];
+    // English and in Ukrainian, and an app with the start screen or with
+    // the settings module has the label of its destination in both. So the
+    // test reads texts in two languages with the provider of the CLI.
+    // Without them an app may have no text at all, as the app of gen_l10n
+    // alone and the app of the layout, which has no destination: there the
+    // test checks the languages of the root and the choice that the app
+    // saves and restores.
+    List<String> languagesOf(MatrixApp app) =>
+        localizationRole.localesIn(localizationRole.hookInput(app.hook!));
     expect(
-      [for (final app in localized) app.name],
-      [
-        'material_theme with settings_screen, localization',
-        'gen_l10n with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
-      ],
+      {
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name: languagesOf(app),
+      },
+      {
+        'home with localization': ['en', 'uk'],
+        'settings with localization': ['en', 'uk'],
+        'bottom_tabs with localization': ['en'],
+        'material_theme with settings_screen, localization': ['en', 'uk'],
+        'material_theme with localization': ['en'],
+        'gen_l10n': ['en'],
+        'every module (bloc)': ['en', 'uk'],
+        'every module (riverpod)': ['en', 'uk'],
+      },
     );
-    for (final app in localized) {
-      final input = localizationRole.hookInput(app.hook!);
+    for (final app in apps) {
+      if (!registered.appliesTo(app) || languagesOf(app).length < 2) continue;
       expect(
-        localizationRole.localesIn(input),
-        ['en', 'uk'],
+        localizationRole.textsIn(localizationRole.hookInput(app.hook!)),
+        isNotEmpty,
         reason: app.name,
       );
-      expect(localizationRole.textsIn(input), isNotEmpty, reason: app.name);
     }
 
     // As the fixtures take it, only in the apps with every module.
@@ -1004,8 +1014,8 @@ void main() {
           if (registered.appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'material_theme with settings_screen, localization',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1414,10 +1424,10 @@ void main() {
           if (settings.appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],
@@ -1440,13 +1450,13 @@ void main() {
           app.name: [for (final entry in entriesOf(app)) entry.widget.name],
       },
       {
+        'settings with localization': ['LanguageSetting'],
         'settings': isEmpty,
         'material_theme with settings_screen, localization': [
           'ThemeModeSetting',
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
-        'gen_l10n with settings_screen': ['LanguageSetting'],
         'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
         'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
       },
@@ -1891,10 +1901,10 @@ void main() {
           if (named('settings').appliesTo(app)) app.name,
       ],
       [
+        'settings with localization',
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'gen_l10n with settings_screen',
         'every module (bloc)',
         'every module (riverpod)',
       ],

@@ -196,11 +196,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
-      'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
+      'State management: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -219,7 +219,11 @@ void main() {
       'settings — Settings screen with the settings of the modules',
       'None',
     ]);
-    expect(run.asked[4].shown, [
+    // The roles come in the order in which the modules of the list bring
+    // them: the layout, with the router, brings the localization, whose
+    // labels it shows. The theme follows, and then the preferences of both
+    // and the DI container, all before the state managers.
+    expect(run.asked[8].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -278,11 +282,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
-      'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
+      'State management: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -305,8 +309,17 @@ void main() {
           .readAsStringSync(),
       allOf(
         contains('StatefulShellRoute.indexedStack('),
-        contains("Destination(label: 'Home', icon: Icons.home)"),
+        contains('destinations: appDestinations,'),
         contains("initialLocation: '/home',"),
+      ),
+    );
+    // The tab of the start screen, whose label is in English in an app
+    // without a module that keeps its texts.
+    expect(
+      app.childFile('lib/core/layout/destination.dart').readAsStringSync(),
+      allOf(
+        contains('Destination(label: _homeHomeLabel, icon: Icons.home),'),
+        contains("String _homeHomeLabel(BuildContext context) => 'Home';"),
       ),
     );
   });
@@ -367,15 +380,32 @@ void main() {
     );
     // The tabs are Home and Settings, in the order of the list of modules,
     // and the app starts on the start screen.
+    final destinations =
+        app.childFile('lib/core/layout/destination.dart').readAsStringSync();
+    final home = destinations.indexOf(
+      'Destination(label: _homeHomeLabel, icon: Icons.home),',
+    );
+    expect(home, isNonNegative);
+    expect(
+      destinations.indexOf(
+        'Destination(label: _settingsSettingsLabel, icon: Icons.settings),',
+      ),
+      greaterThan(home),
+    );
+    expect(
+      destinations,
+      allOf(
+        contains("String _homeHomeLabel(BuildContext context) => 'Home';"),
+        contains(
+          'String _settingsSettingsLabel(BuildContext context) => '
+          "'Settings';",
+        ),
+      ),
+    );
     final router = app
         .childFile('lib/core/router/app_router_factory.dart')
         .readAsStringSync();
-    final home = router.indexOf("Destination(label: 'Home', icon: Icons.home)");
-    expect(home, isNonNegative);
-    expect(
-      router.indexOf("Destination(label: 'Settings', icon: Icons.settings)"),
-      greaterThan(home),
-    );
+    expect(router, contains('destinations: appDestinations,'));
     expect(router, contains("initialLocation: '/home',"));
   });
 
@@ -446,11 +476,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
-      'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
+      'State management: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -504,11 +534,11 @@ void main() {
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
       'Router: which module provides it?',
-      'State management: which module provides it?',
-      'Theme: which module provides it?',
       'Localization: which module provides it?',
+      'Theme: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
+      'State management: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -529,9 +559,9 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the localization after '
-      'the theme, and offers gen_l10n, which keeps the texts of the app in '
-      'ARB files and brings the preferences, in which the app remembers its '
-      'language', () async {
+      'the settings screen, and offers gen_l10n, which keeps the texts of '
+      'the app in ARB files and brings the preferences, in which the app '
+      'remembers its language', () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
@@ -551,33 +581,38 @@ void main() {
     final localization = messages.indexOf(
       'Localization: which module provides it?',
     );
-    // The roles come in the order of the list of modules, and gen_l10n is
-    // after material_theme and before get_it.
+    // The roles come in the order in which the modules of the list bring
+    // them. The router brings the layout, which its role uses, and the
+    // layout the localization, in which it shows the labels of its
+    // destinations. So the question comes after those of the roles that
+    // require the router, and before that of the theme, the next role that
+    // the modules of the list bring.
     expect(
       localization,
-      messages.indexOf('Theme: which module provides it?') + 1,
+      messages.indexOf('Settings screen: which module provides it?') + 1,
     );
-    expect(
-      messages[localization + 1],
-      'Dependency injection: which module provides it?',
-    );
+    expect(messages[localization + 1], 'Theme: which module provides it?');
     expect(run.asked[localization].shown, [
       'gen_l10n — Texts in ARB files with gen-l10n of Flutter',
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
-    // No module of the app has texts yet, so the template of gen-l10n has
-    // none, and the app is in English.
+    // The one text of the app is the label of the start screen in a main
+    // navigation, in English and in Ukrainian, so the app is in both.
     expect(
       app.childFile('lib/l10n/app_en.arb').readAsStringSync(),
-      '{\n  "@@locale": "en"\n}\n',
+      '{\n  "@@locale": "en",\n  "homeLabel": "Home"\n}\n',
+    );
+    expect(
+      app.childFile('lib/l10n/app_uk.arb').readAsStringSync(),
+      '{\n  "@@locale": "uk",\n  "homeLabel": "Головна"\n}\n',
     );
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
           file.basename,
-      ],
-      ['app_en.arb'],
+      ]..sort(),
+      ['app_en.arb', 'app_uk.arb'],
     );
     expect(
       app.childFile('l10n.yaml').readAsStringSync(),
@@ -589,7 +624,7 @@ void main() {
     );
     expect(
       app.childFile('lib/core/l10n/app_locale.dart').readAsStringSync(),
-      contains("const appLocales = <Locale>[Locale('en')];"),
+      contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
     );
     expect(
       app.childFile('lib/app.dart').readAsStringSync(),
@@ -636,7 +671,8 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides dependency injection '
-      'after the state management, and offers get_it', () async {
+      'after the localization and its preferences, and offers get_it',
+      () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
@@ -657,13 +693,17 @@ void main() {
     final di = messages.indexOf(
       'Dependency injection: which module provides it?',
     );
-    // The roles come in the order of the list of modules, and get_it is
-    // after the modules of the state management.
+    // The roles come in the order in which the modules of the list bring
+    // them: the preferences, which the localization requires, use the DI
+    // container, so its question follows theirs, before that of the state
+    // management, which comes with its own modules.
     expect(
       di,
-      greaterThan(
-        messages.indexOf('State management: which module provides it?'),
-      ),
+      messages.indexOf('Preferences: which module provides it?') + 1,
+    );
+    expect(
+      messages[di + 1],
+      'State management: which module provides it?',
     );
     expect(run.asked[di].shown, [
       'get_it — Service locator with get_it',
@@ -759,7 +799,7 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the preferences after '
-      'the theme and the localization, which require them, and offers '
+      'the localization and the theme, which require them, and offers '
       'shared_preferences, which the start-up opens and the DI container '
       'registers', () async {
     final run = await _create({
@@ -783,16 +823,16 @@ void main() {
     final preferences = messages.indexOf(
       'Preferences: which module provides it?',
     );
-    // The roles come in the order in which the modules of the list name
-    // them, and material_theme and gen_l10n, whose roles require the
-    // preferences, are before get_it. So the question of the preferences
-    // knows whether the answers on the theme and on the localization need
-    // them.
+    // The roles come in the order in which the modules of the list bring
+    // them, and the localization and the theme, whose roles require the
+    // preferences, come before the preferences and before get_it. So the
+    // question of the preferences knows whether the answers on the
+    // localization and on the theme need them.
     expect(
       messages.sublist(preferences - 2, preferences + 1),
       [
-        'Theme: which module provides it?',
         'Localization: which module provides it?',
+        'Theme: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -843,7 +883,7 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the theme after the '
-      'state management, and offers material_theme, which brings the '
+      'localization, and offers material_theme, which brings the '
       'preferences that remember the theme mode without a question, and '
       'whose mode the settings screen lets the user select', () async {
     final run = await _create({
@@ -865,7 +905,7 @@ void main() {
     final theme = messages.indexOf('Theme: which module provides it?');
     expect(
       theme,
-      messages.indexOf('State management: which module provides it?') + 1,
+      messages.indexOf('Localization: which module provides it?') + 1,
     );
     expect(run.asked[theme].shown, [
       'material_theme — Light and dark Material 3 themes from one seed colour',

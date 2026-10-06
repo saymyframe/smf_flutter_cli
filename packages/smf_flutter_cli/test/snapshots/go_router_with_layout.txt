@@ -29,7 +29,9 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 ## Layout
 
 - `AppShell` of `lib/core/layout/app_shell.dart` only shows the main navigation around the screen of the selected destination. The router creates it, with its `destinations`, `currentIndex`, `onSelect` and `body`, and keeps the stack of each destination, so keep these parameters. Without destinations, the router creates no `AppShell`.
-- A destination is a `Destination` of `lib/core/layout/destination.dart`, a label and an icon, for a top-level route that needs no values. The routes below it stay in its stack, and every other top-level route shows over the main navigation.
+- A destination is a `Destination` in `appDestinations` of `lib/core/layout/destination.dart`, an icon and a label, for a top-level route that needs no values. The routes below it stay in its stack, and every other top-level route shows over the main navigation.
+- The label of a `Destination` is a top-level function that takes a `BuildContext` and returns the text, so that `appDestinations` stays `const`. Show a label with `destination.label(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a destination, add its `Destination` to `appDestinations` with a function for its label, and give the router a branch for it at the same index.
 - `go()` to a location in the main navigation selects its destination. From a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError`: use `go()`.
 
 - `AppShell` hides its `NavigationBar` while the app has fewer than two destinations. Keep to five destinations, the most that a navigation bar should have.
@@ -50,7 +52,7 @@ With `go_router`:
 - The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
 - To follow the screen that the user sees, add a function to `_screenListeners`.
 
-- The app has no destination yet, so that file has no main navigation. For the first one, add after the route `/` a `StatefulShellRoute.indexedStack` with `notifyRootObserver: false`, a `StatefulShellBranch` with `observers: _observers()` for each destination, and a `builder` that returns `AppShell` with the `Destination`s, `shell.currentIndex`, `shell.goBranch` and `shell` as its `body`. Then make `push()` and `replace()` throw a `StateError` for a location in the main navigation while a page is shown over it.
+- The app has no destination yet, so that file has no main navigation. For the first one, add after the route `/` a `StatefulShellRoute.indexedStack` with `notifyRootObserver: false`, a `StatefulShellBranch` with `observers: _observers()` for each destination, and a `builder` that returns `AppShell` with `appDestinations` of `lib/core/layout/destination.dart`, `shell.currentIndex`, `shell.goBranch` and `shell` as its `body`. Then make `push()` and `replace()` throw a `StateError` for a location in the main navigation while a page is shown over it.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -334,7 +336,7 @@ class AppShell extends StatelessWidget {
               for (final destination in destinations)
                 NavigationDestination(
                   icon: Icon(destination.icon),
-                  label: destination.label,
+                  label: destination.label(context),
                 ),
             ],
           ),
@@ -345,15 +347,21 @@ import 'package:flutter/widgets.dart';
 
 /// An item of the main navigation of the app, such as a tab of a bottom bar.
 final class Destination {
-  /// Creates an item labelled [label] with [icon].
+  /// Creates an item with [label] and [icon].
   const Destination({required this.label, required this.icon});
 
-  /// The text of the item.
-  final String label;
+  /// Returns the text of the item in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) label;
 
   /// The icon of the item.
   final IconData icon;
 }
+
+/// The destinations of the main navigation, in the order in which the
+/// router has their branches.
+const List<Destination> appDestinations = [];
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';
 

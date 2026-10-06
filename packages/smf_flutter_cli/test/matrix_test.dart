@@ -215,20 +215,23 @@ void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
-      'manager, the app of home and the app of settings, which get the '
-      'router, the apps of the theme with the settings screen and the '
-      'localization and without each, and the apps of the localization with '
-      'the settings screen and without, which all get the preferences, the '
-      'app of the DI container, the apps of the events and of the '
-      'preferences with the DI container and without, the app of Firebase, '
-      'the app of Crashlytics '
+      'manager, the apps of home, of settings and of the layout with the '
+      'localization, which get the router and the preferences, the apps of '
+      'home and of settings without it, the apps of the theme with the '
+      'settings screen and the localization and without each, and the app '
+      'of the localization, which all get the preferences, the app of the '
+      'DI container, the apps of the events and of the preferences with the '
+      'DI container and without, the app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, and one of every module for each state manager',
       () async {
     final (:apps, :failed) = await matrixOf(smfModules);
-    const localizedWithSettings = 'gen_l10n with settings_screen '
-        '(gen_l10n, settings, flutter_core, shared_preferences, go_router)';
+    // The modules whose labels and titles are texts of the app, each with
+    // the provider of the texts. The app of settings with it is the app of
+    // the localization with the settings screen too.
+    String localized(String module) => '$module with localization '
+        '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
@@ -242,8 +245,11 @@ void main() {
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
       'bloc (bloc, flutter_core)',
       'riverpod (riverpod, flutter_core)',
+      localized('home'),
       'home (home, flutter_core, go_router)',
+      localized('settings'),
       'settings (settings, flutter_core, go_router)',
+      localized('bottom_tabs'),
       equals(
         'material_theme with settings_screen, localization (material_theme, '
         'settings, gen_l10n, flutter_core, shared_preferences, go_router)',
@@ -257,7 +263,6 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
-      localizedWithSettings,
       'gen_l10n (gen_l10n, flutter_core, shared_preferences)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
@@ -935,7 +940,7 @@ Type type() => Types;
       {'module': 'home', 'package': 'smf_home_flutter', 'apps': withHome},
     ]);
     expect(usesOf(report[2]), {
-      'home': ['home'],
+      'home': ['home with localization', 'home'],
     });
     expect(
       usesOf(report[3]).keys,
