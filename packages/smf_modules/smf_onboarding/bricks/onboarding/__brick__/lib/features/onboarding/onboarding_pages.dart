@@ -46,12 +46,15 @@ class OnboardingPageScope extends InheritedWidget {
 
   /// How far the user has turned the pages of [controller], in pages: zero
   /// on the first page, one on the second, and a fraction in between while
-  /// they turn. Before the pages are laid out, it is the page that they
-  /// start on.
+  /// they turn. Before the pages are first laid out, it is the page that
+  /// they start on.
+  ///
+  /// The controller knows its page from the first layout on, also right
+  /// after its pages got a new scroll position, as when the language of the
+  /// device changes: a page that is built then stays where it is.
   static double turnedOf(PageController controller) =>
-      controller.hasClients && controller.position.haveDimensions
-      ? controller.page ?? 0
-      : controller.initialPage.toDouble();
+      (controller.hasClients ? controller.page : null) ??
+      controller.initialPage.toDouble();
 
   /// How far the pages are turned away from this page: zero while it is the
   /// one on the screen, up to one once the user has turned on to the next

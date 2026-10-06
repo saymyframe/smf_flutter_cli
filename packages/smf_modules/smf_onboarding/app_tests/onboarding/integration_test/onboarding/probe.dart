@@ -11,8 +11,8 @@
 // through it on this device before, or a test finished it before the app
 // started, and the probe is done. If it is not, the probe goes to the route
 // of the onboarding, which must show its screen, and finishes the
-// onboarding as Done does: the preferences must have that saved, and the
-// router must leave the screen. So it leaves the app with the onboarding
+// onboarding as the button of its last page does: the preferences must
+// have that saved, and the router must leave the screen. So it leaves the app with the onboarding
 // finished, as a user does.
 //
 // The app may have a guard of the routes before that of the onboarding
