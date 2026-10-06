@@ -215,10 +215,11 @@ void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router, the app of the router with the layout, one for each state '
-      'manager, the app of home and the app of settings, which get the '
-      'router, the apps of the theme with the settings screen and the '
-      'localization and without each, and the apps of the localization with '
-      'the settings screen and without, which all get the preferences, the '
+      'manager, the app of home and the apps of settings with the '
+      'localization and without, which get the router, the apps of the '
+      'theme with the settings screen and the localization and without '
+      'each, and the app of the localization, which get the preferences as '
+      'the app of settings with the localization does, the '
       'app of the DI container, the apps of the events and of the '
       'preferences with the DI container and without, the apps of the '
       'onboarding with the localization and without, which get the '
@@ -229,8 +230,10 @@ void main() {
       'which get Firebase, and one of every module for each state manager',
       () async {
     final (:apps, :failed) = await matrixOf(smfModules);
-    const localizedWithSettings = 'gen_l10n with settings_screen '
-        '(gen_l10n, settings, flutter_core, shared_preferences, go_router)';
+    // The app of the localization with the settings screen too: the same
+    // modules make one app.
+    const settingsWithTexts = 'settings with localization '
+        '(settings, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
@@ -245,6 +248,7 @@ void main() {
       'bloc (bloc, flutter_core)',
       'riverpod (riverpod, flutter_core)',
       'home (home, flutter_core, go_router)',
+      settingsWithTexts,
       'settings (settings, flutter_core, go_router)',
       equals(
         'material_theme with settings_screen, localization (material_theme, '
@@ -259,7 +263,6 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
-      localizedWithSettings,
       'gen_l10n (gen_l10n, flutter_core, shared_preferences)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',

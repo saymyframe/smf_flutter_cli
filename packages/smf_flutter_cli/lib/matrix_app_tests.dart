@@ -137,8 +137,16 @@ Future<MatrixAppTests> smfAppTests() async {
       ),
       // The last row of the settings screen of the module, which tells
       // what the app is: it opens the about dialog of Flutter with the name
-      // of the app, and the dialog the licenses of its packages.
-      MatrixAppTest('$settings/settings', appliesTo: _has(SettingsModule.id)),
+      // of the app, and the dialog the licenses of its packages. The title
+      // of the screen and that row are in the language of the app. The test
+      // goes through the languages of the app that the module has its
+      // title in: the matrix writes the languages that the localization
+      // role gives the app, and English alone for an app without the role.
+      MatrixAppTest(
+        '$settings/settings',
+        appliesTo: _has(SettingsModule.id),
+        generatedFiles: _settingsLanguagesOf,
+      ),
       // The preferences of the module reach shared_preferences, and read
       // what it has when they are opened, lists in the form that each
       // platform returns them in. The mocks keep the platform side of the
@@ -920,6 +928,70 @@ FacadeRoute _settingsRouteOf(
 String _navigationOf(String packageName) => ImportRef.app(
       RouterRole.navigationFile.substring('lib/'.length),
     ).resolveUri(packageName);
+
+/// The path in an app of what the matrix writes for the test of the
+/// language of the settings screen that the settings module keeps in its
+/// `app_tests/settings`: `appLanguages`, the codes of the languages of the
+/// app ([LocalizationRole.localesIn]), and `chooseLanguage()`, which
+/// chooses one of them for the app as its user does and completes once the
+/// app saved the choice.
+const settingsLanguagesFile = 'test/settings_languages.dart';
+
+/// The file at [settingsLanguagesFile] of [app], an app of the matrix whose
+/// package is [packageName].
+///
+/// In an app with the localization role, the languages are those of the
+/// role, and choosing one goes through `appLocale` of the file of the role,
+/// which the root of the app follows and which saves the choice in the
+/// preferences of the app. An app without the role is in English, and has
+/// no language to choose.
+Map<String, String> _settingsLanguagesOf(MatrixApp app, String packageName) {
+  const about = '''
+// The languages of the app, which the matrix of SMF writes from the
+// localization role of the app for the test of the language of the
+// settings screen, settings_language_test.dart.''';
+  final hook = app.hook!;
+  if (!hook.presentRoles.contains(localizationRole)) {
+    return {
+      settingsLanguagesFile: '''
+$about
+
+/// The codes of the languages of the app: it has no texts in other
+/// languages, so it is in English.
+const List<String> appLanguages = ['en'];
+
+/// The app has one language, so there is none to choose.
+Future<void> chooseLanguage(String language) async {}
+''',
+    };
+  }
+  final languages = [
+    for (final language
+        in localizationRole.localesIn(localizationRole.hookInput(hook)))
+      SmfNames.dartString(language),
+  ];
+  final appLocale = ImportRef.app(
+    LocalizationRole.appLocaleFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  return {
+    settingsLanguagesFile: '''
+$about
+import 'dart:ui';
+
+import '$appLocale';
+
+/// The codes of the languages of the app, the first of which the app is in
+/// when the device asks for none of them.
+const List<String> appLanguages = [${languages.join(', ')}];
+
+/// Chooses [language], one of [appLanguages], as the language of the app,
+/// as its user does. The app saves the choice in its preferences, and the
+/// future completes once it did.
+Future<void> chooseLanguage(String language) =>
+    appLocale.choose(Locale(language));
+''',
+  };
+}
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
 /// for the apps with the role, whichever module provides it, whose modules

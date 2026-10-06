@@ -598,6 +598,15 @@ List<BrokenProvider> brokenProviders() => const [
             'The text title of the module fake_second reads "Second screen" '
                 'in uk rather than "Другий екран".',
           ),
+          // The title of the settings screen is a text of the module of
+          // the screen, so its own test finds it in the first language
+          // once the app is in the second.
+          MatrixExpectedFailure(
+            'test/settings_language_test.dart',
+            'the title of the settings screen and its last row are in the '
+                'language of the app',
+            'The title of the screen is in the language of the app, uk.',
+          ),
         ],
       ),
       BrokenProvider(

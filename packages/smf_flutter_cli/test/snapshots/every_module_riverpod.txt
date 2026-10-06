@@ -144,6 +144,16 @@ With `go_router`:
 
 - The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack`, in the order of the `destinations` of `AppShell`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index. A route outside the main navigation goes after the shell route.
 
+## Settings screen
+
+- The settings screen is a list with an entry for each setting of the app. An entry is a widget in a file of the code that owns the setting, such as one in `lib/core/<concern>/` or `lib/features/<feature>/`, and not in the file of the screen. It reads and changes its setting itself.
+- To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
+- The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
+
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Its list has the entries and then About, the last row, which is the screen's own. The file imports the files of the entries as `entry0`, `entry1` and so on.
+- With a main navigation in the app, the screen is one of its destinations.
+- Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
+
 ## State management
 
 With `flutter_riverpod`:
@@ -2672,6 +2682,7 @@ void restoreOnboarding(AppPreferences preferences) =>
     onboardingStatus._restore(preferences);
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry1;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
@@ -2683,7 +2694,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
+    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
     body: ListView(
       children: const [
         entry0.ThemeModeSetting(),
@@ -2757,6 +2768,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
   "@@locale": "en",
+  "settingsTitle": "Settings",
   "onboardingWelcome": "Welcome! We are glad you are here.",
   "onboardingReadyTitle": "You are all set",
   "onboardingReady": "Enjoy the app.",
@@ -2773,6 +2785,7 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
   "@@locale": "uk",
+  "settingsTitle": "Налаштування",
   "onboardingWelcome": "Вітаємо! Раді, що ви з нами.",
   "onboardingReadyTitle": "Усе готово",
   "onboardingReady": "Приємного користування!",

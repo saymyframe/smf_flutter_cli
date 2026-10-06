@@ -239,10 +239,30 @@ final class SettingsScreenRoute extends SettingsData {
   String toString() => 'settings screen route "$name"';
 }
 
-/// The template of the [SettingsScreenRole], which adds nothing to the app:
-/// it checks the data of the role.
+/// The note of the settings screen role in the guide for coding agents:
+/// what an entry of the screen is and how code adds one, whichever module
+/// provides the screen. It names no file of the app, since the screen is a
+/// file of its provider and an entry a file of the code that owns the
+/// setting.
+const String _agentNote = '''
+- The settings screen is a list with an entry for each setting of the app. An entry is a widget in a file of the code that owns the setting, such as one in `lib/core/<concern>/` or `lib/features/<feature>/`, and not in the file of the screen. It reads and changes its setting itself.
+- To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
+- The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
+''';
+
+/// The template of the [SettingsScreenRole], which generates no file: it
+/// gives the guide for coding agents the note of the role, and checks the
+/// data of the role.
 final class _SettingsScreenTemplate extends RoleTemplate<SettingsData> {
   const _SettingsScreenTemplate();
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        AppEntryRole.agentSections.entry(
+          settingsScreenRole.description,
+          AgentNote.ofRole(_agentNote),
+        ),
+      ];
 
   /// Checks what the module rules of the role cannot see from one module:
   /// the entries of every contributor, the templates of roles included, an

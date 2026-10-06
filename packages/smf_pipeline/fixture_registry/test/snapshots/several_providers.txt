@@ -119,6 +119,16 @@ With `go_router`:
 - The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
 - To follow the screen that the user sees, add a function to `_screenListeners`.
 
+## Settings screen
+
+- The settings screen is a list with an entry for each setting of the app. An entry is a widget in a file of the code that owns the setting, such as one in `lib/core/<concern>/` or `lib/features/<feature>/`, and not in the file of the screen. It reads and changes its setting itself.
+- To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
+- The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
+
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Its list has the entries and then About, the last row, which is the screen's own. The file imports the files of the entries as `entry0`, `entry1` and so on.
+- With a main navigation in the app, the screen is one of its destinations.
+- Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
+
 ## Theme
 
 - `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds. Pass no `theme`, `darkTheme` or `themeMode` to the root `MaterialApp` anywhere else.
@@ -1580,6 +1590,12 @@ class FixtureTexts {
   String get fakeSecondSetting => switch (language) {
     'uk' => 'Друге налаштування',
     _ => 'Second setting',
+  };
+
+  /// The text title of the module settings.
+  String get settingsTitle => switch (language) {
+    'uk' => 'Налаштування',
+    _ => 'Settings',
   };
 
   /// The text welcome of the module onboarding.
@@ -3105,6 +3121,7 @@ void restoreOnboarding(AppPreferences preferences) =>
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
     as entry1;
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/l10n/language_setting.dart' as entry3;
 import 'package:fixture_app/core/theme/theme_mode_setting.dart' as entry2;
 import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
@@ -3119,7 +3136,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
+    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
     body: ListView(
       children: const [
         entry0.FixtureSetting(),
