@@ -4,7 +4,7 @@
 /// imports and depends on, `roleClassNameProblems` that the code of
 /// packages of modules takes the names of the classes of roles from the
 /// roles, and `roleNoteProblems` that what the template of a role says in a
-/// socket of notes names nothing that only a provider of the role has.
+/// socket of notes names nothing of the modules that provide the roles.
 ///
 /// It runs without `package:test`, so both the tests of this package and the
 /// contract tests of the CLI can use it.
