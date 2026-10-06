@@ -296,20 +296,37 @@ void main() {
         expect(agentNote, contains('`$name`'), reason: name);
         expect(index.declaration(name), isNotNull, reason: name);
       }
-      // The colours of a tab, which it reads from the theme.
-      for (final name in ['colorScheme', 'secondary', 'onSurfaceVariant']) {
-        expect(agentNote, contains('`$name`'), reason: name);
+      // The colours of a tab and of the bar, which each reads from the
+      // theme that the app has for a navigation bar, and from the colour
+      // scheme for what that theme does not set.
+      const colours = {
+        '_Tab': ['iconTheme', 'colorScheme', 'primary', 'onSurfaceVariant'],
+        '_TabBar': ['backgroundColor', 'colorScheme', 'surface'],
+      };
+      for (final MapEntry(key: widget, value: names) in colours.entries) {
+        for (final name in names) {
+          expect(agentNote, contains('`$name`'), reason: name);
+          expect(
+            index.memberAccesses.where(
+              (access) =>
+                  access.name == name && access.enclosingDeclaration == widget,
+            ),
+            isNotEmpty,
+            reason: '$name in $widget',
+          );
+        }
         expect(
-          index.memberAccesses.where(
-            (access) =>
-                access.name == name && access.enclosingDeclaration == '_Tab',
-          ),
-          isNotEmpty,
-          reason: name,
+          [
+            for (final call in index.invocationsOf('of', within: widget))
+              if (call.target == 'NavigationBarTheme') call.target,
+          ],
+          hasLength(1),
+          reason: widget,
         );
       }
-      // The bar is drawn by the file, so no theme of a bar of Flutter
-      // changes it.
+      expect(agentNote, contains('`NavigationBarTheme.of(context)`'));
+      // The bar is drawn by the file: it reads the theme of a navigation
+      // bar of Flutter, and creates none.
       expect(
         index.invocations.map((invocation) => invocation.name),
         isNot(anyElement(endsWith('NavigationBar'))),
@@ -469,8 +486,9 @@ void main() {
     });
 
     test(
-        'draws the bar in the colours of the theme, with a hairline above '
-        'the tabs, and the selected tab in the accent colour', () {
+        'draws the bar in the colours that the theme has for a navigation '
+        'bar, or else in those of its colour scheme, with a hairline above '
+        'the tabs and the selected tab in the primary colour', () {
       final unit = _parsed(app, _shell);
       final bar = _callsIn(_methodOf(_classOf(unit, '_TabBar'), 'build'));
       final tab = _callsIn(_methodOf(_classOf(unit, '_Tab'), 'build'));
@@ -478,16 +496,24 @@ void main() {
       // A Material of its own, on which the ink of a tab shows, above the
       // inset at the bottom of the device.
       expect(_argumentsOf(bar['Material']!.single), {
-        'color': 'colors.surface',
+        'color': 'NavigationBarTheme.of(context).backgroundColor ?? '
+            'colors.surface',
         'shape': 'Border(top: BorderSide(color: colors.outlineVariant))',
         'child': startsWith('SafeArea(top: false, child: Row('),
       });
       // The icon and the label take their colour over time, and nothing
       // else of a tab depends on whether it is selected, so a tab keeps
       // its size.
+      expect(_argumentsOf(tab['ColorTween']!.single), {'end': 'color'});
       expect(
-        _argumentsOf(tab['ColorTween']!.single),
-        {'end': 'selected ? colors.secondary : colors.onSurfaceVariant'},
+        _methodOf(_classOf(unit, '_Tab'), 'build').toSource(),
+        contains(
+          'final ofTheme = NavigationBarTheme.of(context).iconTheme; '
+          'final color = selected '
+          '? ofTheme?.resolve(const {WidgetState.selected})?.color ?? '
+          'colors.primary '
+          ': ofTheme?.resolve(const {})?.color ?? colors.onSurfaceVariant;',
+        ),
       );
       expect(
         _argumentsOf(tab['Icon']!.single),

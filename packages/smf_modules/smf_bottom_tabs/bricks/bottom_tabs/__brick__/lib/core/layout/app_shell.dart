@@ -42,15 +42,15 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: _BranchTransition(index: currentIndex, child: body),
-    bottomNavigationBar: destinations.length < 2
-        ? null
-        : _TabBar(
-            destinations: destinations,
-            currentIndex: currentIndex,
-            onTap: _tapped,
-          ),
-  );
+        body: _BranchTransition(index: currentIndex, child: body),
+        bottomNavigationBar: destinations.length < 2
+            ? null
+            : _TabBar(
+                destinations: destinations,
+                currentIndex: currentIndex,
+                onTap: _tapped,
+              ),
+      );
 
   /// Selects the destination of the tab at [index], which the user tapped.
   /// The device gives a light tick when that tab is not the selected one.
@@ -78,7 +78,7 @@ class _TabBar extends StatelessWidget {
     // A Material of its own, so that the ink of a tab shows on the bar and
     // stays inside it.
     return Material(
-      color: colors.surface,
+      color: NavigationBarTheme.of(context).backgroundColor ?? colors.surface,
       shape: Border(top: BorderSide(color: colors.outlineVariant)),
       child: SafeArea(
         top: false,
@@ -100,7 +100,8 @@ class _TabBar extends StatelessWidget {
 }
 
 /// The tab of [destination]: its icon over its label. When it becomes the
-/// selected one, both take the accent colour, and neither changes its size.
+/// selected one, both take the colour of the selected destination, and
+/// neither changes its size.
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.destination,
@@ -119,6 +120,13 @@ class _Tab extends StatelessWidget {
     // Read here each time the tab builds, so the label follows the language
     // of the app.
     final label = destination.label(context);
+    // The colours that the theme of the app gives the icons of a navigation
+    // bar, or else its primary colour for the selected tab.
+    final ofTheme = NavigationBarTheme.of(context).iconTheme;
+    final color = selected
+        ? ofTheme?.resolve(const {WidgetState.selected})?.color ??
+            colors.primary
+        : ofTheme?.resolve(const {})?.color ?? colors.onSurfaceVariant;
     // For a user who asks the device for less motion, the tab changes at
     // once.
     final duration = MediaQuery.disableAnimationsOf(context)
@@ -145,9 +153,7 @@ class _Tab extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: ExcludeSemantics(
                 child: TweenAnimationBuilder<Color?>(
-                  tween: ColorTween(
-                    end: selected ? colors.secondary : colors.onSurfaceVariant,
-                  ),
+                  tween: ColorTween(end: color),
                   duration: duration,
                   builder: (context, color, _) => Column(
                     mainAxisSize: MainAxisSize.min,
@@ -221,17 +227,18 @@ class _BranchTransitionState extends State<_BranchTransition>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, child) {
-      final shown = Easing.emphasizedDecelerate.transform(_controller.value);
-      return Opacity(
-        opacity: shown,
-        child: Transform.translate(
-          offset: Offset(0, (1 - shown) * 10),
-          child: child,
-        ),
+        animation: _controller,
+        builder: (context, child) {
+          final shown =
+              Easing.emphasizedDecelerate.transform(_controller.value);
+          return Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 10),
+              child: child,
+            ),
+          );
+        },
+        child: widget.child,
       );
-    },
-    child: widget.child,
-  );
 }

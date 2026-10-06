@@ -2,13 +2,14 @@
 // in the apps of the fixture modules with bottom_tabs and both fixture
 // features: the bar of its AppShell. The layout draws the bar itself, so
 // the test checks what a bar of Flutter would bring along: a tab for each
-// destination, what each tab says to a screen reader, a tap, the colour of
-// the selected tab, the screen of a destination that fades in, less motion
-// for a user who asks for it, and large text. It builds the AppShell of
-// the app around destinations of its own, as the router does, and does not
-// start the app, so it knows neither the router nor the features. The
-// labels of the destinations of the app, in each of its languages, are
-// checked in the running app by bottom_tabs_tap_test.dart next to it.
+// destination, what each tab says to a screen reader, a tap, the colours
+// of the tabs and of the bar, the screen of a destination that fades in,
+// less motion for a user who asks for it, and large text. It builds the
+// AppShell of the app around destinations of its own, as the router does,
+// and does not start the app, so it knows neither the router nor the
+// features. The labels of the destinations of the app, in each of its
+// languages, are checked in the running app by bottom_tabs_tap_test.dart
+// next to it.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -401,7 +402,7 @@ void main() {
     (tester) async {
       await _pumpShell(tester);
       final colors = _colors(tester);
-      final accent = (colors.secondary, colors.secondary);
+      final accent = (colors.primary, colors.primary);
       final plain = (colors.onSurfaceVariant, colors.onSurfaceVariant);
       expect(
         accent,
@@ -412,9 +413,9 @@ void main() {
       expect(
         _tabColors(tester),
         [accent, plain, plain],
-        reason: 'The icon and the label of the selected tab are in the '
-            'secondary colour of the theme, and those of the others in its '
-            'onSurfaceVariant colour.',
+        reason: 'In a theme without colours for a navigation bar, the icon '
+            'and the label of the selected tab are in its primary colour, '
+            'and those of the others in its onSurfaceVariant colour.',
       );
       final rects = _tabRects(tester);
 
@@ -460,6 +461,67 @@ void main() {
         isFalse,
         reason: 'Once the tabs have their colours, nothing moves: the app '
             'settles.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the bar takes the colours that the theme of the app gives a navigation '
+    'bar: of the selected tab, of the others and of the bar itself',
+    (tester) async {
+      const selected = Color(0xFF00AA55);
+      const others = Color(0xFF777777);
+      const background = Color(0xFF101010);
+      await _pumpShell(
+        tester,
+        theme: ThemeData(
+          navigationBarTheme: NavigationBarThemeData(
+            backgroundColor: background,
+            iconTheme: WidgetStateProperty.fromMap({
+              WidgetState.selected: const IconThemeData(color: selected),
+              WidgetState.any: const IconThemeData(color: others),
+            }),
+          ),
+        ),
+      );
+
+      expect(
+        _tabColors(tester),
+        [(selected, selected), (others, others), (others, others)],
+        reason: 'The icon and the label of each tab are in the colour that '
+            'the theme gives the icon of a destination, selected or not.',
+      );
+      expect(
+        tester
+            .widget<Material>(
+              find
+                  .descendant(
+                    of: bar(tester),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            )
+            .color,
+        background,
+        reason: 'The bar is in the colour that the theme gives a navigation '
+            'bar.',
+      );
+      // Without that colour, the bar is in the surface colour of the theme.
+      await _pumpShell(tester);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Material>(
+              find
+                  .descendant(
+                    of: bar(tester),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            )
+            .color,
+        _colors(tester).surface,
       );
     },
     timeout: timeout,
@@ -527,7 +589,7 @@ void main() {
     (tester) async {
       await _pumpShell(tester, lessMotion: true);
       final colors = _colors(tester);
-      final accent = (colors.secondary, colors.secondary);
+      final accent = (colors.primary, colors.primary);
       final plain = (colors.onSurfaceVariant, colors.onSurfaceVariant);
 
       await _select(tester, 1);

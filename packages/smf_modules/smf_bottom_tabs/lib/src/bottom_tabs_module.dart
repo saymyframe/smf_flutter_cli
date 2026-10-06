@@ -9,12 +9,14 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// `Scaffold` with the screen of the selected destination as its body and,
 /// below it, a bar that the file draws itself, with a tab for each
 /// destination of the app: its icon over its label, below a hairline. The
-/// selected tab differs from the others only in its colour, the secondary
-/// colour of the theme, which it takes over a moment, so no tab changes its
-/// size. A tap on a tab calls `onSelect` with its index, with the tick of a
-/// selection on the device when it is another tab, and the screen of the
-/// new destination fades in while it rises a little. With one destination
-/// there is nothing to switch to, so the bar is hidden.
+/// selected tab differs from the others only in its colour, which it takes
+/// over a moment, so no tab changes its size. The colours are those that
+/// the theme of the app gives a navigation bar, or else the primary colour
+/// of the theme for the selected tab. A tap on a tab calls `onSelect` with
+/// its index, with the tick of a selection on the device when it is another
+/// tab, and the screen of the new destination fades in while it rises a
+/// little. With one destination there is nothing to switch to, so the bar
+/// is hidden.
 ///
 /// The bar brings what a bar of Flutter would. Each tab is one button for a
 /// screen reader, with the label of its destination, selected or not. The

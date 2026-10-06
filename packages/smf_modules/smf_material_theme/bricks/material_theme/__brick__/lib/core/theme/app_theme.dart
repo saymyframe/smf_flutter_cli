@@ -172,6 +172,7 @@ ThemeData _themeOf(Brightness brightness) {
       centerTitle: false,
       titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
     ),
+    // The accent marks the selected destination of the main navigation.
     navigationBarTheme: NavigationBarThemeData(
       height: 68,
       elevation: 0,
@@ -179,18 +180,14 @@ ThemeData _themeOf(Brightness brightness) {
       indicatorColor: scheme.secondaryContainer,
       labelTextStyle: WidgetStateProperty.fromMap({
         WidgetState.selected: text.labelMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
+          color: scheme.secondary,
         ),
         WidgetState.any: text.labelMedium?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
       }),
       iconTheme: WidgetStateProperty.fromMap({
-        WidgetState.selected: IconThemeData(
-          size: 24,
-          color: scheme.onSecondaryContainer,
-        ),
+        WidgetState.selected: IconThemeData(size: 24, color: scheme.secondary),
         WidgetState.any: IconThemeData(
           size: 24,
           color: scheme.onSurfaceVariant,

@@ -88,7 +88,7 @@ With `event_bus`:
 - `go()` to a location in the main navigation selects its destination. From a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError`: use `go()`.
 
 - `AppShell` draws the bar itself, as `_TabBar` with a `_Tab` for each destination, and hides it while the app has fewer than two destinations. Keep to five destinations, the most that fit the bar on a phone.
-- The bar is not the navigation bar of Material, so the theme of that bar does not change it. It reads its colours from the `colorScheme` of the theme: the icon and the label of the selected tab are in `secondary`, those of the others in `onSurfaceVariant`.
+- The bar is not the navigation bar of Material, but it takes its colours where that bar does, from `NavigationBarTheme.of(context)`: `iconTheme` gives the colour of the icon and the label of the selected tab and of the others, and `backgroundColor` that of the bar. For a colour that the theme does not set, the bar reads the `colorScheme`: `primary` for the selected tab, `onSurfaceVariant` for the others and `surface` for the bar.
 - A `_Tab` is one node for a screen reader, with the label of its destination. What you add to a tab, such as a badge, is not read unless the `Semantics` of the tab says it.
 
 ## Localization
@@ -1461,7 +1461,7 @@ class _TabBar extends StatelessWidget {
     // A Material of its own, so that the ink of a tab shows on the bar and
     // stays inside it.
     return Material(
-      color: colors.surface,
+      color: NavigationBarTheme.of(context).backgroundColor ?? colors.surface,
       shape: Border(top: BorderSide(color: colors.outlineVariant)),
       child: SafeArea(
         top: false,
@@ -1483,7 +1483,8 @@ class _TabBar extends StatelessWidget {
 }
 
 /// The tab of [destination]: its icon over its label. When it becomes the
-/// selected one, both take the accent colour, and neither changes its size.
+/// selected one, both take the colour of the selected destination, and
+/// neither changes its size.
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.destination,
@@ -1502,6 +1503,13 @@ class _Tab extends StatelessWidget {
     // Read here each time the tab builds, so the label follows the language
     // of the app.
     final label = destination.label(context);
+    // The colours that the theme of the app gives the icons of a navigation
+    // bar, or else its primary colour for the selected tab.
+    final ofTheme = NavigationBarTheme.of(context).iconTheme;
+    final color = selected
+        ? ofTheme?.resolve(const {WidgetState.selected})?.color ??
+              colors.primary
+        : ofTheme?.resolve(const {})?.color ?? colors.onSurfaceVariant;
     // For a user who asks the device for less motion, the tab changes at
     // once.
     final duration = MediaQuery.disableAnimationsOf(context)
@@ -1528,9 +1536,7 @@ class _Tab extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: ExcludeSemantics(
                 child: TweenAnimationBuilder<Color?>(
-                  tween: ColorTween(
-                    end: selected ? colors.secondary : colors.onSurfaceVariant,
-                  ),
+                  tween: ColorTween(end: color),
                   duration: duration,
                   builder: (context, color, _) => Column(
                     mainAxisSize: MainAxisSize.min,
@@ -2701,6 +2707,7 @@ ThemeData _themeOf(Brightness brightness) {
       centerTitle: false,
       titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
     ),
+    // The accent marks the selected destination of the main navigation.
     navigationBarTheme: NavigationBarThemeData(
       height: 68,
       elevation: 0,
@@ -2708,18 +2715,14 @@ ThemeData _themeOf(Brightness brightness) {
       indicatorColor: scheme.secondaryContainer,
       labelTextStyle: WidgetStateProperty.fromMap({
         WidgetState.selected: text.labelMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
+          color: scheme.secondary,
         ),
         WidgetState.any: text.labelMedium?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
       }),
       iconTheme: WidgetStateProperty.fromMap({
-        WidgetState.selected: IconThemeData(
-          size: 24,
-          color: scheme.onSecondaryContainer,
-        ),
+        WidgetState.selected: IconThemeData(size: 24, color: scheme.secondary),
         WidgetState.any: IconThemeData(
           size: 24,
           color: scheme.onSurfaceVariant,
