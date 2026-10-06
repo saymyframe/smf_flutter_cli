@@ -696,8 +696,8 @@ void main() {
     });
 
     test(
-        'gives the rules what the hooks of a role that requires or uses '
-        'their role get, and of no other role', () {
+        'gives the rules what the hooks of a role of the app that requires '
+        'or uses their role get, and of no other role', () {
       late StructuralRuleInput<String> seen;
       final spy = TestRole<String>(
         'spy',
@@ -720,15 +720,29 @@ void main() {
         uses: {spy, absent},
       );
       final stranger = TestRole<String>('stranger');
+      // A role that sees another role of the app, but not that of the rule.
+      final neighbour = TestRole<String>('neighbour', uses: {shelf});
+      // A role that the app lacks, though it uses the role of the rule and
+      // a module gave it data: such as one that a rule makes up to read the
+      // data of the roles that it names.
+      final lens = TestRole<String>('lens', uses: {spy, shelf, stranger});
 
       spy.checkStructure(
         StructuralRuleRequest(
           hook: RoleHookRequest(
             data: [
-              for (final role in [spy, shelf, absent, user, stranger])
+              for (final role in [
+                spy,
+                shelf,
+                absent,
+                user,
+                stranger,
+                neighbour,
+                lens,
+              ])
                 RoleData<String>(role, 'of ${role.id}'),
             ],
-            presentRoles: {spy, shelf, user, stranger},
+            presentRoles: {spy, shelf, user, stranger, neighbour},
             context: testContext,
           ),
           files: files,
@@ -747,8 +761,9 @@ void main() {
       expect(dataOf(absent, ofUser), isEmpty);
       expect(ofUser.has(absent), isFalse);
       expect(() => stranger.dataIn(ofUser), throwsArgumentError);
-      // Of no role that does not build on the role of the rule.
-      for (final other in [shelf, stranger, spy]) {
+      // Of no role that does not build on the role of the rule, whether
+      // it sees other roles or none.
+      for (final other in [shelf, stranger, neighbour, spy]) {
         expect(
           () => seen.inputOf(other),
           throwsA(
@@ -761,6 +776,18 @@ void main() {
           ),
         );
       }
+      // Nor of a role that the app lacks, whose hooks do not run.
+      expect(
+        () => seen.inputOf(lens),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'The app does not have the $lens, so its hooks get nothing for '
+                'the rules of the $spy to read',
+          ),
+        ),
+      );
     });
   });
 
