@@ -1483,8 +1483,8 @@ void main() {
       expect(issue.message, differ(2, '$first; $second'));
       expect(
         issue.hint,
-        'Give each of these texts a name of its own, and the role each of '
-        'them among the texts of the module.',
+        'Give each of these texts a name of its own, and the localization '
+        'role each of them among the texts of the module.',
       );
       expect(issue.origin, const ModuleOrigin(home));
 
@@ -1508,6 +1508,29 @@ void main() {
           ],
         ).single.message,
         differ(2, '$first; $second'),
+      );
+    });
+
+    test(
+        'compares the texts of the data of each role on their own: a text '
+        'of a name that the data of two roles have is one of each', () {
+      final shelf = TestRole<_Shown>('shelf');
+      const other = LocalizedText('label', en: 'Shelf');
+
+      // The label of the routes is the text that the module gave the role,
+      // and the text of that name of the other role is not.
+      expect(
+        check(
+          const [label],
+          [
+            routes(const [label]),
+            shelf.data(const _Shown([other, other])),
+          ],
+          present: {routerRole, shelf},
+        ).single.message,
+        'The module gives the shelf role the text "label" in its data, and '
+        'the localization role a text of that name that differs from it: '
+        "'Shelf' and 'Home', uk: 'Головна'.",
       );
     });
 
@@ -1670,6 +1693,15 @@ void main() {
       kind: plainKind,
       providers: [RoleProvider.plain(_themeRole)],
     );
+    // A provider of that role that lists the localization role itself,
+    // for texts of its own.
+    final tabs = ModuleDescriptor(
+      id: const ModuleId('tabs'),
+      description: 'Tabs',
+      kind: plainKind,
+      providers: [RoleProvider.plain(_themeRole)],
+      uses: const {localizationRole},
+    );
     final data = [
       _of('home', const [_title]),
       _of('shared', const [LocalizedText('ok', en: 'OK')]),
@@ -1712,7 +1744,7 @@ void main() {
               if (owner != null) 'lib/file.dart': owner,
               LocalizationRole.textsFile: const ModuleOrigin(ModuleId('texts')),
             },
-            modules: [home, shared, feed, plain, provider, settings],
+            modules: [home, shared, feed, plain, provider, settings, tabs],
           ),
         );
 
@@ -1910,6 +1942,7 @@ void main() {
             accesses: const [
               IndexedMemberAccess('context.l10n', 'appThemeMode'),
             ],
+            present: {_themeRole},
           ),
           isEmpty,
         );
@@ -1917,6 +1950,7 @@ void main() {
           check(
             ofTheme,
             accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+            present: {_themeRole},
           ).single.message,
           'lib/file.dart reads context.l10n.homeTitle, the text title of the '
           'module home, but the template of the app_theme role may only read '
@@ -1944,6 +1978,31 @@ void main() {
         );
         expect(issue.origin, ofBoard);
       });
+    });
+
+    test(
+        'tells a provider of a role that reads a text of a module that the '
+        'template of its role reads the texts of the data of the role', () {
+      const ofTabs = ModuleOrigin(ModuleId('tabs'));
+      final issue = check(
+        ofTabs,
+        accesses: const [IndexedMemberAccess('context.l10n', 'homeTitle')],
+      ).single;
+
+      expect(
+        issue.message,
+        'lib/file.dart reads context.l10n.homeTitle, the text title of the '
+        'module home, but the module tabs may only read its own texts and '
+        'those of the modules it depends on.',
+      );
+      expect(
+        issue.hint,
+        'Give the role a text of your own. A text that a module gives the '
+        'app_theme role in its data is read by the template of that role, '
+        'and a provider of the role shows it through what the template '
+        'generates.',
+      );
+      expect(issue.origin, ofTabs);
     });
 
     test('lets the pipeline, which has no texts, read none', () {

@@ -53,8 +53,8 @@ List<SmfIssue> _dataTextIssues(
             'differ: ${named.map(_shown).join('; ')}. The app reads a text '
             'of a module by its name, so it would show the same text for '
             'each of them.',
-            hint: 'Give each of these texts a name of its own, and the role '
-                'each of them among the texts of the module.',
+            hint: 'Give each of these texts a name of its own, and the '
+                '$localizationRole each of them among the texts of the module.',
             origin: origin,
           ),
         );
@@ -209,6 +209,40 @@ Role? _roleWithTextsOf(ContributionOrigin owner) => switch (owner) {
       _ => null,
     };
 
+/// The roles that [module] provides whose templates render data with
+/// texts of the modules: those that require or use this role, but for this
+/// role itself. The texts of that data are for the template of the role to
+/// read, not for the module.
+Iterable<Role> _rolesWithTextsOf(ModuleDescriptor? module) => [
+      for (final role in module?.provides ?? const <Role>{})
+        if (!identical(role, localizationRole) &&
+            role.visibleRoles.contains(localizationRole))
+          role,
+    ];
+
+/// What to do about a text of another owner that code reads: for the
+/// template of the role [rendered], which renders data with texts of the
+/// modules, and for a module [module] that provides such roles, also where
+/// those texts are read.
+String _ownTextHint(Role? rendered, ModuleDescriptor? module) {
+  final hint = StringBuffer('Give the role a text of your own.');
+  if (rendered != null) {
+    hint.write(
+      ' A text of a module comes with the data that the module gives your '
+      'role, a DataWithTexts, and the code that reads it from '
+      'LocalizationRole.expressionOf().',
+    );
+  }
+  for (final role in _rolesWithTextsOf(module)) {
+    hint.write(
+      ' A text that a module gives the $role in its data is read by the '
+      'template of that role, and a provider of the role shows it through '
+      'what the template generates.',
+    );
+  }
+  return '$hint';
+}
+
 /// The texts of the modules that the template of [role] may read besides
 /// its own, each as its owner and its name: the texts of the data of
 /// [role] and of the roles that it requires or uses (see [DataWithTexts]),
@@ -291,12 +325,7 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
           SmfIssue(
             '$path reads $read, the $text, but ${_named(owner)} may only '
             'read $own.',
-            hint: rendered != null
-                ? 'Give the role a text of your own. A text of a module comes '
-                    'with the data that the module gives your role, a '
-                    'DataWithTexts, and the code that reads it from '
-                    'LocalizationRole.expressionOf().'
-                : 'Give the role a text of your own.',
+            hint: _ownTextHint(rendered, module),
             origin: owner,
             path: path,
           ),
