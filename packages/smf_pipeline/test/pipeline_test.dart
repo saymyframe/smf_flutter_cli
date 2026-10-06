@@ -42,7 +42,7 @@ RoutesData _routes(String name) => RoutesData([
           import: ImportRef.app('features/$name/${name}_screen.dart'),
         ),
         destination: Destination(
-          label: name,
+          label: LocalizedText('label', en: name),
           icon: const Fragment('Icons.home'),
         ),
         startCandidate: name == 'home',
