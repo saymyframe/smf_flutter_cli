@@ -266,7 +266,10 @@ void main() {
         'and those of the contributors of settings with and without the '
         'settings screen', () {
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'go_router with layout',
         'bottom_tabs with localization',
@@ -278,7 +281,6 @@ void main() {
         'look',
         'pinch_zoom with settings_screen',
         'pinch_zoom',
-        'gen_l10n',
         'shared_preferences',
       ]);
     });

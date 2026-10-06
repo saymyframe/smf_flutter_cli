@@ -23,6 +23,8 @@ lib/main.dart
 test/core/app/fallback_start_screen_test.dart
 ```
 
+An app with this module alone starts on the fallback start screen. It shows a cell with a symbol and a number made from the name of the app, `Ma` and `5` for `my_app`, then `My App`, a hint that the app has no start screen yet, and the path of the file of the screen, which a tap copies. Add a feature with a route, such as `home`, and the app starts there instead.
+
 `main()` runs `bootstrap()` before the first frame. Other modules put their start-up code into `bootstrap()`, such as the start of Firebase, and their wrappers around the root widget, such as the `ProviderScope` of Riverpod:
 
 ```dart

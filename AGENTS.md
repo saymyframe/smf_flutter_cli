@@ -12,7 +12,7 @@ SMF (Say My Frame) is a Flutter CLI (`smf create`) that generates apps from inde
 
   | Package | Module (`-m`) | What it is |
   | --- | --- | --- |
-  | `smf_flutter_core` | `flutter_core` | Provides the app entry, which every app has exactly one of (`FlutterCoreModule`, brick `bricks/flutter_core`). |
+  | `smf_flutter_core` | `flutter_core` | Provides the app entry, which every app has exactly one of (`FlutterCoreModule`, brick `bricks/flutter_core`). Its fallback start screen, which an app without a route to start on shows, names the app and tells its developer where the first screen goes; it uses the localization role for the two texts of that screen. |
   | `smf_go_router` | `go_router` | Provides the router role. |
   | `smf_bloc`, `smf_riverpod` | `bloc`, `riverpod` | Provide the state management role; an app has at most one. |
   | `smf_home_flutter` | `home` | The feature `home` (`HomeModule`), the start screen at `/home`; requires the router role, and uses the localization role for the label of its destination. |

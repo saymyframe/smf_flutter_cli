@@ -6,9 +6,7 @@ import 'package:{{app_name}}/core/app/fallback_start_screen.dart';
 /// The path that the screen names.
 const _file = 'lib/core/app/fallback_start_screen.dart';
 
-/// Shows what the fallback start screen shows, with texts of the test: the
-/// screen itself reads them from the texts of the app, where the app has
-/// them.
+/// Shows the view of the fallback start screen with texts of the test.
 Future<void> _show(WidgetTester tester) => tester.pumpWidget(
   const MaterialApp(
     home: FallbackStartView(hint: 'A hint', copied: 'Copied'),

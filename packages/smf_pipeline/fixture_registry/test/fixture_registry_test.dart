@@ -11,6 +11,7 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -959,7 +960,7 @@ void main() {
       expect(
         [
           for (final text in localizationRole.textsIn(input))
-            '${text.getter}: $text',
+            if (!_ofAppEntry(text)) '${text.getter}: $text',
         ],
         [
           'fakeSecondTitle: text title of the module fake_second',
@@ -1064,7 +1065,7 @@ void main() {
     List<String> gettersOf(ContractResult result) => [
           for (final text in localizationRole
               .textsIn(localizationRole.hookInput(result.hook!)))
-            text.getter,
+            if (!_ofAppEntry(text)) text.getter,
         ];
 
     test(
@@ -1571,8 +1572,12 @@ const _importCodes = 'duplicate_import,unnecessary_import,unused_import';
 /// The cases of the harness over the fixtures, each building another app,
 /// so that a case that stops being built fails the test.
 const _cases = [
+  'flutter_core (fake_router) with router, localization',
+  'flutter_core (go_router) with router, localization',
   'flutter_core (fake_router) with router',
   'flutter_core (go_router) with router',
+  // The app of the fixture texts alone.
+  'flutter_core with localization',
   'flutter_core',
   'fake_router with layout',
   'go_router with layout',
@@ -1596,7 +1601,6 @@ const _cases = [
   'fake_gate (go_router)',
   'fake_sockets',
   'fake_overlap',
-  'fake_l10n',
   'fake_analytics (fake_di, fake_router) with di, router',
   'fake_analytics (fake_di, go_router) with di, router',
   'fake_analytics (get_it, fake_router) with di, router',
@@ -1632,6 +1636,11 @@ const _cases = [
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
 ];
+
+/// Whether [text] is a text of the app entry of the fixtures, which every
+/// app has besides the texts of the fixtures.
+bool _ofAppEntry(AppText text) =>
+    text.owner == const ModuleOrigin(FlutterCoreModule.id);
 
 /// Collects the code of the first argument of each `Text(...)`.
 final class _TextArguments extends RecursiveAstVisitor<void> {

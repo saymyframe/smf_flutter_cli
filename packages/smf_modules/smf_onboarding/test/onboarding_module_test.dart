@@ -457,10 +457,12 @@ void main() {
         'builds the app of the module with the localization and without, '
         'each with the router and the preferences that it requires', () {
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'memory_preferences',
-        'gen_l10n',
         'feed',
         'onboarding with localization',
         'onboarding',
@@ -1344,12 +1346,13 @@ void main() {
       expect(
         [
           for (final text in localizationRole.textsIn(input))
-            (
-              '${text.owner}',
-              text.getter,
-              text.text.en,
-              text.text.textIn('uk'),
-            ),
+            if (text.owner == _module)
+              (
+                '${text.owner}',
+                text.getter,
+                text.text.en,
+                text.text.textIn('uk'),
+              ),
         ],
         [
           for (final MapEntry(key: getter, value: english) in _texts.entries)

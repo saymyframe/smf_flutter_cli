@@ -10,8 +10,8 @@ const _mono = TextStyle(
   fontFamilyFallback: ['Menlo', 'Courier'],
 );
 
-/// The screen the app starts on when no route of the app can start it, with
-/// its texts in the language of the app.
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
 class FallbackStartScreen extends StatelessWidget {
   /// Creates the screen.
   const FallbackStartScreen({super.key});
@@ -27,7 +27,7 @@ class FallbackStartScreen extends StatelessWidget {
 /// What the [FallbackStartScreen] shows: the name of the app, and where its
 /// developer puts its first screen.
 ///
-/// It takes its texts, so a test shows it without the texts of the app.
+/// It takes its texts, so a test shows it with texts of its own.
 class FallbackStartView extends StatelessWidget {
   /// Creates the view with its texts.
   const FallbackStartView({

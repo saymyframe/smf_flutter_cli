@@ -308,14 +308,16 @@ void main() {
         'localization, and without each, all with the preferences that the '
         'role requires', () {
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'shared_preferences',
         // The settings screen reads its title from the texts of the app, and
         // the localization has its setting on that screen: one app.
         'settings with localization',
         'settings',
-        'gen_l10n',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
         'material_theme with localization',

@@ -187,11 +187,13 @@ void main() {
         'builds the apps with and without home, and the app of home with '
         'and without the texts of the app', () {
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'home with localization',
         'home',
-        'gen_l10n',
         'shared_preferences',
       ]);
     });
@@ -408,8 +410,9 @@ void main() {
       final result = await _rendered(const [HomeModule.id, GenL10nModule.id]);
       final input = localizationRole.hookInput(result.hook!);
 
-      final label = localizationRole.textsIn(input).single;
-      expect(label.owner, const ModuleOrigin(HomeModule.id));
+      final label = localizationRole.textsIn(input).singleWhere(
+            (text) => text.owner == const ModuleOrigin(HomeModule.id),
+          );
       expect(label.getter, 'homeLabel');
       expect(label.text.en, 'Home');
       expect(label.text.translations, {'uk': 'Головна'});

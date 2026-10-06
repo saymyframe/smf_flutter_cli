@@ -126,14 +126,16 @@ void main() {
         'layout with and without the texts of the app', () {
       // The app of this module is the app of go_router with the layout.
       expect(results.map((result) => result.contractCase.name), [
+        'flutter_core with router, localization',
         'flutter_core with router',
+        // The app of the provider of the localization alone.
+        'flutter_core with localization',
         'flutter_core',
         'go_router with layout',
         'bottom_tabs with localization',
         'inbox with localization',
         'inbox',
         'search',
-        'gen_l10n',
         'shared_preferences',
       ]);
     });
@@ -377,11 +379,15 @@ void main() {
         BottomTabsModule.id,
         GenL10nModule.id,
       ]);
-      // The texts of the app, as the localization role has them: the label
-      // of the feature that gave it one.
+      // The texts of the features, as the localization role has them: the
+      // label of the feature that gave it one.
       final input = localizationRole.hookInput(withTexts.hook!);
+      final features = {ModuleOrigin(_inbox.id), ModuleOrigin(_search.id)};
       expect(
-        [for (final text in localizationRole.textsIn(input)) text.getter],
+        [
+          for (final text in localizationRole.textsIn(input))
+            if (features.contains(text.owner)) text.getter,
+        ],
         ['inboxLabel'],
       );
       expect(localizationRole.localesIn(input), ['en', 'uk']);

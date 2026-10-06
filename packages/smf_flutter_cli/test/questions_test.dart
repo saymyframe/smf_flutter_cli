@@ -606,15 +606,15 @@ void main() {
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
-    // The one text of the app is the label of the start screen in a main
+    // The first text of the app is the label of the start screen in a main
     // navigation, in English and in Ukrainian, so the app is in both.
     expect(
       app.childFile('lib/l10n/app_en.arb').readAsStringSync(),
-      '{\n  "@@locale": "en",\n  "homeLabel": "Home"\n}\n',
+      startsWith('{\n  "@@locale": "en",\n  "homeLabel": "Home",\n'),
     );
     expect(
       app.childFile('lib/l10n/app_uk.arb').readAsStringSync(),
-      '{\n  "@@locale": "uk",\n  "homeLabel": "Головна"\n}\n',
+      startsWith('{\n  "@@locale": "uk",\n  "homeLabel": "Головна",\n'),
     );
     expect(
       [

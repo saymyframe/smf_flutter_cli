@@ -58,7 +58,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 
 | Module | What it adds to the app |
 | --- | --- |
-| [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up and the root widget. Every app has it. |
+| [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up, the root widget, and the screen that an app shows while it has no screen to start on. Every app has it. |
 | [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
 | [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
