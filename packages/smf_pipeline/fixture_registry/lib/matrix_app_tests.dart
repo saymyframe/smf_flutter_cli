@@ -314,9 +314,11 @@ Map<String, String> _destinationLabelsOf(MatrixApp app, String packageName) {
   final appLocale =
       ImportRef.app(LocalizationRole.appLocaleFile.substring('lib/'.length))
           .resolveUri(packageName);
-  final imports = localized
-      ? "import 'package:flutter/widgets.dart';\nimport '$appLocale';\n\n"
-      : '';
+  final directives = [
+    "import 'package:flutter/widgets.dart';",
+    "import '$appLocale';",
+  ]..sort();
+  final imports = localized ? '${directives.join('\n')}\n\n' : '';
   return {
     destinationLabelsFile: '''
 // The labels of the destinations of the main navigation of the app in each
