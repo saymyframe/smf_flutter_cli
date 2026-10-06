@@ -12,9 +12,9 @@ The module generates three files in `lib/features/onboarding/`:
 
 The screen does not navigate. The guard keeps the user in the onboarding until it is finished, and the router leaves it then.
 
-To show the onboarding again, call `onboardingStatus.restart()`, for example where the user taps a row of the settings. The app shows the onboarding at once, in place of the screen that the user is on, and saves that it is not finished. Once the user finishes it again, they are back where they were. Do not navigate to `/onboarding` to show it: the guard decides when the app shows the onboarding. If something else shows its screen, such as a link to the route, the onboarding starts again too.
+To show the onboarding again, call `onboardingStatus.restart()`, for example where the user taps a row of the settings. The app shows the onboarding at once, in place of the screen that the user is on, and saves that it is not finished. Once the user finishes it again, they are back on the screen that they were on. From a page pushed over another screen, they come back to the screen below the pushed pages. Do not navigate to `/onboarding` to show it: the guard decides when the app shows the onboarding. If something else shows its screen, such as a link to the route, the onboarding starts again too.
 
-While you edit the pages, the app shows the onboarding once for each install. To see it again, clear the data of the app or install it anew, or call `onboardingStatus.restart()` for the time being.
+While you edit the pages, the app shows the onboarding once for each install. To see it again, clear the data of the app or install it anew. For the time being, you can also call `onboardingStatus.restart()` in `main()` after `bootstrap()`. Before `bootstrap()` the call has no lasting effect, because the start-up takes what the preferences have saved.
 
 The module requires a module that provides the preferences, which remember that the onboarding is finished. The app saves it under `onboarding.completed` and reads it before its first frame, so a later launch never shows the onboarding first. Nothing is saved before the user finishes: an app that is closed in the middle of the onboarding starts it from its first page the next time.
 

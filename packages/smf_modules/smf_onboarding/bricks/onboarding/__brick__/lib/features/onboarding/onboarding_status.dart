@@ -51,10 +51,19 @@ final class OnboardingStatus {
   /// settings, and navigate nowhere.
   ///
   /// The router shows the onboarding as soon as this is called, in place of
-  /// the screen that the user is on, and brings the user back to where they
-  /// were once the onboarding is finished again. So call it outside the
-  /// build of a frame. An app that is closed before that shows the
-  /// onboarding on its next launch.
+  /// the screen that the user is on. Once the onboarding is finished again,
+  /// the router shows that screen again. If the user was on a page pushed
+  /// over another screen, it shows the screen below the pushed pages
+  /// instead. An app that is closed before that shows the onboarding on its
+  /// next launch.
+  ///
+  /// Call it outside the build of a frame, where the router cannot
+  /// navigate. In a build, Flutter reports an error, and the app shows the
+  /// onboarding only at its next navigation.
+  ///
+  /// Call it after `bootstrap()`. Until the app opened its preferences for
+  /// the first time, it changes only memory, and the start-up then takes
+  /// what the preferences have saved.
   ///
   /// If the preferences fail to save it, the future completes with their
   /// error, and the next launch of the app finds the onboarding finished.

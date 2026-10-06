@@ -41,13 +41,17 @@ import 'package:smf_onboarding/src/agents.dart';
 /// `onboardingStatus.restart()` starts the onboarding again, at once, and
 /// saves that, for an app that lets its user see the onboarding again. The
 /// guard stops allowing, so the router shows the onboarding in place of the
-/// screen that the user is on, and brings the user back to where they were
-/// once it is finished again. So the app shows the screen of the onboarding
-/// exactly while the onboarding is not finished, and nothing navigates to
-/// it. When something else shows the screen although the onboarding is
-/// finished, such as a link to its route, the screen starts the onboarding
-/// again once its first frame is over, and Skip and Done leave it as on a
-/// first launch.
+/// screen that the user is on. Once it is finished again, the router shows
+/// that screen again, or the screen below the pushed pages if the user was
+/// on a page pushed over another screen. Before the start-up of the app
+/// opened the preferences, `restart()` changes only memory, and the
+/// start-up then takes what is saved.
+///
+/// So the app shows the screen of the onboarding exactly while the
+/// onboarding is not finished, and nothing navigates to it. When something
+/// else shows the screen although the onboarding is finished, such as a
+/// link to its route, the screen starts the onboarding again once its first
+/// frame is over, and Skip and Done leave it as on a first launch.
 ///
 /// The texts of the screen, [texts], are in English and in Ukrainian. The
 /// module only uses the localization role: in an app with the role they are

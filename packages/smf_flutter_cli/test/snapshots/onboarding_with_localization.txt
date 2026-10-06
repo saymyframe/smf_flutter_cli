@@ -41,9 +41,9 @@ With `gen-l10n` of Flutter:
 
 ## Onboarding
 
-- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it.
+- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, and the screen keeps Skip, Next and Done below the pages.
-- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and Done call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate: the router shows the onboarding, and brings the user back to where they were once it is finished.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and Done call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
 
 ## Preferences
@@ -1512,10 +1512,19 @@ final class OnboardingStatus {
   /// settings, and navigate nowhere.
   ///
   /// The router shows the onboarding as soon as this is called, in place of
-  /// the screen that the user is on, and brings the user back to where they
-  /// were once the onboarding is finished again. So call it outside the
-  /// build of a frame. An app that is closed before that shows the
-  /// onboarding on its next launch.
+  /// the screen that the user is on. Once the onboarding is finished again,
+  /// the router shows that screen again. If the user was on a page pushed
+  /// over another screen, it shows the screen below the pushed pages
+  /// instead. An app that is closed before that shows the onboarding on its
+  /// next launch.
+  ///
+  /// Call it outside the build of a frame, where the router cannot
+  /// navigate. In a build, Flutter reports an error, and the app shows the
+  /// onboarding only at its next navigation.
+  ///
+  /// Call it after `bootstrap()`. Until the app opened its preferences for
+  /// the first time, it changes only memory, and the start-up then takes
+  /// what the preferences have saved.
   ///
   /// If the preferences fail to save it, the future completes with their
   /// error, and the next launch of the app finds the onboarding finished.
