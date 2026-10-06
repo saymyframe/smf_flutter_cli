@@ -252,7 +252,8 @@ void main() {
 
     // The roles whose templates have nothing to tell a coding agent, each
     // with the reason. The template of every other role has a note in the
-    // guide for coding agents.
+    // guide for coding agents. `test/agent_notes_test.dart` of
+    // `smf_flutter_cli` has such a list too, for the apps of the CLI.
     const withoutNote = <Role, String>{};
     final withNotes = [
       for (final role in withTemplates)
@@ -291,9 +292,10 @@ void main() {
               '`AppEntryRole.agentSections` under the description of the '
               'role, with what the role guarantees whichever module '
               'provides it. A role with nothing to tell a coding agent goes '
-              'into `withoutNote` of this test with the reason. The '
-              'convention of the notes is in the AGENTS.md of the '
-              'repository, under "Every app gets `AGENTS.md`".',
+              'into `withoutNote` of this test and into `_withoutNote` of '
+              '`test/agent_notes_test.dart` of `smf_flutter_cli`, with the '
+              'reason. The convention of the notes is in the AGENTS.md of '
+              'the repository, under "Every app gets `AGENTS.md`".',
         );
         for (final note in notes) {
           expect(note.entryKey, role.description, reason: role.id);
