@@ -156,7 +156,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Its list has the entries and then About, the last row, which is the screen's own. The file imports the files of the entries as `entry0`, `entry1` and so on.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -4322,27 +4322,78 @@ void restoreOnboarding(AppPreferences preferences) =>
     onboardingStatus._restore(preferences);
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry1;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
-/// app has, and what the app is, with its licenses.
+/// app has, one below the other in one group.
+///
+/// As a destination of the main navigation, the screen has no app bar.
+/// Shown on top of another screen, it has one, for the back button.
 class SettingsScreen extends StatelessWidget {
   /// Creates the screen.
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
-    body: ListView(
-      children: const [
-        entry0.ThemeModeSetting(),
-        entry1.LanguageSetting(),
-        AboutListTile(
-          icon: Icon(Icons.info_outline),
-          applicationName: 'My App',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Semantics(
+        header: true,
+        child: Text(
+          context.l10n.settingsTitle,
+          style: theme.textTheme.headlineLarge,
         ),
+      ),
+    );
+    // Whether a screen below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    // Without an app bar, the screen itself tells the system which colour
+    // the icons of the status bar have.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: theme.brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        appBar: back ? AppBar() : null,
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            children: [
+              title,
+              const SizedBox(height: 20),
+              const _Group(
+                children: [entry0.ThemeModeSetting(), entry1.LanguageSetting()],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The group of the entries of the screen: its [children] one below the
+/// other on a card, with a line between them.
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, child) in children.indexed) ...[
+          if (index > 0) const Divider(height: 1, indent: 56),
+          child,
+        ],
       ],
     ),
   );

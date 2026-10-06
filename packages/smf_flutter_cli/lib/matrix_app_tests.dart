@@ -138,17 +138,24 @@ Future<MatrixAppTests> smfAppTests() async {
           'probeOnboarding',
         ),
       ),
-      // The last row of the settings screen of the module, which tells
-      // what the app is: it opens the about dialog of Flutter with the name
-      // of the app, and the dialog the licenses of its packages. The title
-      // of the screen and that row are in the language of the app. The test
-      // goes through the languages of the app that the module has its
-      // title in: the matrix writes the languages that the localization
-      // role gives the app, and English alone for an app without the role.
+      // The settings screen of the module. Its title is in the language of
+      // the app: the test goes through the languages of the app that the
+      // module has its title in, which the matrix writes from the
+      // localization role of the app, English alone for an app without the
+      // role. Below the title it shows the entries of the app in one
+      // group, or, in an app without settings, a note for its developer
+      // with the path of the file of the screen, which a tap copies. And
+      // it has a back button only on top of another screen, where the
+      // button leads back. For these, the matrix writes how many entries
+      // the screen has and whether it is a destination of the main
+      // navigation, where code cannot push it (see _settingsOfAppOf).
       MatrixAppTest(
         '$settings/settings',
         appliesTo: _has(SettingsModule.id),
-        generatedFiles: _settingsLanguagesOf,
+        generatedFiles: (app, packageName) => {
+          ..._settingsLanguagesOf(app, packageName),
+          ..._settingsOfAppOf(app),
+        },
       ),
       // The preferences of the module reach shared_preferences, and read
       // what it has when they are opened, lists in the form that each
@@ -1051,6 +1058,51 @@ Map<String, String> _homeTextsFileOf(MatrixApp app) {
 /// has the English texts alone.
 const Map<String, Map<String, String>> homeTexts = {
 $texts};
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the group
+/// and of the back button of the settings screen that the settings module
+/// keeps in its `app_tests/settings`: `settingsEntryCount`, how many
+/// entries the screen has, and `settingsInMainNavigation`, whether the
+/// screen is a destination of the main navigation of the app.
+const settingsOfAppFile = 'test/settings_of_app.dart';
+
+/// The file at [settingsOfAppFile] of [app], an app of the matrix with the
+/// settings screen role.
+///
+/// The entries are those of the role ([SettingsScreenRole.entriesIn]). An
+/// app without any has the note of the module for its developer on the
+/// screen. The screen is a destination when the app has the layout role and
+/// the route of the settings screen ([SettingsScreenRole.screenIn]) is one
+/// of the destinations of that role ([LayoutRole.destinationsIn]). The
+/// router role refuses to push a location of the main navigation over it,
+/// so the test of the back button pushes the screen only where it is no
+/// destination.
+Map<String, String> _settingsOfAppOf(MatrixApp app) {
+  final hook = app.hook!;
+  final input = settingsScreenRole.hookInput(hook);
+  final screen = settingsScreenRole.screenIn(input);
+  final destination = hook.presentRoles.contains(layoutRole) &&
+      layoutRole
+          .destinationsIn(layoutRole.hookInput(hook))
+          .any((route) => route.fullName == screen?.fullName);
+  return {
+    settingsOfAppFile: '''
+// What the settings screen has in the app and where it is, which the matrix
+// of SMF writes from the settings screen role and the layout role of the
+// app for the tests of the settings module, settings_group_test.dart and
+// settings_back_test.dart.
+
+/// How many entries the settings screen has: the settings of the modules
+/// of the app. Without any, the screen has a note for the developer of the
+/// app.
+const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = $destination;
 ''',
   };
 }

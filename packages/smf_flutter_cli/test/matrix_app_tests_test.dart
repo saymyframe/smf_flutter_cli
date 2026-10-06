@@ -2116,7 +2116,7 @@ void main() {
     );
     for (final app in withoutRole) {
       final files = settings.generatedFiles!(app, 'my_app');
-      expect(files.keys, [settingsLanguagesFile]);
+      expect(files.keys, [settingsLanguagesFile, settingsOfAppFile]);
       final text = files[settingsLanguagesFile]!;
       final (:index, :errors) =
           DartFileIndexer.parse(settingsLanguagesFile, text);
@@ -2175,7 +2175,11 @@ void main() {
       for (final app in withRole) {
         final reason = '${app.name} in $languages';
         final files = settings.generatedFiles!(app, 'my_app');
-        expect(files.keys, [settingsLanguagesFile], reason: reason);
+        expect(
+          files.keys,
+          [settingsLanguagesFile, settingsOfAppFile],
+          reason: reason,
+        );
         final text = files[settingsLanguagesFile]!;
         final (:index, :errors) =
             DartFileIndexer.parse(settingsLanguagesFile, text);
@@ -2254,6 +2258,72 @@ void main() {
                 localizationRole.hookInput(app.hook!),
               )
             : ['en'],
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the tests of the settings module get how many entries the screen '
+      'has, from the settings screen role of the app, and whether it is a '
+      'destination of the main navigation, where code cannot push it, from '
+      'the layout role', () {
+    final settings = named('settings');
+
+    /// What the file of [app] says: the number of the entries, and whether
+    /// the screen is a destination.
+    (int, bool) ofApp(MatrixApp app) {
+      final text = settings.generatedFiles!(app, 'my_app')[settingsOfAppFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(settingsOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(index.imports, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['settingsEntryCount', 'settingsInMainNavigation'],
+        reason: app.name,
+      );
+      final count = RegExp(
+        r'^const int settingsEntryCount = (\d+);$',
+        multiLine: true,
+      ).firstMatch(text);
+      final destination = RegExp(
+        r'^const bool settingsInMainNavigation = (true|false);$',
+        multiLine: true,
+      ).firstMatch(text);
+      expect((count, destination), isNot(contains(null)), reason: app.name);
+      return (int.parse(count![1]!), destination![1] == 'true');
+    }
+
+    // The app of the module alone has no entry, so its screen has the note
+    // of an app without settings, which the test checks there. The apps
+    // with every module have a layout, whose destinations the screen is
+    // one of; the other apps of the module have none.
+    expect(
+      {
+        for (final app in apps.where(settings.appliesTo)) app.name: ofApp(app),
+      },
+      {
+        'settings with localization': (1, false),
+        'settings': (0, false),
+        'material_theme with settings_screen, localization': (2, false),
+        'material_theme with settings_screen': (1, false),
+        'every module (bloc)': (2, true),
+        'every module (riverpod)': (2, true),
+      },
+    );
+    for (final app in apps.where(settings.appliesTo)) {
+      final hook = app.hook!;
+      final input = settingsScreenRole.hookInput(hook);
+      final screen = settingsScreenRole.screenIn(input)!;
+      expect(
+        ofApp(app),
+        (
+          settingsScreenRole.entriesIn(input).length,
+          hook.presentRoles.contains(layoutRole) &&
+              layoutRole
+                  .destinationsIn(layoutRole.hookInput(hook))
+                  .any((route) => route.fullName == screen.fullName),
+        ),
         reason: app.name,
       );
     }

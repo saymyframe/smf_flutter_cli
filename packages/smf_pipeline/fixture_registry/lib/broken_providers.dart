@@ -624,8 +624,7 @@ List<BrokenProvider> brokenProviders() => const [
           // once the app is in the second.
           MatrixExpectedFailure(
             'test/settings_language_test.dart',
-            'the title of the settings screen and its last row are in the '
-                'language of the app',
+            'the title of the settings screen is in the language of the app',
             'The title of the screen is in the language of the app, uk.',
           ),
         ],

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -115,23 +118,79 @@ Expression _returnedBy(ClassDeclaration declaration, String name) {
 String? _string(Expression? expression) =>
     (expression as StringLiteral?)?.stringValue;
 
-/// The argument [name] of [call], the creation of a widget.
-Expression _argument(Expression call, String name) => (call as MethodInvocation)
-    .argumentList
-    .arguments
+/// The widgets and other objects that a piece of code creates, and the
+/// methods that it calls, by the name of each, such as `Text` or
+/// `MediaQuery.withClampedTextScaling`, with the arguments of each. A call
+/// on an object has the code of the object before the name, with a dot
+/// between them, also where the code has `?.`.
+final class _Creations extends RecursiveAstVisitor<void> {
+  /// The creations in [node].
+  _Creations.of(AstNode node) {
+    node.accept(this);
+  }
+
+  /// The arguments of each creation, by what creates it.
+  final Map<String, List<ArgumentList>> byName = {};
+
+  /// The arguments of the only creation of [name].
+  ArgumentList only(String name) => byName[name]!.single;
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    final target = node.target;
+    final name = target == null
+        ? node.methodName.name
+        : '${target.toSource()}.${node.methodName.name}';
+    byName.putIfAbsent(name, () => []).add(node.argumentList);
+    super.visitMethodInvocation(node);
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    byName
+        .putIfAbsent(node.constructorName.toSource(), () => [])
+        .add(node.argumentList);
+    super.visitInstanceCreationExpression(node);
+  }
+}
+
+/// The argument [name] of [arguments], those of the creation of a widget.
+Expression _argument(ArgumentList arguments, String name) => arguments.arguments
     .whereType<NamedArgument>()
     .singleWhere((argument) => argument.name.lexeme == name)
     .argumentExpression;
 
-/// The list of the rows of the settings screen of [app], as the screen
-/// creates it: the `children` of the list that is the body of its
-/// `Scaffold`.
-ListLiteral _rowsOf(RenderedApp app) {
-  final screen = _classOf(_parsed(app, _screen), 'SettingsScreen');
-  final list = _argument(_returnedBy(screen, 'build'), 'body');
-  expect((list as MethodInvocation).methodName.name, 'ListView');
-  return _argument(list, 'children') as ListLiteral;
-}
+/// The names of the arguments of [arguments] that have one.
+Set<String> _namesOf(ArgumentList arguments) => {
+      for (final argument in arguments.arguments.whereType<NamedArgument>())
+        argument.name.lexeme,
+    };
+
+/// What the settings screen of [app] creates when it builds.
+_Creations _builtBy(RenderedApp app) => _Creations.of(
+      _classOf(_parsed(app, _screen), 'SettingsScreen')
+          .body
+          .members
+          .whereType<MethodDeclaration>()
+          .singleWhere((method) => method.name.lexeme == 'build'),
+    );
+
+/// The list of the entries of the settings screen of [app], as the screen
+/// creates it: the `children` of its group of the entries.
+ListLiteral _rowsOf(RenderedApp app) =>
+    _argument(_builtBy(app).only('_Group'), 'children') as ListLiteral;
+
+/// The names of what the file of the settings screen of [app] declares at
+/// its top level.
+List<String> _declaredBy(RenderedApp app) => [
+      for (final declaration in _parsed(app, _screen).declarations)
+        switch (declaration) {
+          ClassDeclaration() => declaration.namePart.typeName.lexeme,
+          TopLevelVariableDeclaration() =>
+            declaration.variables.variables.single.name.lexeme,
+          _ => '$declaration',
+        },
+    ];
 
 /// The imports of the settings screen of [app], each with its prefix, by
 /// URI.
@@ -163,13 +222,12 @@ List<String> _labelsOf(ContractResult result) => [
         route.route.destination!.label.en,
     ];
 
-/// The title of the settings screen of [app], as the app bar of the screen
-/// creates it.
+/// The code that reads the title of the settings screen of [app]: what the
+/// screen gives its only text, which it marks as a header.
 String _titleOf(RenderedApp app) {
-  final screen = _classOf(_parsed(app, _screen), 'SettingsScreen');
-  final bar = _argument(_returnedBy(screen, 'build'), 'appBar');
-  expect((bar as MethodInvocation).methodName.name, 'AppBar');
-  return _argument(bar, 'title').toSource();
+  final built = _builtBy(app);
+  expect(_argument(built.only('Semantics'), 'header').toSource(), 'true');
+  return built.only('Text').arguments.first.toSource();
 }
 
 /// The inline code of [markdown]: what stands between two backticks.
@@ -432,8 +490,9 @@ void main() {
     });
 
     test(
-        'shows its title and, in an app whose modules have no settings, only '
-        'what the app is', () {
+        'shows its title and, since no module of the app has a setting, a '
+        'note for the developer of the app, without the code of the group '
+        'of the entries', () {
       final text = app.files[_screen]!.text;
       final unit = parseString(content: text).unit;
       final screen = _classOf(unit, 'SettingsScreen');
@@ -442,9 +501,14 @@ void main() {
       expect(_entriesOf(result), isEmpty);
       expect(
         unit.directives.map((directive) => directive.toSource()),
-        ["import 'package:flutter/material.dart';"],
+        [
+          "import 'package:flutter/material.dart';",
+          "import 'package:flutter/services.dart';",
+        ],
       );
-      expect(unit.declarations, [screen]);
+      // The path that the note names, the screen and the note, and nothing
+      // of a screen with entries.
+      expect(_declaredBy(app), ['_file', 'SettingsScreen', '_NoSettings']);
       expect(screen.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
       expect(screen.metadata, isEmpty);
       final constructor =
@@ -452,14 +516,92 @@ void main() {
       expect(constructor.name, isNull);
       expect(constructor.constKeyword, isNotNull);
       expect(constructor.parameters.toSource(), '({super.key})');
+      expect(_titleOf(app), "'Settings'");
+      final built = _builtBy(app);
+      expect(built.byName.keys, isNot(contains('ListView')));
       expect(
-        _returnedBy(screen, 'build').toSource(),
-        "Scaffold(appBar: AppBar(title: const Text('Settings')), body: "
-        'ListView(children: const [AboutListTile(icon: '
-        "Icon(Icons.info_outline), applicationName: 'Contract App')]))",
+        _argument(built.only('SliverFillRemaining'), 'child').toSource(),
+        '_NoSettings()',
       );
-      // No blank line where the entries would be.
-      expect(text, contains('children: const [\n        AboutListTile('));
+      // No blank line where the code of the other screen would be.
+      expect(text, isNot(contains('\n\n\n')));
+      expect(
+        text,
+        contains(
+          '          bottom: false,\n'
+          '          child: CustomScrollView(\n',
+        ),
+      );
+    });
+
+    test(
+        'names in its note the file of the screen, which a tap copies, and '
+        'shows the path in full, at a text size that grows only by half', () {
+      final unit = _parsed(app, _screen);
+      final note = _Creations.of(_classOf(unit, '_NoSettings'));
+
+      // The path is that of the file itself.
+      final path = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .single
+          .variables;
+      expect(path.isConst, isTrue);
+      expect(_string(path.variables.single.initializer), _screen);
+      expect(app.files.keys, contains(_screen));
+
+      // The texts of the note: that the app has no settings yet, where a
+      // setting goes, the path, and what the screen says once it copied the
+      // path.
+      const hint = 'A module with a setting adds its entry here. You can '
+          'add your own in this file.';
+      expect(
+        [
+          for (final shown in note.byName['Text']!)
+            switch (shown.arguments.first) {
+              // A text without values, as the screen shows it.
+              StringLiteral(:final stringValue?) => stringValue,
+              final code => code.toSource(),
+            },
+        ],
+        [r"'Copied: $_file'", 'No settings yet', hint, '_file'],
+      );
+      expect(
+        note.only('Clipboard.setData').arguments.single.toSource(),
+        'const ClipboardData(text: _file)',
+      );
+      // The path wraps: nothing cuts it or keeps it on one line.
+      final shown = note.byName['Text']!.last;
+      expect(_namesOf(shown), {'style'});
+      final clamped = note.only('MediaQuery.withClampedTextScaling');
+      expect(_argument(clamped, 'maxScaleFactor').toSource(), '1.5');
+      expect(
+        (_argument(clamped, 'child') as MethodInvocation).argumentList,
+        same(shown),
+      );
+      // In the monospaced font of the device, which is Menlo on iOS.
+      final style = note.only('theme.textTheme.bodyMedium.copyWith');
+      expect(_argument(style, 'fontFamily').toSource(), "'monospace'");
+      expect(
+        _argument(style, 'fontFamilyFallback').toSource(),
+        "const ['Menlo', 'Courier']",
+      );
+    });
+
+    test(
+        'shows the note at once in an app that is asked for less motion, '
+        'and lets it come in once otherwise', () {
+      final note = _Creations.of(
+        _classOf(_parsed(app, _screen), '_NoSettings'),
+      );
+
+      expect(
+        _argument(note.only('TweenAnimationBuilder'), 'duration').toSource(),
+        'MediaQuery.disableAnimationsOf(context) ? Duration.zero : '
+        'Durations.long2',
+      );
+      // An animation that ends, so that a test of the app can wait for the
+      // screen to settle.
+      expect(note.byName.keys, isNot(contains('repeat')));
     });
   });
 
@@ -597,13 +739,13 @@ void main() {
 
     test(
         'is read from the texts of the app by the screen in an app with the '
-        'localization role', () async {
+        'localization role, as a header', () async {
       final result =
           await _rendered(const [SettingsModule.id, GenL10nModule.id]);
       final app = result.app!;
 
-      // No constant: the text depends on the language of the context.
-      expect(_titleOf(app), 'Text(context.l10n.settingsTitle)');
+      // The text depends on the language of the context.
+      expect(_titleOf(app), 'context.l10n.settingsTitle');
       // The file of the texts of the app, which the pipeline imports for
       // the code of the title, next to the library of the widgets. The
       // imports with a prefix are those of the entries of the screen.
@@ -617,20 +759,21 @@ void main() {
           LocalizationRole.appTexts.importRef
               .resolveUri(ContractHarness.defaultContext.appName),
           'package:flutter/material.dart',
+          'package:flutter/services.dart',
         ],
       );
-      // The rows stay constants.
-      expect(_rowsOf(app).constKeyword, isNotNull);
     });
 
-    test(
-        'is its English text, as a constant, in an app without the '
-        'localization role', () async {
+    test('is its English text in an app without the localization role',
+        () async {
       final result = await _rendered(const [SettingsModule.id]);
 
       expect(result.hook!.presentRoles, isNot(contains(localizationRole)));
-      expect(_titleOf(result.app!), "const Text('Settings')");
-      expect(_importsOf(result.app!).keys, ['package:flutter/material.dart']);
+      expect(_titleOf(result.app!), "'Settings'");
+      expect(_importsOf(result.app!).keys, [
+        'package:flutter/material.dart',
+        'package:flutter/services.dart',
+      ]);
     });
   });
 
@@ -729,20 +872,57 @@ void main() {
     });
 
     test(
-        'are the rows of the screen, each created once as a constant, in '
-        'the order of the role, before what the app is', () {
+        'are the rows of the group of the screen, each created once as a '
+        'constant, in the order of the role', () {
       final rows = _rowsOf(app);
 
-      const about = 'AboutListTile(icon: Icon(Icons.info_outline), '
-          "applicationName: 'Contract App')";
-      expect(rows.constKeyword, isNotNull);
+      // The group is a constant, and so are the entries in it.
+      expect(
+        rows.thisOrAncestorOfType<InstanceCreationExpression>()!.toSource(),
+        startsWith('const _Group(children: ['),
+      );
       expect(rows.elements.map((row) => row.toSource()), [
         'entry0.FeedSetting()',
         'entry1.ThemeSetting()',
         'entry1.FontSetting()',
         'entry2.ZoomSetting()',
-        about,
       ]);
+    });
+
+    test(
+        'are below the title in a list of the screen, in one group: a card '
+        'that stretches each to its width, with a line between them', () {
+      final unit = _parsed(app, _screen);
+      final built = _builtBy(app);
+
+      // The screen and its group, and nothing of a screen without settings.
+      expect(_declaredBy(app), ['SettingsScreen', '_Group']);
+      final list = _argument(built.only('ListView'), 'children') as ListLiteral;
+      expect(
+        [
+          for (final item in list.elements)
+            (item as Expression).toSource().split('(').first,
+        ],
+        ['title', 'const SizedBox', 'const _Group'],
+      );
+      final group = _Creations.of(_classOf(unit, '_Group'));
+      final column = group.only('Column');
+      expect(
+        (_argument(group.only('Card'), 'child') as MethodInvocation)
+            .argumentList,
+        same(column),
+      );
+      expect(
+        _argument(column, 'crossAxisAlignment').toSource(),
+        'CrossAxisAlignment.stretch',
+      );
+      expect(
+        _argument(column, 'children').toSource(),
+        '[for (final (index, child) in children.indexed) ...[if (index > 0) '
+        'const Divider(height: 1, indent: 56), child]]',
+      );
+      // No blank line around the entries.
+      expect(app.files[_screen]!.text, isNot(contains('\n\n\n')));
     });
 
     test(
@@ -753,6 +933,7 @@ void main() {
         'package:contract_app/${_look.settingsFile}': 'entry1',
         'package:contract_app/${ZoomRole.settingFile}': 'entry2',
         'package:flutter/material.dart': null,
+        'package:flutter/services.dart': null,
       });
     });
 
@@ -768,7 +949,7 @@ void main() {
         'ZoomSetting of lib/${ZoomRole.settingFile}',
       ]);
       expect(
-        _rowsOf(reversed.app!).elements.map((row) => row.toSource()).take(4),
+        _rowsOf(reversed.app!).elements.map((row) => row.toSource()),
         [
           'entry0.ThemeSetting()',
           'entry0.FontSetting()',
@@ -803,7 +984,7 @@ void main() {
       );
       expect(_entriesOf(swapped), [...look, zoom, contrast]);
       expect(
-        _rowsOf(swapped.app!).elements.map((row) => row.toSource()).take(4),
+        _rowsOf(swapped.app!).elements.map((row) => row.toSource()),
         [
           'entry0.ThemeSetting()',
           'entry0.FontSetting()',
@@ -823,7 +1004,45 @@ void main() {
       expect(_importsOf(result.app!), {
         'package:contract_app/${_look.settingsFile}': 'entry0',
         'package:flutter/material.dart': null,
+        'package:flutter/services.dart': null,
       });
+    });
+
+    test(
+        'are in every app of the module with the localization role, whose '
+        'template brings the setting of the language, so the note of a '
+        'screen without settings, which is in English, is in no app with '
+        'texts', () async {
+      final results =
+          await ContractHarness(ModuleRegistry(_modules)).checkAll();
+      final withScreen = [
+        for (final result in results)
+          if (result.hook!.presentRoles.contains(settingsScreenRole)) result,
+      ];
+
+      // Some with the texts of the app, and some without.
+      expect(
+        {
+          for (final result in withScreen)
+            result.hook!.presentRoles.contains(localizationRole),
+        },
+        {true, false},
+      );
+      for (final result in withScreen) {
+        final name = result.contractCase.name;
+        final declared = _declaredBy(result.app!);
+        // The screen has the group or the note, by the entries of the role.
+        expect(
+          declared,
+          _entriesOf(result).isEmpty
+              ? ['_file', 'SettingsScreen', '_NoSettings']
+              : ['SettingsScreen', '_Group'],
+          reason: name,
+        );
+        if (result.hook!.presentRoles.contains(localizationRole)) {
+          expect(declared, contains('_Group'), reason: name);
+        }
+      }
     });
   });
 
@@ -869,24 +1088,80 @@ void main() {
     });
   });
 
-  test('names the app in the row of what the app is as the context names it',
-      () async {
-    final result = await _rendered(
+  test(
+      'has an app bar, for its back button, only where a screen below it is '
+      'there to go back to, with entries and without', () async {
+    for (final modules in [
       const [SettingsModule.id],
+      [SettingsModule.id, _look.id],
+    ]) {
+      final built = _builtBy((await _rendered(modules)).app!);
+
+      expect(
+        _argument(built.only('Scaffold'), 'appBar').toSource(),
+        'back ? AppBar() : null',
+        reason: '$modules',
+      );
+      // As an app bar decides whether it has a back button.
+      expect(
+        built
+            .only('ModalRoute.of')
+            .thisOrAncestorOfType<VariableDeclaration>()!
+            .toSource(),
+        'back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false',
+        reason: '$modules',
+      );
+      // Without an app bar, the screen sets the colour of the icons of the
+      // status bar.
+      expect(
+        _argument(built.only('AnnotatedRegion'), 'value').toSource(),
+        'theme.brightness == Brightness.dark ? SystemUiOverlayStyle.light : '
+        'SystemUiOverlayStyle.dark',
+        reason: '$modules',
+      );
+    }
+  });
+
+  test(
+      'has in its example the screen of an app with a setting, as '
+      '`smf create` writes it', () async {
+    // The app of the example, by its name.
+    final result = await _rendered(
+      [SettingsModule.id, _look.id],
       context: const ModuleContext(
-        appName: 'bird_watch',
-        orgName: 'org.example',
+        appName: 'my_app',
+        orgName: 'com.example',
         appIdentity: AppIdentity(
           platforms: ['android', 'ios'],
-          androidApplicationId: 'org.example.bird_watch',
-          iosBundleId: 'org.example.bird-watch',
-          androidNamespace: 'org.example.bird_watch',
+          androidApplicationId: 'com.example.my_app',
+          iosBundleId: 'com.example.myApp',
+          androidNamespace: 'com.example.my_app',
         ),
       ),
     );
+    // Git may check the example out with the line endings of Windows.
+    final example =
+        File('example/README.md').readAsStringSync().replaceAll('\r\n', '\n');
+    final shown = RegExp(r'```dart\n([\s\S]*?)```').allMatches(example).single;
 
-    final about = _rowsOf(result.app!).elements.single as Expression;
-    expect(_argument(about, 'applicationName').toSource(), "'Bird Watch'");
+    /// The code of [text] but for the imports and the list of its entries,
+    /// which differ with the modules of an app, and for how it is
+    /// formatted.
+    String codeOf(String text) {
+      final unit = parseString(content: text).unit;
+      return unit.declarations
+          .map((declaration) => declaration.toSource())
+          .join('\n')
+          .replaceAll(RegExp(r'const _Group\(children: \[[^\]]*\]\)'), '');
+    }
+
+    expect(codeOf(shown[1]!), codeOf(result.app!.files[_screen]!.text));
+    // The comments, which the code leaves out.
+    List<String> commentsOf(String text) => [
+          for (final line in text.split('\n'))
+            if (line.trimLeft().startsWith('//')) line.trim(),
+        ];
+    expect(commentsOf(shown[1]!), commentsOf(result.app!.files[_screen]!.text));
   });
 
   test('keeps the annotations of the router role on the class of the screen',
