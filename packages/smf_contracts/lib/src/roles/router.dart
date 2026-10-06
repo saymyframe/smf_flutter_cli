@@ -39,9 +39,12 @@ const routerRole = RouterRole._();
 /// - when a layout is present and the app has destinations, puts them into
 ///   the `AppShell` of the layout role, in the order of
 ///   [RouterFacade.destinations], each with the routes below it in its
-///   branch, which keeps its stack while another is selected; it matches
-///   them before the other top-level routes, which stay outside the main
-///   navigation, and the app starts on the branch of its start route;
+///   branch, which keeps its stack while another is selected. It gives the
+///   shell the list that the layout role generates for them
+///   ([LayoutRole.appDestinations]), with the label and the icon of each,
+///   so it renders neither itself. It matches the destinations before the
+///   other top-level routes, which stay outside the main navigation, and
+///   the app starts on the branch of its start route;
 /// - refuses to push a location in the main navigation from a page shown
 ///   over the main navigation, or to replace such a page with one, with a
 ///   `StateError` that leaves the stack as it is;
@@ -417,6 +420,14 @@ final class RouterRole extends Role<RoutesData> {
           description: 'In an app with guards, the files of the provider of '
               'the role create a GuardedNavigation and read guardChanges.',
           check: _checkGuardsAsked,
+        ),
+        StructuralRule(
+          id: 'router.destinations_shown',
+          description: 'In an app with a layout and destinations, the files '
+              'of the provider of the role read appDestinations of the '
+              'layout role, the destinations that its main navigation '
+              'shows.',
+          check: _checkDestinationsShown,
         ),
       ];
 

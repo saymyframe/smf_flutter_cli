@@ -46,7 +46,7 @@ Set<String> _segmentsOf(String path) => {
 List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
   final routes = [for (final data in input.data) ...data.value.routes];
-  final check = _RoutesCheck(origin);
+  final check = _RoutesCheck(origin, input.module);
   if (input.data.isNotEmpty && routes.isEmpty) {
     check.problems.add('The module contributes routes data without routes.');
   }
@@ -63,9 +63,12 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
 /// The checks of [_checkRoutes], which visits the routes of a module in the
 /// order they are declared, each followed by its children, depth first.
 final class _RoutesCheck {
-  _RoutesCheck(this.origin);
+  _RoutesCheck(this.origin, this.module);
 
   final ModuleOrigin origin;
+
+  /// The module whose routes are checked.
+  final ModuleDescriptor module;
   final List<String> problems = [];
   final List<SmfIssue> warnings = [];
   final Map<String, Route> _names = {};
@@ -110,7 +113,13 @@ final class _RoutesCheck {
     }
     if (route.destination case final destination?) {
       problems.addAll(
-        _destinationProblems(destination, label, required, topLevel: topLevel),
+        _destinationProblems(
+          destination,
+          label,
+          required,
+          module,
+          topLevel: topLevel,
+        ),
       );
     }
     if (route.children.isNotEmpty &&
@@ -241,11 +250,15 @@ Iterable<RouteParam> _requiredParams(
 }
 
 /// The problems with [destination], the destination of the main navigation
-/// of the route of [label] that requires the parameters [required].
+/// of the route of [label] of [module] that requires the parameters
+/// [required]. Its label is a text that the module gives the role in its
+/// data, whose problems the localization role tells
+/// ([LocalizationRole.dataTextProblems]).
 List<String> _destinationProblems(
   Destination destination,
   String label,
-  Iterable<RouteParam> required, {
+  Iterable<RouteParam> required,
+  ModuleDescriptor module, {
   required bool topLevel,
 }) {
   final problems = <String>[];
@@ -261,8 +274,10 @@ List<String> _destinationProblems(
       '${required.join(', ')}; a destination is reached without values.',
     );
   }
-  if (destination.label.trim().isEmpty) {
-    problems.add('$label has a destination without a label.');
+  for (final problem
+      in localizationRole.dataTextProblems(module, destination.label)) {
+    problems
+        .add('$label has a destination whose label has a problem: $problem');
   }
   final icon = destination.icon;
   if (icon.isWrapper || icon.code.trim().isEmpty) {
@@ -860,5 +875,53 @@ List<SmfIssue> _nullabilityProblems(FacadeRoute route, DartFileIndex? file) {
               'the parameter ${param.name} of $screen must be nullable, '
               'because the location may leave it out.',
             ),
+  ];
+}
+
+/// The problem of an app with a layout and destinations whose router does
+/// not give the main navigation the destinations of the layout role: none
+/// of the files of the provider of the role reads
+/// [LayoutRole.appDestinations] of [LayoutRole.destinationFile].
+///
+/// The layout role generates that list from the destinations of the
+/// routes, each with its icon and with its label in the language of the
+/// app, and in the order of [RouterFacade.destinations], which is that of
+/// the branches of the router. Whether the router gives it to the shell
+/// with a branch for each, only a running app shows. Without the descriptor
+/// of a provider in [input], no file builds the main navigation and there
+/// is nothing to check.
+List<SmfIssue> _checkDestinationsShown(StructuralRuleInput<RoutesData> input) {
+  if (!input.roleInput.has(layoutRole) ||
+      routerRole.facadeOf(input.roleInput).destinations.isEmpty) {
+    return const [];
+  }
+  final providers = [
+    for (final module in input.modules)
+      if (module.provides.contains(routerRole)) module.id,
+  ];
+  if (providers.isEmpty) return const [];
+  final reads = input.files.entries.any(
+    (file) => switch (input.owners[file.key]) {
+      ModuleOrigin(:final module) when providers.contains(module) =>
+        usesSymbols(
+          file.value,
+          {LayoutRole.appDestinations},
+          LayoutRole.destinationFile,
+        ),
+      _ => false,
+    },
+  );
+  if (reads) return const [];
+  return [
+    SmfIssue(
+      'The provider of the $routerRole does not show the destinations of '
+      'the $layoutRole: none of its files reads '
+      '${LayoutRole.appDestinations} of ${LayoutRole.destinationFile}.',
+      hint: 'A router gives the shell of the main navigation '
+          '${LayoutRole.appDestinations} as its destinations, and has a '
+          'branch for each, in that order.',
+      origin: ModuleOrigin(providers.first),
+      path: RouterRole.appRouterFactoryFile,
+    ),
   ];
 }

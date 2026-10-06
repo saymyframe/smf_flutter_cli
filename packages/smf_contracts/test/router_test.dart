@@ -21,8 +21,10 @@ ScreenRef _screen(String name, String feature) => ScreenRef(
       ),
     );
 
+/// A destination whose label reads [label] in English, and has no
+/// translation: the text of a module without the localization role.
 Destination _destination(String label) => Destination(
-      label: label,
+      label: LocalizedText('label', en: label),
       icon: const Fragment('Icons.home', imports: [_material]),
     );
 
@@ -93,6 +95,7 @@ RouterFacade _facade([List<RoleData<Object>>? data]) =>
 ModuleRuleInput<RoutesData> _moduleInput(
   List<Route> routes, {
   List<MasonBundle> bundles = const [],
+  Set<Role> uses = const {},
 }) {
   // The input can only be built by a role; a test role captures it.
   late ModuleRuleInput<RoutesData> captured;
@@ -117,10 +120,11 @@ ModuleRuleInput<RoutesData> _moduleInput(
         presentRoles: {role},
         context: testContext,
       ),
-      module: const ModuleDescriptor(
-        id: ModuleId('home'),
+      module: ModuleDescriptor(
+        id: const ModuleId('home'),
         description: 'Home',
         kind: ModuleKinds.feature,
+        uses: uses,
       ),
       contributions: [
         data,
@@ -135,8 +139,17 @@ ModuleRuleInput<RoutesData> _moduleInput(
 List<SmfIssue> _moduleIssues(String id, ModuleRuleInput<RoutesData> input) =>
     routerRole.moduleRules.firstWhere((rule) => rule.id == id).check(input);
 
-List<String> _routeProblems(List<Route> routes) => [
-      for (final issue in _moduleIssues('router.routes', _moduleInput(routes)))
+/// The problems of [routes], the routes of the feature `home`, which lists
+/// the roles [uses] among its roles.
+List<String> _routeProblems(
+  List<Route> routes, {
+  Set<Role> uses = const {},
+}) =>
+    [
+      for (final issue in _moduleIssues(
+        'router.routes',
+        _moduleInput(routes, uses: uses),
+      ))
         issue.message,
     ];
 
@@ -1536,7 +1549,7 @@ void main() {
           name: 'a',
           screen: _screen('A', 'h'),
           destination: const Destination(
-            label: ' ',
+            label: LocalizedText('label', en: ' '),
             icon: Fragment.wrap('Icon(', ')'),
           ),
           children: [
@@ -1551,9 +1564,107 @@ void main() {
       ]);
 
       expect(problems, hasLength(3));
-      expect(problems[0], contains('without a label'));
+      expect(
+        problems[0],
+        'The route "a" (/) has a destination whose label has a problem: The '
+        'text "label" has no English text.',
+      );
       expect(problems[1], contains('icon is not an expression'));
       expect(problems[2], contains('is a child'));
+    });
+
+    group('the label of a destination', () {
+      const home = LocalizedText(
+        'label',
+        en: 'Home',
+        translations: {'uk': 'Головна'},
+      );
+
+      Route route(LocalizedText label) => Route(
+            '/',
+            name: 'a',
+            screen: _screen('A', 'h'),
+            destination: Destination(
+              label: label,
+              icon: const Fragment('Icons.home', imports: [_material]),
+            ),
+          );
+
+      /// The problem of the route of [route] with its label.
+      String ofLabel(String problem) =>
+          'The route "a" (/) has a destination whose label has a problem: '
+          '$problem';
+
+      test('is a text of the module: the role reports its problems', () {
+        const noName = 'The text "Label" needs a name that is a '
+            'lowerCamelCase identifier, such as title.';
+        const noLanguage = 'The text "Label" has a translation into '
+            '"ukr_UA", which is not the code of a language: two or three '
+            'lowercase letters, such as uk.';
+        const brace = 'The text "Label" has a brace in its text in en; a '
+            'text takes no parameters, so it has neither { nor }.';
+
+        expect(
+          _routeProblems(
+            [
+              route(
+                const LocalizedText(
+                  'Label',
+                  en: 'Hello, {name}',
+                  translations: {'ukr_UA': 'Привіт'},
+                ),
+              ),
+            ],
+            uses: {localizationRole},
+          ),
+          [ofLabel(noName), ofLabel(noLanguage), ofLabel(brace)],
+        );
+      });
+
+      test(
+          'has no translation in a module that does not list the '
+          'localization role, since no app would show it', () {
+        // The module of the rule lists only the router among its roles.
+        expect(
+          _routeProblems([route(home)]).single,
+          ofLabel(
+            'The text label has a translation into uk, but the module home '
+            'does not list the localization role among its roles, so every '
+            'app would show the text in English. Add the role to the uses of '
+            'the module and give it the text among the texts of the module, '
+            'or leave the translation out.',
+          ),
+        );
+        expect(
+          _routeProblems([
+            route(
+              const LocalizedText(
+                'label',
+                en: 'Home',
+                translations: {'uk': 'Головна', 'de': 'Start'},
+              ),
+            ),
+          ]).single,
+          allOf(
+            contains('has translations into uk, de, but the module home'),
+            endsWith('or leave the translations out.'),
+          ),
+        );
+        // In English alone, it is the text of every app.
+        expect(
+          _routeProblems([route(const LocalizedText('label', en: 'Home'))]),
+          isEmpty,
+        );
+      });
+
+      test(
+          'has its translations in a module that lists the localization '
+          'role, whose rule checks that the module gives it the text', () {
+        expect(
+          _routeProblems([route(home)], uses: {localizationRole}),
+          isEmpty,
+        );
+      });
     });
 
     test('rejects required query parameters of a route with children', () {
@@ -2016,6 +2127,187 @@ class DetailsScreen extends StatelessWidget {
       expect(issues.first.message, contains('is missing'));
       expect(issues.first.origin, const ModuleOrigin(ModuleId('home')));
       expect(issues.first.path, 'lib/features/home/home_screen.dart');
+    });
+  });
+
+  group('the structural rule router.destinations_shown', () {
+    const factoryPath = RouterRole.appRouterFactoryFile;
+    const provider = ModuleOrigin(ModuleId('navigator'));
+    const feature = ModuleOrigin(ModuleId('home'));
+    const widgetPath = 'lib/features/home/home_tabs.dart';
+
+    /// The import of the file of the layout role with the destinations.
+    const ofApp = IndexedImport('package:my_app/core/layout/destination.dart');
+
+    /// The issues of the rule in the app of the two features with
+    /// destinations, or of [data], with a layout unless [layout] is
+    /// `false`, where the module `navigator`, the provider of the role
+    /// unless [withProvider] is `false`, generates [files].
+    List<SmfIssue> check(
+      List<DartFileIndex> files, {
+      List<RoleData<Object>>? data,
+      bool layout = true,
+      bool withProvider = true,
+    }) =>
+        [
+          for (final issue in routerRole.checkStructure(
+            StructuralRuleRequest(
+              hook: RoleHookRequest(
+                data: data ?? _data,
+                presentRoles: {routerRole, if (layout) layoutRole},
+                context: testContext,
+              ),
+              files: {
+                for (final file in files) file.path: file,
+                // A file of a feature that reads the list too, which shows
+                // nothing for the router.
+                widgetPath: const DartFileIndex(
+                  path: widgetPath,
+                  imports: [ofApp],
+                  references: [IndexedReference('appDestinations')],
+                ),
+              },
+              owners: {
+                for (final file in files) file.path: provider,
+                widgetPath: feature,
+              },
+              modules: [
+                if (withProvider)
+                  ModuleDescriptor(
+                    id: provider.module,
+                    description: 'Navigator',
+                    kind: ModuleKinds.infrastructure,
+                    providers: const [RoleProvider.plain(routerRole)],
+                  ),
+                ModuleDescriptor(
+                  id: feature.module,
+                  description: 'Home',
+                  kind: ModuleKinds.feature,
+                ),
+              ],
+            ),
+          ))
+            if (issue.message.contains('does not show the destinations')) issue,
+        ];
+
+    /// The file of the provider with `createAppRouter()`, which imports
+    /// [imports] and reads [reads].
+    DartFileIndex factory({
+      List<IndexedImport> imports = const [],
+      List<String> reads = const [],
+      List<IndexedMemberAccess> accesses = const [],
+    }) =>
+        DartFileIndex(
+          path: factoryPath,
+          imports: imports,
+          references: [for (final name in reads) IndexedReference(name)],
+          memberAccesses: accesses,
+        );
+
+    test('is the last structural rule of the role', () {
+      final rule = routerRole.structuralRules.last;
+
+      expect(rule.id, 'router.destinations_shown');
+      expect(
+        rule.description,
+        'In an app with a layout and destinations, the files of the provider '
+        'of the role read appDestinations of the layout role, the '
+        'destinations that its main navigation shows.',
+      );
+      expect(LayoutRole.appDestinations, 'appDestinations');
+    });
+
+    test('accepts a provider whose file reads the list of the layout role', () {
+      expect(
+        check([
+          factory(imports: const [ofApp], reads: ['appDestinations']),
+        ]),
+        isEmpty,
+      );
+      // By a relative path and with a prefix, in another of its files.
+      expect(
+        check([
+          factory(),
+          const DartFileIndex(
+            path: 'lib/core/router/shell.dart',
+            imports: [
+              IndexedImport('../layout/destination.dart', prefix: 'layout'),
+            ],
+            memberAccesses: [IndexedMemberAccess('layout', 'appDestinations')],
+          ),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('reports a provider that renders the destinations itself', () {
+      final issue = check([
+        // It creates destinations of its own, with the class of the role.
+        const DartFileIndex(
+          path: factoryPath,
+          imports: [ofApp],
+          invocations: [IndexedInvocation('Destination')],
+        ),
+      ]).single;
+
+      expect(
+        issue.message,
+        'The provider of the router role does not show the destinations of '
+        'the layout role: none of its files reads appDestinations of '
+        'lib/core/layout/destination.dart.',
+      );
+      expect(
+        issue.hint,
+        'A router gives the shell of the main navigation appDestinations as '
+        'its destinations, and has a branch for each, in that order.',
+      );
+      expect(issue.origin, provider);
+      expect(issue.path, factoryPath);
+    });
+
+    test(
+        'counts only what the files of the provider read of the file of the '
+        'role', () {
+      expect(
+        check([
+          factory(
+            imports: const [
+              // A list of that name of another file.
+              IndexedImport('package:my_app/core/other.dart'),
+              IndexedImport('../layout/destination.dart', prefix: 'layout'),
+            ],
+            reads: ['appDestinations'],
+            // Of an object, not of the import.
+            accesses: const [IndexedMemberAccess('shell', 'appDestinations')],
+          ),
+        ]),
+        hasLength(1),
+      );
+      // The file of the feature reads the list, and no file of the
+      // provider.
+      expect(check(const []), hasLength(1));
+    });
+
+    test(
+        'checks an app with a layout, destinations and the files of a '
+        'provider among its modules, and nothing otherwise', () {
+      expect(check([factory()]), hasLength(1));
+      expect(check([factory()], layout: false), isEmpty);
+      expect(check([factory()], withProvider: false), isEmpty);
+      expect(
+        check(
+          [factory()],
+          data: [
+            dataOf(
+              routerRole,
+              RoutesData([
+                Route('/', name: 'a', screen: _screen('AScreen', 'home')),
+              ]),
+            ),
+          ],
+        ),
+        isEmpty,
+      );
     });
   });
 }

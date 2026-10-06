@@ -20,8 +20,72 @@ List<SmfIssue> _checkTexts(ModuleRuleInput<TextsData> input) {
     for (final problem in _textProblems(texts))
       SmfIssue(problem, origin: origin),
     ..._variableIssues(input, origin),
+    ..._dataTextIssues(input, texts, origin),
   ];
 }
+
+/// The problems of the texts that the module of [input] gives other roles
+/// in its data (see [DataWithTexts]), such as the label of a destination,
+/// against [texts], those that it gives this role: one that is not among
+/// them, which the app would show in English in every language though the
+/// module lists this role, and one that differs from the text of its name
+/// among them, which the app would show otherwise with the role than
+/// without it. Each text is reported once for a role.
+List<SmfIssue> _dataTextIssues(
+  ModuleRuleInput<TextsData> input,
+  List<LocalizedText> texts,
+  ModuleOrigin origin,
+) {
+  final issues = <SmfIssue>[];
+  final seen = <(Role, String)>{};
+  for (final data in input.contributions.whereType<RoleData<Object>>()) {
+    final value = data.value;
+    if (value is! DataWithTexts) continue;
+    for (final text in value.shownTexts) {
+      if (!seen.add((data.role, text.name))) continue;
+      final given = texts.where((own) => own.name == text.name).firstOrNull;
+      final what = 'The module gives the ${data.role} the $text in its data';
+      if (given == null) {
+        issues.add(
+          SmfIssue(
+            '$what, but not the $localizationRole, so the app would show it '
+            'in English in every language.',
+            hint: 'Give the role the text among the texts of the module: '
+                'localizationRole.data(TextsData([...])).',
+            origin: origin,
+          ),
+        );
+      } else if (!_sameText(given, text)) {
+        issues.add(
+          SmfIssue(
+            '$what, and the $localizationRole a text of that name that '
+            'differs from it: ${_shown(text)} and ${_shown(given)}.',
+            hint: 'Give both roles the same text, such as one constant.',
+            origin: origin,
+          ),
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+/// Whether [a] and [b] read the same in every language.
+bool _sameText(LocalizedText a, LocalizedText b) =>
+    a.en == b.en &&
+    a.translations.length == b.translations.length &&
+    a.translations.entries.every(
+      (translation) => b.translations[translation.key] == translation.value,
+    );
+
+/// [text] as a message shows it: its English text, and its translations by
+/// the code of their language.
+String _shown(LocalizedText text) => [
+      SmfNames.dartString(text.en),
+      for (final MapEntry(key: language, value: translation)
+          in text.translations.entries)
+        '$language: ${SmfNames.dartString(translation)}',
+    ].join(', ');
 
 /// The code of [value], a value of a [RoleVar]: a fragment or a string of
 /// code.
@@ -98,6 +162,12 @@ bool _readsTexts(ContributionOrigin owner, ModuleDescriptor? module) =>
       PipelineOrigin() => true,
     };
 
+/// Whether [owner] is the template of a role other than this one, whose
+/// data may have texts of the modules (see [DataWithTexts]): the data of
+/// this role are the texts themselves.
+bool _rendersDataOfModules(ContributionOrigin owner) =>
+    owner is RoleTemplateOrigin && !identical(owner.role, localizationRole);
+
 /// Whether [target], the expression before a dot, is the texts of the app,
 /// as code names them: `context.l10n`, or a variable called `l10n`.
 bool _isTexts(String? target) =>
@@ -118,11 +188,16 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
       _ => null,
     };
     if (!_readsTexts(owner, module)) continue;
-    final readable = {
-      owner,
-      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
-        ModuleOrigin(dependency),
-    };
+    // The template of another role renders what the modules give that role,
+    // so it reads the texts of their data too: which texts those are, only
+    // its role knows.
+    final readable = _rendersDataOfModules(owner)
+        ? null
+        : {
+            owner,
+            for (final dependency in module?.dependsOn ?? const <ModuleId>{})
+              ModuleOrigin(dependency),
+          };
     final own = owner is ModuleOrigin
         ? 'its own texts and those of the modules it depends on'
         : 'its own texts';
@@ -143,7 +218,7 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
             path: path,
           ),
         );
-      } else if (!readable.contains(text.owner)) {
+      } else if (readable != null && !readable.contains(text.owner)) {
         issues.add(
           SmfIssue(
             '$path reads $read, the $text, but ${_named(owner)} may only '
