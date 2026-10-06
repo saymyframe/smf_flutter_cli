@@ -392,7 +392,12 @@ $list
 /// the chosen one selected and checked. A tap on an option closes the
 /// dialog: the app and the texts of the setting are in the language of the
 /// option, which is saved under [LocalizationRole.localeKey], and the
-/// option of the device removes what was saved.
+/// option of the device removes what was saved. A second file of the test
+/// starts the app on a device that prefers the last language of the app:
+/// the app and the setting follow the device, the setting names a choice
+/// of that same language that code makes, the next start restores the
+/// language that was saved, and the dialog has no option but those of the
+/// app and of the device.
 ///
 /// The test knows only the two roles. The matrix writes the widget of the
 /// entry for it into [languageSettingFile], from the entries of the

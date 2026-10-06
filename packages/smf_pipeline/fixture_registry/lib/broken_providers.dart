@@ -532,11 +532,13 @@ List<BrokenProvider> brokenProviders() => const [
             _eachLanguageSupported,
           ),
           // The probe of the role, which the start check runs on a device,
-          // has the check of the delegates too.
+          // has the check of the delegates too: the test fails with the
+          // problem that the probe finds.
           MatrixExpectedFailure(
             'test/localization_role/probe_test.dart',
             _probeTest,
-            _probeFindsNoProblem,
+            'No delegate of FixtureTexts of the root of the app supports '
+                'uk.',
           ),
         ],
       ),
@@ -562,6 +564,17 @@ List<BrokenProvider> brokenProviders() => const [
             'The setting shows its texts in the language that the user '
                 'chose.',
           ),
+          // On a device in the last language of the app, the texts of the
+          // setting stay in the first one before the user chose anything.
+          MatrixExpectedFailure(
+            'test/language_setting/language_setting_device_test.dart',
+            'on a device in the last language of the app, the setting of '
+                'the language follows the device, names a choice that code '
+                'makes, shows the language that the next start restores, '
+                'and has no option but those of the app and of the device',
+            'While the app follows the device, the setting shows its texts '
+                'in the language of the device.',
+          ),
           // The root can be in each language, so the tests of the role get
           // to the texts, which do not follow it.
           MatrixExpectedFailure(
@@ -577,10 +590,13 @@ List<BrokenProvider> brokenProviders() => const [
             'While the app follows the device, each text of the app reads '
                 'in the language that the app is in.',
           ),
+          // The probe finds the first text of the app that has a
+          // translation, in the language of that translation.
           MatrixExpectedFailure(
             'test/localization_role/probe_test.dart',
             _probeTest,
-            _probeFindsNoProblem,
+            'The text title of the module fake_second reads "Second screen" '
+                'in uk rather than "Другий екран".',
           ),
         ],
       ),
@@ -777,9 +793,9 @@ const List<ModuleId> _appWithGates = [
   FakeServiceLogModule.id,
 ];
 
-/// The names of three tests of the localization role, and the reasons of
-/// two of their expectations: that the root of the app can be in each
-/// language of the app, and that the probe of the role finds no problem.
+/// The names of three tests of the localization role, and the reason of
+/// one of their expectations: that the root of the app can be in each
+/// language of the app.
 const _languagesTest =
     'once the user chose a language, the app is in it, and each text of the '
     'app reads in it, in each language of the app';
@@ -791,9 +807,6 @@ const _probeTest = 'the probe of the role finds no problem';
 const _eachLanguageSupported =
     'For each language of the app, the root has a delegate of each kind of '
     'localizations that supports it.';
-const _probeFindsNoProblem =
-    'The probe finds no problem with an app that keeps the contract of the '
-    'role.';
 
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of
