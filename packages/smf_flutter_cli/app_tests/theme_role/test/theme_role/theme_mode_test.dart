@@ -8,10 +8,10 @@
 // It is a test of the app entry role too: the root gets the mode from an
 // inherited widget around it, which the arguments of the root read from its
 // context, so the root must rebuild when that widget notifies, whichever
-// module provides the app entry. And the app asks the system for the icons
+// module provides the app entry. And the root asks the system for the icons
 // of the status bar that suit the theme, dark ones on a light theme and
-// light ones on a dark theme, as the template of that role has it around
-// every route.
+// light ones on a dark theme, with the widget that the template of that
+// role puts around every route.
 //
 // It knows only the roles. The app starts once, with main() of
 // lib/main.dart, since the start-up of an app may not run twice, with the
@@ -21,7 +21,7 @@
 // known bug fails the test with (brokenProviders of the fixture registry).
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/theme/app_theme.dart';
 import 'package:{{app_name}}/core/theme/theme_mode.dart';
@@ -90,6 +90,24 @@ void main() {
                   .first,
             ),
           );
+      // The icons of the status bar that the root asks the system for: those
+      // of the region around the navigator of the app. A screen with an app
+      // bar has a region of its own below it, for the icons that suit its
+      // bar, which are up to the theme of the bar.
+      Brightness? iconsOfRoot() {
+        final regions =
+            tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.ancestor(
+            of: find
+                .descendant(of: _root, matching: find.byType(Navigator))
+                .first,
+            matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          ),
+        );
+        return regions.isEmpty
+            ? null
+            : regions.first.value.statusBarIconBrightness;
+      }
 
       expect(
         appThemeMode.value,
@@ -114,10 +132,10 @@ void main() {
             'the theme role creates for the root.',
       );
       expect(
-        SystemChrome.latestStyle?.statusBarIconBrightness,
+        iconsOfRoot(),
         Brightness.dark,
-        reason: 'On a light theme, the app asks the system for dark icons '
-            'of the status bar, on the screen that it starts on too.',
+        reason: 'On a light theme, the root of the app asks the system for '
+            'dark icons of the status bar, around every route.',
       );
 
       await chooseMode(tester, ThemeMode.dark);
@@ -134,10 +152,10 @@ void main() {
             'the theme role creates for the root.',
       );
       expect(
-        SystemChrome.latestStyle?.statusBarIconBrightness,
+        iconsOfRoot(),
         Brightness.light,
-        reason: 'On a dark theme, the app asks the system for light icons '
-            'of the status bar.',
+        reason: 'On a dark theme, the root of the app asks the system for '
+            'light icons of the status bar, around every route.',
       );
 
       // The device goes dark, and the light mode is chosen.
