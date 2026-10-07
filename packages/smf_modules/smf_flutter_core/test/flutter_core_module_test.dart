@@ -308,12 +308,41 @@ void main() {
       expect(app, isNot(contains('app_router.dart')));
       expect(app, contains('MaterialApp(\n'));
       expect(app, contains("title: 'Contract App',"));
-      expect(
-        app,
-        contains('builder: (context, child) =>\n            child!,'),
-      );
       expect(app, contains('home: const FallbackStartScreen(),'));
       expect(app, isNot(contains('routerConfig')));
+    });
+
+    test(
+        'tells the system around every route which icons of the status bar '
+        'suit the theme, as the template of the role has it, so no screen '
+        'tells it itself', () {
+      final app = texts['lib/app.dart']!;
+      final root = (_buildOfApp(app).body as ExpressionFunctionBody).expression
+          as MethodInvocation;
+
+      // The builder of the root, around the content of every route: the
+      // widget of the template of the app entry role, which reads the theme
+      // below the root, with a context of its own.
+      expect(
+        _namedOf(root).singleWhere((named) => named.startsWith('builder: ')),
+        'builder: (context, child) => Builder(builder: (context) => '
+        'AnnotatedRegion<SystemUiOverlayStyle>(value: '
+        'SystemUiOverlayStyle(statusBarBrightness: '
+        'Theme.of(context).brightness, statusBarIconBrightness: '
+        'Theme.of(context).brightness == Brightness.dark ? '
+        'Brightness.light : Brightness.dark), child: child!))',
+      );
+      expect(
+        app,
+        contains(
+          "import 'package:flutter/services.dart' show SystemUiOverlayStyle;",
+        ),
+      );
+      // The fallback start screen has no app bar, and leaves the status bar
+      // to the root.
+      final screen = texts[_screenFile]!;
+      expect(screen, isNot(contains('AnnotatedRegion')));
+      expect(screen, isNot(contains('SystemUiOverlayStyle')));
     });
 
     test(
@@ -747,10 +776,21 @@ void main() {
       );
       final app = texts['lib/app.dart']!;
       expect(app, contains("supportedLocales: [Locale('en')],"));
+      // The widget of the module is around that of the template of the
+      // role, which is around the content of the routes.
+      final builder = _namedOf(
+        (_buildOfApp(app).body as ExpressionFunctionBody).expression
+            as MethodInvocation,
+      ).singleWhere((named) => named.startsWith('builder: '));
       expect(
-        app,
-        contains('MediaQuery.withNoTextScaling(child: child!),'),
+        builder,
+        startsWith(
+          'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
+          'Builder(builder: (context) => '
+          'AnnotatedRegion<SystemUiOverlayStyle>(',
+        ),
       );
+      expect(builder, endsWith('child: child!)))'));
     });
   });
 

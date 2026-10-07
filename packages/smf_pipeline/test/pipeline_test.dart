@@ -95,11 +95,13 @@ void main() {
     expect(plan.preflight.results.single.passed, isTrue);
     expect(plan.leftOut, isEmpty);
     expect(plan.collection.roleData.single.value, '/home');
-    // The base value of the minimum iOS version, from the scaffold, and the
-    // note of the app entry role for coding agents, from its template.
+    // The base value of the minimum iOS version, from the scaffold, and
+    // what the template of the app entry role gives every app: its note for
+    // coding agents, and the widget for the icons of the status bar.
     expect(plan.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.agentSections,
+      AppEntryRole.appBuilder,
     ]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies.keys, ['flutter']);

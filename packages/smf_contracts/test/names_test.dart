@@ -85,6 +85,50 @@ void main() {
     });
   });
 
+  group('SmfNames.elementSymbolOf', () {
+    test(
+        'takes the first letters of the first two words, the first one in '
+        'upper case', () {
+      expect(SmfNames.elementSymbolOf('my_app'), 'Ma');
+      expect(SmfNames.elementSymbolOf('bird_watch'), 'Bw');
+      // Only the first two words count.
+      expect(SmfNames.elementSymbolOf('my_big_app'), 'Mb');
+      expect(SmfNames.elementSymbolOf('every_module_bloc'), 'Em');
+      // A first word of one letter.
+      expect(SmfNames.elementSymbolOf('a_team'), 'At');
+      // A second word that starts with a digit.
+      expect(SmfNames.elementSymbolOf('route_66'), 'R6');
+      expect(SmfNames.elementSymbolOf('app_2go'), 'A2');
+    });
+
+    test('takes the first two characters of a name of one word', () {
+      expect(SmfNames.elementSymbolOf('shop'), 'Sh');
+      expect(SmfNames.elementSymbolOf('ab'), 'Ab');
+      expect(SmfNames.elementSymbolOf('app2go'), 'Ap');
+      expect(SmfNames.elementSymbolOf('x1'), 'X1');
+    });
+
+    test('is the one character of a name of one character', () {
+      expect(SmfNames.elementSymbolOf('x'), 'X');
+    });
+
+    test('is empty for a name without a word', () {
+      expect(SmfNames.elementSymbolOf(''), '');
+      expect(SmfNames.elementSymbolOf('_'), '');
+    });
+  });
+
+  group('SmfNames.elementNumberOf', () {
+    test('counts the characters of the words of the name', () {
+      expect(SmfNames.elementNumberOf('my_app'), 5);
+      expect(SmfNames.elementNumberOf('shop'), 4);
+      expect(SmfNames.elementNumberOf('x'), 1);
+      expect(SmfNames.elementNumberOf('route_66'), 7);
+      expect(SmfNames.elementNumberOf('my_big_app'), 8);
+      expect(SmfNames.elementNumberOf(''), 0);
+    });
+  });
+
   group('SmfNames.dartString', () {
     test('quotes text and escapes what Dart would interpret', () {
       expect(SmfNames.dartString('Home'), "'Home'");

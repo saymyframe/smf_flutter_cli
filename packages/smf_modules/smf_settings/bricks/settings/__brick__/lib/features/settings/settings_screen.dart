@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';{{^with_entries}}
+import 'package:flutter/material.dart';{{^with_entries}}
+import 'package:flutter/services.dart';
 
 /// The path of this file in the app, which the screen names for the
 /// developer of the app.
@@ -38,43 +38,36 @@ class SettingsScreen extends StatelessWidget {
     );
     // Whether a screen below this one is there to go back to.
     final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
-    // Without an app bar, the screen itself tells the system which colour
-    // the icons of the status bar have.
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: theme.brightness == Brightness.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        appBar: back ? AppBar() : null,
-        body: SafeArea(
-          bottom: false,{{#with_entries}}
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-            children: [
-              title,
-              const SizedBox(height: 20),
-              const _Group(
-                children: [{{/with_entries}}
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        bottom: false,{{#with_entries}}
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          children: [
+            title,
+            const SizedBox(height: 20),
+            const _Group(
+              children: [{{/with_entries}}
 {{{entries}}}
-{{#with_entries}}                ],
-              ),
-            ],
-          ),{{/with_entries}}{{^with_entries}}          child: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                sliver: SliverToBoxAdapter(child: title),
-              ),
-              // The note in the middle of the rest of the screen, and
-              // below the title on a screen too small for both, where the
-              // two scroll.
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: _NoSettings(),
-              ),
-            ],
-          ),{{/with_entries}}
-        ),
+{{#with_entries}}              ],
+            ),
+          ],
+        ),{{/with_entries}}{{^with_entries}}        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              sliver: SliverToBoxAdapter(child: title),
+            ),
+            // The note in the middle of the rest of the screen, and
+            // below the title on a screen too small for both, where the
+            // two scroll.
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _NoSettings(),
+            ),
+          ],
+        ),{{/with_entries}}
       ),
     );
   }

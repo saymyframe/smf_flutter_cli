@@ -162,7 +162,7 @@ final class _SettingsProvider extends RoleProvider<SettingsData> {
             () => import.withPrefix('entry${files.length}'),
           )
           .prefix;
-      items.add('                  ${widget.codeWith(prefix)}(),');
+      items.add('                ${widget.codeWith(prefix)}(),');
     }
     return RoleOutput(
       vars: {

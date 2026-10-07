@@ -1,7 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_onboarding/bundles/onboarding_bundle.dart';
 import 'package:smf_onboarding/src/agents.dart';
-import 'package:smf_onboarding/src/app_symbol.dart';
 
 /// The module of the onboarding of the app: a feature with one route, whose
 /// screen, `OnboardingScreen`, a new user goes through on the first launch
@@ -11,8 +10,9 @@ import 'package:smf_onboarding/src/app_symbol.dart';
 /// and a page that ends the onboarding. A page is a cell of the periodic
 /// table among smaller cells, with a title and a text below them. The
 /// cell of the first page has the symbol of the app, such as `Ma` for
-/// `my_app`, which the module computes from the name of the app when it
-/// generates the app, and that of the last page has an icon. Skip is above
+/// `my_app`, which the module takes from the name of the app when it
+/// generates the app ([SmfNames.elementSymbolOf]), and that of the last
+/// page has an icon. Skip is above
 /// the pages. Below them are a mark for each page and one button: Next,
 /// and Get started on the last page, where Skip is gone. The pages are the
 /// list that `onboardingPages()` returns in
@@ -145,7 +145,9 @@ final class OnboardingModule extends SmfModule {
           onboardingBundle,
           vars: {
             'completed_key': SmfNames.dartString(completedKey),
-            'symbol': SmfNames.dartString(appSymbolOf(context.appName)),
+            'symbol': SmfNames.dartString(
+              SmfNames.elementSymbolOf(context.appName),
+            ),
             ...localizationRole.varsOf(id, texts),
           },
         ),

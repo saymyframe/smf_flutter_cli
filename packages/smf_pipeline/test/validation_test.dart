@@ -49,6 +49,18 @@ ValidationResult _validate(List<SmfModule> modules) {
 List<String> _messages(ValidationResult result) =>
     [for (final issue in result.issues) '${issue.origin}: ${issue.message}'];
 
+/// The root of an app, with the tags of what the template of the app entry
+/// role puts around every route: a scaffold without them would lose it.
+BrickContribution _root() => BrickContribution(
+      bundle(
+        'root',
+        files: {
+          'lib/app.dart': '{{{smf_app_entry__app_builder_open}}}child'
+              '{{{smf_app_entry__app_builder_close}}}',
+        },
+      ),
+    );
+
 void main() {
   final entry = scaffold();
 
@@ -67,12 +79,14 @@ void main() {
 
     expect(result.issues, isEmpty);
     expect(result.hasErrors, isFalse);
-    // The last is the note of the app entry role for coding agents, which
-    // its template contributes.
+    // The last two are what the template of the app entry role gives every
+    // app: its note for coding agents, and the widget for the icons of the
+    // status bar.
     expect(result.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.bootstrapEarly,
       AppEntryRole.agentSections,
+      AppEntryRole.appBuilder,
     ]);
     expect(result.pubspec.dependencies.keys, ['flutter']);
     expect(result.postGenOrder.contributions, isEmpty);
@@ -1515,6 +1529,7 @@ void main() {
           BrickContribution(
             bundle('ios', files: {'ios/Podfile': "platform :ios, '$_ios'"}),
           ),
+          _root(),
         ],
       ),
     ]);
@@ -1538,6 +1553,7 @@ void main() {
     final podfile = BrickContribution(
       bundle('ios', files: {'ios/Podfile': "platform :ios, '$_ios'"}),
     );
+    final root = _root();
     expect(
       _messages(
         _validate([
@@ -1546,6 +1562,7 @@ void main() {
             contributions: [
               pubspec(withoutFlutter),
               podfile,
+              root,
               const PubspecContribution.flutter(assets: ['assets/']),
             ],
           ),
@@ -1563,7 +1580,7 @@ void main() {
       _validate([
         scaffold(
           bricks: false,
-          contributions: [pubspec(withoutFlutter), podfile],
+          contributions: [pubspec(withoutFlutter), podfile, root],
         ),
       ]).issues,
       isEmpty,
@@ -1863,6 +1880,7 @@ void main() {
           providers: [const RoleProvider.plain(appEntryRole)],
           contributions: [
             const PubspecContribution.environment(sdk: '^3.8.1'),
+            _root(),
           ],
         ),
       ]);

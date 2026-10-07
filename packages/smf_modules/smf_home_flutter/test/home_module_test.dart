@@ -14,7 +14,6 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/bundles/home_bundle.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_home_flutter/src/agents.dart';
-import 'package:smf_home_flutter/src/app_cell.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -509,42 +508,6 @@ void main() {
     });
   });
 
-  group('the cell of the app', () {
-    test(
-        'has the first letters of the first two words of the name of the '
-        'app as its symbol, the first in upper case and the second in '
-        'lower case', () {
-      expect(appSymbolOf('my_app'), 'Ma');
-      expect(appSymbolOf('bird_watch'), 'Bw');
-      // The words after the second add nothing.
-      expect(appSymbolOf('my_big_app'), 'Mb');
-      // A word of one letter is a word.
-      expect(appSymbolOf('a_team'), 'At');
-      // A word may start with a digit, but for the first.
-      expect(appSymbolOf('route_66'), 'R6');
-    });
-
-    test('has the first two letters of a name of one word as its symbol', () {
-      expect(appSymbolOf('shop'), 'Sh');
-      expect(appSymbolOf('app2go'), 'Ap');
-      expect(appSymbolOf('x1'), 'X1');
-    });
-
-    test('has the one letter of a name of one letter as its symbol', () {
-      expect(appSymbolOf('x'), 'X');
-    });
-
-    test(
-        'has the number of letters and digits of the name of the app as its '
-        'number', () {
-      expect(appNumberOf('my_app'), 5);
-      expect(appNumberOf('shop'), 4);
-      expect(appNumberOf('x'), 1);
-      expect(appNumberOf('route_66'), 7);
-      expect(appNumberOf('my_big_app'), 8);
-    });
-  });
-
   group('the contract harness', () {
     late ContractHarness harness;
     late List<ContractResult> results;
@@ -826,9 +789,7 @@ void main() {
       );
       final named = _constantsOf(_parsed(other.app!, _screen));
       expect(named['_appName'], "'Bird Watch'");
-      expect(named['_appSymbol'], "'${appSymbolOf('bird_watch')}'");
       expect(named['_appSymbol'], "'Bw'");
-      expect(named['_appNumber'], '${appNumberOf('bird_watch')}');
       expect(named['_appNumber'], '9');
 
       // A name of one letter has a symbol of one letter.
@@ -1202,20 +1163,15 @@ void main() {
     });
 
     test(
-        'has no app bar, so it tells the colour of the icons of the status '
-        'bar itself, by the brightness of the theme, and keeps its list out '
-        'of what covers the top and the bottom of the screen', () {
+        'has no app bar and leaves the icons of the status bar to the root '
+        'of the app, which tells them for every screen, and keeps its list '
+        'out of what covers the top and the bottom of the screen', () {
       expect(_calls(unit, 'AppBar'), isEmpty);
-      final region = _calls(build, 'AnnotatedRegion').single;
-      expect(
-        region.typeArguments!.toSource(),
-        '<SystemUiOverlayStyle>',
-      );
-      expect(
-        _argument(region, 'value').toSource(),
-        'theme.brightness == Brightness.dark ? SystemUiOverlayStyle.light : '
-        'SystemUiOverlayStyle.dark',
-      );
+      // The app entry role tells the system the icons that suit the theme,
+      // around every route: the screen does not, and names no style of the
+      // system.
+      expect(_calls(unit, 'AnnotatedRegion'), isEmpty);
+      expect(unit.toSource(), isNot(contains('SystemUiOverlayStyle')));
       final safeArea = _calls(build, 'SafeArea').single;
       expect(_namedArgumentsOf(safeArea)['bottom'], 'false');
       final list = _argument(safeArea, 'child') as MethodInvocation;

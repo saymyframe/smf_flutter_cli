@@ -195,9 +195,33 @@ String _renderAgentSections(List<MapEntry<String, AgentNote>> entries) {
       .join('\n');
 }
 
-/// The template of the [AppEntryRole]: the guide for coding agents, which
-/// an app has whichever module provides the role, with the note of the role
-/// itself.
+/// The widget that the template of the [AppEntryRole] puts around the
+/// content of every route ([AppEntryRole.appBuilder]): it tells the system
+/// which icons of the status bar suit the theme of the app, dark ones on a
+/// light theme and light ones on a dark theme.
+///
+/// It reads the theme from a context of its own, below the root
+/// `MaterialApp`, so it needs no name from the `builder` of the provider.
+/// It says nothing of the navigation bar of the system, which stays as the
+/// platform has it. A screen with an `AppBar` gets the icons that suit its
+/// bar, since the bar tells them for the top of the screen itself.
+const _statusBarIcons = Fragment.wrap(
+  'Builder(builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>( '
+      'value: SystemUiOverlayStyle( '
+      'statusBarBrightness: Theme.of(context).brightness, '
+      'statusBarIconBrightness: Theme.of(context).brightness == '
+      'Brightness.dark ? Brightness.light : Brightness.dark), child: ',
+  '))',
+  imports: [
+    ImportRef('package:flutter/material.dart'),
+    ImportRef('package:flutter/services.dart', show: ['SystemUiOverlayStyle']),
+  ],
+);
+
+/// The template of the [AppEntryRole], for what an app has whichever module
+/// provides the role: the guide for coding agents, with the note of the
+/// role itself, and the icons of the status bar that suit the theme of the
+/// app, on every screen.
 final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
   const _AppEntryTemplate();
 
@@ -208,6 +232,7 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
           appEntryRole.description,
           AgentNote.ofRole(_agentNote),
         ),
+        const SocketContribution.wrap(AppEntryRole.appBuilder, _statusBarIcons),
       ];
 }
 
@@ -221,6 +246,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `${AppEntryRole.main.name}()` in `${AppEntryRole.mainFile}` initializes the binding, awaits `${AppEntryRole.bootstrap.name}()` and calls `runApp()`, in this order. Start-up code goes into `${AppEntryRole.bootstrap.name}()`.
 - `${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 ''';
 
 /// The characters of a path of the app: those of the names of its files and

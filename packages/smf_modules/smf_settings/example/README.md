@@ -19,7 +19,6 @@ The module writes `lib/features/settings/settings_screen.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
@@ -49,24 +48,17 @@ class SettingsScreen extends StatelessWidget {
     );
     // Whether a screen below this one is there to go back to.
     final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
-    // Without an app bar, the screen itself tells the system which colour
-    // the icons of the status bar have.
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: theme.brightness == Brightness.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        appBar: back ? AppBar() : null,
-        body: SafeArea(
-          bottom: false,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-            children: [
-              title,
-              const SizedBox(height: 20),
-              const _Group(children: [entry0.ThemeModeSetting()]),
-            ],
-          ),
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          children: [
+            title,
+            const SizedBox(height: 20),
+            const _Group(children: [entry0.ThemeModeSetting()]),
+          ],
         ),
       ),
     );

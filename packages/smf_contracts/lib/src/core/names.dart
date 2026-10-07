@@ -104,6 +104,29 @@ abstract final class SmfNames {
         .join('_');
   }
 
+  /// The symbol of [name], a name in snake_case such as the name of an app,
+  /// as an element of the periodic table has one: `Ma` for `my_app`.
+  ///
+  /// It is the first character of the first word of [name] in upper case,
+  /// then the first character of its second word in lower case, or the
+  /// second character of a name of one word: `Sh` for `shop`. A name of one
+  /// character has that character alone, and an empty name has no symbol.
+  ///
+  /// A module that shows the app as such an element takes the symbol from
+  /// here, so that every screen of an app shows the same one.
+  static String elementSymbolOf(String name) {
+    final words = name.split('_').where((word) => word.isNotEmpty).toList();
+    if (words.isEmpty) return '';
+    final next = words.length > 1 ? words[1] : words.first.substring(1);
+    return words.first[0].toUpperCase() +
+        (next.isEmpty ? '' : next[0].toLowerCase());
+  }
+
+  /// The number of [name], a name in snake_case, where an element of the
+  /// periodic table has its atomic number: how many characters the words of
+  /// [name] have together, 5 for `my_app`. It goes with [elementSymbolOf].
+  static int elementNumberOf(String name) => name.replaceAll('_', '').length;
+
   /// Returns [text] as a single-quoted Dart string literal, such as
   /// `'It\'s here'`, that mason renders unchanged.
   ///

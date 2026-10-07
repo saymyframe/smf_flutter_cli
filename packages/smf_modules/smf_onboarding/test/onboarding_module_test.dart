@@ -13,7 +13,6 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_onboarding/bundles/onboarding_bundle.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_onboarding/src/agents.dart';
-import 'package:smf_onboarding/src/app_symbol.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -448,31 +447,6 @@ void main() {
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
       expect(note.when, isEmpty);
-    });
-  });
-
-  group('the symbol of the app', () {
-    test(
-        'is the first letter of the first word of its name in upper case '
-        'and the first letter of the second word in lower case', () {
-      expect(appSymbolOf('my_app'), 'Ma');
-      expect(appSymbolOf('bird_watch'), 'Bw');
-      // The words after the second add nothing.
-      expect(appSymbolOf('every_module_bloc'), 'Em');
-    });
-
-    test('is the first two letters of a name of one word', () {
-      expect(appSymbolOf('notes'), 'No');
-      expect(appSymbolOf('ab'), 'Ab');
-    });
-
-    test('is the one letter of a name of one letter', () {
-      expect(appSymbolOf('x'), 'X');
-    });
-
-    test('takes a digit as it is', () {
-      expect(appSymbolOf('app_2go'), 'A2');
-      expect(appSymbolOf('v2'), 'V2');
     });
   });
 
@@ -1289,22 +1263,14 @@ void main() {
     });
 
     test(
-        'tells the system which icons of the status bar its background '
-        'needs, by the brightness of the theme, since it has no app bar', () {
-      final region = _calls(unit, 'AnnotatedRegion').single;
-
-      expect(region.typeArguments!.toSource(), '<SystemUiOverlayStyle>');
-      expect(
-        _argument(region, 'value').toSource(),
-        'theme.brightness == Brightness.dark ? SystemUiOverlayStyle.light : '
-        'SystemUiOverlayStyle.dark',
-      );
-      // The whole screen is in it.
-      expect(
-        (_argument(region, 'child') as MethodInvocation).methodName.name,
-        'Scaffold',
-      );
+        'has no app bar and leaves the icons of the status bar to the root '
+        'of the app, which tells them for every screen', () {
       expect(_calls(unit, 'AppBar'), isEmpty);
+      // The app entry role tells the system the icons that suit the theme,
+      // around every route: the screen does not, and names no style of the
+      // system.
+      expect(_calls(unit, 'AnnotatedRegion'), isEmpty);
+      expect(unit.toSource(), isNot(contains('SystemUiOverlayStyle')));
     });
 
     test('names no font: its texts take that of the theme of the app', () {
