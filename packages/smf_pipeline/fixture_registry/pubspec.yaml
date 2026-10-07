@@ -18,33 +18,33 @@ dependencies:
   fake_roles: any
   fake_router: any
   fake_state: any
-  smf_bottom_tabs: ^0.3.0
-  smf_contracts: ^0.3.0
+  smf_bottom_tabs: ^0.4.0
+  smf_contracts: ^0.4.0
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
-  smf_firebase_analytics: ^0.3.0
-  smf_firebase_core: ^0.3.0
-  smf_firebase_crashlytics: ^0.3.0
+  smf_firebase_analytics: ^0.4.0
+  smf_firebase_core: ^0.4.0
+  smf_firebase_crashlytics: ^0.4.0
   # The matrix of CI, for the tests of the apps of the fixtures.
-  smf_flutter_cli: ^0.3.0
-  smf_flutter_core: ^0.3.0
-  smf_get_it: ^0.3.0
-  smf_go_router: ^0.3.0
+  smf_flutter_cli: ^0.4.0
+  smf_flutter_core: ^0.4.0
+  smf_get_it: ^0.4.0
+  smf_go_router: ^0.4.0
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
-  smf_home_flutter: ^0.3.0
+  smf_home_flutter: ^0.4.0
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
-  smf_material_theme: ^0.3.0
+  smf_material_theme: ^0.4.0
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
-  smf_onboarding: ^0.3.0
+  smf_onboarding: ^0.4.0
   # The settings screen of the CLI, for its app tests in the app of several
   # providers.
-  smf_settings: ^0.3.0
+  smf_settings: ^0.4.0
   # The provider of the preferences role in the registry of several
   # providers, for the test of the role that the CLI keeps.
-  smf_shared_preferences: ^0.3.0
+  smf_shared_preferences: ^0.4.0
 
 dev_dependencies:
   analyzer: ^14.4.0
@@ -52,7 +52,7 @@ dev_dependencies:
   dart_style: 3.1.13
   file: ^7.0.1
   pub_semver: ^2.2.0
-  smf_pipeline: ^0.3.0
+  smf_pipeline: ^0.4.0
   test: ^1.32.0
   very_good_analysis: ^10.3.0
   xml: ^7.0.0
