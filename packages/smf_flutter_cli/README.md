@@ -2,7 +2,7 @@
 
 `smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
-![smf create in a terminal: it asks for the app name and the modules, adds go_router for the start screen and generates a Flutter app with bottom tabs, BLoC and get_it](https://doc.saymyframe.com/demo/smf_create.gif)
+![smf create in a terminal: it asks for the app name and the modules, adds go_router and shared_preferences, which the chosen modules need, and generates a Flutter app with an onboarding, a start screen, a settings screen, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.4/smf_create.gif)
 
 With the modules `onboarding`, `home`, `settings`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and has a start screen, a settings screen with a theme mode and a language, and a light and a dark theme:
 
