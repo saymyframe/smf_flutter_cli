@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
@@ -1153,7 +1157,7 @@ void main() {
       final note = appEntryRole.template
           .contribute(testContext)
           .whereType<SocketContribution>()
-          .single;
+          .singleWhere((contribution) => contribution.socket == socket);
 
       expect(note.socket, socket);
       expect(note.entryKey, appEntryRole.description);
@@ -1206,7 +1210,7 @@ void main() {
       final note = appEntryRole.template
           .contribute(testContext)
           .whereType<SocketContribution>()
-          .single
+          .singleWhere((contribution) => contribution.socket == socket)
           .entryValue! as AgentNote;
 
       expect(rendered.files.keys, [
@@ -1214,7 +1218,9 @@ void main() {
         AppEntryRole.claudeFile,
       ]);
       expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
-      expect(rendered.elsewhere, isEmpty);
+      // The widget for the icons of the status bar goes into the builder of
+      // the root, in a file of the provider.
+      expect(rendered.elsewhere.single.socket, AppEntryRole.appBuilder);
       final [title, empty, introduction, ...sections] = guide.split('\n');
       expect(title, '# AGENTS.md');
       expect(empty, isEmpty);
@@ -1456,6 +1462,90 @@ void main() {
       ]) {
         expect(problemsOf(text), isEmpty, reason: text);
       }
+    });
+  });
+
+  group('the icons of the status bar', () {
+    /// What the template of the role puts into the builder of the root.
+    SocketContribution wrapper() => appEntryRole.template
+        .contribute(testContext)
+        .whereType<SocketContribution>()
+        .singleWhere(
+          (contribution) => contribution.socket == AppEntryRole.appBuilder,
+        );
+
+    /// The calls of [name] in the code that the wrapper makes of `child`.
+    List<MethodInvocation> calls(String name) {
+      final fragment = wrapper().fragment!;
+      final unit = parseString(
+        content: 'final wrapped = ${fragment.code}child${fragment.closing};',
+      ).unit;
+      final found = <MethodInvocation>[];
+      unit.accept(_Calls(name, found));
+      return found;
+    }
+
+    /// The argument [name] of [call], as code.
+    String argument(MethodInvocation call, String name) =>
+        call.argumentList.arguments
+            .whereType<NamedArgument>()
+            .singleWhere((argument) => argument.name.lexeme == name)
+            .argumentExpression
+            .toSource();
+
+    test(
+        'come from the template of the role, in every app, as a widget '
+        'around the content of every route', () {
+      final contribution = wrapper();
+
+      expect(contribution.when, isEmpty);
+      expect(contribution.fragment!.isWrapper, isTrue);
+      expect(contribution.fragment!.problems(), isEmpty);
+      expect(
+        [for (final import in contribution.fragment!.imports) import.uri],
+        ['package:flutter/material.dart', 'package:flutter/services.dart'],
+      );
+    });
+
+    test(
+        'suit the theme below the root: dark ones on a light theme and '
+        'light ones on a dark theme', () {
+      final region = calls('AnnotatedRegion').single;
+      final style = calls('SystemUiOverlayStyle').single;
+
+      expect(region.typeArguments!.toSource(), '<SystemUiOverlayStyle>');
+      expect(argument(region, 'value'), style.toSource());
+      // The content of the routes is inside the region.
+      expect(argument(region, 'child'), 'child');
+      // The brightness of the bar, which iOS takes, and of its icons, which
+      // Android takes.
+      expect(
+        argument(style, 'statusBarBrightness'),
+        'Theme.of(context).brightness',
+      );
+      expect(
+        argument(style, 'statusBarIconBrightness'),
+        'Theme.of(context).brightness == Brightness.dark ? '
+        'Brightness.light : Brightness.dark',
+      );
+    });
+
+    test(
+        'read the theme from a context of their own, and leave the '
+        'navigation bar of the system as it is', () {
+      final builder = calls('Builder').single;
+      final style = calls('SystemUiOverlayStyle').single;
+
+      // The widget names no parameter of the builder of the provider.
+      expect(argument(builder, 'builder'), startsWith('(context) => '));
+      expect(
+        [
+          for (final argument
+              in style.argumentList.arguments.whereType<NamedArgument>())
+            argument.name.lexeme,
+        ],
+        ['statusBarBrightness', 'statusBarIconBrightness'],
+      );
     });
   });
 
@@ -2401,3 +2491,17 @@ MasonBundle _bundle(Map<String, String> files) => MasonBundle(
           MasonBundledFile(path, base64.encode(utf8.encode(text)), 'text'),
       ],
     );
+
+/// Collects the calls of the function or the constructor [name].
+final class _Calls extends RecursiveAstVisitor<void> {
+  _Calls(this.name, this.found);
+
+  final String name;
+  final List<MethodInvocation> found;
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == name) found.add(node);
+    super.visitMethodInvocation(node);
+  }
+}

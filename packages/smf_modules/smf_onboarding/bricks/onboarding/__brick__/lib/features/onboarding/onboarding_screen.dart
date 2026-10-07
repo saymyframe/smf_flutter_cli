@@ -85,98 +85,91 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       colors.secondaryContainer.withValues(alpha: 0.6),
       colors.surface,
     );
-    // The screen has no app bar, so it tells the system itself which icons
-    // of the status bar its background needs.
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: theme.brightness == Brightness.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        body: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) => ColoredBox(
-            color: Color.lerp(
-              colors.surface,
-              end,
-              pages.length < 2
-                  ? 0
-                  : (OnboardingPageScope.turnedOf(_controller) /
-                            (pages.length - 1))
-                        .clamp(0, 1),
-            )!,
-            child: child,
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      // Skip fades away on the last page, where a tap no
-                      // longer reaches it, and is gone once it has faded.
-                      child: IgnorePointer(
-                        ignoring: isLast,
-                        child: AnimatedSwitcher(
-                          duration: fade,
-                          child: isLast
-                              ? const SizedBox.shrink()
-                              : TextButton(
-                                  onPressed: onboardingStatus.complete,
-                                  child: Text({{{text_skip}}}),
-                                ),
-                        ),
+    return Scaffold(
+      body: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => ColoredBox(
+          color: Color.lerp(
+            colors.surface,
+            end,
+            pages.length < 2
+                ? 0
+                : (OnboardingPageScope.turnedOf(_controller) /
+                          (pages.length - 1))
+                      .clamp(0, 1),
+          )!,
+          child: child,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    // Skip fades away on the last page, where a tap no
+                    // longer reaches it, and is gone once it has faded.
+                    child: IgnorePointer(
+                      ignoring: isLast,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: isLast
+                            ? const SizedBox.shrink()
+                            : TextButton(
+                                onPressed: onboardingStatus.complete,
+                                child: Text({{{text_skip}}}),
+                              ),
                       ),
                     ),
                   ),
                 ),
-                Expanded(
-                  child: PageView(
-                    controller: _controller,
-                    onPageChanged: (page) {
-                      HapticFeedback.selectionClick();
-                      setState(() => _page = page);
-                    },
-                    children: [
-                      for (final (index, page) in pages.indexed)
-                        OnboardingPageScope(
-                          index: index,
-                          controller: _controller,
-                          child: page,
-                        ),
-                    ],
-                  ),
+              ),
+              Expanded(
+                child: PageView(
+                  controller: _controller,
+                  onPageChanged: (page) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _page = page);
+                  },
+                  children: [
+                    for (final (index, page) in pages.indexed)
+                      OnboardingPageScope(
+                        index: index,
+                        controller: _controller,
+                        child: page,
+                      ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _PageMarks(
-                          controller: _controller,
-                          count: pages.length,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _PageMarks(
+                        controller: _controller,
+                        count: pages.length,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: isLast ? onboardingStatus.complete : _next,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: Text(
+                          isLast ? {{{text_done}}} : {{{text_next}}},
+                          key: ValueKey(isLast),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: isLast ? onboardingStatus.complete : _next,
-                        child: AnimatedSwitcher(
-                          duration: fade,
-                          child: Text(
-                            isLast ? {{{text_done}}} : {{{text_next}}},
-                            key: ValueKey(isLast),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -308,18 +308,6 @@ void main() {
           reason: 'The card keeps the deep green of Say My Frame in a '
               '${brightness.name} theme.',
         );
-        expect(
-          tester
-              .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
-                shown(find.byType(AnnotatedRegion<SystemUiOverlayStyle>)),
-              )
-              .value,
-          brightness == Brightness.dark
-              ? SystemUiOverlayStyle.light
-              : SystemUiOverlayStyle.dark,
-          reason: 'The screen has no app bar, so it asks itself for icons '
-              'of the status bar that show on a ${brightness.name} theme.',
-        );
         await closeNewHome(tester);
       }
     },

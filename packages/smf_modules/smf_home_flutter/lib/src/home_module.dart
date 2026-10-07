@@ -1,7 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_home_flutter/bundles/home_bundle.dart';
 import 'package:smf_home_flutter/src/agents.dart';
-import 'package:smf_home_flutter/src/app_cell.dart';
 
 /// The module of the start screen of the app: a feature with one route,
 /// whose screen, `HomeScreen`, welcomes the developer of the app.
@@ -9,8 +8,9 @@ import 'package:smf_home_flutter/src/app_cell.dart';
 /// The screen greets by the time of the day and names the app, next to the
 /// mark of Say My Frame. Below them, a card in the colours of Say My Frame
 /// tells that the app is ready. The card shows the app as a cell of the
-/// periodic table, with a symbol and a number that the module makes from
-/// the name of the app, such as `Ma` and 5 for `my_app`, next to cells that
+/// periodic table, with the symbol and the number of the name of the app
+/// ([SmfNames.elementSymbolOf] and [SmfNames.elementNumberOf]), such as `Ma`
+/// and 5 for `my_app`, next to cells that
 /// light up one after another. Three steps follow, each with the path or
 /// the address that it is about, which a tap copies: replace the screen,
 /// add a feature, read the documentation. The parts of the screen rise in
@@ -173,8 +173,10 @@ final class HomeModule extends SmfModule {
         BrickContribution(
           homeBundle,
           vars: {
-            'app_symbol': SmfNames.dartString(appSymbolOf(context.appName)),
-            'app_number': appNumberOf(context.appName),
+            'app_symbol': SmfNames.dartString(
+              SmfNames.elementSymbolOf(context.appName),
+            ),
+            'app_number': SmfNames.elementNumberOf(context.appName),
             ...localizationRole.varsOf(id, texts),
           },
         ),

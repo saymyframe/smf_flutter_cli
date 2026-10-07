@@ -530,8 +530,8 @@ void main() {
       expect(
         text,
         contains(
-          '          bottom: false,\n'
-          '          child: CustomScrollView(\n',
+          '        bottom: false,\n'
+          '        child: CustomScrollView(\n',
         ),
       );
     });
@@ -761,7 +761,6 @@ void main() {
           LocalizationRole.appTexts.importRef
               .resolveUri(ContractHarness.defaultContext.appName),
           'package:flutter/material.dart',
-          'package:flutter/services.dart',
         ],
       );
     });
@@ -935,7 +934,6 @@ void main() {
         'package:contract_app/${_look.settingsFile}': 'entry1',
         'package:contract_app/${ZoomRole.settingFile}': 'entry2',
         'package:flutter/material.dart': null,
-        'package:flutter/services.dart': null,
       });
     });
 
@@ -1006,7 +1004,6 @@ void main() {
       expect(_importsOf(result.app!), {
         'package:contract_app/${_look.settingsFile}': 'entry0',
         'package:flutter/material.dart': null,
-        'package:flutter/services.dart': null,
       });
     });
 
@@ -1113,12 +1110,11 @@ void main() {
         'back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false',
         reason: '$modules',
       );
-      // Without an app bar, the screen sets the colour of the icons of the
-      // status bar.
+      // Without an app bar, the icons of the status bar are those that the
+      // root of the app tells for every screen: the screen tells none.
       expect(
-        _argument(built.only('AnnotatedRegion'), 'value').toSource(),
-        'theme.brightness == Brightness.dark ? SystemUiOverlayStyle.light : '
-        'SystemUiOverlayStyle.dark',
+        built.byName.keys,
+        isNot(contains('AnnotatedRegion')),
         reason: '$modules',
       );
     }

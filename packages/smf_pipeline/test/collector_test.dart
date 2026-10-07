@@ -105,10 +105,11 @@ void main() {
 
     // The scaffold contributes the minimum iOS version, the SDK constraint
     // and the dependency on Flutter first, and the template of the app
-    // entry role its brick and its note for coding agents last.
+    // entry role its brick, its note for coding agents and its widget for
+    // the icons of the status bar last.
     expect(
       [for (final c in collection.all) c.applies],
-      [true, true, true, true, false, true, true, true],
+      [true, true, true, true, false, true, true, true, true],
     );
   });
 

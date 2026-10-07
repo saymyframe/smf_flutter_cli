@@ -131,131 +131,124 @@ class _HomeScreenState extends State<HomeScreen>
         'doc.saymyframe.com',
       ),
     ];
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      // The screen has no app bar, so it tells the colour of the icons of
-      // the status bar itself.
-      value: theme.brightness == Brightness.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: ListView(
-            // The list ends above what covers the bottom of the screen,
-            // such as the bar of the home gesture.
-            padding: EdgeInsets.fromLTRB(
-              20,
-              20,
-              20,
-              32 + MediaQuery.paddingOf(context).bottom,
-            ),
-            children: [
-              _Rise(
-                animation: _entrance,
-                order: 0,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            greeting,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                          Semantics(
-                            header: true,
-                            child: Text(
-                              _appName,
-                              style: theme.textTheme.headlineLarge,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset(
-                        _mark,
-                        width: 48,
-                        height: 48,
-                        semanticLabel: 'Say My Frame',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              _Rise(
-                animation: _entrance,
-                order: 1,
-                child: _ReadyCard(
-                  animation: _entrance,
-                  title: {{{text_ready_title}}},
-                  text: {{{text_ready_text}}},
-                ),
-              ),
-              const SizedBox(height: 32),
-              _Rise(
-                animation: _entrance,
-                order: 2,
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    {{{text_next_title}}},
-                    style: theme.textTheme.titleLarge,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              for (final (index, (icon, title, text, code)) in steps.indexed)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _Rise(
-                    animation: _entrance,
-                    order: 3 + index,
-                    child: _StepCard(
-                      icon: icon,
-                      title: title,
-                      text: text,
-                      code: code,
-                      onTap: () => _copy(code),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              _Rise(
-                animation: _entrance,
-                order: 6,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: Image.asset(
-                        _mark,
-                        width: 20,
-                        height: 20,
-                        excludeFromSemantics: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // With a large text size, the text takes more lines.
-                    Flexible(
-                      child: Text(
-                        {{{text_footer}}},
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          // The list ends above what covers the bottom of the screen,
+          // such as the bar of the home gesture.
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            32 + MediaQuery.paddingOf(context).bottom,
           ),
+          children: [
+            _Rise(
+              animation: _entrance,
+              order: 0,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            _appName,
+                            style: theme.textTheme.headlineLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      _mark,
+                      width: 48,
+                      height: 48,
+                      semanticLabel: 'Say My Frame',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _Rise(
+              animation: _entrance,
+              order: 1,
+              child: _ReadyCard(
+                animation: _entrance,
+                title: {{{text_ready_title}}},
+                text: {{{text_ready_text}}},
+              ),
+            ),
+            const SizedBox(height: 32),
+            _Rise(
+              animation: _entrance,
+              order: 2,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  {{{text_next_title}}},
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final (index, (icon, title, text, code)) in steps.indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _Rise(
+                  animation: _entrance,
+                  order: 3 + index,
+                  child: _StepCard(
+                    icon: icon,
+                    title: title,
+                    text: text,
+                    code: code,
+                    onTap: () => _copy(code),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            _Rise(
+              animation: _entrance,
+              order: 6,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      _mark,
+                      width: 20,
+                      height: 20,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // With a large text size, the text takes more lines.
+                  Flexible(
+                    child: Text(
+                      {{{text_footer}}},
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
