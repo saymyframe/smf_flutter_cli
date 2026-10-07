@@ -16,7 +16,7 @@ dependencies:
   fake_infra: any
   fake_router: any
   mason: ^0.1.1
-  smf_contracts: ^0.3.0
+  smf_contracts: ^0.4.0
 
 dev_dependencies:
   very_good_analysis: ^10.3.0

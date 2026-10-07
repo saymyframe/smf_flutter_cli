@@ -1,3 +1,10 @@
+## 0.3.0
+
+> Note: This release has breaking changes.
+
+ - **REFACTOR**(contribution_engine): find the body of a method or of a function in one place. ([81e3196f](https://github.com/saymyframe/smf_flutter_cli/commit/81e3196f366fe085e097c82fe245fbfcfbf37c6b))
+ - **BREAKING** **REFACTOR**(contribution_engine): patch Dart files with the AST of analyzer 13, which it now needs. ([ca9792f2](https://github.com/saymyframe/smf_flutter_cli/commit/ca9792f20a6b90c8d35c2bb59ba2962e0b429c99))
+
 ## 0.2.2
 
  - **FIX**(contribution_engine): fix the known bugs of the inserts, the widget matching and the formatter ([#46](https://github.com/saymyframe/smf_flutter_cli/issues/46)). ([2b86c053](https://github.com/saymyframe/smf_flutter_cli/commit/2b86c05392a677a4f0539fcb5a0970600e424819))
