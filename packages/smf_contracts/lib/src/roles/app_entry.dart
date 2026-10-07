@@ -52,6 +52,15 @@ const appEntryRole = AppEntryRole._();
 /// below the top-level directories of a Flutter project, and its paths to
 /// Dart files: each is a file or a directory of the app.
 ///
+/// The template also tells the system which icons of the status bar suit
+/// the theme of the app, on every screen: it puts a widget into
+/// [appBuilder] that reads the brightness of the theme below the root
+/// `MaterialApp`, and asks for dark icons on a light theme and for light
+/// ones on a dark theme. So a screen without an app bar tells nothing of
+/// the status bar itself, in an app with a module that provides the theme
+/// and in one without it; a screen with an `AppBar` gets the icons that
+/// suit its bar.
+///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
 /// alone at the start of a line of their file, like the tags of
@@ -228,7 +237,11 @@ final class AppEntryRole extends Role<NoDsl> {
   );
 
   /// Widgets around the content of every route, in the `builder` of the
-  /// root `MaterialApp`; the first contribution is outermost.
+  /// root `MaterialApp`; the first contribution is outermost. They are below
+  /// the theme and the localizations of the app. The template of the role
+  /// puts one here itself, for the icons of the status bar, in every app:
+  /// so the templates of every provider have the tags of this socket, and
+  /// the pipeline reports a provider without them.
   static const appBuilder = SocketRef<WrapperSocket>.role(
     appEntryRole,
     'app_builder',

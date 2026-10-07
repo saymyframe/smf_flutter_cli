@@ -1,9 +1,12 @@
 name: home
-description: "The start screen of an SMF app: a screen with the name of the app in its app bar."
+description: "The start screen of an SMF app: a welcome to the developer of the app, with the name of the app and what to do next."
 
 # A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the
-# has_<role> flags and the rendered sockets of its tags.
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: app_symbol, the symbol of the app in its cell as a Dart
+# string, app_number, the number in that cell, and text_<name> for each text
+# of the screen, the code that reads it.
 version: 0.1.0+1
 
 environment:

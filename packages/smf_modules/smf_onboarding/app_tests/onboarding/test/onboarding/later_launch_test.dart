@@ -6,7 +6,8 @@
 //
 // The onboarding starts again in three cases:
 // - something shows its screen although it is finished, as a link to its
-//   route does, so that Skip and Done leave the screen. push() counts too:
+//   route does, so that Skip and Get started, the button of the last page,
+//   leave the screen. push() counts too:
 //   it shows the screen over another, which the router then has to take
 //   out of its stack;
 // - the app asks for it, with restart() of its status, which shows the
@@ -148,7 +149,7 @@ void main() {
         isFalse,
         reason: 'The screen of the onboarding starts the onboarding again '
             'when it is shown although the onboarding is finished, so that '
-            'Skip and Done leave the screen.',
+            'Skip and Get started leave the screen.',
       );
       expect(
         await savedCompleted(tester, expected: false),

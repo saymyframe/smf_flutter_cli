@@ -13,8 +13,8 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
-/// The codes of the languages of the file of the texts of the onboarding
-/// that the matrix writes for an app, [file], in the order of the file.
+/// The codes of the languages of the file of the texts of a module that
+/// the matrix writes for an app, [file], in the order of the file.
 List<String> _languagesOf(String file) => [
       for (final language
           in RegExp(r"^  '(\w+)': \{$", multiLine: true).allMatches(file))
@@ -555,6 +555,8 @@ void main() {
       [
         // The localization role and the theme role require the
         // preferences.
+        'flutter_core with router, localization',
+        'flutter_core with localization',
         'home with localization',
         'settings with localization',
         'bottom_tabs with localization',
@@ -562,7 +564,6 @@ void main() {
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'gen_l10n',
         'shared_preferences with di',
         'shared_preferences',
         // The onboarding requires the preferences.
@@ -642,9 +643,10 @@ void main() {
     expect(test.appliesTo(appWith(localizationRole)), isTrue);
     expect(test.appliesTo(appWith(preferencesRole)), isFalse);
     // The matrix of the CLI runs it in every app with the role: the apps
-    // of gen_l10n and those of material_theme with the localization, with
-    // a settings screen and without, the app of the onboarding with the
-    // role, and the apps with every module.
+    // of flutter_core with the localization, with a router and without,
+    // those of material_theme with the localization, with a settings
+    // screen and without, the app of the onboarding with the role, and the
+    // apps with every module.
     final registered = named('localization_role');
     expect(registered.roles, test.roles);
     expect(registered.startProbe!.path, test.startProbe!.path);
@@ -666,26 +668,26 @@ void main() {
       [
         // The apps of the modules with texts, and of the layout, which
         // shows the labels of the destinations in the language of the app.
+        'flutter_core with router, localization',
+        'flutter_core with localization',
         'home with localization',
         'settings with localization',
         'bottom_tabs with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'gen_l10n',
         'onboarding with localization',
         'every module (bloc)',
         'every module (riverpod)',
       ],
     );
-    // What the test has to check there. An app with a settings screen has
-    // the texts of the setting of the language, which the role gives it in
-    // English and in Ukrainian. An app with the start screen or with the
-    // settings module has the label of its destination in both, and an app
-    // with the onboarding the texts of its pages. So the test reads texts
-    // in two languages with the provider of the CLI. Without them an app
-    // may have no text at all, as the app of gen_l10n alone and the app of
-    // the layout, which has no destination: there the test checks the
-    // languages of the root and the choice that the app saves and restores.
+    // What the test has to check there. Every app has the two texts of the
+    // fallback start screen of its app entry, in English and in Ukrainian.
+    // An app with a settings screen also has the texts of the setting of
+    // the language, which the role gives it in both languages. An app with
+    // the start screen or with the settings module has the label of its
+    // destination in both, and an app with the onboarding the texts of its
+    // pages. So the test reads texts in two languages in each app, with
+    // the provider of the CLI.
     List<String> languagesOf(MatrixApp app) =>
         localizationRole.localesIn(localizationRole.hookInput(app.hook!));
     expect(
@@ -694,12 +696,13 @@ void main() {
           if (registered.appliesTo(app)) app.name: languagesOf(app),
       },
       {
+        'flutter_core with router, localization': ['en', 'uk'],
+        'flutter_core with localization': ['en', 'uk'],
         'home with localization': ['en', 'uk'],
         'settings with localization': ['en', 'uk'],
-        'bottom_tabs with localization': ['en'],
+        'bottom_tabs with localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
-        'material_theme with localization': ['en'],
-        'gen_l10n': ['en'],
+        'material_theme with localization': ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
         'every module (bloc)': ['en', 'uk'],
         'every module (riverpod)': ['en', 'uk'],
@@ -1543,7 +1546,7 @@ void main() {
         "    'ready': 'Enjoy the app.',\n"
         "    'skip': 'Skip',\n"
         "    'next': 'Next',\n"
-        "    'done': 'Done',\n";
+        "    'done': 'Get started',\n";
 
     // The names are those that first_launch_test.dart of the app test looks
     // each text up by: a new text of the module needs a look there.
@@ -1566,7 +1569,7 @@ void main() {
         "    'ready': 'Приємного користування!',\n"
         "    'skip': 'Пропустити',\n"
         "    'next': 'Далі',\n"
-        "    'done': 'Готово',\n"
+        "    'done': 'Почати',\n"
         '  },\n'
         "  'en': {\n"
         '$english'
@@ -2116,7 +2119,7 @@ void main() {
     );
     for (final app in withoutRole) {
       final files = settings.generatedFiles!(app, 'my_app');
-      expect(files.keys, [settingsLanguagesFile]);
+      expect(files.keys, [settingsLanguagesFile, settingsOfAppFile]);
       final text = files[settingsLanguagesFile]!;
       final (:index, :errors) =
           DartFileIndexer.parse(settingsLanguagesFile, text);
@@ -2175,7 +2178,11 @@ void main() {
       for (final app in withRole) {
         final reason = '${app.name} in $languages';
         final files = settings.generatedFiles!(app, 'my_app');
-        expect(files.keys, [settingsLanguagesFile], reason: reason);
+        expect(
+          files.keys,
+          [settingsLanguagesFile, settingsOfAppFile],
+          reason: reason,
+        );
         final text = files[settingsLanguagesFile]!;
         final (:index, :errors) =
             DartFileIndexer.parse(settingsLanguagesFile, text);
@@ -2205,6 +2212,226 @@ void main() {
         );
       }
     }
+  });
+
+  test(
+      'the test of the home module applies to the apps with the module, '
+      'whatever else they have, with neither mocks nor a probe, and gets '
+      'the texts of the screen of the module in each language of the app', () {
+    final test = named('home');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('home'))) app.name,
+      ],
+    );
+    // It tests the module, not a role, and its screen reaches no platform
+    // side that another test would have to mock. The walk of the routes
+    // goes to its screen on a device.
+    expect(test.roles, isEmpty);
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+
+    final languages = <String, List<String>>{};
+    for (final app in apps.where(test.appliesTo)) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [homeTextsFile], reason: app.name);
+      languages[app.name] = _languagesOf(files[homeTextsFile]!);
+    }
+    // The languages of the localization role of the app, which are those
+    // of the texts of its modules, and English alone without the role.
+    expect(languages, {
+      'home with localization': ['en', 'uk'],
+      'home': ['en'],
+      'every module (bloc)': ['en', 'uk'],
+      'every module (riverpod)': ['en', 'uk'],
+    });
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        languages[app.name],
+        app.hook!.presentRoles.contains(localizationRole)
+            ? localizationRole.localesIn(
+                localizationRole.hookInput(app.hook!),
+              )
+            : ['en'],
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the tests of the settings module get how many entries the screen '
+      'has, from the settings screen role of the app, and whether it is a '
+      'destination of the main navigation, where code cannot push it, from '
+      'the layout role', () {
+    final settings = named('settings');
+
+    /// What the file of [app] says: the number of the entries, and whether
+    /// the screen is a destination.
+    (int, bool) ofApp(MatrixApp app) {
+      final text = settings.generatedFiles!(app, 'my_app')[settingsOfAppFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(settingsOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(index.imports, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['settingsEntryCount', 'settingsInMainNavigation'],
+        reason: app.name,
+      );
+      final count = RegExp(
+        r'^const int settingsEntryCount = (\d+);$',
+        multiLine: true,
+      ).firstMatch(text);
+      final destination = RegExp(
+        r'^const bool settingsInMainNavigation = (true|false);$',
+        multiLine: true,
+      ).firstMatch(text);
+      expect((count, destination), isNot(contains(null)), reason: app.name);
+      return (int.parse(count![1]!), destination![1] == 'true');
+    }
+
+    // The app of the module alone has no entry, so its screen has the note
+    // of an app without settings, which the test checks there. The apps
+    // with every module have a layout, whose destinations the screen is
+    // one of; the other apps of the module have none.
+    expect(
+      {
+        for (final app in apps.where(settings.appliesTo)) app.name: ofApp(app),
+      },
+      {
+        'settings with localization': (1, false),
+        'settings': (0, false),
+        'material_theme with settings_screen, localization': (2, false),
+        'material_theme with settings_screen': (1, false),
+        'every module (bloc)': (2, true),
+        'every module (riverpod)': (2, true),
+      },
+    );
+    for (final app in apps.where(settings.appliesTo)) {
+      final hook = app.hook!;
+      final input = settingsScreenRole.hookInput(hook);
+      final screen = settingsScreenRole.screenIn(input)!;
+      expect(
+        ofApp(app),
+        (
+          settingsScreenRole.entriesIn(input).length,
+          hook.presentRoles.contains(layoutRole) &&
+              layoutRole
+                  .destinationsIn(layoutRole.hookInput(hook))
+                  .any((route) => route.fullName == screen.fullName),
+        ),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the test of the home module gets each text of the screen by its name, '
+      'in each language of the app in the order of the localization role, '
+      'in English where the module has no translation, and in English alone '
+      'in an app without the role', () {
+    final test = named('home');
+    String textsOf({List<String>? languages}) => test.generatedFiles!(
+          MatrixApp(
+            'texts',
+            const [ModuleId('home')],
+            hook: RoleHookRequest(
+              data: const [],
+              presentRoles: {
+                routerRole,
+                if (languages != null) localizationRole,
+              },
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          ),
+          'my_app',
+        )[homeTextsFile]!;
+    const english = "    'greetingMorning': 'Good morning',\n"
+        "    'greetingAfternoon': 'Good afternoon',\n"
+        "    'greetingEvening': 'Good evening',\n"
+        "    'readyTitle': 'Your app is ready',\n"
+        "    'readyText': 'Generated with Say My Frame. Everything you see is "
+        "yours to change.',\n"
+        "    'nextTitle': 'Next steps',\n"
+        "    'stepScreenTitle': 'Make this screen yours',\n"
+        "    'stepScreenText': 'Replace this welcome with the first screen of "
+        "your app.',\n"
+        "    'stepFeatureTitle': 'Add a feature',\n"
+        "    'stepFeatureText': 'A feature keeps its screens and routes in a "
+        "folder of its own.',\n"
+        "    'stepDocsTitle': 'Read the docs',\n"
+        "    'stepDocsText': 'Guides for every module, and for writing your "
+        "own.',\n"
+        "    'copied': 'Copied',\n"
+        "    'footer': 'Built with Say My Frame',\n";
+
+    // The names are those that the files of the app test look each text up
+    // by, which the tests of the module check.
+    final localized = textsOf(languages: ['uk', 'en', 'de']);
+    final (:index, :errors) = DartFileIndexer.parse(homeTextsFile, localized);
+    expect(errors, isEmpty);
+    expect(index.imports, isEmpty);
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      ['homeTexts'],
+    );
+    expect(
+      localized,
+      endsWith(
+        'const Map<String, Map<String, String>> homeTexts = {\n'
+        "  'uk': {\n"
+        "    'greetingMorning': 'Доброго ранку',\n"
+        "    'greetingAfternoon': 'Добрий день',\n"
+        "    'greetingEvening': 'Добрий вечір',\n"
+        "    'readyTitle': 'Ваш застосунок готовий',\n"
+        "    'readyText': 'Згенеровано з Say My Frame. Усе, що ви бачите, "
+        "можна змінити.',\n"
+        "    'nextTitle': 'Що далі',\n"
+        "    'stepScreenTitle': 'Зробіть цей екран своїм',\n"
+        "    'stepScreenText': 'Замініть це привітання першим екраном вашого "
+        "застосунку.',\n"
+        "    'stepFeatureTitle': 'Додайте фічу',\n"
+        "    'stepFeatureText': 'Фіча тримає свої екрани й маршрути у власній "
+        "теці.',\n"
+        "    'stepDocsTitle': 'Почитайте документацію',\n"
+        "    'stepDocsText': 'Настанови до кожного модуля і до написання "
+        "власного.',\n"
+        "    'copied': 'Скопійовано',\n"
+        "    'footer': 'Зроблено з Say My Frame',\n"
+        '  },\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        // The module has no German texts.
+        "  'de': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
+    expect(_languagesOf(localized), ['uk', 'en', 'de']);
+
+    expect(
+      textsOf(),
+      endsWith(
+        'const Map<String, Map<String, String>> homeTexts = {\n'
+        "  'en': {\n"
+        '$english'
+        '  },\n'
+        '};\n',
+      ),
+    );
   });
 
   test(

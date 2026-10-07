@@ -2986,7 +2986,7 @@ void main() {
             .whereType<ClassDeclaration>()
             .singleWhere(
               (declaration) =>
-                  declaration.namePart.typeName.lexeme == '_LanguageDialog',
+                  declaration.namePart.typeName.lexeme == '_LanguageSheet',
             )
             .accept(options);
 
@@ -3066,23 +3066,107 @@ void main() {
         expect(literals.found, isEmpty);
       });
 
-      test(
-          'marks the option of the choice of the user as selected, and with '
-          'a check', () {
-        final options = _NamedArgumentsOf('ListTile');
+      /// The named arguments of each creation of [className] in the class
+      /// [declaredAs] of the file of the setting.
+      List<Map<String, String>> createdIn(String declaredAs, String className) {
+        final created = _NamedArgumentsOf(className);
         unit.declarations
             .whereType<ClassDeclaration>()
             .singleWhere(
               (declaration) =>
-                  declaration.namePart.typeName.lexeme == '_LanguageDialog',
+                  declaration.namePart.typeName.lexeme == declaredAs,
             )
-            .accept(options);
+            .accept(created);
+        return created.found;
+      }
 
-        final option = options.found.single;
+      test(
+          'shows the choice of the user as the value of its row, with an '
+          'arrow, and below its title at a large text size, where the two '
+          'do not fit one row', () {
+        final row = createdIn('LanguageSetting', 'ListTile').single;
+
+        expect(row['title'], 'Text(context.l10n.localizationLanguage)');
+        // The choice: the option of the device, or the name of the
+        // language.
+        expect(
+          code,
+          contains(
+            'final choice = Text(\n'
+            '      chosen == null ? context.l10n.localizationSystem : '
+            '_nameOf(chosen),\n',
+          ),
+        );
+        expect(
+          row['trailing'],
+          'below ? arrow : Row(mainAxisSize: MainAxisSize.min, children: '
+          '[choice, const SizedBox(width: 4), arrow])',
+        );
+        expect(row['subtitle'], 'below ? choice : null');
+        expect(
+          code,
+          contains(
+            'final below = MediaQuery.textScalerOf(context).scale(10) > 13;',
+          ),
+        );
+        expect(code, contains('Icon(Icons.chevron_right, color: muted)'));
+      });
+
+      test(
+          'opens its options in a sheet over the main navigation of the '
+          'app, which scrolls where they do not fit', () {
+        final row = createdIn('LanguageSetting', 'ListTile').single;
+        final opened = createdIn('LanguageSetting', 'showModalBottomSheet');
+
+        expect(row['onTap'], startsWith('() => showModalBottomSheet<void>('));
+        expect(opened.single, {
+          'context': 'context',
+          // The navigator of the root of the app, above the navigator of
+          // a destination of the main navigation.
+          'useRootNavigator': 'true',
+          // With any theme, so that the title of the sheet is below its
+          // edge.
+          'showDragHandle': 'true',
+          'builder': '(context) => const _LanguageSheet()',
+        });
+        final list = createdIn('_LanguageSheet', 'ListView').single;
+        expect(list['shrinkWrap'], 'true');
+        expect(list['primary'], 'false');
+        expect(
+          list['children'],
+          allOf(
+            startsWith('[Padding('),
+            contains('for (final Locale? locale in [null, ...appLocales]) '),
+          ),
+        );
+        // No column of a fixed height, which the options of many languages
+        // or a large text size would overflow.
+        expect(createdIn('_LanguageSheet', 'Column'), isEmpty);
+        // Its title, as a header for a screen reader.
+        expect(
+          createdIn('_LanguageSheet', 'Semantics').single['header'],
+          'true',
+        );
+      });
+
+      test(
+          'marks the option of the choice of the user as selected, and with '
+          'a check', () {
+        final option = createdIn('_LanguageSheet', 'ListTile').single;
+
         expect(option['selected'], 'locale == chosen');
         expect(
           option['trailing'],
-          'locale == chosen ? const Icon(Icons.check) : null',
+          'locale == chosen ? Icon(Icons.check_rounded, color: '
+          'theme.colorScheme.secondary) : null',
+        );
+        // The text of an option keeps its colour when the option is
+        // selected: only the check tells the choice to the eye.
+        expect(
+          option['title'],
+          'Text(locale == null ? context.l10n.localizationSystem : '
+          '_nameOf(locale), style: '
+          'theme.textTheme.bodyLarge?.copyWith(fontSize: 19))',
         );
       });
 

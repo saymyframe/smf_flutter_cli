@@ -214,13 +214,14 @@ const _configure = PostGenStep(
 void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
-      'router, the app of the router with the layout, one for each state '
-      'manager, the apps of home, of settings and of the layout with the '
-      'localization, which get the router and the preferences, the apps of '
-      'home and of settings without it, the apps of the theme with the '
-      'settings screen and the localization and without each, and the app '
-      'of the localization, which all get the preferences, the app of the '
-      'DI container, the apps of the events and of the preferences with the '
+      'router and the localization, which gets the preferences and is the '
+      'app of the localization alone, the app of the router with the '
+      'layout, one for each state manager, the apps of home, of settings '
+      'and of the layout with the localization, which get the router and '
+      'the preferences, the apps of home and of settings without it, the '
+      'apps of the theme with the settings screen and the localization and '
+      'without each, which all get the preferences, the app of the DI '
+      'container, the apps of the events and of the preferences with the '
       'DI container and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the app of Firebase, the app of Crashlytics '
@@ -242,7 +243,15 @@ void main() {
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
+      equals(
+        'flutter_core with router, localization (flutter_core, go_router, '
+        'gen_l10n, shared_preferences)',
+      ),
       'flutter_core with router (flutter_core, go_router)',
+      equals(
+        'flutter_core with localization (flutter_core, gen_l10n, '
+        'shared_preferences)',
+      ),
       'flutter_core (flutter_core)',
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
       'bloc (bloc, flutter_core)',
@@ -265,7 +274,6 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
-      'gen_l10n (gen_l10n, flutter_core, shared_preferences)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
       'event_bus (event_bus, flutter_core)',

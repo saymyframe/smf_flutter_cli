@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_contracts/core.dart';
@@ -206,7 +208,7 @@ void main() {
       'Analytics: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
-      'home — Start screen with the name of the app',
+      'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(run.asked[1].shown, [
@@ -360,7 +362,7 @@ void main() {
     ]);
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
-      'home — Start screen with the name of the app',
+      'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
     ]);
     expect(
@@ -377,7 +379,9 @@ void main() {
           .readAsStringSync(),
       allOf(
         contains('class SettingsScreen extends StatelessWidget'),
-        contains("applicationName: 'My App',"),
+        // No module of this app has a setting, so the screen has its note
+        // for the developer of the app.
+        contains('class _NoSettings extends StatelessWidget'),
       ),
     );
     // The tabs are Home and Settings, in the order of the list of modules,
@@ -606,16 +610,27 @@ void main() {
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
-    // The one text of the app is the label of the start screen in a main
-    // navigation, in English and in Ukrainian, so the app is in both.
-    expect(
-      app.childFile('lib/l10n/app_en.arb').readAsStringSync(),
-      '{\n  "@@locale": "en",\n  "homeLabel": "Home"\n}\n',
-    );
-    expect(
-      app.childFile('lib/l10n/app_uk.arb').readAsStringSync(),
-      '{\n  "@@locale": "uk",\n  "homeLabel": "Головна"\n}\n',
-    );
+    // The texts of the app are those of the start screen, after the label
+    // of that screen in a main navigation, and then the two of the fallback
+    // start screen of the app entry, in English and in Ukrainian, so the
+    // app is in both.
+    for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
+      final texts = jsonDecode(
+        app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(texts.keys.take(2), ['@@locale', 'homeLabel'], reason: language);
+      expect(texts['@@locale'], language);
+      expect(texts['homeLabel'], label);
+      expect(
+        texts.keys.skip(1),
+        [
+          ...texts.keys.where((key) => key.startsWith('home')),
+          'flutterCoreFallbackHint',
+          'flutterCoreFallbackCopied',
+        ],
+        reason: language,
+      );
+    }
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
@@ -916,10 +931,10 @@ void main() {
       theme,
       messages.indexOf('Localization: which module provides it?') + 1,
     );
-    expect(run.asked[theme].shown, [
-      'material_theme — Light and dark Material 3 themes from one seed colour',
-      'None',
-    ]);
+    const materialTheme =
+        'material_theme — Light and dark Material 3 themes with a palette '
+        'and a bundled font';
+    expect(run.asked[theme].shown, [materialTheme, 'None']);
     // The theme role requires the preferences, and shared_preferences is the
     // only module that provides them, so the run does not ask for them.
     expect(messages, isNot(contains(startsWith('Preferences'))));
@@ -1013,6 +1028,8 @@ void main() {
           .childFile('lib/features/onboarding/onboarding_pages.dart')
           .readAsStringSync(),
       allOf(
+        // The symbol and the name of the app that the run names.
+        contains("symbol: 'Ma',"),
         contains("title: 'My App',"),
         contains("text: 'Welcome! We are glad you are here.',"),
       ),

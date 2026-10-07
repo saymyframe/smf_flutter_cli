@@ -35,16 +35,20 @@ const Map<String, String> _texts = {
   'themeDark': 'Dark',
 };
 
-/// Collects the code of the first argument of each `Text(...)`.
-final class _TextArguments extends RecursiveAstVisitor<void> {
-  final List<String> arguments = [];
+/// Collects the code of each text that code shows, in its order: a read of
+/// a text of the app, `context.l10n.<getter>`, or a string.
+final class _Texts extends RecursiveAstVisitor<void> {
+  final List<String> texts = [];
 
   @override
-  void visitMethodInvocation(MethodInvocation node) {
-    if (node.methodName.name == 'Text') {
-      arguments.add(node.argumentList.arguments.first.toSource());
-    }
-    super.visitMethodInvocation(node);
+  void visitPropertyAccess(PropertyAccess node) {
+    if (node.target?.toSource() == 'context.l10n') texts.add(node.toSource());
+    super.visitPropertyAccess(node);
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    texts.add(node.toSource());
   }
 }
 
@@ -100,11 +104,15 @@ void main() {
         content: result.app!.files[ThemeRole.themeModeSettingFile]!.text,
       ).unit;
 
-  /// The texts that the entry in [unit] shows, as its code reads them.
+  /// The texts that the entry in [unit] shows, as its code reads them: its
+  /// title, and then the name of each mode.
   List<String> shownBy(CompilationUnit unit) {
-    final finder = _TextArguments();
-    unit.accept(finder);
-    return finder.arguments;
+    final finder = _Texts();
+    // The declarations, without the strings of the imports.
+    for (final declaration in unit.declarations) {
+      declaration.accept(finder);
+    }
+    return finder.texts;
   }
 
   /// Whether the file [unit] imports the texts of the app.

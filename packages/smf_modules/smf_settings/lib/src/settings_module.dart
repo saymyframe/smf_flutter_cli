@@ -6,31 +6,40 @@ import 'package:smf_settings/src/agents.dart';
 /// whose screen, `SettingsScreen`, shows the settings that the modules of
 /// the app have, and so a provider of the settings screen role.
 ///
-/// The screen is a list. It has an entry for each setting that a module of
-/// the app, or the template of a role, gives the role, such as the theme or
-/// the language: the widget of the entry, in the order of the entries of
-/// the role, created as a constant through an import of its file with a
-/// prefix of its own, `entry0` for the first file. After them comes the
-/// row of the module itself, About with the name of the app, which opens
-/// the about dialog of Flutter, and from there the licenses of the packages
-/// of the app. An app whose modules have no settings has that row alone.
+/// The screen has a large title and, below it, the settings in one group,
+/// a card with a line between them. The group has an entry for each
+/// setting that a module of the app, or the template of a role, gives the
+/// role, such as the theme or the language: the widget of the entry, in
+/// the order of the entries of the role, created as a constant through an
+/// import of its file with a prefix of its own, `entry0` for the first
+/// file. The title and the group are in a list, which scrolls.
+///
+/// In an app whose modules have no setting, the screen has a note for the
+/// developer of the app in place of the group: that the app has no
+/// settings yet, and the path of the file of the screen, where a setting
+/// goes, which a tap copies. The provider knows whether the app has
+/// entries when it renders them, so an app gets the code of its own screen
+/// only. The note is in English in every app. An app with the localization
+/// role never has it, because that role gives every settings screen the
+/// setting of the language.
 ///
 /// The title of the screen is a text of the module, in English and in
 /// Ukrainian, which the module gives the localization role, a role that it
 /// uses. It is the label of the destination of the screen in the main
 /// navigation too. With the role, the screen reads the title, and the main
 /// navigation the label, from the texts of the app, in the language of the
-/// app; without it, both are the English text. The About row is a widget
-/// of Flutter, whose words follow the language of the app by themselves.
+/// app; without it, both are the English text.
 ///
 /// The route is `/` of the module, so its full path is `/settings`. The
 /// main navigation of the app, when a module provides it, shows the route
 /// as Settings with the settings icon, after the destinations of the
-/// features before it. Without a main navigation, nothing that SMF
-/// generates opens the screen: code of the app shows it on top of the
-/// current screen with `context.nav.settings.settings().push<void>()`, so
-/// that its back button leads back. `go()` would replace the stack with
-/// the screen alone, and nothing would lead back from it.
+/// features before it. There the screen has no app bar. Without a main
+/// navigation, nothing that SMF generates opens the screen: code of the
+/// app shows it on top of the current screen with
+/// `context.nav.settings.settings().push<void>()`. Shown that way, the
+/// screen has an app bar with a back button, which leads back. `go()`
+/// would replace the stack with the screen alone, and nothing would lead
+/// back from it.
 ///
 /// The route is not a start candidate, so the app starts on the screen
 /// only when it is chosen as the start, as `--start /settings` does. An
@@ -45,8 +54,8 @@ import 'package:smf_settings/src/agents.dart';
 /// state, and it adds no package to the app.
 ///
 /// In the guide for coding agents of the app, the module adds to the section
-/// of the settings screen where the screen is and how code opens it in an
-/// app without a main navigation ([agentNote]).
+/// of the settings screen where the screen is, what it shows, and how code
+/// opens it in an app without a main navigation ([agentNote]).
 final class SettingsModule extends SmfModule {
   /// Creates the module.
   const SettingsModule();
@@ -118,18 +127,24 @@ final class SettingsModule extends SmfModule {
       ];
 }
 
-/// Renders the entries of the settings screen into the brick of the module.
+/// Renders the entries of the settings screen into the brick of the module,
+/// and tells the brick whether the app has any.
 final class _SettingsProvider extends RoleProvider<SettingsData> {
   const _SettingsProvider();
 
   @override
   Role<SettingsData> get role => settingsScreenRole;
 
-  /// The widgets of the entries as the items of a constant list, one on a
-  /// line, in the order of the role, with the imports of their files, each
-  /// with a prefix of its own: `entry0` for the first file, `entry1` for
-  /// the next. Without entries, the variable has no code, and its line of
-  /// the template goes away.
+  /// Two variables of the brick of the screen:
+  /// - `entries`, the widgets of the entries as the items of a constant
+  ///   list, one on a line, in the order of the role, with the imports of
+  ///   their files, each with a prefix of its own: `entry0` for the first
+  ///   file, `entry1` for the next. Without entries, the variable has no
+  ///   code, and its line of the template goes away.
+  /// - `with_entries`, whether the app has an entry. The template has the
+  ///   group of the entries in an app with one, and the note of a screen
+  ///   without settings in an app with none, so no app gets the code of
+  ///   the other screen.
   @override
   RoleOutput render(RoleHookInput<SettingsData> input) {
     // The import of each file of an entry, with its prefix, by the path of
@@ -147,10 +162,11 @@ final class _SettingsProvider extends RoleProvider<SettingsData> {
             () => import.withPrefix('entry${files.length}'),
           )
           .prefix;
-      items.add('        ${widget.codeWith(prefix)}(),');
+      items.add('                ${widget.codeWith(prefix)}(),');
     }
     return RoleOutput(
       vars: {
+        'with_entries': items.isNotEmpty,
         'entries': Fragment(items.join('\n'), imports: [...files.values]),
       },
     );

@@ -103,4 +103,30 @@ void main() {
     );
     expect(greeting, contains('Say My Frame'));
   });
+
+  test(
+      'the frame of the banner has only ASCII, in lines of one length, so '
+      'that every terminal draws its right edge straight', () {
+    final frame = [
+      for (final line in communityBanner.split('\n'))
+        if (line.contains('|') || line.contains('+--')) line,
+    ];
+    // The colour of the frame starts on its first line and ends on its
+    // last one.
+    final plain = [
+      for (final line in frame) line.replaceAll(RegExp(r'\x1B\[[0-9;]*m'), ''),
+    ];
+
+    expect(plain, hasLength(greaterThan(2)));
+    expect(plain.map((line) => line.length).toSet(), hasLength(1));
+    // A terminal draws an emoji one or two cells wide, so a line with one
+    // ends where no padding can foresee.
+    for (final line in plain) {
+      expect(line.runes.every((rune) => rune < 0x80), isTrue, reason: line);
+    }
+    expect(plain.first, plain.last);
+    for (final line in plain.sublist(1, plain.length - 1)) {
+      expect(line, allOf(startsWith('| '), endsWith(' |')));
+    }
+  });
 }

@@ -4,6 +4,10 @@
 
 ![smf create in a terminal: it asks for the app name and the modules, adds go_router for the start screen and generates a Flutter app with bottom tabs, BLoC and get_it](https://doc.saymyframe.com/demo/smf_create.gif)
 
+With the modules `onboarding`, `home`, `settings`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and has a start screen, a settings screen with a theme mode and a language, and a light and a dark theme:
+
+![The app that smf create generates, on a phone: the onboarding, the start screen, the settings screen, and the start screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/app_look.png)
+
 SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
 
 The documentation is at [doc.saymyframe.com](https://doc.saymyframe.com).
@@ -52,13 +56,13 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 
 | Module | What it adds to the app |
 | --- | --- |
-| [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up and the root widget. Every app has it. |
+| [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up, the root widget, and the screen that an app shows while it has no screen to start on. Every app has it. |
 | [`go_router`](https://doc.saymyframe.com/modules/go-router) | Routes and a typed navigation facade, with go_router. |
 | [`bottom_tabs`](https://doc.saymyframe.com/modules/bottom-tabs) | The main navigation as tabs in a bar at the bottom. |
-| [`home`](https://doc.saymyframe.com/modules/home) | A start screen with the name of the app. |
-| [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with a row for each setting of the modules of the app and an About row. |
+| [`home`](https://doc.saymyframe.com/modules/home) | A start screen that welcomes the developer of the app, with the name of the app and the next steps. |
+| [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with the settings of the modules of the app in one group, a row for each. |
 | [`onboarding`](https://doc.saymyframe.com/modules/onboarding) | An onboarding that a new user goes through on the first launch, before every other screen. |
-| [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme from one seed colour, and the theme mode that the user selects, which the app remembers. |
+| [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme with a palette and a bundled font, and the theme mode that the user selects, which the app remembers. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |
 | [`gen_l10n`](https://doc.saymyframe.com/modules/gen-l10n) | Localization with gen-l10n of Flutter: the texts of the modules in ARB files, one for each language of the app. |

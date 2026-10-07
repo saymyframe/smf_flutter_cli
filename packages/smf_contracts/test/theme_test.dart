@@ -1034,37 +1034,84 @@ void main() {
       );
     });
 
+    /// The modes that the entry offers, as its control lists them: the
+    /// code of each mode, of its icon and of its name.
+    List<(String, String, String)> modesOf(MethodInvocation control) {
+      final segments = (control.argumentList.arguments
+              .whereType<NamedArgument>()
+              .singleWhere((argument) => argument.name.lexeme == 'segments')
+              .argumentExpression as ListLiteral)
+          .elements
+          .single as ForElement;
+      final modes =
+          (segments.forLoopParts as ForEachParts).iterable as ListLiteral;
+      return [
+        for (final mode in modes.elements.cast<RecordLiteral>())
+          switch ([for (final field in mode.fields) field.toSource()]) {
+            [final mode, final icon, final name] => (mode, icon, name),
+            final fields => fail('A mode has the fields $fields.'),
+          },
+      ];
+    }
+
     test(
-        'offers the three modes in a group whose choice is the mode that it '
-        'reads from the scope, and chooses the one that the user picks on '
-        'the mode of the app', () async {
+        'offers the three modes as the segments of one control, whose '
+        'selection is the mode that it reads from the scope, and chooses '
+        'the one that the user picks on the mode of the app', () async {
       final (_, calls) = await entry(localized: false);
 
-      final group = calls['RadioGroup']!.single;
-      expect(group.typeArguments!.toSource(), '<ThemeMode>');
+      final control = calls['SegmentedButton']!.single;
+      expect(control.typeArguments!.toSource(), '<ThemeMode>');
       expect(
-        _argumentsOf(group)['groupValue'],
-        'AppThemeModeScope.of(context)',
+        _argumentsOf(control)['selected'],
+        '{AppThemeModeScope.of(context)}',
       );
-      expect(calls['of'], hasLength(1));
+      // The theme, for its colours and text styles, and the mode.
       expect(
-        calls['choose']!.single.toSource(),
-        'appThemeMode.choose(mode)',
+        [for (final call in calls['of']!) call.target!.toSource()],
+        ['Theme', 'AppThemeModeScope'],
       );
       expect(
-        [
-          for (final option in calls['RadioListTile']!)
-            (
-              option.typeArguments!.toSource(),
-              _argumentsOf(option)['value'],
-            ),
-        ],
-        [
-          ('<ThemeMode>', 'ThemeMode.system'),
-          ('<ThemeMode>', 'ThemeMode.light'),
-          ('<ThemeMode>', 'ThemeMode.dark'),
-        ],
+        _argumentsOf(control)['onSelectionChanged'],
+        '(modes) => appThemeMode.choose(modes.single)',
       );
+      expect(calls['choose'], hasLength(1));
+      expect(
+        [for (final (mode, _, _) in modesOf(control)) mode],
+        ['ThemeMode.system', 'ThemeMode.light', 'ThemeMode.dark'],
+      );
+      // A segment for each of them, with the mode as its value.
+      expect(_argumentsOf(calls['ButtonSegment']!.single)['value'], 'mode');
+    });
+
+    test(
+        'shows each mode with its icon above its name, which has the width '
+        'of its segment, so that a long name fits, also at a large text '
+        'size', () async {
+      final (_, calls) = await entry(localized: false);
+
+      final control = calls['SegmentedButton']!.single;
+      // An icon for each mode, and no check mark in its place when the
+      // mode is selected.
+      final icons = [for (final (_, icon, _) in modesOf(control)) icon];
+      expect(icons, everyElement(startsWith('Icons.')));
+      expect(icons.toSet(), hasLength(3));
+      expect(_argumentsOf(control)['showSelectedIcon'], 'false');
+      // One below the other. The name stays on one line, and one that is
+      // wider than its segment is scaled down to it.
+      expect(
+        _argumentsOf(calls['ButtonSegment']!.single)['label'],
+        'Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, '
+        'size: 20), const SizedBox(height: 4), FittedBox(fit: '
+        'BoxFit.scaleDown, child: Text(name, maxLines: 1, softWrap: '
+        'false))])',
+      );
+      // The segments share the width of the entry, so their names grow
+      // only by half at a large text size of the device.
+      final clamped = calls['withClampedTextScaling']!.single;
+      expect(clamped.target!.toSource(), 'MediaQuery');
+      expect(_argumentsOf(clamped)['maxScaleFactor'], '1.5');
+      expect(control.parent!.parent, same(clamped.argumentList));
     });
 
     for (final localized in [true, false]) {
@@ -1077,26 +1124,29 @@ void main() {
         String code(_Text text) =>
             localized ? 'context.l10n.${text.getter}' : "'${text.en}'";
 
+        final control = calls['SegmentedButton']!.single;
         final shown = calls['Text']!;
-        for (final text in shown) {
+        for (final node in [...shown, control]) {
           expect(
-            _inConstant(text),
+            _inConstant(node),
             isFalse,
             reason: 'The code that reads a text of the app is no constant: '
-                '${text.toSource()}',
+                '${node.toSource()}',
           );
         }
-        // The title, and then the name of each mode.
+        // The title, in the text style of the theme, and then the name of
+        // a mode.
         expect(
           [for (final text in shown) text.toSource()],
-          [for (final text in _texts) 'Text(${code(text)})'],
-        );
-        expect(
           [
-            for (final option in calls['RadioListTile']!)
-              _argumentsOf(option)['title'],
+            'Text(${code(_texts.first)}, style: theme.textTheme.bodyLarge)',
+            'Text(name, maxLines: 1, softWrap: false)',
           ],
-          [for (final text in _texts.skip(1)) 'Text(${code(text)})'],
+        );
+        // The name of each mode, in the order of the modes.
+        expect(
+          [for (final (_, _, name) in modesOf(control)) name],
+          [for (final text in _texts.skip(1)) code(text)],
         );
         expect(
           [

@@ -10,6 +10,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 
 After a change, run:
 
@@ -29,8 +30,9 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 ## Onboarding
 
 - On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
-- The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, and the screen keeps Skip, Next and Done below the pages.
-- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and Done call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
+- The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
+- The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
 
 ## Preferences
@@ -270,6 +272,7 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 </plist>
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 import 'core/router/app_router.dart';
 
@@ -282,7 +285,18 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'My App',
     routerConfig: appRouter.config,
-    builder: (context, child) => child!,
+    builder: (context, child) => Builder(
+      builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarBrightness: Theme.of(context).brightness,
+          statusBarIconBrightness:
+              Theme.of(context).brightness == Brightness.dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: child!,
+      ),
+    ),
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
@@ -296,15 +310,248 @@ Future<void> bootstrap() async {
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// The screen the app starts on when no route of the app can start it.
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
 class FallbackStartScreen extends StatelessWidget {
   /// Creates the screen.
   const FallbackStartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('My App')));
+  Widget build(BuildContext context) => const FallbackStartView(
+    hint:
+        'No start screen yet. Add a feature with a route, or replace this screen.',
+    copied: 'Copied',
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:flutter/foundation.dart';
@@ -1078,35 +1325,88 @@ import 'package:flutter/material.dart';
 ///
 /// To change what the onboarding shows, change this list. A page is any
 /// widget, such as an [OnboardingPage]. The screen of the onboarding shows
-/// them one at a time, and adds Skip, Next and Done below them.
+/// them one at a time, with Skip above them and, below them, a mark for
+/// each page and the button that leads on.
 List<Widget> onboardingPages(BuildContext context) => [
   OnboardingPage(
-    icon: Icons.waving_hand_outlined,
+    symbol: 'Ma',
     title: 'My App',
     text: 'Welcome! We are glad you are here.',
   ),
   OnboardingPage(
-    icon: Icons.check_circle_outline,
+    icon: Icons.check_rounded,
     title: 'You are all set',
     text: 'Enjoy the app.',
   ),
 ];
 
-/// A page of the onboarding: an icon, a title and a text below them, in the
-/// middle of the page. It scrolls when the page is too small for them, as
-/// with a large text size on a small phone. A screen reader announces the
-/// title as a header.
-class OnboardingPage extends StatelessWidget {
-  /// Creates the page.
-  const OnboardingPage({
-    required this.icon,
-    required this.title,
-    required this.text,
+/// What a page of the onboarding knows of the pages around it: its place
+/// among them, and the controller that tells how far the user has turned
+/// them. The screen of the onboarding puts one around each page, so that
+/// the parts of a page can move at their own pace while the pages turn.
+class OnboardingPageScope extends InheritedWidget {
+  /// Creates the scope of the page at [index].
+  const OnboardingPageScope({
+    required this.index,
+    required this.controller,
+    required super.child,
     super.key,
   });
 
-  /// The icon at the top of the page.
-  final IconData icon;
+  /// The place of the page among the pages, from zero.
+  final int index;
+
+  /// The controller of the pages.
+  final PageController controller;
+
+  /// The scope of the page around [context], or `null` for a page that is
+  /// shown outside the screen of the onboarding.
+  static OnboardingPageScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OnboardingPageScope>();
+
+  /// How far the user has turned the pages of [controller], in pages: zero
+  /// on the first page, one on the second, and a fraction in between while
+  /// they turn. Before the pages are first laid out, it is the page that
+  /// they start on.
+  ///
+  /// The controller knows its page from the first layout on, also right
+  /// after its pages got a new scroll position, as when the language of the
+  /// device changes: a page that is built then stays where it is.
+  static double turnedOf(PageController controller) =>
+      (controller.hasClients ? controller.page : null) ??
+      controller.initialPage.toDouble();
+
+  /// How far the pages are turned away from this page: zero while it is the
+  /// one on the screen, up to one once the user has turned on to the next
+  /// page, and down to minus one before the user has reached it.
+  double get turned => (turnedOf(controller) - index).clamp(-1, 1);
+
+  @override
+  bool updateShouldNotify(OnboardingPageScope oldWidget) =>
+      oldWidget.index != index || oldWidget.controller != controller;
+}
+
+/// A page of the onboarding: a cell of the periodic table with [symbol] or
+/// [icon], among smaller cells, and a title and a text below them. The
+/// cells and the texts move at their own pace while the pages turn. The
+/// page scrolls when it is too small for them, as with a large text size on
+/// a small phone. A screen reader announces the title as a header, and
+/// passes over the cells, which are a picture.
+class OnboardingPage extends StatelessWidget {
+  /// Creates the page.
+  const OnboardingPage({
+    required this.title,
+    required this.text,
+    this.symbol,
+    this.icon,
+    super.key,
+  }) : assert(symbol != null || icon != null, 'A page shows one of them.');
+
+  /// The letters in the cell of the page, as an element has a symbol.
+  final String? symbol;
+
+  /// The icon in the cell of the page, when it has no [symbol].
+  final IconData? icon;
 
   /// The title of the page.
   final String title;
@@ -1116,27 +1416,318 @@ class OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scope = OnboardingPageScope.maybeOf(context);
+    if (scope == null) return _build(context, turned: 0, index: 0);
+    return AnimatedBuilder(
+      animation: scope.controller,
+      builder: (context, _) =>
+          _build(context, turned: scope.turned, index: scope.index),
+    );
+  }
+
+  /// The page at [index] while the pages are [turned] away from it.
+  Widget _build(
+    BuildContext context, {
+    required double turned,
+    required int index,
+  }) {
     final theme = Theme.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(icon, size: 96, color: theme.colorScheme.primary),
-            const SizedBox(height: 24),
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: theme.textTheme.headlineMedium,
-                textAlign: TextAlign.center,
+    // The texts leave faster than the page, and fade as they go.
+    final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 280),
+                    child: ExcludeSemantics(
+                      child: _Cells(
+                        mirrored: index.isOdd,
+                        turned: turned,
+                        number: index + 1,
+                        symbol: symbol,
+                        icon: icon,
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+                  child: Opacity(
+                    opacity: shown,
+                    child: Transform.translate(
+                      offset: Offset(-turned * 56, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              title,
+                              style: theme.textTheme.displaySmall,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            text,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontSize: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The picture of a page: the cell of the page in the middle, over a grid
+/// that fades at its edges, with smaller cells around it. They come in
+/// once, when the page is first shown, and each moves at its own pace while
+/// the pages turn.
+class _Cells extends StatelessWidget {
+  const _Cells({
+    required this.turned,
+    required this.number,
+    required this.mirrored,
+    this.symbol,
+    this.icon,
+  });
+
+  /// How far the pages are turned away from the page of the picture.
+  final double turned;
+
+  /// The number in the corner of the cell of the page.
+  final int number;
+
+  /// Whether the smaller cells are on the other side, as on every other
+  /// page, so that two pages in a row do not look the same.
+  final bool mirrored;
+
+  final String? symbol;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // The smaller cells: where each is, its size, its colour, whether it is
+    // only an outline, and how far it moves while the page turns.
+    final around = [
+      (
+        at: const Alignment(-0.74, -0.50),
+        size: 60.0,
+        color: colors.secondaryContainer,
+        outlined: false,
+        travel: 120.0,
+      ),
+      (
+        at: const Alignment(0.80, -0.70),
+        size: 44.0,
+        color: colors.outline,
+        outlined: true,
+        travel: 190.0,
+      ),
+      (
+        at: const Alignment(0.72, 0.56),
+        size: 68.0,
+        color: colors.primaryContainer,
+        outlined: false,
+        travel: 90.0,
+      ),
+      (
+        at: const Alignment(-0.60, 0.70),
+        size: 40.0,
+        color: colors.tertiaryContainer,
+        outlined: false,
+        travel: 160.0,
+      ),
+      (
+        at: const Alignment(-0.08, -0.90),
+        size: 30.0,
+        color: colors.outline,
+        outlined: true,
+        travel: 230.0,
+      ),
+      (
+        at: const Alignment(0.22, 0.92),
+        size: 26.0,
+        color: colors.secondary,
+        outlined: false,
+        travel: 250.0,
+      ),
+    ];
+    // The smaller cells fade as the page leaves.
+    final leaving = (1 - turned.abs()).clamp(0.0, 1.0);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      // An app that asks for less motion shows the picture at once.
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 1000),
+      builder: (context, entered, _) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: Curves.easeOut.transform(entered),
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) => const RadialGradient(
+                  radius: 0.52,
+                  colors: [Colors.white, Colors.transparent],
+                  stops: [0.25, 1],
+                ).createShader(bounds),
+                child: CustomPaint(
+                  painter: _GridPainter(
+                    color: colors.outlineVariant,
+                    shift: -turned * 36,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              style: theme.textTheme.bodyLarge,
-              textAlign: TextAlign.center,
+          ),
+          for (final (order, cell) in around.indexed)
+            Align(
+              alignment: mirrored ? Alignment(-cell.at.x, cell.at.y) : cell.at,
+              child: _entering(
+                entered,
+                order: order + 1,
+                opacity: leaving,
+                offset: Offset(-turned * cell.travel, 0),
+                child: Container(
+                  width: cell.size,
+                  height: cell.size,
+                  decoration: BoxDecoration(
+                    color: cell.outlined ? null : cell.color,
+                    border: cell.outlined
+                        ? Border.all(color: cell.color)
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          _entering(
+            entered,
+            order: 0,
+            opacity: 1,
+            offset: Offset(-turned * 28, 0),
+            scale: 1 - turned.abs() * 0.14,
+            angle: turned * 0.07,
+            child: _Cell(number: number, symbol: symbol, icon: icon),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [child] as it comes in while [entered] grows, later for a higher
+  /// [order]: it fades in and settles from below and from a smaller size.
+  Widget _entering(
+    double entered, {
+    required int order,
+    required double opacity,
+    required Offset offset,
+    required Widget child,
+    double scale = 1,
+    double angle = 0,
+  }) {
+    final start = order * 0.09;
+    final settled = Interval(
+      start,
+      (start + 0.5).clamp(0, 1),
+      curve: Easing.emphasizedDecelerate,
+    ).transform(entered);
+    return Opacity(
+      opacity: settled * opacity,
+      child: Transform.translate(
+        offset: offset + Offset(0, (1 - settled) * 28),
+        child: Transform.rotate(
+          angle: angle,
+          child: Transform.scale(
+            scale: scale * (0.82 + 0.18 * settled),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of a page: its [symbol], or its [icon] on the primary colour,
+/// with [number] in its corner, as an element has one.
+class _Cell extends StatelessWidget {
+  const _Cell({required this.number, this.symbol, this.icon});
+
+  final int number;
+  final String? symbol;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final filled = symbol == null;
+    final ink = filled ? colors.onPrimary : colors.onSurface;
+    // The letters and the number are part of the picture, in a cell of a
+    // fixed size: they do not grow with the text size of the device.
+    return MediaQuery.withNoTextScaling(
+      child: Container(
+        width: 164,
+        height: 164,
+        decoration: BoxDecoration(
+          color: filled ? colors.primary : colors.surfaceContainerLowest,
+          border: Border.all(color: filled ? colors.primary : ink, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 40,
+              offset: const Offset(0, 20),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: 10,
+              right: 14,
+              child: Text(
+                '$number',
+                // The monospaced font of the device: Android has it under
+                // the first name, and iOS under the next.
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                  fontFamilyFallback: const ['Menlo', 'Courier'],
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: ink,
+                ),
+              ),
+            ),
+            Center(
+              child: symbol == null
+                  ? Icon(icon, size: 84, color: ink)
+                  : Text(
+                      symbol!,
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        fontSize: 80,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -3,
+                        color: ink,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -1144,24 +1735,58 @@ class OnboardingPage extends StatelessWidget {
     );
   }
 }
+
+/// A grid of square cells in [color], moved sideways by [shift].
+class _GridPainter extends CustomPainter {
+  const _GridPainter({required this.color, required this.shift});
+
+  final Color color;
+  final double shift;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 52.0;
+    final line = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    // The grid is centred, so that the cell of the page sits on its lines.
+    final left = (size.width / 2 + shift) % cell;
+    for (var x = left; x < size.width; x += cell) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+    }
+    final top = (size.height / 2) % cell;
+    for (var y = top; y < size.height; y += cell) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.shift != shift;
+}
 === lib/features/onboarding/onboarding_screen.dart (onboarding) ===
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'onboarding_pages.dart';
 import 'onboarding_status.dart';
 
 /// The onboarding of the app, which the app shows on its first launch in
 /// place of every other screen: the pages of [onboardingPages], with Skip
-/// and Next below them, and Done on the last page.
+/// above them, and below them a mark for each page and a button that leads
+/// to the next page and, on the last one, into the app.
 ///
-/// Skip and Done finish the onboarding. The screen does not navigate, and
-/// nothing navigates to it: the router shows it while the onboarding is not
-/// finished, and then the screen that the app starts on. The next launches
-/// of the app start there.
+/// Skip and the last button finish the onboarding. The screen does not
+/// navigate, and nothing navigates to it: the router shows it while the
+/// onboarding is not finished, and then the screen that the app starts on.
+/// The next launches of the app start there.
 ///
 /// When something shows the screen although the onboarding is finished,
 /// such as a link to its route, the onboarding starts again, as
-/// [OnboardingStatus.restart] has it: Skip and Done then leave the screen.
+/// [OnboardingStatus.restart] has it: Skip and the last button then leave
+/// the screen.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
   const OnboardingScreen({super.key});
@@ -1181,9 +1806,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     // The router shows the screen while the onboarding is not finished.
     // Shown although it is finished, the screen starts the onboarding
-    // again, so that the router leaves the screen once Skip or Done
-    // finishes it. The router acts on that at once, which it must not do
-    // while a frame is built.
+    // again, so that the router leaves the screen once Skip or the last
+    // button finishes it. The router acts on that at once, which it must
+    // not do while a frame is built.
     if (onboardingStatus.completed.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) onboardingStatus.restart();
@@ -1197,74 +1822,175 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  /// Shows the page after the one that the user sees.
-  void _next() => _controller.nextPage(
-    duration: const Duration(milliseconds: 300),
-    curve: Curves.easeInOut,
-  );
+  /// Shows the page after the one that the user sees: at once in an app
+  /// that asks for less motion.
+  void _next() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.jumpToPage(_page + 1);
+    } else {
+      _controller.nextPage(
+        duration: Durations.long2,
+        curve: Easing.emphasizedDecelerate,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = onboardingPages(context);
     final isLast = _page == pages.length - 1;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // How long Skip and the label of the button take to change with the
+    // page: no time in an app that asks for less motion.
+    final fade = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.short4;
+    // The colour that the background has reached on the last page.
+    final end = Color.alphaBlend(
+      colors.secondaryContainer.withValues(alpha: 0.6),
+      colors.surface,
+    );
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _controller,
-                onPageChanged: (page) => setState(() => _page = page),
-                children: pages,
-              ),
-            ),
-            // A dot for each page, with the one of the page that the user
-            // sees in the primary colour.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var index = 0; index < pages.length; index++)
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: index == _page
-                          ? colors.primary
-                          : colors.outlineVariant,
+      body: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => ColoredBox(
+          color: Color.lerp(
+            colors.surface,
+            end,
+            pages.length < 2
+                ? 0
+                : (OnboardingPageScope.turnedOf(_controller) /
+                          (pages.length - 1))
+                      .clamp(0, 1),
+          )!,
+          child: child,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    // Skip fades away on the last page, where a tap no
+                    // longer reaches it, and is gone once it has faded.
+                    child: IgnorePointer(
+                      ignoring: isLast,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: isLast
+                            ? const SizedBox.shrink()
+                            : TextButton(
+                                onPressed: onboardingStatus.complete,
+                                child: Text('Skip'),
+                              ),
+                      ),
                     ),
                   ),
-              ],
-            ),
-            // The buttons go one below the other when they do not fit
-            // side by side, as with a large text size.
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: OverflowBar(
-                alignment: MainAxisAlignment.end,
-                spacing: 8,
-                overflowAlignment: OverflowBarAlignment.end,
-                overflowSpacing: 8,
-                children: [
-                  if (!isLast)
-                    TextButton(
-                      onPressed: onboardingStatus.complete,
-                      child: Text('Skip'),
-                    ),
-                  FilledButton(
-                    onPressed: isLast ? onboardingStatus.complete : _next,
-                    child: Text(isLast ? 'Done' : 'Next'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: PageView(
+                  controller: _controller,
+                  onPageChanged: (page) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _page = page);
+                  },
+                  children: [
+                    for (final (index, page) in pages.indexed)
+                      OnboardingPageScope(
+                        index: index,
+                        controller: _controller,
+                        child: page,
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _PageMarks(
+                        controller: _controller,
+                        count: pages.length,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: isLast ? onboardingStatus.complete : _next,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: Text(
+                          isLast ? 'Get started' : 'Next',
+                          key: ValueKey(isLast),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// A mark for each of [count] pages, with the one of the page that the user
+/// sees stretched and in the primary colour. The marks follow the pages
+/// while they turn.
+class _PageMarks extends StatelessWidget {
+  const _PageMarks({required this.controller, required this.count});
+
+  final PageController controller;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          final turned = OnboardingPageScope.turnedOf(controller);
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var index = 0; index < count; index++)
+                _mark(
+                  colors,
+                  // How much the mark is that of the page on the screen.
+                  (1 - (turned - index).abs()).clamp(0, 1),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// A mark that is [current] of the way from that of another page to that
+  /// of the page on the screen.
+  Widget _mark(ColorScheme colors, double current) => Container(
+    margin: const EdgeInsets.only(right: 6),
+    height: 8,
+    width: lerpDouble(8, 28, current),
+    decoration: BoxDecoration(
+      color: Color.lerp(
+        colors.onSurface.withValues(alpha: 0.16),
+        colors.primary,
+        current,
+      ),
+      borderRadius: BorderRadius.circular(4),
+    ),
+  );
 }
 === lib/features/onboarding/onboarding_status.dart (onboarding) ===
 import 'package:flutter/foundation.dart';
@@ -1396,15 +2122,101 @@ flutter:
   uses-material-design: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/core/app/fallback_start_screen.dart';
 
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
 void main() {
-  testWidgets('the fallback start screen shows the name of the app', (
+  testWidgets('names the app, and tells where its first screen goes', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
 
-    expect(find.text('My App'), findsOneWidget);
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
   });
 }

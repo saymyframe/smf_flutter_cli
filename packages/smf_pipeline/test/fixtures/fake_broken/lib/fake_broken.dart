@@ -24,6 +24,9 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// A module with one known bug, which a change of the code that it renders
 /// brings in: the rest of it is the module [of], under another id. The
 /// module [of] has no sockets of its own, which would be those of its id.
+/// The texts that [of] gives the localization role are texts of this
+/// module, so the variables of its bricks that read them
+/// ([LocalizationRole.varsOf]) read them under the id of this module.
 ///
 /// The broken modules of this package change fixture modules. The package
 /// depends on no module of the CLI, so that the app tests of the fixture
@@ -410,19 +413,34 @@ final class BrokenModule extends SmfModule {
   }
 
   /// The contributions of [of], with its brick that has [_file] under the
-  /// id of this module and with the [_changes] of the file. Throws a
-  /// [StateError] when no brick of [of] has the file, or the file does not
-  /// have the text of a change once, as when the code of the fixture
-  /// changed: the app would not have the bug.
+  /// id of this module and with the [_changes] of the file, and with the
+  /// variables of its bricks that read its texts reading them as texts of
+  /// this module. Throws a [StateError] when no brick of [of] has the file,
+  /// or the file does not have the text of a change once, as when the code
+  /// of the fixture changed: the app would not have the bug.
   @override
   List<Contribution> contribute(ModuleContext context) {
+    final contributed = of.contribute(context);
+    // The getter of a text starts with the id of the module that gives it.
+    final texts = localizationRole.varsOf(
+      id,
+      TextsData([
+        for (final contribution in contributed)
+          if (contribution case RoleData(value: TextsData(:final texts)))
+            ...texts,
+      ]),
+    );
     final contributions = [
-      for (final contribution in of.contribute(context))
-        if (contribution case BrickContribution(:final bundle)
-            when bundle.files.any((file) => file.path == _file))
+      for (final contribution in contributed)
+        if (contribution case BrickContribution(:final bundle, :final vars))
           BrickContribution(
-            _changed(bundle),
-            vars: contribution.vars,
+            bundle.files.any((file) => file.path == _file)
+                ? _changed(bundle)
+                : bundle,
+            vars: {
+              for (final MapEntry(key: name, :value) in vars.entries)
+                name: value is RoleVar ? texts[name] ?? value : value,
+            },
             when: contribution.when,
           )
         else

@@ -8,6 +8,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -26,6 +27,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -100,10 +102,11 @@ Future<MatrixAppTests> smfAppTests() async {
       ),
       // The onboarding of the module: on its first launch, the app shows
       // it in place of the screen that it starts on (see
-      // _startScreenFileOf), and Done or Skip saves that it is finished and
-      // shows that screen; an app that finds it finished goes straight
-      // there. The onboarding has its texts in each language of the app,
-      // as the device asks for it (see _onboardingTextsFileOf). The router
+      // _startScreenFileOf), and the button of its last page or Skip saves
+      // that it is finished and shows that screen; an app that finds it
+      // finished goes straight there. The onboarding has its texts in each
+      // language of the app, as the device asks for it (see
+      // _onboardingTextsFileOf). The router
       // leaves the onboarding, whichever module provides it, as the router
       // role says of the guards of the routes: a test of the router role
       // too. The mocks finish the onboarding before the app starts, in
@@ -135,17 +138,24 @@ Future<MatrixAppTests> smfAppTests() async {
           'probeOnboarding',
         ),
       ),
-      // The last row of the settings screen of the module, which tells
-      // what the app is: it opens the about dialog of Flutter with the name
-      // of the app, and the dialog the licenses of its packages. The title
-      // of the screen and that row are in the language of the app. The test
-      // goes through the languages of the app that the module has its
-      // title in: the matrix writes the languages that the localization
-      // role gives the app, and English alone for an app without the role.
+      // The settings screen of the module. Its title is in the language of
+      // the app: the test goes through the languages of the app that the
+      // module has its title in, which the matrix writes from the
+      // localization role of the app, English alone for an app without the
+      // role. Below the title it shows the entries of the app in one
+      // group, or, in an app without settings, a note for its developer
+      // with the path of the file of the screen, which a tap copies. And
+      // it has a back button only on top of another screen, where the
+      // button leads back. For these, the matrix writes how many entries
+      // the screen has and whether it is a destination of the main
+      // navigation, where code cannot push it (see _settingsOfAppOf).
       MatrixAppTest(
         '$settings/settings',
         appliesTo: _has(SettingsModule.id),
-        generatedFiles: _settingsLanguagesOf,
+        generatedFiles: (app, packageName) => {
+          ..._settingsLanguagesOf(app, packageName),
+          ..._settingsOfAppOf(app),
+        },
       ),
       // The preferences of the module reach shared_preferences, and read
       // what it has when they are opened, lists in the form that each
@@ -167,6 +177,20 @@ Future<MatrixAppTests> smfAppTests() async {
           'integration_test/shared_preferences/probe.dart',
           'probeSharedPreferences',
         ),
+      ),
+      // The start screen of the module, a welcome to the developer of the
+      // app, wherever the app starts: it names the app, greets by the time
+      // of the day and lists the next steps with their paths, with its
+      // texts in each language of the app (see _homeTextsFileOf); a tap on
+      // a step copies its path and says so; its parts come in once, at
+      // once in an app that asks for less motion; and it fits a small
+      // phone with a large text size. The tests go to the route of the
+      // module through the navigation of the router role, so they hold in
+      // an app that starts on another screen too.
+      MatrixAppTest(
+        '$home/home',
+        appliesTo: _has(HomeModule.id),
+        generatedFiles: (app, packageName) => _homeTextsFileOf(app),
       ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
@@ -221,7 +245,7 @@ Future<MatrixAppTests> smfAppTests() async {
       await localizationRoleAppTest(),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
-      // modules provide them: its dialog chooses a language of the app,
+      // modules provide them: its sheet chooses a language of the app,
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
@@ -432,19 +456,21 @@ $list
 /// the localization role gives the settings screen, which the CLI keeps in
 /// its `app_tests/language_setting`, for the apps with the localization
 /// role and the settings screen role, whichever modules provide them. On
-/// the settings screen, the setting shows its title and the choice of the
-/// user, the languages of the device while the user chose none. A tap opens
-/// a dialog with an option for the languages of the device and one for each
+/// the settings screen, the setting shows its title and, as the value of
+/// its row, the choice of the user, the languages of the device while the
+/// user chose none. A tap opens a sheet over the main navigation of the
+/// app, with an option for the languages of the device and one for each
 /// language of the app, by its name in that language, or its code, with
 /// the chosen one selected and checked. A tap on an option closes the
-/// dialog: the app and the texts of the setting are in the language of the
+/// sheet: the app and the texts of the setting are in the language of the
 /// option, which is saved under [LocalizationRole.localeKey], and the
-/// option of the device removes what was saved. A second file of the test
-/// starts the app on a device that prefers the last language of the app:
-/// the app and the setting follow the device, the setting names a choice
-/// of that same language that code makes, the next start restores the
-/// language that was saved, and the dialog has no option but those of the
-/// app and of the device.
+/// option of the device removes what was saved. On a small phone with a
+/// large text size, the choice is below the title of the setting, and the
+/// sheet scrolls. A second file of the test starts the app on a device
+/// that prefers the last language of the app: the app and the setting
+/// follow the device, the setting names a choice of that same language
+/// that code makes, the next start restores the language that was saved,
+/// and the sheet has no option but those of the app and of the device.
 ///
 /// The test knows only the two roles. The matrix writes the widget of the
 /// entry for it into [languageSettingFile], from the entries of the
@@ -989,6 +1015,96 @@ const List<String> appLanguages = [${languages.join(', ')}];
 /// future completes once it did.
 Future<void> chooseLanguage(String language) =>
     appLocale.choose(Locale(language));
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the home
+/// module: `homeTexts`, the texts of the screen of the module
+/// ([HomeModule.texts]), each by its name, in each language of the app, by
+/// the code of the language. The languages are those of the localization
+/// role of the app ([LocalizationRole.localesIn]), in its order, and English
+/// alone in an app without the role, whose screen has the English texts.
+const homeTextsFile = 'test/home/texts.dart';
+
+/// The file at [homeTextsFile] of [app], an app of the matrix.
+///
+/// A text of the module without a translation into a language of the app
+/// is the English one there, as the localization role says of the texts of
+/// an app.
+Map<String, String> _homeTextsFileOf(MatrixApp app) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in HomeModule.texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $name: $shown,');
+    }
+    texts.writeln('  },');
+  }
+  return {
+    homeTextsFile: '''
+// The texts of the start screen of the home module in each language of the
+// app, which the matrix of SMF writes from the texts of the module and the
+// languages of the localization role of the app for the tests of the
+// module, in test/home.
+
+/// The texts of the screen by the code of each language of the app, the
+/// first of which the app uses when the device asks for none of them: each
+/// text by its name in the module. An app without the localization role
+/// has the English texts alone.
+const Map<String, Map<String, String>> homeTexts = {
+$texts};
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the group
+/// and of the back button of the settings screen that the settings module
+/// keeps in its `app_tests/settings`: `settingsEntryCount`, how many
+/// entries the screen has, and `settingsInMainNavigation`, whether the
+/// screen is a destination of the main navigation of the app.
+const settingsOfAppFile = 'test/settings_of_app.dart';
+
+/// The file at [settingsOfAppFile] of [app], an app of the matrix with the
+/// settings screen role.
+///
+/// The entries are those of the role ([SettingsScreenRole.entriesIn]). An
+/// app without any has the note of the module for its developer on the
+/// screen. The screen is a destination when the app has the layout role and
+/// the route of the settings screen ([SettingsScreenRole.screenIn]) is one
+/// of the destinations of that role ([LayoutRole.destinationsIn]). The
+/// router role refuses to push a location of the main navigation over it,
+/// so the test of the back button pushes the screen only where it is no
+/// destination.
+Map<String, String> _settingsOfAppOf(MatrixApp app) {
+  final hook = app.hook!;
+  final input = settingsScreenRole.hookInput(hook);
+  final screen = settingsScreenRole.screenIn(input);
+  final destination = hook.presentRoles.contains(layoutRole) &&
+      layoutRole
+          .destinationsIn(layoutRole.hookInput(hook))
+          .any((route) => route.fullName == screen?.fullName);
+  return {
+    settingsOfAppFile: '''
+// What the settings screen has in the app and where it is, which the matrix
+// of SMF writes from the settings screen role and the layout role of the
+// app for the tests of the settings module, settings_group_test.dart and
+// settings_back_test.dart.
+
+/// How many entries the settings screen has: the settings of the modules
+/// of the app. Without any, the screen has a note for the developer of the
+/// app.
+const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = $destination;
 ''',
   };
 }

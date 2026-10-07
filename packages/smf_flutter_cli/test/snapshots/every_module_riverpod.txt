@@ -10,6 +10,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 
 After a change, run:
 
@@ -77,7 +78,8 @@ With `event_bus`:
 
 ## Home
 
-- `HomeScreen` in `lib/features/home/home_screen.dart`, the route `home.home` at `/home`, is a neutral screen for the app to start on. Replace its content, and keep the route while the app starts there.
+- `HomeScreen` in `lib/features/home/home_screen.dart`, the route `home.home` at `/home`, is a welcome to the developer of the app: it names the app and lists what to do next. Replace its content with the first screen of the app, and keep the route while the app starts there.
+- The screen shows the image `lib/features/home/assets/smf_mark.png`, which `pubspec.yaml` declares among the assets of the app. Flutter takes the files of the same name in `2.0x/` and `3.0x/` next to it for a screen with more pixels. Once no screen shows the image, remove the files and their line in `pubspec.yaml`.
 
 ## Layout
 
@@ -87,7 +89,9 @@ With `event_bus`:
 - To add a destination, add its `Destination` to `appDestinations` with a function for its label, and give the router a branch for it at the same index.
 - `go()` to a location in the main navigation selects its destination. From a page shown over the main navigation, `push()` and `replace()` of such a location throw a `StateError`: use `go()`.
 
-- `AppShell` hides its `NavigationBar` while the app has fewer than two destinations. Keep to five destinations, the most that a navigation bar should have.
+- `AppShell` draws the bar itself, as `_TabBar` with a `_Tab` for each destination, and hides it while the app has fewer than two destinations. Keep to five destinations, the most that fit the bar on a phone.
+- The bar is not the navigation bar of Material, but it takes its colours where that bar does, from `NavigationBarTheme.of(context)`: `iconTheme` gives the colour of the icon and the label of the selected tab and of the others, and `backgroundColor` that of the bar. For a colour that the theme does not set, the bar reads the `colorScheme`: `primary` for the selected tab, `onSurfaceVariant` for the others and `surface` for the bar.
+- A `_Tab` is one node for a screen reader, with the label of its destination. What you add to a tab, such as a badge, is not read unless the `Semantics` of the tab says it.
 
 ## Localization
 
@@ -107,8 +111,9 @@ With `gen-l10n` of Flutter:
 ## Onboarding
 
 - On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
-- The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, and the screen keeps Skip, Next and Done below the pages.
-- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and Done call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
+- The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
+- The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
 
 ## Preferences
@@ -152,7 +157,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Its list has the entries and then About, the last row, which is the screen's own. The file imports the files of the entries as `entry0`, `entry1` and so on.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -170,8 +175,9 @@ With `flutter_riverpod`:
 - The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 
-- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` whose colours `ColorScheme.fromSeed` derives from `seedColor`. Change `seedColor` for other colours.
-- Give that `ThemeData` what both themes share, such as the typography or the theme of a component. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` with the colours of `_schemeOf`, the text styles of `_textThemeOf` and the themes of the components, such as `cardTheme`. Give that `ThemeData` what both themes share. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- `_schemeOf` has the colours of each theme. It sets most of them itself, and `ColorScheme.fromSeed` derives the others from `seedColor`. For another look, change the colours there. Keep the colour of what stands on a colour readable on it, such as `onPrimary` on `primary`.
+- The font of the themes is the family `_fontFamily`, which `pubspec.yaml` declares with the files in `assets/fonts/geist/`, in the weights 400, 500 and 600. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily`. `assets/fonts/geist/OFL.txt` is the licence of the font, which the app bundles as an asset: keep it while the app has the font.
 - Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
@@ -350,6 +356,106 @@ plugins {
 }
 
 include(":app")
+=== assets/fonts/geist/Geist-Medium.ttf (material_theme) ===
+<66576 bytes>
+=== assets/fonts/geist/Geist-Regular.ttf (material_theme) ===
+<66560 bytes>
+=== assets/fonts/geist/Geist-SemiBold.ttf (material_theme) ===
+<66596 bytes>
+=== assets/fonts/geist/OFL.txt (material_theme) ===
+Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://openfontlicense.org
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded, 
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -438,6 +544,7 @@ nullable-getter: false
 use-escaping: false
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
 import 'package:my_app/core/theme/app_theme.dart';
@@ -466,7 +573,18 @@ class App extends StatelessWidget {
     ],
     supportedLocales: [...appLocales],
     routerConfig: appRouter.config,
-    builder: (context, child) => child!,
+    builder: (context, child) => Builder(
+      builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarBrightness: Theme.of(context).brightness,
+          statusBarIconBrightness:
+              Theme.of(context).brightness == Brightness.dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: child!,
+      ),
+    ),
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
@@ -708,15 +826,248 @@ void logFirebaseScreenView(String? route, String location) {
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 
-/// The screen the app starts on when no route of the app can start it.
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
 class FallbackStartScreen extends StatelessWidget {
   /// Creates the screen.
   const FallbackStartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('My App')));
+  Widget build(BuildContext context) => FallbackStartView(
+    hint: context.l10n.flutterCoreFallbackHint,
+    copied: context.l10n.flutterCoreFallbackCopied,
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
@@ -1217,8 +1568,9 @@ import 'app_locale.dart';
 const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
 
 /// The setting of the language of the app, an entry of the settings screen:
-/// it shows the language that the user chose, and lets the user choose one
-/// of the languages of the app, or follow the languages of the device.
+/// it shows the language that the user chose, and opens a sheet in which
+/// the user chooses one of the languages of the app, or follows the
+/// languages of the device.
 ///
 /// The entry does not wait until a choice is saved. If the preferences fail
 /// to save it, the app is in the chosen language while it runs, its next
@@ -1231,16 +1583,33 @@ class LanguageSetting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
+    final choice = Text(
+      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+    );
+    final arrow = Icon(Icons.chevron_right, color: muted);
+    // At a large text size, the choice goes below the title, where it has
+    // the width of the row.
+    final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
       title: Text(context.l10n.localizationLanguage),
-      subtitle: Text(
-        chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      ),
-      onTap: () => showDialog<void>(
+      subtitle: below ? choice : null,
+      trailing: below
+          ? arrow
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [choice, const SizedBox(width: 4), arrow],
+            ),
+      onTap: () => showModalBottomSheet<void>(
         context: context,
-        builder: (context) => const _LanguageDialog(),
+        // Over the main navigation of the app too.
+        useRootNavigator: true,
+        showDragHandle: true,
+        builder: (context) => const _LanguageSheet(),
       ),
     );
   }
@@ -1250,41 +1619,79 @@ class LanguageSetting extends StatelessWidget {
 String _nameOf(Locale locale) =>
     _names[locale.languageCode] ?? locale.languageCode;
 
-/// The choice between the languages of the app and those of the device.
-class _LanguageDialog extends StatelessWidget {
-  const _LanguageDialog();
+/// The sheet of the setting: the choice between the languages of the app
+/// and those of the device. It scrolls where its options do not fit.
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet();
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final chosen = AppLocaleScope.of(context);
-    return SimpleDialog(
-      title: Text(context.l10n.localizationLanguage),
-      children: [
-        for (final Locale? locale in [null, ...appLocales])
-          ListTile(
-            title: Text(
-              locale == null
-                  ? context.l10n.localizationSystem
-                  : _nameOf(locale),
+    return SafeArea(
+      child: ListView(
+        // A drag of options that fit closes the sheet, as a drag of its
+        // handle does.
+        primary: false,
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Semantics(
+              header: true,
+              child: Text(
+                context.l10n.localizationLanguage,
+                style: theme.textTheme.headlineSmall,
+              ),
             ),
-            selected: locale == chosen,
-            trailing: locale == chosen ? const Icon(Icons.check) : null,
-            onTap: () async {
-              Navigator.of(context).pop();
-              await appLocale.choose(locale);
-            },
           ),
-      ],
+          for (final Locale? locale in [null, ...appLocales])
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 4,
+              ),
+              title: Text(
+                locale == null
+                    ? context.l10n.localizationSystem
+                    : _nameOf(locale),
+                // Larger than the text of a row of the screen.
+                style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+              ),
+              selected: locale == chosen,
+              trailing: locale == chosen
+                  ? Icon(
+                      Icons.check_rounded,
+                      color: theme.colorScheme.secondary,
+                    )
+                  : null,
+              onTap: () async {
+                Navigator.of(context).pop();
+                await appLocale.choose(locale);
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }
 === lib/core/layout/app_shell.dart (bottom_tabs) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'destination.dart';
 
-/// The main navigation of the app: a bar at the bottom with a tab for each
-/// destination, below the screen of the selected one.
+/// The least height of the bar above the inset of the device. The bar grows
+/// when a label needs more.
+const double _barHeight = 64;
+
+/// The most that the text size of the device scales the label of a tab. A
+/// long press on a tab shows its label in a tooltip, at the full text size.
+const double _maxLabelScale = 1.3;
+
+/// The main navigation of the app: the screen of the selected destination,
+/// and below it a bar with a tab for each destination.
 ///
 /// With one destination there is nothing to switch to, so the bar is
 /// hidden and the screen fills the app.
@@ -1314,20 +1721,203 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: body,
+    body: _BranchTransition(index: currentIndex, child: body),
     bottomNavigationBar: destinations.length < 2
         ? null
-        : NavigationBar(
-            selectedIndex: currentIndex,
-            onDestinationSelected: onSelect,
-            destinations: [
-              for (final destination in destinations)
-                NavigationDestination(
-                  icon: Icon(destination.icon),
-                  label: destination.label(context),
-                ),
-            ],
+        : _TabBar(
+            destinations: destinations,
+            currentIndex: currentIndex,
+            onTap: _tapped,
           ),
+  );
+
+  /// Selects the destination of the tab at [index], which the user tapped.
+  /// The device gives a light tick when that tab is not the selected one.
+  void _tapped(int index) {
+    if (index != currentIndex) HapticFeedback.selectionClick();
+    onSelect(index);
+  }
+}
+
+/// The bar at the bottom: a tab for each destination, below a hairline.
+class _TabBar extends StatelessWidget {
+  const _TabBar({
+    required this.destinations,
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  final List<Destination> destinations;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // A Material of its own, so that the ink of a tab shows on the bar and
+    // stays inside it.
+    return Material(
+      color: NavigationBarTheme.of(context).backgroundColor ?? colors.surface,
+      shape: Border(top: BorderSide(color: colors.outlineVariant)),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            for (final (index, destination) in destinations.indexed)
+              Expanded(
+                child: _Tab(
+                  destination: destination,
+                  selected: index == currentIndex,
+                  onTap: () => onTap(index),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The tab of [destination]: its icon over its label. When it becomes the
+/// selected one, both take the colour of the selected destination, and
+/// neither changes its size.
+class _Tab extends StatelessWidget {
+  const _Tab({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Destination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // Read here each time the tab builds, so the label follows the language
+    // of the app.
+    final label = destination.label(context);
+    // The colours that the theme of the app gives the icons of a navigation
+    // bar, or else its primary colour for the selected tab.
+    final ofTheme = NavigationBarTheme.of(context).iconTheme;
+    final color = selected
+        ? ofTheme?.resolve(const {WidgetState.selected})?.color ??
+              colors.primary
+        : ofTheme?.resolve(const {})?.color ?? colors.onSurfaceVariant;
+    // For a user who asks the device for less motion, the tab changes at
+    // once.
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.medium2;
+    // One node for a screen reader: a button with the label of the
+    // destination, selected or not.
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: label,
+      child: Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        preferBelow: false,
+        verticalOffset: 40,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 44,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: _barHeight),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ExcludeSemantics(
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: color),
+                  duration: duration,
+                  builder: (context, color, _) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(destination.icon, size: 24, color: color),
+                      const SizedBox(height: 4),
+                      MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: _maxLabelScale,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows [child], the screen of the destination at [index], and lets it
+/// fade in while it rises a little, once, when the destination changes.
+class _BranchTransition extends StatefulWidget {
+  const _BranchTransition({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_BranchTransition> createState() => _BranchTransitionState();
+}
+
+class _BranchTransitionState extends State<_BranchTransition>
+    with SingleTickerProviderStateMixin {
+  /// At its end while no destination changes, where the screen is shown as
+  /// it is.
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Durations.medium2,
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(_BranchTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index == widget.index) return;
+    // For a user who asks the device for less motion, the screen is shown
+    // at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+    } else {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) {
+      final shown = Easing.emphasizedDecelerate.transform(_controller.value);
+      return Opacity(
+        opacity: shown,
+        child: Transform.translate(
+          offset: Offset(0, (1 - shown) * 10),
+          child: child,
+        ),
+      );
+    },
+    child: widget.child,
   );
 }
 === lib/core/layout/destination.dart (role:layout) ===
@@ -2239,11 +2829,30 @@ final class OnboardingRoutes {
       NavLink(_context, const OnboardingOnboardingLocation());
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
-/// The colour that the light and the dark theme of the app derive their
-/// colours from. Change it to give the app another look.
-const Color seedColor = Colors.deepPurple;
+/// The accent of the app, and the colour that `ColorScheme.fromSeed` derives
+/// the colours from that [_schemeOf] does not set itself, such as those of
+/// an error. The colours of the app are in [_schemeOf]: change them there
+/// to give the app another look.
+const Color seedColor = Color(0xFF15803D);
+
+/// The deep green that the themes pair with [seedColor]: the primary colour
+/// of the light theme, and the colour of what stands on the primary colour
+/// of the dark one.
+const Color _deepGreen = Color(0xFF0F3326);
+
+/// The cream that goes with [_deepGreen]: the primary colour of the dark
+/// theme, and the colour of what stands on the primary colour of the light
+/// one.
+const Color _cream = Color(0xFFF1F1E8);
+
+/// The font of the app: the family that `pubspec.yaml` declares with the
+/// files in `assets/fonts/geist/`, in the weights 400, 500 and 600. A text
+/// of another weight gets the nearest of them. For another font, add its
+/// files, declare its family in `pubspec.yaml` and name it here.
+const String _fontFamily = 'Geist';
 
 /// The light theme of the app.
 ///
@@ -2256,15 +2865,241 @@ ThemeData createLightTheme(BuildContext context) => _themeOf(Brightness.light);
 /// The dark theme of the app; see [createLightTheme].
 ThemeData createDarkTheme(BuildContext context) => _themeOf(Brightness.dark);
 
-/// The Material 3 theme of [brightness] in the colours of [seedColor]. What
-/// both themes of the app share goes here, such as the shape of its
-/// buttons.
-ThemeData _themeOf(Brightness brightness) => ThemeData(
-  colorScheme: ColorScheme.fromSeed(
+/// The colours of [brightness]: those that `ColorScheme.fromSeed` derives
+/// from [seedColor], with neutral surfaces, hairlines for borders, and the
+/// deep green and the cream as the primary pair.
+ColorScheme _schemeOf(Brightness brightness) {
+  final seeded = ColorScheme.fromSeed(
     seedColor: seedColor,
     brightness: brightness,
-  ),
-);
+    dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+  );
+  return switch (brightness) {
+    Brightness.light => seeded.copyWith(
+      primary: _deepGreen,
+      onPrimary: _cream,
+      primaryContainer: const Color(0xFFDDEDE3),
+      onPrimaryContainer: _deepGreen,
+      secondary: seedColor,
+      onSecondary: Colors.white,
+      secondaryContainer: const Color(0xFFDCFCE7),
+      onSecondaryContainer: const Color(0xFF14532D),
+      tertiary: const Color(0xFFB45309),
+      onTertiary: Colors.white,
+      tertiaryContainer: const Color(0xFFFEF3C7),
+      onTertiaryContainer: const Color(0xFF78350F),
+      surface: const Color(0xFFFAFAF9),
+      onSurface: const Color(0xFF0C0A09),
+      onSurfaceVariant: const Color(0xFF57534E),
+      surfaceContainerLowest: Colors.white,
+      surfaceContainerLow: Colors.white,
+      surfaceContainer: const Color(0xFFF5F5F4),
+      surfaceContainerHigh: const Color(0xFFEEEDEB),
+      surfaceContainerHighest: const Color(0xFFE7E5E4),
+      outline: const Color(0xFFA8A29E),
+      outlineVariant: const Color(0xFFE7E5E4),
+      inverseSurface: const Color(0xFF1C1917),
+      onInverseSurface: const Color(0xFFFAFAF9),
+      surfaceTint: Colors.transparent,
+    ),
+    Brightness.dark => seeded.copyWith(
+      primary: _cream,
+      onPrimary: _deepGreen,
+      primaryContainer: const Color(0xFF143D2F),
+      onPrimaryContainer: const Color(0xFFD9EFE2),
+      secondary: const Color(0xFF4ADE80),
+      onSecondary: const Color(0xFF052E16),
+      secondaryContainer: const Color(0xFF133422),
+      onSecondaryContainer: const Color(0xFFBBF7D0),
+      tertiary: const Color(0xFFFBBF24),
+      onTertiary: const Color(0xFF451A03),
+      tertiaryContainer: const Color(0xFF3A2A0A),
+      onTertiaryContainer: const Color(0xFFFDE68A),
+      surface: const Color(0xFF0A0A0A),
+      onSurface: const Color(0xFFEDEDED),
+      onSurfaceVariant: const Color(0xFFA3A3A3),
+      surfaceContainerLowest: const Color(0xFF060606),
+      surfaceContainerLow: const Color(0xFF111111),
+      surfaceContainer: const Color(0xFF161616),
+      surfaceContainerHigh: const Color(0xFF1C1C1C),
+      surfaceContainerHighest: const Color(0xFF262626),
+      outline: const Color(0xFF525252),
+      outlineVariant: const Color(0xFF262626),
+      inverseSurface: const Color(0xFFEDEDED),
+      onInverseSurface: const Color(0xFF0A0A0A),
+      surfaceTint: Colors.transparent,
+    ),
+  };
+}
+
+/// The text styles of the app in its font, in the colours of [scheme]:
+/// tight, heavy headlines and calm body text.
+TextTheme _textThemeOf(ColorScheme scheme) {
+  final base = ThemeData(
+    colorScheme: scheme,
+    fontFamily: _fontFamily,
+  ).textTheme;
+  TextStyle? style(
+    TextStyle? from,
+    FontWeight weight, {
+    double? spacing,
+    double? height,
+  }) => from?.copyWith(
+    fontWeight: weight,
+    letterSpacing: spacing,
+    height: height,
+  );
+  return base.copyWith(
+    displayLarge: style(base.displayLarge, FontWeight.w600, spacing: -2.2),
+    displayMedium: style(base.displayMedium, FontWeight.w600, spacing: -1.8),
+    displaySmall: style(base.displaySmall, FontWeight.w600, spacing: -1.4),
+    headlineLarge: style(base.headlineLarge, FontWeight.w600, spacing: -1.1),
+    headlineMedium: style(base.headlineMedium, FontWeight.w600, spacing: -0.9),
+    headlineSmall: style(base.headlineSmall, FontWeight.w600, spacing: -0.6),
+    titleLarge: style(base.titleLarge, FontWeight.w600, spacing: -0.5),
+    titleMedium: style(base.titleMedium, FontWeight.w600, spacing: -0.2),
+    titleSmall: style(base.titleSmall, FontWeight.w600, spacing: -0.1),
+    bodyLarge: style(
+      base.bodyLarge,
+      FontWeight.w400,
+      spacing: -0.1,
+      height: 1.5,
+    ),
+    bodyMedium: style(
+      base.bodyMedium,
+      FontWeight.w400,
+      spacing: 0,
+      height: 1.45,
+    ),
+    bodySmall: style(base.bodySmall, FontWeight.w400, spacing: 0, height: 1.4),
+    labelLarge: style(base.labelLarge, FontWeight.w600, spacing: -0.1),
+    labelMedium: style(base.labelMedium, FontWeight.w500, spacing: 0),
+    labelSmall: style(base.labelSmall, FontWeight.w500, spacing: 0.1),
+  );
+}
+
+/// The theme of [brightness]. What both themes of the app share goes here:
+/// its colours, its font and text styles, and the look of its components.
+ThemeData _themeOf(Brightness brightness) {
+  final scheme = _schemeOf(brightness);
+  final text = _textThemeOf(scheme);
+  final hairline = BorderSide(color: scheme.outlineVariant);
+  return ThemeData(
+    colorScheme: scheme,
+    fontFamily: _fontFamily,
+    textTheme: text,
+    scaffoldBackgroundColor: scheme.surface,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    appBarTheme: AppBarThemeData(
+      backgroundColor: scheme.surface,
+      foregroundColor: scheme.onSurface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
+    ),
+    // The accent marks the selected destination of the main navigation.
+    navigationBarTheme: NavigationBarThemeData(
+      height: 68,
+      elevation: 0,
+      backgroundColor: scheme.surface,
+      indicatorColor: scheme.secondaryContainer,
+      labelTextStyle: WidgetStateProperty.fromMap({
+        WidgetState.selected: text.labelMedium?.copyWith(
+          color: scheme.secondary,
+        ),
+        WidgetState.any: text.labelMedium?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      }),
+      iconTheme: WidgetStateProperty.fromMap({
+        WidgetState.selected: IconThemeData(size: 24, color: scheme.secondary),
+        WidgetState.any: IconThemeData(
+          size: 24,
+          color: scheme.onSurfaceVariant,
+        ),
+      }),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: scheme.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: hairline,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(64, 60),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        textStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        textStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: SegmentedButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        selectedForegroundColor: scheme.onSecondaryContainer,
+        selectedBackgroundColor: scheme.secondaryContainer,
+        side: hairline,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: text.labelLarge,
+        minimumSize: const Size(0, 44),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: scheme.onSurfaceVariant,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      titleTextStyle: text.bodyLarge?.copyWith(color: scheme.onSurface),
+    ),
+    dividerTheme: DividerThemeData(
+      color: scheme.outlineVariant,
+      thickness: 1,
+      space: 1,
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: text.bodyMedium?.copyWith(
+        color: scheme.onInverseSurface,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+}
 === lib/core/theme/theme_mode.dart (role:theme) ===
 import 'package:flutter/material.dart';
 
@@ -2369,46 +3204,679 @@ class ThemeModeSetting extends StatelessWidget {
   const ThemeModeSetting({super.key});
 
   @override
-  Widget build(BuildContext context) => RadioGroup<ThemeMode>(
-    groupValue: AppThemeModeScope.of(context),
-    onChanged: (mode) {
-      if (mode != null) appThemeMode.choose(mode);
-    },
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.brightness_6_outlined),
-          title: Text(context.l10n.themeTitle),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.system,
-          title: Text(context.l10n.themeSystem),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.light,
-          title: Text(context.l10n.themeLight),
-        ),
-        RadioListTile<ThemeMode>(
-          value: ThemeMode.dark,
-          title: Text(context.l10n.themeDark),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.brightness_6_outlined,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  context.l10n.themeTitle,
+                  style: theme.textTheme.bodyLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // The names of the modes share the width of the entry, so at a
+          // large text size they grow only by half.
+          MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.5,
+            child: SegmentedButton<ThemeMode>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                ),
+              ),
+              segments: [
+                for (final (mode, icon, name) in [
+                  (
+                    ThemeMode.system,
+                    Icons.brightness_auto_outlined,
+                    context.l10n.themeSystem,
+                  ),
+                  (
+                    ThemeMode.light,
+                    Icons.light_mode_outlined,
+                    context.l10n.themeLight,
+                  ),
+                  (
+                    ThemeMode.dark,
+                    Icons.dark_mode_outlined,
+                    context.l10n.themeDark,
+                  ),
+                ])
+                  ButtonSegment(
+                    value: mode,
+                    // The icon above the name, so that a long name of a
+                    // mode has the width of its segment.
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 20),
+                        const SizedBox(height: 4),
+                        // On one line, and scaled down where it is wider
+                        // than its segment.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(name, maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              selected: {AppThemeModeScope.of(context)},
+              onSelectionChanged: (modes) => appThemeMode.choose(modes.single),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+=== lib/features/home/assets/2.0x/smf_mark.png (home) ===
+<7096 bytes>
+=== lib/features/home/assets/3.0x/smf_mark.png (home) ===
+<11061 bytes>
+=== lib/features/home/assets/smf_mark.png (home) ===
+<4087 bytes>
 === lib/features/home/home_screen.dart (home) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/l10n/l10n.dart';
 
-/// A neutral screen with the name of the app, which the app can start on.
-class HomeScreen extends StatelessWidget {
-  /// Creates the screen.
-  const HomeScreen({super.key});
+/// The name of the app, as the screen shows it.
+const _appName = 'My App';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The mark of Say My Frame, an image that `pubspec.yaml` declares among
+/// the assets of the app. Flutter takes the file of the same name in `2.0x/`
+/// or in `3.0x/` next to it on a screen with more pixels.
+const _mark = 'lib/features/home/assets/smf_mark.png';
+
+/// The colours of Say My Frame, which the card of the screen keeps in the
+/// light and in the dark theme: it is the mark of what generated the app.
+const _brandGreen = Color(0xFF0F3326);
+const _brandCream = Color(0xFFF1F1E8);
+const _brandAccent = Color(0xFF4ADE80);
+
+/// The font of a path and of the number of a cell: the monospaced font of
+/// the device, whose name differs between the platforms.
+const _monospace = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The side of the cell of the app in the card, and the space between the
+/// cell and the edges of the card.
+const _cellSide = 88.0;
+const _cardPadding = 24.0;
+
+/// The screen that the app starts on: a welcome to the developer of the app,
+/// with what to do next. Replace its content with the first screen of the
+/// app.
+class HomeScreen extends StatefulWidget {
+  /// Creates the screen, which greets by the time that [now] tells.
+  const HomeScreen({super.key, this.now = DateTime.now});
+
+  /// Tells the time, for the greeting of the screen. A test gives a time of
+  /// its own.
+  final DateTime Function() now;
 
   @override
-  Widget build(BuildContext context) =>
-      Scaffold(appBar: AppBar(title: const Text('My App')));
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  /// Lets the parts of the screen rise in one after another, once.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  var _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // An app that asks for less motion shows the screen at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  /// Copies [code] and says so.
+  Future<void> _copy(String code) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final copied = context.l10n.homeCopied;
+    await Clipboard.setData(ClipboardData(text: code));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          // As in the box of its step, the path is not much larger than
+          // usual, so that a large text size leaves the snack bar room on
+          // a small phone.
+          content: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.5,
+            child: Text('$copied: $code'),
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hour = widget.now().hour;
+    final greeting = hour < 12
+        ? context.l10n.homeGreetingMorning
+        : hour < 18
+        ? context.l10n.homeGreetingAfternoon
+        : context.l10n.homeGreetingEvening;
+    final steps = [
+      (
+        Icons.edit_outlined,
+        context.l10n.homeStepScreenTitle,
+        context.l10n.homeStepScreenText,
+        'lib/features/home/home_screen.dart',
+      ),
+      (
+        Icons.add_box_outlined,
+        context.l10n.homeStepFeatureTitle,
+        context.l10n.homeStepFeatureText,
+        'lib/features/',
+      ),
+      (
+        Icons.menu_book_outlined,
+        context.l10n.homeStepDocsTitle,
+        context.l10n.homeStepDocsText,
+        'doc.saymyframe.com',
+      ),
+    ];
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          // The list ends above what covers the bottom of the screen,
+          // such as the bar of the home gesture.
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
+            _Rise(
+              animation: _entrance,
+              order: 0,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            _appName,
+                            style: theme.textTheme.headlineLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      _mark,
+                      width: 48,
+                      height: 48,
+                      semanticLabel: 'Say My Frame',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _Rise(
+              animation: _entrance,
+              order: 1,
+              child: _ReadyCard(
+                animation: _entrance,
+                title: context.l10n.homeReadyTitle,
+                text: context.l10n.homeReadyText,
+              ),
+            ),
+            const SizedBox(height: 32),
+            _Rise(
+              animation: _entrance,
+              order: 2,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  context.l10n.homeNextTitle,
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final (index, (icon, title, text, code)) in steps.indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _Rise(
+                  animation: _entrance,
+                  order: 3 + index,
+                  child: _StepCard(
+                    icon: icon,
+                    title: title,
+                    text: text,
+                    code: code,
+                    onTap: () => _copy(code),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            _Rise(
+              animation: _entrance,
+              order: 6,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      _mark,
+                      width: 20,
+                      height: 20,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // With a large text size, the text takes more lines.
+                  Flexible(
+                    child: Text(
+                      context.l10n.homeFooter,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets [child] fade in and rise while [animation] runs, later for a higher
+/// [order].
+class _Rise extends StatelessWidget {
+  const _Rise({
+    required this.animation,
+    required this.order,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final int order;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = order * 0.08;
+    final curve = Interval(
+      start,
+      (start + 0.45).clamp(0, 1),
+      curve: Easing.emphasizedDecelerate,
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final shown = curve.transform(animation.value);
+        return Opacity(
+          opacity: shown,
+          child: Transform.translate(
+            offset: Offset(0, (1 - shown) * 18),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// The card in the colours of Say My Frame that tells that the app is
+/// ready, with the app as an element of a table whose cells light up.
+class _ReadyCard extends StatelessWidget {
+  const _ReadyCard({
+    required this.animation,
+    required this.title,
+    required this.text,
+  });
+
+  final Animation<double> animation;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _brandGreen,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _CellsPainter(animation)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(_cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _ElementTile(symbol: _appSymbol, number: _appNumber),
+                  const SizedBox(height: 60),
+                  Text(
+                    title,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: _brandCream,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    text,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: _brandCream.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A cell of the table of elements with [symbol] and [number], as the mark
+/// of Say My Frame has one.
+///
+/// It is a picture of the app, whose name the screen tells above the card.
+/// So its letters keep their size when the text of the device is larger,
+/// and a screen reader passes it by.
+class _ElementTile extends StatelessWidget {
+  const _ElementTile({required this.symbol, required this.number});
+
+  final String symbol;
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ExcludeSemantics(
+      child: MediaQuery.withNoTextScaling(
+        child: Container(
+          width: _cellSide,
+          height: _cellSide,
+          decoration: BoxDecoration(
+            color: _brandGreen,
+            border: Border.all(color: _brandCream, width: 1.5),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 6,
+                right: 8,
+                child: Text(
+                  '$number',
+                  style: _monospace.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+              Center(
+                child: Text(
+                  symbol,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -1.5,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cells of a table of elements on the right of the card: outlines,
+/// some of which light up one after another while [animation] runs.
+class _CellsPainter extends CustomPainter {
+  _CellsPainter(this.animation) : super(repaint: animation);
+
+  final Animation<double> animation;
+
+  /// The cells that light up, by column from the right and row from the
+  /// top, each with its colour and the order in which it lights up.
+  static const _lit = <(int, int, Color, int)>[
+    (0, 0, _brandAccent, 0),
+    (1, 1, Color(0x33F1F1E8), 1),
+    (0, 2, Color(0x664ADE80), 2),
+    (2, 0, Color(0x1FF1F1E8), 3),
+    (3, 1, Color(0x14F1F1E8), 4),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 44.0;
+    const gap = 8.0;
+    const inset = 20.0;
+    final outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var column = 0; column < 4; column++) {
+      for (var row = 0; row < 3; row++) {
+        final rect = Rect.fromLTWH(
+          size.width - inset - cell - column * (cell + gap),
+          inset + row * (cell + gap),
+          cell,
+          cell,
+        );
+        // A narrow card has no room for every column: it leaves out those
+        // that would reach the cell of the app on its left.
+        if (rect.left < _cardPadding + _cellSide + gap) continue;
+        // The outlines fade towards the text on the left.
+        outline.color = _brandCream.withValues(alpha: 0.14 - column * 0.035);
+        canvas.drawRect(rect, outline);
+        for (final (litColumn, litRow, color, order) in _lit) {
+          if (litColumn != column || litRow != row) continue;
+          final start = 0.25 + order * 0.1;
+          final shown = Interval(
+            start,
+            (start + 0.3).clamp(0, 1),
+            curve: Curves.easeOut,
+          ).transform(animation.value);
+          canvas.drawRect(
+            rect,
+            Paint()..color = color.withValues(alpha: color.a * shown),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CellsPainter oldDelegate) =>
+      oldDelegate.animation != animation;
+}
+
+/// A step for the developer of the app: what to do, and the path or the
+/// address that it is about, which a tap copies.
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.code,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+  final String code;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Card(
+      // In the theme of any app, the card is as wide as what is above it,
+      // and the response to a tap keeps to its corners.
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      // A screen reader announces the card as one button.
+      child: Semantics(
+        button: true,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.secondaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 20,
+                        color: colors.onSecondaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          Text(
+                            text,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        // A long path takes more lines, which break at its
+                        // slashes while the text is not much larger than
+                        // usual.
+                        child: MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.5,
+                          child: Text(
+                            code,
+                            style: _monospace.copyWith(
+                              fontSize: 12.5,
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.copy_rounded,
+                        size: 15,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:flutter/material.dart';
@@ -2419,35 +3887,88 @@ import 'package:my_app/core/l10n/l10n.dart';
 ///
 /// To change what the onboarding shows, change this list. A page is any
 /// widget, such as an [OnboardingPage]. The screen of the onboarding shows
-/// them one at a time, and adds Skip, Next and Done below them.
+/// them one at a time, with Skip above them and, below them, a mark for
+/// each page and the button that leads on.
 List<Widget> onboardingPages(BuildContext context) => [
   OnboardingPage(
-    icon: Icons.waving_hand_outlined,
+    symbol: 'Ma',
     title: 'My App',
     text: context.l10n.onboardingWelcome,
   ),
   OnboardingPage(
-    icon: Icons.check_circle_outline,
+    icon: Icons.check_rounded,
     title: context.l10n.onboardingReadyTitle,
     text: context.l10n.onboardingReady,
   ),
 ];
 
-/// A page of the onboarding: an icon, a title and a text below them, in the
-/// middle of the page. It scrolls when the page is too small for them, as
-/// with a large text size on a small phone. A screen reader announces the
-/// title as a header.
-class OnboardingPage extends StatelessWidget {
-  /// Creates the page.
-  const OnboardingPage({
-    required this.icon,
-    required this.title,
-    required this.text,
+/// What a page of the onboarding knows of the pages around it: its place
+/// among them, and the controller that tells how far the user has turned
+/// them. The screen of the onboarding puts one around each page, so that
+/// the parts of a page can move at their own pace while the pages turn.
+class OnboardingPageScope extends InheritedWidget {
+  /// Creates the scope of the page at [index].
+  const OnboardingPageScope({
+    required this.index,
+    required this.controller,
+    required super.child,
     super.key,
   });
 
-  /// The icon at the top of the page.
-  final IconData icon;
+  /// The place of the page among the pages, from zero.
+  final int index;
+
+  /// The controller of the pages.
+  final PageController controller;
+
+  /// The scope of the page around [context], or `null` for a page that is
+  /// shown outside the screen of the onboarding.
+  static OnboardingPageScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OnboardingPageScope>();
+
+  /// How far the user has turned the pages of [controller], in pages: zero
+  /// on the first page, one on the second, and a fraction in between while
+  /// they turn. Before the pages are first laid out, it is the page that
+  /// they start on.
+  ///
+  /// The controller knows its page from the first layout on, also right
+  /// after its pages got a new scroll position, as when the language of the
+  /// device changes: a page that is built then stays where it is.
+  static double turnedOf(PageController controller) =>
+      (controller.hasClients ? controller.page : null) ??
+      controller.initialPage.toDouble();
+
+  /// How far the pages are turned away from this page: zero while it is the
+  /// one on the screen, up to one once the user has turned on to the next
+  /// page, and down to minus one before the user has reached it.
+  double get turned => (turnedOf(controller) - index).clamp(-1, 1);
+
+  @override
+  bool updateShouldNotify(OnboardingPageScope oldWidget) =>
+      oldWidget.index != index || oldWidget.controller != controller;
+}
+
+/// A page of the onboarding: a cell of the periodic table with [symbol] or
+/// [icon], among smaller cells, and a title and a text below them. The
+/// cells and the texts move at their own pace while the pages turn. The
+/// page scrolls when it is too small for them, as with a large text size on
+/// a small phone. A screen reader announces the title as a header, and
+/// passes over the cells, which are a picture.
+class OnboardingPage extends StatelessWidget {
+  /// Creates the page.
+  const OnboardingPage({
+    required this.title,
+    required this.text,
+    this.symbol,
+    this.icon,
+    super.key,
+  }) : assert(symbol != null || icon != null, 'A page shows one of them.');
+
+  /// The letters in the cell of the page, as an element has a symbol.
+  final String? symbol;
+
+  /// The icon in the cell of the page, when it has no [symbol].
+  final IconData? icon;
 
   /// The title of the page.
   final String title;
@@ -2457,27 +3978,318 @@ class OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scope = OnboardingPageScope.maybeOf(context);
+    if (scope == null) return _build(context, turned: 0, index: 0);
+    return AnimatedBuilder(
+      animation: scope.controller,
+      builder: (context, _) =>
+          _build(context, turned: scope.turned, index: scope.index),
+    );
+  }
+
+  /// The page at [index] while the pages are [turned] away from it.
+  Widget _build(
+    BuildContext context, {
+    required double turned,
+    required int index,
+  }) {
     final theme = Theme.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(icon, size: 96, color: theme.colorScheme.primary),
-            const SizedBox(height: 24),
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: theme.textTheme.headlineMedium,
-                textAlign: TextAlign.center,
+    // The texts leave faster than the page, and fade as they go.
+    final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 280),
+                    child: ExcludeSemantics(
+                      child: _Cells(
+                        mirrored: index.isOdd,
+                        turned: turned,
+                        number: index + 1,
+                        symbol: symbol,
+                        icon: icon,
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+                  child: Opacity(
+                    opacity: shown,
+                    child: Transform.translate(
+                      offset: Offset(-turned * 56, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              title,
+                              style: theme.textTheme.displaySmall,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            text,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontSize: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The picture of a page: the cell of the page in the middle, over a grid
+/// that fades at its edges, with smaller cells around it. They come in
+/// once, when the page is first shown, and each moves at its own pace while
+/// the pages turn.
+class _Cells extends StatelessWidget {
+  const _Cells({
+    required this.turned,
+    required this.number,
+    required this.mirrored,
+    this.symbol,
+    this.icon,
+  });
+
+  /// How far the pages are turned away from the page of the picture.
+  final double turned;
+
+  /// The number in the corner of the cell of the page.
+  final int number;
+
+  /// Whether the smaller cells are on the other side, as on every other
+  /// page, so that two pages in a row do not look the same.
+  final bool mirrored;
+
+  final String? symbol;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // The smaller cells: where each is, its size, its colour, whether it is
+    // only an outline, and how far it moves while the page turns.
+    final around = [
+      (
+        at: const Alignment(-0.74, -0.50),
+        size: 60.0,
+        color: colors.secondaryContainer,
+        outlined: false,
+        travel: 120.0,
+      ),
+      (
+        at: const Alignment(0.80, -0.70),
+        size: 44.0,
+        color: colors.outline,
+        outlined: true,
+        travel: 190.0,
+      ),
+      (
+        at: const Alignment(0.72, 0.56),
+        size: 68.0,
+        color: colors.primaryContainer,
+        outlined: false,
+        travel: 90.0,
+      ),
+      (
+        at: const Alignment(-0.60, 0.70),
+        size: 40.0,
+        color: colors.tertiaryContainer,
+        outlined: false,
+        travel: 160.0,
+      ),
+      (
+        at: const Alignment(-0.08, -0.90),
+        size: 30.0,
+        color: colors.outline,
+        outlined: true,
+        travel: 230.0,
+      ),
+      (
+        at: const Alignment(0.22, 0.92),
+        size: 26.0,
+        color: colors.secondary,
+        outlined: false,
+        travel: 250.0,
+      ),
+    ];
+    // The smaller cells fade as the page leaves.
+    final leaving = (1 - turned.abs()).clamp(0.0, 1.0);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      // An app that asks for less motion shows the picture at once.
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 1000),
+      builder: (context, entered, _) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: Curves.easeOut.transform(entered),
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) => const RadialGradient(
+                  radius: 0.52,
+                  colors: [Colors.white, Colors.transparent],
+                  stops: [0.25, 1],
+                ).createShader(bounds),
+                child: CustomPaint(
+                  painter: _GridPainter(
+                    color: colors.outlineVariant,
+                    shift: -turned * 36,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              style: theme.textTheme.bodyLarge,
-              textAlign: TextAlign.center,
+          ),
+          for (final (order, cell) in around.indexed)
+            Align(
+              alignment: mirrored ? Alignment(-cell.at.x, cell.at.y) : cell.at,
+              child: _entering(
+                entered,
+                order: order + 1,
+                opacity: leaving,
+                offset: Offset(-turned * cell.travel, 0),
+                child: Container(
+                  width: cell.size,
+                  height: cell.size,
+                  decoration: BoxDecoration(
+                    color: cell.outlined ? null : cell.color,
+                    border: cell.outlined
+                        ? Border.all(color: cell.color)
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          _entering(
+            entered,
+            order: 0,
+            opacity: 1,
+            offset: Offset(-turned * 28, 0),
+            scale: 1 - turned.abs() * 0.14,
+            angle: turned * 0.07,
+            child: _Cell(number: number, symbol: symbol, icon: icon),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [child] as it comes in while [entered] grows, later for a higher
+  /// [order]: it fades in and settles from below and from a smaller size.
+  Widget _entering(
+    double entered, {
+    required int order,
+    required double opacity,
+    required Offset offset,
+    required Widget child,
+    double scale = 1,
+    double angle = 0,
+  }) {
+    final start = order * 0.09;
+    final settled = Interval(
+      start,
+      (start + 0.5).clamp(0, 1),
+      curve: Easing.emphasizedDecelerate,
+    ).transform(entered);
+    return Opacity(
+      opacity: settled * opacity,
+      child: Transform.translate(
+        offset: offset + Offset(0, (1 - settled) * 28),
+        child: Transform.rotate(
+          angle: angle,
+          child: Transform.scale(
+            scale: scale * (0.82 + 0.18 * settled),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of a page: its [symbol], or its [icon] on the primary colour,
+/// with [number] in its corner, as an element has one.
+class _Cell extends StatelessWidget {
+  const _Cell({required this.number, this.symbol, this.icon});
+
+  final int number;
+  final String? symbol;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final filled = symbol == null;
+    final ink = filled ? colors.onPrimary : colors.onSurface;
+    // The letters and the number are part of the picture, in a cell of a
+    // fixed size: they do not grow with the text size of the device.
+    return MediaQuery.withNoTextScaling(
+      child: Container(
+        width: 164,
+        height: 164,
+        decoration: BoxDecoration(
+          color: filled ? colors.primary : colors.surfaceContainerLowest,
+          border: Border.all(color: filled ? colors.primary : ink, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 40,
+              offset: const Offset(0, 20),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: 10,
+              right: 14,
+              child: Text(
+                '$number',
+                // The monospaced font of the device: Android has it under
+                // the first name, and iOS under the next.
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                  fontFamilyFallback: const ['Menlo', 'Courier'],
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: ink,
+                ),
+              ),
+            ),
+            Center(
+              child: symbol == null
+                  ? Icon(icon, size: 84, color: ink)
+                  : Text(
+                      symbol!,
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        fontSize: 80,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -3,
+                        color: ink,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -2485,8 +4297,40 @@ class OnboardingPage extends StatelessWidget {
     );
   }
 }
+
+/// A grid of square cells in [color], moved sideways by [shift].
+class _GridPainter extends CustomPainter {
+  const _GridPainter({required this.color, required this.shift});
+
+  final Color color;
+  final double shift;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 52.0;
+    final line = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    // The grid is centred, so that the cell of the page sits on its lines.
+    final left = (size.width / 2 + shift) % cell;
+    for (var x = left; x < size.width; x += cell) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+    }
+    final top = (size.height / 2) % cell;
+    for (var y = top; y < size.height; y += cell) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.shift != shift;
+}
 === lib/features/onboarding/onboarding_screen.dart (onboarding) ===
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
 import 'onboarding_pages.dart';
@@ -2494,16 +4338,18 @@ import 'onboarding_status.dart';
 
 /// The onboarding of the app, which the app shows on its first launch in
 /// place of every other screen: the pages of [onboardingPages], with Skip
-/// and Next below them, and Done on the last page.
+/// above them, and below them a mark for each page and a button that leads
+/// to the next page and, on the last one, into the app.
 ///
-/// Skip and Done finish the onboarding. The screen does not navigate, and
-/// nothing navigates to it: the router shows it while the onboarding is not
-/// finished, and then the screen that the app starts on. The next launches
-/// of the app start there.
+/// Skip and the last button finish the onboarding. The screen does not
+/// navigate, and nothing navigates to it: the router shows it while the
+/// onboarding is not finished, and then the screen that the app starts on.
+/// The next launches of the app start there.
 ///
 /// When something shows the screen although the onboarding is finished,
 /// such as a link to its route, the onboarding starts again, as
-/// [OnboardingStatus.restart] has it: Skip and Done then leave the screen.
+/// [OnboardingStatus.restart] has it: Skip and the last button then leave
+/// the screen.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
   const OnboardingScreen({super.key});
@@ -2523,9 +4369,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     // The router shows the screen while the onboarding is not finished.
     // Shown although it is finished, the screen starts the onboarding
-    // again, so that the router leaves the screen once Skip or Done
-    // finishes it. The router acts on that at once, which it must not do
-    // while a frame is built.
+    // again, so that the router leaves the screen once Skip or the last
+    // button finishes it. The router acts on that at once, which it must
+    // not do while a frame is built.
     if (onboardingStatus.completed.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) onboardingStatus.restart();
@@ -2539,78 +4385,177 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  /// Shows the page after the one that the user sees.
-  void _next() => _controller.nextPage(
-    duration: const Duration(milliseconds: 300),
-    curve: Curves.easeInOut,
-  );
+  /// Shows the page after the one that the user sees: at once in an app
+  /// that asks for less motion.
+  void _next() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.jumpToPage(_page + 1);
+    } else {
+      _controller.nextPage(
+        duration: Durations.long2,
+        curve: Easing.emphasizedDecelerate,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = onboardingPages(context);
     final isLast = _page == pages.length - 1;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // How long Skip and the label of the button take to change with the
+    // page: no time in an app that asks for less motion.
+    final fade = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.short4;
+    // The colour that the background has reached on the last page.
+    final end = Color.alphaBlend(
+      colors.secondaryContainer.withValues(alpha: 0.6),
+      colors.surface,
+    );
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _controller,
-                onPageChanged: (page) => setState(() => _page = page),
-                children: pages,
-              ),
-            ),
-            // A dot for each page, with the one of the page that the user
-            // sees in the primary colour.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var index = 0; index < pages.length; index++)
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: index == _page
-                          ? colors.primary
-                          : colors.outlineVariant,
+      body: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => ColoredBox(
+          color: Color.lerp(
+            colors.surface,
+            end,
+            pages.length < 2
+                ? 0
+                : (OnboardingPageScope.turnedOf(_controller) /
+                          (pages.length - 1))
+                      .clamp(0, 1),
+          )!,
+          child: child,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    // Skip fades away on the last page, where a tap no
+                    // longer reaches it, and is gone once it has faded.
+                    child: IgnorePointer(
+                      ignoring: isLast,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: isLast
+                            ? const SizedBox.shrink()
+                            : TextButton(
+                                onPressed: onboardingStatus.complete,
+                                child: Text(context.l10n.onboardingSkip),
+                              ),
+                      ),
                     ),
                   ),
-              ],
-            ),
-            // The buttons go one below the other when they do not fit
-            // side by side, as with a large text size.
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: OverflowBar(
-                alignment: MainAxisAlignment.end,
-                spacing: 8,
-                overflowAlignment: OverflowBarAlignment.end,
-                overflowSpacing: 8,
-                children: [
-                  if (!isLast)
-                    TextButton(
-                      onPressed: onboardingStatus.complete,
-                      child: Text(context.l10n.onboardingSkip),
-                    ),
-                  FilledButton(
-                    onPressed: isLast ? onboardingStatus.complete : _next,
-                    child: Text(
-                      isLast
-                          ? context.l10n.onboardingDone
-                          : context.l10n.onboardingNext,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: PageView(
+                  controller: _controller,
+                  onPageChanged: (page) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _page = page);
+                  },
+                  children: [
+                    for (final (index, page) in pages.indexed)
+                      OnboardingPageScope(
+                        index: index,
+                        controller: _controller,
+                        child: page,
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _PageMarks(
+                        controller: _controller,
+                        count: pages.length,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: isLast ? onboardingStatus.complete : _next,
+                      child: AnimatedSwitcher(
+                        duration: fade,
+                        child: Text(
+                          isLast
+                              ? context.l10n.onboardingDone
+                              : context.l10n.onboardingNext,
+                          key: ValueKey(isLast),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// A mark for each of [count] pages, with the one of the page that the user
+/// sees stretched and in the primary colour. The marks follow the pages
+/// while they turn.
+class _PageMarks extends StatelessWidget {
+  const _PageMarks({required this.controller, required this.count});
+
+  final PageController controller;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          final turned = OnboardingPageScope.turnedOf(controller);
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var index = 0; index < count; index++)
+                _mark(
+                  colors,
+                  // How much the mark is that of the page on the screen.
+                  (1 - (turned - index).abs()).clamp(0, 1),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// A mark that is [current] of the way from that of another page to that
+  /// of the page on the screen.
+  Widget _mark(ColorScheme colors, double current) => Container(
+    margin: const EdgeInsets.only(right: 6),
+    height: 8,
+    width: lerpDouble(8, 28, current),
+    decoration: BoxDecoration(
+      color: Color.lerp(
+        colors.onSurface.withValues(alpha: 0.16),
+        colors.primary,
+        current,
+      ),
+      borderRadius: BorderRadius.circular(4),
+    ),
+  );
 }
 === lib/features/onboarding/onboarding_status.dart (onboarding) ===
 import 'package:flutter/foundation.dart';
@@ -2713,22 +4658,71 @@ import 'package:my_app/core/l10n/language_setting.dart' as entry1;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
-/// app has, and what the app is, with its licenses.
+/// app has, one below the other in one group.
+///
+/// As a destination of the main navigation, the screen has no app bar.
+/// Shown on top of another screen, it has one, for the back button.
 class SettingsScreen extends StatelessWidget {
   /// Creates the screen.
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.l10n.settingsTitle)),
-    body: ListView(
-      children: const [
-        entry0.ThemeModeSetting(),
-        entry1.LanguageSetting(),
-        AboutListTile(
-          icon: Icon(Icons.info_outline),
-          applicationName: 'My App',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Semantics(
+        header: true,
+        // A title that is too long for its line, as with a large text
+        // size, gets smaller rather than break inside a word.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            context.l10n.settingsTitle,
+            style: theme.textTheme.headlineLarge,
+          ),
         ),
+      ),
+    );
+    // Whether a screen below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          children: [
+            title,
+            const SizedBox(height: 20),
+            const _Group(
+              children: [entry0.ThemeModeSetting(), entry1.LanguageSetting()],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The group of the entries of the screen: its [children] one below the
+/// other on a card, with a line between them.
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, child) in children.indexed) ...[
+          if (index > 0) const Divider(height: 1, indent: 56),
+          child,
+        ],
       ],
     ),
   );
@@ -2794,14 +4788,30 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_en.arb (gen_l10n) ===
 {
   "@@locale": "en",
+  "flutterCoreFallbackHint": "No start screen yet. Add a feature with a route, or replace this screen.",
+  "flutterCoreFallbackCopied": "Copied",
   "homeLabel": "Home",
+  "homeGreetingMorning": "Good morning",
+  "homeGreetingAfternoon": "Good afternoon",
+  "homeGreetingEvening": "Good evening",
+  "homeReadyTitle": "Your app is ready",
+  "homeReadyText": "Generated with Say My Frame. Everything you see is yours to change.",
+  "homeNextTitle": "Next steps",
+  "homeStepScreenTitle": "Make this screen yours",
+  "homeStepScreenText": "Replace this welcome with the first screen of your app.",
+  "homeStepFeatureTitle": "Add a feature",
+  "homeStepFeatureText": "A feature keeps its screens and routes in a folder of its own.",
+  "homeStepDocsTitle": "Read the docs",
+  "homeStepDocsText": "Guides for every module, and for writing your own.",
+  "homeCopied": "Copied",
+  "homeFooter": "Built with Say My Frame",
   "settingsTitle": "Settings",
   "onboardingWelcome": "Welcome! We are glad you are here.",
   "onboardingReadyTitle": "You are all set",
   "onboardingReady": "Enjoy the app.",
   "onboardingSkip": "Skip",
   "onboardingNext": "Next",
-  "onboardingDone": "Done",
+  "onboardingDone": "Get started",
   "themeTitle": "Theme",
   "themeSystem": "System",
   "themeLight": "Light",
@@ -2812,14 +4822,30 @@ class DefaultFirebaseOptions {
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
   "@@locale": "uk",
+  "flutterCoreFallbackHint": "Стартового екрана ще немає. Додайте фічу з маршрутом або замініть цей екран.",
+  "flutterCoreFallbackCopied": "Скопійовано",
   "homeLabel": "Головна",
+  "homeGreetingMorning": "Доброго ранку",
+  "homeGreetingAfternoon": "Добрий день",
+  "homeGreetingEvening": "Добрий вечір",
+  "homeReadyTitle": "Ваш застосунок готовий",
+  "homeReadyText": "Згенеровано з Say My Frame. Усе, що ви бачите, можна змінити.",
+  "homeNextTitle": "Що далі",
+  "homeStepScreenTitle": "Зробіть цей екран своїм",
+  "homeStepScreenText": "Замініть це привітання першим екраном вашого застосунку.",
+  "homeStepFeatureTitle": "Додайте фічу",
+  "homeStepFeatureText": "Фіча тримає свої екрани й маршрути у власній теці.",
+  "homeStepDocsTitle": "Почитайте документацію",
+  "homeStepDocsText": "Настанови до кожного модуля і до написання власного.",
+  "homeCopied": "Скопійовано",
+  "homeFooter": "Зроблено з Say My Frame",
   "settingsTitle": "Налаштування",
   "onboardingWelcome": "Вітаємо! Раді, що ви з нами.",
   "onboardingReadyTitle": "Усе готово",
   "onboardingReady": "Приємного користування!",
   "onboardingSkip": "Пропустити",
   "onboardingNext": "Далі",
-  "onboardingDone": "Готово",
+  "onboardingDone": "Почати",
   "themeTitle": "Тема",
   "themeSystem": "Системна",
   "themeLight": "Світла",
@@ -2881,17 +4907,115 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - "lib/features/home/assets/smf_mark.png"
+    - "assets/fonts/geist/OFL.txt"
+  fonts:
+    - family: "Geist"
+      fonts:
+        - asset: "assets/fonts/geist/Geist-Regular.ttf"
+          weight: 400
+        - asset: "assets/fonts/geist/Geist-Medium.ttf"
+          weight: 500
+        - asset: "assets/fonts/geist/Geist-SemiBold.ttf"
+          weight: 600
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/core/app/fallback_start_screen.dart';
 
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
 void main() {
-  testWidgets('the fallback start screen shows the name of the app', (
+  testWidgets('names the app, and tells where its first screen goes', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: FallbackStartScreen()));
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
 
-    expect(find.text('My App'), findsOneWidget);
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
   });
 }

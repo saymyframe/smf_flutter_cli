@@ -1,5 +1,6 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_flutter_core/src/agents.dart';
@@ -10,19 +11,81 @@ import 'package:yaml/yaml.dart';
 
 import 'support.dart';
 
+/// The method `build` of the class [name] in [text], the text of a Dart
+/// file.
+MethodDeclaration _buildOf(String name, String text) =>
+    parseString(content: text)
+        .unit
+        .declarations
+        .whereType<ClassDeclaration>()
+        .singleWhere(
+          (declaration) => declaration.namePart.typeName.lexeme == name,
+        )
+        .body
+        .members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == 'build');
+
 /// The method `build` of the class `App` in [text], the text of
 /// `lib/app.dart`.
-MethodDeclaration _buildOfApp(String text) => parseString(content: text)
-    .unit
-    .declarations
-    .whereType<ClassDeclaration>()
-    .singleWhere(
-      (declaration) => declaration.namePart.typeName.lexeme == 'App',
-    )
-    .body
-    .members
-    .whereType<MethodDeclaration>()
-    .singleWhere((method) => method.name.lexeme == 'build');
+MethodDeclaration _buildOfApp(String text) => _buildOf('App', text);
+
+/// The path of the fallback start screen.
+const String _screenFile = AppEntryRole.fallbackStartScreenFile;
+
+/// The path of the widget test of the fallback start screen.
+const _screenTestFile = 'test/core/app/fallback_start_screen_test.dart';
+
+/// What `FallbackStartScreen` builds in [text], the text of its file, as
+/// written.
+String _builtByScreen(String text) {
+  final build = _buildOf(AppEntryRole.fallbackStartScreen.name, text);
+  return (build.body as ExpressionFunctionBody).expression.toSource();
+}
+
+/// The initializer of the top-level constant [name] in [text], the text of
+/// a Dart file, as written.
+String _constantOf(String name, String text) => [
+      for (final declaration in parseString(content: text).unit.declarations)
+        if (declaration is TopLevelVariableDeclaration)
+          for (final variable in declaration.variables.variables)
+            if (variable.name.lexeme == name) variable.initializer!.toSource(),
+    ].single;
+
+/// The first argument of each call of [name] in [text], the text of a
+/// Dart file, as written and in the order of the file.
+List<String> _firstArgumentsOf(String name, String text) {
+  final arguments = <String>[];
+  parseString(content: text).unit.accept(_CallVisitor(name, arguments));
+  return arguments;
+}
+
+/// The first argument of each `Text` that [text], the text of a Dart file,
+/// creates, as written and in the order of the file.
+List<String> _shownTextsOf(String text) => _firstArgumentsOf('Text', text);
+
+final class _CallVisitor extends RecursiveAstVisitor<void> {
+  _CallVisitor(this.name, this.arguments);
+
+  final String name;
+  final List<String> arguments;
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    // Without resolved types, the parser reads `Text(...)` as a call too.
+    if (node.methodName.name == name) {
+      arguments.add(node.argumentList.arguments.first.toSource());
+    }
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// The context of an app named [appName].
+ModuleContext _contextOf(String appName) => ModuleContext(
+      appName: appName,
+      orgName: ContractHarness.defaultContext.orgName,
+      appIdentity: ContractHarness.defaultContext.appIdentity,
+    );
 
 /// The widget that `main()` passes to `runApp()` in [text], the text of
 /// `lib/main.dart`, as written.
@@ -96,13 +159,15 @@ void main() {
   const module = FlutterCoreModule();
 
   group('FlutterCoreModule', () {
-    test('is the scaffold that provides the app entry and uses a router', () {
+    test(
+        'is the scaffold that provides the app entry, and uses a router and '
+        'the texts of the app', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, FlutterCoreModule.id);
       expect(descriptor.kind, ModuleKinds.scaffold);
       expect(descriptor.provides, {appEntryRole});
-      expect(descriptor.uses, {routerRole});
+      expect(descriptor.uses, {routerRole, localizationRole});
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.requires, isEmpty);
     });
@@ -118,13 +183,43 @@ void main() {
           .whereType<BrickContribution>()
           .single;
 
-      expect(brick.vars, {
-        'android_namespace': 'com.example.contract_app',
-        'android_application_id': 'com.example.contract_app',
-        'android_package_path': 'com/example/contract_app',
-        'ios_bundle_id': 'com.example.contract-app',
-      });
+      expect(
+        {
+          for (final MapEntry(key: name, :value) in brick.vars.entries)
+            if (name.startsWith('android_') || name.startsWith('ios_'))
+              name: value,
+        },
+        {
+          'android_namespace': 'com.example.contract_app',
+          'android_application_id': 'com.example.contract_app',
+          'android_package_path': 'com/example/contract_app',
+          'ios_bundle_id': 'com.example.contract-app',
+        },
+      );
     });
+
+    // The cell of the app on the fallback start screen, like that of an
+    // element of the periodic table.
+    for (final (name, symbol, number, why) in [
+      ('my_app', 'Ma', 5, 'the first letters of its first two words'),
+      ('my_first_app', 'Mf', 10, 'the first letters of its first two words'),
+      ('counter', 'Co', 7, 'the first two letters of its one word'),
+      ('a', 'A', 1, 'its one letter'),
+      ('app_2048', 'A2', 7, 'a digit that starts its second word'),
+      ('b2', 'B2', 2, 'a digit as the second letter of its one word'),
+    ]) {
+      test(
+          'gives the app $name the symbol $symbol, $why, and the number '
+          '$number, the count of its letters and digits', () {
+        final brick = module
+            .contribute(_contextOf(name))
+            .whereType<BrickContribution>()
+            .single;
+
+        expect(brick.vars['app_symbol'], symbol);
+        expect(brick.vars['app_number'], number);
+      });
+    }
   });
 
   group('the contract harness', () {
@@ -134,10 +229,17 @@ void main() {
       results = await ContractHarness(testRegistry()).checkAll();
     });
 
-    test('builds the app with and without a router', () {
+    test(
+        'builds the app with and without a router, each with and without '
+        'the texts of the app', () {
       expect(
         results.map((result) => result.contractCase.name),
-        containsAll(['flutter_core with router', 'flutter_core']),
+        containsAll([
+          'flutter_core with router, localization',
+          'flutter_core with router',
+          'flutter_core with localization',
+          'flutter_core',
+        ]),
       );
     });
 
@@ -206,27 +308,117 @@ void main() {
       expect(app, isNot(contains('app_router.dart')));
       expect(app, contains('MaterialApp(\n'));
       expect(app, contains("title: 'Contract App',"));
-      expect(
-        app,
-        contains('builder: (context, child) =>\n            child!,'),
-      );
       expect(app, contains('home: const FallbackStartScreen(),'));
       expect(app, isNot(contains('routerConfig')));
     });
 
-    test('names the app on the fallback start screen and in its test', () {
+    test(
+        'tells the system around every route which icons of the status bar '
+        'suit the theme, as the template of the role has it, so no screen '
+        'tells it itself', () {
+      final app = texts['lib/app.dart']!;
+      final root = (_buildOfApp(app).body as ExpressionFunctionBody).expression
+          as MethodInvocation;
+
+      // The builder of the root, around the content of every route: the
+      // widget of the template of the app entry role, which reads the theme
+      // below the root, with a context of its own.
       expect(
-        texts['lib/core/app/fallback_start_screen.dart'],
-        contains("Text('Contract App')"),
+        _namedOf(root).singleWhere((named) => named.startsWith('builder: ')),
+        'builder: (context, child) => Builder(builder: (context) => '
+        'AnnotatedRegion<SystemUiOverlayStyle>(value: '
+        'SystemUiOverlayStyle(statusBarBrightness: '
+        'Theme.of(context).brightness, statusBarIconBrightness: '
+        'Theme.of(context).brightness == Brightness.dark ? '
+        'Brightness.light : Brightness.dark), child: child!))',
       );
-      final test = texts['test/core/app/fallback_start_screen_test.dart']!;
       expect(
-        test,
+        app,
         contains(
-          "import 'package:contract_app/core/app/fallback_start_screen.dart';",
+          "import 'package:flutter/services.dart' show SystemUiOverlayStyle;",
         ),
       );
-      expect(test, contains("find.text('Contract App')"));
+      // The fallback start screen has no app bar, and leaves the status bar
+      // to the root.
+      final screen = texts[_screenFile]!;
+      expect(screen, isNot(contains('AnnotatedRegion')));
+      expect(screen, isNot(contains('SystemUiOverlayStyle')));
+    });
+
+    test(
+        'shows on the fallback start screen the cell of the app, its name, '
+        'the hint and the path of the file of the screen', () {
+      final screen = texts[_screenFile]!;
+
+      // The number and the symbol of contract_app, then the name of the
+      // app, the hint that the view was given, what it says once the path
+      // is copied, and the path.
+      expect(_shownTextsOf(screen), [
+        "'11'",
+        "'Ca'",
+        "'Contract App'",
+        'hint',
+        r"'$copied: $_file'",
+        '_file',
+      ]);
+      // The path that a tap copies is the one of the file itself.
+      expect(_constantOf('_file', screen), "'$_screenFile'");
+      final index = DartFileIndexer.index(_screenFile, screen);
+      expect(
+        index.declaration(AppEntryRole.fallbackStartScreen.name)?.kind,
+        DeclarationKind.classType,
+      );
+      expect(index.invocationsOf('setData').single.target, 'Clipboard');
+    });
+
+    test('has the texts of the fallback start screen in English', () {
+      final screen = texts[_screenFile]!;
+
+      // A constant, since the app has no texts to read them from.
+      expect(
+        _builtByScreen(screen),
+        "const FallbackStartView(hint: 'No start screen yet. Add a feature "
+        "with a route, or replace this screen.', copied: 'Copied')",
+      );
+      expect(
+        DartFileIndexer.index(_screenFile, screen).imports.map(
+              (import) => import.uri,
+            ),
+        ['package:flutter/material.dart', 'package:flutter/services.dart'],
+      );
+    });
+
+    test(
+        'tests the view of the fallback start screen with texts of the '
+        'test, by the name of the app and the path of the file', () {
+      final test = texts[_screenTestFile]!;
+      final index = DartFileIndexer.index(_screenTestFile, test);
+
+      expect(index.imports.map((import) => import.uri), [
+        'package:flutter/material.dart',
+        'package:flutter/services.dart',
+        'package:flutter_test/flutter_test.dart',
+        'package:contract_app/core/app/fallback_start_screen.dart',
+      ]);
+      expect(_constantOf('_file', test), "'$_screenFile'");
+      // It finds the name of the app by what a screen reader reads, where
+      // the number of the cell is not, and the symbol of the cell by its
+      // text.
+      expect(
+        _firstArgumentsOf('bySemanticsLabel', test),
+        ["'11'", "'Contract App'"],
+      );
+      expect(_firstArgumentsOf('text', test), contains("'Ca'"));
+      // It shows the view, which takes its texts, and not the screen, which
+      // reads them.
+      expect(
+        index.invocationsOf('FallbackStartView').single.namedArguments,
+        ['hint', 'copied'],
+      );
+      expect(
+        index.invocationsOf(AppEntryRole.fallbackStartScreen.name),
+        isEmpty,
+      );
     });
 
     test('depends on Flutter 3.44 and the lints of a new Flutter app', () {
@@ -414,6 +606,108 @@ void main() {
     });
   });
 
+  group('an app of flutter_core with the texts of the app', () {
+    late ContractResult result;
+    late Map<String, String> texts;
+
+    setUpAll(() async {
+      result = await renderedApp(const [
+        FlutterCoreModule.id,
+        TestTextsModule.id,
+        TestPreferencesModule.id,
+      ]);
+      texts = result.app!.texts;
+    });
+
+    test(
+        'gives the localization role the two texts of the fallback start '
+        'screen, in English and in Ukrainian', () {
+      final own = [
+        for (final text in localizationRole.textsIn(
+          localizationRole.hookInput(result.hook!),
+        ))
+          if (text.owner == const ModuleOrigin(FlutterCoreModule.id)) text,
+      ];
+
+      expect(
+        {
+          for (final text in own)
+            text.getter: {
+              for (final language in text.text.languages)
+                language: text.text.textIn(language),
+            },
+        },
+        {
+          'flutterCoreFallbackHint': {
+            'en': 'No start screen yet. Add a feature with a route, or '
+                'replace this screen.',
+            'uk': 'Стартового екрана ще немає. Додайте фічу з маршрутом '
+                'або замініть цей екран.',
+          },
+          'flutterCoreFallbackCopied': {'en': 'Copied', 'uk': 'Скопійовано'},
+        },
+      );
+    });
+
+    test(
+        'reads the texts of the fallback start screen from the texts of '
+        'the app', () async {
+      final screen = texts[_screenFile]!;
+
+      // No constant: the texts are in the language of the context.
+      expect(
+        _builtByScreen(screen),
+        'FallbackStartView(hint: context.l10n.flutterCoreFallbackHint, '
+        'copied: context.l10n.flutterCoreFallbackCopied)',
+      );
+      expect(
+        DartFileIndexer.index(_screenFile, screen).importsUri(
+          LocalizationRole.appTexts.importRef.resolveUri('contract_app'),
+        ),
+        isTrue,
+      );
+      // The view, which shows what it is given, is that of an app without
+      // the texts.
+      String viewOf(String screen) =>
+          screen.substring(screen.indexOf('class FallbackStartView '));
+      final without = await renderedApp(const [FlutterCoreModule.id]);
+      expect(screen, contains('class FallbackStartView '));
+      expect(viewOf(screen), viewOf(without.app!.texts[_screenFile]!));
+    });
+
+    test('is in English and in Ukrainian, the languages of those texts', () {
+      expect(
+        localizationRole.localesIn(localizationRole.hookInput(result.hook!)),
+        ['en', 'uk'],
+      );
+    });
+  });
+
+  group('the widget test of the fallback start screen', () {
+    test(
+        'is the same in every app, with the texts of the app and a router '
+        'or without: it shows the view with texts of its own, so it needs '
+        'neither the texts of the app nor its start-up', () async {
+      final tests = <String>{};
+      for (final modules in const [
+        [FlutterCoreModule.id],
+        [FlutterCoreModule.id, TestRouterModule.id],
+        [FlutterCoreModule.id, TestTextsModule.id, TestPreferencesModule.id],
+        [
+          FlutterCoreModule.id,
+          TestRouterModule.id,
+          TestTextsModule.id,
+          TestPreferencesModule.id,
+        ],
+      ]) {
+        final result = await renderedApp(modules);
+        tests.add(result.app!.texts[_screenTestFile]!);
+      }
+
+      expect(tests, hasLength(1));
+    });
+  });
+
   group('an app with something in every socket', () {
     late Map<String, String> texts;
 
@@ -482,10 +776,21 @@ void main() {
       );
       final app = texts['lib/app.dart']!;
       expect(app, contains("supportedLocales: [Locale('en')],"));
+      // The widget of the module is around that of the template of the
+      // role, which is around the content of the routes.
+      final builder = _namedOf(
+        (_buildOfApp(app).body as ExpressionFunctionBody).expression
+            as MethodInvocation,
+      ).singleWhere((named) => named.startsWith('builder: '));
       expect(
-        app,
-        contains('MediaQuery.withNoTextScaling(child: child!),'),
+        builder,
+        startsWith(
+          'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
+          'Builder(builder: (context) => '
+          'AnnotatedRegion<SystemUiOverlayStyle>(',
+        ),
       );
+      expect(builder, endsWith('child: child!)))'));
     });
   });
 
