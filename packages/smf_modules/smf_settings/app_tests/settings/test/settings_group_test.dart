@@ -281,6 +281,15 @@ Future<void> _expectTitleOnOneLine(WidgetTester tester) async {
   tester.platformDispatcher.textScaleFactorTestValue = 3;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   await tester.pumpAndSettle();
+  // A check before this one may have scrolled the screen down, and a list
+  // builds only what is in view: back to its top, where the title is.
+  tester
+      .state<ScrollableState>(
+        find.descendant(of: _screen, matching: find.byType(Scrollable)).first,
+      )
+      .position
+      .jumpTo(0);
+  await tester.pumpAndSettle();
 
   final title = find.descendant(
     of: find
