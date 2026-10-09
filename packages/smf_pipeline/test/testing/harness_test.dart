@@ -1076,6 +1076,100 @@ void main() {
     });
 
     test(
+        'reports a value that an option does not take, which the command '
+        'line would refuse, and renders no app with it', () async {
+      final doors = TestRole<String>(
+        'doors',
+        options: const [
+          RoleOption.mode(
+            name: 'access',
+            help: 'Who may use the app.',
+            values: ['members', 'guests'],
+          ),
+          RoleOption(name: 'side', help: '', allowed: ['front', 'back']),
+          RoleOption(name: 'label', help: ''),
+        ],
+        template: _ModeTemplate(values: const ['members', 'guests']),
+      );
+      // A role of the registry that the app of the case lacks.
+      final bells = TestRole<String>(
+        'bells',
+        options: const [
+          RoleOption.mode(name: 'chime', help: '', values: ['on', 'off']),
+        ],
+        template: TestTemplate(),
+      );
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('lock', providers: [RoleProvider.plain(doors)]),
+        TestModule('tower', uses: {bells}),
+      ]);
+
+      /// The result of the app of the doors with [ofCase], the options of
+      /// its case, and [ofHarness], those of every case.
+      Future<ContractResult> checked({
+        Map<String, String?> ofCase = const {},
+        Map<String, String?> ofHarness = const {},
+      }) =>
+          ContractHarness(registry, roleOptions: ofHarness).check(
+            ContractCase(
+              'lock',
+              requested: const [ModuleId('lock')],
+              roleOptions: ofCase,
+            ),
+          );
+
+      // A value of a mode option, from the case and from the harness.
+      for (final result in [
+        await checked(ofCase: const {'access': 'nobody'}),
+        await checked(ofHarness: const {'access': 'nobody'}),
+      ]) {
+        expect(
+          result.errors.single.message,
+          '--access=nobody is not a value of the option of the doors role, '
+          'which takes members, guests: the command line refuses it.',
+        );
+        expect(result.errors.single.origin, isNull);
+        expect(result.app, isNull);
+        expect(result.choices, isNull);
+      }
+      // The case decides when both give the option.
+      expect(
+        (await checked(
+          ofCase: const {'access': 'guests'},
+          ofHarness: const {'access': 'nobody'},
+        ))
+            .errors,
+        isEmpty,
+      );
+
+      // A value of any option with a list of values, also of a role that
+      // the app lacks: the command line refuses it in every app.
+      final both = await checked(
+        ofCase: const {'side': 'roof'},
+        ofHarness: const {'chime': 'loud'},
+      );
+      expect(both.errors, hasLength(2));
+      expect(
+        both.errors.first.message,
+        '--side=roof is not a value of the option of the doors role, which '
+        'takes front, back: the command line refuses it.',
+      );
+      expect(
+        both.errors.last.message,
+        '--chime=loud is not a value of the option of the bells role, which '
+        'takes on, off: the command line refuses it.',
+      );
+
+      // An option without such a list takes any value, and none.
+      final fine = await checked(
+        ofCase: const {'label': 'Way in', 'side': 'back', 'access': null},
+      );
+      expect(fine.errors, isEmpty);
+      expect(fine.app, isNotNull);
+    });
+
+    test(
         'gives the result the data and the roles of its app, with the context '
         'of the harness and the choices of the roles', () async {
       final pick = TestRole<String>(

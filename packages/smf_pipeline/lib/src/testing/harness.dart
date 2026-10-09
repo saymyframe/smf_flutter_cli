@@ -751,6 +751,10 @@ final class ContractHarness {
   /// [contractCase], then, if [render] is on and they found no error, the
   /// stages 7 and 8 and [checkRendered].
   ///
+  /// Before the stage 7, it reports a value that the case or [roleOptions]
+  /// give an option that does not take it (see [RoleOption.allowed]), as
+  /// the command line would refuse it, and makes no choice with it.
+  ///
   /// Between the stages 7 and 8, it holds the choice of each role of the
   /// app with a mode option to what the option states (see
   /// [RoleOption.mode]). For that it makes the choices of the app a second
@@ -817,9 +821,11 @@ final class ContractHarness {
     );
     if (!render || checked.errors.isNotEmpty) return checked;
 
+    final options = {...roleOptions, ...contractCase.roleOptions};
+    final refused = _refusedValues(options);
+    if (refused.isNotEmpty) return checked._with(refused);
     final Map<Role, Object?> choices;
     final RenderedApp app;
-    final options = {...roleOptions, ...contractCase.roleOptions};
     final answering = _EnterPrompter();
     // The choices of the roles that asked, which the harness answered.
     final answered = <Role, Object?>{};
@@ -894,6 +900,26 @@ final class ContractHarness {
     );
     return rendered._with(checkRendered(rendered, app));
   }
+
+  /// The values among [options], the values of role options of a case by
+  /// name, that their options do not take: a value outside the allowed
+  /// ones of an option of a role of the registry (see [RoleOption.allowed]),
+  /// such as one that is not among the values of a mode option. The
+  /// command line refuses such a value in every app, also in one without
+  /// the role, so the app of the case could not be generated with it.
+  List<SmfIssue> _refusedValues(Map<String, String?> options) => [
+        for (final role in registry.roles)
+          for (final option in role.options)
+            if ((option.allowed, options[option.name])
+                case (final allowed?, final value?)
+                when !allowed.contains(value))
+              SmfIssue(
+                '--${option.name}=$value is not a value of the option of '
+                'the $role, which takes ${allowed.join(', ')}: the command '
+                'line refuses it.',
+                hint: 'Give the option one of its values, or leave it out.',
+              ),
+      ];
 
   /// The options that the templates of the roles in [answered] give for the
   /// choices that the harness answered, and the problems of those options:
