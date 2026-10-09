@@ -1,10 +1,10 @@
 // A test that continuous integration runs in the apps of the fixture
 // modules with a router and a layout, whichever modules provide them, both
-// fixture features and the fixture gates: when a guard of the routes of
-// the router role stops allowing while a page is shown over the main
-// navigation, as a push shows it, the user comes back into the main
-// navigation once the guard allows, to the destination that the page was
-// opened from, and not to that page alone, with no way back
+// fixture features, the fixture gates and the fixture late gate: when a
+// guard of the routes of the router role stops allowing while a page is
+// shown over the main navigation, as a push shows it, the user comes back
+// into the main navigation once the guard allows, to the destination that
+// the page was opened from, and not to that page alone, with no way back
 // (RouterRole.guardedNavigation). While the guard does not allow, the main
 // navigation is not shown, and the target of the guard takes the stacks of
 // every branch: a branch that was not selected is back on its destination
@@ -12,7 +12,12 @@
 // matter: asked for from the main navigation, it shows the screen that the
 // app starts on, as go() to that screen does, and hides nothing from the
 // user. So whether a branch that is not selected keeps its pages then is
-// up to the router, and the test does not look at it. It selects a
+// up to the router, and the test does not look at it. And a guard that
+// does not bring the user back (RouteGuard.resumes), that of the fixture
+// late gate, is another matter too: once it allows again, the user is in
+// the main navigation on the screen that the app starts on, whichever
+// destination the page over the main navigation was opened from, and the
+// branch of that destination is back on it. It selects a
 // destination as the layout does when the user selects it, with onSelect
 // of AppShell, so it depends neither on the router nor on how the layout
 // shows the destinations. It uses what the tests of router_screens and of
@@ -26,6 +31,8 @@ import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
+import 'package:{{app_name}}/features/fake_late_gate/fixture_late_gate.dart';
+import 'package:{{app_name}}/features/fake_late_gate/fixture_late_gate_screen.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_outside_screen.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_second_screen.dart';
 
@@ -242,6 +249,114 @@ void main() {
         first,
         reason: 'The destination of the screen that the app starts on is '
             'selected.',
+      );
+
+      // A guard that does not bring the user back: the second destination,
+      // a page that a push shows in its branch, and over the main
+      // navigation the page outside it, as a push shows it. Then the late
+      // gate closes.
+      shown(tester, FixtureHomeScreen).nav.fakeSecond.second().go();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'go() to a destination selects it, with the destination '
+            'alone in its branch.',
+      );
+      pushed(shown(tester, FixtureSecondScreen).nav.fakeFeature.details(id: 7));
+      await tester.pumpAndSettle();
+      pushed(details(tester, 7).nav.fakeSecond.outside());
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [
+          ('fake_feature.details', '/fake_feature/details/7'),
+          _outsideScreen,
+        ],
+        reason: 'The pages that push() shows in a branch and over the main '
+            'navigation are heard of once each.',
+      );
+      fixtureLateGate.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [lateGateScreen],
+        reason: 'When a guard stops allowing, the router shows its target in '
+            'place of the pages that it keeps the user from.',
+      );
+      expect(
+        builtScreens(tester),
+        [FixtureLateGateScreen],
+        reason: 'When a guard stops allowing, no page that it keeps the user '
+            'from stays in the stack.',
+      );
+      expect(
+        _shells(),
+        findsNothing,
+        reason: 'While a guard does not allow, the main navigation is not '
+            'shown.',
+      );
+
+      // The late gate opens: the user is in the main navigation, on the
+      // screen that the app starts on, and not on the destination that the
+      // page was opened from.
+      fixtureLateGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, the user comes to the screen that the app starts on, '
+            'and not to the destination that the pushed page was opened '
+            'from.',
+      );
+      expect(
+        _shells(),
+        findsOneWidget,
+        reason: 'The screen that the app starts on is a destination, so the '
+            'user is back in the main navigation.',
+      );
+      expect(
+        tester.widget<AppShell>(_shells()).currentIndex,
+        first,
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, the destination of the screen that the app starts on is '
+            'selected.',
+      );
+      expect(
+        find.byType(FixtureHomeScreen),
+        findsOneWidget,
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, the screen that the app starts on is the screen the '
+            'user sees.',
+      );
+      expect(
+        find.byType(FixtureOutsideScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, the page that the push showed over the main navigation '
+            'is gone.',
+      );
+
+      // The branch of the second destination, which was selected when the
+      // gate closed: the page that the push showed there is gone too.
+      tester.widget<AppShell>(_shells()).onSelect(second);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'The target of a guard takes the stacks of every branch of '
+            'the main navigation, also when the guard does not bring the '
+            'user back: the branch that was selected is back on its '
+            'destination.',
+      );
+      expect(
+        find.byType(FixtureDetailsScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'The target of a guard takes the stacks of every branch of '
+            'the main navigation, also when the guard does not bring the '
+            'user back: the branch that was selected is back on its '
+            'destination.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

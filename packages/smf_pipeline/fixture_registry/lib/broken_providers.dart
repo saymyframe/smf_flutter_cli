@@ -303,6 +303,14 @@ List<BrokenProvider> brokenProviders() => const [
             'go() to a location in a flow that is over shows the screen that '
                 'the app starts on.',
           ),
+          // A location that is asked for while a guard that does not bring
+          // the user back does not allow.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'go() to a location that a guard keeps the user from shows the '
+                'target of the guard.',
+          ),
           MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
             'the walk of the routes holds while a guard keeps the user out, '
@@ -358,6 +366,14 @@ List<BrokenProvider> brokenProviders() => const [
             'When a guard starts allowing while a page of its flow is on '
                 'top, the router leaves the flow: it shows the screen that '
                 'the app starts on.',
+          ),
+          // What the guards answer for a guard that does not bring the user
+          // back is an answer like any other: the router does not show it.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'When a guard stops allowing, the router shows its target in '
+                'place of the pages that it keeps the user from.',
           ),
           MatrixExpectedFailure(
             'test/router_guard_early_change_test.dart',
@@ -835,12 +851,14 @@ List<BrokenProvider> brokenProviders() => const [
     ];
 
 /// The other modules of the app of a router that breaks what the role says
-/// of the guards of the routes: the fixture gates, whose guards the tests
-/// close and open, the fixture feature, whose screens the guards keep the
-/// user from, and what the fixture feature and the tests of the listeners
-/// of the screen need.
+/// of the guards of the routes: the fixture late gate and the fixture
+/// gates, in the order of the registry of the fixtures, whose guards the
+/// tests close and open, the fixture feature, whose screens the guards keep
+/// the user from, and what the fixture feature and the tests of the
+/// listeners of the screen need.
 const List<ModuleId> _appWithGates = [
   FakeFeatureModule.id,
+  FakeLateGateModule.id,
   FakeGateModule.id,
   FakeBlocModule.id,
   FakeDiModule.id,
@@ -874,6 +892,13 @@ const _flowTest =
     'the routes of the flow of a guard show only while the guard does not '
     'allow, and the screen that the app starts on in their place once the '
     'flow is over';
+
+/// The name of the test of a guard of the routes that does not bring the
+/// user back.
+const _returnTest =
+    'a guard that does not bring the user back shows the screen that the app '
+    'starts on once it allows again, or a location that was asked for while '
+    'it did not allow';
 
 /// The name of the test of the labels of the destinations.
 const _labelsTest =

@@ -54,6 +54,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeRiverpodModule(),
       const FakeFeatureModule(),
       const FakeSecondModule(),
+      const FakeLateGateModule(),
       const FakeGateModule(),
       const FakeSocketsModule(),
       const FakeOverlapModule(),
@@ -76,8 +77,10 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
 
 /// The modules to ask for so that an app has every fixture that fits, with
 /// the state manager [stateManager], the router [router] and the DI
-/// container [di]: the fixture gates, and so the guards of the routes, are
-/// only in an app with the state manager that they depend on.
+/// container [di]: the fixture late gate and the fixture gates, and so the
+/// guards of the routes, are only in an app with the state manager that
+/// they depend on. The late gate comes before the gates, as in
+/// [fixtureModules], though the app asks its guard after theirs.
 List<ModuleId> everyFixture({
   ModuleId stateManager = FakeBlocModule.id,
   ModuleId router = FakeRouterModule.id,
@@ -86,8 +89,12 @@ List<ModuleId> everyFixture({
     [
       FakeFeatureModule.id,
       FakeSecondModule.id,
-      // The fixture gates depend on one of the state managers.
-      if (stateManager == FakeGateModule.stateManager) FakeGateModule.id,
+      // The fixture late gate and the fixture gates depend on one of the
+      // state managers.
+      if (stateManager == FakeGateModule.stateManager) ...[
+        FakeLateGateModule.id,
+        FakeGateModule.id,
+      ],
       router,
       stateManager,
       di,

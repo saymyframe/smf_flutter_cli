@@ -16,13 +16,18 @@
 /// over gates that a test opens and closes, each with a route to show while
 /// its gate is closed, the first with a route below it. It depends on one
 /// of the two fake state managers, so the apps with every fixture come with
-/// guards and without.
+/// guards and without. The fourth has one guard over a gate of its own, of
+/// a later stage than the guards of the third, which does not bring the
+/// user back. It depends on the same state manager, and the registries list
+/// it before the third, so the stages of the guards go against the order of
+/// their modules.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_riverpod_bundle.dart';
 import 'package:fake_feature/bundles/fake_gate_bundle.dart';
+import 'package:fake_feature/bundles/fake_late_gate_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_settings_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -231,7 +236,9 @@ final class FakeSecondModule extends SmfModule {
 /// shows the gate screen at `/fake_gate`, with a step below it, and the
 /// second, which the app asks after it, the second gate screen at
 /// `/fake_gate/second`. Both routes are outside the main navigation, and
-/// neither can start the app.
+/// neither can start the app. Both guards are of the stage `welcome`, so
+/// the app asks them as the module declares them, and both bring the user
+/// back to where they were once they allow again.
 ///
 /// The module depends on one of the two fake state managers, as a feature
 /// that works with one state manager does, though it uses nothing of it.
@@ -308,6 +315,76 @@ final class FakeGateModule extends SmfModule {
                 allows: FunctionRef('fixtureSecondGateOpen', import: _gates),
                 redirectTo: 'second',
                 stage: GuardStage.welcome,
+              ),
+            ],
+          ),
+        ),
+      ];
+}
+
+/// A feature with one guard of the routes of a later stage than the guards
+/// of the fixture gates ([FakeGateModule]), which does not bring the user
+/// back.
+///
+/// Its gate, the late gate, is open unless a test closes it, as the gates
+/// of the fixture gates are. Its guard shows the late gate screen at
+/// `/fake_late_gate`, which is outside the main navigation and cannot start
+/// the app. The guard is of the stage `identity`, and those of the fixture
+/// gates are of the stage `welcome`. So the app asks it after them, though
+/// the registries of the fixtures list this module before the fixture
+/// gates, and the order of the modules alone would ask it first.
+///
+/// The guard does not resume ([RouteGuard.resumes]): when its gate closes,
+/// the router remembers nothing, and once it opens again, the user comes to
+/// the screen that the app starts on, unless a location was asked for while
+/// the gate was closed.
+///
+/// The module depends on the fake state manager that the fixture gates
+/// depend on, so the apps with every fixture have the guards of both
+/// modules or no guard.
+final class FakeLateGateModule extends SmfModule {
+  /// Creates the module.
+  const FakeLateGateModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_late_gate');
+
+  static const _folder = 'features/fake_late_gate';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A screen behind a late gate (fixture)',
+        kind: ModuleKinds.feature,
+        dependsOn: {FakeGateModule.stateManager},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeLateGateBundle),
+        routerRole.data(
+          const RoutesData(
+            [
+              Route(
+                '/',
+                name: 'gate',
+                screen: ScreenRef(
+                  'FixtureLateGateScreen',
+                  import:
+                      ImportRef.app('$_folder/fixture_late_gate_screen.dart'),
+                ),
+              ),
+            ],
+            guards: [
+              RouteGuard(
+                name: 'late',
+                allows: FunctionRef(
+                  'fixtureLateGateOpen',
+                  import: ImportRef.app('$_folder/fixture_late_gate.dart'),
+                ),
+                redirectTo: 'gate',
+                stage: GuardStage.identity,
+                resumes: false,
               ),
             ],
           ),
