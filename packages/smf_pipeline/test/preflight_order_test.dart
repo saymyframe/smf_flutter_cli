@@ -201,7 +201,7 @@ void main() {
           final plan = (await pipeline(modules(required: true), host)
               .plan(request(named)))!;
 
-          expect(plan.leftOut, isEmpty);
+          expect(plan.leftOut.map((left) => '${left.module}'), isEmpty);
           expect(
             plan.resolution.modules.map((module) => module.id.value),
             containsAll(['core', 'rules']),
