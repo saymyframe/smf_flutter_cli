@@ -8,8 +8,9 @@
 // ErrorWidget on the screen and no error of Flutter.
 //
 // The guards of the routes of the app must allow, so that the walk reaches
-// every route outside their flows: the test fails on each guard that does
-// not, by its name. The module of a guard opens it for the tests of the
+// every route outside their flows, and every route that asks for a
+// condition that a guard stands for: the test fails on each guard that
+// does not, by its name. The module of a guard opens it for the tests of the
 // app in the mocks of its app test (MatrixAppTest.mocks), which the matrix
 // sets up before the tests of each test file. On a device, where no test
 // opens a guard, the walk expects the target of the guard in place of each

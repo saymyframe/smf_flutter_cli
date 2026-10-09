@@ -393,6 +393,119 @@ void main() {
   });
 
   test(
+      'in an app with a guard that stands for a condition, the file of the '
+      'walk has the routes that ask for the condition among its locations '
+      'like any other, and the targets of the gates before those of such '
+      'guards, a target that a gate and such a guard share once', () {
+    const screens = ImportRef.app('features/club/club_screens.dart');
+    const status = ImportRef.app('features/club/club_status.dart');
+    // Conditions of a role of the app, as a role with an account
+    // publishes them.
+    const member = RouteCondition(preferencesRole, 'member');
+    const paid = RouteCondition(preferencesRole, 'paid');
+    Route route(
+      String path,
+      String screen, {
+      List<RouteCondition> conditions = const [],
+      List<Route> children = const [],
+    }) =>
+        Route(
+          path,
+          name: path.replaceFirst('/', ''),
+          screen: ScreenRef(screen, import: screens),
+          conditions: conditions,
+          children: children,
+        );
+    RouteGuard guard(String name, String target, [RouteCondition? condition]) =>
+        RouteGuard(
+          name: name,
+          allows: FunctionRef(name, import: status),
+          redirectTo: target,
+          stage: condition == null ? GuardStage.identity : GuardStage.welcome,
+          condition: condition,
+        );
+    final text = named('router_walk').generatedFiles!(
+      MatrixApp(
+        'club',
+        const [ModuleId('club')],
+        hook: RoleHookRequest(
+          data: [
+            routerRole
+                .data(
+                  RoutesData(
+                    [
+                      route('/lobby', 'LobbyScreen'),
+                      route(
+                        '/members',
+                        'MembersScreen',
+                        conditions: const [member],
+                        children: [route('card', 'CardScreen')],
+                      ),
+                      route(
+                        '/lounge',
+                        'LoungeScreen',
+                        conditions: const [paid],
+                      ),
+                      route('/plans', 'PlansScreen'),
+                      route('/login', 'LoginScreen'),
+                    ],
+                    // The module declares its guards of conditions first,
+                    // with the earlier stage: the app asks them after its
+                    // gate all the same. One of them shows the target of
+                    // the gate.
+                    guards: [
+                      guard('hasPaid', 'plans', paid),
+                      guard('isMember', 'login', member),
+                      guard('signedIn', 'login'),
+                    ],
+                  ),
+                )
+                .withOrigin(const ModuleOrigin(ModuleId('club'))),
+          ],
+          presentRoles: {routerRole, preferencesRole},
+          context: ContractHarness.defaultContext,
+          choices: const {routerRole: RouterChoice(startPath: '/club/lobby')},
+        ),
+      ),
+      'my_app',
+    )[routerWalkFile]!;
+
+    expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
+    // The walk goes to a route that asks for a condition, and to the route
+    // below it, as to any other: what the router shows for it is up to
+    // redirectOf() of the app, which knows the routes of each guard.
+    expect(_walkedRoutesOf(text), [
+      'club.lobby',
+      'club.members',
+      'club.card',
+      'club.lounge',
+      'club.plans',
+      'club.login',
+    ]);
+    final targetsAt = text.indexOf('guardTargets = [');
+    expect(
+      [
+        for (final match in RegExp(r"route: '([\w.]+)'").allMatches(
+          text.substring(
+            targetsAt,
+            text.indexOf('const ShownScreen startOfApp'),
+          ),
+        ))
+          match[1],
+      ],
+      ['club.login', 'club.plans'],
+    );
+    expect(text, contains('  final target = redirectOf(walked.route);\n'));
+    expect(
+      text,
+      contains(
+        '  for (final guard in routeGuards)\n'
+        '    if (!guard.allows.value) guard.name,\n',
+      ),
+    );
+  });
+
+  test(
       'the walk of the routes goes to the locations in the flows of the '
       'guards like any other, in the order of the routes of the app, and '
       'leaves out the last ones in an app with more locations than it goes '
