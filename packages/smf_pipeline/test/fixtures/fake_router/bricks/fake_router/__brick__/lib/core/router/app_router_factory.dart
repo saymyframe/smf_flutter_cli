@@ -115,8 +115,16 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// Shows [location] in place of the whole stack and of the stacks of
   /// every branch of the main navigation, each of which is back on its
   /// destination; `null` is the fallback screen.
+  ///
+  /// The branches get new navigators, with observers of their own, when
+  /// they are selected next. The page of the main navigation that leaves
+  /// stays in the tree until the transition to the page that took its
+  /// place is over, with the navigators that it had: a main navigation
+  /// that comes back sooner would have their keys in the tree twice.
   void _go(AppLocation? location) {
     _stack.clear();
+    _branchNavigators.clear();
+    _branchObservers.clear();
     for (final (index, branch) in _branches.indexed) {
       branch
         ..clear()
@@ -179,7 +187,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   /// The navigators of the branches of the main navigation, of which the
   /// selected one shows: a branch gets its navigator when it is first
-  /// selected, and keeps it.
+  /// selected, and keeps it{{#guards}} until an answer of the guards takes
+  /// its pages{{/guards}}.
   Widget _branchesWidget() => IndexedStack(
         index: _selected,
         children: [

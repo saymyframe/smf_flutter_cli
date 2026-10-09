@@ -16,7 +16,10 @@
 /// through the `GuardedNavigation` of the router role, which keeps what the
 /// router comes back to: about the screen it starts on and about each
 /// location that it is asked to show, and it tells them of the pages of its
-/// stack when one of them changes, and shows the location that they answer.
+/// stack when one of them changes, and shows the location that they answer,
+/// with new navigators for the branches of the main navigation, so that a
+/// main navigation that comes back before the transition to that location
+/// is over shares no key with the one that leaves.
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';
