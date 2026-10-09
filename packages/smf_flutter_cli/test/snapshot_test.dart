@@ -15,11 +15,28 @@ import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 import 'package:yaml/yaml.dart';
 
+import 'mode_registry.dart';
+
 /// Set to rewrite the snapshots with what the pipeline renders now.
 const _update = 'SMF_UPDATE_SNAPSHOTS';
 
-/// The directory of the snapshots, one per app of the matrix.
+/// The directory of the snapshots, one per app of the matrix that has one
+/// (see [_withSnapshot]).
 final _directory = Directory('test/snapshots');
+
+/// The apps of [apps], the apps of a matrix, that have a snapshot: all but
+/// the apps with every module of another value of a mode option of a role.
+///
+/// Such an app differs from the app with its modules and the first value
+/// only in the files of the role and in those that its provider renders
+/// for the value, which the snapshot of the app of the provider for that
+/// value shows already, such as `clock by sundial --clock-hours=12`. A
+/// snapshot of it would repeat the thousands of lines of every other
+/// module of the app, once for each value.
+List<MatrixApp> _withSnapshot(List<MatrixApp> apps) => [
+      for (final app in apps)
+        if (app.everyModuleWith == null || app.modes.isEmpty) app,
+    ];
 
 /// The files of the app entry that the snapshots show: the Dart code, the
 /// pubspec, the README, and the native files with sockets. The Xcode project
@@ -114,7 +131,8 @@ Future<void> main() async {
     for (final module in registry.providersOf(appEntryRole))
       ModuleOrigin(module.descriptor.id),
   };
-  final (:apps, failed: _) = await matrixOf(smfModules);
+  final (apps: matrix, failed: _) = await matrixOf(smfModules);
+  final apps = _withSnapshot(matrix);
 
   for (final app in apps) {
     test('the app of ${app.name} renders as its snapshot', () async {
@@ -148,6 +166,37 @@ Future<void> main() async {
       );
     });
   }
+
+  test(
+      'the apps with every module of the other values of a mode option have '
+      'no snapshot, and the apps of the provider of the role for those '
+      'values have one', () async {
+    // No module of smf create has to provide a role with a mode option for
+    // this: a synthetic registry has one.
+    final (apps: all, :failed) = await matrixOf(doorsOfWood);
+
+    expect(failed, isEmpty);
+    expect(all, hasLength(12));
+    expect(_withSnapshot(all).map(_fileNameOf), [
+      'flutter_core.txt',
+      'lock.txt',
+      'oak.txt',
+      'pine.txt',
+      'doors_by_lock_access_guests.txt',
+      'doors_by_lock_access_anyone.txt',
+      'every_module_oak.txt',
+      'every_module_pine.txt',
+    ]);
+    // The matrix of the CLI has a snapshot for each of its other apps.
+    expect(
+      matrix.where((app) => !apps.contains(app)),
+      everyElement(
+        isA<MatrixApp>()
+            .having((app) => app.everyModuleWith, 'everyModuleWith', isNotNull)
+            .having((app) => app.modes, 'modes', isNotEmpty),
+      ),
+    );
+  });
 
   test('every snapshot belongs to an app of the matrix', () {
     final expected = {for (final app in apps) _fileNameOf(app)};
