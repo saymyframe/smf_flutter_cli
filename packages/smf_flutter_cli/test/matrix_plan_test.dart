@@ -1,9 +1,10 @@
 // Tests the plan of the jobs of CI that check the matrix: the apps with
 // every module that a run takes (a pairwise or 3-wise covering of the
 // combinations of the providers of the roles that take one, all of them,
-// one by its name, or one for each provider of a role), the shards of the
-// matrix, the options of the matrix tools that choose them, and the plan
-// that the tools print for the workflows.
+// one by its name, or one for each provider of a role), those for the
+// other values of the mode options of the roles that it takes next to
+// them, the shards of the matrix, the options of the matrix tools that
+// choose them, and the plan that the tools print for the workflows.
 import 'dart:convert';
 
 import 'package:smf_bloc/smf_bloc.dart';
@@ -14,6 +15,8 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
+
+import 'mode_registry.dart';
 
 /// A role that an app has at most one provider of.
 final class _Role extends Role<Object> {
@@ -146,6 +149,59 @@ Set<String> _tuplesOf(List<MatrixApp> apps, int strength) {
       }
       for (var i = start; i < providers.length; i++) {
         add(i + 1, [...chosen, providers[i]]);
+      }
+    }
+
+    add(0, []);
+  }
+  return tuples;
+}
+
+/// What sets the apps of [apps] apart in the synthetic registries with the
+/// mode options [options]: for each app, its providers, `r<i>_p<j>`, `oak`
+/// or `pine`, and its value of each option whose role it has, the one of
+/// its modes or the first, such as `access=guests`.
+List<List<String>> _partsOf(List<MatrixApp> apps, List<RoleOption> options) {
+  String valueOf(MatrixApp app, RoleOption option) =>
+      app.modes[option.name] ?? option.allowed!.first;
+  return [
+    for (final app in apps)
+      [
+        for (final id in app.modules)
+          if (RegExp(r'^(r\d+_p\d+|oak|pine)$').hasMatch(id.value)) id.value,
+        for (final option in options)
+          if (app.modules.contains(_providerOf[option.name]))
+            '${option.name}=${valueOf(app, option)}',
+      ],
+  ];
+}
+
+/// The module that provides the role of each mode option of the synthetic
+/// registries, by the name of the option.
+const _providerOf = {'access': ModuleId('lock'), 'chime': ModuleId('tower')};
+
+/// The sets of [strength] of the parts of each app of [apps] (see
+/// [_partsOf]) that have a value of an option of [options] other than its
+/// first, as texts such as `access=guests+pine`.
+Set<String> _modeTuplesOf(
+  List<MatrixApp> apps,
+  List<RoleOption> options,
+  int strength,
+) {
+  final first = {
+    for (final option in options) '${option.name}=${option.allowed!.first}',
+  };
+  final tuples = <String>{};
+  for (final parts in _partsOf(apps, options)) {
+    void add(int start, List<String> chosen) {
+      if (chosen.length == strength) {
+        if (chosen.any((part) => part.contains('=') && !first.contains(part))) {
+          tuples.add((chosen.toList()..sort()).join('+'));
+        }
+        return;
+      }
+      for (var i = start; i < parts.length; i++) {
+        add(i + 1, [...chosen, parts[i]]);
       }
     }
 
@@ -467,6 +523,310 @@ void main() {
     });
   });
 
+  group(
+      'the apps with every module of the other values of the mode options '
+      'that a selection takes', () {
+    /// The apps with every module of [modules], those that [selection]
+    /// takes of them, and those of the other values of the mode options
+    /// that it takes next to them.
+    Future<
+        ({
+          List<MatrixApp> every,
+          List<MatrixApp> selected,
+          List<MatrixApp> modes,
+          List<MatrixApp> selectedModes,
+        })> take(
+      List<SmfModule> modules,
+      EveryModuleSelection selection,
+    ) async {
+      final every = await everyModuleAppsOf(modules);
+      final modes = await modeAppsOf(modules);
+      expect(every.failed, isEmpty);
+      expect(modes.failed, isEmpty);
+      final selected = selection.select(every.apps, modules);
+      return (
+        every: every.apps,
+        selected: selected,
+        modes: modes.apps,
+        selectedModes: selection.selectModes(modes.apps, selected, modules),
+      );
+    }
+
+    test(
+        'of a pairwise covering have each other value with each provider of '
+        'a role that has several: for two providers and an option of three '
+        'values, the two apps with every module and four more', () async {
+      final (:every, :selected, :modes, :selectedModes) = await take(
+        doorsOfWood,
+        EveryModuleCombinations.pairwise,
+      );
+
+      expect(_names(selected), ['every module (oak)', 'every module (pine)']);
+      expect(_names(selectedModes), [
+        'every module (oak) --access=guests',
+        'every module (oak) --access=anyone',
+        'every module (pine) --access=guests',
+        'every module (pine) --access=anyone',
+      ]);
+      expect(selectedModes, modes);
+      expect(every, selected);
+    });
+
+    test(
+        'of a pairwise covering are a few of them, next to the covering of '
+        'the registry without the option: for three roles of two providers '
+        'and an option of two values, its four apps and two more', () async {
+      final modules = [
+        ..._registry(const [2, 2, 2]),
+        tower,
+      ];
+      final (:every, :selected, :modes, :selectedModes) = await take(
+        modules,
+        EveryModuleCombinations.pairwise,
+      );
+      final without = await everyModuleAppsOf(_registry(const [2, 2, 2]));
+
+      expect(every, hasLength(8));
+      expect(modes, hasLength(8));
+      // The option changes nothing of the covering of the providers.
+      expect(
+        [for (final app in selected) app.everyModuleWith],
+        [
+          for (final app in EveryModuleCombinations.pairwise
+              .select(without.apps, _registry(const [2, 2, 2])))
+            app.everyModuleWith,
+        ],
+      );
+      expect(selected, hasLength(4));
+      expect(selectedModes, hasLength(2));
+      expect(
+        _modeTuplesOf(selectedModes, const [chime], 2),
+        _modeTuplesOf(modes, const [chime], 2),
+      );
+      // Six pairs of the value with a provider, three in each app.
+      expect(_modeTuplesOf(modes, const [chime], 2), hasLength(6));
+      expect(selectedModes, orderedEquals(modes.where(selectedModes.contains)));
+    });
+
+    test(
+        'of a covering have every tuple with another value that one of them '
+        'has, of providers of different roles and of values of different '
+        'options, and keep their order, also when an option is of a role '
+        'that only some of the apps have', () async {
+      const options = [access, chime];
+      // Each registry with the numbers of the apps of the other values:
+      // all of them, and those of a pairwise and of a 3-wise covering.
+      for (final (name, modules, all, pairwise, threeWise) in [
+        ('the doors and the bells', const [...doorsOfWood, tower], 10, 5, 10),
+        (
+          'two roles, the doors and the bells',
+          [
+            ..._registry(const [2, 3]),
+            lock,
+            tower,
+          ],
+          30,
+          7,
+          15,
+        ),
+        (
+          'three roles and the doors',
+          [
+            ..._registry(const [2, 2, 2]),
+            lock,
+          ],
+          16,
+          4,
+          8,
+        ),
+        // The bells depend on pine, so the app with oak has no bells, and
+        // no value of their option: it has one thing less that sets it
+        // apart than the app with pine, and still its pairs. And an app
+        // with the first value of an option is an app with the role of the
+        // option, so the app with oak for guests does not stand for the
+        // app for guests whose bells ring.
+        (
+          'the doors, and the bells with pine alone',
+          const [
+            ...doorsOfWood,
+            ModeModule(
+              ModuleId('tower'),
+              provides: {bells},
+              dependsOn: {ModuleId('pine')},
+            ),
+          ],
+          7,
+          7,
+          7,
+        ),
+      ]) {
+        for (final (combinations, count) in [
+          (EveryModuleCombinations.pairwise, pairwise),
+          (EveryModuleCombinations.threeWise, threeWise),
+        ]) {
+          final (every: _, selected: _, :modes, :selectedModes) = await take(
+            modules,
+            combinations,
+          );
+          final reason = '${combinations.option} of $name';
+
+          expect(modes, hasLength(all), reason: reason);
+          for (var size = 1; size <= combinations.strength!; size++) {
+            expect(
+              _modeTuplesOf(selectedModes, options, size),
+              _modeTuplesOf(modes, options, size),
+              reason: '$reason: tuples of $size',
+            );
+          }
+          expect(
+            selectedModes,
+            orderedEquals(modes.where(selectedModes.contains)),
+            reason: reason,
+          );
+          expect(selectedModes, hasLength(count), reason: reason);
+        }
+      }
+    });
+
+    test(
+        'of a covering leave out an app whose tuples with another value the '
+        'others have too, though one of its pairs of providers is in no '
+        'other of them: an app of the covering has that pair already', () {
+      final modules = [
+        ..._registry(const [2, 2, 2]),
+        tower,
+      ];
+
+      /// The app with every module and the providers [providers], one of
+      /// each of the three roles, whose bells are off with [off].
+      MatrixApp app(List<int> providers, {bool off = false}) => MatrixApp(
+            'every module (${providers.join(', ')})${off ? ' off' : ''}',
+            [
+              const ModuleId('flutter_core'),
+              for (final (role, provider) in providers.indexed)
+                ModuleId('r${role}_p$provider'),
+              const ModuleId('tower'),
+            ],
+            modes: {if (off) 'chime': 'off'},
+            everyModuleWith: const [],
+          );
+      // Every pair of providers is in one of the apps of the covering.
+      final selected = EveryModuleCombinations.pairwise.select(
+        [
+          for (final first in [0, 1])
+            for (final second in [0, 1])
+              for (final third in [0, 1]) app([first, second, third]),
+        ],
+        modules,
+      );
+      expect(selected, hasLength(4));
+      // Only some of the apps of the other value, as when modules fit only
+      // some combinations. The covering takes the first of them first, for
+      // its three providers with the bells off, and then the two others,
+      // which have those three between them and the three other providers.
+      final first = app([0, 0, 0], off: true);
+      final others = [
+        app([0, 0, 1], off: true),
+        app([1, 1, 0], off: true),
+      ];
+
+      expect(
+        EveryModuleCombinations.pairwise.selectModes(
+          [first, ...others],
+          selected,
+          modules,
+        ),
+        others,
+      );
+    });
+
+    test('is the same for the same apps', () async {
+      const modules = [...doorsOfWood, tower];
+
+      final first = await take(modules, EveryModuleCombinations.pairwise);
+      final second = await take(modules, EveryModuleCombinations.pairwise);
+
+      expect(_names(first.selectedModes), _names(second.selectedModes));
+      // Two values with each of two providers, one value with each of
+      // them, and five pairs of values with one that is not the first.
+      expect(first.selectedModes, hasLength(5));
+      expect(first.modes, hasLength(10));
+    });
+
+    test(
+        'of an option whose role only some apps with every module have are '
+        'those of the apps with the role', () async {
+      // The provider of the doors depends on the second provider of r0, so
+      // the app with the first one has no doors, and no value of their
+      // option.
+      final modules = [
+        ..._registry(const [2]),
+        const ModeModule(
+          ModuleId('lock'),
+          provides: {doors},
+          dependsOn: {ModuleId('r0_p1')},
+        ),
+      ];
+
+      final (:every, :selected, :modes, :selectedModes) = await take(
+        modules,
+        EveryModuleCombinations.pairwise,
+      );
+
+      expect(_names(every), ['every module (r0_p0)', 'every module (r0_p1)']);
+      expect(every.first.modules, isNot(contains(const ModuleId('lock'))));
+      expect(selected, every);
+      expect(_names(modes), [
+        'every module (r0_p1) --access=guests',
+        'every module (r0_p1) --access=anyone',
+      ]);
+      expect(selectedModes, modes);
+    });
+
+    test('of all of them are all of those apps', () async {
+      final (:every, :selected, :modes, :selectedModes) = await take(
+        const [...doorsOfWood, tower],
+        EveryModuleCombinations.all,
+      );
+
+      expect(selected, every);
+      // Each of the two apps with every module once more for each
+      // combination of the three and the two values but the first.
+      expect(modes, hasLength(2 * (3 * 2 - 1)));
+      expect(selectedModes, modes);
+    });
+
+    test(
+        'are none for one app by its name, also by the name of one of them, '
+        'and none for one app for each provider of a role', () async {
+      final named = await take(
+        doorsOfWood,
+        const NamedEveryModuleApp('every module (pine)'),
+      );
+      expect(_names(named.selected), ['every module (pine)']);
+      expect(named.modes, hasLength(4));
+      expect(named.selectedModes, isEmpty);
+
+      // The name of an app of another value is the name of no app with
+      // every module.
+      const mode = NamedEveryModuleApp('every module (pine) --access=guests');
+      final ofMode = await take(doorsOfWood, mode);
+      expect(_names(ofMode.modes), contains(mode.name));
+      expect(ofMode.selected, isEmpty);
+      expect(ofMode.selectedModes, isEmpty);
+      expect(mode.problemsOf(ofMode.selected), [
+        'No app with every module is every module (pine) --access=guests.',
+      ]);
+
+      final perProvider = await take(
+        doorsOfWood,
+        const EveryModuleAppPerProvider(wood),
+      );
+      expect(perProvider.selected, hasLength(2));
+      expect(perProvider.selectedModes, isEmpty);
+    });
+  });
+
   group('a shard of the matrix', () {
     test('is read as <index>/<count>, from 1', () {
       final shard = MatrixShard.parse('2/3');
@@ -513,6 +873,7 @@ void main() {
 
     Future<int> run(
       List<SmfModule> modules, {
+      Set<String>? only,
       bool everyModule = false,
       EveryModuleSelection everyModuleApps = EveryModuleCombinations.all,
       MatrixShard? shard,
@@ -521,6 +882,7 @@ void main() {
           modules,
           directory: '/apps',
           selection: MatrixSelection(
+            only: only,
             everyModule: everyModule,
             everyModuleApps: everyModuleApps,
             shard: shard,
@@ -600,6 +962,84 @@ void main() {
         0,
       );
       expect(created, hasLength(2));
+    });
+
+    test(
+        'checks each app with every module of another value of a mode '
+        'option once, with its option: with the matrix, where it has a name '
+        'and a number as any app, and not with the apps with every module '
+        'alone', () async {
+      /// The name of each app that the run created, with its value of the
+      /// option of the doors, if it got one.
+      List<String> createdWith() => [
+            for (final arguments in created)
+              [
+                arguments[1],
+                ...arguments.where((argument) => argument.startsWith('--acc')),
+              ].join(' '),
+          ];
+
+      expect(await run(doorsOfWood), 0);
+      expect(createdWith(), [
+        for (var number = 1; number <= 4; number++) 'app_$number',
+        // The apps of the provider of the doors for the other values.
+        'app_5 --access=guests',
+        'app_6 --access=anyone',
+        // The apps with every module, of oak and of pine.
+        'app_7',
+        'app_8',
+        'app_9 --access=guests',
+        'app_10 --access=anyone',
+        'app_11 --access=guests',
+        'app_12 --access=anyone',
+      ]);
+
+      // The run of the apps with every module alone, which CI repeats in a
+      // second directory, has one app for each combination of providers.
+      created.clear();
+      expect(await run(doorsOfWood, everyModule: true), 0);
+      expect(createdWith(), ['app_7', 'app_8']);
+      expect(log.last, '\n2 apps generated in /apps.');
+
+      // A shard of the matrix has its share of them.
+      created.clear();
+      expect(await run(doorsOfWood, shard: const MatrixShard(2, 2)), 0);
+      expect(createdWith(), [
+        'app_2',
+        'app_4',
+        'app_6 --access=anyone',
+        'app_8',
+        'app_10 --access=anyone',
+        'app_12 --access=anyone',
+      ]);
+
+      // By its name.
+      created.clear();
+      expect(
+        await run(
+          doorsOfWood,
+          only: {'every module (pine) --access=guests'},
+        ),
+        0,
+      );
+      expect(createdWith(), ['app_11 --access=guests']);
+
+      // Not as the one app with every module of a run.
+      created.clear();
+      expect(
+        await run(
+          doorsOfWood,
+          everyModule: true,
+          everyModuleApps: const NamedEveryModuleApp(
+            'every module (pine) --access=guests',
+          ),
+        ),
+        1,
+      );
+      expect(created, isEmpty);
+      expect(log.sublist(log.indexOf('Problems:') + 1), [
+        'No app with every module is every module (pine) --access=guests.',
+      ]);
     });
 
     test(
@@ -736,6 +1176,41 @@ void main() {
         [for (final arguments in created) arguments[1]],
         hasLength(4),
       );
+    });
+
+    test(
+        'generates no app of another value of a mode option, whichever apps '
+        'it is to take: each app gets no value of the option, so the role '
+        'chooses the first, and keeps its name', () async {
+      for (final selection in <EveryModuleSelection>[
+        EveryModuleCombinations.pairwise,
+        EveryModuleCombinations.all,
+        const EveryModuleAppPerProvider(wood),
+      ]) {
+        created.clear();
+        expect(await create(doorsOfWood, selection), 0);
+        expect(
+          [for (final arguments in created) arguments[1]],
+          ['start_app', 'start_app_pine'],
+          reason: '$selection',
+        );
+        expect(
+          [for (final arguments in created) ...arguments],
+          isNot(contains(startsWith('--access'))),
+          reason: '$selection',
+        );
+      }
+
+      created.clear();
+      expect(
+        await create(
+          doorsOfWood,
+          const NamedEveryModuleApp('every module (pine) --access=guests'),
+        ),
+        1,
+      );
+      expect(created, isEmpty);
+      expect(log.last, contains('No app with every module is every module'));
     });
   });
 
@@ -945,6 +1420,112 @@ void main() {
         startsWith('every module: error [broken]'),
       ]);
       expect(plan, isEmpty);
+
+      // Those of the apps of the other values of a mode option too.
+      final withModes = await matrixPlanOf(
+        const [FlutterCoreModule(), lock, _Broken()],
+      );
+      expect(withModes.plan, isEmpty);
+      expect(
+        withModes.problems,
+        containsAll([
+          startsWith('every module --access=guests: error [broken]'),
+          startsWith('every module --access=anyone: error [broken]'),
+        ]),
+      );
+    });
+
+    test(
+        'gives CI the same apps to build, start and configure when a role '
+        'has a mode option: none of them is an app of another value, so each '
+        'has the first one', () async {
+      // The doors without their option.
+      const plain = ModeModule(ModuleId('lock'), provides: {ModeRole('d', [])});
+      final without = await matrixPlanOf(
+        const [FlutterCoreModule(), plain, oak, pine],
+        native: wood,
+      );
+      final (:plan, :problems) = await matrixPlanOf(doorsOfWood, native: wood);
+
+      expect(problems, isEmpty);
+      expect(without.problems, isEmpty);
+      expect(plan, {
+        'combinations': 'pairwise',
+        'shards': ['1/1'],
+        'apps': ['every module (oak)', 'every module (pine)'],
+        'start': ['every module (oak)', 'every module (pine)'],
+        'entries': ['every module (oak)', 'every module (pine)'],
+      });
+      for (final list in ['apps', 'start', 'entries']) {
+        expect(plan[list], without.plan[list], reason: list);
+      }
+
+      // With every combination too.
+      final every = await matrixPlanOf(
+        doorsOfWood,
+        native: wood,
+        everyCombination: true,
+      );
+      expect(every.problems, isEmpty);
+      expect(every.plan, {...plan, 'combinations': 'all'});
+    });
+
+    test(
+        'counts an app of another value of a mode option once for the '
+        'shards, as the jobs check it: with the matrix, and not again with '
+        'the apps with every module', () async {
+      /// The doors of wood with [count] more modules, each with an app of
+      /// its own.
+      List<SmfModule> withMore(int count) => [
+            ...doorsOfWood,
+            for (var index = 0; index < count; index++)
+              ModeModule(ModuleId('more_$index')),
+          ];
+
+      // The 12 apps of the doors of wood, four of them of another value,
+      // and ten more; the two apps with every module once more.
+      final matrix = await matrixOf(
+        withMore(10),
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      expect(matrix.failed, isEmpty);
+      expect(matrix.apps, hasLength(22));
+      expect(matrix.apps.where((app) => app.modes.isNotEmpty), hasLength(6));
+      expect(
+        matrix.apps.where(
+          (app) => app.everyModuleWith != null && app.modes.isEmpty,
+        ),
+        hasLength(2),
+      );
+      expect(appsPerShard, 24);
+
+      final full = await matrixPlanOf(withMore(10));
+      expect(full.problems, isEmpty);
+      expect(full.plan['shards'], ['1/1']);
+
+      // One app more is one more than a shard checks.
+      final over = await matrixPlanOf(withMore(11));
+      expect(over.problems, isEmpty);
+      expect(over.plan['shards'], ['1/2', '2/2']);
+    });
+
+    test(
+        'with every combination counts the apps of the other values of the '
+        'mode options among those that it checks all of up to 100', () async {
+      // 2 ** 6 = 64 combinations of providers, each once more for the
+      // other value of the option of the bells.
+      final modules = _registry(const [2, 2, 2, 2, 2, 2]);
+
+      final without = await matrixPlanOf(modules, everyCombination: true);
+      final (:plan, :problems) = await matrixPlanOf(
+        [...modules, tower],
+        everyCombination: true,
+      );
+
+      expect(without.problems, isEmpty);
+      expect(without.plan['combinations'], 'all');
+      expect(problems, isEmpty);
+      expect(plan['combinations'], '3-wise');
     });
 
     test(

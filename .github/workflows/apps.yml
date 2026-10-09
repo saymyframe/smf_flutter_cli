@@ -259,7 +259,10 @@ jobs:
       # build_runner. flutter analyze of Flutter 3.44 and 3.47 fails in a
       # directory whose path has letters beyond ASCII, on every system
       # (https://github.com/flutter/flutter/pull/191377), so the matrix
-      # analyzes the apps there with dart analyze.
+      # analyzes the apps there with dart analyze. The apps with every module
+      # of the other values of a mode option of a role, which differ from
+      # these in their Dart code only, are not among them: the step before
+      # checked each of them once.
       - name: Generate, analyze and test the apps with every module of the shard in a directory with letters beyond ASCII
         if: ${{ !cancelled() }}
         env: *shard_env

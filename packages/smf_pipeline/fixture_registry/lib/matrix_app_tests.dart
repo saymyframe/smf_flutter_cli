@@ -23,7 +23,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// gate, whose guards of the routes a test closes and opens, the fixture
 /// analytics and the fixture screen log, whose listeners of the screen note
 /// what they hear, the fixture setting, whose restorers note what they
-/// read, and the fixture theme, whose colour a test changes.
+/// read, the fixture theme, whose colour a test changes, and the module
+/// that uses the fixture clock, which shows an hour on a clock of 24 hours
+/// or of 12.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -253,6 +255,20 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeThemeModule.id),
         roles: {appEntryRole},
       ),
+      // The module that uses the fixture clock, whose role has a mode
+      // option, --clock-hours: the clock of the app has the hours that the
+      // role chose, 24 or 12, and the module shows an hour as that clock
+      // has it. Only in the apps with every module, which run flutter test
+      // for other tests already, and which the matrix has once more for the
+      // other value of the option. It tests a module, so it names no role.
+      MatrixAppTest(
+        '$appTests/clock_hours',
+        appliesTo: (app) =>
+            _modeOf(app, _clockHours) != null &&
+            app.everyModuleWith != null &&
+            app.modules.contains(const ModuleId('fake_clock_user')),
+        values: (app) => {'clock_hours': _modeOf(app, _clockHours)!},
+      ),
     ],
     testedRoles: {
       routerRole,
@@ -265,6 +281,31 @@ Future<MatrixAppTests> fixtureAppTests() async {
       appEntryRole,
     },
   );
+}
+
+/// The name of the mode option of the clock role of the fixtures, which
+/// that role, of a package of its own, declares.
+const _clockHours = 'clock-hours';
+
+/// The value of the mode option [option] in [app], an app of the matrix,
+/// as the role with that option chose it, or `null` in an app without that
+/// role: the value that the template of the role gives the option for its
+/// choice ([RoleTemplate.optionsOf]), as the contract harness reads the
+/// mode of an app.
+///
+/// It comes from the choice of the role, which an app that got no value of
+/// the option has too, not from the options that the matrix gives
+/// `smf create` ([MatrixApp.roleOptions]). The test of a role of
+/// `smf_contracts` reads it with a function of that role instead; this
+/// library imports no package of a fixture module for a role of it.
+String? _modeOf(MatrixApp app, String option) {
+  final hook = app.hook!;
+  for (final role in hook.presentRoles) {
+    if (role.options.any((other) => other.isMode && other.name == option)) {
+      return role.template!.optionsOf(role.hookInput(hook).choice)[option];
+    }
+  }
+  return null;
 }
 
 /// The path in an app of what the matrix writes for the tests of the labels

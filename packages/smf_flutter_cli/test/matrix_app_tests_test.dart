@@ -93,6 +93,13 @@ void main() {
   });
 
   test(
+      'no app test reads the name or the options of an app of the matrix: '
+      'each takes what a role chose for the app, such as the value of a '
+      'mode option, from the roles of the app', () {
+    expect(appTests.modeProblems(apps), isEmpty);
+  });
+
+  test(
       'the walk of the routes applies to the apps with the router role, or '
       'to those of them that it is given, and goes to the locations of the '
       'app that need no values', () async {
