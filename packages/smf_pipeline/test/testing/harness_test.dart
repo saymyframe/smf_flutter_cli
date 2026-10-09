@@ -1346,7 +1346,7 @@ void main() {
       test(
           'sets the app of a case with a value apart from the app of the same '
           'modules without it', () async {
-        final harness = harnessOf(doors(_AccessTemplate()));
+        final harness = harnessOf(doors(_ModeTemplate()));
 
         final byDefault = await harness.check(lock);
         final forGuests = await harness.check(lockForGuests);
@@ -1385,7 +1385,7 @@ void main() {
           'tracking',
           cardinality: RoleCardinality.many,
         );
-        final role = doors(_AccessTemplate(), uses: {nav, tracking});
+        final role = doors(_ModeTemplate(), uses: {nav, tracking});
         final harness = ContractHarness(
           ModuleRegistry([
             scaffold(),
@@ -1483,7 +1483,7 @@ void main() {
 
       test('gives the hooks of the app of a case with a value that choice',
           () async {
-        final role = doors(_AccessTemplate());
+        final role = doors(_ModeTemplate());
         final harness = harnessOf(role);
 
         final result = await harness.check(
@@ -1506,7 +1506,7 @@ void main() {
       test(
           'has no case of its own for a value that the harness gives every '
           'case', () async {
-        final role = doors(_AccessTemplate());
+        final role = doors(_ModeTemplate());
         final harness =
             harnessOf(role, roleOptions: const {'access': 'guests'});
 
@@ -1535,7 +1535,7 @@ void main() {
           'gives each app with every module a case for each other '
           'combination of the values of the options of its roles', () {
         final nav = TestRole<NoDsl>('nav');
-        final role = doors(_AccessTemplate());
+        final role = doors(_ModeTemplate());
         final clock = TestRole<String>(
           'clock',
           options: const [
@@ -1629,14 +1629,14 @@ void main() {
 
       test('passes with a template that asks, and with one that does not',
           () async {
-        final asking = doors(_AccessTemplate());
+        final asking = doors(_ModeTemplate());
         final asked = await harnessOf(asking).check(lock);
         expect(asked.errors, isEmpty);
         expect(asked.choices![asking], 'members');
         // The answer of the user who presses Enter.
         expect(asked.answers, {'access': 'members'});
 
-        final silent = doors(_AccessTemplate(asks: false));
+        final silent = doors(_ModeTemplate(asks: false));
         final unasked = await harnessOf(silent).check(lock);
         expect(unasked.errors, isEmpty);
         expect(unasked.choices![silent], 'members');
@@ -1651,57 +1651,37 @@ void main() {
           'is an error when the choice without it is not its first value, '
           'the default', () async {
         // The question offers another value first.
-        final offered = await errorsOf(_AccessTemplate(enter: 'guests'));
+        final offered = await errorsOf(_ModeTemplate(enter: 'guests'));
         expect(
           offered.single.message,
           'Without --access, the doors role makes the choice guests when the '
-          'user presses Enter, for which its template gives --access guests, '
-          'not --access members: the first value of a mode option is its '
-          'default.',
+          'user presses Enter at its question, for which its template gives '
+          '--access guests, not --access members: the first value of a mode '
+          'option is its default.',
         );
         expect(offered.single.origin, ofDoors);
         expect(offered.single.hint, contains('offers first'));
 
-        // The template chooses another value without asking, in a terminal
-        // and without one.
-        final chosen = await errorsOf(
-          _AccessTemplate(
-            asks: false,
-            enter: 'anyone',
-            withoutTerminal: 'anyone',
-          ),
-        );
-        const rest = 'for which its template gives --access anyone, not '
-            '--access members: the first value of a mode option is its '
-            'default.';
-        const start = 'Without --access, the doors role makes the choice '
-            'anyone';
-        expect(chosen.map((issue) => issue.message), [
-          '$start when the user presses Enter, $rest',
-          '$start in a run without a terminal, $rest',
-        ]);
-
         // The template gives no option for a choice that it made without
         // asking, so nothing tells which value the app has.
         final unnamed = await errorsOf(
-          _AccessTemplate(asks: false, optionsFor: (choice) => const {}),
+          _ModeTemplate(asks: false, optionsFor: (choice) => const {}),
         );
-        expect(unnamed, hasLength(2));
         expect(
-          unnamed.first.message,
-          'Without --access, the doors role makes the choice members when '
-          'the user presses Enter, for which its template gives no --access, '
-          'not --access members: the first value of a mode option is its '
-          'default.',
+          unnamed.single.message,
+          'Without --access, the doors role makes the choice members in a '
+          'terminal and in a run without a terminal, for which its template '
+          'gives no --access, not --access members: the first value of a '
+          'mode option is its default.',
         );
-        expect(unnamed.first.hint, contains('optionsOf()'));
+        expect(unnamed.single.hint, contains('optionsOf()'));
       });
 
       test(
           'is an error when a run without a terminal needs it, or chooses '
           'another value than the first without it', () async {
         // As a template that asks in a terminal, and cannot decide without.
-        final needed = await errorsOf(_AccessTemplate(withoutTerminal: null));
+        final needed = await errorsOf(_ModeTemplate(needsOption: true));
         expect(
           needed.single.message,
           'The doors role cannot choose in a run without a terminal and '
@@ -1711,7 +1691,7 @@ void main() {
         expect(needed.single.hint, contains('first value'));
 
         final other = await errorsOf(
-          _AccessTemplate(withoutTerminal: 'guests'),
+          _ModeTemplate(withoutTerminal: 'guests'),
         );
         expect(
           other.single.message,
@@ -1724,7 +1704,7 @@ void main() {
 
         // With the option, neither run has a choice to make.
         expect(
-          await errorsOf(_AccessTemplate(withoutTerminal: null), lockForGuests),
+          await errorsOf(_ModeTemplate(needsOption: true), lockForGuests),
           isEmpty,
         );
       });
@@ -1741,7 +1721,7 @@ void main() {
           options: const [RoleOption(name: 'color', help: 'The color.')],
           template: _AskTemplate(),
         );
-        final role = doors(_AccessTemplate(withoutTerminal: null));
+        final role = doors(_ModeTemplate(needsOption: true));
         final harness = ContractHarness(
           ModuleRegistry([
             scaffold(),
@@ -1770,27 +1750,296 @@ void main() {
           () async {
         // The template does not read the option.
         final ignored = await errorsOf(
-          _AccessTemplate(readsOption: false),
+          _ModeTemplate(readsOption: false),
           lockForGuests,
         );
+        // It asks instead, in a terminal, and chooses its default without
+        // one: one problem of both runs.
         expect(
           ignored.single.message,
-          'With --access guests, the doors role makes the choice members, '
-          'for which its template gives --access members, not --access '
-          'guests: the choice of a mode option is its value.',
+          'With --access guests, the doors role makes the choice members '
+          'when the user presses Enter at its question and in a run without '
+          'a terminal, for which its template gives --access members, not '
+          '--access guests: the choice of a mode option is its value.',
         );
         expect(ignored.single.origin, ofDoors);
         expect(ignored.single.hint, contains('choose()'));
 
         // So is the value that the harness gives every case.
         final everywhere = await harnessOf(
-          doors(_AccessTemplate(readsOption: false)),
+          doors(_ModeTemplate(readsOption: false)),
           roleOptions: const {'access': 'anyone'},
         ).check(lock);
         expect(
           everywhere.errors.single.message,
           startsWith('With --access anyone, the doors role makes the choice'),
         );
+      });
+
+      test(
+          'is an error when the choice with a value is not that value in a '
+          'run without a terminal, as the matrices generate every app',
+          () async {
+        // The template reads the option only in a terminal: without one it
+        // chooses the first value before it looks at the option.
+        final template = _ModeTemplate(readsOptionWithoutTerminal: false);
+        final unread = await errorsOf(template, lockForGuests);
+        expect(
+          unread.single.message,
+          'With --access guests, the doors role makes the choice members in '
+          'a run without a terminal, for which its template gives --access '
+          'members, not --access guests: the choice of a mode option is its '
+          'value.',
+        );
+        expect(unread.single.origin, ofDoors);
+
+        // So the cases of the other values of its role fail, and render no
+        // app with a choice that no run without a terminal makes.
+        final results = await harnessOf(doors(template)).checkAll();
+        expect(
+          {
+            for (final result in results)
+              '${result.contractCase}': (
+                result.errors.length,
+                result.app != null,
+              ),
+          },
+          {
+            'scaffold': (0, true),
+            'lock': (0, true),
+            'doors by lock --access=guests': (1, false),
+            'doors by lock --access=anyone': (1, false),
+          },
+        );
+      });
+
+      test(
+          'is an error when the choice of its role differs between a '
+          'terminal and a run without one in a part that is no mode', () async {
+        // A role that asks nothing: the harness has no answer of it to make
+        // again, with which it holds the choices of the roles that ask to
+        // one another.
+        final noted = await errorsOf(
+          _ModeTemplate(asks: false, notesRun: true),
+        );
+        expect(
+          noted.single.message,
+          'The doors role makes the choice members/script in a run without a '
+          'terminal, not members/terminal, its choice in a terminal with the '
+          'same options: a run without a terminal would generate another app '
+          'than the harness renders.',
+        );
+        expect(noted.single.origin, ofDoors);
+        expect(
+          noted.single.hint,
+          'The choices of a role with a mode option compare by value, and '
+          'are the same with a terminal and without one.',
+        );
+
+        // With a value of the option, no role has a question to answer.
+        final given = await errorsOf(
+          _ModeTemplate(notesRun: true),
+          lockForGuests,
+        );
+        expect(
+          given.single.message,
+          startsWith(
+            'The doors role makes the choice guests/script in a run without '
+            'a terminal, not guests/terminal, its choice in a terminal',
+          ),
+        );
+      });
+
+      test(
+          'reports a choice of another value once when a terminal and a run '
+          'without one make it, and tells whether its role asked', () async {
+        const rest = 'for which its template gives --access anyone, not '
+            '--access members: the first value of a mode option is its '
+            'default.';
+
+        // Chosen without a question.
+        final silent = await errorsOf(
+          _ModeTemplate(
+            asks: false,
+            enter: 'anyone',
+            withoutTerminal: 'anyone',
+          ),
+        );
+        expect(
+          silent.single.message,
+          'Without --access, the doors role makes the choice anyone in a '
+          'terminal and in a run without a terminal, $rest',
+        );
+
+        // Offered first in a question.
+        final asked = await errorsOf(
+          _ModeTemplate(enter: 'anyone', withoutTerminal: 'anyone'),
+        );
+        expect(
+          asked.single.message,
+          'Without --access, the doors role makes the choice anyone when the '
+          'user presses Enter at its question and in a run without a '
+          'terminal, $rest',
+        );
+
+        // Another value in each run is a problem of each.
+        final two = await errorsOf(
+          _ModeTemplate(
+            asks: false,
+            enter: 'anyone',
+            withoutTerminal: 'guests',
+          ),
+        );
+        expect(two, hasLength(2));
+        expect(
+          two.first.message,
+          'Without --access, the doors role makes the choice anyone in a '
+          'terminal, $rest',
+        );
+        expect(
+          two.last.message,
+          startsWith(
+            'Without --access, the doors role makes the choice guests in a '
+            'run without a terminal, for which its template gives --access '
+            'guests, not --access members',
+          ),
+        );
+      });
+
+      group('with a second role', () {
+        const hours = RoleOption.mode(
+          name: 'hours',
+          help: 'The hours of the clock.',
+          values: ['24', '12'],
+        );
+
+        /// The role `clock` with the mode option `--hours`.
+        TestRole<String> clock(RoleTemplate<String> template) =>
+            TestRole<String>(
+              'clock',
+              options: const [hours],
+              template: template,
+            );
+
+        _ModeTemplate hoursTemplate({bool needsOption = false}) =>
+            _ModeTemplate(
+              name: 'hours',
+              values: const ['24', '12'],
+              needsOption: needsOption,
+            );
+
+        /// The errors of the app of the doors with [access], provided by
+        /// `lock`, and of [second], provided by `dial`, whose role chooses
+        /// after the doors.
+        Future<List<SmfIssue>> errorsWith(
+          RoleTemplate<String> access,
+          Role second,
+        ) async {
+          final result = await ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule(
+                'lock',
+                providers: [RoleProvider.plain(doors(access))],
+              ),
+              TestModule('dial', providers: [RoleProvider.plain(second)]),
+            ]),
+          ).check(
+            const ContractCase(
+              'both',
+              requested: [ModuleId('lock'), ModuleId('dial')],
+            ),
+          );
+          expect(result.app, isNull);
+          expect(result.choices, isNotNull);
+          return result.errors;
+        }
+
+        test(
+            'that cannot choose without a terminal, names the options of '
+            'that role only', () async {
+          final errors = await errorsWith(
+            _ModeTemplate(),
+            clock(hoursTemplate(needsOption: true)),
+          );
+
+          expect(
+            errors.single.message,
+            'The clock role cannot choose in a run without a terminal and '
+            'without --hours: Give --hours.',
+          );
+          expect(errors.single.hint, contains('first value'));
+          expect(
+            errors.single.origin,
+            isA<RoleTemplateOrigin>()
+                .having((origin) => origin.role.id, 'role', 'clock'),
+          );
+        });
+
+        test(
+            'that has no mode option and cannot choose without a terminal, '
+            'says so without the advice for a mode option', () async {
+          // No role asks, so the harness has no answers to make again in
+          // a run without a terminal, where it would find this already.
+          final errors = await errorsWith(
+            _ModeTemplate(asks: false),
+            TestRole<String>(
+              'colors',
+              options: const [RoleOption(name: 'color', help: 'The color.')],
+              template: _TerminalOnlyTemplate(),
+            ),
+          );
+
+          expect(
+            errors.single.message,
+            'The colors role cannot choose in a run without a terminal: Give '
+            '--color.',
+          );
+          expect(errors.single.hint, isNull);
+          expect(
+            errors.single.origin,
+            isA<RoleTemplateOrigin>()
+                .having((origin) => origin.role.id, 'role', 'colors'),
+          );
+        });
+
+        test(
+            'that cannot choose without a terminal, still holds the roles '
+            'that chose before it to their options', () async {
+          final errors = await errorsWith(
+            _ModeTemplate(withoutTerminal: 'guests'),
+            clock(hoursTemplate(needsOption: true)),
+          );
+
+          expect(errors, hasLength(2));
+          expect(
+            errors.first.message,
+            'The clock role cannot choose in a run without a terminal and '
+            'without --hours: Give --hours.',
+          );
+          expect(
+            errors.last.message,
+            'Without --access, the doors role makes the choice guests in a '
+            'run without a terminal, for which its template gives --access '
+            'guests, not --access members: the first value of a mode option '
+            'is its default.',
+          );
+        });
+      });
+
+      test(
+          'is an error of its role when the template asks in a run without '
+          'a terminal', () async {
+        final errors = await errorsOf(_ModeTemplate(asksWithoutTerminal: true));
+
+        expect(
+          errors.single.message,
+          'The doors role cannot choose in a run without a terminal and '
+          'without --access: The template of the doors role failed to '
+          'choose: Bad state: The contract harness cannot ask: Which access?',
+        );
+        expect(errors.single.origin, ofDoors);
+        expect(errors.single.hint, contains('asks nothing'));
       });
     });
 
@@ -3655,74 +3904,124 @@ final class _AskTemplate extends RoleTemplate<String> {
   Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
 }
 
-/// The template of a role with the mode option `--access`, whose values are
-/// `members`, `guests` and `anyone`. Its choice is the value of the option,
-/// unless it does not read it ([readsOption]). Without the option, it is
-/// [withoutTerminal] in a run without a terminal, which fails if that is
-/// `null`, and [enter] in a terminal: the value that its question offers
-/// first, or that it chooses without a question if it asks nothing
-/// ([asks]). It gives [optionsFor] of its choice, and renders the choice
-/// into a brick.
-final class _AccessTemplate extends RoleTemplate<String> {
-  _AccessTemplate({
+/// The template of a role with the mode option `--<name>` of [values]:
+/// `--access` of `members`, `guests` and `anyone` unless they are given.
+///
+/// Its choice is the value of the option, unless it does not read the
+/// option ([readsOption]), or not in a run without a terminal
+/// ([readsOptionWithoutTerminal]). Without the option:
+/// - in a terminal, it is [enter], the first value by default, which its
+///   question offers first, or which it chooses without a question if it
+///   asks nothing ([asks]);
+/// - in a run without a terminal, it is [withoutTerminal], the first value
+///   by default, unless the template fails there ([needsOption]) or asks
+///   there too ([asksWithoutTerminal]).
+///
+/// If it notes the run ([notesRun]), its choice is the value with
+/// `/terminal` or `/script` after it. It gives [optionsFor] of its choice,
+/// by default the option with the value, and renders the choice into a
+/// brick.
+final class _ModeTemplate extends RoleTemplate<String> {
+  _ModeTemplate({
+    this.name = 'access',
+    this.values = const ['members', 'guests', 'anyone'],
     this.asks = true,
-    this.enter = 'members',
-    this.withoutTerminal = 'members',
+    this.enter,
+    this.withoutTerminal,
+    this.needsOption = false,
+    this.asksWithoutTerminal = false,
     this.readsOption = true,
-    this.optionsFor = _accessOf,
+    this.readsOptionWithoutTerminal = true,
+    this.notesRun = false,
+    this.optionsFor,
   });
 
-  static Map<String, String> _accessOf(Object? choice) => {'access': '$choice'};
+  /// The name of the option.
+  final String name;
+
+  /// The values of the option.
+  final List<String> values;
 
   /// Whether the template asks in a terminal.
   final bool asks;
 
-  /// The choice of a user who presses Enter.
-  final String enter;
+  /// The choice of a user who presses Enter, or `null` for the first value.
+  final String? enter;
 
-  /// The choice in a run without a terminal, or `null` if the template
-  /// cannot make one there.
+  /// The choice in a run without a terminal, or `null` for the first value.
   final String? withoutTerminal;
+
+  /// Whether the template fails in a run without a terminal.
+  final bool needsOption;
+
+  /// Whether the template asks in a run without a terminal too.
+  final bool asksWithoutTerminal;
 
   /// Whether the template reads the option.
   final bool readsOption;
 
-  /// The options of a choice.
-  final Map<String, String> Function(Object? choice) optionsFor;
+  /// Whether the template reads the option in a run without a terminal.
+  final bool readsOptionWithoutTerminal;
+
+  /// Whether the choice tells which run made it.
+  final bool notesRun;
+
+  /// The options of a choice, or `null` for the option with its value.
+  final Map<String, String> Function(Object? choice)? optionsFor;
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
           bundle(
-            'access',
-            files: {'lib/access.dart': "const access = '{{access}}';\n"},
+            name,
+            files: {'lib/$name.dart': "const $name = '{{$name}}';\n"},
           ),
         ),
       ];
 
   @override
   Future<Object?> choose(RoleChoiceContext<String> context) async {
-    final given = readsOption ? context.option('access') : null;
-    if (given != null) return given;
+    final value = await _valueOf(context);
+    if (!notesRun) return value;
+    return '$value/${context.environment.interactive ? 'terminal' : 'script'}';
+  }
+
+  Future<String> _valueOf(RoleChoiceContext<String> context) async {
     final environment = context.environment;
-    if (!environment.interactive) {
-      return withoutTerminal ??
-          (throw const SmfUsageException('Give --access.'));
+    final interactive = environment.interactive;
+    final reads = readsOption && (interactive || readsOptionWithoutTerminal);
+    final given = reads ? context.option(name) : null;
+    if (given != null) return given;
+    if (!interactive && !asksWithoutTerminal) {
+      if (needsOption) throw SmfUsageException('Give --$name.');
+      return withoutTerminal ?? values.first;
     }
-    if (!asks) return enter;
+    if (interactive && !asks) return enter ?? values.first;
     return environment.prompter.select(
-      'Who may use the app?',
-      const ['members', 'guests', 'anyone'],
-      defaultValue: enter,
+      'Which $name?',
+      values,
+      defaultValue: enter ?? values.first,
     );
   }
 
   @override
-  Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
+  Map<String, String> optionsOf(Object? choice) =>
+      optionsFor?.call(choice) ?? {name: '$choice'.split('/').first};
 
   @override
   RoleOutput render(RoleHookInput<String> input) =>
-      RoleOutput(vars: {'access': input.choice});
+      RoleOutput(vars: {name: input.choice});
+}
+
+/// A template that chooses green in a terminal without asking, and needs
+/// the option `--color` in a run without one.
+final class _TerminalOnlyTemplate extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      context.option('color') ??
+      (context.environment.interactive
+          ? 'green'
+          : throw const SmfUsageException('Give --color.'));
 }
 
 /// A template that asks a question of every kind and joins the answers,
