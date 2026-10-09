@@ -353,4 +353,108 @@ void main() {
     expect(Resolution.providerObject(module, nav), same(provider));
     expect(module.origin, const ModuleOrigin(ModuleId('go')));
   });
+
+  group('dependenciesFirst', () {
+    /// The modules of a resolution of [modules], selected in that order,
+    /// with each after the modules it depends on.
+    List<String> ordered(List<SmfModule> modules) => [
+          for (final module in resolutionOf(modules).dependenciesFirst)
+            module.id.value,
+        ];
+
+    test('keeps the order of modules that do not depend on each other', () {
+      expect(
+        ordered([TestModule('zeta'), TestModule('alpha'), TestModule('mid')]),
+        ['zeta', 'alpha', 'mid'],
+      );
+      expect(resolutionOf(const []).dependenciesFirst, isEmpty);
+    });
+
+    test('moves a module to right before the first one that depends on it', () {
+      expect(
+        ordered([
+          TestModule('zeta'),
+          TestModule('rules', dependsOn: {'core'}),
+          TestModule('alpha'),
+          TestModule('other', dependsOn: {'core'}),
+          TestModule('core'),
+        ]),
+        ['zeta', 'core', 'rules', 'alpha', 'other'],
+      );
+      // A module that comes before those that depend on it stays.
+      expect(
+        ordered([
+          TestModule('core'),
+          TestModule('zeta'),
+          TestModule('rules', dependsOn: {'core'}),
+        ]),
+        ['core', 'zeta', 'rules'],
+      );
+    });
+
+    test('follows the dependencies of the dependencies', () {
+      expect(
+        ordered([
+          TestModule('top', dependsOn: {'middle'}),
+          TestModule('middle', dependsOn: {'base'}),
+          TestModule('base'),
+        ]),
+        ['base', 'middle', 'top'],
+      );
+      // The module in the middle was selected first of the three.
+      expect(
+        ordered([
+          TestModule('middle', dependsOn: {'base'}),
+          TestModule('top', dependsOn: {'middle'}),
+          TestModule('base'),
+        ]),
+        ['base', 'middle', 'top'],
+      );
+    });
+
+    test(
+        'keeps the order of the modules that a module depends on, whatever '
+        'order it lists them in', () {
+      expect(
+        ordered([
+          TestModule('first', dependsOn: {'left', 'right'}),
+          TestModule('second', dependsOn: {'right', 'left'}),
+          TestModule('right'),
+          TestModule('left'),
+        ]),
+        ['right', 'left', 'first', 'second'],
+      );
+    });
+
+    test('has each module of the app once, and no other', () {
+      // In an app that a test resolved by hand, a module may depend on one
+      // that the app lacks.
+      expect(
+        ordered([
+          TestModule('rules', dependsOn: {'gone', 'core'}),
+          TestModule('core'),
+        ]),
+        ['core', 'rules'],
+      );
+    });
+
+    test('keeps the variant and the reason of each module', () {
+      final resolution = Resolution([
+        ResolvedModule(
+          TestModule('rules', dependsOn: {'core'}),
+          const Requested(),
+          variant: const ModuleId('bloc'),
+        ),
+        ResolvedModule(
+          TestModule('core'),
+          const DependencyOf(ModuleId('rules')),
+        ),
+      ]);
+
+      final [core, rules] = resolution.dependenciesFirst;
+
+      expect(core, same(resolution.modules.last));
+      expect(rules, same(resolution.modules.first));
+    });
+  });
 }
