@@ -178,8 +178,8 @@ final class MatrixApp {
 /// the mode options of the roles ([modeAppsOf]), those that
 /// [everyModuleApps] takes next to its apps with every module (see
 /// [EveryModuleSelection.selectModes]). They come after every other app,
-/// so that the others keep their positions, and with them their numbers in
-/// a run, when a role gets a mode option or such an option another value.
+/// so that the others have the same positions, and with them the same
+/// numbers in a run, whichever of these apps a selection takes.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   List<SmfModule> modules, {
   Map<String, String?> roleOptions = const {},

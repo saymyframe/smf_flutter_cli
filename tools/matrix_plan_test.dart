@@ -54,7 +54,8 @@ final Matcher _shards = predicate<Object?>(
 
 /// Matches a list of the names of apps with every module, one or more,
 /// none of them with an option after its name, as the app of another value
-/// of a mode option has, such as `every module (bloc) --clock-hours=12`.
+/// of a mode option has: in the fixtures,
+/// `every module (go_router, get_it, fake_riverpod) --clock-hours=12`.
 final Matcher _apps = allOf(
   isA<List<Object?>>(),
   isNotEmpty,

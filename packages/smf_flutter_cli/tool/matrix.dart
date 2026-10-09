@@ -38,8 +38,8 @@ import 'package:yaml/yaml.dart';
 /// `matrixPlanOf`.
 ///
 /// A role with a mode option has its apps with every module once more for
-/// each other value of the option, named after the option too, such as
-/// `every module (bloc) --clock-hours=12`; see `modeAppsOf`. A run of the
+/// each other value of the option, each named as the app with the first
+/// value and then `--<option>=<value>`; see `modeAppsOf`. A run of the
 /// matrix checks those that its covering takes, once, as any app of the
 /// matrix. `--every-module`, `--app` and `--create` take none of them: the
 /// apps that CI builds and starts get no value of such an option, and so
