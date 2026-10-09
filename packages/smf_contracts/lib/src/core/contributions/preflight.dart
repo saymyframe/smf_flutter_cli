@@ -12,9 +12,12 @@ part of '../contributions.dart';
 /// those modules or the pipeline added them. So a check may build on what a
 /// check of such a module installs, as a check of the version of a tool
 /// does on the check that installs the tool: after an installation, the
-/// pipeline runs again the checks after it that have not passed. The checks
-/// of modules that do not depend on each other run in the order of the
-/// modules of the app.
+/// pipeline runs again the checks after it that have not passed.
+///
+/// The pipeline takes the modules in the order of the app. The checks of a
+/// module that comes there after one that depends on it run right before
+/// those of the first such module instead, and the checks of the other
+/// modules keep their order.
 final class Preflight extends Contribution {
   /// Creates the preflight of a module with [checks].
   const Preflight(this.checks, {super.when});

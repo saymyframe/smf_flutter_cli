@@ -147,8 +147,7 @@ final class Resolution {
   /// comes after the modules it depends on, directly or not. A module that
   /// [modules] has after one that depends on it comes right before the
   /// first such module instead, and so do the modules that it depends on
-  /// itself, before it. Modules of which none depends on another keep the
-  /// order of [modules].
+  /// itself, before it. The other modules keep the order of [modules].
   ///
   /// So what the pipeline does for a module in this order may build on what
   /// it did for the modules that the module depends on, as a check of the

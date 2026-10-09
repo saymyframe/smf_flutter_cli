@@ -289,12 +289,14 @@ final class PreflightReport {
 /// templates of its roles.
 ///
 /// The checks of a module come after those of the modules it depends on,
-/// directly or not, wherever the user named those, and otherwise in the
-/// order of the modules; see [Resolution.dependenciesFirst]. A check may
-/// need what a check of such a module installs, as a check of the version
-/// of a tool needs the tool, and [runPreflight] runs again only the checks
-/// after an installation. The checks of the templates of the roles come
-/// last, in the order of the roles.
+/// directly or not, wherever the user named those: a module that comes
+/// after one that depends on it has its checks right before those of the
+/// first such module, and the other modules keep their order; see
+/// [Resolution.dependenciesFirst]. A check may need what a check of such a
+/// module installs, as a check of the version of a tool needs the tool, and
+/// [runPreflight] runs again only the checks after an installation. The
+/// checks of the templates of the roles come last, in the order of the
+/// roles.
 List<PlannedCheck> plannedChecks(
   Collection collection,
   FlutterSdkCheck sdkCheck,
@@ -332,8 +334,15 @@ List<PlannedCheck> plannedChecks(
 /// for any module with [strict], or for modules that [canDoWithout] says
 /// no app can be made without, which lenient mode does not leave out
 /// either. Nor for a module that lenient mode will leave out for such a
-/// check. Anything still missing gets instructions: an error for a
-/// [PreflightCheck.required] check, a warning otherwise.
+/// check. The pipeline does not know which installation a check needs, so
+/// a failing required check is one that nothing can fix only when it can
+/// install nothing itself and no check before it, of any contributor,
+/// found something missing that it can install. When one did, a run that
+/// may install offers the installations first, and the required check
+/// stops the run, or has its module left out, only once it failed again
+/// after them, also when none of them could have fixed it. Anything still
+/// missing gets instructions: an error for a [PreflightCheck.required]
+/// check, a warning otherwise.
 ///
 /// The versions of the SDK are compared with the SDK constraints of
 /// [pubspec] right after the checks, before anything is installed; see
@@ -422,8 +431,17 @@ Future<List<CheckResult>> _checkAll(
 }
 
 /// The contributors that a failing required check among [results] dooms:
-/// one that no installation before it can fix. The checks whose
-/// installations may fix a check all come before it; see [plannedChecks].
+/// one that can install nothing itself, with no installable check before
+/// it.
+///
+/// The rule is coarse. Any installable check before a failing required
+/// check counts as one whose installation may fix it, whoever contributes
+/// it. The checks that can fix it are among them, since they are those of
+/// its own module and of the modules that its module depends on (see
+/// [plannedChecks]), but so are the checks of modules that have nothing to
+/// do with it. So a required check that no installation can fix does not
+/// doom its contributor when such a check comes before it: the run offers
+/// that installation before it stops, or leaves the module out.
 Set<ContributionOrigin> _doomedBy(List<CheckResult> results) {
   final doomed = <ContributionOrigin>{};
   var installableBefore = false;
