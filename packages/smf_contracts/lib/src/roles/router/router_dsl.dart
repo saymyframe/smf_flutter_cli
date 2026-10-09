@@ -48,21 +48,21 @@ final class RoutesData implements DataWithTexts {
 /// The stages come in the order of a first launch: the user goes through
 /// the flow of a [welcome] guard, and once that guard allows, through the
 /// flow of an [identity] guard. The app asks two guards of one stage in the
-/// order of their modules, and two guards of one module in the order of
+/// order of their modules, and those of one module in the order of its
 /// [RoutesData.guards].
 ///
 /// A module cannot add a stage. A guard that is neither of the two takes
 /// the stage that its flow belongs to: [welcome] if the flow needs to know
-/// nothing of the user, as a consent or a required update does, and
-/// [identity] if it needs to know who the user is, as a subscription does.
-/// The order of the modules then says where it comes among the guards of
-/// that stage.
+/// nothing of the user, as that of a consent or of a required update, and
+/// [identity] if it needs to know who the user is, as that of a
+/// subscription. The order of the modules then says where it comes among
+/// the guards of that stage.
 enum GuardStage {
   /// Before the app asks who the user is: what a new user goes through on
   /// the first launch, such as an onboarding.
   welcome,
 
-  /// Who the user is, such as a sign-in.
+  /// What asks who the user is, such as a sign-in.
   identity,
 }
 
@@ -185,9 +185,9 @@ final class RouteGuard {
   /// once it allows again, as the next user does after a sign-out. A
   /// location that is asked for while the guard does not allow is
   /// remembered then too, so the user still comes to a link that arrived
-  /// meanwhile. And what the router remembers already stays: the location
-  /// that an earlier guard kept the user from is shown once this guard
-  /// allows.
+  /// in the meantime. And what the router remembers already stays, such as
+  /// the location that a guard before this one took the user from: the
+  /// router shows it once the guards allow it.
   final bool resumes;
 
   @override

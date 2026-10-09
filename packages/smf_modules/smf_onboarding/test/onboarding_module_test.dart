@@ -350,7 +350,8 @@ void main() {
 
     test(
         'declares the guard firstRun, which shows its route until the '
-        'function of the status of the onboarding says otherwise', () {
+        'function of the status of the onboarding says otherwise, comes '
+        'before the guards of a later stage, and brings the user back', () {
       final data = [
         for (final contribution
             in module.contribute(ContractHarness.defaultContext))
@@ -365,6 +366,11 @@ void main() {
         guard.allows.import,
         const ImportRef.app('features/onboarding/onboarding_status.dart'),
       );
+      // The onboarding comes before a guard that asks who the user is,
+      // whatever the order of the modules, and restart() brings the user
+      // back to the screen that they were on.
+      expect(guard.stage, GuardStage.welcome);
+      expect(guard.resumes, isTrue);
     });
 
     test('has each of its texts in English and in Ukrainian', () {
