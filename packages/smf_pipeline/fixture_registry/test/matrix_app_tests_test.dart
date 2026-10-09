@@ -111,6 +111,13 @@ void main() {
   });
 
   test(
+      'no app test reads the name or the options of an app of the matrix: '
+      'each takes what a role chose for the app, such as the value of a '
+      'mode option, from the roles of the app', () {
+    expect(appTests.modeProblems(apps), isEmpty);
+  });
+
+  test(
       'the test of the DI role applies only to the apps with the role whose '
       'services have every lifetime, of each DI container', () {
     final diRoleTest = named('di_role');
@@ -730,6 +737,7 @@ void main() {
         severalProviders.roleProblems(severalProvidersModules(), matrix),
         isEmpty,
       );
+      expect(severalProviders.modeProblems(matrix), isEmpty);
     });
   });
 }

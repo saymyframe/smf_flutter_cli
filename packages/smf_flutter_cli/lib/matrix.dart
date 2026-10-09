@@ -59,7 +59,7 @@ final class MatrixApp {
   ///
   /// They tell the matrix which app it is. A [MatrixAppTest] takes the mode
   /// of an app from the choice of the role instead ([hook]), as it takes
-  /// everything else that a role chose.
+  /// everything else that a role chose (see [MatrixAppTests.modeProblems]).
   final Map<String, String> modes;
 
   /// For an app with every module, one of those that the contract harness
@@ -1079,6 +1079,72 @@ final class MatrixAppTests {
       'providers of the role from the roles of the app (MatrixApp.hook), such '
       'as whether the app has the role (presentRoles), so that a new provider '
       'of the role gets the test as it is.';
+
+  /// The problems of the [tests] that read what the case of an app of
+  /// [apps], the apps of a matrix, is called or which options it got: for
+  /// each test, the apps in which it applies otherwise, or fills other
+  /// values or generates other files, once the app has another name, no
+  /// [MatrixApp.roleOptions] and no [MatrixApp.modes], with the same
+  /// modules and the same data and choices of its roles ([MatrixApp.hook]).
+  ///
+  /// The name and the options of an app are how the matrix generates it,
+  /// such as `--clock-hours=12` for the app of another value of a mode
+  /// option (see [RoleOption.mode]). What the app is, its roles chose: a
+  /// role may choose a value that no option gave, as it chooses the first
+  /// value of a mode option, and an option may be given to an app whose
+  /// roles do not read it. So a test takes the mode of an app from the
+  /// choice of the role, with a function of the role that reads it from the
+  /// input of its hooks ([Role.hookInput]), as it takes the route that the
+  /// app starts on with `routerRole.startIn(routerRole.hookInput(
+  /// app.hook!))`, and a test that takes it from elsewhere is a problem.
+  List<String> modeProblems(List<MatrixApp> apps) {
+    final problems = <String>[];
+    for (final test in tests) {
+      final reading = [
+        for (final app in apps)
+          if (_readsCase(test, app)) app.name,
+      ];
+      if (reading.isNotEmpty) problems.add(_byCase(test, reading));
+    }
+    return problems;
+  }
+
+  /// The problem that [test] selects its apps, takes its values or
+  /// generates its files by the name or the options of the apps [reading].
+  static String _byCase(MatrixAppTest test, List<String> reading) =>
+      'The tests of ${test.directory} select their apps, take the values of '
+      'their files or generate files by the name or the options of the app: '
+      'with another name and without its options, they would apply '
+      'otherwise, or get other values or files, in these apps of the matrix: '
+      '${reading.join(', ')}. A test takes what a role chose for the app, '
+      'such as the value of a mode option, from the roles of the app '
+      '(MatrixApp.hook), with a function of the role, since the role may '
+      'choose it without the option.';
+
+  /// Whether [test] reads the name or the options of [app]: whether it
+  /// applies to the app under another name and without its options other
+  /// than to [app], or fills the values of its files, or generates files,
+  /// there otherwise, or throws there.
+  static bool _readsCase(MatrixAppTest test, MatrixApp app) {
+    final selection = _selectionOf(test, app);
+    try {
+      return _selectionOf(
+            test,
+            MatrixApp(
+              _otherName,
+              app.modules,
+              everyModuleWith: app.everyModuleWith,
+              hook: app.hook,
+            ),
+          ) !=
+          selection;
+    } on Object {
+      return true;
+    }
+  }
+
+  /// The name that [_readsCase] gives an app in place of its own.
+  static const _otherName = 'another app';
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated
@@ -1620,9 +1686,10 @@ final class MatrixCommands {
 /// apply to, adds them and runs every test of the app with `flutter test`.
 /// Returns the exit code: 0 if every app was generated with every module
 /// and every step that the options of CI do not leave for later, has no
-/// issue and passes its tests, each of the tests applies to some app, and
-/// they check the contract of their roles with every provider (see
-/// [MatrixAppTests.roleProblems]); 1 otherwise.
+/// issue and passes its tests, each of the tests applies to some app, they
+/// check the contract of their roles with every provider (see
+/// [MatrixAppTests.roleProblems]), and none of them reads the name or the
+/// options of an app (see [MatrixAppTests.modeProblems]); 1 otherwise.
 ///
 /// It checks the apps of [selection], every app of the matrix by default,
 /// such as those with some names, only the apps with every module, or a
@@ -1692,7 +1759,9 @@ Future<int> runMatrix(
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }
-  problems.addAll(appTests.roleProblems(modules, all));
+  problems
+    ..addAll(appTests.roleProblems(modules, all))
+    ..addAll(appTests.modeProblems(all));
   run.say('\n${checked.length} apps generated in $directory.');
   return _exitCode(problems, run.say);
 }

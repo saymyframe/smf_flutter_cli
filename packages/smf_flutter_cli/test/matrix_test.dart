@@ -1472,7 +1472,10 @@ Type type() => Types;
       // so a test of an app that the covering lacks is a problem there.
       final ofAll = MatrixAppTest(
         '/tests/all',
-        appliesTo: (app) => app.modes.length > 1,
+        appliesTo: (app) =>
+            app.hook!.presentRoles.containsAll([doors, bells]) &&
+            doors.modeIn(app.hook!, 'access') == 'guests' &&
+            bells.modeIn(app.hook!, 'chime') == 'off',
       );
       expect(
         await run(
@@ -1492,6 +1495,152 @@ Type type() => Types;
         1,
       );
       expect(log.last, 'The tests of /tests/all apply to no app.');
+    });
+
+    group('with tests of the apps of a mode option', () {
+      /// The problems that the run logged.
+      List<String> problems() => log.contains('Problems:')
+          ? log.sublist(log.indexOf('Problems:') + 1)
+          : [];
+
+      /// The problem that the tests of [directory] read the name or the
+      /// options of the apps [names].
+      String byCase(String directory, String names) =>
+          'The tests of $directory select their apps, take the values of '
+          'their files or generate files by the name or the options of the '
+          'app: with another name and without its options, they would apply '
+          'otherwise, or get other values or files, in these apps of the '
+          'matrix: $names. A test takes what a role chose for the app, such '
+          'as the value of a mode option, from the roles of the app '
+          '(MatrixApp.hook), with a function of the role, since the role may '
+          'choose it without the option.';
+
+      /// The apps of the other values of the option of the doors: those of
+      /// their provider, and those with every module.
+      const guests = 'doors by lock --access=guests, '
+          'every module (oak) --access=guests, '
+          'every module (pine) --access=guests';
+      const anyone = 'doors by lock --access=anyone, '
+          'every module (oak) --access=anyone, '
+          'every module (pine) --access=anyone';
+      const ofModes = 'doors by lock --access=guests, '
+          'doors by lock --access=anyone, '
+          'every module (oak) --access=guests, '
+          'every module (oak) --access=anyone, '
+          'every module (pine) --access=guests, '
+          'every module (pine) --access=anyone';
+
+      test(
+          'passes when they take the mode of an app from the choice of the '
+          'role, to select their apps and to fill their files', () async {
+        final byChoice = MatrixAppTest(
+          '/tests/doors',
+          appliesTo: (app) => app.hook!.presentRoles.contains(doors),
+          values: (app) => {'access': doors.modeIn(app.hook!, 'access')},
+          generatedFiles: (app, packageName) => {
+            'test/access.dart': "const access = '"
+                "${doors.modeIn(app.hook!, 'access')}';\n",
+          },
+          roles: {doors},
+        );
+        final ofGuests = MatrixAppTest(
+          '/tests/guests',
+          appliesTo: (app) =>
+              app.hook!.presentRoles.contains(doors) &&
+              doors.modeIn(app.hook!, 'access') == 'guests',
+        );
+
+        expect(
+          await run(
+            modules: doorsOfWood,
+            appTests: [byChoice, ofGuests],
+            testedRoles: {doors},
+          ),
+          0,
+        );
+        expect(problems(), isEmpty);
+        // The app of the provider of the doors and the two apps with every
+        // module, each for each of the three values.
+        expect(tested, hasLength(9));
+        expect(tested.where((app) => app.contains('/tests/guests')), [
+          'app_5 (doors by lock --access=guests): /tests/doors, /tests/guests',
+          equals(
+            'app_9 (every module (oak) --access=guests): /tests/doors, '
+            '/tests/guests',
+          ),
+          equals(
+            'app_11 (every module (pine) --access=guests): /tests/doors, '
+            '/tests/guests',
+          ),
+        ]);
+      });
+
+      test(
+          'fails when they select their apps by the name, the modes or the '
+          'options of an app', () async {
+        final byName = MatrixAppTest(
+          '/tests/name',
+          appliesTo: (app) => app.name.endsWith('--access=guests'),
+        );
+        final byModes = MatrixAppTest(
+          '/tests/modes',
+          appliesTo: (app) => app.modes['access'] == 'anyone',
+        );
+        final byOptions = MatrixAppTest(
+          '/tests/options',
+          appliesTo: (app) => app.roleOptions['access'] == 'guests',
+        );
+
+        expect(
+          await run(
+            modules: doorsOfWood,
+            appTests: [byName, byModes, byOptions],
+          ),
+          1,
+        );
+        expect(problems(), [
+          equals(byCase('/tests/name', guests)),
+          equals(byCase('/tests/modes', anyone)),
+          equals(byCase('/tests/options', guests)),
+        ]);
+      });
+
+      test(
+          'fails when they take the values of their files or generate files '
+          'by the options or the name of an app, also when they look the app '
+          'up by its name', () async {
+        bool hasDoors(MatrixApp app) => app.hook!.presentRoles.contains(doors);
+        final values = MatrixAppTest(
+          '/tests/values',
+          appliesTo: hasDoors,
+          values: (app) => {'access': app.roleOptions['access'] ?? 'members'},
+        );
+        final files = MatrixAppTest(
+          '/tests/files',
+          appliesTo: hasDoors,
+          generatedFiles: (app, packageName) => {
+            'test/access.dart': '// ${app.modes}\n',
+          },
+        );
+        // A table of the apps by their names has no other app.
+        final lookup = MatrixAppTest(
+          '/tests/lookup',
+          appliesTo: (app) => app.modules.length == 1,
+          values: (app) => {
+            'kind': const {'flutter_core': 'the app entry alone'}[app.name]!,
+          },
+        );
+
+        expect(
+          await run(modules: doorsOfWood, appTests: [values, files, lookup]),
+          1,
+        );
+        expect(problems(), [
+          equals(byCase('/tests/values', ofModes)),
+          equals(byCase('/tests/files', ofModes)),
+          equals(byCase('/tests/lookup', 'flutter_core')),
+        ]);
+      });
     });
 
     group('with tests of a role', () {
