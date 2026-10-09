@@ -137,6 +137,7 @@ abstract final class Icons {
 const _goRouter = '''
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 abstract class GoRouterState {
@@ -252,6 +253,23 @@ class RouteConfiguration {
   RouteMatchList findMatch(Uri uri, {Object? extra}) => RouteMatchList();
 }
 
+class RoutingConfig {
+  const RoutingConfig({
+    required this.routes,
+    this.redirect = _defaultRedirect,
+  });
+
+  static FutureOr<String?> _defaultRedirect(
+    BuildContext context,
+    GoRouterState state,
+  ) =>
+      null;
+
+  final List<RouteBase> routes;
+
+  final GoRouterRedirect redirect;
+}
+
 class GoRouter implements RouterConfig<RouteMatchList> {
   factory GoRouter({
     required List<RouteBase> routes,
@@ -260,6 +278,12 @@ class GoRouter implements RouterConfig<RouteMatchList> {
     List<NavigatorObserver>? observers,
   }) =>
       throw UnimplementedError();
+
+  GoRouter.routingConfig({
+    required ValueListenable<RoutingConfig> routingConfig,
+    String? initialLocation,
+    List<NavigatorObserver>? observers,
+  });
 
   late final RouteConfiguration configuration;
 

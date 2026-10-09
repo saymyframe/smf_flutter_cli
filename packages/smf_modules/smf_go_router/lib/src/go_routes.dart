@@ -6,6 +6,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 final class GoRoutes {
   GoRoutes._({
     required this.routes,
+    required this.mainNavigation,
     required this.valueChecks,
     required this.initialLocation,
     required this.hasMainNavigation,
@@ -29,13 +30,15 @@ final class GoRoutes {
   /// with the routes below them: its builder shows the `AppShell` of the
   /// layout with the list of the destinations that the layout role
   /// generates in the same order, each with its label and its icon, the
-  /// index of the selected branch, and `goBranch` to select another. It
-  /// comes right after `/`, so the router matches the destinations first,
-  /// and the other top-level routes follow it, outside the main
-  /// navigation. Each branch starts on its destination and creates
-  /// observers of its own, and so does the root navigator; the branches do
-  /// not notify the observers of the root navigator, which would see their
-  /// pages twice otherwise.
+  /// index of the selected branch, and `goBranch` to select another. The
+  /// function `_mainNavigation()` of [mainNavigation] creates that route,
+  /// so that the router can create it anew, and the list of routes calls
+  /// it right after `/`: the router matches the destinations first, and the
+  /// other top-level routes follow, outside the main navigation. Each
+  /// branch starts on its destination and creates observers of its own,
+  /// and so does the root navigator; the branches do not notify the
+  /// observers of the root navigator, which would see their pages twice
+  /// otherwise.
   ///
   /// A screen gets the values of its parameters from the location, parsed
   /// with `tryParse`: a path parameter from the path, including one of a
@@ -58,9 +61,12 @@ final class GoRoutes {
             '${SmfNames.dartString(start.fullPath)},';
     final destinations =
         mainNavigation ? facade.destinations : const <FacadeRoute>[];
+    // The routes of the main navigation come first, so that their screens
+    // get the first prefixes.
+    final shell = destinations.isEmpty ? null : code.shellOf(destinations);
     final routes = [
       "GoRoute(\n  path: '/',\n$root\n)",
-      if (destinations.isNotEmpty) code.shellOf(destinations),
+      if (shell != null) '_mainNavigation()',
       for (final feature in facade.features)
         for (final route in feature.routes)
           if (!destinations.contains(route)) code.of(route),
@@ -72,9 +78,14 @@ final class GoRoutes {
         imports: [
           if (start == null) fallback.importRef,
           ...code.screens.values,
-          if (destinations.isNotEmpty) ..._layoutImports,
         ],
       ),
+      mainNavigation: shell == null
+          ? const Fragment('')
+          : Fragment(
+              '$_mainNavigation$shell;\n',
+              imports: _layoutImports,
+            ),
       valueChecks: Fragment(code.checksValues ? _checkValues : ''),
       initialLocation: SmfNames.dartString(start?.fullPath ?? '/'),
       hasMainNavigation: destinations.isNotEmpty,
@@ -82,8 +93,15 @@ final class GoRoutes {
   }
 
   /// The items of the list of routes of `GoRouter`, with the imports of the
-  /// screens.
+  /// screens: with a main navigation, a call of `_mainNavigation()` is in
+  /// its place among them.
   final Fragment routes;
+
+  /// The function `_mainNavigation()`, which creates the route of the main
+  /// navigation, with the imports of the layout, or a fragment without code
+  /// for routes without a main navigation. The code is a blank line and
+  /// the function, for a line of its own between two declarations.
+  final Fragment mainNavigation;
 
   /// The function that checks the values of a location, if a route needs
   /// it, or else a fragment without code.
@@ -137,6 +155,20 @@ final class GoRoutes {
 
   static String _indented(String code, String indent) =>
       code.split('\n').map((line) => '$indent$line').join('\n');
+
+  /// The start of the function that creates the route of the main
+  /// navigation, up to the route.
+  static const _mainNavigation = '''
+
+/// Creates the main navigation: a branch for each destination, in the order
+/// of [${LayoutRole.appDestinations}], with the routes below it.
+///
+/// The router calls it again each time the main navigation leaves its
+/// pages, because go_router keeps the pages of the branches under keys of
+/// the route: with a new route, the main navigation comes back with each
+/// branch on its destination. So what a branch has of its own, such as the
+/// observers of its navigator, is created here, in each call.
+StatefulShellRoute _mainNavigation() => ''';
 
   static const _checkValues = r'''
 

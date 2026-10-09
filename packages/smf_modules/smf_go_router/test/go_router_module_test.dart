@@ -107,9 +107,64 @@ void _callAlone(
 ''',
 ).unit.declarations.single.toSource();
 
+/// `_pagesChanged` of an app with a main navigation, which first gives
+/// go_router a new main navigation if the main navigation has left its
+/// pages, as the analyzer prints its declaration.
+final String _expectedPagesChangedWithMainNavigation = parseString(
+  content: '''
+class _GoAppRouter {
+  void _pagesChanged() {
+    _renewMainNavigation();
+    _keepPushes();
+    _showScreen();
+  }
+}
+''',
+)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .single
+    .body
+    .members
+    .single
+    .toSource();
+
+/// The members of the router that give go_router a new route for the main
+/// navigation once the main navigation has left its pages, as the analyzer
+/// prints their declarations, by name.
+final Map<String, String> _expectedRenewalMembers = {
+  for (final member in parseString(
+    content: '''
+class _GoAppRouter {
+  bool _mainNavigationShown = false;
+
+  void _renewMainNavigation() {
+    final pages = config.routerDelegate.currentConfiguration.matches;
+    if (pages.any((page) => page is ShellRouteMatch)) {
+      _mainNavigationShown = true;
+    } else if (_mainNavigationShown) {
+      _mainNavigationShown = false;
+      final routes = _routes.value;
+      _routes.value = RoutingConfig(
+        redirect: routes.redirect,
+        routes: [
+          for (final route in routes.routes)
+            route is StatefulShellRoute ? _mainNavigation() : route,
+        ],
+      );
+    }
+  }
+}
+''',
+  ).unit.declarations.whereType<ClassDeclaration>().single.body.members)
+    _nameOf(member)!: member.toSource(),
+};
+
 /// The members of the router that let each push complete with the value
 /// that its page returns when it closes, whatever completer go_router gives
-/// the page, as the analyzer prints their declarations, by name.
+/// the page, as the analyzer prints their declarations, by name;
+/// `_pagesChanged` is that of an app without a main navigation.
 final Map<String, String> _expectedPushMembers = {
   for (final member in parseString(
     content: '''
@@ -237,10 +292,36 @@ List<AgentNote> _notesOfModule(RenderedApp app) => [
 CompilationUnit _factoryOf(RenderedApp app) =>
     parseString(content: app.files[_factory]!.text).unit;
 
-/// The call that creates the `GoRouter` in [unit].
+/// The call that creates the `GoRouter` in [unit]: `GoRouter(...)`, or
+/// `GoRouter.routingConfig(...)` in an app with a main navigation.
 MethodInvocation _goRouterOf(CompilationUnit unit) {
   final finder = _CallFinder('GoRouter');
-  unit.accept(finder);
+  final named = _CallFinder('routingConfig', target: 'GoRouter');
+  unit
+    ..accept(finder)
+    ..accept(named);
+  return [...finder.calls, ...named.calls].single;
+}
+
+/// The declaration of the field [name] of the router class of [unit], or
+/// `null`.
+FieldDeclaration? _fieldOf(CompilationUnit unit, String name) =>
+    _routerClassOf(unit)
+        .body
+        .members
+        .whereType<FieldDeclaration>()
+        .where((field) => _nameOf(field) == name)
+        .singleOrNull;
+
+/// The call in [unit] that has the routes of the app and the redirect of
+/// the guards: the one that creates the `GoRouter`, or, in an app with a
+/// main navigation, the `RoutingConfig(...)` of the field `_routes`, which
+/// go_router follows.
+MethodInvocation _routingOf(CompilationUnit unit) {
+  final routes = _fieldOf(unit, '_routes');
+  if (routes == null) return _goRouterOf(unit);
+  final finder = _CallFinder('RoutingConfig');
+  routes.accept(finder);
   return finder.calls.single;
 }
 
@@ -294,10 +375,10 @@ final class _GoRoute {
       };
 }
 
-/// The items of the list of routes of `GoRouter` in [unit].
+/// The items of the list of the top-level routes in [unit].
 List<MethodInvocation> _topLevelOf(CompilationUnit unit) => [
       for (final element
-          in (_argument(_goRouterOf(unit), 'routes')! as ListLiteral).elements)
+          in (_argument(_routingOf(unit), 'routes')! as ListLiteral).elements)
         element as MethodInvocation,
     ];
 
@@ -308,14 +389,32 @@ List<_GoRoute> _routesOf(CompilationUnit unit) => [
           _GoRoute(route),
     ];
 
-/// The `StatefulShellRoute.indexedStack` in the list of routes of
-/// `GoRouter` in [unit], or `null`.
-MethodInvocation? _shellOf(CompilationUnit unit) => [
+/// The `StatefulShellRoute.indexedStack` that the function
+/// `_mainNavigation()` of [unit] returns, or `null` if [unit] has no such
+/// function. The list of the top-level routes then has no shell route
+/// either.
+MethodInvocation? _shellOf(CompilationUnit unit) {
+  expect(
+    [
       for (final route in _topLevelOf(unit))
-        if (route.target?.toSource() == 'StatefulShellRoute' &&
-            route.methodName.name == 'indexedStack')
-          route,
-    ].singleOrNull;
+        if (route.methodName.name == 'indexedStack') route.toSource(),
+    ],
+    isEmpty,
+    reason: 'The routes have the main navigation only as _mainNavigation().',
+  );
+  final function = unit.declarations
+      .whereType<FunctionDeclaration>()
+      .where((function) => function.name.lexeme == '_mainNavigation')
+      .singleOrNull;
+  if (function == null) return null;
+  expect(function.returnType!.toSource(), 'StatefulShellRoute');
+  expect(function.functionExpression.parameters!.parameters, isEmpty);
+  final shell = (function.functionExpression.body as ExpressionFunctionBody)
+      .expression as MethodInvocation;
+  expect(shell.target!.toSource(), 'StatefulShellRoute');
+  expect(shell.methodName.name, 'indexedStack');
+  return shell;
+}
 
 /// A `StatefulShellBranch(...)` of the generated code.
 final class _Branch {
@@ -419,7 +518,9 @@ void _expectPagesChanged(CompilationUnit unit) {
     router.body.members
         .singleWhere((member) => _nameOf(member) == '_pagesChanged')
         .toSource(),
-    _expectedPushMembers['_pagesChanged'],
+    _shellOf(unit) == null
+        ? _expectedPushMembers['_pagesChanged']
+        : _expectedPagesChangedWithMainNavigation,
   );
 }
 
@@ -436,6 +537,9 @@ void _expectPushResults(CompilationUnit unit) {
   };
   for (final MapEntry(key: name, value: source)
       in _expectedPushMembers.entries) {
+    // An app with a main navigation has more in _pagesChanged, which
+    // _expectPagesChanged checks.
+    if (name == '_pagesChanged') continue;
     expect(members[name], source, reason: name);
   }
   expect(
@@ -496,15 +600,19 @@ List<(_GoRoute, String?)> _allOf(List<_GoRoute> routes, [String? parent]) => [
       ],
     ];
 
+/// Finds the calls of [name], without a target or on [target].
 final class _CallFinder extends RecursiveAstVisitor<void> {
-  _CallFinder(this.name);
+  _CallFinder(this.name, {this.target});
 
   final String name;
+  final String? target;
   final List<MethodInvocation> calls = [];
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
-    if (node.target == null && node.methodName.name == name) calls.add(node);
+    if (node.target?.toSource() == target && node.methodName.name == name) {
+      calls.add(node);
+    }
     super.visitMethodInvocation(node);
   }
 }
@@ -976,6 +1084,13 @@ void main() {
 
     test('has no main navigation without a layout', () {
       expect(_shellOf(unit), isNull);
+      // Nor what replaces one: go_router gets the routes themselves.
+      expect(_goRouterOf(unit).target, isNull);
+      expect(_fieldOf(unit, '_routes'), isNull);
+      for (final name in _expectedRenewalMembers.keys) {
+        expect(app.files[_factory]!.text, isNot(contains(name)), reason: name);
+      }
+      expect(app.files[_factory]!.text, isNot(contains('RoutingConfig')));
       expect(
         app.files[_factory]!.addedImports.map((added) => added.import.uri),
         isNot(contains(contains('/core/layout/'))),
@@ -1215,7 +1330,20 @@ void main() {
         IntroFeature.id,
         TabsLayout.id,
       ]);
-      final router = _routerClassOf(_factoryOf(withLayout.app!));
+      final unit = _factoryOf(withLayout.app!);
+      final router = _routerClassOf(unit);
+      // The redirect that asks the guards is with the routes that go_router
+      // follows, and stays when the router replaces the main navigation.
+      expect(_argument(_goRouterOf(unit), 'redirect'), isNull);
+      expect(
+        _argument(_routingOf(unit), 'redirect')!.toSource(),
+        '(context, state) => '
+        r"_guards.asked(state.topRoute?.name, '${state.uri}')?.location",
+      );
+      expect(
+        _expectedRenewalMembers['_renewMainNavigation'],
+        contains('redirect: routes.redirect'),
+      );
       // The guards come first: while one keeps the user out, the main
       // navigation is not shown.
       expect(
@@ -1281,7 +1409,10 @@ void main() {
       final topLevel = _topLevelOf(unit);
 
       expect(topLevel.first.methodName.name, 'GoRoute');
-      expect(topLevel[1], shell);
+      // The function that creates the shell, which the router calls again
+      // for a new main navigation.
+      expect(topLevel[1].toSource(), '_mainNavigation()');
+      expect(shell.methodName.name, 'indexedStack');
       expect(
         [for (final route in _routesOf(unit)) route.path],
         [
@@ -1297,6 +1428,65 @@ void main() {
         _routesOf(unit).first.redirect,
         "(context, state) => '/catalog'",
       );
+    });
+
+    test(
+        'keeps its routes in a RoutingConfig that go_router follows, so that '
+        'it can replace the main navigation among them', () {
+      final router = _goRouterOf(unit);
+
+      expect(router.target!.toSource(), 'GoRouter');
+      expect(router.methodName.name, 'routingConfig');
+      expect(_argument(router, 'routingConfig')!.toSource(), '_routes');
+      expect(_argument(router, 'routes'), isNull);
+      expect(_argument(router, 'redirect'), isNull);
+      final routes = _fieldOf(unit, '_routes')!.fields;
+      expect(routes.isLate, isTrue);
+      expect(routes.isFinal, isTrue);
+      expect(routes.type!.toSource(), 'ValueNotifier<RoutingConfig>');
+      final holder = routes.variables.single.initializer! as MethodInvocation;
+      expect(holder.methodName.name, 'ValueNotifier');
+      expect(holder.argumentList.arguments.single, _routingOf(unit));
+      // Without guards, the routes are all that the configuration has.
+      expect(
+        [
+          for (final argument in _routingOf(unit).argumentList.arguments)
+            (argument as NamedArgument).name.lexeme,
+        ],
+        ['routes'],
+      );
+    });
+
+    test(
+        'gives go_router a new route for the main navigation once the main '
+        'navigation has left its pages, and the other routes as they are', () {
+      final members = {
+        for (final member in _routerClassOf(unit).body.members)
+          _nameOf(member): member.toSource(),
+      };
+
+      expect(_expectedRenewalMembers.keys, [
+        '_mainNavigationShown',
+        '_renewMainNavigation',
+      ]);
+      for (final MapEntry(key: name, value: source)
+          in _expectedRenewalMembers.entries) {
+        expect(members[name], source, reason: name);
+      }
+      // First of all when the pages change, so that the next location that
+      // go_router is asked for matches the new route.
+      _expectPagesChanged(unit);
+      // What a branch has of its own comes from the function, in each call.
+      final index = DartFileIndexer.index(_factory, app.files[_factory]!.text);
+      expect(
+        {
+          for (final call in index.invocationsOf('StatefulShellBranch'))
+            call.enclosingDeclaration,
+        },
+        {'_mainNavigation'},
+      );
+      // Which the routes call once, and the router for each new one.
+      expect(index.invocationsOf('_mainNavigation'), hasLength(2));
     });
 
     test(
@@ -1343,8 +1533,17 @@ void main() {
         ofLayout.invocationsOf(LayoutRole.destination.name),
         hasLength(branches.length),
       );
+      // The function that creates the shell, which the list of the routes
+      // calls.
+      expect(
+        index.declaration('_mainNavigation')?.kind,
+        DeclarationKind.function,
+      );
+      expect(shellCall.enclosingDeclaration, '_mainNavigation');
       for (final name in [
         'StatefulShellRoute.indexedStack',
+        '_mainNavigation()',
+        'routes',
         'StatefulShellBranch',
         'observers: _observers()',
         'destinations',
@@ -1394,8 +1593,17 @@ void main() {
         ['push', 'replace'],
       );
       expect(text, contains('throw StateError('));
+      // The routes that go_router follows, among which the router replaces
+      // the main navigation.
+      expect(
+        index.invocationsOf('routingConfig').single.target,
+        'GoRouter',
+      );
+      expect(text, contains('ValueNotifier<RoutingConfig>'));
       for (final name in [
         'StatefulShellRoute.indexedStack',
+        'GoRouter.routingConfig',
+        'ValueNotifier<RoutingConfig>',
         'notifyRootObserver: false',
         'StatefulShellBranch',
         'observers: _observers()',
@@ -1657,6 +1865,8 @@ void main() {
       );
       expect(index.invocationsOf('indexedStack'), isEmpty);
       expect(index.invocationsOf('_checkMainNavigation'), isEmpty);
+      expect(index.invocationsOf('_renewMainNavigation'), isEmpty);
+      expect(_goRouterOf(unit).target, isNull);
       expect(index.declaration('_observers')?.kind, DeclarationKind.function);
       expect(_routesOf(unit).map((route) => route.path), ['/']);
       expect(
