@@ -117,7 +117,8 @@ import 'package:smf_go_router/src/go_routes.dart';
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// router how its file writes a route, and, in an app with a main
-/// navigation, where the destinations are among the routes.
+/// navigation, where the destinations are among the routes and that the
+/// router creates the route of the main navigation anew.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();
