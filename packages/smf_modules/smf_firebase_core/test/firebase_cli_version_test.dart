@@ -196,15 +196,6 @@ const _orders = [
   ['firebase_rules'],
 ];
 
-/// Why the check of the version does not see a Firebase CLI that the run
-/// installed when its module comes before firebase_core.
-const _staleCheck = 'Bug: the pipeline runs the checks in the order of the '
-    'modules, in which a module that the user names comes before a module '
-    'it depends on that the pipeline adds for it, and after an installation '
-    'it checks again only the checks that come after it. So the check of the '
-    'version, which ran before the check that installs the Firebase CLI, '
-    'still reports it missing, and the step that needs it is left for later.';
-
 void main() {
   for (final modules in _orders) {
     group('with -m ${modules.join(',')}', () {
@@ -279,14 +270,19 @@ void main() {
           lines.skip(check + 1).takeWhile((line) => line.startsWith('    ')),
           ['    $_update'],
         );
-        expect(lines, contains('  ✓ Firebase CLI (for firebase_core)'));
+        // The check of the Firebase CLI itself comes first, wherever the
+        // user named its module: the check of the version builds on it.
+        expect(
+          lines.indexOf('  ✓ Firebase CLI (for firebase_core)'),
+          inInclusiveRange(0, check - 1),
+          reason: lines.join('\n'),
+        );
         expect(machine.fake.questions, isEmpty);
       });
 
       test(
           'on a machine without the Firebase CLI, the installation that the '
           'check of firebase_core offers gives the module its version too',
-          skip: modules.first == 'firebase_core' ? null : _staleCheck,
           () async {
         final machine = _Machine(confirmations: [true, true]);
 
