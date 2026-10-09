@@ -1,0 +1,2151 @@
+@TestOn('vm')
+library;
+
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:smf_contracts/smf_contracts.dart';
+import 'package:test/test.dart';
+
+import 'dart_files.dart';
+import 'role_support.dart';
+import 'support.dart';
+
+/// The file of the fake provider of sign-in in the test app.
+const _fakeFile = ImportRef.app('fakes/fake_auth.dart');
+
+/// The file of the session, as code imports it.
+const _sessionImport = ImportRef.app('core/auth/app_session.dart');
+
+/// The implementation of the service of the test app: one that is created
+/// asynchronously, or one created with the app.
+RoleImplementation _implementation({required bool async}) => async
+    ? const RoleImplementation.async(
+        type: TypeRef('FakeAuth', import: _fakeFile),
+        init: FactoryRef('openFakeAuth', import: _fakeFile),
+      )
+    : const RoleImplementation(
+        type: TypeRef('FakeAuth', import: _fakeFile),
+        create: FactoryRef('createFakeAuth', import: _fakeFile),
+      );
+
+/// The files of the role in an app of [mode], rendered with an
+/// implementation that is created asynchronously, or with the app, and
+/// what the template puts into other sockets.
+Future<RenderedTemplate> _rendered({
+  AuthMode mode = AuthMode.required,
+  bool async = false,
+}) =>
+    renderTemplate(
+      authRole,
+      data: [
+        dataOf(authRole, _implementation(async: async), module: 'fake_auth'),
+      ],
+      choice: mode,
+    );
+
+/// A stand-in for the part of Flutter's foundation library that the files
+/// of the role use, with the signatures of Flutter 3.44: the app runs in
+/// debug mode, what it prints goes to `debugPrinted`, and the errors that
+/// it reports go to `reportedErrors`.
+const _foundation = r'''
+const bool kDebugMode = true;
+
+/// What the app printed with [debugPrint], in order.
+final List<String> debugPrinted = [];
+
+void debugPrint(String? message, {int? wrapWidth}) =>
+    debugPrinted.add('$message');
+
+class Immutable {
+  const Immutable();
+}
+
+const Immutable immutable = Immutable();
+
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  const Listenable();
+
+  void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
+}
+
+abstract class ValueListenable<T> extends Listenable {
+  const ValueListenable();
+
+  T get value;
+}
+
+mixin class ChangeNotifier implements Listenable {
+  final List<VoidCallback> _listeners = [];
+  bool _disposed = false;
+
+  void _notDisposed() {
+    if (_disposed) throw StateError('A $runtimeType was used after dispose.');
+  }
+
+  @override
+  void addListener(VoidCallback listener) {
+    _notDisposed();
+    _listeners.add(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  void notifyListeners() {
+    _notDisposed();
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+
+  void dispose() {
+    _notDisposed();
+    _disposed = true;
+    _listeners.clear();
+  }
+}
+
+class ErrorDescription {
+  ErrorDescription(this.message);
+
+  final String message;
+}
+
+class FlutterErrorDetails {
+  const FlutterErrorDetails({
+    required this.exception,
+    this.stack,
+    this.library = 'Flutter framework',
+    this.context,
+  });
+
+  final Object exception;
+  final StackTrace? stack;
+  final String? library;
+  final ErrorDescription? context;
+}
+
+/// The errors that the app reported with [FlutterError.reportError].
+final List<FlutterErrorDetails> reportedErrors = [];
+
+class FlutterError {
+  static void reportError(FlutterErrorDetails details) =>
+      reportedErrors.add(details);
+}
+''';
+
+/// A stand-in for the part of Flutter's widgets library that the files of
+/// the role use: what that library exports of the foundation library, and
+/// the listener of the lifecycle of the app. `resumeApp()` stands for the
+/// user who comes back to the app.
+const _widgets = '''
+import 'foundation.dart';
+
+export 'foundation.dart'
+    show
+        ChangeNotifier,
+        ErrorDescription,
+        FlutterError,
+        FlutterErrorDetails,
+        VoidCallback,
+        debugPrint,
+        immutable;
+
+/// The listeners of the lifecycle of the app that were not disposed of.
+final List<AppLifecycleListener> lifecycleListeners = [];
+
+class AppLifecycleListener {
+  AppLifecycleListener({this.onResume}) {
+    lifecycleListeners.add(this);
+  }
+
+  final VoidCallback? onResume;
+
+  void dispose() => lifecycleListeners.remove(this);
+}
+
+/// The user comes back to the app.
+void resumeApp() {
+  for (final listener in [...lifecycleListeners]) {
+    listener.onResume?.call();
+  }
+}
+''';
+
+/// A provider of sign-in for the test app, which keeps to the contract of
+/// `AuthService` unless a test says otherwise.
+///
+/// The accounts are on a map that stands for the server, and the user who
+/// is signed in on a variable that stands for the device: each new service
+/// reads it, as a service does at the next launch of an app. The services
+/// note their calls. A test holds a call until it lets it go, makes a call
+/// fail, and changes the user as something outside the app does.
+const _fakeAuth = r'''
+import 'dart:async';
+
+import '../core/auth/auth_service.dart';
+
+/// The accounts on the server, by their email addresses.
+final Map<String, ({String uid, String password})> accounts = {};
+
+/// The user who is signed in on the device.
+AuthUser? onDevice;
+
+/// The calls that reached the services, in order.
+final List<String> calls = [];
+
+/// The [calls] since it last asked.
+List<String> takeCalls() {
+  final taken = [...calls];
+  calls.clear();
+  return taken;
+}
+
+/// The calls that wait until their completer completes, by their names.
+final Map<String, Completer<void>> holds = {};
+
+/// What the calls throw, by their names.
+final Map<String, Object> failures = {};
+
+/// Whether a call that fails signs the user out first, without an event,
+/// as a call for a user whose session has ended on the server does.
+bool failuresSignOut = false;
+
+/// Whether a service tells of the changes that its calls make.
+bool tells = true;
+
+/// How many services were created.
+int created = 0;
+
+int _users = 0;
+
+AuthService createFakeAuth() => FakeAuth();
+
+Future<AuthService> openFakeAuth() async {
+  await Future<void>.delayed(Duration.zero);
+  return FakeAuth();
+}
+
+final class FakeAuth implements AuthService {
+  FakeAuth() : _user = onDevice {
+    created++;
+  }
+
+  final StreamController<AuthUser?> _changes = StreamController.broadcast();
+
+  AuthUser? _user;
+
+  /// Whether something listens to the changes of the user.
+  bool get hasListener => _changes.hasListener;
+
+  /// Changes the user as something outside the app does, and tells of it.
+  void change(AuthUser? user) {
+    _user = user;
+    onDevice = user;
+    _changes.add(user);
+  }
+
+  void _set(AuthUser? user) {
+    _user = user;
+    onDevice = user;
+    if (tells) _changes.add(user);
+  }
+
+  Future<void> _enter(String name, [String argument = '']) async {
+    calls.add(argument.isEmpty ? name : '$name $argument');
+    await holds[name]?.future;
+    final failure = failures[name];
+    if (failure == null) return;
+    if (failuresSignOut) {
+      _user = null;
+      onDevice = null;
+    }
+    throw failure;
+  }
+
+  @override
+  AuthUser? get currentUser => _user;
+
+  @override
+  Stream<AuthUser?> get userChanges => _changes.stream;
+
+  @override
+  Future<void> signIn({required String email, required String password}) async {
+    await _enter('signIn', email);
+    final account = accounts[email];
+    if (account == null || account.password != password) {
+      throw const AuthFailure(AuthFailureReason.invalidCredentials);
+    }
+    _set(AuthUser(uid: account.uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signUp({required String email, required String password}) async {
+    await _enter('signUp', email);
+    if (accounts.containsKey(email)) {
+      throw const AuthFailure(AuthFailureReason.emailInUse);
+    }
+    final uid = 'user-${++_users}';
+    accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) async {
+    await _enter('linkPassword', email);
+    final uid = _user!.uid;
+    accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signInAnonymously() async {
+    await _enter('signInAnonymously');
+    _set(AuthUser(uid: 'user-${++_users}', isAnonymous: true));
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) =>
+      _enter('sendPasswordReset', email);
+
+  @override
+  Future<void> signOut() async {
+    await _enter('signOut');
+    _set(null);
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    await _enter('deleteAccount');
+    final uid = _user!.uid;
+    accounts.removeWhere((email, account) => account.uid == uid);
+    _set(null);
+  }
+}
+''';
+
+/// What the scripts for the test app share. `show` tells a session, and
+/// `failureOf` the failure that a call completes with: its reason, its
+/// hint, and the file in which its stack trace starts, which is where the
+/// error was thrown. `pump` lets what is on its way happen.
+///
+/// It takes `AuthFailure` and its reasons from the file of the session,
+/// which exports them.
+const _notes = r'''
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/auth/app_session.dart';
+import 'package:my_app/core/auth/auth_service.dart' show AuthService, AuthUser;
+import 'package:my_app/core/auth/guest_data.dart';
+import 'package:my_app/fakes/fake_auth.dart';
+
+final result = <String, Object?>{};
+
+String show(AppSession session) => switch (session) {
+      SignedOutSession() => 'signed out',
+      AnonymousSession(:final uid) => 'anonymous $uid',
+      AccountSession(:final uid, :final email) => 'account $uid $email',
+    };
+
+Future<void> pump() => Future<void>.delayed(Duration.zero);
+
+Future<String> failureOf(Future<void> Function() call) async {
+  try {
+    await call();
+    return 'none';
+  } on AuthFailure catch (failure, stackTrace) {
+    final file = RegExp(r'\w+\.dart').firstMatch('$stackTrace')?[0];
+    return '${failure.reason.name}, hint ${failure.developerHint}, '
+        'thrown in $file';
+  } on Object catch (error) {
+    return 'no AuthFailure: $error';
+  }
+}
+
+const email = 'ann@example.com';
+const password = 'secret';
+''';
+
+/// Goes through the life of the session of the app, with the session and
+/// the functions that the role generates: a first launch, sign-up,
+/// sign-out, sign-in, the next launch, a password reset and the deletion
+/// of the account. After each step it notes the session with its two
+/// flags, the calls that reached the provider, and what the listeners of
+/// the session and of each flag found when they were called.
+const _life = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final heard = <String>[];
+  String state() => '${show(appSession.value)}; '
+      'allows ${appSession.allowsApp.value}, '
+      'account ${appSession.hasAccount.value}';
+  appSession.addListener(() => heard.add('session: ${state()}'));
+  appSession.allowsApp.addListener(() => heard.add('allowsApp: ${state()}'));
+  appSession.hasAccount.addListener(() => heard.add('hasAccount: ${state()}'));
+  void note(String step) {
+    result[step] = {
+      'state': state(),
+      'calls': takeCalls(),
+      'heard': [...heard],
+    };
+    heard.clear();
+  }
+
+  result['the mode'] = '${authMode.name}, ${appSession.mode.name}';
+  result['the wait for an anonymous user'] = '${appSession.anonymousWait}';
+  try {
+    createAuthService();
+    result['the service before the start'] = 'a service';
+  } on Error {
+    result['the service before the start'] = 'none';
+  }
+  note('before the start');
+
+  await initAuth();
+  final first = createAuthService();
+  note('a first launch');
+
+  await appSession.signUp(email: email, password: password);
+  note('sign-up');
+
+  await appSession.signOut();
+  note('sign-out');
+
+  await appSession.signIn(email: email, password: password);
+  note('sign-in');
+
+  await initAuth();
+  note('the next launch');
+  result['the services'] = {
+    'created': created,
+    'the app has the one of the last start':
+        !identical(createAuthService(), first) &&
+            identical(createAuthService(), createAuthService()),
+    'the first one is listened to': (first as FakeAuth).hasListener,
+  };
+
+  await appSession.sendPasswordReset(email);
+  note('a password reset');
+
+  await appSession.deleteAccount();
+  note('the deletion of the account');
+  result['the accounts'] = [...accounts.keys];
+  port.send(result);
+}
+''';
+
+/// What the listeners of the session and of its two flags find at a change
+/// to [state]: each is called once, and each finds the session and both
+/// flags as they are after the change.
+List<String> _heard(String state) => [
+      'session: $state',
+      'allowsApp: $state',
+      'hasAccount: $state',
+    ];
+
+/// What [_life] sends back from the app of [mode].
+Map<String, Object?> _lifeIn(AuthMode mode) {
+  // Whether a user without an account may see the app.
+  final open = mode != AuthMode.required;
+  final anonymous = mode == AuthMode.anonymous;
+  String state(String session, {bool account = false}) =>
+      '$session; allows ${open || account}, account $account';
+  final signedOut = state('signed out');
+  final account = state('account user-1 ann@example.com', account: true);
+  // What a user who signed out or was deleted leaves behind: nobody, or in
+  // the anonymous mode a new anonymous user, after the app had nobody.
+  Map<String, Object?> left(String call, String user) => {
+        'state': anonymous ? state('anonymous $user') : signedOut,
+        'calls': [call, if (anonymous) 'signInAnonymously'],
+        'heard': [
+          ..._heard(signedOut),
+          if (anonymous) ..._heard(state('anonymous $user')),
+        ],
+      };
+  return {
+    'the mode': '${mode.name}, ${mode.name}',
+    'the wait for an anonymous user': '0:00:03.000000',
+    'the service before the start': 'none',
+    'before the start': {
+      'state': signedOut,
+      'calls': <Object?>[],
+      'heard': <Object?>[],
+    },
+    // Nobody is signed in on a new device. Only the anonymous mode signs a
+    // user in on its own.
+    'a first launch': anonymous
+        ? {
+            'state': state('anonymous user-1'),
+            'calls': ['signInAnonymously'],
+            'heard': _heard(state('anonymous user-1')),
+          }
+        : {
+            'state': signedOut,
+            'calls': <Object?>[],
+            'heard': <Object?>[],
+          },
+    // An anonymous user gets the account and keeps the id.
+    'sign-up': {
+      'state': account,
+      'calls': [if (anonymous) 'linkPassword $_email' else 'signUp $_email'],
+      'heard': _heard(account),
+    },
+    'sign-out': left('signOut', 'user-2'),
+    'sign-in': {
+      'state': account,
+      'calls': ['signIn $_email'],
+      'heard': _heard(account),
+    },
+    // The user is known when initAuth() completes, without a call, and the
+    // listeners hear nothing, since nothing changed.
+    'the next launch': {
+      'state': account,
+      'calls': <Object?>[],
+      'heard': <Object?>[],
+    },
+    'the services': {
+      'created': 2,
+      'the app has the one of the last start': true,
+      'the first one is listened to': false,
+    },
+    'a password reset': {
+      'state': account,
+      'calls': ['sendPasswordReset $_email'],
+      'heard': <Object?>[],
+    },
+    'the deletion of the account': left('deleteAccount', 'user-3'),
+    'the accounts': <Object?>[],
+  };
+}
+
+/// The email address of the account of the scripts.
+const _email = 'ann@example.com';
+
+/// Makes the provider fail, and notes what each call of the session
+/// completes with and what the session is after it.
+const _failures = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final heard = <String>[];
+  appSession.addListener(() => heard.add(show(appSession.value)));
+  Future<void> signIn() => appSession.signIn(email: email, password: password);
+  final callsOfSession = <String, Future<void> Function()>{
+    'signIn': signIn,
+    'signUp': () => appSession.signUp(email: 'bob@example.com', password: 'x'),
+    'sendPasswordReset': () => appSession.sendPasswordReset(email),
+    'signOut': appSession.signOut,
+    'deleteAccount': appSession.deleteAccount,
+  };
+
+  await initAuth();
+  await appSession.signUp(email: email, password: password);
+  heard.clear();
+
+  // A failure of the provider, for each reason.
+  final passed = <String, String>{};
+  for (final reason in AuthFailureReason.values) {
+    failures['signIn'] = AuthFailure(
+      reason,
+      developerHint:
+          reason == AuthFailureReason.notConfigured ? 'Enable it.' : null,
+    );
+    passed[reason.name] = await failureOf(signIn);
+  }
+  failures.clear();
+  result['a failure of the provider'] = passed;
+
+  // An error that is no failure, from each call.
+  final errors = <String, String>{};
+  for (final MapEntry(key: name, value: call) in callsOfSession.entries) {
+    failures[name] = StateError('The plugin broke in $name.');
+    errors[name] = await failureOf(call);
+  }
+  failures.clear();
+  failures['signIn'] = 'A text that was thrown.';
+  errors['an object that is no error'] = await failureOf(signIn);
+  failures.clear();
+  result['an error of another kind'] = errors;
+  result['the session after the failures'] = {
+    'state': show(appSession.value),
+    'heard': [...heard],
+  };
+
+  // The provider signs the user out, tells of nothing, and fails.
+  tells = false;
+  failuresSignOut = true;
+  failures['deleteAccount'] = const AuthFailure(
+    AuthFailureReason.recentSignInRequired,
+  );
+  result['a call for a user whose session has ended'] = {
+    'failure': await failureOf(appSession.deleteAccount),
+    'state': show(appSession.value),
+    'heard': [...heard],
+  };
+  const notSetUp = AuthFailure(
+    AuthFailureReason.notConfigured,
+    developerHint: 'Enable it.',
+  );
+  result['a failure as text'] = [
+    '${const AuthFailure(AuthFailureReason.network)}',
+    '$notSetUp',
+  ];
+  port.send(result);
+}
+''';
+
+/// Changes the user as something outside the app does, and starts the
+/// session again with another service.
+const _changes = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final heard = <String>[];
+  appSession.addListener(() => heard.add(show(appSession.value)));
+  void note(String step) {
+    result[step] = {'state': show(appSession.value), 'heard': [...heard]};
+    heard.clear();
+  }
+
+  const remote = AuthUser(
+    uid: 'remote',
+    isAnonymous: false,
+    email: 'remote@example.com',
+  );
+  await initAuth();
+  final first = createAuthService() as FakeAuth;
+
+  first.change(remote);
+  await pump();
+  note('a change that no call made');
+
+  first.change(remote);
+  await pump();
+  note('an event for the same user');
+
+  first.change(null);
+  await pump();
+  note('a sign-out that no call made');
+
+  onDevice = const AuthUser(uid: 'other', isAnonymous: true);
+  final second = FakeAuth();
+  await appSession.start(second);
+  note('a start with another service');
+
+  first.change(remote);
+  await pump();
+  note('a change of the service before');
+  result['the service before is listened to'] = first.hasListener;
+
+  second.change(remote);
+  await pump();
+  note('a change of the service of the start');
+
+  result['sessions compare by value'] = {
+    'signed out': SignedOutSession() == const SignedOutSession(),
+    'the same anonymous user': AnonymousSession('a') == AnonymousSession('a'),
+    'another anonymous user': AnonymousSession('a') == AnonymousSession('b'),
+    'the same account':
+        AccountSession('a', email: email) == AccountSession('a', email: email),
+    'another address of the account':
+        AccountSession('a', email: email) == AccountSession('a'),
+    'an account and an anonymous user of one id':
+        AccountSession('a') == AnonymousSession('a'),
+    'as keys': {
+      SignedOutSession(),
+      SignedOutSession(),
+      AnonymousSession('a'),
+      AnonymousSession('a'),
+      AccountSession('a', email: email),
+      AccountSession('a', email: email),
+    }.length,
+  };
+  port.send(result);
+}
+''';
+
+/// Makes calls before the first start of a session, in each mode, and two
+/// after it, the second while the first is on its way.
+const _earlyCalls = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  for (final mode in AuthMode.values) {
+    onDevice = null;
+    accounts.clear();
+    final session = AppSessionController(
+      mode: mode,
+      takeGuestData: takeGuestData,
+    );
+    final done = <String>[];
+    unawaited(
+      session
+          .signUp(email: email, password: password)
+          .then((_) => done.add('sign-up')),
+    );
+    // The second call fails, which neither the start nor the third call
+    // takes for its own failure.
+    unawaited(
+      failureOf(() => session.signIn(email: email, password: 'wrong'))
+          .then((failure) => done.add('sign-in: $failure')),
+    );
+    unawaited(
+      session.sendPasswordReset(email).then((_) => done.add('reset')),
+    );
+    await pump();
+    final before = {'calls': takeCalls(), 'state': show(session.value)};
+
+    // The start holds the first call, so the others wait behind it.
+    final hold = Completer<void>();
+    holds[mode == AuthMode.anonymous ? 'linkPassword' : 'signUp'] = hold;
+    var started = false;
+    final start = session.start(FakeAuth()).then((_) => started = true);
+    await pump();
+    final during = {
+      'calls': takeCalls(),
+      'the calls that are done': [...done],
+      'the start is done': started,
+    };
+    holds.clear();
+    hold.complete();
+    await start;
+    await pump();
+    final after = {
+      'calls': takeCalls(),
+      'the calls that are done': [...done],
+      'state': show(session.value),
+    };
+
+    // After the first start, a call still waits for the one before it.
+    final holdOfSignOut = holds['signOut'] = Completer<void>();
+    unawaited(session.signOut());
+    final reset = session.sendPasswordReset(email);
+    await pump();
+    final first = takeCalls();
+    holds.clear();
+    holdOfSignOut.complete();
+    await reset;
+    result[mode.name] = {
+      'before the start': before,
+      'while the first call is on its way': during,
+      'after the start': after,
+      'a call after the start': first,
+      'the call after it': takeCalls(),
+    };
+    session.dispose();
+  }
+  port.send(result);
+}
+''';
+
+/// Starts a session, and then makes a call and starts the session again in
+/// a zone whose microtasks run only when the script says so, as those of a
+/// test of Flutter in fake time do, which starts the app in real time
+/// before.
+const _otherZone = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final microtasks = <void Function()>[];
+  final zone = Zone.current.fork(
+    specification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) =>
+          microtasks.add(microtask),
+    ),
+  );
+  void flush() {
+    while (microtasks.isNotEmpty) {
+      microtasks.removeAt(0)();
+    }
+  }
+
+  final session = AppSessionController(
+    mode: AuthMode.guest,
+    takeGuestData: takeGuestData,
+  );
+  await session.start(FakeAuth());
+  await session.signUp(email: email, password: password);
+  takeCalls();
+
+  var signedOut = false;
+  zone.run(() => unawaited(session.signOut().then((_) => signedOut = true)));
+  flush();
+  result['a call'] = {
+    'calls': takeCalls(),
+    'the call is done': signedOut,
+    'state': show(session.value),
+  };
+
+  var started = false;
+  zone.run(
+    () => unawaited(session.start(FakeAuth()).then((_) => started = true)),
+  );
+  flush();
+  result['a start is done'] = started;
+  session.dispose();
+  port.send(result);
+}
+''';
+
+/// Starts sessions in the anonymous mode whose anonymous sign-in takes
+/// long, comes in time or fails, brings the user back to the app, and
+/// signs out; and sessions in the other modes, which sign nobody in.
+const _anonymous = r'''
+AppSessionController anonymousSession({required Duration wait}) =>
+    AppSessionController(
+      mode: AuthMode.anonymous,
+      takeGuestData: takeGuestData,
+      anonymousWait: wait,
+    );
+
+Map<String, Object?> note(AppSessionController session) => {
+      'state': show(session.value),
+      'calls': takeCalls(),
+      'printed': [...debugPrinted],
+    };
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  // A sign-in that takes longer than the wait.
+  var session = anonymousSession(wait: const Duration(milliseconds: 20));
+  var service = FakeAuth();
+  var hold = holds['signInAnonymously'] = Completer<void>();
+  var started = false;
+  Future<void> start = session.start(service).then((_) => started = true);
+  await pump();
+  result['while the app waits for its anonymous user'] = {
+    'the start is done': started,
+    'calls': [...calls],
+  };
+  await start;
+  result['a sign-in that takes longer than the wait'] = note(session);
+  resumeApp();
+  await pump();
+  result['the user comes back while it is on its way'] = note(session);
+  // It comes, and the provider tells of nothing.
+  tells = false;
+  hold.complete();
+  await pump();
+  tells = true;
+  holds.clear();
+  result['when it comes'] = note(session);
+  resumeApp();
+  await pump();
+  result['the user comes back to an app with a user'] = note(session);
+  session.dispose();
+  result['after dispose'] = {
+    'listeners of the lifecycle': lifecycleListeners.length,
+    'the service is listened to': service.hasListener,
+  };
+
+  // A sign-in that comes within the wait.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  hold = holds['signInAnonymously'] = Completer<void>();
+  start = session.start(FakeAuth());
+  await pump();
+  hold.complete();
+  await start;
+  holds.clear();
+  result['a sign-in that comes within the wait'] = note(session);
+  session.dispose();
+
+  // A sign-in that fails, and the tries after it.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  failures['signInAnonymously'] = const AuthFailure(
+    AuthFailureReason.notConfigured,
+    developerHint: 'Enable anonymous sign-in.',
+  );
+  await session.start(FakeAuth());
+  result['a sign-in that fails'] = note(session);
+  debugPrinted.clear();
+  resumeApp();
+  await pump();
+  result['the user comes back, and it fails again'] = note(session);
+  debugPrinted.clear();
+  failures.clear();
+  resumeApp();
+  await pump();
+  result['the user comes back, and it works'] = note(session);
+
+  // Sign-out and the deletion of an account, while the anonymous sign-in
+  // fails and while it works.
+  await session.signUp(email: email, password: password);
+  takeCalls();
+  failures['signInAnonymously'] = StateError('No network.');
+  await session.signOut();
+  result['a sign-out, after which it fails'] = note(session);
+  debugPrinted.clear();
+  failures.clear();
+  await session.signIn(email: email, password: password);
+  takeCalls();
+  await session.deleteAccount();
+  result['the deletion of the account'] = note(session);
+  await session.deleteAccount();
+  result['the deletion of an anonymous user'] = note(session);
+  session.dispose();
+
+  // A start with another service while the sign-in of the first is on its
+  // way, and a start with that service again: each service signs in once,
+  // and when the sign-in of the first comes, that of the second is still
+  // the one on its way.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(milliseconds: 20));
+  final holdOfFirst = holds['signInAnonymously'] = Completer<void>();
+  await session.start(FakeAuth());
+  final holdOfSecond = holds['signInAnonymously'] = Completer<void>();
+  final second = FakeAuth();
+  await session.start(second);
+  await session.start(second);
+  final signInsOfStarts = takeCalls();
+  holdOfFirst.complete();
+  await pump();
+  resumeApp();
+  await pump();
+  final afterTheFirst = takeCalls();
+  holdOfSecond.complete();
+  await pump();
+  holds.clear();
+  result['starts while an anonymous sign-in is on its way'] = {
+    'the sign-ins of the starts': signInsOfStarts,
+    'calls once the first has come': afterTheFirst,
+    'the user': show(session.value),
+  };
+  session.dispose();
+
+  // A call that is made while the anonymous sign-in is on its way waits
+  // for it, and finds the anonymous user.
+  onDevice = null;
+  accounts.clear();
+  session = anonymousSession(wait: const Duration(milliseconds: 20));
+  hold = holds['signInAnonymously'] = Completer<void>();
+  await session.start(FakeAuth());
+  takeCalls();
+  var signedUp = false;
+  final signUp = session
+      .signUp(email: email, password: password)
+      .then((_) => signedUp = true);
+  await pump();
+  result['a call while the anonymous sign-in is on its way'] = {
+    'calls': takeCalls(),
+    'the call is done': signedUp,
+  };
+  holds.clear();
+  hold.complete();
+  await signUp;
+  result['the call, once the sign-in is over'] = note(session);
+  session.dispose();
+
+  // The user comes back while a call is on its way: the try waits for the
+  // call, and is made only if the app has no user then.
+  for (final wrong in [false, true]) {
+    onDevice = null;
+    session = anonymousSession(wait: const Duration(hours: 1));
+    failures['signInAnonymously'] = StateError('No network.');
+    await session.start(FakeAuth());
+    failures.clear();
+    debugPrinted.clear();
+    takeCalls();
+    hold = holds['signIn'] = Completer<void>();
+    final signIn = failureOf(
+      () => session.signIn(email: email, password: wrong ? 'wrong' : password),
+    );
+    await pump();
+    resumeApp();
+    await pump();
+    final during = takeCalls();
+    holds.clear();
+    hold.complete();
+    final failure = await signIn;
+    await pump();
+    result['the user comes back while a sign-in ${wrong ? 'fails' : 'works'}'] =
+        {'calls while it is on its way': during, 'it': failure, ...note(session)};
+    session.dispose();
+  }
+
+  // The other modes sign nobody in, and do not follow the lifecycle.
+  for (final mode in [AuthMode.required, AuthMode.guest]) {
+    onDevice = null;
+    session = AppSessionController(mode: mode, takeGuestData: takeGuestData);
+    await session.start(FakeAuth());
+    final listeners = lifecycleListeners.length;
+    await session.signOut();
+    resumeApp();
+    await pump();
+    result['in the mode ${mode.name}'] = {
+      ...note(session),
+      'listeners of the lifecycle': listeners,
+    };
+    session.dispose();
+  }
+  port.send(result);
+}
+''';
+
+/// Signs anonymous users in to an account that exists, with a function for
+/// the data of a guest that notes what it is asked and fails when told.
+const _guestData = r'''
+Object? takingFails;
+Object? givingFails;
+bool nothingToMove = false;
+
+Future<GiveGuestData?> take(String guestUid) async {
+  calls.add('take $guestUid');
+  if (takingFails case final error?) throw error;
+  if (nothingToMove) return null;
+  return (accountUid) async {
+    calls.add('give $accountUid');
+    if (givingFails case final error?) throw error;
+  };
+}
+
+/// A session of [mode] that started on a device without a user.
+Future<AppSessionController> sessionOf(AuthMode mode) async {
+  onDevice = null;
+  final session = AppSessionController(mode: mode, takeGuestData: take);
+  await session.start(FakeAuth());
+  takeCalls();
+  return session;
+}
+
+Map<String, Object?> note(AppSessionController session, [String? failure]) => {
+      'calls': takeCalls(),
+      'state': show(session.value),
+      if (failure != null) 'failure': failure,
+    };
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  accounts[email] = (uid: 'owner', password: password);
+  Future<void> signIn(AppSessionController session) =>
+      session.signIn(email: email, password: password);
+
+  var session = await sessionOf(AuthMode.anonymous);
+  await signIn(session);
+  result['an anonymous user signs in'] = note(session);
+  // The user of an account who signs in again is no guest.
+  await signIn(session);
+  result['the user of an account signs in'] = note(session);
+  session.dispose();
+
+  nothingToMove = true;
+  session = await sessionOf(AuthMode.anonymous);
+  await signIn(session);
+  result['with nothing to move'] = note(session);
+  nothingToMove = false;
+  session.dispose();
+
+  session = await sessionOf(AuthMode.anonymous);
+  takingFails = StateError('The cart does not load.');
+  result['taking fails'] = note(session, await failureOf(() => signIn(session)));
+  takingFails = null;
+  result['the sign-in fails'] = note(
+    session,
+    await failureOf(() => session.signIn(email: email, password: 'wrong')),
+  );
+  givingFails = StateError('The cart does not save.');
+  result['giving fails'] = note(session, await failureOf(() => signIn(session)));
+  givingFails = null;
+  result['reported'] = [
+    for (final details in reportedErrors)
+      {
+        'exception': '${details.exception}',
+        'has a stack trace': details.stack != null,
+        'library': details.library,
+        'context': details.context?.message,
+      },
+  ];
+  session.dispose();
+
+  // Sign-up gives the guest the account, so nothing moves.
+  session = await sessionOf(AuthMode.anonymous);
+  await session.signUp(email: 'bob@example.com', password: password);
+  result['an anonymous user signs up'] = note(session);
+  session.dispose();
+
+  // A sign-in after which the user has the id of the guest.
+  session = await sessionOf(AuthMode.anonymous);
+  accounts['same@example.com'] = (uid: session.value.uid!, password: password);
+  await session.signIn(email: 'same@example.com', password: password);
+  result['the account has the id of the guest'] = note(session);
+  session.dispose();
+
+  // An app without anonymous users.
+  session = await sessionOf(AuthMode.guest);
+  await signIn(session);
+  result['a user who is not signed in signs in'] = note(session);
+  session.dispose();
+
+  result['the function of the app has nothing to move'] =
+      await takeGuestData('user-1') == null;
+  port.send(result);
+}
+''';
+
+/// The files of the test app of [mode]: the files of the role, as its
+/// template generates them, and the fake provider.
+Future<DartFiles> _app({
+  AuthMode mode = AuthMode.required,
+  bool async = false,
+}) async {
+  final rendered = await _rendered(mode: mode, async: async);
+  return DartFiles.write(
+    {...rendered.files, 'lib/fakes/fake_auth.dart': _fakeAuth},
+    flutter: const {'foundation.dart': _foundation, 'widgets.dart': _widgets},
+  );
+}
+
+/// The top-level functions of [unit], by name.
+Map<String, FunctionDeclaration> _functionsOf(CompilationUnit unit) => {
+      for (final function in unit.declarations.whereType<FunctionDeclaration>())
+        function.name.lexeme: function,
+    };
+
+/// The top-level variables of [unit], by name, each as its declaration.
+Map<String, String> _variablesOf(CompilationUnit unit) => {
+      for (final declaration
+          in unit.declarations.whereType<TopLevelVariableDeclaration>())
+        for (final variable in declaration.variables.variables)
+          variable.name.lexeme: declaration.toSource(),
+    };
+
+/// The statements of the body of [function].
+List<String> _statementsOf(FunctionDeclaration function) => [
+      for (final statement
+          in (function.functionExpression.body as BlockFunctionBody)
+              .block
+              .statements)
+        '$statement',
+    ];
+
+/// The interface that a provider of the role implements.
+const _service = 'AuthService';
+
+/// The signature of [member], a method or a getter, as its code.
+String _signatureOf(MethodDeclaration member) => [
+      '${member.returnType} ',
+      if (member.isGetter) 'get ',
+      member.name.lexeme,
+      '${member.parameters ?? ''}',
+    ].join();
+
+/// The values of the enum [name] of [unit].
+List<String> _enumValuesOf(CompilationUnit unit, String name) => [
+      for (final constant in unit.declarations
+          .whereType<EnumDeclaration>()
+          .singleWhere(
+            (declaration) => declaration.namePart.typeName.lexeme == name,
+          )
+          .body
+          .constants)
+        constant.name.lexeme,
+    ];
+
+/// The template of a role whose code may reach the session, as that of a
+/// role with screens of sign-in would.
+final _otherRole = TestRole<NoDsl>('account_screens');
+
+/// The provider of the role, a feature that uses the role, and the
+/// provider of a DI container.
+const _provider = ModuleDescriptor(
+  id: ModuleId('fake_auth'),
+  description: 'Sign-in',
+  kind: ModuleKinds.infrastructure,
+  providers: [RoleProvider.plain(authRole)],
+);
+const _feature = ModuleDescriptor(
+  id: ModuleId('profile'),
+  description: 'Profile',
+  kind: ModuleKinds.feature,
+  uses: {authRole},
+);
+
+/// The issues of the structural rules of the role in an app with [files],
+/// each with its owner; a file without an owner has `null`.
+List<SmfIssue> _structureIssues(
+  Map<DartFileIndex, ContributionOrigin?> files,
+) =>
+    authRole.checkStructure(
+      StructuralRuleRequest(
+        hook: const RoleHookRequest(
+          data: [],
+          presentRoles: {authRole},
+          context: testContext,
+        ),
+        files: {for (final file in files.keys) file.path: file},
+        owners: {
+          for (final MapEntry(key: file, value: owner) in files.entries)
+            if (owner != null) file.path: owner,
+        },
+        modules: const [_provider, _feature],
+      ),
+    );
+
+/// The index of the file at [path] that imports the file of the session
+/// and calls [function] of it.
+DartFileIndex _calling(String path, String function) => DartFileIndex(
+      path: path,
+      imports: const [
+        IndexedImport('package:my_app/core/auth/app_session.dart'),
+      ],
+      invocations: [IndexedInvocation(function)],
+    );
+
+void main() {
+  group('the auth role', () {
+    test(
+        'takes one provider, needs no other role, and has the socket of its '
+        'implementation, the option of the mode and three files', () {
+      expect(authRole.id, 'auth');
+      expect(authRole.description, 'Authentication');
+      expect(authRole.presenceFlag, 'has_auth');
+      expect('$authRole', 'authentication role');
+      expect(authRole.cardinality, RoleCardinality.atMostOne);
+      expect(authRole.requires, isEmpty);
+      // Not the DI role either: the role registers nothing in a container.
+      expect(authRole.uses, isEmpty);
+      expect(authRole.sockets, const [AuthRole.implementations]);
+      expect(AuthRole.implementations.tag, 'smf_auth__implementations');
+      expect(authRole.options, const [AuthRole.modeOption]);
+      expect(authRole.interface.files, [
+        'lib/core/auth/auth_service.dart',
+        'lib/core/auth/app_session.dart',
+        'lib/core/auth/guest_data.dart',
+      ]);
+      expect(authRole.interface.files, [
+        AuthRole.serviceFile,
+        AuthRole.sessionFile,
+        AuthRole.guestDataFile,
+      ]);
+      expect(authRole.interface.symbols, isEmpty);
+      expect(
+        [for (final rule in authRole.moduleRules) rule.id],
+        ['services.implementations'],
+      );
+      expect(
+        [for (final rule in authRole.structuralRules) rule.id],
+        [
+          'auth.factory_calls',
+          'auth.start_calls',
+          'auth.implementation_factories',
+        ],
+      );
+    });
+  });
+
+  group('the mode of the auth role', () {
+    const option = AuthRole.modeOption;
+
+    /// The choice of the role with [value] for its option, in a terminal
+    /// whose user picks the item at [pick], or without a terminal.
+    Future<Object?> choose(String? value, {SmfEnvironment? environment}) =>
+        authRole.template.choose(
+          authRole.choiceContext(
+            RoleChoiceRequest(
+              data: const [],
+              presentRoles: {authRole},
+              optionValues: {option.name: value},
+              environment: environment ?? FakeEnvironment(),
+              context: testContext,
+            ),
+          ),
+        );
+
+    test(
+        'is the mode option --auth-mode, whose values are the modes, with '
+        'the mode that asks for an account first', () {
+      expect(option.name, 'auth-mode');
+      expect(option.isMode, isTrue);
+      expect(option.allowed, ['required', 'guest', 'anonymous']);
+      expect(option.allowed, [for (final mode in AuthMode.values) mode.name]);
+      for (final mode in AuthMode.values) {
+        expect(option.help, contains(mode.name));
+      }
+    });
+
+    test('is the value of the option, which nothing asks for then', () async {
+      for (final mode in AuthMode.values) {
+        // The environment without a terminal fails when it is asked.
+        expect(await choose(mode.name), mode);
+        final terminal = PromptingEnvironment(pick: 2);
+        expect(await choose(mode.name, environment: terminal), mode);
+        expect(terminal.asked, isEmpty);
+      }
+    });
+
+    test(
+        'is the first mode in a run without a terminal and without the '
+        'option, which neither fails nor asks', () async {
+      expect(await choose(null), AuthMode.required);
+    });
+
+    test(
+        'is asked for in a terminal without the option, with the first mode '
+        'as the first item and as the one that Enter takes', () async {
+      for (final (pick, mode) in AuthMode.values.indexed) {
+        final terminal = PromptingEnvironment(pick: pick);
+
+        expect(await choose(null, environment: terminal), mode);
+        expect(terminal.asked, ['Who may use the app without an account?']);
+        expect(terminal.shown, [
+          'Nobody: the user signs in first',
+          'Everyone: an account only where a screen needs one',
+          'Everyone, as an anonymous user with an id from the start',
+        ]);
+        expect(terminal.shownDefault, terminal.shown.first);
+      }
+    });
+
+    test(
+        'has the option for every choice, with which a run without a '
+        'terminal makes the same choice', () async {
+      for (final mode in AuthMode.values) {
+        final options = authRole.template.optionsOf(mode);
+
+        expect(options, {'auth-mode': mode.name});
+        expect(await choose(options[option.name]), mode);
+      }
+    });
+
+    test('reaches the render hooks of the role and of its provider', () {
+      for (final mode in AuthMode.values) {
+        expect(authRole.modeIn(inputOf(authRole, choice: mode)), mode);
+      }
+    });
+  });
+
+  group('the auth template', () {
+    test(
+        'contributes the brick of the three files and the note of the '
+        'role, and registers nothing in a DI container', () {
+      final contributions = authRole.template.contribute(testContext);
+
+      expect(contributions, hasLength(2));
+      final brick = contributions.whereType<BrickContribution>().single;
+      expect(
+        templatesOf(brick.bundle).keys,
+        unorderedEquals(authRole.interface.files),
+      );
+      expect(brick.when, isEmpty);
+      expect(contributions.whereType<RoleData<Object>>(), isEmpty);
+    });
+
+    test(
+        'generates the interface that a provider implements, with the user '
+        'and the reasons of a failure', () async {
+      final unit = parseString(
+        content: (await _rendered()).files[AuthRole.serviceFile]!,
+      ).unit;
+      const credentials = '({required String email, required String password})';
+
+      final service = unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere((type) => type.namePart.typeName.lexeme == _service);
+      expect(service.interfaceKeyword, isNotNull);
+      expect(service.abstractKeyword, isNotNull);
+      expect(
+        [
+          for (final member in service.body.members)
+            if (member is MethodDeclaration) _signatureOf(member),
+        ],
+        [
+          'AuthUser? get currentUser',
+          'Stream<AuthUser?> get userChanges',
+          'Future<void> signIn$credentials',
+          'Future<void> signUp$credentials',
+          'Future<void> linkPassword$credentials',
+          'Future<void> signInAnonymously()',
+          'Future<void> sendPasswordReset(String email)',
+          'Future<void> signOut()',
+          'Future<void> deleteAccount()',
+        ],
+      );
+      expect(_enumValuesOf(unit, 'AuthFailureReason'), [
+        'invalidCredentials',
+        'emailInUse',
+        'weakPassword',
+        'invalidEmail',
+        'userDisabled',
+        'tooManyAttempts',
+        'network',
+        'recentSignInRequired',
+        'notConfigured',
+        'unknown',
+      ]);
+      // The file of the provider needs nothing of Flutter and no other
+      // file of the app.
+      expect(unit.directives, isEmpty);
+    });
+
+    test(
+        'writes the mode of the app into the file of the session as the '
+        'constant authMode, whose type has the modes of the option', () async {
+      for (final mode in AuthMode.values) {
+        final unit = parseString(
+          content: (await _rendered(mode: mode)).files[AuthRole.sessionFile]!,
+        ).unit;
+
+        expect(
+          _variablesOf(unit)['authMode'],
+          'const AuthMode authMode = AuthMode.${mode.name};',
+        );
+        expect(
+          _enumValuesOf(unit, 'AuthMode'),
+          AuthRole.modeOption.allowed,
+        );
+      }
+    });
+
+    for (final async in [true, false]) {
+      final how = async ? 'created asynchronously' : 'created with the app';
+
+      test(
+          'creates an implementation $how in initAuth(), starts the session '
+          'with it, and awaits that in the platform phase of bootstrap()',
+          () async {
+        final rendered = await _rendered(async: async);
+        final code = rendered.files[AuthRole.sessionFile]!;
+        final unit = parseString(content: code).unit;
+
+        final init = _functionsOf(unit)['initAuth']!;
+        expect('${init.returnType}', 'Future<void>');
+        expect(init.functionExpression.parameters!.parameters, isEmpty);
+        expect(_statementsOf(init), [
+          if (async)
+            '_authService = await impl0.openFakeAuth();'
+          else
+            '_authService = impl0.createFakeAuth();',
+          'await appSession.start(_authService);',
+        ]);
+        // Not final: initAuth() may run again.
+        expect(
+          _variablesOf(unit)['_authService'],
+          'late AuthService _authService;',
+        );
+        final factory = _functionsOf(unit)['createAuthService']!;
+        expect('${factory.returnType}', 'AuthService');
+        final body = factory.functionExpression.body as ExpressionFunctionBody;
+        expect('${body.expression}', '_authService');
+        expect(
+          code,
+          contains("import 'package:my_app/fakes/fake_auth.dart' as impl0;"),
+        );
+        // The start-up, with any provider: the session starts in it.
+        final start = rendered.elsewhere.single;
+        expect(start.socket, AppEntryRole.bootstrapPlatform);
+        expect(start.fragment!.code, 'await initAuth();');
+        expect(start.fragment!.imports, [_sessionImport]);
+      });
+    }
+
+    test(
+        'reports the problems of the implementation, and a function of it '
+        'that its file lacks', () {
+      final issues = authRole.template.validate(
+        inputOf(
+          authRole,
+          data: [
+            dataOf(
+              authRole,
+              const RoleImplementation(
+                type: TypeRef('_Private'),
+                create: FactoryRef('create', import: _fakeFile),
+              ),
+              module: 'fake_auth',
+            ),
+          ],
+        ),
+      );
+      expect(issues.single.origin, const ModuleOrigin(ModuleId('fake_auth')));
+
+      final missing = authRole.checkStructure(
+        StructuralRuleRequest(
+          hook: RoleHookRequest(
+            data: [
+              dataOf(
+                authRole,
+                _implementation(async: false),
+                module: 'fake_auth',
+              ),
+            ],
+            presentRoles: {authRole},
+            context: testContext,
+          ),
+          files: const {
+            'lib/fakes/fake_auth.dart':
+                DartFileIndex(path: 'lib/fakes/fake_auth.dart'),
+          },
+        ),
+      );
+      expect(
+        missing.single.message,
+        contains('does not declare function createFakeAuth()'),
+      );
+    });
+  });
+
+  group('the generated session', () {
+    for (final mode in AuthMode.values) {
+      group('of an app in the mode ${mode.name}', () {
+        late DartFiles app;
+
+        setUpAll(() async => app = await _app(mode: mode));
+
+        tearDownAll(() => app.delete());
+
+        test('is code that type-checks', () async {
+          expect(await app.analysisProblems(), isEmpty);
+        });
+
+        test(
+            'knows the user when initAuth() completes, at a first launch '
+            'and at the next one, and follows sign-up, sign-out, sign-in '
+            'and the deletion of the account, with allowsApp and '
+            'hasAccount as the mode says', () async {
+          expect(await app.run('$_notes$_life'), _lifeIn(mode));
+        });
+      });
+    }
+
+    test('type-checks and starts with an implementation created asynchronously',
+        () async {
+      final app = await _app(async: true);
+      addTearDown(app.delete);
+
+      expect(await app.analysisProblems(), isEmpty);
+      expect(await app.run('$_notes$_life'), _lifeIn(AuthMode.required));
+    });
+
+    group('with a provider that a test scripts', () {
+      late DartFiles app;
+
+      setUpAll(() async => app = await _app());
+
+      tearDownAll(() => app.delete());
+
+      test(
+          'fails only with an AuthFailure: one of the provider as it is, '
+          'and any other error as unknown with the error as its hint; and '
+          'has the user of the provider after a failure too', () async {
+        const hint = 'Bad state: The plugin broke in';
+        // A failure keeps the stack trace of what the provider threw, also
+        // when the session made it from another error.
+        String thrown(String failure) => '$failure, thrown in fake_auth.dart';
+        expect(await app.run('$_notes$_failures'), {
+          'a failure of the provider': {
+            for (final reason in [
+              'invalidCredentials',
+              'emailInUse',
+              'weakPassword',
+              'invalidEmail',
+              'userDisabled',
+              'tooManyAttempts',
+              'network',
+              'recentSignInRequired',
+            ])
+              reason: thrown('$reason, hint null'),
+            'notConfigured': thrown('notConfigured, hint Enable it.'),
+            'unknown': thrown('unknown, hint null'),
+          },
+          'an error of another kind': {
+            for (final call in [
+              'signIn',
+              'signUp',
+              'sendPasswordReset',
+              'signOut',
+              'deleteAccount',
+            ])
+              call: thrown('unknown, hint $hint $call.'),
+            'an object that is no error':
+                thrown('unknown, hint A text that was thrown.'),
+          },
+          // No failure changed the user.
+          'the session after the failures': {
+            'state': 'account user-1 $_email',
+            'heard': <Object?>[],
+          },
+          // The session takes the user of the provider when a call is
+          // over, also when no event tells of the change.
+          'a call for a user whose session has ended': {
+            'failure': thrown('recentSignInRequired, hint null'),
+            'state': 'signed out',
+            'heard': ['signed out'],
+          },
+          'a failure as text': [
+            'AuthFailure: network',
+            'AuthFailure: notConfigured (Enable it.)',
+          ],
+        });
+      });
+
+      test(
+          'follows the changes of the user that no call made, tells its '
+          'listeners only of a change, and follows only the service of the '
+          'last start', () async {
+        expect(await app.run('$_notes$_changes'), {
+          'a change that no call made': {
+            'state': 'account remote remote@example.com',
+            'heard': ['account remote remote@example.com'],
+          },
+          'an event for the same user': {
+            'state': 'account remote remote@example.com',
+            'heard': <Object?>[],
+          },
+          'a sign-out that no call made': {
+            'state': 'signed out',
+            'heard': ['signed out'],
+          },
+          // The session has the user of the new service when start()
+          // completes.
+          'a start with another service': {
+            'state': 'anonymous other',
+            'heard': ['anonymous other'],
+          },
+          'a change of the service before': {
+            'state': 'anonymous other',
+            'heard': <Object?>[],
+          },
+          'the service before is listened to': false,
+          'a change of the service of the start': {
+            'state': 'account remote remote@example.com',
+            'heard': ['account remote remote@example.com'],
+          },
+          'sessions compare by value': {
+            'signed out': true,
+            'the same anonymous user': true,
+            'another anonymous user': false,
+            'the same account': true,
+            'another address of the account': false,
+            'an account and an anonymous user of one id': false,
+            'as keys': 3,
+          },
+        });
+      });
+
+      test(
+          'keeps the calls made before its first start until it has the '
+          'user, runs its calls one after another in their order, and '
+          'completes the start after those made before it, also after one '
+          'that fails', () async {
+        Map<String, Object?> expected(AuthMode mode) {
+          final anonymous = mode == AuthMode.anonymous;
+          final signUp = anonymous ? 'linkPassword $_email' : 'signUp $_email';
+          const refused =
+              'invalidCredentials, hint null, thrown in fake_auth.dart';
+          return {
+            'before the start': {
+              'calls': <Object?>[],
+              'state': 'signed out',
+            },
+            // The anonymous mode has its user before the calls run, so
+            // sign-up gives that user the account.
+            'while the first call is on its way': {
+              'calls': [if (anonymous) 'signInAnonymously', signUp],
+              'the calls that are done': <Object?>[],
+              'the start is done': false,
+            },
+            'after the start': {
+              'calls': ['signIn $_email', 'sendPasswordReset $_email'],
+              'the calls that are done': [
+                'sign-up',
+                'sign-in: $refused',
+                'reset',
+              ],
+              // Each session has a user of its own.
+              'state': 'account user-${mode.index + 1} $_email',
+            },
+            'a call after the start': ['signOut'],
+            // In the anonymous mode, the sign-out is over once the app has
+            // its anonymous user again.
+            'the call after it': [
+              if (anonymous) 'signInAnonymously',
+              'sendPasswordReset $_email',
+            ],
+          };
+        }
+
+        expect(await app.run('$_notes$_earlyCalls'), {
+          for (final mode in AuthMode.values) mode.name: expected(mode),
+        });
+      });
+
+      test(
+          'makes a call that waits for no other, and a later start, wait '
+          'for nothing that another zone has to run: a test in fake time '
+          'calls it after the app started in real time', () async {
+        expect(await app.run('$_notes$_otherZone'), {
+          'a call': {
+            'calls': ['signOut'],
+            'the call is done': true,
+            'state': 'signed out',
+          },
+          'a start is done': true,
+        });
+      });
+
+      test(
+          'in the anonymous mode, waits for its anonymous user only as long '
+          'as it is told, starts without a user when the sign-in fails or '
+          'takes longer, tries again when the user comes back to the app '
+          'and after a sign-out or a deletion, and runs no call next to an '
+          'anonymous sign-in', () async {
+        const failed = 'The anonymous sign-in failed, so the app has no '
+            'user: AuthFailure: notConfigured (Enable anonymous sign-in.)';
+        const noNetwork = 'The anonymous sign-in failed, so the app has no '
+            'user: Bad state: No network.';
+        Map<String, Object?> note(
+          String state, {
+          List<String> calls = const [],
+          List<String> printed = const [],
+        }) =>
+            {'state': state, 'calls': calls, 'printed': printed};
+
+        expect(await app.run('$_notes$_anonymous'), {
+          'while the app waits for its anonymous user': {
+            'the start is done': false,
+            'calls': ['signInAnonymously'],
+          },
+          'a sign-in that takes longer than the wait': note(
+            'signed out',
+            calls: ['signInAnonymously'],
+          ),
+          // No second sign-in next to the one that is on its way.
+          'the user comes back while it is on its way': note('signed out'),
+          'when it comes': note('anonymous user-1'),
+          'the user comes back to an app with a user': note('anonymous user-1'),
+          'after dispose': {
+            'listeners of the lifecycle': 0,
+            'the service is listened to': false,
+          },
+          'a sign-in that comes within the wait': note(
+            'anonymous user-2',
+            calls: ['signInAnonymously'],
+          ),
+          // The start does not wait for a sign-in that failed, and in
+          // debug mode the developer of the app sees why.
+          'a sign-in that fails': note(
+            'signed out',
+            calls: ['signInAnonymously'],
+            printed: [failed],
+          ),
+          'the user comes back, and it fails again': note(
+            'signed out',
+            calls: ['signInAnonymously'],
+            printed: [failed],
+          ),
+          'the user comes back, and it works': note(
+            'anonymous user-3',
+            calls: ['signInAnonymously'],
+          ),
+          // The user is signed out, so the call completes.
+          'a sign-out, after which it fails': note(
+            'signed out',
+            calls: ['signOut', 'signInAnonymously'],
+            printed: [noNetwork],
+          ),
+          'the deletion of the account': note(
+            'anonymous user-4',
+            calls: ['deleteAccount', 'signInAnonymously'],
+          ),
+          'the deletion of an anonymous user': note(
+            'anonymous user-5',
+            calls: ['deleteAccount', 'signInAnonymously'],
+          ),
+          'starts while an anonymous sign-in is on its way': {
+            'the sign-ins of the starts': [
+              'signInAnonymously',
+              'signInAnonymously',
+            ],
+            'calls once the first has come': <Object?>[],
+            'the user': 'anonymous user-7',
+          },
+          // The sign-up finds the anonymous user, who gets the account:
+          // next to the sign-in, it would have made a second user, and the
+          // one of the two that came last would be the user.
+          'a call while the anonymous sign-in is on its way': {
+            'calls': <Object?>[],
+            'the call is done': false,
+          },
+          'the call, once the sign-in is over': note(
+            'account user-8 $_email',
+            calls: ['linkPassword $_email'],
+          ),
+          // No anonymous sign-in next to the sign-in, and none after it
+          // for a user with an account.
+          'the user comes back while a sign-in works': {
+            'calls while it is on its way': ['signIn $_email'],
+            'it': 'none',
+            ...note('account user-8 $_email'),
+          },
+          'the user comes back while a sign-in fails': {
+            'calls while it is on its way': ['signIn $_email'],
+            'it': 'invalidCredentials, hint null, thrown in fake_auth.dart',
+            ...note('anonymous user-9', calls: ['signInAnonymously']),
+          },
+          for (final mode in ['required', 'guest'])
+            'in the mode $mode': {
+              ...note('signed out', calls: ['signOut']),
+              'listeners of the lifecycle': 0,
+            },
+        });
+      });
+
+      test(
+          'takes the data of an anonymous user before it signs in to an '
+          'account, and gives it once the user of the account is signed '
+          'in; fails when taking fails, and reports when giving fails',
+          () async {
+        Map<String, Object?> note(
+          String state,
+          List<String> calls, [
+          String? failure,
+        ]) =>
+            {
+              'calls': calls,
+              'state': state,
+              if (failure != null) 'failure': failure,
+            };
+        const owner = 'account owner $_email';
+
+        expect(await app.run('$_notes$_guestData'), {
+          'an anonymous user signs in': note(
+            owner,
+            ['take user-1', 'signIn $_email', 'give owner'],
+          ),
+          'the user of an account signs in': note(owner, ['signIn $_email']),
+          'with nothing to move': note(
+            owner,
+            ['take user-2', 'signIn $_email'],
+          ),
+          // The provider is not called, and the guest stays.
+          'taking fails': note(
+            'anonymous user-3',
+            ['take user-3'],
+            'unknown, hint Bad state: The cart does not load., thrown in '
+                'check.dart',
+          ),
+          // Nothing is given to an account that the user is not in.
+          'the sign-in fails': note(
+            'anonymous user-3',
+            ['take user-3', 'signIn $_email'],
+            'invalidCredentials, hint null, thrown in fake_auth.dart',
+          ),
+          // The user is signed in, so the call completes.
+          'giving fails': note(
+            owner,
+            ['take user-3', 'signIn $_email', 'give owner'],
+            'none',
+          ),
+          'reported': [
+            {
+              'exception': 'Bad state: The cart does not save.',
+              'has a stack trace': true,
+              'library': 'app session',
+              'context': 'while giving the data of a guest to the account',
+            },
+          ],
+          'an anonymous user signs up': note(
+            'account user-4 bob@example.com',
+            ['linkPassword bob@example.com'],
+          ),
+          'the account has the id of the guest': note(
+            'account user-5 same@example.com',
+            ['take user-5', 'signIn same@example.com'],
+          ),
+          'a user who is not signed in signs in': note(
+            owner,
+            ['signIn $_email'],
+          ),
+          'the function of the app has nothing to move': true,
+        });
+      });
+    });
+  });
+
+  group('the note of the auth role for coding agents', () {
+    test(
+        'is a note of the role in the section of the role of every app with '
+        'it, and names what the three files declare', () async {
+      final rendered = await _rendered();
+      final note = agentNoteOf(authRole);
+
+      expect(rendered.notes.single.entryKey, authRole.description);
+      expect(rendered.notes.single.entryValue, note);
+      expect(note.isOfRole, isTrue);
+      expectNamesOfCode(
+        note,
+        {
+          AuthRole.sessionFile: [
+            'appSession',
+            'AppSessionController',
+            'AppSessionController.value',
+            'AppSessionController.allowsApp',
+            'AppSessionController.hasAccount',
+            'AppSession.uid',
+            'SignedOutSession',
+            'AnonymousSession',
+            'AccountSession',
+            'authMode',
+            'initAuth',
+            'createAuthService',
+          ],
+          AuthRole.serviceFile: [
+            'AuthService',
+            'AuthFailure',
+            'AuthFailure.reason',
+            'AuthFailure.developerHint',
+            'AuthFailureReason',
+            'AuthFailureReason.recentSignInRequired',
+          ],
+          AuthRole.guestDataFile: ['takeGuestData'],
+        },
+        files: rendered.files,
+      );
+      // The files that it names are those of the role, which every app
+      // with the role has.
+      expect(
+        {
+          for (final span in codeSpansOf(note.text))
+            if (span.contains('/')) span,
+        },
+        authRole.interface.files.toSet(),
+      );
+    });
+
+    test(
+        'tells to import the file of the session alone, which exports the '
+        'failure and its reasons, as the rule of the role asks', () async {
+      final unit = parseString(
+        content: (await _rendered()).files[AuthRole.sessionFile]!,
+      ).unit;
+
+      expect(
+        [
+          for (final directive in unit.directives)
+            if (directive is ExportDirective) directive.toSource(),
+        ],
+        ["export 'auth_service.dart' show AuthFailure, AuthFailureReason;"],
+      );
+      expect(
+        agentNoteOf(authRole).text,
+        contains(
+          '`${AuthRole.sessionFile}` exports `AuthFailure` and '
+          '`AuthFailureReason`',
+        ),
+      );
+    });
+  });
+
+  group('the rules of the auth role', () {
+    const session = 'package:my_app/core/auth/app_session.dart';
+    const service = 'package:my_app/core/auth/auth_service.dart';
+    const providerFile = 'lib/core/auth/fake_auth_service.dart';
+    const screen = 'lib/features/profile/profile_screen.dart';
+    const ofProvider = ModuleOrigin(ModuleId('fake_auth'));
+    const ofFeature = ModuleOrigin(ModuleId('profile'));
+
+    test(
+        'let each provider contribute one implementation, and no module '
+        'put code into the socket of the implementation', () {
+      List<SmfIssue> issuesOf(
+        ModuleDescriptor module, {
+        List<RoleImplementation> implementations = const [],
+        List<Contribution> contributions = const [],
+      }) =>
+          authRole.checkModule(
+            ModuleRuleRequest(
+              hook: RoleHookRequest(
+                data: [
+                  for (final implementation in implementations)
+                    authRole
+                        .data(implementation)
+                        .withOrigin(ModuleOrigin(module.id)),
+                ],
+                presentRoles: {authRole},
+                context: testContext,
+              ),
+              module: module,
+              contributions: contributions,
+            ),
+          );
+      final implementation = _implementation(async: false);
+
+      expect(issuesOf(_provider, implementations: [implementation]), isEmpty);
+      expect(issuesOf(_feature), isEmpty);
+      expect(
+        issuesOf(_provider).single.message,
+        contains('exactly one implementation, but the module contributes 0'),
+      );
+      expect(
+        issuesOf(_feature, implementations: [implementation]).single.message,
+        contains('which only its providers do'),
+      );
+      final issue = issuesOf(
+        _provider,
+        implementations: [implementation],
+        contributions: const [
+          SocketContribution.code(
+            AuthRole.implementations,
+            Fragment('late AuthService _authService;'),
+          ),
+        ],
+      ).single;
+      expect(issue.message, contains('socket auth.implementations'));
+      expect(issue.hint, contains('RoleImplementation'));
+    });
+
+    test(
+        'auth.factory_calls: createAuthService() is for the provider of the '
+        'role; a file of another module, or of the template of another '
+        'role, that calls it is reported, with the session as what to use', () {
+      final issues = _structureIssues({
+        _calling(providerFile, 'createAuthService'): ofProvider,
+        _calling(screen, 'createAuthService'): ofFeature,
+        _calling('lib/core/account/account.dart', 'createAuthService'):
+            RoleTemplateOrigin(_otherRole),
+        // Another file of the template of the role itself, and files that
+        // neither a module nor the template of a role owns.
+        _calling('lib/core/auth/more.dart', 'createAuthService'):
+            const RoleTemplateOrigin(authRole),
+        _calling('lib/generated.dart', 'createAuthService'):
+            const PipelineOrigin(),
+        _calling('lib/mine.dart', 'createAuthService'): null,
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (screen, ofFeature),
+          ('lib/core/account/account.dart', RoleTemplateOrigin(_otherRole)),
+        ],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} calls createAuthService(), which only the provider '
+          'of the authentication role may call.',
+        );
+        expect(
+          issue.hint,
+          'Sign in, up and out through appSession of '
+          'lib/core/auth/app_session.dart, which also exports AuthFailure '
+          'and AuthFailureReason.',
+        );
+      }
+    });
+
+    test(
+        'auth.factory_calls: the file of AuthService is for the provider of '
+        'the role; a file of another module that imports or exports it, '
+        'in whichever way, is reported', () {
+      const relative = DartFileIndex(
+        path: screen,
+        imports: [IndexedImport('../../core/auth/auth_service.dart')],
+      );
+      const prefixed = DartFileIndex(
+        path: 'lib/features/profile/profile_state.dart',
+        imports: [
+          IndexedImport(service, prefix: 'auth', show: ['AuthService']),
+        ],
+      );
+      const exported = DartFileIndex(
+        path: 'lib/features/profile/profile.dart',
+        exports: [IndexedImport(service)],
+      );
+      final issues = _structureIssues({
+        const DartFileIndex(
+          path: providerFile,
+          imports: [IndexedImport('auth_service.dart')],
+        ): ofProvider,
+        relative: ofFeature,
+        prefixed: ofFeature,
+        exported: ofFeature,
+        // The file of the session, which the code of an app imports, and a
+        // file of the same name of another directory.
+        const DartFileIndex(
+          path: 'lib/features/profile/profile_cubit.dart',
+          imports: [
+            IndexedImport(session),
+            IndexedImport('auth_service.dart'),
+          ],
+        ): ofFeature,
+        // The file of the session itself imports it.
+        const DartFileIndex(
+          path: AuthRole.sessionFile,
+          imports: [IndexedImport('auth_service.dart')],
+        ): const RoleTemplateOrigin(authRole),
+      });
+
+      expect(
+        [for (final issue in issues) issue.path],
+        [relative.path, prefixed.path, exported.path],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} imports lib/core/auth/auth_service.dart, the file '
+          'of AuthService, which only the provider of the authentication '
+          'role implements.',
+        );
+        expect(issue.origin, ofFeature);
+        expect(issue.hint, contains('appSession'));
+      }
+    });
+
+    test(
+        'auth.start_calls: initAuth() is for bootstrap(); any other file of '
+        'the app that calls it is reported, the file of the provider too', () {
+      final issues = _structureIssues({
+        _calling(AppEntryRole.bootstrapFile, 'initAuth'):
+            const ModuleOrigin(ModuleId('flutter_core')),
+        _calling(providerFile, 'initAuth'): ofProvider,
+        _calling(screen, 'initAuth'): ofFeature,
+        _calling('lib/core/account/account.dart', 'initAuth'):
+            RoleTemplateOrigin(_otherRole),
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (providerFile, ofProvider),
+          (screen, ofFeature),
+          ('lib/core/account/account.dart', RoleTemplateOrigin(_otherRole)),
+        ],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} calls initAuth(), which only bootstrap() calls.',
+        );
+        expect(issue.hint, contains('appSession'));
+      }
+    });
+
+    test(
+        'take a function of the same name of another file for none of the '
+        'role, and the session for what the code of an app may use', () {
+      expect(
+        _structureIssues({
+          for (final function in ['createAuthService', 'initAuth'])
+            DartFileIndex(
+              path: 'lib/features/profile/$function.dart',
+              imports: const [IndexedImport('profile_auth.dart')],
+              invocations: [IndexedInvocation(function)],
+            ): ofFeature,
+          // What a screen of a feature does with the session.
+          const DartFileIndex(
+            path: screen,
+            imports: [IndexedImport(session)],
+            invocations: [
+              IndexedInvocation('signIn', target: 'appSession'),
+              IndexedInvocation('AuthFailure'),
+            ],
+            references: [IndexedReference('appSession')],
+            memberAccesses: [IndexedMemberAccess('appSession', 'allowsApp')],
+          ): ofFeature,
+        }),
+        isEmpty,
+      );
+    });
+  });
+}

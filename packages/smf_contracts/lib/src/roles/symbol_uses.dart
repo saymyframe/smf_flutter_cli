@@ -20,6 +20,14 @@ bool usesImported(DartFileIndex file, String name, ImportRef import) =>
         ? usesSymbols(file, {name}, 'lib/${import.uri}')
         : _uses(file, {name}, (uri) => uri == import.uri);
 
+/// Whether [file] imports or exports the library at [libraryPath], a path
+/// relative to the project root such as `lib/core/auth/auth_service.dart`,
+/// by a relative or a `package:` URI, with a prefix or without one.
+bool importsLibrary(DartFileIndex file, String libraryPath) =>
+    [...file.imports, ...file.exports].any(
+      (directive) => _pathOf(directive.uri, file.path) == libraryPath,
+    );
+
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
 /// import of the library has and no import of another library, as in
