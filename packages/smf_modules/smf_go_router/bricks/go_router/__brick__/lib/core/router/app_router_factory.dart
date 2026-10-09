@@ -53,9 +53,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   ///
   /// go_router asks them about every location that it parses, in its
   /// `redirect`: the one the app starts on, those of [go] and those of the
-  /// platform, and goes to the location that they answer. [push] and
-  /// [replace] ask them before they hand a location to go_router, which
-  /// would put the target of the guard on top of the stack.
+  /// platform, and goes to the location that they answer. That is the
+  /// target of the guard that keeps the user from the location, or `/` for
+  /// a location in a flow that is over. [push] and [replace] ask them
+  /// before they hand a location to go_router, which would put that answer
+  /// on top of the stack: they go to it instead.
   final GuardedNavigation<String> _guards = GuardedNavigation(
     start: '/',
     locationOf: (location) => location.path,
@@ -88,8 +90,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   /// Tells the guards of the pages of the router when one of them starts
   /// or stops allowing, and goes to the location that they answer: the
-  /// target of the guard that keeps the user from one of the pages, or the
-  /// location that the user comes back to once the guards allow it.
+  /// target of the guard that keeps the user from one of the pages, the
+  /// location that the user comes back to once the guards allow it, or `/`
+  /// when the page on top is in a flow that is over.
   ///
   /// The pages of the router are those that pushes showed, the one on top
   /// first, and, below them, the location that go_router went to last. A
@@ -99,14 +102,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// about the location below the pushed pages.
   void _guardsChanged() {
     final configuration = config.routerDelegate.currentConfiguration;
-    // Before its first location, the router has no page to tell of, and
-    // no stack that an answer of the guards could take the place of. It
-    // tells them of no pages, and asks about that location when it shows
-    // it.
-    if (configuration.isEmpty && !configuration.isError) {
-      _guards.changed(const []);
-      return;
-    }
+    // Before its first location, the router has no page to tell the
+    // guards of, and no stack that an answer of theirs could take the
+    // place of: it asks them about that location when it shows it.
+    if (configuration.isEmpty && !configuration.isError) return;
     final below = config.configuration.findMatch(configuration.uri);
     final shown = _guards.changed([
       for (final page in _pushedPages(configuration.matches).toList().reversed)

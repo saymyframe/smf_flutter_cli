@@ -65,19 +65,26 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// nothing of the guards itself. It knows a location by its URI. The
 /// top-level `redirect` of go_router asks about every location that
 /// go_router parses, such as the one the app starts on, those of `go()` and
-/// those of the platform, and sends the user to the target of the guard
-/// that keeps them from it. `push()` and `replace()` ask before they hand a
-/// location to go_router, which would put the target on top of the stack:
-/// they go to the target instead, and `push()` completes with `null`. The
-/// router listens to `guardChanges` itself. When a guard starts or stops
-/// allowing, it tells the role of the pages that pushes showed, the one on
-/// top first, and of the location below them, or of no pages before it
-/// showed its first location, and goes to the location that the role
-/// answers. A page that `replace()` showed over other pages
-/// counts as one that a push showed, as it is one to go_router. The router
-/// does not hand `guardChanges` to go_router as its `refreshListenable`: a
-/// refresh asks only about the location below the pushed pages, and gives
-/// each of those pages a new completer.
+/// those of the platform, and sends the user to what the role answers: the
+/// target of the guard that keeps them from the location, or `/`, the
+/// screen that the app starts on, for a location in a flow that is over.
+/// `push()` and `replace()` ask before they hand a location to go_router,
+/// which would put that answer on top of the stack: they go to it instead,
+/// and `push()` completes with `null`. A `go()` of go_router to `/` leaves
+/// the branches of the main navigation that are not selected as they are,
+/// so they keep their pages when a flow that is over sends the user to
+/// `/`. The target of a guard is outside the main navigation, so going to
+/// it takes the pages of every branch. The router listens to
+/// `guardChanges` itself. When a guard starts or stops allowing, it tells
+/// the role of the pages that pushes showed, the one on top first, and of
+/// the location below them, and goes to the location that the role
+/// answers. Before it showed its first location, it has no page to tell
+/// of and does nothing: go_router asks about that location when it parses
+/// it. A page that `replace()` showed over other pages counts as one that a
+/// push showed, as it is one to go_router. The router does not hand
+/// `guardChanges` to go_router as its `refreshListenable`: a refresh asks
+/// only about the location below the pushed pages, and gives each of those
+/// pages a new completer.
 ///
 /// The router tells the listeners of the screen of the router role about
 /// the page on top of the app: the delegate of go_router hears of every
