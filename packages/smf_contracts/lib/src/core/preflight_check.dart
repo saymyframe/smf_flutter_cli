@@ -95,8 +95,10 @@ final class ToolInstall {
 
   /// Directories with the installed executables.
   ///
-  /// The pipeline adds them to the `PATH` of later checks and of every
-  /// [PostGenStep], so that tools which call each other find them.
+  /// The pipeline adds them to the `PATH` of later checks, among them the
+  /// checks of the modules that depend on the module of the check (see
+  /// [Preflight]), and of every [PostGenStep], so that tools which call
+  /// each other find them.
   final List<String> binDirs;
 
   /// How to run the installed tool, if the check provides one.
