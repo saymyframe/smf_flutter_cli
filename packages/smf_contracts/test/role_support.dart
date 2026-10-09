@@ -225,8 +225,19 @@ void expectNamesOfCode(
   AgentNote note,
   Map<String, List<String>> names, {
   required Map<String, String> files,
+}) =>
+    expectNamesOfCodeIn(note.text, names, files: files);
+
+/// Fails unless the Markdown [text] gives each of the [names] inside a span
+/// of inline code, and the file that the name is listed under declares it,
+/// as [expectNamesOfCode] tells: for a text that is no note for coding
+/// agents, such as a section of the README of an app.
+void expectNamesOfCodeIn(
+  String text,
+  Map<String, List<String>> names, {
+  required Map<String, String> files,
 }) {
-  final spans = codeSpansOf(note.text);
+  final spans = codeSpansOf(text);
   for (final MapEntry(key: file, value: ofFile) in names.entries) {
     final declared = declarationsOf(files[file]!);
     for (final name in ofFile) {
@@ -237,7 +248,7 @@ void expectNamesOfCode(
       expect(
         spans.any(word.hasMatch),
         isTrue,
-        reason: 'The note does not give $given in inline code.',
+        reason: 'The text does not give $given in inline code.',
       );
     }
   }

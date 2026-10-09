@@ -2331,10 +2331,99 @@ void main() {
       expect(
         agentNoteOf(authRole).text,
         contains(
-          '`${AuthRole.sessionFile}` exports `AuthFailure` and '
-          '`AuthFailureReason`',
+          'The code of the app imports `${AuthRole.sessionFile}`, which '
+          'exports `AuthFailure` and `AuthFailureReason`',
         ),
       );
+    });
+  });
+
+  group('the section of the auth role in the README of the app', () {
+    /// The section of [app], under the heading of the role.
+    String sectionOf(RenderedTemplate app) {
+      final section = app.elsewhere.singleWhere(
+        (entry) => entry.socket == AppEntryRole.readmeSections,
+      );
+      expect(section.entryKey, AuthRole.readmeHeading);
+      expect(AppEntryRole.readmeSections.problemsWith(section), isEmpty);
+      return section.entryValue! as String;
+    }
+
+    test(
+        'comes from the render hook, since it tells the mode of the app and '
+        'where that is written, and is the same text otherwise', () async {
+      expect(AuthRole.readmeHeading, 'Sign-in');
+      // No contribution of the template: those are the same in every mode.
+      expect(
+        authRole.template.contribute(testContext).where(
+              (contribution) =>
+                  contribution is SocketContribution &&
+                  contribution.socket == AppEntryRole.readmeSections,
+            ),
+        isEmpty,
+      );
+      final sections = <AuthMode, String>{};
+      for (final mode in AuthMode.values) {
+        final rendered = await _rendered(mode: mode);
+        final section = sections[mode] = sectionOf(rendered);
+
+        // The mode as the file of the session has it.
+        final ofApp = 'This app was generated in the mode `${mode.name}`: '
+            '`authMode` in `${AuthRole.sessionFile}` is '
+            '`AuthMode.${mode.name}`.';
+        expect(section, contains(ofApp));
+        expect(
+          rendered.files[AuthRole.sessionFile],
+          contains('const AuthMode authMode = AuthMode.${mode.name};'),
+        );
+        // What each mode means, in every app.
+        for (final other in AuthMode.values) {
+          expect(section, contains('- In `${other.name}`, '));
+        }
+        expect(
+          section.replaceFirst(ofApp, ''),
+          sections[AuthMode.values.first]!.replaceFirst(
+            RegExp(r'This app was generated in the mode [^\n]*'),
+            '',
+          ),
+        );
+      }
+    });
+
+    test(
+        'names what the files of the role declare, no file but theirs, and '
+        'the wait for an anonymous user that the session has', () async {
+      final rendered = await _rendered(mode: AuthMode.anonymous);
+      final section = sectionOf(rendered);
+
+      expectNamesOfCodeIn(
+        section,
+        {
+          AuthRole.sessionFile: [
+            'authMode',
+            'AuthMode.required',
+            'AuthMode.guest',
+            'AuthMode.anonymous',
+            'appSession',
+            'AppSessionController.value',
+            'AppSessionController.allowsApp',
+            'AppSessionController.hasAccount',
+            'AppSession.uid',
+          ],
+          AuthRole.guestDataFile: ['takeGuestData'],
+        },
+        files: rendered.files,
+      );
+      expect(
+        {
+          for (final span in codeSpansOf(section))
+            if (span.contains('/')) span,
+        },
+        {AuthRole.sessionFile, AuthRole.guestDataFile},
+      );
+      final wait = RegExp(r'anonymousWait = const Duration\(seconds: (\d+)\)')
+          .firstMatch(rendered.files[AuthRole.sessionFile]!)![1];
+      expect(section, contains('The app waits up to $wait seconds'));
     });
   });
 

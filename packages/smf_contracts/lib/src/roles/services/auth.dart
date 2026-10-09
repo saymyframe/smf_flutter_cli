@@ -43,16 +43,25 @@ enum AuthMode {
 /// The provider contributes its implementation of `AuthService` as a
 /// [RoleImplementation], created with the app or asynchronously.
 ///
+/// The template also writes the section [readmeHeading] of the README of
+/// the app, from its render hook, since the section tells the mode of the
+/// app: what each mode means, that the mode gates nothing on its own, how
+/// to change it, and where the data of a guest moves. A provider tells in
+/// a section of its own what its side needs for a mode. In the guide for
+/// coding agents of the app, the template writes the note of the role
+/// under its description.
+///
 /// ## The session
 ///
 /// The code of an app reaches sign-in only through `appSession`, a
 /// `ValueListenable<AppSession>`: its `signIn`, `signUp`,
 /// `sendPasswordReset`, `signOut` and `deleteAccount` call the service and
 /// do what is the same with every provider. No module, and no template of
-/// another role, calls `createAuthService()` or imports [serviceFile]. The
-/// role registers nothing in a DI container: `appSession` is a top-level
-/// variable, which a guard of the routes reads synchronously and which the
-/// state of a screen takes as it is.
+/// another role, calls `createAuthService()` or `appSession.start()`, and
+/// only the file of the provider's implementation imports [serviceFile].
+/// The role registers nothing in a DI container: `appSession` is a
+/// top-level variable, which a guard of the routes reads synchronously and
+/// which the state of a screen takes as it is.
 ///
 /// `Future<void> initAuth()` creates the service with the provider's
 /// function and starts the session with it. `bootstrap()` awaits it in its
@@ -69,7 +78,8 @@ enum AuthMode {
 /// The calls of `appSession` run one after another, in the order they were
 /// made, and none runs next to an anonymous sign-in that is on its way. So
 /// the user of the app is the result of the call that was made last, and a
-/// sign-up finds the anonymous user that it gives the account.
+/// sign-up finds the anonymous user that it gives the account. A start of
+/// the session after the first one takes its turn among the calls too.
 ///
 /// `appSession.allowsApp` and `appSession.hasAccount` are the two
 /// `ValueListenable<bool>` that guards of the routes read. Both are
@@ -89,10 +99,15 @@ enum AuthMode {
 /// - `anonymous`: `allowsApp` is always true, and an app without a user
 ///   signs in anonymously when it starts, so that code has the id of a
 ///   user from the first frame. The start waits for that sign-in for at
-///   most 3 seconds. When it fails or takes longer, the app starts without
-///   a user and tries again each time the user comes back to the app, and
-///   after a sign-out or the deletion of an account. `signUp` then gives
-///   the anonymous user the account, with the same id.
+///   most 3 seconds, also when the user comes back to the app meanwhile.
+///   When it fails or takes longer, the app starts without a user and
+///   tries again each time the user comes back to the app, and after each
+///   call that leaves nobody signed in: a sign-out or the deletion of an
+///   account, which wait for it as the start does, and a call that failed
+///   after the provider signed the user out, which does not, so that its
+///   failure is not late. `signUp` then gives the anonymous user the
+///   account, with the same id. An anonymous user whom the provider has on
+///   the device in another mode gets the account in the same way.
 ///
 /// The mode gates nothing on its own. A module with the screens of sign-in
 /// declares the guards of the routes, with functions of its own that
@@ -114,7 +129,9 @@ enum AuthMode {
 /// error of the first fails the call before the service is called. An
 /// error of the second is reported with `FlutterError.reportError`, and
 /// the call completes, since the user is signed in. `signUp` of an
-/// anonymous user keeps the id, so it moves nothing.
+/// anonymous user keeps the id, so it moves nothing. Neither function
+/// calls `appSession`: the sign-in is one of its calls, which run one
+/// after another, so the two would wait for each other.
 ///
 /// ## What a provider keeps to
 ///
@@ -123,7 +140,13 @@ enum AuthMode {
 ///   `currentUser` is the user of the device already, without a request to
 ///   the server, and it may be called again;
 /// - when a call completes, `currentUser` is its result, and `userChanges`
-///   tells of every change, also of one that no call made;
+///   tells of every change, also of one that no call made. An error that
+///   the stream sends changes nothing: the session reports it with
+///   `FlutterError.reportError` and goes on listening;
+/// - `signIn` is also called while a user is signed in, an anonymous one
+///   or the user of another account, and `signUp` while the user of
+///   another account is: the user of the call then replaces that user on
+///   the device;
 /// - every failure is an `AuthFailure`, and every call ends, with the
 ///   reason `network` when the server does not answer. A wrong password and
 ///   an address without an account are both `invalidCredentials`, and
@@ -138,17 +161,42 @@ enum AuthMode {
 ///
 /// Only a running app shows whether a provider keeps to it.
 ///
+/// ## Rules
+///
+/// The structural rules of the role read the index of each Dart file of
+/// an app, so they see what a file itself imports and calls:
+/// - `auth.factory_calls`: no file of a module, and none of the template of
+///   another role, calls `createAuthService()`, and of such files only
+///   those of the provider's implementation, the files of its class and of
+///   its function, import or export [serviceFile]. So a widget of a
+///   provider signs in through `appSession` too;
+/// - `auth.start_calls`: only the file of `bootstrap()` calls `initAuth()`,
+///   and no file of a module or of the template of another role calls
+///   `appSession.start()`, which `initAuth()` and tests call;
+/// - `auth.implementation_factories`: the function of the implementation
+///   is in its file and takes no arguments.
+///
+/// They do not see a `part` file of a library that imports [sessionFile],
+/// a file that reaches [sessionFile] through an export of another file of
+/// the app, or `appSession` under another name, such as a variable that it
+/// was assigned to.
+///
 /// ## Tests
 ///
 /// A call of `appSession` made before the first `initAuth()` waits for it,
 /// and `initAuth()` completes after such calls. So a test that needs an
 /// account before the app starts calls `appSession.signUp` before
 /// `bootstrap()`, without awaiting it, and the app then starts with that
-/// account. The tests of a module whose guard asks for an account open the
-/// guard for the tests of the other modules this way. A test gives
+/// account. It makes the call outside the body of a test, as in a
+/// `setUpAll`: a call made in the body of a widget test waits in the fake
+/// time of that body, and a start that runs in real time then never
+/// completes. The tests of a module whose guard asks for an account open
+/// the guard for the tests of the other modules this way. A test gives
 /// `appSession.start()` a service of its own to script what a provider
 /// answers, and creates an `AppSessionController` of its own to see
-/// another mode.
+/// another mode. A test that brings the user back to the app may go
+/// through any state of the lifecycle: the session looks only at
+/// `AppLifecycleState.resumed`.
 final class AuthRole extends Role<RoleImplementation> {
   const AuthRole._();
 
@@ -163,6 +211,11 @@ final class AuthRole extends Role<RoleImplementation> {
   /// The path of the file with `takeGuestData`, which the developer of the
   /// app edits.
   static const guestDataFile = 'lib/core/auth/guest_data.dart';
+
+  /// The heading of the section of the README of the app in which the
+  /// template tells the mode of the app and what it does. The section of a
+  /// provider on what its side needs for a mode can refer to it.
+  static const readmeHeading = 'Sign-in';
 
   /// `--auth-mode`, who may use the app without an account: `required`, the
   /// default, `guest` or `anonymous`, the names of the [AuthMode]s.
@@ -345,6 +398,24 @@ List<SmfIssue> _checkAuthStart(
       ],
     ];
 
+/// The section of the role in the README of an app in [mode]: the mode of
+/// the app and where it is written, what each mode means, that the mode
+/// gates nothing on its own, how to change it, and where the data of a
+/// guest moves. It holds with every provider and names none.
+String _readmeSection(AuthMode mode) => '''
+The sign-in mode of the app says who may use it without an account. This app was generated in the mode `${mode.name}`: `authMode` in `${AuthRole.sessionFile}` is `AuthMode.${mode.name}`.
+
+- In `${AuthMode.required.name}`, nobody may. `appSession.allowsApp` is true only for a user who signed in to an account.
+- In `${AuthMode.guest.name}`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
+- In `${AuthMode.anonymous.name}`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
+
+The mode keeps nobody from a screen on its own. A guard of the routes does, which reads `appSession.allowsApp`, or `appSession.hasAccount` for a screen that needs an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `${AuthMode.required.name}` too, until you write a guard of your own that reads `appSession.allowsApp`.
+
+To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `${AuthMode.anonymous.name}`. Where the provider has a section in this README, that section tells how.
+
+When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves to the account. As generated it moves nothing.
+''';
+
 final class _AuthTemplate extends _ServiceTemplate {
   const _AuthTemplate();
 
@@ -375,14 +446,16 @@ final class _AuthTemplate extends _ServiceTemplate {
   /// The note of the role in the guide for coding agents: that the code of
   /// an app signs in through the session, how it shows a failure, what the
   /// mode does and does not do, where the data of a guest moves, and which
-  /// functions of the role are not for the code of the app.
+  /// functions of the role are not for the code of the app. The section of
+  /// the role in the README of the app tells the mode of the app and what
+  /// each mode means.
   @override
   String get agentNote => '''
 - `appSession` in `$file` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
 - A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
 - `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes, which reads `appSession.allowsApp`, or `appSession.hasAccount` for a screen that needs an account. In an app without such a guard every screen is open, whatever the mode. A screen does not redirect itself.
-- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user.
-- A new provider implements `$service` of `${AuthRole.serviceFile}`. In the code of the app, do not call `$initFunction()` or `$factory()`, and do not import that file: `$file` exports `AuthFailure` and `AuthFailureReason`.
+- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
+- A new provider implements `$service` of `${AuthRole.serviceFile}`, and only the file of that implementation imports it. The code of the app imports `$file`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `$initFunction()` nor `$factory()` nor `appSession.start()`.
 ''';
 
   /// The brick and the note of the role. The role registers nothing in a DI
@@ -418,13 +491,23 @@ final class _AuthTemplate extends _ServiceTemplate {
   Map<String, String> optionsOf(Object? choice) =>
       {AuthRole.modeOption.name: (choice! as AuthMode).name};
 
-  /// The implementation, and the mode of the app as the value of the
-  /// constant `authMode`.
+  /// The implementation, the mode of the app as the value of the constant
+  /// `authMode`, and the section of the role in the README of the app,
+  /// which tells that mode.
   @override
-  RoleOutput render(RoleHookInput<RoleImplementation> input) => RoleOutput(
-        fragments: super.render(input).fragments,
-        vars: {'auth_mode': 'AuthMode.${authRole.modeIn(input).name}'},
-      );
+  RoleOutput render(RoleHookInput<RoleImplementation> input) {
+    final mode = authRole.modeIn(input);
+    return RoleOutput(
+      fragments: [
+        ...super.render(input).fragments,
+        AppEntryRole.readmeSections.entry(
+          AuthRole.readmeHeading,
+          _readmeSection(mode),
+        ),
+      ],
+      vars: {'auth_mode': 'AuthMode.${mode.name}'},
+    );
+  }
 
   /// `bootstrap()` always awaits `initAuth()`, which also starts the
   /// session, whether the implementation is created asynchronously or not.
