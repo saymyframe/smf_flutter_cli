@@ -104,9 +104,8 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
 
   /// The choice of the route at [start], the path the user asked the app to
   /// start on, which must be a route without required parameters, and
-  /// outside the flow of every guard: once a guard allows, the app shows the
-  /// location that the guard kept the user from, and an app that starts in
-  /// the flow has none.
+  /// outside the flow of every guard: once a flow is over, the app shows
+  /// the screen that it starts on in place of the routes of the flow.
   RouterChoice _startOn(RouterFacade facade, String start) {
     final route = facade.routeAt(start);
     if (route == null) {
@@ -178,16 +177,18 @@ const String _agentNote = '''
 ''';
 
 /// The note of the router role about the guards, in the guide for coding
-/// agents of an app with guards: where they are, how the code of the app
-/// adds one and changes what it allows, that the router navigates when it
-/// does, and how the code keeps the user from coming back to where they
-/// were, as after a sign-out (see [RouteGuard]), whichever module provides
-/// the role.
+/// agents of an app with guards: where they are and in which order the
+/// router asks them, how the code of the app adds one and changes what it
+/// allows, that the router navigates when it does, where the user comes to
+/// once a guard allows again, and that no code navigates into the flow of a
+/// guard, whose routes show only while the guard does not allow (see
+/// [RouteGuard]), whichever module provides the role.
 ///
 /// The note leaves out what the comments of the generated code say, such as
 /// what `redirectOf()` and `guardChanges` are for.
 const String _guardsAgentNote = '''
-- `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`.
-- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. The first one whose `allows` is `false` decides, and the router asks no guard after it.
+- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Put it at the place in the list where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. It shows the `redirectTo` while the value is `false`. Once it is `true`, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A guard with `resumes: false` does not bring the user back. When its `allows` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the guards allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 ''';

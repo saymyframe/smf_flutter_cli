@@ -161,7 +161,7 @@ final class BrokenModule extends SmfModule {
   /// that the app starts on, and again when one of them starts or stops
   /// allowing, but not about the locations that `go()`, `push()` and
   /// `replace()` are asked to show: it shows a location that a guard keeps
-  /// the user from.
+  /// the user from, and one in a flow that is over.
   static const routerAskingGuardsOnlyAtStart = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_asks_guards_at_start'),
@@ -199,10 +199,12 @@ final class BrokenModule extends SmfModule {
   );
 
   /// The fake router whose `replace()` asks the guards of the routes about
-  /// its location, and leaves the stack as it is when a guard keeps the
-  /// user from the location, rather than showing the target of the guard
-  /// in place of the whole stack: from a page of the flow that is not the
-  /// target, the user stays on that page.
+  /// its location, and leaves the stack as it is when they answer another
+  /// location, rather than showing that location in place of the whole
+  /// stack. When a guard keeps the user from the location, the user stays
+  /// on a page of the flow that is not the target. And for a location in a
+  /// flow that is over, the user stays on the page that they are on, not
+  /// on the screen that the app starts on.
   static const routerKeepingPageOnGuardedReplace = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_keeps_page_on_guarded_replace'),
@@ -217,6 +219,37 @@ final class BrokenModule extends SmfModule {
             'null) return;\n'
             '    {{/guards}}final branch = _branchOf(location);\n'
             "    _checkMainNavigation(location, branch, 'replace');\n",
+      ),
+    ],
+  );
+
+  /// The fake router that, when it shows the location that the guards of
+  /// the routes answer, puts the branches of the main navigation back on
+  /// their destinations, but for the selected one, which keeps its pages.
+  /// A location that brings the user back into that branch makes its stack
+  /// anew, so the bug shows only when the user comes back somewhere else,
+  /// as after a guard that does not bring the user back: the branch then
+  /// still has a page that the guard kept the user from.
+  static const routerKeepingSelectedBranch = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_selected_branch'),
+    'A plain navigator whose guards leave the selected branch (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      if (index == _selected) continue;\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
       ),
     ],
   );

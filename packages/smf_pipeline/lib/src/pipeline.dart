@@ -352,7 +352,7 @@ extension CreatePlanning on CreatePipeline {
       }
 
       final preflight = await runPreflight(
-        plannedChecks(collection, sdkCheck),
+        plannedChecks(collection, sdkCheck, resolution),
         environment,
         explain: request.explain,
         strict: request.strict,

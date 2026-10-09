@@ -77,11 +77,13 @@ final RoutesData _introRoutes = RoutesData(
       name: 'firstRun',
       allows: FunctionRef('introSeen', import: _introFile),
       redirectTo: 'intro',
+      stage: GuardStage.welcome,
     ),
     RouteGuard(
       name: 'premium',
       allows: FunctionRef('isPremium', import: _introFile),
       redirectTo: 'paywall',
+      stage: GuardStage.identity,
     ),
   ],
 );
@@ -94,6 +96,22 @@ final RoutesData _accountRoutes = RoutesData(
       name: 'signedIn',
       allows: FunctionRef('isSignedIn', import: _accountFile),
       redirectTo: 'login',
+      stage: GuardStage.identity,
+    ),
+  ],
+);
+
+/// The guard of the feature `account` as one that does not bring the user
+/// back, with the routes of the feature.
+final RoutesData _sessionRoutes = RoutesData(
+  _accountRoutes.routes,
+  guards: const [
+    RouteGuard(
+      name: 'signedIn',
+      allows: FunctionRef('isSignedIn', import: _accountFile),
+      redirectTo: 'login',
+      stage: GuardStage.identity,
+      resumes: false,
     ),
   ],
 );
@@ -119,6 +137,18 @@ final List<RoleData<Object>> _oneGuardData = [
   dataOf(routerRole, _accountRoutes, module: 'account'),
 ];
 
+/// The routes of an app whose modules are listed against the stages of
+/// their guards: `account`, whose guard is of the stage `identity` and does
+/// not bring the user back, comes before `intro`, whose first guard is of
+/// the stage `welcome`. The app asks the first guard of `intro`, then the
+/// guard of `account`, and then the second guard of `intro`, which is of
+/// the stage `identity` too.
+final List<RoleData<Object>> _accountFirstData = [
+  ..._data,
+  dataOf(routerRole, _sessionRoutes, module: 'account'),
+  dataOf(routerRole, _introRoutes, module: 'intro'),
+];
+
 /// The routes of an app whose two guards show one target, so that both
 /// have one flow: the first route of `intro` with its child.
 final List<RoleData<Object>> _sharedTargetData = [
@@ -132,11 +162,13 @@ final List<RoleData<Object>> _sharedTargetData = [
           name: 'firstRun',
           allows: FunctionRef('introSeen', import: _introFile),
           redirectTo: 'intro',
+          stage: GuardStage.welcome,
         ),
         RouteGuard(
           name: 'premium',
           allows: FunctionRef('isPremium', import: _introFile),
           redirectTo: 'intro',
+          stage: GuardStage.identity,
         ),
       ],
     ),
@@ -179,7 +211,12 @@ RouteGuard _guard({
   String redirectTo = 'gate',
   FunctionRef allows = const FunctionRef('isOpen', import: _gateFile),
 }) =>
-    RouteGuard(name: name, allows: allows, redirectTo: redirectTo);
+    RouteGuard(
+      name: name,
+      allows: allows,
+      redirectTo: redirectTo,
+      stage: GuardStage.welcome,
+    );
 
 /// The issues of the module rule `router.guards`, if the role has it, for
 /// [guards] of the feature `home`, whose routes are [routes].
@@ -347,8 +384,8 @@ ValueListenable<bool> isSignedIn() => signedInNow;
 
 /// Prints the guards of the app, and then what `redirectOf()` says of some
 /// routes, and of a screen that is no route (`none`), as the guards open
-/// and close, and how often `guardChanges` notified and the functions were
-/// called.
+/// and close, with the routes whose flow `flowIsOver()` says is over, and
+/// how often `guardChanges` notified and the functions were called.
 const _vmGuardsMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/account/account_composition.dart';
@@ -389,6 +426,11 @@ void main() {
     for (final MapEntry(:key, :value) in sent.entries) {
       print('  $key: ${value.join(', ')}');
     }
+    final over = [
+      for (final route in routes)
+        if (flowIsOver(route)) route ?? 'none',
+    ];
+    if (over.isNotEmpty) print('  over: ${over.join(', ')}');
   }
 
   ask('none allows');
@@ -472,11 +514,20 @@ void main() {
   signedInNow.value = true;
   changed('signedIn allows', ['account.login /account/login']);
 
-  print('a flow with nothing remembered');
-  const flow = ['intro.terms /intro/terms', 'intro.intro /intro'];
+  print('a flow that is over');
   asked('intro.terms', '/intro/terms');
+  asked('intro.paywall', '/intro/paywall?plan=a');
+  asked('account.login', '/account/login');
+  asked('home.root', '/home');
+  asked(null, '/no/such');
+  changed('a notification', ['home.root /home']);
+  const flow = ['intro.terms /intro/terms', 'intro.intro /intro'];
+  changed('a notification, a page of the flow on top', flow);
+
+  print('a flow shown with nothing remembered');
   introSeenNow.value = false;
   changed('firstRun stops', flow);
+  asked('intro.terms', '/intro/terms');
   changed('a notification', flow);
   premiumNow.value = false;
   changed('premium stops', flow);
@@ -484,11 +535,20 @@ void main() {
   changed('premium allows', flow);
   introSeenNow.value = true;
   changed('firstRun allows', flow);
-  changed('a notification', flow);
+  asked('intro.terms', '/intro/terms');
+
+  print('a flow of a guard that allows, behind a guard that does not');
+  premiumNow.value = false;
+  const paywall = ['intro.paywall /intro/paywall'];
+  changed('premium stops', paywall);
+  asked('intro.terms', '/intro/terms');
+  asked('intro.paywall', '/intro/paywall');
   introSeenNow.value = false;
-  changed('firstRun stops', ['account.login /account/login']);
+  changed('firstRun stops', paywall);
   introSeenNow.value = true;
-  changed('firstRun allows, outside its flow', ['home.root /home']);
+  changed('firstRun allows', ['intro.intro /intro']);
+  premiumNow.value = true;
+  changed('premium allows', paywall);
 
   print('a location of a flow asked last');
   introSeenNow.value = false;
@@ -506,10 +566,171 @@ void main() {
 }
 ''';
 
-/// Prints what `GuardedNavigation` answers in an app whose two guards show
-/// one target: when it is told of no pages, as by a router that has none
-/// yet, and when the guards of the one flow start allowing one after the
-/// other while a page of the flow is on top.
+/// Prints the guards of the app in the order of `routeGuards`, and the
+/// target that `redirectOf()` answers for a route outside every flow as the
+/// guards start allowing one after another, in the order of the modules.
+const _vmOrderMain = r'''
+import 'package:my_app/core/router/app_router.dart';
+import 'package:my_app/features/account/account_composition.dart';
+import 'package:my_app/features/intro/intro_status.dart';
+
+void main() {
+  print([for (final guard in routeGuards) guard.name].join(', '));
+  String shown() => redirectOf('home.root')?.path ?? 'shows it';
+  print('none allows: ${shown()}');
+  signedInNow.value = true;
+  print('signedIn allows: ${shown()}');
+  introSeenNow.value = true;
+  print('firstRun allows too: ${shown()}');
+  signedInNow.value = false;
+  print('signedIn stopped: ${shown()}');
+  signedInNow.value = true;
+  premiumNow.value = true;
+  print('all allow: ${shown()}');
+}
+''';
+
+/// Prints what `GuardedNavigation` answers in an app whose guard
+/// `account.signedIn` does not bring the user back, while the guards before
+/// and after it do, as that guard and the others stop and start allowing:
+/// alone, behind a guard that does not allow, before one, and with the
+/// class told of each change or asked only later. The pages are written as
+/// in [_vmMemoryMain].
+const _vmResumesMain = r'''
+import 'package:my_app/core/router/app_router.dart';
+import 'package:my_app/features/account/account_composition.dart';
+import 'package:my_app/features/intro/intro_status.dart';
+
+final guards = GuardedNavigation<String>(
+  start: '/',
+  locationOf: (location) => location.path,
+);
+
+void asked(String? route, String location) {
+  final answer = guards.asked(route, location);
+  print('  asked $location: ${answer?.location ?? 'shows it'}');
+}
+
+void changed(String what, List<String> pages) {
+  final answer = guards.changed([
+    for (final page in pages.map((page) => page.split(' ')))
+      (
+        route: page[0] == '-' ? null : page[0],
+        location: page[1],
+        pushed: page.length > 2,
+      ),
+  ]);
+  print('  $what: ${answer?.location ?? 'stays'}');
+}
+
+void main() {
+  const intro = ['intro.intro /intro'];
+  const login = ['account.login /account/login'];
+  const paywall = ['intro.paywall /intro/paywall'];
+  const details = ['home.details /home/details/5?tab=a', 'home.root /home'];
+
+  print('a first launch');
+  asked('home.details', '/home/details/3');
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+  premiumNow.value = true;
+  changed('premium allows', paywall);
+
+  print('the guard stops allowing');
+  signedInNow.value = false;
+  changed('signedIn stops', ['home.details /home/details/9 pushed', ...details]);
+  changed('a notification', login);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+  changed('a notification', ['home.root /home']);
+
+  print('a location asked for while it does not allow');
+  signedInNow.value = false;
+  changed('signedIn stops', details);
+  asked('home.details', '/home/details/7');
+  asked('account.login', '/account/login');
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+  changed('a notification', ['home.details /home/details/7', 'home.root /home']);
+
+  print('it stops behind a guard that brings the user back');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  signedInNow.value = false;
+  changed('signedIn stops', intro);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+
+  print('it stops before a guard that brings the user back');
+  signedInNow.value = false;
+  changed('signedIn stops', details);
+  introSeenNow.value = false;
+  changed('firstRun stops', login);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+
+  print('it stops and allows again behind a guard that does not allow');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  signedInNow.value = false;
+  changed('signedIn stops', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', intro);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+
+  print('a location that was asked for before it stops');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  asked('home.details', '/home/details/8');
+  signedInNow.value = false;
+  changed('signedIn stops', intro);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+
+  print('it stops without the class being told, which is asked next');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  signedInNow.value = false;
+  asked('intro.terms', '/intro/terms');
+  signedInNow.value = true;
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+
+  print('it stops while a guard after it does not allow');
+  premiumNow.value = false;
+  changed('premium stops', details);
+  signedInNow.value = false;
+  changed('signedIn stops', paywall);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+  premiumNow.value = true;
+  changed('premium allows', paywall);
+
+  print('a guard that brings the user back');
+  introSeenNow.value = false;
+  changed('firstRun stops', ['home.details /home/details/9 pushed', ...details]);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  premiumNow.value = false;
+  changed('premium stops', ['home.root /home']);
+  premiumNow.value = true;
+  changed('premium allows', paywall);
+}
+''';
+
+/// Prints what `flowIsOver()` and `GuardedNavigation` answer in an app whose
+/// two guards show one target, so that both have one flow: when the class
+/// is told of no pages, as by a router that has none yet, and as the two
+/// guards start and stop allowing while a page of the flow is on top.
 const _vmSharedTargetMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/intro/intro_status.dart';
@@ -526,27 +747,50 @@ void main() {
           (route: route, location: location, pushed: false),
       ])?.location ??
       'stays';
+  String asked(String route, String location) =>
+      guards.asked(route, location)?.location ?? 'shows it';
+  String over() => flowIsOver('intro.terms') ? 'over' : 'not over';
   const flow = [('intro.terms', '/intro/terms'), ('intro.intro', '/intro')];
 
-  print('a change before the router has a page');
-  introSeenNow.value = true;
-  premiumNow.value = true;
-  print('  both allow, no pages: ${told(const [])}');
-  final shown = guards.asked('intro.terms', '/intro/terms');
-  print('  asked /intro/terms: ${shown?.location ?? 'shows it'}');
-  print('  a notification in the flow: ${told(flow)}');
+  print('a router without a page');
+  print('  no guard allows, no pages: ${told(const [])}');
 
-  print('two guards with one target');
-  introSeenNow.value = false;
-  print('  firstRun stops: ${told(flow)}');
-  premiumNow.value = false;
-  print('  premium stops: ${told(flow)}');
+  print('two guards with one target, with nothing remembered');
+  print('  no guard allows: ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
   introSeenNow.value = true;
-  print('  firstRun allows: ${told(flow)}');
+  print('  firstRun allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
   premiumNow.value = true;
-  print('  premium allows: ${told(flow)}');
+  print('  premium allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
+  print('  both allow, no pages: ${told(const [])}');
+
+  print('two guards with one target, in the other order');
+  introSeenNow.value = false;
+  print('  firstRun stops: ${told(const [('home.root', '/home')])}, ${over()}');
+  premiumNow.value = false;
+  print('  premium stops: ${told(flow)}, ${over()}');
+  premiumNow.value = true;
+  print('  premium allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
+  introSeenNow.value = true;
+  print('  firstRun allows: ${told(flow)}, ${over()}');
 }
 ''';
+
+/// The lines that a script printed below its heading [heading], up to the
+/// next heading: a heading is a line that does not start with a space.
+String _section(String printed, String heading) {
+  final lines = printed.split('\n');
+  final start = lines.indexOf(heading);
+  expect(start, isNonNegative, reason: 'The script prints "$heading".');
+  return lines
+      .skip(start + 1)
+      .takeWhile((line) => line.startsWith(' '))
+      .map((line) => '$line\n')
+      .join();
+}
 
 void main() {
   group('the guards of a module', () {
@@ -595,12 +839,119 @@ void main() {
     });
 
     test(
+        'come by stage, whatever the order of the modules, then in the order '
+        'of the modules, and then as their module declares them', () {
+      // An onboarding comes before a sign-in though its module is listed
+      // after: `account` before `intro`, whose first guard is of the stage
+      // before. The second guard of `intro` is of the stage of the guard
+      // of `account`, so it comes after it, in the order of the modules.
+      final facade = _facade(_accountFirstData);
+      expect(
+        [for (final guard in facade.guards) guard.fullName],
+        ['intro.firstRun', 'account.signedIn', 'intro.premium'],
+      );
+      // The guards of a module stay as it declares them.
+      expect(
+        [
+          for (final feature in facade.features)
+            for (final guard in feature.guards) guard.fullName,
+        ],
+        ['account.signedIn', 'intro.firstRun', 'intro.premium'],
+      );
+
+      // Every arrangement of the stages of three guards, two of them of one
+      // module, with the modules in both orders.
+      const stages = GuardStage.values;
+      expect(stages, [GuardStage.welcome, GuardStage.identity]);
+      RouteGuard staged(RouteGuard guard, GuardStage stage) => RouteGuard(
+            name: guard.name,
+            allows: guard.allows,
+            redirectTo: guard.redirectTo,
+            stage: stage,
+          );
+      var arrangements = 0;
+      for (final firstRun in stages) {
+        for (final premium in stages) {
+          for (final signedIn in stages) {
+            for (final accountFirst in [false, true]) {
+              final intro = dataOf(
+                routerRole,
+                RoutesData(
+                  _introRoutes.routes,
+                  guards: [
+                    staged(_introRoutes.guards.first, firstRun),
+                    staged(_introRoutes.guards.last, premium),
+                  ],
+                ),
+                module: 'intro',
+              );
+              final account = dataOf(
+                routerRole,
+                RoutesData(
+                  _accountRoutes.routes,
+                  guards: [staged(_accountRoutes.guards.single, signedIn)],
+                ),
+                module: 'account',
+              );
+              // The guards in the order of the modules and of their
+              // declarations, each with its stage.
+              final declared = [
+                if (accountFirst) ('account.signedIn', signedIn),
+                ('intro.firstRun', firstRun),
+                ('intro.premium', premium),
+                if (!accountFirst) ('account.signedIn', signedIn),
+              ];
+              expect(
+                [
+                  for (final guard in _facade([
+                    ..._data,
+                    if (accountFirst) account,
+                    intro,
+                    if (!accountFirst) account,
+                  ]).guards)
+                    guard.fullName,
+                ],
+                [
+                  for (final (name, stage) in declared)
+                    if (stage == GuardStage.welcome) name,
+                  for (final (name, stage) in declared)
+                    if (stage == GuardStage.identity) name,
+                ],
+                reason: 'firstRun: ${firstRun.name}, premium: ${premium.name}, '
+                    'signedIn: ${signedIn.name}, account first: $accountFirst',
+              );
+              arrangements++;
+            }
+          }
+        }
+      }
+      expect(arrangements, 16);
+    });
+
+    test(
+        'a guard brings the user back unless it says otherwise, and has the '
+        'stage that its module gives it', () {
+      const guard = RouteGuard(
+        name: 'firstRun',
+        allows: FunctionRef('introSeen', import: _introFile),
+        redirectTo: 'intro',
+        stage: GuardStage.welcome,
+      );
+      expect(guard.resumes, isTrue);
+      expect(guard.stage, GuardStage.welcome);
+      final signedIn = _sessionRoutes.guards.single;
+      expect(signedIn.resumes, isFalse);
+      expect(signedIn.stage, GuardStage.identity);
+    });
+
+    test(
         'merge the guards of the data of a module, and leave out a guard '
         'whose target is no top-level route of its module', () {
       const guard = RouteGuard(
         name: 'premium',
         allows: FunctionRef('isPremium', import: _introFile),
         redirectTo: 'paywall',
+        stage: GuardStage.identity,
       );
       final facade = _facade([
         dataOf(
@@ -653,6 +1004,7 @@ void main() {
         'RouteGuard',
         RouterRole.routeGuards,
         RouterRole.redirectOf,
+        RouterRole.flowIsOver,
         RouterRole.guardChanges,
         RouterRole.guardedNavigation,
         'foundation.dart',
@@ -696,10 +1048,12 @@ void main() {
               'RouteGuard',
               'RouteGuard.allows',
               'RouteGuard.redirectTo',
+              // The routes that no code of the app navigates to.
+              'RouteGuard.flow',
+              // Whether the user comes back to where they were.
+              'RouteGuard.resumes',
               RouterRole.routeGuards,
             ],
-            // What the code of the app calls to go to the target of a guard.
-            RouterRole.navigationFile: ['NavLink.go'],
           },
           files: rendered.files,
         );
@@ -780,6 +1134,7 @@ void main() {
           'RouteGuard',
           RouterRole.routeGuards,
           RouterRole.redirectOf,
+          RouterRole.flowIsOver,
           RouterRole.guardChanges,
           RouterRole.guardedNavigation,
         ]),
@@ -825,6 +1180,73 @@ void main() {
       for (final target in ['IntroIntro', 'IntroPaywall', 'AccountLogin']) {
         expect(navigation, contains('final class ${target}Location extends'));
       }
+    });
+
+    test(
+        'generates the guards by stage, against the order of the modules, '
+        'and says of a guard that does not bring the user back that it does '
+        'not', () async {
+      final rendered = await renderTemplate(
+        routerRole,
+        data: _accountFirstData,
+      );
+
+      final router = rendered.files[RouterRole.appRouterFile]!;
+      expectParses(router);
+      final unit = parseString(content: router).unit;
+      final guards = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .map((declaration) => declaration.variables.variables.single)
+          .singleWhere(
+            (variable) => variable.name.lexeme == RouterRole.routeGuards,
+          );
+      String guard(
+        String name,
+        String allows,
+        String target,
+        String flow, {
+        String resumes = '',
+      }) =>
+          "RouteGuard('$name', allows: $allows(), redirectTo: const "
+          '${target}Location(), flow: const {$flow}$resumes)';
+      expect(
+        [
+          for (final element in (guards.initializer! as ListLiteral).elements)
+            element.toSource(),
+        ],
+        [
+          // The files of the functions get their prefixes in the order of
+          // the guards too.
+          guard(
+            'intro.firstRun',
+            'guard0.introSeen',
+            'IntroIntro',
+            "'intro.intro', 'intro.terms'",
+          ),
+          guard(
+            'account.signedIn',
+            'guard1.isSignedIn',
+            'AccountLogin',
+            "'account.login'",
+            resumes: ', resumes: false',
+          ),
+          guard(
+            'intro.premium',
+            'guard0.isPremium',
+            'IntroPaywall',
+            "'intro.paywall'",
+          ),
+        ],
+      );
+      // A guard of the app brings the user back unless it says otherwise.
+      final guardClass =
+          unit.declarations.whereType<ClassDeclaration>().singleWhere(
+                (declared) => declared.namePart.typeName.lexeme == 'RouteGuard',
+              );
+      expect(
+        guardClass.toSource(),
+        allOf(contains('this.resumes = true'), contains('final bool resumes;')),
+      );
     });
 
     /// What the script [main] prints in the app with guards, with the
@@ -885,15 +1307,21 @@ AppRouter createAppRouter() => throw UnimplementedError();
       return (result.stdout as String).replaceAll('\r\n', '\n');
     }
 
+    /// What [_vmMemoryMain] prints, which the first test that reads it
+    /// runs: the tests of the generated class each read some sections.
+    late final memory = printedBy(_vmMemoryMain);
+
     test(
         'the generated guards send every route outside the flow of the first '
-        'one that does not allow to its target, and tell when one changes',
-        () async {
+        'one that does not allow to its target, tell when one changes, and '
+        'say that a flow is over once its guard allows', () async {
       // The functions of the guards are called on the first use of the
       // guards, each once, whatever the guards are asked. The first guard
       // that does not allow decides: the routes of its flow show, and the
-      // targets of the guards after it are routes like any other. Each
-      // change of a guard is one notification.
+      // targets of the guards after it are routes like any other to it.
+      // Each change of a guard is one notification. The flow of a guard is
+      // over while the guard allows, whatever the other guards do, and a
+      // route outside every flow, or no route, is in none.
       expect(await printedBy(_vmGuardsMain), '''
 functions called before the first use: 0
 intro.firstRun shows /intro and allows intro.intro, intro.terms
@@ -905,17 +1333,22 @@ none allows
 firstRun allows
   shows intro.paywall
   /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+  over: intro.intro, intro.terms
 firstRun and premium allow
   shows account.login
   /account/login: home.root, intro.intro, intro.terms, intro.paywall, none
+  over: intro.intro, intro.terms, intro.paywall
 all allow
   shows home.root, intro.intro, intro.terms, intro.paywall, account.login, none
+  over: intro.intro, intro.terms, intro.paywall, account.login
 premium stopped
   shows intro.paywall
   /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+  over: intro.intro, intro.terms, account.login
 firstRun stopped too
   shows intro.intro, intro.terms
   /intro: home.root, intro.paywall, account.login, none
+  over: account.login
 changes: 5
 calls: 1, 1
 ''');
@@ -925,11 +1358,10 @@ calls: 1, 1
         'the generated class keeps what a router remembers: the latest '
         'location that was asked for, or the location below the pushed pages '
         'that a change took out of the stack, never one in a flow; it answers '
-        'that location once the guards allow it and forgets it, and the '
-        'start of the app when a flow is over with nothing remembered',
-        () async {
-      expect(await printedBy(_vmMemoryMain), '''
-asked while no guard allows
+        'that location once the guards allow it and forgets it', () async {
+      final printed = await memory;
+
+      expect(_section(printed, 'asked while no guard allows'), '''
   asked /home: /intro
   asked /intro/terms: shows it
   asked /account/login: /intro
@@ -939,7 +1371,10 @@ asked while no guard allows
   premium allows: /account/login
   signedIn allows: /home/details/5?tab=a
   a notification: stays
-pages that a change takes out of the stack
+''');
+      expect(
+        _section(printed, 'pages that a change takes out of the stack'),
+        '''
   signedIn stops: /account/login
   premium stops: /intro/paywall
   a page outside the flows: /intro/paywall
@@ -947,21 +1382,14 @@ pages that a change takes out of the stack
   signedIn allows: /home/details/5?tab=a
   signedIn stops: /account/login
   signedIn allows: /
-a flow with nothing remembered
-  asked /intro/terms: shows it
-  firstRun stops: stays
-  a notification: stays
-  premium stops: stays
-  premium allows: stays
-  firstRun allows: /
-  a notification: stays
-  firstRun stops: /intro
-  firstRun allows, outside its flow: stays
-a location of a flow asked last
+''',
+      );
+      expect(_section(printed, 'a location of a flow asked last'), '''
   firstRun stops: /intro
   asked /account/login: /intro
   firstRun allows: /home
-the location / asked last
+''');
+      expect(_section(printed, 'the location / asked last'), '''
   signedIn stops: /account/login
   asked /: /account/login
   signedIn allows: /
@@ -969,22 +1397,216 @@ the location / asked last
     });
 
     test(
-        'the generated class takes note of what the guards allow when it is '
-        'told of no pages, so that a notification without a change ends no '
-        'flow later; and of two guards with one target, the flow is over '
-        'only once both allow', () async {
+        'the generated class answers the start of the app for a location in '
+        'a flow that is over, whose guard allows, and for a page of such a '
+        'flow on top of the stack when nothing is remembered', () async {
+      final printed = await memory;
+
+      // Every guard allows: a route of a flow shows the start of the app,
+      // whichever guard has the flow, and nothing is remembered for it. A
+      // page of such a flow that a router still has on top leaves at the
+      // next notification of a guard.
+      expect(_section(printed, 'a flow that is over'), '''
+  asked /intro/terms: /
+  asked /intro/paywall?plan=a: /
+  asked /account/login: /
+  asked /home: shows it
+  asked /no/such: shows it
+  a notification: stays
+  a notification, a page of the flow on top: /
+''');
+      // The pages of the flow of a guard that does not allow stay, also
+      // when a guard after it changes. Once the guard allows, with nothing
+      // remembered, as in an app that a link opened in the flow, the router
+      // leaves the flow for the start of the app.
+      expect(_section(printed, 'a flow shown with nothing remembered'), '''
+  firstRun stops: stays
+  asked /intro/terms: shows it
+  a notification: stays
+  premium stops: stays
+  premium allows: stays
+  firstRun allows: /
+  asked /intro/terms: /
+''');
+      // A guard that does not allow decides before a flow that is over: a
+      // route of the flow of a guard that allows shows the target of that
+      // guard. And a location in a flow is not remembered when another
+      // guard takes it out of the stack.
+      expect(
+        _section(
+          printed,
+          'a flow of a guard that allows, behind a guard that does not',
+        ),
+        '''
+  premium stops: stays
+  asked /intro/terms: /intro/paywall
+  asked /intro/paywall: shows it
+  firstRun stops: /intro
+  firstRun allows: /intro/paywall
+  premium allows: /
+''',
+      );
+    });
+
+    test(
+        'the generated guards are asked by stage: the first one that does '
+        'not allow decides, whatever the order of the modules', () async {
+      // `account` is listed before `intro`, whose first guard is of the
+      // stage before that of the guard of `account`: it decides first, then
+      // the guard of `account`, and then the second guard of `intro`, of
+      // the same stage as that of `account`.
+      expect(await printedBy(_vmOrderMain, data: _accountFirstData), '''
+intro.firstRun, account.signedIn, intro.premium
+none allows: /intro
+signedIn allows: /intro
+firstRun allows too: /intro/paywall
+signedIn stopped: /account/login
+all allow: shows it
+''');
+    });
+
+    test(
+        'the generated class forgets what it remembers when a guard that '
+        'does not bring the user back stops allowing, whichever guard made '
+        'it remember, so the user comes to the start of the app; it still '
+        'shows a location that is asked for after the guard stopped, and one '
+        'that the app is opened with while the guard never allowed', () async {
+      final printed = await printedBy(_vmResumesMain, data: _accountFirstData);
+
+      // The location that the app is opened with is asked for while no
+      // guard allows. The guard that does not bring the user back never
+      // allowed, so it did not stop: the user comes to that location once
+      // the last guard allows.
+      expect(_section(printed, 'a first launch'), '''
+  asked /home/details/3: /intro
+  firstRun allows: /account/login
+  signedIn allows: /intro/paywall
+  premium allows: /home/details/3
+''');
+      // Neither the pushed page nor the location below it comes back: the
+      // flow of the guard is over and nothing is remembered.
+      expect(_section(printed, 'the guard stops allowing'), '''
+  signedIn stops: /account/login
+  a notification: stays
+  signedIn allows: /
+  a notification: stays
+''');
+      expect(
+        _section(printed, 'a location asked for while it does not allow'),
+        '''
+  signedIn stops: /account/login
+  asked /home/details/7: /account/login
+  asked /account/login: shows it
+  signedIn allows: /home/details/7
+  a notification: stays
+''',
+      );
+      // A guard before it took the user from a location, and it stops
+      // while the flow of that guard is shown: the location is forgotten,
+      // though the guard before it still decides and the stack stays.
+      expect(
+        _section(printed, 'it stops behind a guard that brings the user back'),
+        '''
+  firstRun stops: /intro
+  signedIn stops: stays
+  firstRun allows: /account/login
+  signedIn allows: /
+''',
+      );
+      // The other order of the two, as in one handler: it stops first, and
+      // the guard before it then takes the user from its target, a location
+      // in a flow, which is never remembered.
+      expect(
+        _section(printed, 'it stops before a guard that brings the user back'),
+        '''
+  signedIn stops: /account/login
+  firstRun stops: /intro
+  firstRun allows: /account/login
+  signedIn allows: /
+''',
+      );
+      // It allows again before the guard before it does: the router showed
+      // nothing of it, and the location is forgotten all the same.
+      expect(
+        _section(
+          printed,
+          'it stops and allows again behind a guard that does not allow',
+        ),
+        '''
+  firstRun stops: /intro
+  signedIn stops: stays
+  signedIn allows: stays
+  firstRun allows: /
+''',
+      );
+      // A location that was asked for before it stopped is forgotten too.
+      expect(
+        _section(printed, 'a location that was asked for before it stops'),
+        '''
+  firstRun stops: /intro
+  asked /home/details/8: /intro
+  signedIn stops: stays
+  firstRun allows: /account/login
+  signedIn allows: /
+''',
+      );
+      // A change that the class is not told of counts the next time it is
+      // asked: it finds that the guard does not allow, which allowed when
+      // it last looked.
+      expect(
+        _section(
+          printed,
+          'it stops without the class being told, which is asked next',
+        ),
+        '''
+  firstRun stops: /intro
+  asked /intro/terms: shows it
+  firstRun allows: /
+''',
+      );
+      // And so is the location that a guard after it took the user from.
+      expect(
+        _section(printed, 'it stops while a guard after it does not allow'),
+        '''
+  premium stops: /intro/paywall
+  signedIn stops: /account/login
+  signedIn allows: /intro/paywall
+  premium allows: /
+''',
+      );
+      // The guards before and after it bring the user back as before: to
+      // the location below the pushed pages.
+      expect(_section(printed, 'a guard that brings the user back'), '''
+  firstRun stops: /intro
+  firstRun allows: /home/details/5?tab=a
+  premium stops: /intro/paywall
+  premium allows: /home
+''');
+    });
+
+    test(
+        'of two guards with one target, the flow is over only once both '
+        'allow, in whichever order; and the generated class answers nothing '
+        'when it is told of no pages', () async {
       expect(
         await printedBy(_vmSharedTargetMain, data: _sharedTargetData),
         '''
-a change before the router has a page
-  both allow, no pages: stays
+a router without a page
+  no guard allows, no pages: stays
+two guards with one target, with nothing remembered
+  no guard allows: not over
   asked /intro/terms: shows it
-  a notification in the flow: stays
-two guards with one target
-  firstRun stops: stays
-  premium stops: stays
-  firstRun allows: stays
-  premium allows: /
+  firstRun allows: stays, not over
+  asked /intro/terms: shows it
+  premium allows: /, over
+  asked /intro/terms: /
+  both allow, no pages: stays
+two guards with one target, in the other order
+  firstRun stops: /intro, not over
+  premium stops: stays, not over
+  premium allows: stays, not over
+  asked /intro/terms: shows it
+  firstRun allows: /home, over
 ''',
       );
     });

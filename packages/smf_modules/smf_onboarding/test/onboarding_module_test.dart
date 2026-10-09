@@ -350,7 +350,8 @@ void main() {
 
     test(
         'declares the guard firstRun, which shows its route until the '
-        'function of the status of the onboarding says otherwise', () {
+        'function of the status of the onboarding says otherwise, comes '
+        'before the guards of a later stage, and brings the user back', () {
       final data = [
         for (final contribution
             in module.contribute(ContractHarness.defaultContext))
@@ -365,6 +366,11 @@ void main() {
         guard.allows.import,
         const ImportRef.app('features/onboarding/onboarding_status.dart'),
       );
+      // The onboarding comes before a guard that asks who the user is,
+      // whatever the order of the modules, and restart() brings the user
+      // back to the screen that they were on.
+      expect(guard.stage, GuardStage.welcome);
+      expect(guard.resumes, isTrue);
     });
 
     test('has each of its texts in English and in Ukrainian', () {
@@ -1279,44 +1285,24 @@ void main() {
     });
 
     test(
-        'starts the onboarding again when it is shown although the '
-        'onboarding is finished, once its first frame is over', () {
-      final initState = _methodOf(unit, '_OnboardingScreenState', 'initState');
-      final statements = (initState.body as BlockFunctionBody).block.statements;
-
-      expect(statements.first.toSource(), 'super.initState();');
-      final whenFinished = statements.last as IfStatement;
-      expect(statements, hasLength(2));
+        'only finishes the onboarding and never starts it again, since the '
+        'router shows the screen only while the onboarding is not finished',
+        () {
+      // A navigation to its route once the onboarding is finished shows
+      // the screen that the app starts on, so the screen is never shown
+      // with nothing to finish: it has no state to set right when it is
+      // first built, and restart() of the status is for the code of the
+      // app.
+      expect(_calls(unit, 'restart'), isEmpty);
       expect(
-        whenFinished.expression.toSource(),
-        'onboardingStatus.completed.value',
+        _classOf(unit, '_OnboardingScreenState')
+            .body
+            .members
+            .whereType<MethodDeclaration>()
+            .map((method) => method.name.lexeme),
+        isNot(contains('initState')),
       );
-      expect(whenFinished.elseStatement, isNull);
-      // The router acts on it at once, which it must not do while a frame
-      // is built: the screen waits for the end of the frame.
-      final restart = _calls(initState, 'restart').single;
-      expect(restart.toSource(), 'onboardingStatus.restart()');
-      final callback =
-          _calls(whenFinished.thenStatement, 'addPostFrameCallback').single;
-      expect(
-        callback.toSource(),
-        startsWith('WidgetsBinding.instance.addPostFrameCallback('),
-      );
-      expect(
-        restart.thisOrAncestorMatching((node) => node == callback),
-        isNotNull,
-      );
-      // The screen may be gone by the end of that frame: only one that is
-      // still mounted starts the onboarding again.
-      final whenMounted = restart.thisOrAncestorOfType<IfStatement>()!;
-      expect(whenMounted.expression.toSource(), 'mounted');
-      expect(
-        whenMounted.thisOrAncestorMatching((node) => node == callback),
-        isNotNull,
-      );
-      // Nothing else of the screen starts it again, and its build neither
-      // starts nor finishes it.
-      expect(_calls(unit, 'restart'), [restart]);
+      // Its build neither starts nor finishes the onboarding.
       final build = _methodOf(unit, '_OnboardingScreenState', 'build');
       expect(_calls(build, 'complete'), isEmpty);
     });

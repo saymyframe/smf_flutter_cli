@@ -86,9 +86,10 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
 
-- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
-- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. The first one whose `allows` is `false` decides, and the router asks no guard after it.
+- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Put it at the place in the list where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. It shows the `redirectTo` while the value is `false`. Once it is `true`, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A guard with `resumes: false` does not bring the user back. When its `allows` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the guards allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 
 ## Theme
 
@@ -2047,6 +2048,8 @@ void _restore(AppPreferences preferences) {
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:fixture_app/features/fake_gate/fixture_gates.dart' as guard0;
+import 'package:fixture_app/features/fake_late_gate/fixture_late_gate.dart'
+    as guard1;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -2102,8 +2105,15 @@ abstract interface class AppNavigator {
 /// `go()`, `push()` and `replace()` of such a location show the target
 /// too, and `push()` completes with `null`. Once the guard allows, the
 /// router shows the location that the user last asked for, or the one that
-/// the guard took the user from, or else the screen that the app starts
-/// on.
+/// the guard took the user from if it [resumes], or else the screen that
+/// the app starts on.
+///
+/// The routes of its flow show only while it does not allow, or while
+/// another guard with the same flow does not. At any other time the router
+/// shows the screen that the app starts on in place of a location of the
+/// flow (see [flowIsOver]), or the target of another guard while that one
+/// does not allow. So the code of the app changes what [allows] reads and
+/// never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -2111,6 +2121,7 @@ final class RouteGuard {
     required this.allows,
     required this.redirectTo,
     required this.flow,
+    this.resumes = true,
   });
 
   /// The full name of the guard: its module and its name there.
@@ -2126,7 +2137,19 @@ final class RouteGuard {
 
   /// The full names of the routes that the user may see while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
+  /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
+
+  /// Whether the router brings the user back to the location that the
+  /// guard takes them from when it stops allowing, once it allows again.
+  ///
+  /// With `false`, the router forgets what it remembers when the guard
+  /// stops allowing: where the user was, whichever guard took them from
+  /// it, and a location that was asked for before. So once the guards
+  /// allow, the user comes to the screen that the app starts on, as the
+  /// next user does after a sign-out, unless a location was asked for
+  /// since the guard stopped, such as a link.
+  final bool resumes;
 }
 
 /// The guards of the routes of the app, in the order the app asks them.
@@ -2143,6 +2166,13 @@ final List<RouteGuard> routeGuards = [
     redirectTo: const FakeGateSecondLocation(),
     flow: const {'fake_gate.second'},
   ),
+  RouteGuard(
+    'fake_late_gate.late',
+    allows: guard1.fixtureLateGateOpen(),
+    redirectTo: const FakeLateGateGateLocation(),
+    flow: const {'fake_late_gate.gate'},
+    resumes: false,
+  ),
 ];
 
 /// The location that the router shows in place of the route [routeName],
@@ -2152,12 +2182,36 @@ final List<RouteGuard> routeGuards = [
 /// no route of a module, such as the error screen of the router. The first
 /// guard that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow.
-AppLocation? redirectOf(String? routeName) {
+///
+/// A route that the guards let the user see may still be in a flow that is
+/// over, in place of which the router shows the screen that the app starts
+/// on; see [flowIsOver].
+AppLocation? redirectOf(String? routeName) =>
+    _guardKeepingFrom(routeName)?.redirectTo;
+
+/// The guard that keeps the user from the route [routeName], or `null` if
+/// the guards let the user see it: the first guard that does not allow,
+/// unless the route is in its flow.
+RouteGuard? _guardKeepingFrom(String? routeName) {
   for (final guard in routeGuards) {
     if (guard.allows.value) continue;
-    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+    return guard.flow.contains(routeName) ? null : guard;
   }
   return null;
+}
+
+/// Whether the route [routeName] is in the flow of a guard and every guard
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [redirectOf]).
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, which is in no flow. Two guards with one target
+/// have one flow, which is over once both allow.
+bool flowIsOver(String? routeName) {
+  final guards = routeGuards.where((guard) => guard.flow.contains(routeName));
+  return guards.isNotEmpty && guards.every((guard) => guard.allows.value);
 }
 
 /// Notifies its listeners when a guard starts or stops allowing, so that
@@ -2192,22 +2246,37 @@ final class GuardedNavigation<L> {
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
-  /// Whether each guard allowed when the router last told of its pages.
-  List<bool> _allowed = _allowedNow();
+  /// The guards that do not bring the user back (see [RouteGuard.resumes])
+  /// and that allowed when the class last looked at the guards, which it
+  /// does each time it is asked or told. One of them that does not allow
+  /// at the next look has stopped allowing. The class first looks when it
+  /// is first asked or told, so a guard that does not allow then has not
+  /// stopped.
+  late final Set<RouteGuard> _allowed = {
+    for (final guard in routeGuards)
+      if (!guard.resumes && guard.allows.value) guard,
+  };
 
   /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it; see [redirectOf].
+  /// full name [route], or `null` to show it: the target of the guard that
+  /// keeps the user from it (see [redirectOf]), or [start] for a location in a
+  /// flow that is over (see [flowIsOver]).
   ///
   /// The router asks before it shows a location: the one the app starts
   /// on, each one that `go()`, `push()` or `replace()` is asked to show,
   /// and each one from the platform. A location that a guard keeps the
   /// user from is remembered in place of the one before it, so the user
-  /// comes back to the latest one that they or the platform asked for. A
-  /// location in the flow of a guard is never remembered: once that guard
-  /// allows, its flow is over.
+  /// comes back to the latest one that they or the platform asked for,
+  /// whether or not that guard brings the user back (see
+  /// [RouteGuard.resumes]). A location in the flow of a guard is never
+  /// remembered: once that guard allows, its flow is over.
+  ///
+  /// Before that, what was remembered is forgotten if a guard that does
+  /// not bring the user back stopped allowing, as [changed] says.
   ({L location})? asked(String? route, L location) {
+    _forgetAfterStop();
     final target = redirectOf(route);
-    if (target == null) return null;
+    if (target == null) return flowIsOver(route) ? (location: start) : null;
     if (!_inAFlow(route)) _remembered = (route: route, location: location);
     return (location: locationOf(target));
   }
@@ -2219,51 +2288,65 @@ final class GuardedNavigation<L> {
   /// first: those of the root navigator and of the selected branch of the
   /// main navigation, each with the full name of its route, its location,
   /// and whether `push()` showed it; none for a router that has no page
-  /// yet. The answer is the first of these:
+  /// yet.
+  ///
+  /// First, the remembered location is forgotten if a guard that does not
+  /// bring the user back (see [RouteGuard.resumes]) stopped allowing: it
+  /// allowed when the class was last asked or told, and does not now. That
+  /// holds whichever guard decides and whatever the pages are, and for
+  /// whichever guard the location was remembered, so that the next user
+  /// does not come to a location of the last one. A guard that stops and
+  /// allows again without the class being asked or told in between is not
+  /// seen to stop.
+  ///
+  /// The answer is then the first of these:
   /// - the target of the guard that keeps the user from one of the pages.
-  ///   The location below the pages that pushes showed is then remembered,
-  ///   or [start] if pushes showed them all, unless one is remembered
-  ///   already or it is in the flow of a guard;
+  ///   If that guard brings the user back, the location below the pages
+  ///   that pushes showed is then remembered, or [start] if pushes showed
+  ///   them all, unless one is remembered already or it is in the flow of
+  ///   a guard;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
-  /// - [start], when a guard started allowing while a page of its flow is
-  ///   on top, every guard allows and nothing is remembered: its flow is
-  ///   over.
+  /// - [start], when the page on top is in a flow that is over (see
+  ///   [flowIsOver]): its guard started allowing while the flow was shown, and
+  ///   nothing is remembered.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
-    final before = _allowed;
-    _allowed = _allowedNow();
+    _forgetAfterStop();
     for (final page in pages) {
-      final target = redirectOf(page.route);
-      if (target == null) continue;
+      final guard = _guardKeepingFrom(page.route);
+      if (guard == null) continue;
       final below = pages.where((other) => !other.pushed).firstOrNull;
-      if (_remembered == null && !_inAFlow(below?.route)) {
+      if (guard.resumes && _remembered == null && !_inAFlow(below?.route)) {
         _remembered = (
           route: below?.route,
           location: below == null ? start : below.location,
         );
       }
-      return (location: locationOf(target));
+      return (location: locationOf(guard.redirectTo));
     }
     if (_remembered case final remembered?) {
       if (redirectOf(remembered.route) != null) return null;
       _remembered = null;
       return (location: remembered.location);
     }
-    final top = pages.firstOrNull?.route;
-    for (final (index, guard) in routeGuards.indexed) {
-      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
-        return _allowed.contains(false) ? null : (location: start);
-      }
-    }
-    return null;
+    return flowIsOver(pages.firstOrNull?.route) ? (location: start) : null;
   }
 
-  /// Whether each guard allows now, in the order of [routeGuards].
-  static List<bool> _allowedNow() => [
-    for (final guard in routeGuards) guard.allows.value,
-  ];
+  /// Forgets the remembered location if a guard that does not bring the
+  /// user back stopped allowing since the class last looked at the guards,
+  /// and notes which of those guards allow now.
+  void _forgetAfterStop() {
+    for (final guard in routeGuards) {
+      if (guard.resumes) continue;
+      if (guard.allows.value) {
+        _allowed.add(guard);
+      } else if (_allowed.remove(guard)) {
+        _remembered = null;
+      }
+    }
+  }
 
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
@@ -2279,6 +2362,8 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
 import 'package:fixture_app/features/fake_gate/fixture_gate_screens.dart'
+    as screen5;
+import 'package:fixture_app/features/fake_late_gate/fixture_late_gate_screen.dart'
     as screen4;
 import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen3;
@@ -2681,9 +2766,10 @@ Widget _screen(AppLocation location) => switch (location) {
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
   FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
-  FakeGateGateLocation() => const screen4.FixtureGateScreen(),
-  FakeGateStepLocation() => const screen4.FixtureGateStepScreen(),
-  FakeGateSecondLocation() => const screen4.FixtureSecondGateScreen(),
+  FakeLateGateGateLocation() => const screen4.FixtureLateGateScreen(),
+  FakeGateGateLocation() => const screen5.FixtureGateScreen(),
+  FakeGateStepLocation() => const screen5.FixtureGateStepScreen(),
+  FakeGateSecondLocation() => const screen5.FixtureSecondGateScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -2816,6 +2902,18 @@ final class FakeSecondOutsideLocation extends AppLocation {
   String get path => '/fake_second/outside';
 }
 
+/// The location of `fake_late_gate.gate`: `/fake_late_gate`.
+final class FakeLateGateGateLocation extends AppLocation {
+  /// Creates the location.
+  const FakeLateGateGateLocation();
+
+  @override
+  String get routeName => 'fake_late_gate.gate';
+
+  @override
+  String get path => '/fake_late_gate';
+}
+
 /// The location of `fake_gate.gate`: `/fake_gate`.
 final class FakeGateGateLocation extends AppLocation {
   /// Creates the location.
@@ -2878,6 +2976,9 @@ final class AppNav {
   /// The routes of the module `fake_second`.
   FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
 
+  /// The routes of the module `fake_late_gate`.
+  FakeLateGateRoutes get fakeLateGate => FakeLateGateRoutes._(_context);
+
   /// The routes of the module `fake_gate`.
   FakeGateRoutes get fakeGate => FakeGateRoutes._(_context);
 }
@@ -2907,6 +3008,16 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.outside`: `/fake_second/outside`.
   NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+}
+
+/// The routes of the module `fake_late_gate`.
+final class FakeLateGateRoutes {
+  const FakeLateGateRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_late_gate.gate`: `/fake_late_gate`.
+  NavLink gate() => NavLink(_context, const FakeLateGateGateLocation());
 }
 
 /// The routes of the module `fake_gate`.
@@ -3208,6 +3319,30 @@ ValueListenable<bool> fixtureGateOpen() => fixtureGate;
 
 /// Whether the second guard of the fixture allows: while its gate is open.
 ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
+=== lib/features/fake_late_gate/fixture_late_gate.dart (fake_late_gate) ===
+import 'package:flutter/foundation.dart';
+
+/// The late gate of the fixture: whether it is open, which a test sets. It
+/// is open unless a test closes it, and the guard of the fixture allows
+/// while it is open.
+final ValueNotifier<bool> fixtureLateGate = ValueNotifier(true);
+
+/// Whether the guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureLateGateOpen() => fixtureLateGate;
+=== lib/features/fake_late_gate/fixture_late_gate_screen.dart (fake_late_gate) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// The screen that the guard of the fixture shows in place of the other
+/// screens of the app while its gate is closed.
+@FixtureScreen('fake_late_gate.gate')
+class FixtureLateGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLateGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';

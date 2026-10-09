@@ -8,13 +8,17 @@
 // (RouterRole.guardedNavigation). While the guard does not allow, the main
 // navigation is not shown, and the target of the guard takes the stacks of
 // every branch: a branch that was not selected is back on its destination
-// when the user selects it. It selects a destination as the layout does
-// when the user selects it, with onSelect of AppShell, so it depends
-// neither on the router nor on how the layout shows the destinations. It
-// uses what the tests of router_screens and of router_guards share, which
-// every app that it applies to has. Each expectation gives its reason,
-// which a provider of a role with a known bug fails the test with
-// (brokenProviders of the fixture registry).
+// when the user selects it. A location in a flow that is over is another
+// matter: asked for from the main navigation, it shows the screen that the
+// app starts on, as go() to that screen does, and hides nothing from the
+// user. So whether a branch that is not selected keeps its pages then is
+// up to the router, and the test does not look at it. It selects a
+// destination as the layout does when the user selects it, with onSelect
+// of AppShell, so it depends neither on the router nor on how the layout
+// shows the destinations. It uses what the tests of router_screens and of
+// router_guards share, which every app that it applies to has. Each
+// expectation gives its reason, which a provider of a role with a known
+// bug fails the test with (brokenProviders of the fixture registry).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
@@ -171,6 +175,73 @@ void main() {
         reason: 'The target of a guard takes the stacks of every branch of '
             'the main navigation: a branch that was not selected is back on '
             'its destination.',
+      );
+
+      // A location in a flow that is over, asked for from the main
+      // navigation while the branch that is not selected has a pushed
+      // page: the second destination, a page that a push shows in its
+      // branch, the first destination again, and there push() of the
+      // target of the guard, which allows.
+      tester.widget<AppShell>(_shells()).onSelect(second);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'A switch to another destination is heard of once.',
+      );
+      pushed(shown(tester, FixtureSecondScreen).nav.fakeFeature.details(id: 5));
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/5')],
+        reason: 'The page that push() shows in a branch is heard of once.',
+      );
+      tester.widget<AppShell>(_shells()).onSelect(first);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'A switch to another destination is heard of once.',
+      );
+      final home = shown(tester, FixtureHomeScreen);
+      final result = pushed(home.nav.fakeGate.gate());
+      await tester.pumpAndSettle();
+      expectHeardAtMostOnce(
+        tester,
+        home,
+        startScreen,
+        reason: 'push() of a location in a flow that is over shows the '
+            'screen that the app starts on, from the main navigation too.',
+      );
+      expect(
+        result(),
+        isNull,
+        reason: 'push() of a location in a flow that is over completes with '
+            'null, from the main navigation too.',
+      );
+      expect(
+        find.byType(FixtureGateScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'The router shows no page of a location in a flow that is '
+            'over, on the main navigation either.',
+      );
+      expect(
+        find.byType(FixtureHomeScreen),
+        findsOneWidget,
+        reason: 'push() of a location in a flow that is over shows the '
+            'screen that the app starts on, from the main navigation too.',
+      );
+      expect(
+        _shells(),
+        findsOneWidget,
+        reason: 'The screen that the app starts on is a destination, so the '
+            'user stays in the main navigation.',
+      );
+      expect(
+        tester.widget<AppShell>(_shells()).currentIndex,
+        first,
+        reason: 'The destination of the screen that the app starts on is '
+            'selected.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
