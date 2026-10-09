@@ -1294,9 +1294,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// about the location below the pushed pages.
   void _guardsChanged() {
     final configuration = config.routerDelegate.currentConfiguration;
-    // Before its first location, the router has no page to tell of. The
-    // guards still take note of what they allow, so that a notification
-    // without a change does not look like one later.
+    // Before its first location, the router has no page to tell of, and
+    // no stack that an answer of the guards could take the place of. It
+    // tells them of no pages, and asks about that location when it shows
+    // it.
     if (configuration.isEmpty && !configuration.isError) {
       _guards.changed(const []);
       return;
