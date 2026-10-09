@@ -6,8 +6,9 @@ library;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 
-/// A role that an app has at most one provider of, with the mode options
-/// [options] (see [RoleOption.mode]).
+/// A role that an app has at most one provider of, with the options
+/// [options], each with the values that it takes: mode options (see
+/// [RoleOption.mode]), and options that are none.
 ///
 /// Its choice is the value of each of its options, the one given or the
 /// first, which [modeIn] reads for an app of the matrix, as a test of the
@@ -15,7 +16,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 /// no option gives, as a role of `smf create` does, so the contract harness
 /// answers its question.
 final class ModeRole extends Role<Object> {
-  /// Creates the role [id] with the mode options [options].
+  /// Creates the role [id] with the options [options].
   const ModeRole(this.id, this.options);
 
   @override
@@ -130,6 +131,29 @@ const chime = RoleOption.mode(
 
 /// A second role with a mode option, [chime], which `tower` provides.
 const bells = ModeRole('bells', [chime]);
+
+/// The mode option `--latch` of [gate]: `open`, the default, or `shut`.
+const latch = RoleOption.mode(
+  name: 'latch',
+  help: 'Whether the gate of the app is open.',
+  values: ['open', 'shut'],
+);
+
+/// The option `--side` of [gate], `front` or `back`, which is no mode
+/// option: its values make no other apps for the tests, and a run without
+/// a terminal gets the answer of the contract harness for it.
+const side = RoleOption(
+  name: 'side',
+  help: 'The side of the house that the gate is on.',
+  allowed: ['front', 'back'],
+);
+
+/// A role with a mode option, [latch], and with an option that is none,
+/// [side], which `fence` provides.
+const gate = ModeRole('gate', [latch, side]);
+
+/// The provider of [gate].
+const fence = ModeModule(ModuleId('fence'), provides: {gate});
 
 /// A role without options that takes one provider, `oak` or `pine`.
 const wood = ModeRole('wood', []);

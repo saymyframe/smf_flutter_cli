@@ -601,6 +601,51 @@ void main() {
     });
 
     test(
+        'leave the app with the first value without the option on the '
+        'command line, though its role asked the harness for a value, and '
+        'with the other answers of the harness, which a run without a '
+        'terminal needs', () async {
+      final (:apps, :failed) = await matrixOf(
+        const [FlutterCoreModule(), fence],
+      );
+      MatrixApp named(String name) =>
+          apps.singleWhere((app) => app.name == name);
+
+      expect(failed, isEmpty);
+      expect(names(apps), [
+        'flutter_core',
+        'fence',
+        'gate by fence --latch=shut',
+      ]);
+      // The role asked for the latch and for the side, and the harness
+      // answered with the first value of each.
+      final open = named('fence');
+      expect(gate.modeIn(open.hook!, 'latch'), 'open');
+      expect(gate.modeIn(open.hook!, 'side'), 'front');
+      expect(open.modes, isEmpty);
+      // The side is no mode option, so `smf create` gets the answer. It
+      // gets no latch: the role chooses the first value without it, as for
+      // a user who does not give the option.
+      expect(open.roleOptions, {'side': 'front'});
+      expect(
+        open.createArguments('app_1', '/apps'),
+        allOf(
+          contains('--side=front'),
+          isNot(contains(startsWith('--latch'))),
+        ),
+      );
+      // The app of the other value gets it, and the answer for the side.
+      final shut = named('gate by fence --latch=shut');
+      expect(gate.modeIn(shut.hook!, 'latch'), 'shut');
+      expect(shut.modes, {'latch': 'shut'});
+      expect(shut.roleOptions, {'latch': 'shut', 'side': 'front'});
+      expect(
+        shut.createArguments('app_1', '/apps'),
+        containsAll(['--latch=shut', '--side=front']),
+      );
+    });
+
+    test(
         'are none for modules without such an option, and for an option that '
         'the options of every app give a value', () async {
       final without = await modeAppsOf(smfModules);
