@@ -1864,6 +1864,73 @@ void main() {
     );
   });
 
+  test('the notice of a step is one line of text', () {
+    const d = PostGenStepId(ModuleId('scaffold'), 'd');
+    PostGenStep step(String tool, String notice, {PostGenStepId? of}) =>
+        PostGenStep(
+          ToolRef(tool),
+          const [],
+          followUpOf: of,
+          notice: notice,
+          skippable: true,
+        );
+    final result = _validate([
+      scaffold(
+        contributions: [
+          const PostGenStep(ToolRef('d'), [], id: d),
+          step('fine', 'It registers an app. See the console.'),
+          step('empty', ''),
+          step('blank', ' \t'),
+          step('two', 'It registers an app.\nSee the console.'),
+          step('windows', 'It registers an app.\r\nSee the console.'),
+          step('return', 'It registers an app.\rSee the console.'),
+          // Only a line break, which is no text either.
+          step('break', '\n'),
+        ],
+      ),
+      TestModule(
+        'other',
+        dependsOn: {'scaffold'},
+        contributions: [
+          // Steps that continue a step of the module that they depend on.
+          step('e', '', of: d),
+          step('f', 'It registers an app.\nSee the console.', of: d),
+          step('g', 'It registers an app.', of: d),
+        ],
+      ),
+    ]);
+
+    String blank(String step, String module) =>
+        '$module: The notice of the step $step of $module is blank, but the '
+        'user is asked to agree to what it tells.';
+    String broken(String step, String module) =>
+        '$module: The notice of the step $step of $module has a line break, '
+        'but it goes into the question about the step, which is one line.';
+    expect(_messages(result), [
+      blank('empty', 'scaffold'),
+      blank('blank', 'scaffold'),
+      broken('two', 'scaffold'),
+      broken('windows', 'scaffold'),
+      broken('return', 'scaffold'),
+      blank('break', 'scaffold'),
+      blank('e', 'other'),
+      broken('f', 'other'),
+    ]);
+    expect(
+      {
+        for (final issue in result.issues)
+          issue.message.contains('is blank') ? 'blank' : 'broken': issue.hint,
+      },
+      {
+        'blank': 'Leave the notice out, or tell what the user has to know '
+            'before the step runs.',
+        'broken': 'Write the notice on one line: it is also printed after '
+            'the command of a step that is left for later, and under the '
+            'command by --explain.',
+      },
+    );
+  });
+
   group('sockets', () {
     test('code for a socket without a tag is an error of its owner', () {
       final sockets = <SocketRef>[];

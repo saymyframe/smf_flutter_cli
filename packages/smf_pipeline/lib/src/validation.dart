@@ -629,21 +629,15 @@ Iterable<SmfIssue> _brickFileIssues(
 /// one of the module of [origin], which may continue only its own steps and
 /// those of the modules that it depends on directly, as [resolution] tells;
 /// a step that continues another has no conditions of its own; and a step
-/// with a notice, which the user may decline, must be skippable (see
-/// [PostGenStep.notice]).
+/// with a notice, which the user may decline, must be skippable, and its
+/// notice one line of text; see [_noticeIssues].
 Iterable<SmfIssue> _stepIssues(
   PostGenStep step,
   ContributionOrigin origin,
   Resolution resolution,
 ) sync* {
-  if (step.notice != null && !step.skippable) {
-    yield SmfIssue(
-      'The step ${_stepName(step)} of $origin has a notice, so it runs only '
-      'once the user agreed to it, but the app is not complete without it.',
-      hint: 'Make the step skippable, or tell what it does in its '
-          'description.',
-      origin: origin,
-    );
+  if (step.notice case final notice?) {
+    yield* _noticeIssues(step, notice, origin);
   }
   final id = step.id;
   if (id != null && id.module != _moduleOf(origin)) {
@@ -669,6 +663,45 @@ Iterable<SmfIssue> _stepIssues(
       'The step ${_stepName(step)} of $origin continues another step, but '
       'has conditions of its own.',
       hint: 'A step that continues another applies whenever that step does.',
+      origin: origin,
+    );
+  }
+}
+
+/// The problems of [notice], the notice of [step] of [origin] (see
+/// [PostGenStep.notice]): the user may decline the step, so it must be
+/// skippable, and the notice goes into the question about the step, which
+/// is one line, so it must have text and no line break.
+Iterable<SmfIssue> _noticeIssues(
+  PostGenStep step,
+  String notice,
+  ContributionOrigin origin,
+) sync* {
+  if (!step.skippable) {
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin has a notice, so it runs only '
+      'once the user agreed to it, but the app is not complete without it.',
+      hint: 'Make the step skippable, or tell what it does in its '
+          'description.',
+      origin: origin,
+    );
+  }
+  if (notice.trim().isEmpty) {
+    yield SmfIssue(
+      'The notice of the step ${_stepName(step)} of $origin is blank, but '
+      'the user is asked to agree to what it tells.',
+      hint: 'Leave the notice out, or tell what the user has to know before '
+          'the step runs.',
+      origin: origin,
+    );
+  } else if (notice.contains('\n') || notice.contains('\r')) {
+    yield SmfIssue(
+      'The notice of the step ${_stepName(step)} of $origin has a line '
+      'break, but it goes into the question about the step, which is one '
+      'line.',
+      hint: 'Write the notice on one line: it is also printed after the '
+          'command of a step that is left for later, and under the command '
+          'by --explain.',
       origin: origin,
     );
   }
