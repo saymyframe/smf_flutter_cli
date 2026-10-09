@@ -6,6 +6,8 @@ It adds `firebase_core` and `lib/firebase_options.dart` to the app, and `bootstr
 
 Before generation, SMF checks what `flutterfire configure` needs: the Firebase CLI, a login that Google still accepts, flutterfire_cli 1.4.1 or a later 1.x, and on macOS the Ruby gem xcodeproj. In a terminal, it offers to set up what it can, asking first, and to log in again when the login has expired. After generation, it asks whether to run `flutterfire configure`, and prints the command to run later when the run cannot.
 
+For the modules that depend on it, the package has the check `FirebaseCliVersionCheck`. A module whose command exists only in newer versions of the Firebase CLI puts the check among its own checks of the machine, with the lowest version that has the command. The check reads `firebase --version` and tells how to update an older Firebase CLI. SMF does not update the Firebase CLI itself.
+
 ## Use with the SMF CLI
 
 `smf create` asks which infrastructure modules the app has, and offers this one. It also comes with the other Firebase modules. To choose it without the question:
