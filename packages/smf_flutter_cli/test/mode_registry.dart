@@ -11,7 +11,9 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 ///
 /// Its choice is the value of each of its options, the one given or the
 /// first, which [modeIn] reads for an app of the matrix, as a test of the
-/// apps reads what a role chose.
+/// apps reads what a role chose. In a terminal it asks for each value that
+/// no option gives, as a role of `smf create` does, so the contract harness
+/// answers its question.
 final class ModeRole extends Role<Object> {
   /// Creates the role [id] with the mode options [options].
   const ModeRole(this.id, this.options);
@@ -39,18 +41,33 @@ final class ModeRole extends Role<Object> {
   }
 }
 
-/// Chooses a value for each of [options]: the one given, or the first, in
-/// a terminal too.
+/// Chooses a value for each of [options]: the one given, or else the first
+/// in a run without a terminal and the answer to its question in a
+/// terminal, where it offers the first value first.
 final class _ModeTemplate extends RoleTemplate<Object> {
   const _ModeTemplate(this.options);
 
   final List<RoleOption> options;
 
   @override
-  Future<Object?> choose(RoleChoiceContext<Object> context) async => [
-        for (final option in options)
-          context.option(option.name) ?? option.allowed!.first,
-      ].join(',');
+  Future<Object?> choose(RoleChoiceContext<Object> context) async {
+    final environment = context.environment;
+    final values = <String>[];
+    for (final option in options) {
+      final allowed = option.allowed!;
+      values.add(
+        context.option(option.name) ??
+            (environment.interactive
+                ? await environment.prompter.select(
+                    'Which value of --${option.name}?',
+                    allowed,
+                    defaultValue: allowed.first,
+                  )
+                : allowed.first),
+      );
+    }
+    return values.join(',');
+  }
 
   @override
   Map<String, String> optionsOf(Object? choice) {

@@ -47,7 +47,13 @@ final class MatrixApp {
   /// The modules of the app.
   final List<ModuleId> modules;
 
-  /// The values of role options by name.
+  /// The values of role options by name, which `smf create` gets as its
+  /// options ([createArguments]).
+  ///
+  /// An app has none for a mode option (see [RoleOption.mode]) with its
+  /// first value, unless the options of every app of the matrix give one:
+  /// the role chooses the first value without the option, so the matrix
+  /// generates the app as a user who does not give the option does.
   final Map<String, String?> roleOptions;
 
   /// The values of the mode options (see [RoleOption.mode]) that set the
@@ -149,10 +155,16 @@ final class MatrixApp {
 /// questions of the roles that they leave open (see
 /// [ContractResult.answers]), such as `--start` with the first of several
 /// screens that can start the app: `smf create` then makes the same
-/// choices without a terminal. It gets the choices too, with the data and
-/// roles of its case ([MatrixApp.hook]). The harness renders each app in
-/// memory first, so a case that it finds errors in is among the `failed`
-/// ones, since its app could not be generated.
+/// choices without a terminal. It gets no answer to the question of a mode
+/// option (see [RoleOption.mode]): the role chooses the first value of
+/// such an option without it, in a terminal and in a run without one, as
+/// the harness checks. So `smf create` generates an app with the first
+/// value without the option, as for a user who does not give it, and an
+/// app of another value with the option of its case. Each app gets the
+/// choices too, with the data and roles of its case ([MatrixApp.hook]).
+/// The harness renders each app in memory first, so a case that it finds
+/// errors in is among the `failed` ones, since its app could not be
+/// generated.
 ///
 /// An app with every module that another case built already is that app,
 /// which then has the [MatrixApp.everyModuleWith] of the app with every
@@ -346,12 +358,18 @@ List<ModuleId> _everyModuleWith(
     ];
 
 /// The app of the matrix that [result] built, a result of [harness], or
-/// `null` if the case has errors: with the options of every case of the
-/// harness, those of its case and the answers of the harness as the values
-/// of its role options, and with the values that its case gives the mode
-/// options of the roles of the registry as its [MatrixApp.modes]. The
-/// harness of the matrix renders every app, so a case without errors has
-/// the request that the hooks of the roles got ([ContractResult.hook]).
+/// `null` if the case has errors. The harness of the matrix renders every
+/// app, so a case without errors has the request that the hooks of the
+/// roles got ([ContractResult.hook]).
+///
+/// The values of its role options are the options of every case of the
+/// harness, those of its case and the answers of the harness, but for its
+/// answers to the questions of mode options: the harness answers such a
+/// question with the first value, which the role chooses without the
+/// option too, as the harness checks in a run without a terminal that gets
+/// none. So the app is generated without that option. The values that its
+/// case gives the mode options of the roles of the registry are its
+/// [MatrixApp.modes].
 MatrixApp? _appOf(
   ContractResult result,
   ContractHarness harness, {
@@ -360,15 +378,23 @@ MatrixApp? _appOf(
   final resolution = result.resolution;
   if (result.errors.isNotEmpty || resolution == null) return null;
   final options = result.contractCase.roleOptions;
+  final modes = {
+    for (final role in harness.registry.roles)
+      for (final option in role.options)
+        if (option.isMode) option.name,
+  };
   return MatrixApp(
     '${result.contractCase}',
     [for (final module in resolution.modules) module.id],
-    roleOptions: {...harness.roleOptions, ...options, ...result.answers},
+    roleOptions: {
+      ...harness.roleOptions,
+      ...options,
+      for (final MapEntry(:key, :value) in result.answers.entries)
+        if (!modes.contains(key)) key: value,
+    },
     modes: {
-      for (final role in harness.registry.roles)
-        for (final option in role.options)
-          if (option.isMode)
-            if (options[option.name] case final value?) option.name: value,
+      for (final name in modes)
+        if (options[name] case final value?) name: value,
     },
     everyModuleWith: everyModuleWith,
     hook: result.hook,

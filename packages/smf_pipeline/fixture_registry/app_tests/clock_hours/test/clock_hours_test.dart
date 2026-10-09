@@ -16,7 +16,8 @@ import 'package:{{app_name}}/core/clock_user/clock_user.dart';
 
 /// How many hours the clock of the app shows, as the clock role chose: the
 /// matrix fills it from the choice of the role, not from the options that
-/// it gave `smf create`, so the test holds for an app that got none.
+/// it gave `smf create`. An app with a clock of 24 hours got none, and the
+/// role chose its first value.
 final int _hours = int.parse('{{clock_hours}}');
 
 /// The hour of [hour] o'clock as the clock user shows it.

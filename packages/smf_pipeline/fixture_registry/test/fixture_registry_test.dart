@@ -569,11 +569,24 @@ void main() {
         'app_go_router_get_it',
         'app_go_router_get_it_fake_riverpod',
       ]);
+      // The harness answered two questions for each: that of the router
+      // and that of the clock, whose role chose 24 hours. The app gets the
+      // start, which a run without a terminal needs, and no value of the
+      // mode option of the clock: the role chooses its first value without
+      // it, so the app is generated as a user without the option does it.
       for (final app in every) {
-        expect(app.roleOptions, _answers, reason: '$app');
+        expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
           app.createArguments('app_1', '/apps'),
-          containsAll(['--start=/fake_feature', '--clock-hours=24']),
+          allOf(
+            contains('--start=/fake_feature'),
+            isNot(contains(startsWith('--clock-hours'))),
+          ),
+          reason: '$app',
+        );
+        expect(
+          clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          24,
           reason: '$app',
         );
       }
@@ -1397,11 +1410,29 @@ void main() {
         contains('--clock-hours=12'),
       );
       expect(clockRole.hoursIn(clockRole.hookInput(twelve.hook!)), 12);
-      // The other apps with the clock get the answer of the harness.
-      expect(
-        byDefault.createArguments('app_1', '/apps'),
-        contains('--clock-hours=24'),
-      );
+      // The other apps with the clock get no value of the option, though
+      // the role asked the harness for one: the role chooses 24 hours
+      // without it, so `smf create` generates each as for a user who does
+      // not give the option.
+      final withClock = [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(clockRole) && app.modes.isEmpty)
+            app,
+      ];
+      expect(withClock, contains(byDefault));
+      expect(withClock, hasLength(greaterThan(8)));
+      for (final app in withClock) {
+        expect(
+          app.createArguments('app_1', '/apps'),
+          isNot(contains(startsWith('--clock-hours'))),
+          reason: app.name,
+        );
+        expect(
+          clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          24,
+          reason: app.name,
+        );
+      }
     });
 
     test(
