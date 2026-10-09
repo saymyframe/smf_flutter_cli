@@ -1018,10 +1018,11 @@ abstract interface class AppNavigator {
 /// the guard took the user from, or else the screen that the app starts
 /// on.
 ///
-/// The routes of its flow show only while it does not allow. At any other
-/// time the router shows the screen that the app starts on in place of a
-/// location of the flow (see [flowIsOver]), so the code of the app changes
-/// what [allows] reads and never navigates into the flow.
+/// The routes of its flow show only while it does not allow, or while
+/// another guard with the same flow does not. At any other time the router
+/// shows the screen that the app starts on in place of a location of the
+/// flow (see [flowIsOver]), so the code of the app changes what [allows]
+/// reads and never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -1042,8 +1043,9 @@ final class RouteGuard {
   /// guard does not allow.
   final AppLocation redirectTo;
 
-  /// The full names of the routes that the user sees only while the guard
+  /// The full names of the routes that the user may see while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
+  /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
 }
 

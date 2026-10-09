@@ -56,10 +56,10 @@ final class RoutesData implements DataWithTexts {
 /// the flow. See [RouterRole.guardedNavigation] for what every router does
 /// with the guards.
 ///
-/// The routes of the flow show only while the guard does not allow. Once
-/// it allows, and so does every other guard of the module with the same
-/// target, the flow is over: the router shows the screen that the app
-/// starts on in place of a location of the flow, whether `go()`, `push()`,
+/// The routes of the flow show only until the flow is over, which it is
+/// once the guard allows, and so does every other guard of the module with
+/// the same target. The router then shows the screen that the app starts
+/// on in place of a location of the flow, whether `go()`, `push()`,
 /// `replace()` or the platform asks for it, and such a `push()` completes
 /// with `null`. So no code navigates into a flow, the module of the guard
 /// included: it changes what the guard reads, and the router shows the
