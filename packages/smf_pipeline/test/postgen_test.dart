@@ -1262,6 +1262,441 @@ void main() {
       });
     });
 
+    group('with a notice', () {
+      const setUpId = PostGenStepId(ModuleId('firebase'), 'setup');
+      const enableId = PostGenStepId(ModuleId('auth'), 'enable');
+      const notice = 'The tool also registers a web app in the project.';
+      // It needs no terminal and the app is not complete without it, so no
+      // run asks about it.
+      const setUp = PostGenStep(
+        ToolRef('firebase'),
+        ['setup'],
+        id: setUpId,
+        description: 'Set up Firebase',
+      );
+      // Steps of a module that depends on firebase, which knows nothing of
+      // them.
+      const enable = PostGenStep(
+        ToolRef('enable'),
+        ['methods'],
+        id: enableId,
+        followUpOf: setUpId,
+        description: 'Enable the methods',
+        notice: notice,
+        skippable: true,
+      );
+      const verify = PostGenStep(
+        ToolRef('verify'),
+        [],
+        followUpOf: enableId,
+        skippable: true,
+      );
+      const tidy = PostGenStep(
+        ToolRef('tidy'),
+        [],
+        followUpOf: setUpId,
+        skippable: true,
+      );
+      const question =
+          'Enable the methods (enable methods), for auth. $notice Run it now?';
+      const afterEnable = 'verify: verify (it runs after "Enable the methods", '
+          'which is not done)';
+
+      /// [firebase], the step of the module firebase, and the steps of the
+      /// module auth: [auth], which continues it and has a notice, the step
+      /// that continues [auth], and another that continues [firebase].
+      List<Collected> stepsOf(
+        PostGenStep firebase, [
+        PostGenStep auth = enable,
+      ]) =>
+          [
+            _step('firebase', firebase),
+            _step('auth', auth),
+            _step('auth', verify),
+            _step('auth', tidy),
+          ];
+
+      /// Puts the tools of the steps of auth on the PATH.
+      void installTools() {
+        for (final name in ['enable', 'verify', 'tidy']) {
+          host.fileSystem.file('/usr/bin/$name').createSync();
+        }
+      }
+
+      /// The records of [steps], as `description: command (reason)`.
+      List<String> records(List<SkippedStep> steps) =>
+          [for (final step in steps) '$step'];
+
+      /// The questions that the run asked.
+      List<String> questions() =>
+          [for (final prompt in host.prompter.asked) prompt.message];
+
+      test(
+          'that continue another step are asked about once that step '
+          'succeeded, with the notice in the question, and run when the user '
+          'agrees', () async {
+        // The user presses Enter, which answers yes, as for every step.
+        environment = environmentOf(interactive: true, answers: [null]);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(skipped, isEmpty);
+        expect(questions(), [question]);
+        expect(runner.lines.sublist(1, 5), [
+          'firebase setup',
+          'enable methods',
+          'verify',
+          'tidy',
+        ]);
+      });
+
+      test(
+          'that the user declines are left for later, and so are the steps '
+          'that continue them, while the other steps go on', () async {
+        environment = environmentOf(interactive: true, answers: [false]);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(records(skipped), [
+          'Enable the methods: enable methods (you chose to run it later)',
+          afterEnable,
+        ]);
+        // The notice goes with the command for later.
+        expect(skipped.map((step) => step.notice), [notice, null]);
+        expect(skipped.map((step) => step.failed), everyElement(isFalse));
+        expect(questions(), [question]);
+        // The step that they continue ran, and so did the other step that
+        // continues it.
+        expect(runner.lines, containsAllInOrder(['firebase setup', 'tidy']));
+        expect(runner.lines, isNot(contains('enable methods')));
+        expect(runner.lines, isNot(contains('verify')));
+      });
+
+      test(
+          'are left for later in a run that cannot ask, after the step that '
+          'they continue ran', () async {
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(records(skipped), [
+          'Enable the methods: enable methods (the run cannot ask the user)',
+          afterEnable,
+        ]);
+        expect(skipped.map((step) => step.notice), [notice, null]);
+        expect(skipped.map((step) => step.failed), everyElement(isFalse));
+        expect(runner.lines, containsAllInOrder(['firebase setup', 'tidy']));
+        expect(runner.lines, isNot(contains('enable methods')));
+        expect(runner.lines, isNot(contains('verify')));
+      });
+
+      test(
+          'that need external setup are left for later in a run that skips '
+          'it, without a question', () async {
+        environment = environmentOf(interactive: true, skipExternalSetup: true);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(
+            setUp,
+            const PostGenStep(
+              ToolRef('enable'),
+              ['methods'],
+              id: enableId,
+              followUpOf: setUpId,
+              description: 'Enable the methods',
+              notice: notice,
+              skippable: true,
+              external: true,
+            ),
+          ),
+        );
+
+        expect(records(skipped), [
+          'Enable the methods: enable methods (the run skips external setup)',
+          afterEnable,
+        ]);
+        expect(skipped.first.notice, notice);
+        expect(questions(), isEmpty);
+        expect(runner.lines, containsAllInOrder(['firebase setup', 'tidy']));
+        expect(runner.lines, isNot(contains('enable methods')));
+      });
+
+      test(
+          'are left for later with the step that they continue, without a '
+          'question', () async {
+        // A step like one that configures an external service in the
+        // terminal.
+        const configure = PostGenStep(
+          ToolRef('firebase'),
+          ['setup'],
+          id: setUpId,
+          description: 'Set up Firebase',
+          interactive: true,
+          skippable: true,
+          external: true,
+        );
+        const aboutSetUp =
+            'Set up Firebase (firebase setup), for firebase. Run it now?';
+        for (final (run, exitCode, reason, asked) in [
+          (
+            () => environmentOf(interactive: true, skipExternalSetup: true),
+            0,
+            'the run skips external setup',
+            const <String>[],
+          ),
+          (environmentOf, 0, 'the run cannot ask the user', const <String>[]),
+          (
+            () => environmentOf(interactive: true, answers: [false]),
+            0,
+            'you chose to run it later',
+            const [aboutSetUp],
+          ),
+          (
+            () => environmentOf(interactive: true, answers: [true]),
+            1,
+            'it exited with code 1',
+            const [aboutSetUp],
+          ),
+        ]) {
+          environment = run();
+          installTools();
+          runner.onInteractive = (call) => exitCode;
+
+          final skipped = await runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: stepsOf(configure),
+          );
+
+          expect(
+            records(skipped),
+            [
+              'Set up Firebase: firebase setup ($reason)',
+              equals(
+                'Enable the methods: enable methods (it runs after "Set up '
+                'Firebase", which is not done)',
+              ),
+              afterEnable,
+              equals(
+                'tidy: tidy (it runs after "Set up Firebase", which is not '
+                'done)',
+              ),
+            ],
+            reason: reason,
+          );
+          expect(
+            skipped.map((step) => step.notice),
+            [null, notice, null, null],
+            reason: reason,
+          );
+          expect(questions(), asked, reason: reason);
+          expect(runner.lines, isNot(contains('enable methods')));
+        }
+      });
+
+      test(
+          'that continue no other step have the notice in the question about '
+          'them, and are left for later in a run that cannot ask, which runs '
+          'a step without a notice', () async {
+        final steps = [
+          _step(
+            'auth',
+            const PostGenStep(
+              ToolRef('enable'),
+              ['methods'],
+              description: 'Enable the methods',
+              notice: notice,
+              skippable: true,
+            ),
+          ),
+          _step(
+            'auth',
+            const PostGenStep(ToolRef('tidy'), [], skippable: true),
+          ),
+        ];
+        environment = environmentOf(interactive: true, answers: [true, true]);
+        installTools();
+
+        final asked = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: steps,
+        );
+
+        expect(asked, isEmpty);
+        expect(questions(), [question, 'tidy, for auth. Run it now?']);
+        expect(runner.lines, containsAllInOrder(['enable methods', 'tidy']));
+
+        environment = environmentOf();
+        installTools();
+
+        final unasked = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: steps,
+        );
+
+        expect(records(unasked), [
+          'Enable the methods: enable methods (the run cannot ask the user)',
+        ]);
+        expect(unasked.single.notice, notice);
+        expect(unasked.single.failed, isFalse);
+        expect(runner.lines, contains('tidy'));
+        expect(runner.lines, isNot(contains('enable methods')));
+      });
+
+      test(
+          'are each asked about in their turn: one that continues a step with '
+          'a notice, once the user agreed to that step and it succeeded',
+          () async {
+        environment = environmentOf(interactive: true, answers: [true, false]);
+        installTools();
+
+        final skipped = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: [
+            _step('firebase', setUp),
+            _step('auth', enable),
+            _step(
+              'auth',
+              const PostGenStep(
+                ToolRef('verify'),
+                [],
+                followUpOf: enableId,
+                notice: 'It reads the users of the project.',
+                skippable: true,
+              ),
+            ),
+          ],
+        );
+
+        expect(questions(), [
+          question,
+          'verify, for auth. It reads the users of the project. Run it now?',
+        ]);
+        expect(
+          records(skipped),
+          ['verify: verify (you chose to run it later)'],
+        );
+        expect(skipped.single.notice, 'It reads the users of the project.');
+        expect(
+          runner.lines,
+          containsAllInOrder(['firebase setup', 'enable methods']),
+        );
+        expect(runner.lines, isNot(contains('verify')));
+      });
+
+      test(
+          'that need a check which has not passed are left for later without '
+          'a question', () async {
+        const needsTool = PostGenStep(
+          ToolRef('enable'),
+          ['methods'],
+          id: enableId,
+          followUpOf: setUpId,
+          description: 'Enable the methods',
+          notice: notice,
+          skippable: true,
+          needs: ['tool'],
+        );
+        const missing = [
+          CheckResult(
+            PlannedCheck(
+              _Check('tool', 'Tool'),
+              ModuleOrigin(ModuleId('auth')),
+            ),
+            PreflightMissing(instructions: 'Install it.'),
+          ),
+        ];
+        for (final (interactive, reason, failed) in [
+          (true, 'Tool is missing', true),
+          // The user who runs the command later needs the tool too.
+          (false, 'the run cannot ask the user, and Tool is missing', false),
+        ]) {
+          environment = environmentOf(interactive: interactive);
+          installTools();
+
+          final skipped = await runPostGen(
+            directory: '/tmp/app',
+            environment: environment,
+            steps: stepsOf(setUp, needsTool),
+            checks: missing,
+          );
+
+          expect(records(skipped), [
+            'Enable the methods: enable methods ($reason)',
+            afterEnable,
+          ]);
+          expect(skipped.first.notice, notice);
+          expect(skipped.first.failed, failed);
+          expect(questions(), isEmpty);
+          expect(runner.lines, isNot(contains('enable methods')));
+        }
+      });
+
+      test(
+          'that fail, or whose tool is missing, are left for later as any '
+          'step, with their notice', () async {
+        environment = environmentOf(interactive: true, answers: [true]);
+        installTools();
+        runner.onRun = (call) => call.line == 'enable methods'
+            ? const SmfProcessResult(exitCode: 2)
+            : const SmfProcessResult(exitCode: 0);
+
+        final fails = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(records(fails), [
+          'Enable the methods: enable methods (it exited with code 2)',
+          afterEnable,
+        ]);
+        expect(fails.map((step) => step.notice), [notice, null]);
+        expect(fails.map((step) => step.failed), [true, false]);
+        expect(questions(), [question]);
+
+        // The user is not asked about a step that cannot run.
+        environment = environmentOf(interactive: true);
+        for (final name in ['verify', 'tidy']) {
+          host.fileSystem.file('/usr/bin/$name').createSync();
+        }
+
+        final noTool = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(records(noTool), [
+          'Enable the methods: enable methods (enable was not found)',
+          afterEnable,
+        ]);
+        expect(noTool.map((step) => step.notice), [notice, null]);
+        expect(noTool.map((step) => step.failed), [true, false]);
+        expect(questions(), isEmpty);
+      });
+    });
+
     group('for some systems', () {
       const macos = {HostOperatingSystem.macos};
       const setUpId = PostGenStepId(ModuleId('firebase'), 'setup');

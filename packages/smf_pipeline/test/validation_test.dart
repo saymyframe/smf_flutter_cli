@@ -1796,6 +1796,74 @@ void main() {
     );
   });
 
+  test('a step with a notice must be skippable', () {
+    const d = PostGenStepId(ModuleId('scaffold'), 'd');
+    final nav = TestRole<String>('nav');
+    final result = _validate([
+      scaffold(
+        contributions: const [
+          PostGenStep(ToolRef('a'), [], notice: 'It changes the project.'),
+          PostGenStep(
+            ToolRef('b'),
+            [],
+            notice: 'It changes the project.',
+            skippable: true,
+          ),
+          PostGenStep(ToolRef('c'), []),
+          PostGenStep(ToolRef('d'), [], id: d),
+        ],
+      ),
+      TestModule(
+        'other',
+        dependsOn: {'scaffold'},
+        uses: {nav},
+        contributions: [
+          // Steps that continue a step of the module that they depend on.
+          const PostGenStep(
+            ToolRef('e'),
+            [],
+            followUpOf: d,
+            description: 'Enable',
+            notice: 'It registers an app.',
+          ),
+          const PostGenStep(
+            ToolRef('f'),
+            [],
+            followUpOf: d,
+            notice: 'It registers an app.',
+            skippable: true,
+          ),
+          // A step that does not apply to the app.
+          PostGenStep(
+            const ToolRef('g'),
+            const [],
+            notice: 'It registers an app.',
+            when: {nav},
+          ),
+        ],
+      ),
+    ]);
+
+    expect(_messages(result), [
+      equals(
+        'scaffold: The step a of scaffold has a notice, so it runs only once '
+        'the user agreed to it, but the app is not complete without it.',
+      ),
+      equals(
+        'other: The step Enable of other has a notice, so it runs only once '
+        'the user agreed to it, but the app is not complete without it.',
+      ),
+      equals(
+        'other: The step g of other has a notice, so it runs only once the '
+        'user agreed to it, but the app is not complete without it.',
+      ),
+    ]);
+    expect(
+      result.issues.map((issue) => issue.hint).toSet().single,
+      'Make the step skippable, or tell what it does in its description.',
+    );
+  });
+
   group('sockets', () {
     test('code for a socket without a tag is an error of its owner', () {
       final sockets = <SocketRef>[];

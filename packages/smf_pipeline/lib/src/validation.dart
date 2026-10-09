@@ -398,8 +398,8 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
 
 /// The problems of [collected] with the rules of the pipeline: the roles in
 /// its [Contribution.when], who may use which role and socket, for a brick,
-/// its hooks, variables and files, and for a post-generation step, its id
-/// and the step it continues; see [_stepIssues].
+/// its hooks, variables and files, and for a post-generation step, its id,
+/// its notice and the step it continues; see [_stepIssues].
 ///
 /// Stage 8 checks the fragments of the render hooks with it too.
 Iterable<SmfIssue> contributionIssues(
@@ -624,16 +624,27 @@ Iterable<SmfIssue> _brickFileIssues(
   }
 }
 
-/// The problems of the id of [step] of [origin] and of the step that it
-/// continues (see [PostGenStep.followUpOf]): its id must be one of the
-/// module of [origin], which may continue only its own steps and those of
-/// the modules that it depends on directly, as [resolution] tells; a step
-/// that continues another has no conditions of its own.
+/// The problems of the id of [step] of [origin], of its notice and of the
+/// step that it continues (see [PostGenStep.followUpOf]): its id must be
+/// one of the module of [origin], which may continue only its own steps and
+/// those of the modules that it depends on directly, as [resolution] tells;
+/// a step that continues another has no conditions of its own; and a step
+/// with a notice, which the user may decline, must be skippable (see
+/// [PostGenStep.notice]).
 Iterable<SmfIssue> _stepIssues(
   PostGenStep step,
   ContributionOrigin origin,
   Resolution resolution,
 ) sync* {
+  if (step.notice != null && !step.skippable) {
+    yield SmfIssue(
+      'The step ${_stepName(step)} of $origin has a notice, so it runs only '
+      'once the user agreed to it, but the app is not complete without it.',
+      hint: 'Make the step skippable, or tell what it does in its '
+          'description.',
+      origin: origin,
+    );
+  }
   final id = step.id;
   if (id != null && id.module != _moduleOf(origin)) {
     yield SmfIssue(

@@ -196,6 +196,141 @@ void main() {
     expect(created.single.skippedSteps.single.command, 'firebase login');
   });
 
+  group('a step with a notice that continues a step of another module', () {
+    const first = PostGenStepId(ModuleId('extra'), 'first');
+    const notice = 'The tool also registers a web app in the project.';
+    // Everything that a run in a terminal would ask for otherwise.
+    const create = [
+      'create',
+      'my_app',
+      '-o',
+      '/work',
+      '--org',
+      'com.example',
+      '-m',
+      'auth',
+    ];
+
+    /// A host with a terminal, whose user gives [answers].
+    FakeHost terminal([List<Object?> answers = const []]) =>
+        FakeHost(processRunner: runner, terminal: true, answers: answers);
+
+    setUp(() {
+      modules = [
+        ...modulesWith([
+          const PostGenStep(ToolRef('dart'), ['run', 'first'], id: first),
+        ]),
+        // It depends on extra, which knows nothing of it.
+        TestModule(
+          'auth',
+          dependsOn: {'extra'},
+          contributions: const [
+            PostGenStep(
+              ToolRef('dart'),
+              ['run', 'enable'],
+              followUpOf: first,
+              description: 'Enabling the methods',
+              notice: notice,
+              skippable: true,
+              external: true,
+            ),
+          ],
+        ),
+      ];
+    });
+
+    test('is asked about in a terminal, and runs when the user agrees',
+        () async {
+      host = terminal([true]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(
+        host.prompter.asked.single.message,
+        'Enabling the methods (dart run enable), for auth. $notice Run it '
+        'now?',
+      );
+      expect(
+        runner.lines,
+        containsAllInOrder(['dart run first', 'dart run enable']),
+      );
+      expect(host.logger.warnings, isEmpty);
+      expect(created.single.skippedSteps, isEmpty);
+    });
+
+    test('that the user declines is left for later, with the notice', () async {
+      host = terminal([false]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(host.prompter.asked, hasLength(1));
+      expect(runner.lines, contains('dart run first'));
+      expect(runner.lines, isNot(contains('dart run enable')));
+      expect(
+        host.logger.warnings.single,
+        'Enabling the methods is not done, because you chose to run it '
+        'later. Run it in the app: dart run enable\n'
+        '$notice',
+      );
+    });
+
+    test('is left for later with --no-input, with the notice', () async {
+      host = terminal();
+
+      expect(await smf([...create, '--no-input']), SmfExitCodes.success);
+
+      expect(host.prompter.asked, isEmpty);
+      expect(runner.lines, contains('dart run first'));
+      expect(runner.lines, isNot(contains('dart run enable')));
+      expect(
+        host.logger.warnings.single,
+        'Enabling the methods is not done, because the run cannot ask the '
+        'user. Run it in the app: dart run enable\n'
+        '$notice',
+      );
+      expect(created.single.skippedSteps.single.notice, notice);
+    });
+
+    test('is left for later with --skip-external-setup, with the notice',
+        () async {
+      host = terminal();
+
+      expect(
+        await smf([...create, '--skip-external-setup']),
+        SmfExitCodes.success,
+      );
+
+      expect(host.prompter.asked, isEmpty);
+      expect(runner.lines, contains('dart run first'));
+      expect(runner.lines, isNot(contains('dart run enable')));
+      expect(
+        host.logger.warnings.single,
+        'Enabling the methods is not done, because the run skips external '
+        'setup. Run it in the app: dart run enable\n'
+        '$notice',
+      );
+    });
+
+    test('is shown by --explain under its command', () async {
+      host = terminal();
+
+      expect(await smf([...create, '--explain']), SmfExitCodes.success);
+
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'After generation\n'
+          '  dart run first (extra)\n'
+          '    then dart run enable (auth)\n'
+          '      $notice\n'
+          '      A run asks before it runs this step, and leaves it for later '
+          'when it cannot ask.\n',
+        ),
+      );
+      expect(runner.calls, isEmpty);
+    });
+  });
+
   test('says which modules lenient mode left out', () async {
     final other = TestRole<NoDsl>('other');
     modules = [
