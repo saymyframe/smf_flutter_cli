@@ -218,9 +218,10 @@ void main() {
       for (final app in everyModule) app.name,
     ]);
     // One for each combination of the providers of the roles that take one,
-    // and each once more for the other value of the mode option of the
-    // fixture clock.
-    expect(everyModule, hasLength(16));
+    // and each once more for every other combination of the values of the
+    // two mode options of the fixtures: the three modes of the auth role
+    // and the two of the fixture clock.
+    expect(everyModule, hasLength(48));
     expect(everyModule.where((app) => app.modes.isEmpty), hasLength(8));
     for (final app in everyModule) {
       expect(
@@ -242,7 +243,7 @@ void main() {
       'every module, which have the clock and the module that uses it, and '
       'gets the hours that the clock role chose for each: 24 in an app that '
       'got no value of the option of the role, and 12 in the app of the '
-      'other value', () {
+      'other value, in each mode of the auth role', () {
     final clockHours = named('clock_hours');
     final everyModule = [
       for (final app in apps)
@@ -261,12 +262,15 @@ void main() {
           },
       },
     );
+    // Each app with every module has a clock of 12 hours once in each of
+    // the three modes of the auth role, whose option comes before that of
+    // the clock in the name of an app.
     expect(
       [
         for (final app in everyModule)
           if (clockHours.values!(app)['clock_hours'] == '12') app.name,
       ],
-      hasLength(8),
+      hasLength(24),
     );
     // The hours come from the choice of the role, which an app has without
     // the option too.

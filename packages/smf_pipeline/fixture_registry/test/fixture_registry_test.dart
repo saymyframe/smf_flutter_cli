@@ -276,8 +276,8 @@ void main() {
         );
         // Both features can start the app, so the harness answers the
         // question of the router with the first, as the user who presses
-        // Enter would, and that of the clock with the first value of its
-        // option.
+        // Enter would, and those of the auth role and of the clock with
+        // the first value of their options.
         expect(result.answers, _answers);
       }
     });
@@ -530,9 +530,9 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
-      // The option answers the question of the router, not that of the
-      // clock.
-      expect(result.answers, {'clock-hours': '24'});
+      // The option answers the question of the router, not those of the
+      // auth role and of the clock.
+      expect(result.answers, {'auth-mode': 'required', 'clock-hours': '24'});
       expect(
         initialLocationsOf(result),
         ['/fake_second', '/fake_feature', '/fake_second'],
@@ -544,8 +544,10 @@ void main() {
       final (:apps, :failed) = await matrixOf(fixtureModules());
 
       expect(failed, isEmpty);
-      // The apps with every module whose clock has its first value, 24
-      // hours; each is in the matrix once more for a clock of 12.
+      // The apps with every module whose mode options have their first
+      // values, a clock of 24 hours and the mode required of the auth role;
+      // each is in the matrix once more for each other combination of the
+      // values.
       final every = [
         for (final app in apps)
           if (app.everyModuleWith != null && app.modes.isEmpty) app,
@@ -569,11 +571,12 @@ void main() {
         'app_go_router_get_it',
         'app_go_router_get_it_fake_riverpod',
       ]);
-      // The harness answered two questions for each: that of the router
-      // and that of the clock, whose role chose 24 hours. The app gets the
-      // start, which a run without a terminal needs, and no value of the
-      // mode option of the clock: the role chooses its first value without
-      // it, so the app is generated as a user without the option does it.
+      // The harness answered three questions for each: that of the router,
+      // that of the auth role, which chose the mode required, and that of
+      // the clock, whose role chose 24 hours. The app gets the start, which
+      // a run without a terminal needs, and no value of a mode option: each
+      // role chooses the first value of its option without it, so the app
+      // is generated as a user without the options does it.
       for (final app in every) {
         expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
@@ -581,12 +584,18 @@ void main() {
           allOf(
             contains('--start=/fake_feature'),
             isNot(contains(startsWith('--clock-hours'))),
+            isNot(contains(startsWith('--auth-mode'))),
           ),
           reason: '$app',
         );
         expect(
           clockRole.hoursIn(clockRole.hookInput(app.hook!)),
           24,
+          reason: '$app',
+        );
+        expect(
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+          AuthMode.required,
           reason: '$app',
         );
       }
@@ -1584,8 +1593,9 @@ void main() {
 
     test(
         'the matrix has each app with every module once more for a clock of '
-        '12 hours, after its other apps, and a run takes those that have 12 '
-        'hours with each router, each DI container and each state manager',
+        '12 hours, in each mode of the auth role, after its other apps, and '
+        'a run takes those that have 12 hours with each router, each DI '
+        'container, each state manager and each mode of the auth role',
         () async {
       /// The names of the apps of [apps] whose clock has 12 hours, as the
       /// clock role chose.
@@ -1601,6 +1611,10 @@ void main() {
         ['fake_bloc', 'fake_riverpod'],
       ];
       const twelveHours = '--clock-hours=12';
+      // The other mode option of the fixtures, that of the auth role, whose
+      // role comes before the clock in the registry: an app with every
+      // module has a clock of 12 hours in each of its three modes.
+      const authModes = ['', ' --auth-mode=guest', ' --auth-mode=anonymous'];
 
       final all = await matrixOf(fixtureModules());
       expect(all.failed, isEmpty);
@@ -1609,19 +1623,34 @@ void main() {
         for (final router in providers[0])
           for (final container in providers[1])
             for (final stateManager in providers[2])
-              'every module ($router, $container, $stateManager) $twelveHours',
+              for (final authMode in authModes)
+                [
+                  'every module ($router, $container, $stateManager)$authMode',
+                  twelveHours,
+                ].join(' '),
       ]);
-      // They are the last apps of the matrix.
+      // The apps with every module for the other values of the two options
+      // are the last apps of the matrix: five for each of the eight apps
+      // with every module.
+      final last = all.apps.sublist(all.apps.length - 40);
       expect(
-        [for (final app in all.apps.reversed.take(8)) app.name],
-        ofTwelve(all.apps).reversed.take(8),
+        [
+          for (final app in all.apps)
+            if (app.everyModuleWith != null && app.modes.isNotEmpty) app,
+        ],
+        last,
       );
-      for (final app in all.apps.reversed.take(8)) {
-        expect(app.modes, {'clock-hours': '12'}, reason: app.name);
+      expect(
+        last.map((app) => app.name),
+        containsAll(ofTwelve(all.apps).skip(1)),
+      );
+      for (final app in last) {
+        if (!app.name.endsWith(' $twelveHours')) continue;
+        expect(app.modes['clock-hours'], '12', reason: app.name);
         expect(app.everyModuleWith, isNotNull, reason: app.name);
         expect(
           app.roleOptions,
-          {'start': '/fake_feature', 'clock-hours': '12'},
+          {'start': '/fake_feature', ...app.modes},
           reason: app.name,
         );
       }
@@ -1632,13 +1661,20 @@ void main() {
         everyModuleApps: EveryModuleCombinations.pairwise,
       );
       expect(failed, isEmpty);
-      final twelve = [
+      final ofModes = [
         for (final app in apps)
           if (app.everyModuleWith != null && app.modes.isNotEmpty) app,
       ];
+      final twelve = [
+        for (final app in ofModes)
+          if (app.modes['clock-hours'] == '12') app,
+      ];
+      const ofFirst = 'every module (fake_router, fake_di, fake_bloc)';
+      const ofLast = 'every module (go_router, get_it, fake_riverpod)';
       expect(twelve.map((app) => app.name), [
-        'every module (fake_router, fake_di, fake_bloc) --clock-hours=12',
-        'every module (go_router, get_it, fake_riverpod) --clock-hours=12',
+        '$ofFirst --clock-hours=12',
+        '$ofFirst --auth-mode=guest --clock-hours=12',
+        '$ofLast --auth-mode=anonymous --clock-hours=12',
       ]);
       for (final ofRole in providers) {
         for (final provider in ofRole) {
@@ -1649,9 +1685,17 @@ void main() {
           );
         }
       }
-      expect(apps.sublist(apps.length - 2), twelve);
-      // The covering of the apps with a clock of 24 hours is the one of a
-      // matrix without them.
+      // A clock of 12 hours is in an app of each mode of the auth role.
+      expect(
+        {
+          for (final app in twelve)
+            authRole.modeIn(authRole.hookInput(app.hook!)),
+        },
+        AuthMode.values.toSet(),
+      );
+      expect(apps.sublist(apps.length - ofModes.length), ofModes);
+      // The covering of the apps with a clock of 24 hours and the first
+      // mode of the auth role is the one of a matrix without the others.
       expect(
         [
           for (final app in apps)
@@ -1698,6 +1742,229 @@ void main() {
       );
       expect(
         await create(const ['--clock-hours', '13']),
+        (SmfExitCodes.usage, null),
+      );
+    });
+  });
+
+  group('the fixture sign-in, which provides the auth role', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    const fixtureFile = 'lib/core/fixture_auth/fixture_auth.dart';
+
+    /// The app of the fixture sign-in alone, with [options].
+    Future<ContractResult> authApp([
+      Map<String, String?> options = const {},
+    ]) async {
+      final result = await harness.check(
+        ContractCase(
+          'sign-in',
+          requested: const [FakeAuthModule.id],
+          roleOptions: options,
+        ),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    /// The source of the value of the constant `authMode` in [text], the
+    /// file of the session of an app.
+    String modeIn(String text) {
+      final finder = _Code('authMode');
+      parseString(content: text).unit.accept(finder);
+      return finder.code.single;
+    }
+
+    test(
+        'opens its service asynchronously, so the start of the session waits '
+        'for it, and has the same code in every mode of the app', () async {
+      final byDefault = await authApp();
+
+      expect(
+        _implementationOf(const FakeAuthModule(), authRole)?.isAsync,
+        isTrue,
+      );
+      final initAuth = _Code('initAuth');
+      parseString(content: byDefault.app!.files[AuthRole.sessionFile]!.text)
+          .unit
+          .accept(initAuth);
+      expect(
+        initAuth.code.single,
+        allOf(
+          matches(RegExp(r'_authService = await \w+\.openFixtureAuth\(\);')),
+          contains('await appSession.start(_authService);'),
+        ),
+      );
+      expect(
+        byDefault.app!.files[AppEntryRole.bootstrapFile]!.text,
+        contains('await initAuth();'),
+      );
+      for (final mode in AuthMode.values) {
+        final ofMode = await authApp({'auth-mode': mode.name});
+        expect(
+          modeIn(ofMode.app!.files[AuthRole.sessionFile]!.text),
+          'AuthMode.${mode.name}',
+        );
+        expect(
+          ofMode.app!.files[fixtureFile]!.text,
+          byDefault.app!.files[fixtureFile]!.text,
+          reason: mode.name,
+        );
+      }
+    });
+
+    test(
+        'the harness builds an app of it for each other mode, which the '
+        'matrix generates with the option, and the other apps with the role '
+        'get no value of the option and the mode required', () async {
+      expect(harness.casesOfModule(FakeAuthModule.id).map((c) => '$c'), [
+        'fake_auth',
+      ]);
+      expect(harness.casesOfRole(authRole).map((c) => '$c'), [
+        'auth by fake_auth',
+        'auth by fake_auth --auth-mode=guest',
+        'auth by fake_auth --auth-mode=anonymous',
+      ]);
+      // The role asks, and the harness answers as a user who presses Enter:
+      // with the first value.
+      final byDefault = await authApp();
+      expect(byDefault.answers, {'auth-mode': 'required'});
+      expect(
+        authRole.modeIn(authRole.hookInput(byDefault.hook!)),
+        AuthMode.required,
+      );
+
+      final (:apps, :failed) = await matrixOf(fixtureModules());
+      expect(failed, isEmpty);
+      MatrixApp named(String name) =>
+          apps.singleWhere((app) => app.name == name);
+      for (final mode in AuthMode.values.skip(1)) {
+        final ofMode = named('auth by fake_auth --auth-mode=${mode.name}');
+        expect(ofMode.modules, named('fake_auth').modules);
+        expect(ofMode.modes, {'auth-mode': mode.name});
+        expect(
+          ofMode.createArguments('app_1', '/apps'),
+          contains('--auth-mode=${mode.name}'),
+        );
+        expect(authRole.modeIn(authRole.hookInput(ofMode.hook!)), mode);
+      }
+      final withoutMode = [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(authRole) &&
+              !app.modes.containsKey('auth-mode'))
+            app,
+      ];
+      expect(withoutMode, contains(named('fake_auth')));
+      // The app of the fixture alone, and each app with every module, with
+      // a clock of 24 hours and with one of 12.
+      expect(withoutMode, hasLength(17));
+      for (final app in withoutMode) {
+        expect(
+          app.createArguments('app_1', '/apps'),
+          isNot(contains(startsWith('--auth-mode'))),
+          reason: app.name,
+        );
+        expect(
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+          AuthMode.required,
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'a run of the matrix takes apps with every module that have each '
+        'other mode with each router, each DI container and each state '
+        'manager, and with a clock of 24 hours and of 12', () async {
+      final (:apps, :failed) = await matrixOf(
+        fixtureModules(),
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      expect(failed, isEmpty);
+      final ofModes = [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.modes.containsKey('auth-mode'))
+            app,
+      ];
+
+      const first = 'every module (fake_router, fake_di, fake_bloc)';
+      const last = 'every module (go_router, get_it, fake_riverpod)';
+      expect(ofModes.map((app) => app.name), [
+        '$first --auth-mode=guest --clock-hours=12',
+        '$first --auth-mode=anonymous',
+        '$last --auth-mode=guest',
+        '$last --auth-mode=anonymous --clock-hours=12',
+      ]);
+      for (final mode in AuthMode.values.skip(1)) {
+        final ofMode = [
+          for (final app in ofModes)
+            if (authRole.modeIn(authRole.hookInput(app.hook!)) == mode) app,
+        ];
+        for (final provider in const [
+          'fake_router',
+          'go_router',
+          'fake_di',
+          'get_it',
+          'fake_bloc',
+          'fake_riverpod',
+        ]) {
+          expect(
+            ofMode.where((app) => app.modules.contains(ModuleId(provider))),
+            isNotEmpty,
+            reason: 'No app with $provider is in the mode ${mode.name}.',
+          );
+        }
+        expect(
+          {
+            for (final app in ofMode)
+              clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          },
+          {24, 12},
+          reason: mode.name,
+        );
+      }
+    });
+
+    test(
+        'smf create without a terminal generates the app in the mode '
+        'required without the option, and takes no value but those of the '
+        'option', () async {
+      /// Runs `smf create` for the fixture sign-in with [options], and
+      /// returns its exit code and the mode of the app, if it has one.
+      Future<(int, String?)> create(List<String> options) async {
+        final host = testHost(processRunner: RecordingRunner());
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            '${FakeAuthModule.id}',
+            ...options,
+            '--no-input',
+            '--skip-external-setup',
+            '--strict',
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        final file = host.fileSystem.file(
+          '/work/fixture_app/${AuthRole.sessionFile}',
+        );
+        if (!file.existsSync()) return (code, null);
+        return (code, modeIn(file.readAsStringSync()));
+      }
+
+      expect(
+        await create(const []),
+        (SmfExitCodes.success, 'AuthMode.required'),
+      );
+      for (final mode in AuthMode.values) {
+        expect(
+          await create(['--auth-mode', mode.name]),
+          (SmfExitCodes.success, 'AuthMode.${mode.name}'),
+        );
+      }
+      expect(
+        await create(const ['--auth-mode', 'members']),
         (SmfExitCodes.usage, null),
       );
     });
@@ -1904,8 +2171,13 @@ void main() {
 
 /// The answers of the harness to the questions of the roles of an app with
 /// every fixture: the first of the two screens that can start it, and the
-/// first value of the mode option of the fixture clock.
-const _answers = {'start': '/fake_feature', 'clock-hours': '24'};
+/// first value of each mode option, that of the auth role, which the
+/// fixture sign-in provides, and that of the fixture clock.
+const _answers = {
+  'start': '/fake_feature',
+  'auth-mode': 'required',
+  'clock-hours': '24',
+};
 
 /// The one of the two modules [both] that is not [one].
 String _other(List<String> both, String one) =>
@@ -2056,6 +2328,7 @@ const _cases = [
   'fake_preferences_user',
   'fake_theme with localization',
   'fake_theme',
+  'fake_auth',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
@@ -2066,6 +2339,10 @@ const _cases = [
   'fake_clock_user',
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
+  // The other values of the mode option of the auth role, with the
+  // fixture sign-in, which provides it.
+  'auth by fake_auth --auth-mode=guest',
+  'auth by fake_auth --auth-mode=anonymous',
   // The other value of the mode option of the fixture clock, with its
   // provider.
   'clock by fake_clock_badge --clock-hours=12',
