@@ -14,6 +14,8 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
+import 'mode_registry.dart';
+
 /// The directory of the app whose tests the reports report.
 const _app = '/apps/app_1';
 
@@ -891,6 +893,63 @@ void main() {
         one.createArguments('app_1', '/apps').take(4),
         ['create', 'app_1', '-m', 'flutter_core'],
       );
+    });
+
+    test(
+        'the app whose tests must fail is generated with its role options, '
+        'such as another value of a mode option, which is then the choice '
+        'of the role there', () async {
+      const failing = MatrixFailingApp(
+        'doors with a bug for guests',
+        modules: doorsOfWood,
+        providers: [ModuleId('pine')],
+        roleOptions: {'access': 'guests'},
+        failures: [expected],
+      );
+
+      final (:app, :problems) = await failing.check();
+
+      expect(problems, isEmpty);
+      expect(app!.name, 'doors with a bug for guests');
+      expect(app.modules, [
+        FlutterCoreModule.id,
+        const ModuleId('lock'),
+        const ModuleId('pine'),
+      ]);
+      expect(app.roleOptions, {'access': 'guests'});
+      expect(
+        app.createArguments('app_1', '/apps'),
+        contains('--access=guests'),
+      );
+      expect(doors.modeIn(app.hook!, 'access'), 'guests');
+      expect(app.everyModuleWith, [const ModuleId('pine')]);
+
+      // Without them, the role chooses the first value, as for an app that
+      // got no option.
+      final (app: byDefault, problems: none) = await const MatrixFailingApp(
+        'doors with a bug',
+        modules: doorsOfWood,
+        providers: [ModuleId('pine')],
+        failures: [expected],
+      ).check();
+      expect(none, isEmpty);
+      expect(byDefault!.roleOptions, isEmpty);
+      expect(doors.modeIn(byDefault.hook!, 'access'), 'members');
+
+      // The run generates the app with the option.
+      final created = <List<String>>[];
+      await runFailingApps(
+        const [failing],
+        directory: '/apps',
+        commands: MatrixCommands(
+          log: (line) {},
+          create: (arguments, onCreated) async {
+            created.add(arguments);
+            return 1;
+          },
+        ),
+      );
+      expect(created.single, contains('--access=guests'));
     });
 
     test(

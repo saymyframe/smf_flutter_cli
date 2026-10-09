@@ -1847,12 +1847,14 @@ Future<int> createEveryModuleApps(
 /// matrix runs only in such apps too ([MatrixApp.everyModuleWith]).
 final class MatrixFailingApp {
   /// Creates the app [name] with every module of [modules] and [providers],
-  /// whose tests must fail as [failures] expect.
+  /// generated with [roleOptions], whose tests must fail as [failures]
+  /// expect.
   const MatrixFailingApp(
     this.name, {
     required this.modules,
     required this.failures,
     this.providers = const [],
+    this.roleOptions = const {},
   });
 
   /// The name of the app, such as that of the provider with a bug.
@@ -1869,18 +1871,29 @@ final class MatrixFailingApp {
   /// feature; among other modules, as any module of the app may be named.
   final List<ModuleId> providers;
 
+  /// The values of role options by name that the app is generated with,
+  /// such as another value of a mode option of a role (see
+  /// [RoleOption.mode]), for a provider whose bug shows only in an app with
+  /// that value; none by default, so that each role chooses as it does for
+  /// an app that got no option.
+  final Map<String, String?> roleOptions;
+
   /// The tests of the app that must fail, each with the reason of its first
   /// failure.
   final List<MatrixExpectedFailure> failures;
 
   /// The app of the matrix, the app with every module of [modules] that has
-  /// the [providers], as the contract harness builds and renders it, with
-  /// the data and roles of its case ([MatrixApp.hook]), under [name]; or
+  /// the [providers], as the contract harness builds and renders it with
+  /// the [roleOptions], with the data and roles of its case
+  /// ([MatrixApp.hook]), under [name]; or
   /// `null` and the problems when not one app with every module has them:
   /// the errors of the cases of the apps that the harness found errors in,
   /// and the number of the apps that have them.
   Future<({MatrixApp? app, List<String> problems})> check() async {
-    final (:apps, :failed) = await everyModuleAppsOf(modules);
+    final (:apps, :failed) = await everyModuleAppsOf(
+      modules,
+      roleOptions: roleOptions,
+    );
     final withProviders = [
       for (final app in apps)
         if (providers.every(app.modules.contains)) app,
