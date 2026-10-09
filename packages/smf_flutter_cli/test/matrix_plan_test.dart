@@ -688,6 +688,58 @@ void main() {
       }
     });
 
+    test(
+        'of a covering leave out an app whose tuples with another value the '
+        'others have too, though one of its pairs of providers is in no '
+        'other of them: an app of the covering has that pair already', () {
+      final modules = [
+        ..._registry(const [2, 2, 2]),
+        tower,
+      ];
+
+      /// The app with every module and the providers [providers], one of
+      /// each of the three roles, whose bells are off with [off].
+      MatrixApp app(List<int> providers, {bool off = false}) => MatrixApp(
+            'every module (${providers.join(', ')})${off ? ' off' : ''}',
+            [
+              const ModuleId('flutter_core'),
+              for (final (role, provider) in providers.indexed)
+                ModuleId('r${role}_p$provider'),
+              const ModuleId('tower'),
+            ],
+            modes: {if (off) 'chime': 'off'},
+            everyModuleWith: const [],
+          );
+      // Every pair of providers is in one of the apps of the covering.
+      final selected = EveryModuleCombinations.pairwise.select(
+        [
+          for (final first in [0, 1])
+            for (final second in [0, 1])
+              for (final third in [0, 1]) app([first, second, third]),
+        ],
+        modules,
+      );
+      expect(selected, hasLength(4));
+      // Only some of the apps of the other value, as when modules fit only
+      // some combinations. The covering takes the first of them first, for
+      // its three providers with the bells off, and then the two others,
+      // which have those three between them and the three other providers.
+      final first = app([0, 0, 0], off: true);
+      final others = [
+        app([0, 0, 1], off: true),
+        app([1, 1, 0], off: true),
+      ];
+
+      expect(
+        EveryModuleCombinations.pairwise.selectModes(
+          [first, ...others],
+          selected,
+          modules,
+        ),
+        others,
+      );
+    });
+
     test('is the same for the same apps', () async {
       const modules = [...doorsOfWood, tower];
 
