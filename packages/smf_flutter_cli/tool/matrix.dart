@@ -37,6 +37,14 @@ import 'package:yaml/yaml.dart';
 /// archive and start its apps, one app or shard for each job; see
 /// `matrixPlanOf`.
 ///
+/// A role with a mode option has its apps with every module once more for
+/// each other value of the option, named after the option too, such as
+/// `every module (bloc) --clock-hours=12`; see `modeAppsOf`. A run of the
+/// matrix checks those that its covering takes, once, as any app of the
+/// matrix. `--every-module`, `--app` and `--create` take none of them: the
+/// apps that CI builds and starts get no value of such an option, and so
+/// the first one.
+///
 /// With `--create`, a directory and a name, it generates the apps with
 /// every module in the directory instead, without checking them, each as
 /// the name followed by the providers that set it apart, such as

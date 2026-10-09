@@ -2,9 +2,11 @@
 /// with `smf create` and analyzes with Flutter: every app that the contract
 /// harness builds for a set of modules, and the apps with every module, of
 /// which CI also builds a covering for Android and iOS and starts it on
-/// devices, one app for each job of the plan of CI; the apps whose tests
-/// must fail, which show that the tests can fail; and the versions of
-/// Flutter that its nightly run checks them with.
+/// devices, one app for each job of the plan of CI; those apps once more
+/// for the other values of the mode options of the roles, which CI only
+/// analyzes and tests; the apps whose tests must fail, which show that the
+/// tests can fail; and the versions of Flutter that its nightly run checks
+/// them with.
 ///
 /// It serves the repository of SMF, and its API may change in any release.
 library;

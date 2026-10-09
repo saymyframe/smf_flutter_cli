@@ -94,8 +94,9 @@ enum EveryModuleCombinations implements EveryModuleSelection {
   /// selects these apps.
   final String option;
 
-  /// The number of providers of different roles of each tuple that one of
-  /// the apps must have, or `null` for every app.
+  /// The number of providers of different roles, and of values of
+  /// different mode options, of each tuple that one of the apps must have,
+  /// or `null` for every app.
   final int? strength;
 
   /// The combinations that the value [option] of `--combinations` selects,
