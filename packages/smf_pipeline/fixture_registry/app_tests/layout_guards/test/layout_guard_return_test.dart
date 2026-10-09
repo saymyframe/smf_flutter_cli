@@ -11,12 +11,22 @@
 // of every branch, the selected one too, which no location that the user
 // comes back to puts back on its destination here: each branch shows its
 // destination when the user selects it, and no page that the guard kept
-// the user from. It selects a destination as the layout does when the user
-// selects it, with onSelect of AppShell, so it depends neither on the
-// router nor on how the layout shows the destinations. It uses what the
-// tests of router_screens and of router_guards share, which every app that
-// it applies to has. Each expectation gives its reason, which a provider
-// of a role with a known bug fails the test with (brokenProviders of the
+// the user from.
+//
+// That holds whenever the guard allows again, so the gate closes and opens
+// twice more, with a page in each branch. First in one turn, as code that
+// signs one user out and the next one in does: the router shows the target
+// of the guard for no frame. Then while the transition to that target is
+// on its way: the page of the main navigation that left is still in the
+// tree. Both times the router throws nothing, and no branch has a page
+// that the guard kept the user from.
+//
+// The test selects a destination as the layout does when the user selects
+// it, with onSelect of AppShell, so it depends neither on the router nor
+// on how the layout shows the destinations. It uses what the tests of
+// router_screens and of router_guards share, which every app that it
+// applies to has. Each expectation gives its reason, which a provider of a
+// role with a known bug fails the test with (brokenProviders of the
 // fixture registry).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
@@ -183,7 +193,179 @@ void main() {
             'the main navigation, the selected one too: no page that the '
             'guard kept the user from is left in a branch.',
       );
+
+      // A page in each branch again, as a push shows it, with the first
+      // destination selected. Then the late gate closes and opens in one
+      // turn, as code that signs one user out and the next one in does:
+      // the router shows the target of the guard for no frame.
+      await _pushInEachBranch(tester, first: first, second: second);
+      fixtureLateGate.value = false;
+      fixtureLateGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'A guard that stops allowing and allows again in one turn '
+            'leaves the router with one main navigation, which it shows '
+            'without an error.',
+      );
+      // Whether the listeners hear of the target, which no frame showed,
+      // is up to the router.
+      expect(
+        heard(),
+        anyOf(equals([startScreen]), equals([lateGateScreen, startScreen])),
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, in the turn in which it stopped allowing, the user '
+            'comes to the screen that the app starts on.',
+      );
+      await _expectEveryBranchOnItsDestination(
+        tester,
+        first: first,
+        second: second,
+        when: 'A guard stopped allowing and allowed again in one turn.',
+      );
+
+      // A page in each branch again, with the second destination selected.
+      // Then the late gate closes, and opens again while the transition to
+      // the target of its guard is on its way: the page of the main
+      // navigation that left is still in the tree, below the target.
+      await _pushInEachBranch(tester, first: first, second: second);
+      tester.widget<AppShell>(_shells()).onSelect(second);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/7')],
+        reason: 'A switch to another destination is heard of once.',
+      );
+      fixtureLateGate.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        heard(),
+        [lateGateScreen],
+        reason: 'When a guard stops allowing, the router shows its target in '
+            'place of the pages that it keeps the user from.',
+      );
+      // Without a transition on its way, the steps below would test what
+      // the first steps of the test did.
+      expect(
+        tester.binding.hasScheduledFrame,
+        isTrue,
+        reason: 'The transition to the target of the guard is on its way.',
+      );
+      fixtureLateGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'A guard that allows again while the transition to its '
+            'target is on its way leaves the router with one main '
+            'navigation, which it shows without an error.',
+      );
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'Once a guard that does not bring the user back allows '
+            'again, while the transition to its target is on its way, the '
+            'user comes to the screen that the app starts on.',
+      );
+      await _expectEveryBranchOnItsDestination(
+        tester,
+        first: first,
+        second: second,
+        when: 'A guard allowed again while the transition to its target '
+            'was on its way.',
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+/// Shows a page in the branch of each destination, as a push shows it, and
+/// leaves the destination [first], that of the screen that the app starts
+/// on, selected. It starts in the main navigation with each branch on its
+/// destination, whichever of them is selected.
+Future<void> _pushInEachBranch(
+  WidgetTester tester, {
+  required int first,
+  required int second,
+}) async {
+  tester.widget<AppShell>(_shells()).onSelect(second);
+  await tester.pumpAndSettle();
+  pushed(shown(tester, FixtureSecondScreen).nav.fakeFeature.details(id: 7));
+  await tester.pumpAndSettle();
+  tester.widget<AppShell>(_shells()).onSelect(first);
+  await tester.pumpAndSettle();
+  pushed(shown(tester, FixtureHomeScreen).nav.fakeFeature.details(id: 3));
+  await tester.pumpAndSettle();
+  heard();
+  // Each branch has its page, without which the steps that follow would
+  // test nothing.
+  tester.widget<AppShell>(_shells()).onSelect(second);
+  await tester.pumpAndSettle();
+  tester.widget<AppShell>(_shells()).onSelect(first);
+  await tester.pumpAndSettle();
+  expect(
+    heard(),
+    [
+      ('fake_feature.details', '/fake_feature/details/7'),
+      ('fake_feature.details', '/fake_feature/details/3'),
+    ],
+    reason: 'A branch keeps the page that a push showed in it while the '
+        'other is selected.',
+  );
+}
+
+/// Checks that the user is in the main navigation on the screen that the
+/// app starts on, the destination [first], and that the branch of each
+/// destination is back on its destination, that of [second] once the user
+/// selects it; [when] says what happened before, for the reasons of the
+/// expectations.
+Future<void> _expectEveryBranchOnItsDestination(
+  WidgetTester tester, {
+  required int first,
+  required int second,
+  required String when,
+}) async {
+  expect(
+    _shells(),
+    findsOneWidget,
+    reason: '$when The screen that the app starts on is a destination, so '
+        'the user is back in the main navigation.',
+  );
+  expect(
+    tester.widget<AppShell>(_shells()).currentIndex,
+    first,
+    reason: '$when The destination of the screen that the app starts on is '
+        'selected.',
+  );
+  expect(
+    find.byType(FixtureHomeScreen),
+    findsOneWidget,
+    reason: '$when The screen that the app starts on is the screen the user '
+        'sees.',
+  );
+  expect(
+    find.byType(FixtureDetailsScreen),
+    findsNothing,
+    reason: '$when The target of the guard took the stacks of every branch '
+        'of the main navigation all the same: the branch of the screen '
+        'that the app starts on is back on its destination.',
+  );
+  tester.widget<AppShell>(_shells()).onSelect(second);
+  await tester.pumpAndSettle();
+  expect(
+    heard(),
+    [_secondScreen],
+    reason: '$when The target of the guard took the stacks of every branch '
+        'of the main navigation all the same: the other branch is back on '
+        'its destination when the user selects it.',
+  );
+  expect(
+    find.byType(FixtureDetailsScreen, skipOffstage: false),
+    findsNothing,
+    reason: '$when The target of the guard took the stacks of every branch '
+        'of the main navigation all the same: no page that the guard kept '
+        'the user from is left in a branch.',
   );
 }
