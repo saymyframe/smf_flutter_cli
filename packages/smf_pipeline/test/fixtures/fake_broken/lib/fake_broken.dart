@@ -161,7 +161,7 @@ final class BrokenModule extends SmfModule {
   /// that the app starts on, and again when one of them starts or stops
   /// allowing, but not about the locations that `go()`, `push()` and
   /// `replace()` are asked to show: it shows a location that a guard keeps
-  /// the user from.
+  /// the user from, and one in a flow that is over.
   static const routerAskingGuardsOnlyAtStart = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_asks_guards_at_start'),
@@ -199,10 +199,12 @@ final class BrokenModule extends SmfModule {
   );
 
   /// The fake router whose `replace()` asks the guards of the routes about
-  /// its location, and leaves the stack as it is when a guard keeps the
-  /// user from the location, rather than showing the target of the guard
-  /// in place of the whole stack: from a page of the flow that is not the
-  /// target, the user stays on that page.
+  /// its location, and leaves the stack as it is when they answer another
+  /// location, rather than showing that location in place of the whole
+  /// stack. When a guard keeps the user from the location, the user stays
+  /// on a page of the flow that is not the target. And for a location in a
+  /// flow that is over, the user stays on the page that they are on, not
+  /// on the screen that the app starts on.
   static const routerKeepingPageOnGuardedReplace = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_keeps_page_on_guarded_replace'),

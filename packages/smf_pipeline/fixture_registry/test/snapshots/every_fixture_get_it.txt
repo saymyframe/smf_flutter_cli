@@ -88,7 +88,8 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
 - To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does: it shows the `redirectTo` while the value is `false`, and brings the user back to where they were once it is `true`.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 
 ## Theme
 
@@ -2104,6 +2105,13 @@ abstract interface class AppNavigator {
 /// router shows the location that the user last asked for, or the one that
 /// the guard took the user from, or else the screen that the app starts
 /// on.
+///
+/// The routes of its flow show only while it does not allow, or while
+/// another guard with the same flow does not. At any other time the router
+/// shows the screen that the app starts on in place of a location of the
+/// flow (see [flowIsOver]), or the target of another guard while that one
+/// does not allow. So the code of the app changes what [allows] reads and
+/// never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -2126,6 +2134,7 @@ final class RouteGuard {
 
   /// The full names of the routes that the user may see while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
+  /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
 }
 
@@ -2152,12 +2161,30 @@ final List<RouteGuard> routeGuards = [
 /// no route of a module, such as the error screen of the router. The first
 /// guard that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow.
+///
+/// A route that the guards let the user see may still be in a flow that is
+/// over, in place of which the router shows the screen that the app starts
+/// on; see [flowIsOver].
 AppLocation? redirectOf(String? routeName) {
   for (final guard in routeGuards) {
     if (guard.allows.value) continue;
     return guard.flow.contains(routeName) ? null : guard.redirectTo;
   }
   return null;
+}
+
+/// Whether the route [routeName] is in the flow of a guard and every guard
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [redirectOf]).
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, which is in no flow. Two guards with one target
+/// have one flow, which is over once both allow.
+bool flowIsOver(String? routeName) {
+  final guards = routeGuards.where((guard) => guard.flow.contains(routeName));
+  return guards.isNotEmpty && guards.every((guard) => guard.allows.value);
 }
 
 /// Notifies its listeners when a guard starts or stops allowing, so that
@@ -2192,11 +2219,10 @@ final class GuardedNavigation<L> {
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
-  /// Whether each guard allowed when the router last told of its pages.
-  List<bool> _allowed = _allowedNow();
-
   /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it; see [redirectOf].
+  /// full name [route], or `null` to show it: the target of the guard that
+  /// keeps the user from it (see [redirectOf]), or [start] for a location in a
+  /// flow that is over (see [flowIsOver]).
   ///
   /// The router asks before it shows a location: the one the app starts
   /// on, each one that `go()`, `push()` or `replace()` is asked to show,
@@ -2207,7 +2233,7 @@ final class GuardedNavigation<L> {
   /// allows, its flow is over.
   ({L location})? asked(String? route, L location) {
     final target = redirectOf(route);
-    if (target == null) return null;
+    if (target == null) return flowIsOver(route) ? (location: start) : null;
     if (!_inAFlow(route)) _remembered = (route: route, location: location);
     return (location: locationOf(target));
   }
@@ -2226,14 +2252,12 @@ final class GuardedNavigation<L> {
   ///   already or it is in the flow of a guard;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
-  /// - [start], when a guard started allowing while a page of its flow is
-  ///   on top, every guard allows and nothing is remembered: its flow is
-  ///   over.
+  /// - [start], when the page on top is in a flow that is over (see
+  ///   [flowIsOver]): its guard started allowing while the flow was shown, and
+  ///   nothing is remembered.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
-    final before = _allowed;
-    _allowed = _allowedNow();
     for (final page in pages) {
       final target = redirectOf(page.route);
       if (target == null) continue;
@@ -2251,19 +2275,8 @@ final class GuardedNavigation<L> {
       _remembered = null;
       return (location: remembered.location);
     }
-    final top = pages.firstOrNull?.route;
-    for (final (index, guard) in routeGuards.indexed) {
-      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
-        return _allowed.contains(false) ? null : (location: start);
-      }
-    }
-    return null;
+    return flowIsOver(pages.firstOrNull?.route) ? (location: start) : null;
   }
-
-  /// Whether each guard allows now, in the order of [routeGuards].
-  static List<bool> _allowedNow() => [
-    for (final guard in routeGuards) guard.allows.value,
-  ];
 
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>

@@ -180,10 +180,7 @@ class _GoAppRouter {
 
   void _guardsChanged() {
     final configuration = config.routerDelegate.currentConfiguration;
-    if (configuration.isEmpty && !configuration.isError) {
-      _guards.changed(const []);
-      return;
-    }
+    if (configuration.isEmpty && !configuration.isError) return;
     final below = config.configuration.findMatch(configuration.uri);
     final shown = _guards.changed([
       for (final page in _pushedPages(configuration.matches).toList().reversed)
@@ -1181,9 +1178,9 @@ void main() {
     });
 
     test(
-        'listens to the guards itself, tells the role of its pages, of none '
-        'before its first location, and goes to the location that the role '
-        'answers', () {
+        'listens to the guards itself, tells the role of its pages once it '
+        'has shown its first location, and goes to the location that the '
+        'role answers', () {
       final router = _routerClassOf(unit);
       final members = {
         for (final member in router.body.members)

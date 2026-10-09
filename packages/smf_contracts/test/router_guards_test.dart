@@ -347,8 +347,8 @@ ValueListenable<bool> isSignedIn() => signedInNow;
 
 /// Prints the guards of the app, and then what `redirectOf()` says of some
 /// routes, and of a screen that is no route (`none`), as the guards open
-/// and close, and how often `guardChanges` notified and the functions were
-/// called.
+/// and close, with the routes whose flow `flowIsOver()` says is over, and
+/// how often `guardChanges` notified and the functions were called.
 const _vmGuardsMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/account/account_composition.dart';
@@ -389,6 +389,11 @@ void main() {
     for (final MapEntry(:key, :value) in sent.entries) {
       print('  $key: ${value.join(', ')}');
     }
+    final over = [
+      for (final route in routes)
+        if (flowIsOver(route)) route ?? 'none',
+    ];
+    if (over.isNotEmpty) print('  over: ${over.join(', ')}');
   }
 
   ask('none allows');
@@ -472,11 +477,20 @@ void main() {
   signedInNow.value = true;
   changed('signedIn allows', ['account.login /account/login']);
 
-  print('a flow with nothing remembered');
-  const flow = ['intro.terms /intro/terms', 'intro.intro /intro'];
+  print('a flow that is over');
   asked('intro.terms', '/intro/terms');
+  asked('intro.paywall', '/intro/paywall?plan=a');
+  asked('account.login', '/account/login');
+  asked('home.root', '/home');
+  asked(null, '/no/such');
+  changed('a notification', ['home.root /home']);
+  const flow = ['intro.terms /intro/terms', 'intro.intro /intro'];
+  changed('a notification, a page of the flow on top', flow);
+
+  print('a flow shown with nothing remembered');
   introSeenNow.value = false;
   changed('firstRun stops', flow);
+  asked('intro.terms', '/intro/terms');
   changed('a notification', flow);
   premiumNow.value = false;
   changed('premium stops', flow);
@@ -484,11 +498,20 @@ void main() {
   changed('premium allows', flow);
   introSeenNow.value = true;
   changed('firstRun allows', flow);
-  changed('a notification', flow);
+  asked('intro.terms', '/intro/terms');
+
+  print('a flow of a guard that allows, behind a guard that does not');
+  premiumNow.value = false;
+  const paywall = ['intro.paywall /intro/paywall'];
+  changed('premium stops', paywall);
+  asked('intro.terms', '/intro/terms');
+  asked('intro.paywall', '/intro/paywall');
   introSeenNow.value = false;
-  changed('firstRun stops', ['account.login /account/login']);
+  changed('firstRun stops', paywall);
   introSeenNow.value = true;
-  changed('firstRun allows, outside its flow', ['home.root /home']);
+  changed('firstRun allows', ['intro.intro /intro']);
+  premiumNow.value = true;
+  changed('premium allows', paywall);
 
   print('a location of a flow asked last');
   introSeenNow.value = false;
@@ -506,10 +529,10 @@ void main() {
 }
 ''';
 
-/// Prints what `GuardedNavigation` answers in an app whose two guards show
-/// one target: when it is told of no pages, as by a router that has none
-/// yet, and when the guards of the one flow start allowing one after the
-/// other while a page of the flow is on top.
+/// Prints what `flowIsOver()` and `GuardedNavigation` answer in an app whose
+/// two guards show one target, so that both have one flow: when the class
+/// is told of no pages, as by a router that has none yet, and as the two
+/// guards start and stop allowing while a page of the flow is on top.
 const _vmSharedTargetMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/intro/intro_status.dart';
@@ -526,27 +549,50 @@ void main() {
           (route: route, location: location, pushed: false),
       ])?.location ??
       'stays';
+  String asked(String route, String location) =>
+      guards.asked(route, location)?.location ?? 'shows it';
+  String over() => flowIsOver('intro.terms') ? 'over' : 'not over';
   const flow = [('intro.terms', '/intro/terms'), ('intro.intro', '/intro')];
 
-  print('a change before the router has a page');
-  introSeenNow.value = true;
-  premiumNow.value = true;
-  print('  both allow, no pages: ${told(const [])}');
-  final shown = guards.asked('intro.terms', '/intro/terms');
-  print('  asked /intro/terms: ${shown?.location ?? 'shows it'}');
-  print('  a notification in the flow: ${told(flow)}');
+  print('a router without a page');
+  print('  no guard allows, no pages: ${told(const [])}');
 
-  print('two guards with one target');
-  introSeenNow.value = false;
-  print('  firstRun stops: ${told(flow)}');
-  premiumNow.value = false;
-  print('  premium stops: ${told(flow)}');
+  print('two guards with one target, with nothing remembered');
+  print('  no guard allows: ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
   introSeenNow.value = true;
-  print('  firstRun allows: ${told(flow)}');
+  print('  firstRun allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
   premiumNow.value = true;
-  print('  premium allows: ${told(flow)}');
+  print('  premium allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
+  print('  both allow, no pages: ${told(const [])}');
+
+  print('two guards with one target, in the other order');
+  introSeenNow.value = false;
+  print('  firstRun stops: ${told(const [('home.root', '/home')])}, ${over()}');
+  premiumNow.value = false;
+  print('  premium stops: ${told(flow)}, ${over()}');
+  premiumNow.value = true;
+  print('  premium allows: ${told(flow)}, ${over()}');
+  print('  asked /intro/terms: ${asked('intro.terms', '/intro/terms')}');
+  introSeenNow.value = true;
+  print('  firstRun allows: ${told(flow)}, ${over()}');
 }
 ''';
+
+/// The lines that a script printed below its heading [heading], up to the
+/// next heading: a heading is a line that does not start with a space.
+String _section(String printed, String heading) {
+  final lines = printed.split('\n');
+  final start = lines.indexOf(heading);
+  expect(start, isNonNegative, reason: 'The script prints "$heading".');
+  return lines
+      .skip(start + 1)
+      .takeWhile((line) => line.startsWith(' '))
+      .map((line) => '$line\n')
+      .join();
+}
 
 void main() {
   group('the guards of a module', () {
@@ -653,6 +699,7 @@ void main() {
         'RouteGuard',
         RouterRole.routeGuards,
         RouterRole.redirectOf,
+        RouterRole.flowIsOver,
         RouterRole.guardChanges,
         RouterRole.guardedNavigation,
         'foundation.dart',
@@ -696,10 +743,10 @@ void main() {
               'RouteGuard',
               'RouteGuard.allows',
               'RouteGuard.redirectTo',
+              // The routes that no code of the app navigates to.
+              'RouteGuard.flow',
               RouterRole.routeGuards,
             ],
-            // What the code of the app calls to go to the target of a guard.
-            RouterRole.navigationFile: ['NavLink.go'],
           },
           files: rendered.files,
         );
@@ -780,6 +827,7 @@ void main() {
           'RouteGuard',
           RouterRole.routeGuards,
           RouterRole.redirectOf,
+          RouterRole.flowIsOver,
           RouterRole.guardChanges,
           RouterRole.guardedNavigation,
         ]),
@@ -885,15 +933,21 @@ AppRouter createAppRouter() => throw UnimplementedError();
       return (result.stdout as String).replaceAll('\r\n', '\n');
     }
 
+    /// What [_vmMemoryMain] prints, which the first test that reads it
+    /// runs: the tests of the generated class each read some sections.
+    late final memory = printedBy(_vmMemoryMain);
+
     test(
         'the generated guards send every route outside the flow of the first '
-        'one that does not allow to its target, and tell when one changes',
-        () async {
+        'one that does not allow to its target, tell when one changes, and '
+        'say that a flow is over once its guard allows', () async {
       // The functions of the guards are called on the first use of the
       // guards, each once, whatever the guards are asked. The first guard
       // that does not allow decides: the routes of its flow show, and the
-      // targets of the guards after it are routes like any other. Each
-      // change of a guard is one notification.
+      // targets of the guards after it are routes like any other to it.
+      // Each change of a guard is one notification. The flow of a guard is
+      // over while the guard allows, whatever the other guards do, and a
+      // route outside every flow, or no route, is in none.
       expect(await printedBy(_vmGuardsMain), '''
 functions called before the first use: 0
 intro.firstRun shows /intro and allows intro.intro, intro.terms
@@ -905,17 +959,22 @@ none allows
 firstRun allows
   shows intro.paywall
   /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+  over: intro.intro, intro.terms
 firstRun and premium allow
   shows account.login
   /account/login: home.root, intro.intro, intro.terms, intro.paywall, none
+  over: intro.intro, intro.terms, intro.paywall
 all allow
   shows home.root, intro.intro, intro.terms, intro.paywall, account.login, none
+  over: intro.intro, intro.terms, intro.paywall, account.login
 premium stopped
   shows intro.paywall
   /intro/paywall: home.root, intro.intro, intro.terms, account.login, none
+  over: intro.intro, intro.terms, account.login
 firstRun stopped too
   shows intro.intro, intro.terms
   /intro: home.root, intro.paywall, account.login, none
+  over: account.login
 changes: 5
 calls: 1, 1
 ''');
@@ -925,11 +984,10 @@ calls: 1, 1
         'the generated class keeps what a router remembers: the latest '
         'location that was asked for, or the location below the pushed pages '
         'that a change took out of the stack, never one in a flow; it answers '
-        'that location once the guards allow it and forgets it, and the '
-        'start of the app when a flow is over with nothing remembered',
-        () async {
-      expect(await printedBy(_vmMemoryMain), '''
-asked while no guard allows
+        'that location once the guards allow it and forgets it', () async {
+      final printed = await memory;
+
+      expect(_section(printed, 'asked while no guard allows'), '''
   asked /home: /intro
   asked /intro/terms: shows it
   asked /account/login: /intro
@@ -939,7 +997,10 @@ asked while no guard allows
   premium allows: /account/login
   signedIn allows: /home/details/5?tab=a
   a notification: stays
-pages that a change takes out of the stack
+''');
+      expect(
+        _section(printed, 'pages that a change takes out of the stack'),
+        '''
   signedIn stops: /account/login
   premium stops: /intro/paywall
   a page outside the flows: /intro/paywall
@@ -947,21 +1008,14 @@ pages that a change takes out of the stack
   signedIn allows: /home/details/5?tab=a
   signedIn stops: /account/login
   signedIn allows: /
-a flow with nothing remembered
-  asked /intro/terms: shows it
-  firstRun stops: stays
-  a notification: stays
-  premium stops: stays
-  premium allows: stays
-  firstRun allows: /
-  a notification: stays
-  firstRun stops: /intro
-  firstRun allows, outside its flow: stays
-a location of a flow asked last
+''',
+      );
+      expect(_section(printed, 'a location of a flow asked last'), '''
   firstRun stops: /intro
   asked /account/login: /intro
   firstRun allows: /home
-the location / asked last
+''');
+      expect(_section(printed, 'the location / asked last'), '''
   signedIn stops: /account/login
   asked /: /account/login
   signedIn allows: /
@@ -969,22 +1023,80 @@ the location / asked last
     });
 
     test(
-        'the generated class takes note of what the guards allow when it is '
-        'told of no pages, so that a notification without a change ends no '
-        'flow later; and of two guards with one target, the flow is over '
-        'only once both allow', () async {
+        'the generated class answers the start of the app for a location in '
+        'a flow that is over, whose guard allows, and for a page of such a '
+        'flow on top of the stack when nothing is remembered', () async {
+      final printed = await memory;
+
+      // Every guard allows: a route of a flow shows the start of the app,
+      // whichever guard has the flow, and nothing is remembered for it. A
+      // page of such a flow that a router still has on top leaves at the
+      // next notification of a guard.
+      expect(_section(printed, 'a flow that is over'), '''
+  asked /intro/terms: /
+  asked /intro/paywall?plan=a: /
+  asked /account/login: /
+  asked /home: shows it
+  asked /no/such: shows it
+  a notification: stays
+  a notification, a page of the flow on top: /
+''');
+      // The pages of the flow of a guard that does not allow stay, also
+      // when a guard after it changes. Once the guard allows, with nothing
+      // remembered, as in an app that a link opened in the flow, the router
+      // leaves the flow for the start of the app.
+      expect(_section(printed, 'a flow shown with nothing remembered'), '''
+  firstRun stops: stays
+  asked /intro/terms: shows it
+  a notification: stays
+  premium stops: stays
+  premium allows: stays
+  firstRun allows: /
+  asked /intro/terms: /
+''');
+      // A guard that does not allow decides before a flow that is over: a
+      // route of the flow of a guard that allows shows the target of that
+      // guard. And a location in a flow is not remembered when another
+      // guard takes it out of the stack.
+      expect(
+        _section(
+          printed,
+          'a flow of a guard that allows, behind a guard that does not',
+        ),
+        '''
+  premium stops: stays
+  asked /intro/terms: /intro/paywall
+  asked /intro/paywall: shows it
+  firstRun stops: /intro
+  firstRun allows: /intro/paywall
+  premium allows: /
+''',
+      );
+    });
+
+    test(
+        'of two guards with one target, the flow is over only once both '
+        'allow, in whichever order; and the generated class answers nothing '
+        'when it is told of no pages', () async {
       expect(
         await printedBy(_vmSharedTargetMain, data: _sharedTargetData),
         '''
-a change before the router has a page
-  both allow, no pages: stays
+a router without a page
+  no guard allows, no pages: stays
+two guards with one target, with nothing remembered
+  no guard allows: not over
   asked /intro/terms: shows it
-  a notification in the flow: stays
-two guards with one target
-  firstRun stops: stays
-  premium stops: stays
-  firstRun allows: stays
-  premium allows: /
+  firstRun allows: stays, not over
+  asked /intro/terms: shows it
+  premium allows: /, over
+  asked /intro/terms: /
+  both allow, no pages: stays
+two guards with one target, in the other order
+  firstRun stops: /intro, not over
+  premium stops: stays, not over
+  premium allows: stays, not over
+  asked /intro/terms: shows it
+  firstRun allows: /home, over
 ''',
       );
     });

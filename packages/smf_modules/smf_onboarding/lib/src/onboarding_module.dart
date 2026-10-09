@@ -66,11 +66,12 @@ import 'package:smf_onboarding/src/agents.dart';
 /// start-up then takes what is saved.
 ///
 /// So the app shows the screen of the onboarding exactly while the
-/// onboarding is not finished, and nothing navigates to it. When something
-/// else shows the screen although the onboarding is finished, such as a
-/// link to its route, the screen starts the onboarding again once its first
-/// frame is over, and Skip and the last button leave it as on a first
-/// launch.
+/// onboarding is not finished, and nothing navigates to it. The route is
+/// the flow of the guard, which is over once the onboarding is finished: a
+/// navigation to it then, such as a link, shows the screen that the app
+/// starts on, or the target of another guard of the app while that one
+/// does not allow, as the router role says of the flow of a guard.
+/// `restart()` is the only way to show the onboarding again.
 ///
 /// The texts of the screen, [texts], are in English and in Ukrainian. The
 /// module only uses the localization role: in an app with the role they are
