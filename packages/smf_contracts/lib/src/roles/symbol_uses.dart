@@ -28,6 +28,30 @@ bool importsLibrary(DartFileIndex file, String libraryPath) =>
       (directive) => _pathOf(directive.uri, file.path) == libraryPath,
     );
 
+/// Whether [file] invokes [method] on [object], a top-level name of the
+/// library at [libraryPath], a path relative to the project root, as in
+/// `appSession.start(service)`: on the name as it is if [file] imports the
+/// library without a prefix, and after the prefix of an import of the
+/// library otherwise, as in `session.appSession.start(service)`.
+///
+/// The object under another name is not seen, such as a variable that it
+/// was assigned to.
+bool invokesOn(
+  DartFileIndex file,
+  String object,
+  String method,
+  String libraryPath,
+) {
+  final targets = {
+    for (final IndexedImport(:uri, :prefix) in file.imports)
+      if (_pathOf(uri, file.path) == libraryPath)
+        prefix == null ? object : '$prefix.$object',
+  };
+  return file.invocations.any(
+    (call) => call.name == method && targets.contains(call.target),
+  );
+}
+
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
 /// import of the library has and no import of another library, as in

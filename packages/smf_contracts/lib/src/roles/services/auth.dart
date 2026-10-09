@@ -213,14 +213,16 @@ final class AuthRole extends Role<RoleImplementation> {
   List<StructuralRule<RoleImplementation>> get structuralRules => const [
         StructuralRule(
           id: 'auth.factory_calls',
-          description: 'Only the provider of the role calls '
-              'createAuthService() or imports the file of AuthService: the '
-              'code of the app signs in through appSession.',
+          description: 'No module calls createAuthService(), and only the '
+              'files of the implementation of the provider import the file '
+              'of AuthService: the code of the app signs in through '
+              'appSession.',
           check: _checkAuthService,
         ),
         StructuralRule(
           id: 'auth.start_calls',
-          description: 'Only bootstrap() calls initAuth().',
+          description: 'Only bootstrap() calls initAuth(), and no module '
+              'calls appSession.start().',
           check: _checkAuthStart,
         ),
         StructuralRule(
@@ -243,43 +245,62 @@ const _sessionHint = 'Sign in, up and out through appSession of '
     '${AuthRole.sessionFile}, which also exports AuthFailure and '
     'AuthFailureReason.';
 
-/// The problems with the service of the provider in [input]: a file of a
-/// module that does not provide the role, or of the template of another
-/// role, that calls `createAuthService()` or imports the file of
-/// `AuthService`.
+/// What the owner of a file does rather than start the session.
+const _startHint = 'The role starts the session in bootstrap(), before the '
+    'first frame. Read who is signed in from appSession.';
+
+/// Whether [owner] is a module or the template of another role: the owners
+/// whose code reaches sign-in only through the session.
+bool _signsInThroughSession(ContributionOrigin? owner) => switch (owner) {
+      ModuleOrigin() => true,
+      RoleTemplateOrigin(:final role) => !identical(role, authRole),
+      _ => false,
+    };
+
+/// The problems with the service of the provider in [input], in the files
+/// of modules and of the templates of other roles: a file that calls
+/// `createAuthService()`, and a file other than those of the
+/// implementation of the provider that imports or exports the file of
+/// `AuthService`. The files of the implementation are those of its class
+/// and of its function, so another file of the provider, such as a widget,
+/// is held to the rule too.
 ///
 /// Such code would sign in around the session, which is what links an
 /// anonymous user on sign-up, moves the data of a guest and turns every
 /// error into an `AuthFailure`.
+///
+/// The rule reads what a file itself imports and calls. It does not see a
+/// `part` file of a library that imports the file of the session, nor a
+/// file that reaches that file through an export of another file.
 List<SmfIssue> _checkAuthService(
   StructuralRuleInput<RoleImplementation> input,
 ) {
+  final implementation = {
+    for (final data in input.roleInput.data)
+      for (final import in [data.value.type.import, data.value.factory.import])
+        if (import != null && import.isAppFile) 'lib/${import.uri}',
+  };
   final issues = <SmfIssue>[];
   for (final MapEntry(key: path, value: index) in input.files.entries) {
     final owner = input.owners[path];
-    final mayUse = switch (owner) {
-      ModuleOrigin(:final module) =>
-        input.module(module)?.provides.contains(authRole) ?? false,
-      RoleTemplateOrigin(:final role) => identical(role, authRole),
-      _ => true,
-    };
-    if (mayUse) continue;
+    if (!_signsInThroughSession(owner)) continue;
     if (usesSymbols(index, {'createAuthService'}, AuthRole.sessionFile)) {
       issues.add(
         SmfIssue(
-          '$path calls createAuthService(), which only the provider of the '
-          '$authRole may call.',
+          '$path calls createAuthService(), which no module may call.',
           hint: _sessionHint,
           origin: owner,
           path: path,
         ),
       );
     }
-    if (importsLibrary(index, AuthRole.serviceFile)) {
+    if (!implementation.contains(path) &&
+        importsLibrary(index, AuthRole.serviceFile)) {
       issues.add(
         SmfIssue(
           '$path imports ${AuthRole.serviceFile}, the file of AuthService, '
-          'which only the provider of the $authRole implements.',
+          'which only the files of the implementation of the provider of '
+          'the $authRole import.',
           hint: _sessionHint,
           origin: owner,
           path: path,
@@ -290,23 +311,38 @@ List<SmfIssue> _checkAuthService(
   return issues;
 }
 
-/// The problems with the calls of `initAuth()` in [input]: one in any file
-/// of the app but that of `bootstrap()`, which awaits it once, before the
-/// first frame.
+/// The problems with the start of the session in [input]:
+/// - a call of `initAuth()` in any file of the app but that of
+///   `bootstrap()`, which awaits it once, before the first frame;
+/// - a call of `appSession.start()` in a file of a module or of the
+///   template of another role: `initAuth()` starts the session, and a test
+///   gives it a service of its own, but the code of an app has no reason
+///   to.
+///
+/// The rule reads what a file itself imports and calls: see
+/// [_checkAuthService]. Nor does it see `appSession` under another name.
 List<SmfIssue> _checkAuthStart(
   StructuralRuleInput<RoleImplementation> input,
 ) =>
     [
-      for (final MapEntry(key: path, value: index) in input.files.entries)
+      for (final MapEntry(key: path, value: index) in input.files.entries) ...[
         if (path != AppEntryRole.bootstrapFile &&
             usesSymbols(index, {'initAuth'}, AuthRole.sessionFile))
           SmfIssue(
             '$path calls initAuth(), which only bootstrap() calls.',
-            hint: 'The role starts the session in bootstrap(), before the '
-                'first frame. Read who is signed in from appSession.',
+            hint: _startHint,
             origin: input.owners[path],
             path: path,
           ),
+        if (_signsInThroughSession(input.owners[path]) &&
+            invokesOn(index, 'appSession', 'start', AuthRole.sessionFile))
+          SmfIssue(
+            '$path calls appSession.start(), which only initAuth() calls.',
+            hint: _startHint,
+            origin: input.owners[path],
+            path: path,
+          ),
+      ],
     ];
 
 final class _AuthTemplate extends _ServiceTemplate {

@@ -1424,8 +1424,33 @@ List<String> _enumValuesOf(CompilationUnit unit, String name) => [
 /// role with screens of sign-in would.
 final _otherRole = TestRole<NoDsl>('account_screens');
 
-/// The provider of the role, a feature that uses the role, and the
-/// provider of a DI container.
+/// The implementation of the provider of the apps of the rules: its class
+/// in one file and its function in another.
+const _providerImplementation = RoleImplementation(
+  type: TypeRef(
+    'FakeAuthService',
+    import: ImportRef.app('core/auth/fake_auth_service.dart'),
+  ),
+  create: FactoryRef(
+    'createFakeAuthService',
+    import: ImportRef.app('core/auth/fake_auth.dart'),
+  ),
+);
+
+/// The file of the function of [_providerImplementation], which imports
+/// the file of `AuthService`, as the file of an implementation may.
+const _factoryFile = DartFileIndex(
+  path: 'lib/core/auth/fake_auth.dart',
+  imports: [IndexedImport('auth_service.dart')],
+  declarations: [
+    IndexedDeclaration(
+      name: 'createFakeAuthService',
+      kind: DeclarationKind.function,
+    ),
+  ],
+);
+
+/// The provider of the role and a feature that uses the role.
 const _provider = ModuleDescriptor(
   id: ModuleId('fake_auth'),
   description: 'Sign-in',
@@ -1439,20 +1464,27 @@ const _feature = ModuleDescriptor(
   uses: {authRole},
 );
 
-/// The issues of the structural rules of the role in an app with [files],
-/// each with its owner; a file without an owner has `null`.
+/// The issues of the structural rules of the role in an app of the
+/// provider with [_providerImplementation] and with [files], each with its
+/// owner; a file without an owner has `null`.
 List<SmfIssue> _structureIssues(
   Map<DartFileIndex, ContributionOrigin?> files,
 ) =>
     authRole.checkStructure(
       StructuralRuleRequest(
-        hook: const RoleHookRequest(
-          data: [],
+        hook: RoleHookRequest(
+          data: [
+            dataOf(authRole, _providerImplementation, module: 'fake_auth'),
+          ],
           presentRoles: {authRole},
           context: testContext,
         ),
-        files: {for (final file in files.keys) file.path: file},
+        files: {
+          _factoryFile.path: _factoryFile,
+          for (final file in files.keys) file.path: file,
+        },
         owners: {
+          _factoryFile.path: ModuleOrigin(_provider.id),
           for (final MapEntry(key: file, value: owner) in files.entries)
             if (owner != null) file.path: owner,
         },
@@ -2365,9 +2397,10 @@ void main() {
     });
 
     test(
-        'auth.factory_calls: createAuthService() is for the provider of the '
-        'role; a file of another module, or of the template of another '
-        'role, that calls it is reported, with the session as what to use', () {
+        'auth.factory_calls: no module calls createAuthService(), the '
+        'provider neither; a file of a module, or of the template of '
+        'another role, that calls it is reported, with the session as what '
+        'to use', () {
       final issues = _structureIssues({
         _calling(providerFile, 'createAuthService'): ofProvider,
         _calling(screen, 'createAuthService'): ofFeature,
@@ -2385,6 +2418,7 @@ void main() {
       expect(
         [for (final issue in issues) (issue.path, issue.origin)],
         [
+          (providerFile, ofProvider),
           (screen, ofFeature),
           ('lib/core/account/account.dart', RoleTemplateOrigin(_otherRole)),
         ],
@@ -2392,8 +2426,8 @@ void main() {
       for (final issue in issues) {
         expect(
           issue.message,
-          '${issue.path} calls createAuthService(), which only the provider '
-          'of the authentication role may call.',
+          '${issue.path} calls createAuthService(), which no module may '
+          'call.',
         );
         expect(
           issue.hint,
@@ -2405,9 +2439,14 @@ void main() {
     });
 
     test(
-        'auth.factory_calls: the file of AuthService is for the provider of '
-        'the role; a file of another module that imports or exports it, '
-        'in whichever way, is reported', () {
+        'auth.factory_calls: the file of AuthService is for the files of '
+        'the implementation of the provider, those of its class and of its '
+        'function; any other file of a module that imports or exports it, '
+        'in whichever way, is reported, a widget of the provider too', () {
+      const widget = DartFileIndex(
+        path: 'lib/core/auth/fake_auth_widget.dart',
+        imports: [IndexedImport('auth_service.dart')],
+      );
       const relative = DartFileIndex(
         path: screen,
         imports: [IndexedImport('../../core/auth/auth_service.dart')],
@@ -2422,11 +2461,15 @@ void main() {
         path: 'lib/features/profile/profile.dart',
         exports: [IndexedImport(service)],
       );
+      // The file of the function of the implementation imports it too, in
+      // every app of these tests.
+      expect(_factoryFile.imports.single.uri, 'auth_service.dart');
       final issues = _structureIssues({
         const DartFileIndex(
           path: providerFile,
           imports: [IndexedImport('auth_service.dart')],
         ): ofProvider,
+        widget: ofProvider,
         relative: ofFeature,
         prefixed: ofFeature,
         exported: ofFeature,
@@ -2439,25 +2482,34 @@ void main() {
             IndexedImport('auth_service.dart'),
           ],
         ): ofFeature,
-        // The file of the session itself imports it.
+        // The file of the session itself imports it, and a file that no
+        // module owns may.
         const DartFileIndex(
           path: AuthRole.sessionFile,
           imports: [IndexedImport('auth_service.dart')],
         ): const RoleTemplateOrigin(authRole),
+        const DartFileIndex(
+          path: 'lib/mine.dart',
+          imports: [IndexedImport(service)],
+        ): null,
       });
 
       expect(
-        [for (final issue in issues) issue.path],
-        [relative.path, prefixed.path, exported.path],
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (widget.path, ofProvider),
+          (relative.path, ofFeature),
+          (prefixed.path, ofFeature),
+          (exported.path, ofFeature),
+        ],
       );
       for (final issue in issues) {
         expect(
           issue.message,
           '${issue.path} imports lib/core/auth/auth_service.dart, the file '
-          'of AuthService, which only the provider of the authentication '
-          'role implements.',
+          'of AuthService, which only the files of the implementation of '
+          'the provider of the authentication role import.',
         );
-        expect(issue.origin, ofFeature);
         expect(issue.hint, contains('appSession'));
       }
     });
@@ -2488,6 +2540,67 @@ void main() {
           '${issue.path} calls initAuth(), which only bootstrap() calls.',
         );
         expect(issue.hint, contains('appSession'));
+      }
+    });
+
+    test(
+        'auth.start_calls: appSession.start() is for initAuth(); a file of '
+        'a module, or of the template of another role, that calls it is '
+        'reported, also through the prefix of its import of the session', () {
+      /// The index of the file at [path] that imports the file of the
+      /// session, with [prefix] or without one, and calls `start` on
+      /// [target].
+      DartFileIndex starting(String path, String target, {String? prefix}) =>
+          DartFileIndex(
+            path: path,
+            imports: [IndexedImport(session, prefix: prefix)],
+            invocations: [IndexedInvocation('start', target: target)],
+          );
+      const prefixedScreen = 'lib/features/profile/profile_state.dart';
+      final issues = _structureIssues({
+        starting(providerFile, 'appSession'): ofProvider,
+        starting(screen, 'appSession'): ofFeature,
+        starting(prefixedScreen, 'auth.appSession', prefix: 'auth'): ofFeature,
+        starting('lib/core/account/account.dart', 'appSession'):
+            RoleTemplateOrigin(_otherRole),
+        // The file of the role itself, which starts the session in
+        // initAuth(), and a file that no module owns.
+        starting('lib/core/auth/more.dart', 'appSession'):
+            const RoleTemplateOrigin(authRole),
+        starting('lib/mine.dart', 'appSession'): null,
+        // Another object that is started, the session of an import with a
+        // prefix under its plain name, and an `appSession` of a file that
+        // does not import the file of the session.
+        starting('lib/features/profile/a.dart', 'controller'): ofFeature,
+        starting('lib/features/profile/b.dart', 'appSession', prefix: 'auth'):
+            ofFeature,
+        const DartFileIndex(
+          path: 'lib/features/profile/c.dart',
+          imports: [IndexedImport('profile_session.dart')],
+          invocations: [IndexedInvocation('start', target: 'appSession')],
+        ): ofFeature,
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin)],
+        [
+          (providerFile, ofProvider),
+          (screen, ofFeature),
+          (prefixedScreen, ofFeature),
+          ('lib/core/account/account.dart', RoleTemplateOrigin(_otherRole)),
+        ],
+      );
+      for (final issue in issues) {
+        expect(
+          issue.message,
+          '${issue.path} calls appSession.start(), which only initAuth() '
+          'calls.',
+        );
+        expect(
+          issue.hint,
+          'The role starts the session in bootstrap(), before the first '
+          'frame. Read who is signed in from appSession.',
+        );
       }
     });
 
