@@ -20,6 +20,38 @@ bool usesImported(DartFileIndex file, String name, ImportRef import) =>
         ? usesSymbols(file, {name}, 'lib/${import.uri}')
         : _uses(file, {name}, (uri) => uri == import.uri);
 
+/// Whether [file] imports or exports the library at [libraryPath], a path
+/// relative to the project root such as `lib/core/auth/auth_service.dart`,
+/// by a relative or a `package:` URI, with a prefix or without one.
+bool importsLibrary(DartFileIndex file, String libraryPath) =>
+    [...file.imports, ...file.exports].any(
+      (directive) => _pathOf(directive.uri, file.path) == libraryPath,
+    );
+
+/// Whether [file] invokes [method] on [object], a top-level name of the
+/// library at [libraryPath], a path relative to the project root, as in
+/// `appSession.start(service)`: on the name as it is if [file] imports the
+/// library without a prefix, and after the prefix of an import of the
+/// library otherwise, as in `session.appSession.start(service)`.
+///
+/// The object under another name is not seen, such as a variable that it
+/// was assigned to.
+bool invokesOn(
+  DartFileIndex file,
+  String object,
+  String method,
+  String libraryPath,
+) {
+  final targets = {
+    for (final IndexedImport(:uri, :prefix) in file.imports)
+      if (_pathOf(uri, file.path) == libraryPath)
+        prefix == null ? object : '$prefix.$object',
+  };
+  return file.invocations.any(
+    (call) => call.name == method && targets.contains(call.target),
+  );
+}
+
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
 /// import of the library has and no import of another library, as in
