@@ -27,9 +27,9 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// Its description names the lowest version. For an older Firebase CLI, the
 /// check tells which command it found and in which version
 /// ([PreflightMissing.found]), and how to update it. It installs nothing:
-/// SMF did not install that Firebase CLI, which may come from npm, from a
-/// standalone binary or from a package manager, and which other projects of
-/// the user run too.
+/// the Firebase CLI of the machine may come from npm, from a standalone
+/// binary or from a package manager, and other projects of the user run it
+/// too, so the user updates it.
 ///
 /// On a machine without the Firebase CLI the check reports it missing, and
 /// when the command does not run, it says only that: [FirebaseCliCheck]
