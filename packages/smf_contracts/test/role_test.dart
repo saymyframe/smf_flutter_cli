@@ -441,6 +441,23 @@ void main() {
     expect(option.help, 'The start route.');
     expect(option.valueHelp, 'path');
     expect(option.allowed, ['/home']);
+    // A list of allowed values alone states nothing about the app.
+    expect(option.isMode, isFalse);
+  });
+
+  test('RoleOption.mode takes one of its values, the first by default', () {
+    const option = RoleOption.mode(
+      name: 'access',
+      help: 'Who may use the app.',
+      values: ['members', 'guests'],
+    );
+
+    expect(option.name, 'access');
+    expect(option.help, 'Who may use the app.');
+    expect(option.isMode, isTrue);
+    // The command line takes no other value.
+    expect(option.allowed, ['members', 'guests']);
+    expect(option.valueHelp, isNull);
   });
 
   test('RoleInterface checks the required symbols of a provider', () {

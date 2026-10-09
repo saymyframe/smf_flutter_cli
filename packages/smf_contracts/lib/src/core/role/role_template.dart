@@ -38,7 +38,9 @@ abstract base class RoleTemplate<D extends Object> {
   /// The result reaches [render] and the providers' render hooks as
   /// [RoleHookInput.choice]. The hook checks the decision itself: it throws
   /// an [SmfUsageException] for an option value that does not fit the data,
-  /// or if the run is not interactive and no option decides.
+  /// or if the run is not interactive and no option decides. A mode option
+  /// that is not given decides with its first value, so the hook never
+  /// throws for the lack of one (see [RoleOption.mode]).
   Future<Object?> choose(RoleChoiceContext<D> context) async => null;
 
   /// The values of the role's options by name that make [choice], a result
@@ -50,6 +52,8 @@ abstract base class RoleTemplate<D extends Object> {
   /// test harness does, gives them to a run without a terminal, which then
   /// makes the same decision. So a role whose [choose] asks the user gives
   /// options of its own for every answer, and its choices compare by value.
+  /// A role with a mode option gives that option for every choice, also
+  /// for one that it made without asking (see [RoleOption.mode]).
   /// It returns no values by default, for a role that asks nothing.
   Map<String, String> optionsOf(Object? choice) => const {};
 
