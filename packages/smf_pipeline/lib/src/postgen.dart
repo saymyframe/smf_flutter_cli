@@ -263,8 +263,8 @@ final class _ModuleSteps {
         failed: false,
       );
     }
-    final notice = step.notice != null;
-    if ((step.interactive || notice) && !environment.interactive) {
+    final hasNotice = step.notice != null;
+    if ((step.interactive || hasNotice) && !environment.interactive) {
       return (reason: alsoUnmet('the run cannot ask the user'), failed: false);
     }
     if (unmet.isNotEmpty) {
@@ -287,7 +287,7 @@ final class _ModuleSteps {
     }
     // A step that continues another is part of that step, so only its
     // notice makes a question of its own.
-    final asked = notice || (!followUp && step.skippable);
+    final asked = hasNotice || (!followUp && step.skippable);
     if (asked &&
         environment.interactive &&
         !await _confirmRun(step, origin, command)) {
