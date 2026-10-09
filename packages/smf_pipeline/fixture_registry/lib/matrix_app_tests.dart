@@ -219,8 +219,10 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // device, where no test opens a guard: with a gate of the fixture
       // gates closed, the walk expects the target of its guard in place of
       // each location outside its flow, as the router role says, whichever
-      // module provides the router. The apps it applies to have the walk,
-      // and the tests of router_screens, whose helpers it uses.
+      // module provides the router. And once the gate opens, it expects the
+      // screen that the app starts on in place of each location of a flow,
+      // which is over. The apps it applies to have the walk, and the tests
+      // of router_screens, whose helpers it uses.
       MatrixAppTest(
         '$appTests/router_walk_guards',
         appliesTo: (app) =>

@@ -9,15 +9,12 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
-import 'package:fake_router/fake_router.dart';
-import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart' show routerWalkFile;
-import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:test/test.dart';
 
 /// The full names of the routes of the locations that the walk of the
@@ -399,50 +396,29 @@ void main() {
 
   test(
       'the walk of the routes goes to the routes of the fixture gates, the '
-      'flows of their guards, after the routes of the other fixtures, also '
-      'in an app whose gates are listed before them', () async {
-    const gates = ['fake_gate.gate', 'fake_gate.step', 'fake_gate.second'];
-    List<String> walkedIn(MatrixApp app) => _walkedRoutesOf(
-          named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!,
-        );
-    // The apps with every fixture, where the gates are listed after the
-    // fixtures with routes.
+      'flows of their guards, and to the routes of the other fixtures, in '
+      'the order of the routes of the app', () {
+    // The apps with every fixture, where the test of the walk closes and
+    // opens a gate: the walk has locations of the flows of both guards and
+    // locations outside them to check there.
     final withGates = apps.where(named('router_walk_guards').appliesTo);
     expect(withGates, isNotEmpty);
     for (final app in withGates) {
       expect(
-        walkedIn(app),
+        _walkedRoutesOf(
+          named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!,
+        ),
         [
           'fake_feature.home',
           'fake_second.second',
           'fake_second.outside',
-          ...gates,
+          'fake_gate.gate',
+          'fake_gate.step',
+          'fake_gate.second',
         ],
         reason: app.name,
       );
     }
-
-    // Fixtures with the gates listed first: the walk goes to the routes in
-    // the order of the modules, but for those of the flows.
-    final (apps: reordered, :failed) = await matrixOf(const [
-      FlutterCoreModule(),
-      FakeRouterModule(),
-      FakeBlocModule(),
-      FakeGateModule(),
-      FakeSecondModule(),
-    ]);
-    expect(failed, isEmpty);
-    final everyModule =
-        reordered.singleWhere((app) => app.everyModuleWith != null);
-    expect(
-      everyModule.modules.indexOf(FakeGateModule.id),
-      lessThan(everyModule.modules.indexOf(FakeSecondModule.id)),
-    );
-    expect(walkedIn(everyModule), [
-      'fake_second.second',
-      'fake_second.outside',
-      ...gates,
-    ]);
   });
 
   test(

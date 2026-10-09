@@ -7,11 +7,13 @@
 // app starts, the router shows the target of its guard and does not build
 // the fallback screen; once the gate opens, it shows the fallback screen;
 // when the gate closes, the target takes its place, and the router comes
-// back to it. And when the guard starts allowing while its flow is shown
-// with nothing to come back to, the screen that the app starts on is the
-// fallback screen. It starts the app with main() of lib/main.dart, which
-// the app entry role puts into every app, so it applies to a new provider
-// of the router role as it is.
+// back to it. And once the guard allows, its flow is over: in place of a
+// location of the flow, the router shows the screen that the app starts
+// on, which is the fallback screen here. It starts the app with main() of
+// lib/main.dart, which the app entry role puts into every app, so it
+// applies to a new provider of the router role as it is.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,33 +122,40 @@ void main() {
             'fallback screen.',
       );
 
-      // Into the flow while the guard allows, and then the gate closes and
-      // opens: with nothing to come back to, the router shows the screen
-      // that the app starts on, the fallback screen.
+      // A location of the flow while the guard allows: the flow is over,
+      // so the router shows the screen that the app starts on in its
+      // place, the fallback screen, for go() and for push(), which
+      // completes with null.
       tester.element(find.byType(FallbackStartScreen)).nav.fakeGate.step().go();
       await tester.pumpAndSettle();
       expect(
         _builtScreens(tester),
-        [FixtureGateScreen, FixtureGateStepScreen],
-        reason: 'With guards that allow, a route of a flow is a route like '
-            'any other.',
+        [FallbackStartScreen],
+        reason: 'go() to a location in a flow that is over shows the screen '
+            'that the app starts on: the fallback screen.',
       );
-      fixtureGate.value = false;
-      await tester.pumpAndSettle();
-      expect(
-        _builtScreens(tester),
-        [FixtureGateScreen, FixtureGateStepScreen],
-        reason: 'A guard that stops allowing leaves the pages of its flow as '
-            'they are.',
+      Object? result = 'not completed';
+      unawaited(
+        tester
+            .element(find.byType(FallbackStartScreen))
+            .nav
+            .fakeGate
+            .gate()
+            .push<Object?>()
+            .then((value) => result = value),
       );
-      fixtureGate.value = true;
       await tester.pumpAndSettle();
       expect(
         _builtScreens(tester),
         [FallbackStartScreen],
-        reason: 'When a guard starts allowing while a page of its flow is on '
-            'top and there is no location to come back to, the router shows '
-            'the screen that the app starts on: the fallback screen.',
+        reason: 'push() of a location in a flow that is over shows the '
+            'screen that the app starts on: the fallback screen.',
+      );
+      expect(
+        result,
+        isNull,
+        reason: 'push() of a location in a flow that is over completes with '
+            'null.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
