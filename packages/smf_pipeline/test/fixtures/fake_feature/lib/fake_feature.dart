@@ -301,11 +301,13 @@ final class FakeGateModule extends SmfModule {
                 name: 'first',
                 allows: FunctionRef('fixtureGateOpen', import: _gates),
                 redirectTo: 'gate',
+                stage: GuardStage.welcome,
               ),
               RouteGuard(
                 name: 'second',
                 allows: FunctionRef('fixtureSecondGateOpen', import: _gates),
                 redirectTo: 'second',
+                stage: GuardStage.welcome,
               ),
             ],
           ),

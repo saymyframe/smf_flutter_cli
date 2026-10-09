@@ -43,8 +43,9 @@ Fragment _guardsCode(RouterFacade facade) {
       ..writeln('    ${SmfNames.dartString(guard.fullName)},')
       ..writeln('    allows: ${allowsOf(guard.guard)}(),')
       ..writeln('    redirectTo: const ${guard.target.locationClass}(),')
-      ..writeln('    flow: const {${flow.join(', ')}},')
-      ..writeln('  ),');
+      ..writeln('    flow: const {${flow.join(', ')}},');
+    if (!guard.guard.resumes) buffer.writeln('    resumes: false,');
+    buffer.writeln('  ),');
   }
   buffer
     ..writeln('];')
@@ -64,8 +65,8 @@ const _guardClass = '''
 /// `go()`, `push()` and `replace()` of such a location show the target
 /// too, and `push()` completes with `null`. Once the guard allows, the
 /// router shows the location that the user last asked for, or the one that
-/// the guard took the user from, or else the screen that the app starts
-/// on.
+/// the guard took the user from if it [resumes], or else the screen that
+/// the app starts on.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
@@ -80,6 +81,7 @@ final class RouteGuard {
     required this.allows,
     required this.redirectTo,
     required this.flow,
+    this.resumes = true,
   });
 
   /// The full name of the guard: its module and its name there.
@@ -97,6 +99,14 @@ final class RouteGuard {
   /// does not allow: the route of [redirectTo] and the routes below it.
   /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
+
+  /// Whether the router brings the user back to the location that the
+  /// guard takes them from when it stops allowing, once it allows again.
+  ///
+  /// With `false`, the user then comes to the screen that the app starts
+  /// on, as the next user does after a sign-out, unless a location was
+  /// asked for while the guard did not allow, such as a link.
+  final bool resumes;
 }
 ''';
 
@@ -114,10 +124,16 @@ const _redirectOf = '''
 /// A route that the guards let the user see may still be in a flow that is
 /// over, in place of which the router shows the screen that the app starts
 /// on; see [${RouterRole.flowIsOver}].
-AppLocation? ${RouterRole.redirectOf}(String? routeName) {
+AppLocation? ${RouterRole.redirectOf}(String? routeName) =>
+    _guardKeepingFrom(routeName)?.redirectTo;
+
+/// The guard that keeps the user from the route [routeName], or `null` if
+/// the guards let the user see it: the first guard that does not allow,
+/// unless the route is in its flow.
+RouteGuard? _guardKeepingFrom(String? routeName) {
   for (final guard in ${RouterRole.routeGuards}) {
     if (guard.allows.value) continue;
-    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+    return guard.flow.contains(routeName) ? null : guard;
   }
   return null;
 }
@@ -198,9 +214,10 @@ final class $_navigation<L> {
   /// on, each one that `go()`, `push()` or `replace()` is asked to show,
   /// and each one from the platform. A location that a guard keeps the
   /// user from is remembered in place of the one before it, so the user
-  /// comes back to the latest one that they or the platform asked for. A
-  /// location in the flow of a guard is never remembered: once that guard
-  /// allows, its flow is over.
+  /// comes back to the latest one that they or the platform asked for,
+  /// whether or not that guard brings the user back (see
+  /// [RouteGuard.resumes]). A location in the flow of a guard is never
+  /// remembered: once that guard allows, its flow is over.
   ({L location})? asked(String? route, L location) {
     final target = $_ask(route);
     if (target == null) return $_over(route) ? (location: start) : null;
@@ -217,28 +234,31 @@ final class $_navigation<L> {
   /// and whether `push()` showed it; none for a router that has no page
   /// yet. The answer is the first of these:
   /// - the target of the guard that keeps the user from one of the pages.
-  ///   The location below the pages that pushes showed is then remembered,
-  ///   or [start] if pushes showed them all, unless one is remembered
-  ///   already or it is in the flow of a guard;
+  ///   If that guard brings the user back (see [RouteGuard.resumes]), the
+  ///   location below the pages that pushes showed is then remembered, or
+  ///   [start] if pushes showed them all, unless one is remembered already
+  ///   or it is in the flow of a guard. A guard that does not bring the
+  ///   user back changes nothing of what is remembered;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
   /// - [start], when the page on top is in a flow that is over (see
   ///   [$_over]): its guard started allowing while the flow was shown, and
-  ///   nothing is remembered.
+  ///   nothing is remembered, as after a guard that does not bring the
+  ///   user back stopped allowing.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
     for (final page in pages) {
-      final target = $_ask(page.route);
-      if (target == null) continue;
+      final guard = _guardKeepingFrom(page.route);
+      if (guard == null) continue;
       final below = pages.where((other) => !other.pushed).firstOrNull;
-      if (_remembered == null && !_inAFlow(below?.route)) {
+      if (guard.resumes && _remembered == null && !_inAFlow(below?.route)) {
         _remembered = (
           route: below?.route,
           location: below == null ? start : below.location,
         );
       }
-      return (location: locationOf(target));
+      return (location: locationOf(guard.redirectTo));
     }
     if (_remembered case final remembered?) {
       if ($_ask(remembered.route) != null) return null;

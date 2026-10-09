@@ -71,9 +71,11 @@ const routerRole = RouterRole._();
 /// through them about every location before it shows it, and tells them of
 /// its pages when one of them changes, as [guardedNavigation] says. In the
 /// guide for coding agents of such an app, the template tells where the
-/// guards are, how the code of the app adds one and changes what it allows,
-/// that the router navigates when it does, and that no code navigates into
-/// the flow of a guard. An app without guards gets none of this.
+/// guards are and in which order the router asks them, how the code of the
+/// app adds one and changes what it allows, that the router navigates when
+/// it does, where the user comes to once a guard allows again, and that no
+/// code navigates into the flow of a guard. An app without guards gets
+/// none of this.
 ///
 /// When the role is present, the provider of the [AppEntryRole] builds the
 /// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
@@ -101,7 +103,11 @@ final class RouterRole extends Role<RoutesData> {
   /// The name of the list of the guards of an app with guards, which the
   /// role's template generates in [appRouterFile], as
   /// `final List<RouteGuard> routeGuards`: the guards of
-  /// [RouterFacade.guards], in the order the app asks them.
+  /// [RouterFacade.guards], in the order the app asks them. That is by
+  /// their stages (see [GuardStage]), whatever the order of the modules,
+  /// and for the guards of one stage, in the order of the modules and of
+  /// their [RoutesData.guards]. The app has nothing else of the stage of a
+  /// guard.
   ///
   /// Each is a `RouteGuard` of the app, a class of the same file:
   /// - `name`, the full name of the guard (see [FacadeGuard.fullName]);
@@ -109,7 +115,10 @@ final class RouterRole extends Role<RoutesData> {
   ///   returns, which the list calls once, when it is first used;
   /// - `redirectTo`, the location of the target of the guard;
   /// - `flow`, the full names of the routes of its flow (see
-  ///   [FacadeGuard.flow]).
+  ///   [FacadeGuard.flow]);
+  /// - `resumes`, whether the router brings the user back to where they
+  ///   were once the guard allows again (see [RouteGuard.resumes]): `true`
+  ///   unless the list says otherwise.
   static const routeGuards = 'routeGuards';
 
   /// The name of the function that says what the guards show in place of a
@@ -231,10 +240,11 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// What the class answers, and what it remembers:
   /// - `asked` answers as [redirectOf] does for a location that a guard
-  ///   keeps the user from. It remembers that location, in place of the one
-  ///   that it remembered before: the user comes back to the latest
-  ///   location that they or the platform asked for, such as a link that
-  ///   arrives while the flow of a guard is shown.
+  ///   keeps the user from. It remembers that location, whichever guard
+  ///   keeps the user from it, in place of the one that it remembered
+  ///   before: the user comes back to the latest location that they or the
+  ///   platform asked for, such as a link that arrives while the flow of a
+  ///   guard is shown.
   /// - For a location that the guards let the user see, `asked` answers
   ///   `/` when its flow is over, as [flowIsOver] tells, and `null`
   ///   otherwise. So the routes of a flow show only while a guard with
@@ -243,12 +253,19 @@ final class RouterRole extends Role<RoutesData> {
   ///   platform show the screen that the app starts on, or the target of
   ///   another guard while that one does not allow.
   /// - `changed` answers the target of the guard that keeps the user from
-  ///   one of the pages, so that no such page stays in the stack. Unless it
-  ///   remembers a location already, it then remembers the location below
-  ///   the pages that pushes showed, or `/` when pushes showed every page.
-  ///   So the user comes back to where the pushed pages were opened from,
-  ///   such as a tab of the main navigation, and not to a pushed page
+  ///   one of the pages, so that no such page stays in the stack. If that
+  ///   guard brings the user back ([RouteGuard.resumes]), and unless the
+  ///   class remembers a location already, it then remembers the location
+  ///   below the pages that pushes showed, or `/` when pushes showed every
+  ///   page. So the user comes back to where the pushed pages were opened
+  ///   from, such as a tab of the main navigation, and not to a pushed page
   ///   alone, with no way back.
+  /// - For a guard that does not bring the user back, `changed` remembers
+  ///   nothing then, and forgets nothing either. So once that guard allows
+  ///   again, the user comes to a location that was asked for in the
+  ///   meantime, to one that the class remembered before, or else to `/`,
+  ///   as the last of these rules says: after a sign-out, the next user
+  ///   does not come to the page that the last one was on.
   /// - With no such page, `changed` answers the location that it
   ///   remembers, once the guards allow that location, and forgets it.
   ///   Nothing else makes it forget one.

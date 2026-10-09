@@ -26,8 +26,10 @@ final class RoutesData implements DataWithTexts {
   /// that another leaves unreachable in either order.
   final List<Route> routes;
 
-  /// The guards of the module, in the order the app asks them; see
-  /// [RouteGuard].
+  /// The guards of the module; see [RouteGuard].
+  ///
+  /// The app asks the guards of all modules by their [RouteGuard.stage],
+  /// and those of one stage in the order of the modules and of this list.
   final List<RouteGuard> guards;
 
   /// The texts of the routes that a user sees: the labels of their
@@ -37,6 +39,31 @@ final class RoutesData implements DataWithTexts {
         for (final route in routes)
           if (route.destination case final destination?) destination.label,
       ];
+}
+
+/// When the app asks a guard of the routes among its guards: it asks the
+/// guards of an earlier stage first, whatever the order of their modules,
+/// and the first guard that does not allow decides (see [RouteGuard]).
+///
+/// The stages come in the order of a first launch: the user goes through
+/// the flow of a [welcome] guard, and once that guard allows, through the
+/// flow of an [identity] guard. The app asks two guards of one stage in the
+/// order of their modules, and two guards of one module in the order of
+/// [RoutesData.guards].
+///
+/// A module cannot add a stage. A guard that is neither of the two takes
+/// the stage that its flow belongs to: [welcome] if the flow needs to know
+/// nothing of the user, as a consent or a required update does, and
+/// [identity] if it needs to know who the user is, as a subscription does.
+/// The order of the modules then says where it comes among the guards of
+/// that stage.
+enum GuardStage {
+  /// Before the app asks who the user is: what a new user goes through on
+  /// the first launch, such as an onboarding.
+  welcome,
+
+  /// Who the user is, such as a sign-in.
+  identity,
 }
 
 /// A gate over the whole app: a condition without which the user sees a
@@ -51,10 +78,10 @@ final class RoutesData implements DataWithTexts {
 /// know nothing of the guard. Once the guard allows, the router shows the
 /// location that the user or the platform last asked for and the guards
 /// kept them from, or the location that the guard took the user from when
-/// it stopped allowing, or else the screen that the app starts on. So the
-/// screens of the flow only change what the guard reads: the router leaves
-/// the flow. See [RouterRole.guardedNavigation] for what every router does
-/// with the guards.
+/// it stopped allowing, if it [resumes], or else the screen that the app
+/// starts on. So the screens of the flow only change what the guard reads:
+/// the router leaves the flow. See [RouterRole.guardedNavigation] for what
+/// every router does with the guards.
 ///
 /// The routes of the flow show only until the flow is over, which it is
 /// once the guard allows, and so does every other guard of the module with
@@ -65,21 +92,28 @@ final class RoutesData implements DataWithTexts {
 /// no code navigates into a flow, the module of the guard included: it
 /// changes what the guard reads, and the router shows the target.
 ///
-/// That holds for a guard that stops allowing by what the screens of its
-/// own module do, such as a sign-out, too: the router remembers the
-/// location that the guard takes the user from, and shows it once the
-/// guard allows again. The module cannot go to the target of its guard
-/// first: while the guard allows, a `go()` to the target shows the screen
-/// that the app starts on.
+/// A guard may stop allowing while the app runs, by what the screens of
+/// its own module do too: the router then shows its target in place of the
+/// screen that the user is on. Where the user comes to once the guard
+/// allows again is up to [resumes]. By default the router remembers the
+/// location that the guard takes the user from and shows it again, as
+/// after an onboarding that the user asked to see once more. A guard with
+/// [resumes] `false` makes the router remember nothing then, so the user
+/// comes to the screen that the app starts on: after a sign-out, the next
+/// user does not come to the screen that the last one was on. Either way,
+/// the router shows a location that is asked for while the guard does not
+/// allow, such as a link, once the guard allows.
 ///
 /// A guard keeps the user from every route outside its flow. A condition
 /// that only some routes ask for, such as a paid screen, is not a guard:
 /// the role has nothing for it.
 ///
-/// The app asks the guards of all modules in the order of the modules and
-/// of [RoutesData.guards]. The first one that does not allow decides, and
-/// no later one is asked, so the flows of the guards show one after
-/// another.
+/// The app asks the guards of all modules by their [stage], those of an
+/// earlier stage first, whatever the order of the modules: the guard of an
+/// onboarding comes before the guard of a sign-in. It asks the guards of
+/// one stage in the order of the modules and of [RoutesData.guards]. The
+/// first guard that does not allow decides, and no later one is asked, so
+/// the flows of the guards show one after another.
 ///
 /// ```dart
 /// RoutesData(
@@ -92,18 +126,21 @@ final class RoutesData implements DataWithTexts {
 ///         import: ImportRef.app('features/intro/intro_status.dart'),
 ///       ),
 ///       redirectTo: 'intro',
+///       stage: GuardStage.welcome,
 ///     ),
 ///   ],
 /// )
 /// ```
 @immutable
 final class RouteGuard {
-  /// Creates the guard [name], which shows the route [redirectTo] of its
-  /// module until [allows] says otherwise.
+  /// Creates the guard [name] of the stage [stage], which shows the route
+  /// [redirectTo] of its module until [allows] says otherwise.
   const RouteGuard({
     required this.name,
     required this.allows,
     required this.redirectTo,
+    required this.stage,
+    this.resumes = true,
   });
 
   /// The name of the guard in its module, a lowerCamelCase identifier such
@@ -135,6 +172,23 @@ final class RouteGuard {
   /// It is a top-level route that needs no values and is outside the main
   /// navigation. Neither it nor a route below it can start the app.
   final String redirectTo;
+
+  /// When the app asks the guard among its guards: before every guard of a
+  /// later stage, whichever module declares it; see [GuardStage].
+  final GuardStage stage;
+
+  /// Whether the router brings the user back to the location that the
+  /// guard takes them from when it stops allowing, once it allows again.
+  ///
+  /// With `false`, the router remembers nothing when the guard stops
+  /// allowing, and the user comes to the screen that the app starts on
+  /// once it allows again, as the next user does after a sign-out. A
+  /// location that is asked for while the guard does not allow is
+  /// remembered then too, so the user still comes to a link that arrived
+  /// meanwhile. And what the router remembers already stays: the location
+  /// that an earlier guard kept the user from is shown once this guard
+  /// allows.
+  final bool resumes;
 
   @override
   String toString() => 'guard $name';

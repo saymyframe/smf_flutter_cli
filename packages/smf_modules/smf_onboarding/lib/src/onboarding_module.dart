@@ -171,6 +171,7 @@ final class OnboardingModule extends SmfModule {
                 name: 'firstRun',
                 allows: FunctionRef('onboardingCompleted', import: _status),
                 redirectTo: _route,
+                stage: GuardStage.welcome,
               ),
             ],
           ),

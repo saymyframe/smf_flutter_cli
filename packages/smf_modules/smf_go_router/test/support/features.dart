@@ -360,6 +360,7 @@ final class IntroFeature extends SmfModule {
                   import: ImportRef.app('$_folder/intro_status.dart'),
                 ),
                 redirectTo: 'intro',
+                stage: GuardStage.welcome,
               ),
             ],
           ),
