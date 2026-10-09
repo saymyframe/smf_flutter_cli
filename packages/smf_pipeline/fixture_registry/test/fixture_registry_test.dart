@@ -544,9 +544,11 @@ void main() {
       final (:apps, :failed) = await matrixOf(fixtureModules());
 
       expect(failed, isEmpty);
+      // The apps with every module whose clock has its first value, 24
+      // hours; each is in the matrix once more for a clock of 12.
       final every = [
         for (final app in apps)
-          if (app.everyModuleWith != null) app,
+          if (app.everyModuleWith != null && app.modes.isEmpty) app,
       ];
       // Each combination of a router, a DI container and a state manager,
       // named after the providers other than the first of their roles:
@@ -1400,13 +1402,84 @@ void main() {
         byDefault.createArguments('app_1', '/apps'),
         contains('--clock-hours=24'),
       );
+    });
+
+    test(
+        'the matrix has each app with every module once more for a clock of '
+        '12 hours, after its other apps, and a run takes those that have 12 '
+        'hours with each router, each DI container and each state manager',
+        () async {
+      /// The names of the apps of [apps] whose clock has 12 hours, as the
+      /// clock role chose.
+      List<String> ofTwelve(List<MatrixApp> apps) => [
+            for (final app in apps)
+              if (app.hook!.presentRoles.contains(clockRole) &&
+                  clockRole.hoursIn(clockRole.hookInput(app.hook!)) == 12)
+                app.name,
+          ];
+      const providers = [
+        ['fake_router', 'go_router'],
+        ['fake_di', 'get_it'],
+        ['fake_bloc', 'fake_riverpod'],
+      ];
+      const twelveHours = '--clock-hours=12';
+
+      final all = await matrixOf(fixtureModules());
+      expect(all.failed, isEmpty);
+      expect(ofTwelve(all.apps), [
+        'clock by fake_clock_badge $twelveHours',
+        for (final router in providers[0])
+          for (final container in providers[1])
+            for (final stateManager in providers[2])
+              'every module ($router, $container, $stateManager) $twelveHours',
+      ]);
+      // They are the last apps of the matrix.
+      expect(
+        [for (final app in all.apps.reversed.take(8)) app.name],
+        ofTwelve(all.apps).reversed.take(8),
+      );
+      for (final app in all.apps.reversed.take(8)) {
+        expect(app.modes, {'clock-hours': '12'}, reason: app.name);
+        expect(app.everyModuleWith, isNotNull, reason: app.name);
+        expect(
+          app.roleOptions,
+          {'start': '/fake_feature', 'clock-hours': '12'},
+          reason: app.name,
+        );
+      }
+
+      // The matrix that CI checks, with a pairwise covering.
+      final (:apps, :failed) = await matrixOf(
+        fixtureModules(),
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      expect(failed, isEmpty);
+      final twelve = [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.modes.isNotEmpty) app,
+      ];
+      expect(twelve.map((app) => app.name), [
+        'every module (fake_router, fake_di, fake_bloc) --clock-hours=12',
+        'every module (go_router, get_it, fake_riverpod) --clock-hours=12',
+      ]);
+      for (final ofRole in providers) {
+        for (final provider in ofRole) {
+          expect(
+            twelve.where((app) => app.modules.contains(ModuleId(provider))),
+            isNotEmpty,
+            reason: 'No app with $provider has a clock of 12 hours.',
+          );
+        }
+      }
+      expect(apps.sublist(apps.length - 2), twelve);
+      // The covering of the apps with a clock of 24 hours is the one of a
+      // matrix without them.
       expect(
         [
           for (final app in apps)
-            if (app.hook!.presentRoles.contains(clockRole))
-              clockRole.hoursIn(clockRole.hookInput(app.hook!)),
-        ].where((hours) => hours == 12),
-        hasLength(1),
+            if (app.everyModuleWith != null && app.modes.isEmpty) app.name,
+        ],
+        hasLength(4),
       );
     });
 

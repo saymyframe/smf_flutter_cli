@@ -34,6 +34,7 @@ final class MatrixApp {
     this.name,
     this.modules, {
     this.roleOptions = const {},
+    this.modes = const {},
     this.everyModuleWith,
     this.hook,
   });
@@ -46,6 +47,20 @@ final class MatrixApp {
 
   /// The values of role options by name.
   final Map<String, String?> roleOptions;
+
+  /// The values of the mode options (see [RoleOption.mode]) that set the
+  /// app apart from the app with the same modules and the first value of
+  /// each, by the name of the option, such as `{'clock-hours': '12'}`: those
+  /// that its case of the contract harness gives (see
+  /// [ContractHarness.casesOfRole] and [ContractHarness.casesOfModes]),
+  /// which are among the [roleOptions] too. None for the app of any other
+  /// case, whose mode options have their first value, or the value that the
+  /// options of every app of the matrix give them.
+  ///
+  /// They tell the matrix which app it is. A [MatrixAppTest] takes the mode
+  /// of an app from the choice of the role instead ([hook]), as it takes
+  /// everything else that a role chose.
+  final Map<String, String> modes;
 
   /// For an app with every module, one of those that the contract harness
   /// builds for each combination of the providers of the roles that take
@@ -100,6 +115,23 @@ final class MatrixApp {
         '--strict',
       ];
 
+  /// This app with [name], [modules] and [everyModuleWith], each as it is
+  /// unless given: the same app of the matrix otherwise, with its options,
+  /// its [modes] and its [hook].
+  MatrixApp _with({
+    String? name,
+    List<ModuleId>? modules,
+    List<ModuleId>? everyModuleWith,
+  }) =>
+      MatrixApp(
+        name ?? this.name,
+        modules ?? this.modules,
+        roleOptions: roleOptions,
+        modes: modes,
+        everyModuleWith: everyModuleWith ?? this.everyModuleWith,
+        hook: hook,
+      );
+
   @override
   String toString() => '$name (${modules.join(', ')})';
 }
@@ -125,6 +157,13 @@ final class MatrixApp {
 /// module. The apps with every module are those of [everyModuleApps], such
 /// as a pairwise covering of them; the contract harness checks all of them
 /// anyway, and those that fail are among the `failed` ones.
+///
+/// The last apps are the apps with every module for the other values of
+/// the mode options of the roles ([modeAppsOf]), those that
+/// [everyModuleApps] takes next to its apps with every module (see
+/// [EveryModuleSelection.selectModes]). They come after every other app,
+/// so that the others keep their positions, and with them their numbers in
+/// a run, when a role gets a mode option or such an option another value.
 Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   List<SmfModule> modules, {
   Map<String, String?> roleOptions = const {},
@@ -137,7 +176,7 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
   final apps = <MatrixApp>[];
   final failed = <ContractResult>[];
   for (final result in await harness.checkAll()) {
-    switch (_appOf(result, roleOptions)) {
+    switch (_appOf(result, harness)) {
       case final app?:
         apps.add(app);
       case null:
@@ -148,20 +187,20 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> matrixOf(
     modules,
     roleOptions: roleOptions,
   );
-  failed.addAll(everyModule.failed);
-  for (final app in everyModuleApps.select(everyModule.apps, modules)) {
+  final modes = await modeAppsOf(modules, roleOptions: roleOptions);
+  failed
+    ..addAll(everyModule.failed)
+    ..addAll(modes.failed);
+  final selected = everyModuleApps.select(everyModule.apps, modules);
+  for (final app in [
+    ...selected,
+    ...everyModuleApps.selectModes(modes.apps, selected, modules),
+  ]) {
     final index = apps.indexWhere((other) => _keyOf(other) == _keyOf(app));
     if (index < 0) {
       apps.add(app);
     } else {
-      final other = apps[index];
-      apps[index] = MatrixApp(
-        other.name,
-        other.modules,
-        roleOptions: other.roleOptions,
-        everyModuleWith: app.everyModuleWith,
-        hook: other.hook,
-      );
+      apps[index] = apps[index]._with(everyModuleWith: app.everyModuleWith);
     }
   }
   return (apps: apps, failed: failed);
@@ -195,12 +234,56 @@ Future<({List<MatrixApp> apps, List<ContractResult> failed})> everyModuleAppsOf(
     final (:apps, :failed, :external) = await _everyModuleOf(
       ContractHarness(registry, roleOptions: roleOptions),
       names,
-      roleOptions,
       withoutExternalSteps: withoutExternalSteps,
     );
     if (external.isEmpty) return (apps: apps, failed: failed);
     registry = ModuleRegistry(_without(registry.modules, external));
   }
+}
+
+/// The apps with every module of [modules] for the other values of the
+/// mode options of their roles (see [RoleOption.mode]): each app of
+/// [everyModuleAppsOf] once more for every combination of the values of
+/// the mode options of its roles, but the combination of the first value
+/// of each, which is that app itself (see [ContractHarness.casesOfModes]).
+///
+/// Each is an app with every module too: it has the
+/// [MatrixApp.everyModuleWith] of the app with its modules, so the tests
+/// that a matrix runs in its apps with every module run in it, and its
+/// [MatrixApp.modes] tell it from that app. None for modules without a
+/// role with a mode option, and none for an option that [roleOptions], the
+/// options of every app, give a value.
+///
+/// The harness renders all of them in memory, and those that it finds
+/// errors in are among the `failed` ones. A run of the matrix generates
+/// only those that its selection takes (see
+/// [EveryModuleSelection.selectModes]). CI generates none of them to build
+/// it for a platform or to start it on a device: the apps of those jobs
+/// are apps of [everyModuleAppsOf], which get no value of a mode option
+/// from the matrix, and so the first one.
+Future<({List<MatrixApp> apps, List<ContractResult> failed})> modeAppsOf(
+  List<SmfModule> modules, {
+  Map<String, String?> roleOptions = const {},
+}) async {
+  final registry = ModuleRegistry(modules);
+  final harness = ContractHarness(registry, roleOptions: roleOptions);
+  final apps = <MatrixApp>[];
+  final failed = <ContractResult>[];
+  for (final contractCase in harness.casesOfModes()) {
+    final result = await harness.check(contractCase);
+    final app = _appOf(
+      result,
+      harness,
+      everyModuleWith: _everyModuleWith(contractCase, registry),
+    );
+    switch (app) {
+      case final app?:
+        apps.add(app);
+      case null:
+        failed.add(result);
+    }
+  }
+  return (apps: apps, failed: failed);
 }
 
 /// The apps with every module of the registry of [harness], with their
@@ -215,8 +298,7 @@ Future<
       Set<ModuleId> external,
     })> _everyModuleOf(
   ContractHarness harness,
-  ModuleRegistry names,
-  Map<String, String?> roleOptions, {
+  ModuleRegistry names, {
   required bool withoutExternalSteps,
 }) async {
   final apps = <MatrixApp>[];
@@ -226,7 +308,7 @@ Future<
     final result = await harness.check(contractCase);
     final app = _appOf(
       result,
-      roleOptions,
+      harness,
       everyModuleWith: _everyModuleWith(contractCase, names),
     );
     if (app == null) {
@@ -261,34 +343,47 @@ List<ModuleId> _everyModuleWith(
       },
     ];
 
-/// The app of the matrix that [result] built with the values of role
-/// options [roleOptions], or `null` if the case has errors. The harness of
-/// the matrix renders every app, so a case without errors has the request
-/// that the hooks of the roles got ([ContractResult.hook]).
+/// The app of the matrix that [result] built, a result of [harness], or
+/// `null` if the case has errors: with the options of every case of the
+/// harness, those of its case and the answers of the harness as the values
+/// of its role options, and with the values that its case gives the mode
+/// options of the roles of the registry as its [MatrixApp.modes]. The
+/// harness of the matrix renders every app, so a case without errors has
+/// the request that the hooks of the roles got ([ContractResult.hook]).
 MatrixApp? _appOf(
   ContractResult result,
-  Map<String, String?> roleOptions, {
+  ContractHarness harness, {
   List<ModuleId>? everyModuleWith,
 }) {
   final resolution = result.resolution;
   if (result.errors.isNotEmpty || resolution == null) return null;
+  final options = result.contractCase.roleOptions;
   return MatrixApp(
     '${result.contractCase}',
     [for (final module in resolution.modules) module.id],
-    roleOptions: {
-      ...roleOptions,
-      ...result.contractCase.roleOptions,
-      ...result.answers,
+    roleOptions: {...harness.roleOptions, ...options, ...result.answers},
+    modes: {
+      for (final role in harness.registry.roles)
+        for (final option in role.options)
+          if (option.isMode)
+            if (options[option.name] case final value?) option.name: value,
     },
     everyModuleWith: everyModuleWith,
     hook: result.hook,
   );
 }
 
-/// The modules of [app], which tell it apart from the other apps of the
-/// matrix: the variants of the modules follow from them.
-String _keyOf(MatrixApp app) =>
-    ([for (final module in app.modules) module.value]..sort()).join(',');
+/// What tells [app] apart from the other apps of the matrix: its modules,
+/// which the variants of the modules follow from, and its
+/// [MatrixApp.modes], each as `--<name>=<value>` in the order of the names.
+/// So the app of another value of a mode option is not the app with the
+/// same modules and the first value.
+String _keyOf(MatrixApp app) => [
+      ([for (final module in app.modules) module.value]..sort()).join(','),
+      ...[
+        for (final MapEntry(:key, :value) in app.modes.entries) '--$key=$value',
+      ]..sort(),
+    ].join(' ');
 
 /// The modules whose steps after generation in the app that [validation]
 /// checked need an external service ([PostGenStep.external]). A step that
@@ -610,7 +705,7 @@ Future<String> appTestsDirectoryOf(String package) async {
 
 /// The names of [apps] that [test] applies to once the modules [ids] are
 /// taken out of their modules and their [MatrixApp.everyModuleWith], with
-/// the same name, role options and hook.
+/// the same name, role options, modes and hook.
 List<String> _appliesWithout(
   MatrixAppTest test,
   Set<ModuleId> ids,
@@ -619,16 +714,13 @@ List<String> _appliesWithout(
     [
       for (final app in apps)
         if (test.appliesTo(
-          MatrixApp(
-            app.name,
-            [
+          app._with(
+            modules: [
               for (final id in app.modules)
                 if (!ids.contains(id)) id,
             ],
-            roleOptions: app.roleOptions,
             everyModuleWith:
                 app.everyModuleWith?.where((id) => !ids.contains(id)).toList(),
-            hook: app.hook,
           ),
         ))
           app.name,
@@ -681,18 +773,16 @@ const _packageOfUses = 'matrix_app';
 
 /// [app] with another id in place of the module [id], in its modules, its
 /// [MatrixApp.everyModuleWith] and its name, as if another module took the
-/// place of the module: with the same roles, role options and hook.
+/// place of the module: with the same roles, role options, modes and hook.
 MatrixApp _renamed(MatrixApp app, ModuleId id) {
   ModuleId rename(ModuleId module) => module == id ? _otherModule : module;
-  return MatrixApp(
-    app.name.replaceAll(
+  return app._with(
+    name: app.name.replaceAll(
       RegExp('\\b${RegExp.escape(id.value)}\\b'),
       _otherModule.value,
     ),
-    [for (final module in app.modules) rename(module)],
-    roleOptions: app.roleOptions,
+    modules: [for (final module in app.modules) rename(module)],
     everyModuleWith: app.everyModuleWith?.map(rename).toList(),
-    hook: app.hook,
   );
 }
 
@@ -1713,16 +1803,7 @@ final class MatrixFailingApp {
         if (providers.every(app.modules.contains)) app,
     ];
     if (withProviders case [final app]) {
-      return (
-        app: MatrixApp(
-          name,
-          app.modules,
-          roleOptions: app.roleOptions,
-          everyModuleWith: app.everyModuleWith,
-          hook: app.hook,
-        ),
-        problems: const <String>[],
-      );
+      return (app: app._with(name: name), problems: const <String>[]);
     }
     final named = providers.isEmpty ? 'its modules' : providers.join(', ');
     final count = '${withProviders.length} apps with every module of the '

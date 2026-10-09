@@ -211,8 +211,11 @@ void main() {
     expect(appsOf(named('router_walk')), [
       for (final app in everyModule) app.name,
     ]);
-    // One for each combination of the providers of the roles that take one.
-    expect(everyModule, hasLength(8));
+    // One for each combination of the providers of the roles that take one,
+    // and each once more for the other value of the mode option of the
+    // fixture clock.
+    expect(everyModule, hasLength(16));
+    expect(everyModule.where((app) => app.modes.isEmpty), hasLength(8));
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,

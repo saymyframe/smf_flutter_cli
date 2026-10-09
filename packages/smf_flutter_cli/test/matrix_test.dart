@@ -16,6 +16,8 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
+import 'mode_registry.dart';
+
 /// The package that declares the class of each of [modules], as the
 /// matrix tools give them to [appTestsReport].
 Map<ModuleId, String> _packagesOf(List<SmfModule> modules) => {
@@ -550,6 +552,225 @@ void main() {
       '--no-dart-fix',
       '--strict',
     ]);
+  });
+
+  group('the apps of the other values of a mode option of a role', () {
+    /// The names of [apps].
+    List<String> names(List<MatrixApp> apps) => [
+          for (final app in apps) app.name,
+        ];
+
+    test(
+        'are the apps with every module once more for each other value, with '
+        'the option, the value as their mode and as the choice of the role, '
+        'and the providers of the app with their modules', () async {
+      final (:apps, :failed) = await modeAppsOf(doorsOfWood);
+      final every = await everyModuleAppsOf(doorsOfWood);
+
+      expect(failed, isEmpty);
+      expect(names(every.apps), ['every module (oak)', 'every module (pine)']);
+      expect(names(apps), [
+        'every module (oak) --access=guests',
+        'every module (oak) --access=anyone',
+        'every module (pine) --access=guests',
+        'every module (pine) --access=anyone',
+      ]);
+      for (final (index, app) in apps.indexed) {
+        final twin = every.apps[index ~/ 2];
+        final value = const ['guests', 'anyone'][index % 2];
+
+        expect(app.modes, {'access': value}, reason: app.name);
+        expect(app.modules, twin.modules, reason: app.name);
+        expect(app.everyModuleWith, twin.everyModuleWith, reason: app.name);
+        expect(
+          app.createArguments('app_1', '/apps'),
+          contains('--access=$value'),
+          reason: app.name,
+        );
+        expect(doors.modeIn(app.hook!, 'access'), value, reason: app.name);
+        // The app with the first value gets no value from the matrix: the
+        // role chooses it.
+        expect(twin.modes, isEmpty, reason: twin.name);
+        expect(
+          twin.createArguments('app_1', '/apps'),
+          isNot(contains(startsWith('--access'))),
+          reason: twin.name,
+        );
+        expect(doors.modeIn(twin.hook!, 'access'), 'members');
+      }
+    });
+
+    test(
+        'are none for modules without such an option, and for an option that '
+        'the options of every app give a value', () async {
+      final without = await modeAppsOf(smfModules);
+      expect(without.failed, isEmpty);
+      expect(without.apps, isEmpty);
+
+      final fixed = await modeAppsOf(
+        doorsOfWood,
+        roleOptions: const {'access': 'guests'},
+      );
+      expect(fixed.failed, isEmpty);
+      expect(fixed.apps, isEmpty);
+      // Every app of the matrix then has that value, and none is the app of
+      // a mode.
+      final (:apps, :failed) = await matrixOf(
+        doorsOfWood,
+        roleOptions: const {'access': 'guests'},
+      );
+      expect(failed, isEmpty);
+      for (final app in apps) {
+        expect(app.modes, isEmpty, reason: app.name);
+        expect(app.roleOptions, {'access': 'guests'}, reason: app.name);
+      }
+      expect(names(apps), isNot(contains(contains(' --'))));
+    });
+
+    test(
+        'are the last apps of the matrix, after its apps with every module, '
+        'each an app of its own next to the app with its modules and the '
+        'first value', () async {
+      final (:apps, :failed) = await matrixOf(doorsOfWood);
+
+      expect(failed, isEmpty);
+      expect(names(apps), [
+        'flutter_core',
+        'lock',
+        'oak',
+        'pine',
+        // The apps of the provider of the role for the other values.
+        'doors by lock --access=guests',
+        'doors by lock --access=anyone',
+        'every module (oak)',
+        'every module (pine)',
+        'every module (oak) --access=guests',
+        'every module (oak) --access=anyone',
+        'every module (pine) --access=guests',
+        'every module (pine) --access=anyone',
+      ]);
+      expect(
+        [for (final app in apps) app.modes['access']],
+        [
+          for (final _ in apps.take(4)) isNull,
+          'guests',
+          'anyone',
+          isNull,
+          isNull,
+          'guests',
+          'anyone',
+          'guests',
+          'anyone',
+        ],
+      );
+      // Each is an app with every module too, with the providers of the app
+      // with its modules.
+      expect(
+        {
+          for (final app in apps)
+            if (app.everyModuleWith case final providers?) app.name: providers,
+        },
+        {
+          'every module (oak)': isEmpty,
+          'every module (pine)': [pine.id],
+          'every module (oak) --access=guests': isEmpty,
+          'every module (oak) --access=anyone': isEmpty,
+          'every module (pine) --access=guests': [pine.id],
+          'every module (pine) --access=anyone': [pine.id],
+        },
+      );
+    });
+
+    test(
+        'come after every other app of the matrix, so the others have the '
+        'same numbers whichever of them a run takes', () async {
+      // Two roles with a mode option: a pairwise covering takes only some
+      // of the apps of their values.
+      const modules = [...doorsOfWood, tower];
+      bool isMode(MatrixApp app) =>
+          app.everyModuleWith != null && app.modes.isNotEmpty;
+
+      final all = await matrixOf(modules);
+      final pairwise = await matrixOf(
+        modules,
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      final named = await matrixOf(
+        modules,
+        everyModuleApps: const NamedEveryModuleApp('every module (oak)'),
+      );
+
+      final others = names(all.apps.where((app) => !isMode(app)).toList());
+      expect(others, [
+        'flutter_core',
+        'lock',
+        'oak',
+        'pine',
+        'tower',
+        'doors by lock --access=guests',
+        'doors by lock --access=anyone',
+        'bells by tower --chime=off',
+        'every module (oak)',
+        'every module (pine)',
+      ]);
+      expect(names(all.apps).take(others.length), others);
+      expect(names(pairwise.apps).take(others.length), others);
+      // Two values of one option and one of the other, with each of the
+      // two providers of the wood.
+      expect(all.apps.skip(others.length), hasLength(10));
+      expect(pairwise.apps.skip(others.length), hasLength(lessThan(10)));
+      expect(
+        pairwise.apps.skip(others.length),
+        everyElement(predicate(isMode, 'an app with every module of a mode')),
+      );
+      // A run for one app with every module has none of them.
+      expect(names(named.apps), others.take(9));
+    });
+
+    test(
+        'are the app of the provider of the role for a value when that app '
+        'has every module, which is then an app with every module of that '
+        'mode, apart from the app with the first value', () async {
+      final (:apps, :failed) = await matrixOf(
+        const [FlutterCoreModule(), lock],
+      );
+
+      expect(failed, isEmpty);
+      expect(
+        [
+          for (final app in apps)
+            '${app.name}: ${app.everyModuleWith} ${app.modes}',
+        ],
+        [
+          'flutter_core: null {}',
+          // The app with every module and the first value.
+          'lock: [] {}',
+          'doors by lock --access=guests: [] {access: guests}',
+          'doors by lock --access=anyone: [] {access: anyone}',
+        ],
+      );
+    });
+
+    test('that the contract harness finds errors in are among the failed ones',
+        () async {
+      const modules = [FlutterCoreModule(), lock, _Broken()];
+
+      final modes = await modeAppsOf(modules);
+      final (:apps, :failed) = await matrixOf(modules);
+
+      expect(modes.apps, isEmpty);
+      expect(
+        [for (final result in modes.failed) '${result.contractCase}'],
+        ['every module --access=guests', 'every module --access=anyone'],
+      );
+      expect(
+        [for (final result in failed) '${result.contractCase}'],
+        containsAll(
+          ['every module --access=guests', 'every module --access=anyone'],
+        ),
+      );
+      expect(names(apps), isNot(contains(startsWith('every module'))));
+    });
   });
 
   test(
