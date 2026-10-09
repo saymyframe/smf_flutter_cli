@@ -56,7 +56,10 @@ final class RoutesData implements DataWithTexts {
 /// nothing of the user, as that of a consent or of a required update, and
 /// [identity] if it needs to know who the user is, as that of a
 /// subscription. The order of the modules then says where it comes among
-/// the guards of that stage.
+/// the guards of that stage, so the app may ask such a guard before the
+/// guard that asks who the user is. It therefore allows while it cannot
+/// tell who the user is: the guard that asks who the user is then decides,
+/// and this one once the user is known.
 enum GuardStage {
   /// Before the app asks who the user is: what a new user goes through on
   /// the first launch, such as an onboarding.
