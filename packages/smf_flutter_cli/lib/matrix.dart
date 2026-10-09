@@ -123,19 +123,21 @@ final class MatrixApp {
         '--strict',
       ];
 
-  /// This app with [name], [modules] and [everyModuleWith], each as it is
-  /// unless given: the same app of the matrix otherwise, with its options,
-  /// its [modes] and its [hook].
+  /// This app with [name], [modules], [roleOptions], [modes] and
+  /// [everyModuleWith], each as it is unless given: the same app of the
+  /// matrix otherwise, with its [hook].
   MatrixApp _with({
     String? name,
     List<ModuleId>? modules,
+    Map<String, String?>? roleOptions,
+    Map<String, String>? modes,
     List<ModuleId>? everyModuleWith,
   }) =>
       MatrixApp(
         name ?? this.name,
         modules ?? this.modules,
-        roleOptions: roleOptions,
-        modes: modes,
+        roleOptions: roleOptions ?? this.roleOptions,
+        modes: modes ?? this.modes,
         everyModuleWith: everyModuleWith ?? this.everyModuleWith,
         hook: hook,
       );
@@ -784,15 +786,99 @@ bool _usesId(MatrixAppTest test, MatrixApp app, ModuleId id) {
   }
 }
 
+/// Whether a test applies to an app and, if it does, the values of its
+/// files and the files that it generates there, each as text.
+typedef _Selection = ({bool applies, String values, String files});
+
 /// Whether [test] applies to [app] and, if it does, the values of its
-/// files and the files it generates there, as text.
-String _selectionOf(MatrixAppTest test, MatrixApp app) => test.appliesTo(app)
-    ? jsonEncode([
-        test.values?.call(app) ?? const <String, String>{},
-        test.generatedFiles?.call(app, _packageOfUses) ??
-            const <String, String>{},
-      ])
-    : '';
+/// files and the files it generates there.
+_Selection _selectionOf(MatrixAppTest test, MatrixApp app) =>
+    test.appliesTo(app)
+        ? (
+            applies: true,
+            values: jsonEncode(
+              test.values?.call(app) ?? const <String, String>{},
+            ),
+            files: jsonEncode(
+              test.generatedFiles?.call(app, _packageOfUses) ??
+                  const <String, String>{},
+            ),
+          )
+        : (applies: false, values: '', files: '');
+
+/// What of an app of the matrix says how the matrix generates it, rather
+/// than what the app is, which a [MatrixAppTest] does not read (see
+/// [MatrixAppTests.modeProblems]).
+enum _CaseRead {
+  /// [MatrixApp.name].
+  appName('the name of the app (MatrixApp.name)', 'under another name'),
+
+  /// [MatrixApp.roleOptions].
+  roleOptions(
+    'the role options of the app (MatrixApp.roleOptions)',
+    'without them',
+  ),
+
+  /// [MatrixApp.modes].
+  modes('the modes of the app (MatrixApp.modes)', 'without them'),
+
+  /// One of them where the app lacks another, as a test that takes a value
+  /// from the modes of an app without that role option does.
+  together(
+    'the name, the role options or the modes of the app, one where it '
+        'lacks another',
+    'under another name and without its role options and modes',
+  );
+
+  const _CaseRead(this.what, this.otherwise);
+
+  /// What a test reads, for a message.
+  final String what;
+
+  /// How an app differs without it, for a message.
+  final String otherwise;
+
+  /// Each of the three alone.
+  static const List<_CaseRead> each = [appName, roleOptions, modes];
+
+  /// The name of an app under another name.
+  static const _otherName = 'another app';
+
+  /// [app] without this of it: under another name, without its role
+  /// options or without its modes, and the same app otherwise, with the
+  /// same modules and the same data and choices of its roles.
+  MatrixApp without(MatrixApp app) => switch (this) {
+        appName => app._with(name: _otherName),
+        roleOptions => app._with(roleOptions: const {}),
+        modes => app._with(modes: const {}),
+        together => app._with(
+            name: _otherName,
+            roleOptions: const {},
+            modes: const {},
+          ),
+      };
+}
+
+/// What a [MatrixAppTest] does otherwise in an app without something that
+/// it read of the app (see [_CaseRead]).
+enum _CaseEffect {
+  /// It applies to one of the two apps only.
+  applies('apply otherwise'),
+
+  /// It fills the placeholders of its files otherwise.
+  fills('get other values for their files'),
+
+  /// It generates other files.
+  generates('generate other files'),
+
+  /// It throws, as a test that looks the app up by its name does.
+  fails('fail');
+
+  const _CaseEffect(this.what);
+
+  /// What the tests would do, for a message.
+  final String what;
+}
 
 /// The name of the package that [_selectionOf] gives the apps whose files
 /// a test generates: the same for every app, so that only what the app is
@@ -1108,71 +1194,102 @@ final class MatrixAppTests {
       'as whether the app has the role (presentRoles), so that a new provider '
       'of the role gets the test as it is.';
 
-  /// The problems of the [tests] that read what the case of an app of
-  /// [apps], the apps of a matrix, is called or which options it got: for
-  /// each test, the apps in which it applies otherwise, or fills other
-  /// values or generates other files, once the app has another name, no
-  /// [MatrixApp.roleOptions] and no [MatrixApp.modes], with the same
-  /// modules and the same data and choices of its roles ([MatrixApp.hook]).
+  /// The problems of the [tests] that read what says how the matrix
+  /// generates an app of [apps], the apps of a matrix, rather than what the
+  /// app is: its name, its [MatrixApp.roleOptions] or its
+  /// [MatrixApp.modes]. Each problem tells which of them a test read, what
+  /// the test would do otherwise without it, and in which apps: apply to
+  /// one of the two apps only, fill other values, generate other files or
+  /// fail. The other app has another name, no role options or no modes,
+  /// and the same modules and the same data and choices of its roles
+  /// ([MatrixApp.hook]).
   ///
   /// The name and the options of an app are how the matrix generates it,
   /// such as `--clock-hours=12` for the app of another value of a mode
   /// option (see [RoleOption.mode]). What the app is, its roles chose: a
-  /// role may choose a value that no option gave, as it chooses the first
-  /// value of a mode option, and an option may be given to an app whose
-  /// roles do not read it. So a test takes the mode of an app from the
-  /// choice of the role, with a function of the role that reads it from the
-  /// input of its hooks ([Role.hookInput]), as it takes the route that the
-  /// app starts on with `routerRole.startIn(routerRole.hookInput(
-  /// app.hook!))`, and a test that takes it from elsewhere is a problem.
+  /// role chooses the first value of a mode option for an app that gets no
+  /// value of it, and an option may be given to an app whose roles do not
+  /// read it. So a test takes the mode of an app from the choice of the
+  /// role, with a function of the role that reads it from the input of its
+  /// hooks ([Role.hookInput]), as it takes the route that the app starts on
+  /// with `routerRole.startIn(routerRole.hookInput(app.hook!))`.
+  ///
+  /// The rule is about where a test reads the mode, not about the apps
+  /// that it runs in: a test may apply only to the apps in which a role
+  /// chose one value, which it reads from the hook.
   List<String> modeProblems(List<MatrixApp> apps) {
     final problems = <String>[];
     for (final test in tests) {
-      final reading = [
-        for (final app in apps)
-          if (_readsCase(test, app)) app.name,
-      ];
-      if (reading.isNotEmpty) problems.add(_byCase(test, reading));
+      // The apps in which the test read each thing, with each effect, in
+      // the order found.
+      final seen = <(_CaseRead, _CaseEffect), List<String>>{};
+      for (final app in apps) {
+        for (final read in _readsOf(test, app)) {
+          (seen[read] ??= []).add(app.name);
+        }
+      }
+      for (final MapEntry(key: (read, effect), value: names) in seen.entries) {
+        problems.add(_byCase(test, read, effect, names));
+      }
     }
     return problems;
   }
 
-  /// The problem that [test] selects its apps, takes its values or
-  /// generates its files by the name or the options of the apps [reading].
-  static String _byCase(MatrixAppTest test, List<String> reading) =>
-      'The tests of ${test.directory} select their apps, take the values of '
-      'their files or generate files by the name or the options of the app: '
-      'with another name and without its options, they would apply '
-      'otherwise, or get other values or files, in these apps of the matrix: '
-      '${reading.join(', ')}. A test takes what a role chose for the app, '
-      'such as the value of a mode option, from the roles of the app '
-      '(MatrixApp.hook), with a function of the role, since the role may '
-      'choose it without the option.';
+  /// The problem that [test] reads [read] of the apps [reading], without
+  /// which it would do [effect] there.
+  static String _byCase(
+    MatrixAppTest test,
+    _CaseRead read,
+    _CaseEffect effect,
+    List<String> reading,
+  ) =>
+      'The tests of ${test.directory} read ${read.what}: ${read.otherwise}, '
+      'they would ${effect.what} in these apps of the matrix: '
+      '${reading.join(', ')}. The name, the role options and the modes of an '
+      'app say how the matrix generates it. A test takes what a role chose '
+      'for the app, such as the value of a mode option, from the roles of '
+      'the app (MatrixApp.hook), with a function of the role, since the role '
+      'may choose it without the option.';
 
-  /// Whether [test] reads the name or the options of [app]: whether it
-  /// applies to the app under another name and without its options other
-  /// than to [app], or fills the values of its files, or generates files,
-  /// there otherwise, or throws there.
-  static bool _readsCase(MatrixAppTest test, MatrixApp app) {
+  /// What [test] reads of [app] that says how the matrix generates it,
+  /// each with what the test does otherwise without it: the name, the role
+  /// options and the modes, each alone, or, when none of them alone
+  /// changes anything, the three together, as for a test that takes a
+  /// value from one of them only where the app lacks another.
+  static List<(_CaseRead, _CaseEffect)> _readsOf(
+    MatrixAppTest test,
+    MatrixApp app,
+  ) {
     final selection = _selectionOf(test, app);
-    try {
-      return _selectionOf(
-            test,
-            MatrixApp(
-              _otherName,
-              app.modules,
-              everyModuleWith: app.everyModuleWith,
-              hook: app.hook,
-            ),
-          ) !=
-          selection;
-    } on Object {
-      return true;
-    }
+    List<(_CaseRead, _CaseEffect)> seen(List<_CaseRead> reads) => [
+          for (final read in reads)
+            if (_effectOf(test, selection, read.without(app))
+                case final effect?)
+              (read, effect),
+        ];
+    final each = seen(_CaseRead.each);
+    return each.isNotEmpty ? each : seen(const [_CaseRead.together]);
   }
 
-  /// The name that [_readsCase] gives an app in place of its own.
-  static const _otherName = 'another app';
+  /// What [test] does in [other] otherwise than [selection], what it does
+  /// in the app that [other] is but for something that it may have read,
+  /// or `null` if it does the same.
+  static _CaseEffect? _effectOf(
+    MatrixAppTest test,
+    _Selection selection,
+    MatrixApp other,
+  ) {
+    final _Selection otherwise;
+    try {
+      otherwise = _selectionOf(test, other);
+    } on Object {
+      return _CaseEffect.fails;
+    }
+    if (otherwise.applies != selection.applies) return _CaseEffect.applies;
+    if (otherwise.values != selection.values) return _CaseEffect.fills;
+    if (otherwise.files != selection.files) return _CaseEffect.generates;
+    return null;
+  }
 }
 
 /// Copies the files of [tests] into the app of the matrix [app], generated

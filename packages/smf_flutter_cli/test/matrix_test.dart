@@ -1503,17 +1503,40 @@ Type type() => Types;
           ? log.sublist(log.indexOf('Problems:') + 1)
           : [];
 
-      /// The problem that the tests of [directory] read the name or the
-      /// options of the apps [names].
-      String byCase(String directory, String names) =>
-          'The tests of $directory select their apps, take the values of '
-          'their files or generate files by the name or the options of the '
-          'app: with another name and without its options, they would apply '
-          'otherwise, or get other values or files, in these apps of the '
-          'matrix: $names. A test takes what a role chose for the app, such '
-          'as the value of a mode option, from the roles of the app '
-          '(MatrixApp.hook), with a function of the role, since the role may '
-          'choose it without the option.';
+      /// The problem that the tests of [directory] read [read] of the apps
+      /// [names], what it is and how an app differs without it, and would
+      /// [effect] there otherwise.
+      String byCase(
+        String directory,
+        (String, String) read,
+        String effect,
+        String names,
+      ) =>
+          'The tests of $directory read ${read.$1}: ${read.$2}, they would '
+          '$effect in these apps of the matrix: $names. The name, the role '
+          'options and the modes of an app say how the matrix generates it. A '
+          'test takes what a role chose for the app, such as the value of a '
+          'mode option, from the roles of the app (MatrixApp.hook), with a '
+          'function of the role, since the role may choose it without the '
+          'option.';
+
+      const theName = (
+        'the name of the app (MatrixApp.name)',
+        'under another name',
+      );
+      const theOptions = (
+        'the role options of the app (MatrixApp.roleOptions)',
+        'without them',
+      );
+      const theModes = (
+        'the modes of the app (MatrixApp.modes)',
+        'without them',
+      );
+      const together = (
+        'the name, the role options or the modes of the app, one where it '
+            'lacks another',
+        'under another name and without its role options and modes',
+      );
 
       /// The apps of the other values of the option of the doors: those of
       /// their provider, and those with every module.
@@ -1577,7 +1600,7 @@ Type type() => Types;
 
       test(
           'fails when they select their apps by the name, the modes or the '
-          'options of an app', () async {
+          'options of an app, and tells which of them they read', () async {
         final byName = MatrixAppTest(
           '/tests/name',
           appliesTo: (app) => app.name.endsWith('--access=guests'),
@@ -1599,16 +1622,19 @@ Type type() => Types;
           1,
         );
         expect(problems(), [
-          equals(byCase('/tests/name', guests)),
-          equals(byCase('/tests/modes', anyone)),
-          equals(byCase('/tests/options', guests)),
+          equals(byCase('/tests/name', theName, 'apply otherwise', guests)),
+          equals(byCase('/tests/modes', theModes, 'apply otherwise', anyone)),
+          equals(
+            byCase('/tests/options', theOptions, 'apply otherwise', guests),
+          ),
         ]);
       });
 
       test(
           'fails when they take the values of their files or generate files '
-          'by the options or the name of an app, also when they look the app '
-          'up by its name', () async {
+          'by the options, the modes or the name of an app, also when they '
+          'select nothing by it or look the app up by its name, and tells '
+          'what they would do otherwise', () async {
         bool hasDoors(MatrixApp app) => app.hook!.presentRoles.contains(doors);
         final values = MatrixAppTest(
           '/tests/values',
@@ -1622,6 +1648,15 @@ Type type() => Types;
             'test/access.dart': '// ${app.modes}\n',
           },
         );
+        // The name of the app in a comment of a file selects nothing, and
+        // is still read from the name.
+        final comment = MatrixAppTest(
+          '/tests/comment',
+          appliesTo: (app) => app.modes.isEmpty && hasDoors(app),
+          generatedFiles: (app, packageName) => {
+            'test/about.dart': '// The tests of ${app.name}.\n',
+          },
+        );
         // A table of the apps by their names has no other app.
         final lookup = MatrixAppTest(
           '/tests/lookup',
@@ -1630,15 +1665,59 @@ Type type() => Types;
             'kind': const {'flutter_core': 'the app entry alone'}[app.name]!,
           },
         );
+        // The value of the option, or else the mode: neither alone changes
+        // what the test gets, since an app of a mode has both.
+        final either = MatrixAppTest(
+          '/tests/either',
+          appliesTo: hasDoors,
+          values: (app) => {
+            'access':
+                app.roleOptions['access'] ?? app.modes['access'] ?? 'members',
+          },
+        );
 
         expect(
-          await run(modules: doorsOfWood, appTests: [values, files, lookup]),
+          await run(
+            modules: doorsOfWood,
+            appTests: [values, files, comment, lookup, either],
+          ),
           1,
         );
         expect(problems(), [
-          equals(byCase('/tests/values', ofModes)),
-          equals(byCase('/tests/files', ofModes)),
-          equals(byCase('/tests/lookup', 'flutter_core')),
+          equals(
+            byCase(
+              '/tests/values',
+              theOptions,
+              'get other values for their files',
+              ofModes,
+            ),
+          ),
+          equals(
+            byCase('/tests/files', theModes, 'generate other files', ofModes),
+          ),
+          // The apps with the doors and their first value: under another
+          // name the comment differs, and without their modes the tests
+          // would apply to the apps of the other values too.
+          equals(
+            byCase(
+              '/tests/comment',
+              theName,
+              'generate other files',
+              'lock, every module (oak), every module (pine)',
+            ),
+          ),
+          equals(
+            byCase('/tests/comment', theModes, 'apply otherwise', ofModes),
+          ),
+          equals(byCase('/tests/lookup', theName, 'fail', 'flutter_core')),
+          equals(
+            byCase(
+              '/tests/either',
+              together,
+              'get other values for their files',
+              ofModes,
+            ),
+          ),
         ]);
       });
     });
