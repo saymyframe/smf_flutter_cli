@@ -264,11 +264,13 @@ final class RouterRole extends Role<RoutesData> {
   ///   guard is shown.
   /// - A guard that stands for a condition gets the answers of a gate, for
   ///   the routes that ask for the condition. The target takes the whole
-  ///   stack, so the user cannot go back from it to the screen that they
-  ///   were on, and the location that was asked for takes the stack in turn
-  ///   once the guards allow it. No gate keeps the user in the flow then,
-  ///   so they may be on another screen when the condition comes to hold:
-  ///   `changed` answers the remembered location all the same.
+  ///   stack, and the stacks of every branch of the main navigation with
+  ///   it, though no page of a branch asks for a condition. So the user
+  ///   cannot go back from the target to the screen that they were on, and
+  ///   the location that was asked for takes the stack in turn once the
+  ///   guards allow it. No gate keeps the user in the flow then, so they
+  ///   may be on another screen when the condition comes to hold: `changed`
+  ///   answers the remembered location all the same.
   /// - For a location that the guards let the user see, `asked` answers
   ///   `/` when its flow is over, as [flowIsOver] tells, and `null`
   ///   otherwise. So the routes of a flow show only while a guard with
