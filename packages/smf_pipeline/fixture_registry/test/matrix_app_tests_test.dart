@@ -238,6 +238,65 @@ void main() {
     }
   });
 
+  test(
+      'the test of the hours of the fixture clock applies to the apps with '
+      'every module, which have the clock and the module that uses it, and '
+      'gets the hours that the clock role chose for each: 24 in an app that '
+      'got no value of the option of the role, and 12 in the app of the '
+      'other value', () {
+    final clockHours = named('clock_hours');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    // It tests a module, not the contract of a role.
+    expect(clockHours.roles, isEmpty);
+    expect(appsOf(clockHours), [for (final app in everyModule) app.name]);
+    expect(
+      {for (final app in everyModule) app.name: clockHours.values!(app)},
+      {
+        for (final app in everyModule)
+          app.name: {
+            'clock_hours': app.name.endsWith(' --clock-hours=12') ? '12' : '24',
+          },
+      },
+    );
+    expect(
+      [
+        for (final app in everyModule)
+          if (clockHours.values!(app)['clock_hours'] == '12') app.name,
+      ],
+      hasLength(8),
+    );
+    // The hours come from the choice of the role, which an app has without
+    // the option too.
+    final byDefault = everyModule.first;
+    expect(
+      clockHours.values!(
+        MatrixApp(
+          byDefault.name,
+          byDefault.modules,
+          everyModuleWith: byDefault.everyModuleWith,
+          hook: byDefault.hook,
+        ),
+      ),
+      {'clock_hours': '24'},
+    );
+    // The apps of the clock alone run no test for it.
+    for (final name in [
+      'fake_clock_badge',
+      'fake_clock_user with clock, badge',
+      'clock by fake_clock_badge --clock-hours=12',
+    ]) {
+      expect(
+        clockHours.appliesTo(apps.singleWhere((app) => app.name == name)),
+        isFalse,
+        reason: name,
+      );
+    }
+  });
+
   /// The modules of the fixtures that provide the router role.
   List<ModuleId> routers() => [
         for (final module in fixtureModules())
