@@ -7,8 +7,9 @@ const _foundation = ImportRef('package:flutter/foundation.dart');
 /// The code of the guards of [facade] for `lib/core/router/app_router.dart`
 /// of the router's template: the class `RouteGuard`,
 /// [RouterRole.routeGuards], [RouterRole.redirectOf],
-/// [RouterRole.guardChanges] and the class [RouterRole.guardedNavigation],
-/// with the imports they need; or no code for an app without guards.
+/// [RouterRole.flowIsOver], [RouterRole.guardChanges] and the class
+/// [RouterRole.guardedNavigation], with the imports they need; or no code
+/// for an app without guards.
 ///
 /// The file of the function of each guard is imported with a prefix of the
 /// template's own, `guard0`, `guard1` and so on, so that no function can
@@ -48,6 +49,7 @@ Fragment _guardsCode(RouterFacade facade) {
   buffer
     ..writeln('];')
     ..write(_redirectOf)
+    ..write(_flowIsOver)
     ..write(_guardChanges)
     ..write(_guardedNavigation);
   return Fragment('$buffer', imports: [_foundation, ...files.values]);
@@ -64,6 +66,11 @@ const _guardClass = '''
 /// router shows the location that the user last asked for, or the one that
 /// the guard took the user from, or else the screen that the app starts
 /// on.
+///
+/// The routes of its flow show only while it does not allow. At any other
+/// time the router shows the screen that the app starts on in place of a
+/// location of the flow (see [flowIsOver]), so the code of the app changes
+/// what [allows] reads and never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -84,7 +91,7 @@ final class RouteGuard {
   /// guard does not allow.
   final AppLocation redirectTo;
 
-  /// The full names of the routes that the user may see while the guard
+  /// The full names of the routes that the user sees only while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
   final Set<String> flow;
 }
@@ -100,12 +107,32 @@ const _redirectOf = '''
 /// no route of a module, such as the error screen of the router. The first
 /// guard that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow.
+///
+/// A route that the guards let the user see may still be in a flow that is
+/// over, in place of which the router shows the screen that the app starts
+/// on; see [${RouterRole.flowIsOver}].
 AppLocation? ${RouterRole.redirectOf}(String? routeName) {
   for (final guard in ${RouterRole.routeGuards}) {
     if (guard.allows.value) continue;
     return guard.flow.contains(routeName) ? null : guard.redirectTo;
   }
   return null;
+}
+''';
+
+/// The function of the app that says whether the flow of a route is over.
+const _flowIsOver = '''
+
+/// Whether the route [routeName] is in the flow of a guard and every guard
+/// with that flow allows: the flow is over, and the router shows the screen
+/// that the app starts on in place of the route.
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, which is in no flow. Two guards with one target
+/// have one flow, which is over once both allow.
+bool ${RouterRole.flowIsOver}(String? routeName) {
+  final guards = $_list.where((guard) => guard.flow.contains(routeName));
+  return guards.isNotEmpty && guards.every((guard) => guard.allows.value);
 }
 ''';
 
@@ -119,9 +146,11 @@ final Listenable ${RouterRole.guardChanges} = Listenable.merge([
 ]);
 ''';
 
-/// The names that the code of [_guardedNavigation] has from the role.
+/// The names that the code of [_flowIsOver] and of [_guardedNavigation] has
+/// from the role.
 const String _navigation = RouterRole.guardedNavigation;
 const String _ask = RouterRole.redirectOf;
+const String _over = RouterRole.flowIsOver;
 const String _list = RouterRole.routeGuards;
 const String _changes = RouterRole.guardChanges;
 
@@ -155,11 +184,10 @@ final class $_navigation<L> {
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
-  /// Whether each guard allowed when the router last told of its pages.
-  List<bool> _allowed = _allowedNow();
-
   /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it; see [$_ask].
+  /// full name [route], or `null` to show it: the target of the guard that
+  /// keeps the user from it (see [$_ask]), or [start] for a location in a
+  /// flow that is over (see [$_over]).
   ///
   /// The router asks before it shows a location: the one the app starts
   /// on, each one that `go()`, `push()` or `replace()` is asked to show,
@@ -170,7 +198,7 @@ final class $_navigation<L> {
   /// allows, its flow is over.
   ({L location})? asked(String? route, L location) {
     final target = $_ask(route);
-    if (target == null) return null;
+    if (target == null) return $_over(route) ? (location: start) : null;
     if (!_inAFlow(route)) _remembered = (route: route, location: location);
     return (location: locationOf(target));
   }
@@ -189,14 +217,12 @@ final class $_navigation<L> {
   ///   already or it is in the flow of a guard;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
-  /// - [start], when a guard started allowing while a page of its flow is
-  ///   on top, every guard allows and nothing is remembered: its flow is
-  ///   over.
+  /// - [start], when the page on top is in a flow that is over (see
+  ///   [$_over]): its guard started allowing while the flow was shown, and
+  ///   nothing is remembered.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
-    final before = _allowed;
-    _allowed = _allowedNow();
     for (final page in pages) {
       final target = $_ask(page.route);
       if (target == null) continue;
@@ -214,19 +240,8 @@ final class $_navigation<L> {
       _remembered = null;
       return (location: remembered.location);
     }
-    final top = pages.firstOrNull?.route;
-    for (final (index, guard) in $_list.indexed) {
-      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
-        return _allowed.contains(false) ? null : (location: start);
-      }
-    }
-    return null;
+    return $_over(pages.firstOrNull?.route) ? (location: start) : null;
   }
-
-  /// Whether each guard allows now, in the order of [$_list].
-  static List<bool> _allowedNow() => [
-    for (final guard in $_list) guard.allows.value,
-  ];
 
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
@@ -287,9 +302,10 @@ List<String> _guardFunctionProblems(RouteGuard guard, String label) {
 /// The target is a top-level route, as the router shows it without the
 /// pages of other routes below it. It needs no values, as the router has
 /// none to give it. It is outside the main navigation, which the guard
-/// keeps the user out of. And no route of its flow can start the app:
-/// once the guard allows, the router shows the location that it kept the
-/// user from, and an app that starts in the flow has none.
+/// keeps the user out of. And no route of its flow can start the app: the
+/// routes of a flow show only while its guard does not allow, and the
+/// router shows the screen that the app starts on in their place once the
+/// flow is over.
 List<String> _guardTargetProblems(
   RouteGuard guard,
   String label,

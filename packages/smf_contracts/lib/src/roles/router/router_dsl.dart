@@ -56,11 +56,21 @@ final class RoutesData implements DataWithTexts {
 /// the flow. See [RouterRole.guardedNavigation] for what every router does
 /// with the guards.
 ///
-/// A module whose guard stops allowing by what its own screens do, such as
-/// a sign-out, decides whether the user comes back to where they were: if
-/// it goes to the target of the guard with `go()` before the guard stops
-/// allowing, the guard takes the user from no location, and once it allows
-/// again the router shows the screen that the app starts on.
+/// The routes of the flow show only while the guard does not allow. Once
+/// it allows, and so does every other guard of the module with the same
+/// target, the flow is over: the router shows the screen that the app
+/// starts on in place of a location of the flow, whether `go()`, `push()`,
+/// `replace()` or the platform asks for it, and such a `push()` completes
+/// with `null`. So no code navigates into a flow, the module of the guard
+/// included: it changes what the guard reads, and the router shows the
+/// target.
+///
+/// That holds for a guard that stops allowing by what the screens of its
+/// own module do, such as a sign-out, too: the router remembers the
+/// location that the guard takes the user from, and shows it once the
+/// guard allows again. The module cannot go to the target of its guard
+/// first: while the guard allows, a `go()` to the target shows the screen
+/// that the app starts on.
 ///
 /// A guard keeps the user from every route outside its flow. A condition
 /// that only some routes ask for, such as a paid screen, is not a guard:
