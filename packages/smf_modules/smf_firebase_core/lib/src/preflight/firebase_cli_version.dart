@@ -19,10 +19,11 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// PostGenStep(tool, arguments, skippable: true, needs: [version.id]),
 /// ```
 ///
-/// The check runs `firebase --version` as [FirebaseCliCheck] does, and takes
-/// the last line of its output that is a version, of three numbers. Any
-/// later version passes, one of a later major version too. A pre-release of
-/// the lowest version, such as `15.6.0-rc.1`, comes before it.
+/// The check runs `firebase --version` as the check of the Firebase CLI of
+/// this package does, and takes the last line of its standard output that
+/// is a version, of three numbers. Any later version passes, one of a later
+/// major version too. A pre-release of the lowest version, such as
+/// `15.6.0-rc.1`, comes before it.
 ///
 /// Its description names the lowest version. For an older Firebase CLI, the
 /// check tells which command it found and in which version
@@ -32,8 +33,8 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// too, so the user updates it.
 ///
 /// On a machine without the Firebase CLI the check reports it missing, and
-/// when the command does not run, it says only that: [FirebaseCliCheck]
-/// tells why, and offers the installation.
+/// when the command does not run, it says only that: the check of the
+/// Firebase CLI of this package tells why, and offers the installation.
 final class FirebaseCliVersionCheck extends PreflightCheck {
   /// Creates the check of a Firebase CLI in the version [minimum] or later,
   /// which is three numbers, such as `15.6.0`.
