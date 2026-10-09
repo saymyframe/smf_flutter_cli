@@ -5,6 +5,10 @@
 /// both shows that the pipeline keeps the data of roles apart by role, not
 /// by type. One module provides both roles.
 ///
+/// The badge role publishes a condition that routes of an app ask for, so
+/// that two fixture features meet through it: one asks for it on its
+/// routes, and the other has the guard that stands for it.
+///
 /// The clock has a mode option, `--clock-hours`: an app with a clock of 12
 /// hours is another app than one with a clock of 24, so the tests build
 /// both.
@@ -139,8 +143,17 @@ final class _ClockTemplate extends RoleTemplate<String> {
 
 /// A role of a third-party package with the same data type as [ClockRole]:
 /// a badge with the labels the modules ask for.
+///
+/// It publishes a condition for the routes of an app, [holder]: a feature
+/// asks for it on a route, and another module stands for it with a guard,
+/// and each knows only this role.
 final class BadgeRole extends Role<String> {
   const BadgeRole._();
+
+  /// What a user needs for the routes of the holders of a badge. A module
+  /// that requires the role says whether the user holds one, with a guard
+  /// of the routes that stands for the condition.
+  static const holder = RouteCondition(badgeRole, 'holder');
 
   /// `Badge createBadge()`, which every provider generates.
   static const createBadge = RequiredFunction(

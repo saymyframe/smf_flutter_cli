@@ -9,6 +9,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
@@ -86,6 +87,7 @@ void main() {
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
     expect(named('router_guards').roles, {routerRole});
+    expect(named('router_conditions').roles, {routerRole});
     expect(named('router_guards_fallback').roles, {routerRole});
     expect(named('layout_guards').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
@@ -307,7 +309,8 @@ void main() {
       'manager that they depend on, whichever the other providers are, so '
       'every covering of the pairs of providers has both kinds for each '
       'router; and the fixture late gate is in the apps with the fixture '
-      'gates, before them, though the app asks its guard after theirs', () {
+      'gates, before them, though the app asks its guard after their gates, '
+      'and the guard of a condition of the fixture gates after every gate', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -333,17 +336,48 @@ void main() {
         lessThan(app.modules.indexOf(FakeGateModule.id)),
         reason: app.name,
       );
+      // And the guard that stands for a condition comes after the gates,
+      // that of a later stage too, though its module declares it second.
+      final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
       expect(
         [
-          for (final guard
-              in routerRole.facadeOf(routerRole.hookInput(app.hook!)).guards)
-            '${guard.fullName} ${guard.guard.stage.name}',
+          for (final guard in facade.guards)
+            [
+              guard.fullName,
+              guard.guard.stage.name,
+              if (guard.guard.condition case final condition?) '$condition',
+            ].join(' '),
         ],
         [
           'fake_gate.first welcome',
           'fake_gate.second welcome',
           'fake_late_gate.late identity',
+          'fake_gate.holder welcome badge.holder',
         ],
+        reason: app.name,
+      );
+      expect(
+        [
+          for (final feature in facade.features)
+            for (final guard in feature.guards) guard.fullName,
+        ],
+        [
+          'fake_late_gate.late',
+          'fake_gate.first',
+          'fake_gate.holder',
+          'fake_gate.second',
+        ],
+        reason: app.name,
+      );
+      // The app has the role of the condition, which the fixture gates
+      // require, and the routes of the second fixture feature ask for it.
+      expect(app.hook!.presentRoles, contains(badgeRole), reason: app.name);
+      expect(
+        [
+          for (final route in facade.routesAsking(BadgeRole.holder))
+            route.fullName,
+        ],
+        ['fake_second.members', 'fake_second.memberCard'],
         reason: app.name,
       );
     }
@@ -430,6 +464,71 @@ void main() {
   });
 
   test(
+      'the tests of a guard that stands for a condition apply to the apps '
+      'with the tests of the guards, which have the guard of the fixture '
+      'gates for the condition of the fixture badge role and the routes of '
+      'the second fixture feature that ask for it, with each router', () {
+    final conditions = named('router_conditions');
+
+    // They use the helpers of the tests of the guards, and close and open
+    // the gates and the late gate too.
+    expect(appsOf(conditions), appsOf(named('router_guards')));
+    for (final app in apps) {
+      if (!conditions.appliesTo(app)) continue;
+      final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
+      final guard = facade.guardFor(BadgeRole.holder);
+      expect(guard?.fullName, 'fake_gate.holder', reason: app.name);
+      // The guard has the flow of a gate of its module, and does not bring
+      // the user back.
+      expect(
+        [
+          for (final other in facade.guards)
+            if (other.isGate && other.target == guard!.target) other.fullName,
+        ],
+        ['fake_gate.first'],
+        reason: app.name,
+      );
+      expect(guard!.guard.resumes, isFalse, reason: app.name);
+      // A route asks for the condition by being below one that does, and
+      // both are outside the main navigation.
+      final routes = facade.routesAsking(BadgeRole.holder);
+      expect(
+        [for (final route in routes) route.route.conditions.length],
+        [1, 0],
+        reason: app.name,
+      );
+      for (final route in routes) {
+        expect(route.topLevel.route.destination, isNull, reason: app.name);
+      }
+    }
+    for (final router in routers()) {
+      expect(
+        [
+          for (final app in apps)
+            if (conditions.appliesTo(app) && app.modules.contains(router))
+              app.name,
+        ],
+        isNotEmpty,
+        reason: 'No app with $router has the tests of the conditions.',
+      );
+    }
+    // No app of the second fixture feature without the fixture gates has
+    // them: its routes that ask for the condition have no guard there.
+    for (final app in apps) {
+      if (!app.modules.contains(FakeSecondModule.id)) continue;
+      if (app.modules.contains(FakeGateModule.id)) continue;
+      expect(conditions.appliesTo(app), isFalse, reason: app.name);
+      expect(
+        routerRole
+            .facadeOf(routerRole.hookInput(app.hook!))
+            .guardFor(BadgeRole.holder),
+        isNull,
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
       'the test of the guards over the fallback screen applies to the apps '
       'with the fixture gates in which no route starts the app, with each '
       'router', () {
@@ -498,12 +597,13 @@ void main() {
   test(
       'the walk of the routes goes to the routes of the fixture gates and '
       'of the fixture late gate, the flows of their guards, and to the '
-      'routes of the other fixtures, in the order of the routes of the app; '
-      'and its file has the targets of the guards in the order the app asks '
-      'the guards, by their stages', () {
+      'routes of the other fixtures, those that ask for a condition among '
+      'them, in the order of the routes of the app; and its file has the '
+      'targets of the guards in the order the app asks the guards, by their '
+      'stages, each once', () {
     // The apps with every fixture, where the test of the walk closes and
-    // opens a gate: the walk has locations of the flows of the three
-    // guards and locations outside them to check there.
+    // opens a gate: the walk has locations of the flows of the guards,
+    // locations that ask for a condition and others to check there.
     final withGates = apps.where(named('router_walk_guards').appliesTo);
     expect(withGates, isNotEmpty);
     for (final app in withGates) {
@@ -518,6 +618,8 @@ void main() {
           'fake_feature.home',
           'fake_second.second',
           'fake_second.outside',
+          'fake_second.members',
+          'fake_second.memberCard',
           'fake_late_gate.gate',
           'fake_gate.gate',
           'fake_gate.step',
@@ -526,6 +628,8 @@ void main() {
         reason: app.name,
       );
       // The targets come in the order of the guards, the late gate last.
+      // The guard of a condition, which the app asks after it, shows the
+      // target of the first guard, which the file has once.
       expect(
         [
           for (final route in RegExp(r"route: '([\w.]+)'").allMatches(
@@ -550,6 +654,7 @@ void main() {
     for (final name in [
       'router_listeners',
       'router_guards',
+      'router_conditions',
       'layout_guards',
       'router_walk_guards',
       'layout_screens',

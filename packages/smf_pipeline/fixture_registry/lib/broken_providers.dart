@@ -19,6 +19,7 @@ import 'package:fake_broken/fake_broken.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
@@ -432,6 +433,7 @@ List<BrokenProvider> brokenProviders() => const [
           FakeSecondModule.id,
           FakeLateGateModule.id,
           FakeGateModule.id,
+          FakeClockBadgeModule.id,
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
@@ -891,13 +893,18 @@ List<BrokenProvider> brokenProviders() => const [
 /// The other modules of the app of a router that breaks what the role says
 /// of the guards of the routes: the fixture late gate and the fixture
 /// gates, in the order of the registry of the fixtures, whose guards the
-/// tests close and open, the fixture feature, whose screens the guards keep
-/// the user from, and what the fixture feature and the tests of the
-/// listeners of the screen need.
+/// tests close and open, with the provider of the fixture badge role, whose
+/// condition one of those guards stands for; the fixture feature, whose
+/// screens the guards keep the user from, and on whose screen the app
+/// starts; the second fixture feature, two routes of which ask for that
+/// condition; and what the fixture feature and the tests of the listeners
+/// of the screen need.
 const List<ModuleId> _appWithGates = [
   FakeFeatureModule.id,
+  FakeSecondModule.id,
   FakeLateGateModule.id,
   FakeGateModule.id,
+  FakeClockBadgeModule.id,
   FakeBlocModule.id,
   FakeDiModule.id,
   FakeAnalyticsModule.id,
@@ -994,6 +1001,8 @@ List<MatrixFailingApp> brokenModuleApps() => const [
           FakeRouterModule(),
           FakeBlocModule(),
           FakeGateModule(open: false),
+          // The fixture badge role, which the fixture gates require.
+          FakeClockBadgeModule(),
         ],
         failures: [
           MatrixExpectedFailure(

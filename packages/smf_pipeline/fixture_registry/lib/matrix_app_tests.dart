@@ -19,13 +19,13 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
-/// they use: the fixture features, the fixture gates and the fixture late
-/// gate, whose guards of the routes a test closes and opens, the fixture
-/// analytics and the fixture screen log, whose listeners of the screen note
-/// what they hear, the fixture setting, whose restorers note what they
-/// read, the fixture theme, whose colour a test changes, and the module
-/// that uses the fixture clock, which shows an hour on a clock of 24 hours
-/// or of 12.
+/// they use: the fixture features, the second of which has routes that ask
+/// for a condition, the fixture gates and the fixture late gate, whose
+/// guards of the routes a test closes and opens, the fixture analytics and
+/// the fixture screen log, whose listeners of the screen note what they
+/// hear, the fixture setting, whose restorers note what they read, the
+/// fixture theme, whose colour a test changes, and the module that uses the
+/// fixture clock, which shows an hour on a clock of 24 hours or of 12.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -71,6 +71,22 @@ Future<MatrixAppTests> fixtureAppTests() async {
       MatrixAppTest(
         '$appTests/router_guards',
         appliesTo: (app) => _hearsScreens(app) && _hasGates(app),
+        roles: {routerRole},
+      ),
+      // A guard that stands for a condition, which keeps the user only from
+      // the routes that ask for it, whichever module provides the router:
+      // two routes of the second fixture feature ask for the condition of
+      // the fixture badge role, and the third guard of the fixture gates
+      // stands for it, with the flow of the first, a gate. The tests take
+      // the badge away and give it back, next to the gates. The apps it
+      // applies to have the tests of router_screens and of router_guards,
+      // whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/router_conditions',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            _hasGates(app) &&
+            app.modules.contains(const ModuleId('fake_second')),
         roles: {routerRole},
       ),
       // The guards over the fallback screen of the app entry, the location
@@ -418,8 +434,9 @@ bool _hearsScreens(MatrixApp app) =>
     app.modules.contains(const ModuleId('fake_analytics'));
 
 /// Whether [app] has the guards of the routes that the tests of the guards
-/// close and open: those of the fixture gates, and that of the fixture late
-/// gate, of a later stage, which does not bring the user back.
+/// close and open: those of the fixture gates, one of which stands for a
+/// condition, and that of the fixture late gate, of a later stage, which
+/// does not bring the user back.
 bool _hasGates(MatrixApp app) =>
     app.modules.contains(const ModuleId('fake_gate')) &&
     app.modules.contains(const ModuleId('fake_late_gate'));
