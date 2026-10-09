@@ -100,12 +100,16 @@ final class PostGenStep extends Contribution {
   /// `null` if there is nothing of the kind.
   ///
   /// A step with a notice runs only once the user agreed to it:
-  /// - a run that can ask asks about the step, with the notice in the
-  ///   question, between what the step does and `Run it now?`. It asks
-  ///   about a step that continues another too ([followUpOf]), which would
-  ///   run without a question otherwise, once the step that it continues
-  ///   succeeded. The answer of a user who only presses Enter is yes, as
-  ///   for every step;
+  /// - a run that can ask asks about the step when the step can run, with
+  ///   the notice in the question, between what the step does and
+  ///   `Run it now?`. It asks about a step that continues another too
+  ///   ([followUpOf]), which would run without a question otherwise, once
+  ///   the step that it continues succeeded. The answer of a user who only
+  ///   presses Enter is yes, as for every step. It does not ask about a
+  ///   step that cannot run, which is left for later as any step: one that
+  ///   is [external] in a run that skips external setup, one that [needs]
+  ///   a check which has not passed, one whose tool is missing, and one
+  ///   that continues a step which is not done;
   /// - a run that cannot ask leaves the step for later, where it would run
   ///   a step without a notice unasked.
   ///
@@ -122,7 +126,9 @@ final class PostGenStep extends Contribution {
   /// is printed after its command, and `--explain` shows it under the
   /// command. So it is a sentence or two on one line that read on their own
   /// in each of these places, and it does not refer to the question, such
-  /// as with "answer no".
+  /// as with "answer no". The pipeline reports a notice that is blank, or
+  /// that has a line break, as a problem of its contributor: the question
+  /// is one line.
   final String? notice;
 
   /// Whether the step talks to the user, so the pipeline runs it with the
