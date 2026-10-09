@@ -267,9 +267,9 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/router_walk_test.dart',
-            'each location that needs no values shows the page and the screen '
-                'of its route',
-            'Each location shows the screen of its route.',
+            _walkTest,
+            'Each location shows the screen of its route, or the screen that '
+                'the app starts on if it is in a flow that is over.',
           ),
         ],
       ),
@@ -278,7 +278,9 @@ List<BrokenProvider> brokenProviders() => const [
         role: routerRole,
         bug: 'It asks the guards of the routes about the screen that the app '
             'starts on, and again when one of them changes, but not about the '
-            'locations that go(), push() and replace() are asked to show.',
+            'locations that go(), push() and replace() are asked to show. So '
+            'it shows a location that a guard keeps the user from, and one in '
+            'a flow that is over.',
         app: _appWithGates,
         failures: [
           MatrixExpectedFailure(
@@ -296,11 +298,35 @@ List<BrokenProvider> brokenProviders() => const [
                 'a route like any other.',
           ),
           MatrixExpectedFailure(
+            'test/router_guard_flow_test.dart',
+            _flowTest,
+            'go() to a location in a flow that is over shows the screen that '
+                'the app starts on.',
+          ),
+          // A location that is asked for while a guard that does not bring
+          // the user back does not allow.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'go() to a location that a guard keeps the user from shows the '
+                'target of the guard.',
+          ),
+          MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
-            'the walk of the routes holds while a guard keeps the user out',
+            'the walk of the routes holds while a guard keeps the user out, '
+                'and once the flows of the guards are over',
             'While a guard does not allow, each location outside its flow '
                 'shows the target of the guard, and each location of its flow '
                 'its own screen.',
+          ),
+          // With guards that allow, the walk goes to the routes of their
+          // flows too, which are over.
+          MatrixExpectedFailure(
+            'test/router_walk_test.dart',
+            _walkTest,
+            'The page on top of the innermost navigator on the screen is '
+                'named after the route of each location, or after the route '
+                'that the app starts on for a location in a flow that is over.',
           ),
         ],
       ),
@@ -336,19 +362,28 @@ List<BrokenProvider> brokenProviders() => const [
           ),
           MatrixExpectedFailure(
             'test/router_guard_flow_test.dart',
-            'a guard that starts allowing while its flow is shown, with no '
-                'location to come back to, shows the screen that the app '
-                'starts on',
-            'When a guard starts allowing while a page of its flow is on top '
-                'and there is no location to come back to, the router shows '
-                'the screen that the app starts on.',
+            _flowTest,
+            'When a guard starts allowing while a page of its flow is on '
+                'top, the router leaves the flow: it shows the screen that '
+                'the app starts on.',
+          ),
+          // What the guards answer for a guard that does not bring the user
+          // back is an answer like any other: the router does not show it.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'Once a guard allows, a guard of a later stage that does not '
+                'allow shows its target.',
           ),
           MatrixExpectedFailure(
             'test/router_guard_early_change_test.dart',
-            'a guard that changes before the router shows its first location '
-                'ends no flow later',
+            'a guard that starts allowing before the router shows its first '
+                'location lets the app start on the location that it is '
+                'opened with',
             'With guards that allow when the app starts, the app starts on '
-                'its start screen.',
+                'the location that it is opened with: the one from the '
+                'platform, or its start screen for a router that takes no '
+                'location from the platform.',
           ),
         ],
       ),
@@ -356,8 +391,10 @@ List<BrokenProvider> brokenProviders() => const [
         BrokenModule.routerKeepingPageOnGuardedReplace,
         role: routerRole,
         bug: 'Its replace() asks the guards of the routes, and leaves the '
-            'stack as it is when a guard keeps the user from the location, '
-            'rather than showing the target of the guard in its place.',
+            'stack as it is when they answer another location, rather than '
+            'showing that location in its place: the target of the guard '
+            'that keeps the user from the location, or the screen that the '
+            'app starts on for a location in a flow that is over.',
         app: _appWithGates,
         failures: [
           MatrixExpectedFailure(
@@ -367,6 +404,50 @@ List<BrokenProvider> brokenProviders() => const [
             'replace() with a location that a guard keeps the user from '
                 'shows the target of the guard alone, from a page of its flow '
                 'too.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_guard_flow_test.dart',
+            _flowTest,
+            'replace() with a location in a flow that is over shows the '
+                'screen that the app starts on.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerKeepingSelectedBranch,
+        role: routerRole,
+        bug: 'When it shows the location that the guards of the routes '
+            'answer, it puts the branches of the main navigation back on '
+            'their destinations, but for the selected one, which keeps its '
+            'pages. So once a guard that does not bring the user back allows '
+            'again, that branch still has a page that the guard kept the '
+            'user from.',
+        // The app of the guards with a layout and the second fixture
+        // feature, whose destination is the branch that is selected when
+        // the guard stops allowing. The fixture feature comes first, so the
+        // app starts on its screen.
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeLateGateModule.id,
+          FakeGateModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/layout_guard_return_test.dart',
+            'after a guard that does not bring the user back, the user is in '
+                'the main navigation on the screen that the app starts on, '
+                'and every branch is back on its destination',
+            'The target of a guard takes the stacks of every branch of the '
+                'main navigation, the selected one too: when the user does '
+                'not come back to that branch, it is back on its destination '
+                'all the same.',
           ),
         ],
       ),
@@ -808,12 +889,14 @@ List<BrokenProvider> brokenProviders() => const [
     ];
 
 /// The other modules of the app of a router that breaks what the role says
-/// of the guards of the routes: the fixture gates, whose guards the tests
-/// close and open, the fixture feature, whose screens the guards keep the
-/// user from, and what the fixture feature and the tests of the listeners
-/// of the screen need.
+/// of the guards of the routes: the fixture late gate and the fixture
+/// gates, in the order of the registry of the fixtures, whose guards the
+/// tests close and open, the fixture feature, whose screens the guards keep
+/// the user from, and what the fixture feature and the tests of the
+/// listeners of the screen need.
 const List<ModuleId> _appWithGates = [
   FakeFeatureModule.id,
+  FakeLateGateModule.id,
   FakeGateModule.id,
   FakeBlocModule.id,
   FakeDiModule.id,
@@ -836,6 +919,24 @@ const List<ModuleId> _appWithMainNavigation = [
   FakeServiceLogModule.id,
   FakeScreenLogModule.id,
 ];
+
+/// The name of the test of the walk of the routes.
+const _walkTest =
+    'each location that needs no values shows the page and the screen of '
+    'its route, or the screen that the app starts on if its flow is over';
+
+/// The name of the test of the flow of a guard of the routes.
+const _flowTest =
+    'the routes of the flow of a guard show only while the guard does not '
+    'allow, and the screen that the app starts on in their place once the '
+    'flow is over';
+
+/// The name of the test of a guard of the routes that does not bring the
+/// user back.
+const _returnTest =
+    'a guard that does not bring the user back shows the screen that the app '
+    'starts on once it allows again, or a location that was asked for while '
+    'it did not allow';
 
 /// The name of the test of the labels of the destinations.
 const _labelsTest =
@@ -897,8 +998,7 @@ List<MatrixFailingApp> brokenModuleApps() => const [
         failures: [
           MatrixExpectedFailure(
             'test/router_walk_test.dart',
-            'each location that needs no values shows the page and the '
-                'screen of its route',
+            _walkTest,
             'These guards of the routes do not allow, so the walk cannot '
                 'reach the routes outside their flows, and the tests of the '
                 'other modules of the app do not see the screens that they '

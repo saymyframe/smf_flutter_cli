@@ -116,11 +116,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // onboarding on a device, where a first launch finds nothing saved,
       // unless the onboarding is finished there. The test comes before the
       // walk of the routes in this list, whose probe then goes through the
-      // routes of an app past its onboarding. The walk goes to the route of
-      // the onboarding last, as it does to every route in the flow of a
-      // guard. By then the onboarding is finished, so its screen starts it
-      // again, and on a device the start check leaves the app in that
-      // state.
+      // routes of an app past its onboarding. For the route of the
+      // onboarding, whose flow is over by then, the walk expects the screen
+      // that the app starts on, or the target of a guard that does not
+      // allow there. So on a device the start check leaves the app with the
+      // onboarding finished.
       MatrixAppTest(
         '$onboarding/onboarding',
         appliesTo: _has(OnboardingModule.id),
@@ -675,20 +675,19 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// an `ErrorWidget` on the screen or an error that Flutter reports.
 ///
 /// In an app with guards of the routes, the walk expects what the role
-/// says: for a location that a guard keeps the user from, the page and the
-/// screen of the target of that guard (`redirectOf()` of the role). So its
-/// probe, `probeRoutes()`, which the start check runs on a device, holds
-/// whichever guards allow there, where no test can open one, such as a
-/// guard that asks for a signed-in user. The test itself first fails on
-/// each guard that does not allow, by its name: under `flutter test`, the
-/// module of a guard opens it for the tests of the app, in the mocks of its
-/// app test ([MatrixAppTest.mocks]), so that the walk reaches every route
-/// and the tests of the other modules see the screens that they expect.
-///
-/// The walk goes to the locations in the flows of the guards last (see
-/// [routerWalkFile]): a screen of a flow may change what its guard allows
-/// when it is shown, and the router then shows the target of that guard in
-/// place of each location that the walk goes to after it.
+/// says. For a location that a guard keeps the user from, that is the page
+/// and the screen of the target of that guard (`redirectOf()` of the
+/// role). For any other location in a flow that is over, it is the screen
+/// that the app starts on (`flowIsOver()` of the role). So its probe,
+/// `probeRoutes()`, which the start check runs on a device, holds whichever
+/// guards allow there, where no test can open one, such as a guard that
+/// asks for a signed-in user. The test itself first fails on each guard
+/// that does not allow, by its name: under `flutter test`, the module of a
+/// guard opens it for the tests of the app, in the mocks of its app test
+/// ([MatrixAppTest.mocks]), so that the walk reaches every route outside
+/// the flows and the tests of the other modules see the screens that they
+/// expect. The screens of a flow are then for the tests of its module,
+/// since the router shows them only while the guard does not allow.
 ///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes and the guards of its router role, into
@@ -717,40 +716,33 @@ Future<MatrixAppTest> routerWalkAppTest({
 /// locations of the routes that need no values, each with the full name of
 /// its route ([FacadeRoute.fullName]), the location, created as `const`
 /// from its class of the navigation of the role, and the type of the screen
-/// that the route shows.
+/// that the route shows. They are in the order of the routes of the app
+/// ([RouterFacade.routes]).
 ///
-/// The locations are in the order of the routes of the app
-/// ([RouterFacade.routes]), but for those of the routes in the flow of a
-/// guard ([FacadeGuard.flow]), which come after every other, in the same
-/// order among themselves. A screen of a flow may change what its guard
-/// allows when it is shown: one that is shown although its flow is over
-/// may start the flow again, for example. From then on the router shows
-/// the target of that guard in place of each location outside its flow.
-/// The walk expects what `redirectOf()` says, so it would pass without
-/// seeing the screens of the locations that come after. With the flows
-/// last, it has seen every other location by then. The order does not
-/// help among the flows themselves: once a screen of one flow has made its
-/// guard stop allowing, the walk checks the locations of the flows of the
-/// other guards only against `redirectOf()`.
-///
-/// The file also says what the guards of the routes of the app
-/// ([RouterFacade.guards]) do to the walk, with two functions that every
-/// app gets, so that the walk is the same in an app with guards and in one
-/// without, which has nothing of what the role generates for them:
-/// - `shownFor(walked)`, the location that the router shows when it is
-///   asked to show `walked`: `walked` itself, or the target of the guard
-///   that keeps the user from it, as `redirectOf()` of the role says. In an
-///   app without guards it returns `walked`. The targets are in
-///   `guardTargets`, in the order of the guards, also those that are not
-///   among the first [routerWalkLimit] locations;
+/// The file also says what the router shows for each of them, with two
+/// functions that every app gets, so that the walk is the same in an app
+/// with guards of the routes ([RouterFacade.guards]) and in one without,
+/// which has nothing of what the role generates for them:
+/// - `shownFor(walked)`, the full name of the route and the type of the
+///   screen that the router shows when it is asked to show `walked`, a
+///   `ShownScreen`. In an app without guards, those are the ones of
+///   `walked`. In an app with guards, they are the ones of the target of
+///   the guard that keeps the user from `walked`, as `redirectOf()` of the
+///   role says; else `startOfApp` for a location in a flow that is over,
+///   as `flowIsOver()` of the role says; else the ones of `walked`. The
+///   targets are in `guardTargets`, in the order of the guards, also those
+///   that are not among the first [routerWalkLimit] locations.
+///   `startOfApp` is the screen that the app starts on: that of the route
+///   that the role chose ([RouterRole.startIn]), with the name of that
+///   route, or the fallback start screen of the app entry role
+///   ([AppEntryRole.fallbackStartScreen]) without the name of a route, in
+///   an app that no route can start;
 /// - `closedGuards()`, the full names of the guards that do not allow, in
 ///   the order of `routeGuards` of the role; none in an app without guards.
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
-/// to, the first of [routerWalkFile]. The locations in the flows of the
-/// guards count among them and are the last of the file, so the walk
-/// leaves them out first in an app with more locations than it goes to.
+/// to, the first of [routerWalkFile].
 const routerWalkLimit = 20;
 
 /// The file at [routerWalkFile] of [app], an app of the matrix with the
@@ -762,41 +754,46 @@ const routerWalkLimit = 20;
 /// that no name clashes. In an app with guards it imports the file of the
 /// role that has them too, without a prefix either.
 Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
-  final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
-  // The routes in the flow of a guard, which the walk goes to last: their
-  // screens may change what their guard allows when they are shown.
-  final inFlows = {
-    for (final guard in facade.guards)
-      for (final route in guard.flow) route.fullName,
-  };
-  final walkable = [
+  final input = routerRole.hookInput(app.hook!);
+  final facade = routerRole.facadeOf(input);
+  final routes = [
     for (final route in facade.routes)
       if (!route.hasRequiredParams) route,
-  ];
-  final routes = [
-    ...walkable.where((route) => !inFlows.contains(route.fullName)),
-    ...walkable.where((route) => inFlows.contains(route.fullName)),
   ].take(routerWalkLimit);
   final screens = <String, String>{};
+  String prefixOf(ImportRef import) => screens.putIfAbsent(
+        import.resolveUri(packageName),
+        () => 'screen${screens.length}',
+      );
   String walked(FacadeRoute route) {
     final screen = route.route.screen;
-    final prefix = screens.putIfAbsent(
-      screen.import.resolveUri(packageName),
-      () => 'screen${screens.length}',
-    );
     return '  (\n'
         '    route: ${SmfNames.dartString(route.fullName)},\n'
         '    location: ${route.locationClass}(),\n'
-        '    screen: $prefix.${screen.className},\n'
+        '    screen: ${prefixOf(screen.import)}.${screen.className},\n'
         '  ),\n';
   }
 
   final locations = routes.map(walked).join();
   // Each target once: two guards may show the same one.
   final targets = {for (final guard in facade.guards) guard.target};
+  const fallback = AppEntryRole.fallbackStartScreen;
   final guards = targets.isEmpty
       ? _withoutGuards
-      : _withGuards(targets.map(walked).join());
+      : _withGuards(
+          targets: targets.map(walked).join(),
+          start: switch (routerRole.startIn(input)) {
+            final start? => (
+                route: SmfNames.dartString(start.fullName),
+                screen: '${prefixOf(start.route.screen.import)}.'
+                    '${start.route.screen.className}',
+              ),
+            null => (
+                route: 'null',
+                screen: '${prefixOf(fallback.importRef)}.${fallback.name}',
+              ),
+          },
+        );
   String ofRole(String file) =>
       ImportRef.app(file.substring('lib/'.length)).resolveUri(packageName);
   final imports = [
@@ -808,18 +805,22 @@ Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
   return {
     routerWalkFile: '''
 // The locations of the app that need no values, at most $routerWalkLimit,
-// and what the guards of its routes show in their place, which the matrix
-// of SMF writes from the data of the router role of the app for the walk of
-// its routes, walk.dart.
+// and what the router shows for each, which the matrix of SMF writes from
+// the data of the router role of the app for the walk of its routes,
+// walk.dart.
 ${imports.join('\n')}
 
 /// A location of the app that needs no values: the full name of its route,
 /// the location, and the type of the screen that the route shows.
 typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 
+/// What the router shows for a location: the full name of the route of the
+/// page on top, or `null` for a screen that is no route of a module, and
+/// the type of the screen.
+typedef ShownScreen = ({String? route, Type screen});
+
 /// The locations of the app that need no values, in the order of the
-/// routes of the app, with those in the flow of a guard after the others:
-/// a screen of a flow may change what its guard allows when it is shown.
+/// routes of the app.
 const List<WalkedLocation> walkedLocations = [
 $locations];
 $guards''',
@@ -827,12 +828,15 @@ $guards''',
 }
 
 /// What [routerWalkFile] says of the guards in an app without guards, which
-/// has neither `redirectOf()` nor `routeGuards` of the router role.
+/// has none of `redirectOf()`, `flowIsOver()` and `routeGuards` of the
+/// router role.
 const _withoutGuards = '''
 
-/// The location that the router shows when it is asked to show [walked]:
-/// [walked] itself, since no module of the app has a guard of the routes.
-WalkedLocation shownFor(WalkedLocation walked) => walked;
+/// What the router shows when it is asked to show [walked]: the page and
+/// the screen of [walked] itself, since no module of the app has a guard of
+/// the routes.
+ShownScreen shownFor(WalkedLocation walked) =>
+    (route: walked.route, screen: walked.screen);
 
 /// The full names of the guards of the routes that do not allow: none,
 /// since no module of the app has a guard.
@@ -840,8 +844,15 @@ List<String> closedGuards() => const [];
 ''';
 
 /// What [routerWalkFile] says of the guards in an app with guards, whose
-/// targets are [targets], each as a location of the walk.
-String _withGuards(String targets) => '''
+/// targets are [targets], each as a location of the walk, and which starts
+/// on the screen [start]: the code of the full name of its route, or of
+/// `null` for the fallback start screen, and the code of the type of the
+/// screen.
+String _withGuards({
+  required String targets,
+  required ({String route, String screen}) start,
+}) =>
+    '''
 
 /// The targets of the guards of the routes of the app, in the order of the
 /// guards: the location that the router shows while a guard does not
@@ -849,15 +860,30 @@ String _withGuards(String targets) => '''
 const List<WalkedLocation> guardTargets = [
 $targets];
 
-/// The location that the router shows when it is asked to show [walked]:
-/// [walked] itself, or the target of the guard that keeps the user from it,
-/// as redirectOf() of the router role says.
-WalkedLocation shownFor(WalkedLocation walked) {
+/// The screen that the app starts on, which the router shows in place of a
+/// location in a flow that is over: that of the route that starts the app,
+/// or the fallback start screen of the app entry, which is no route, in an
+/// app that no route can start.
+const ShownScreen startOfApp = (
+  route: ${start.route},
+  screen: ${start.screen},
+);
+
+/// What the router shows when it is asked to show [walked], as the router
+/// role says: the target of the guard that keeps the user from it
+/// (redirectOf()), or else the screen that the app starts on if the flow of
+/// [walked] is over (flowIsOver()), or else the page and the screen of
+/// [walked] itself.
+ShownScreen shownFor(WalkedLocation walked) {
   final target = ${RouterRole.redirectOf}(walked.route);
-  if (target == null) return walked;
-  return guardTargets.firstWhere(
-    (shown) => shown.route == target.routeName,
-  );
+  if (target != null) {
+    final shown = guardTargets.firstWhere(
+      (shown) => shown.route == target.routeName,
+    );
+    return (route: shown.route, screen: shown.screen);
+  }
+  if (${RouterRole.flowIsOver}(walked.route)) return startOfApp;
+  return (route: walked.route, screen: walked.screen);
 }
 
 /// The full names of the guards of the routes that do not allow, in the

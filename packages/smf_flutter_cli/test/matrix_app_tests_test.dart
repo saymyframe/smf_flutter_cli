@@ -144,7 +144,13 @@ void main() {
     );
     expect(
       index.declarations.map((declaration) => declaration.name),
-      ['WalkedLocation', 'walkedLocations', 'shownFor', 'closedGuards'],
+      [
+        'WalkedLocation',
+        'ShownScreen',
+        'walkedLocations',
+        'shownFor',
+        'closedGuards',
+      ],
     );
     expect(
       files[routerWalkFile],
@@ -156,20 +162,28 @@ void main() {
         '  ),\n',
       ),
     );
-    // No module of the app has a guard of the routes: the walk expects each
-    // location itself, and the file names nothing of what the role
-    // generates for guards, which the app does not have.
+    // No module of the app has a guard of the routes: the walk expects the
+    // page and the screen of each location itself, and the file names
+    // nothing of what the role generates for guards, which the app does not
+    // have, nor the screen that the app starts on, which only a flow that
+    // is over shows in place of a location.
     expect(
       files[routerWalkFile],
       contains(
-        'WalkedLocation shownFor(WalkedLocation walked) => walked;\n',
+        'ShownScreen shownFor(WalkedLocation walked) =>\n'
+        '    (route: walked.route, screen: walked.screen);\n',
       ),
     );
     expect(
       files[routerWalkFile],
       contains('List<String> closedGuards() => const [];\n'),
     );
-    for (final name in [RouterRole.redirectOf, RouterRole.routeGuards]) {
+    for (final name in [
+      RouterRole.redirectOf,
+      RouterRole.flowIsOver,
+      RouterRole.routeGuards,
+      'startOfApp',
+    ]) {
       expect(files[routerWalkFile], isNot(contains(name)));
     }
   });
@@ -177,8 +191,8 @@ void main() {
   test(
       'in an app with guards of the routes, the file of the walk has the '
       'target of each guard once, also one beyond the locations that the '
-      'walk goes to, the location that the router shows for another, and '
-      'the guards that do not allow', () {
+      'walk goes to, the screen that the app starts on, what the router '
+      'shows for a location, and the guards that do not allow', () {
     const screens = ImportRef.app('features/gate/gate_screens.dart');
     const status = ImportRef.app('features/gate/gate_status.dart');
     Route route(
@@ -192,46 +206,64 @@ void main() {
           screen: ScreenRef(screen, import: screens),
           children: children,
         );
-    RouteGuard guard(String name, String target) => RouteGuard(
+    RouteGuard guard(
+      String name,
+      String target, {
+      GuardStage stage = GuardStage.welcome,
+    }) =>
+        RouteGuard(
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: stage,
         );
-    final app = MatrixApp(
-      'gate',
-      const [ModuleId('gate')],
-      hook: RoleHookRequest(
-        data: [
-          routerRole
-              .data(
-                RoutesData(
-                  [
-                    route(
-                      '/intro',
-                      'IntroScreen',
-                      children: [route('terms', 'TermsScreen')],
-                    ),
-                    // As many routes as fill the walk with the two above.
-                    for (var index = 2; index < routerWalkLimit; index++)
-                      route('/r$index', 'Screen$index'),
-                    route('/login', 'LoginScreen'),
-                  ],
-                  guards: [
-                    guard('firstRun', 'intro'),
-                    guard('consent', 'intro'),
-                    guard('signedIn', 'login'),
-                  ],
-                ),
-              )
-              .withOrigin(const ModuleOrigin(ModuleId('gate'))),
-        ],
-        presentRoles: {routerRole},
-        context: ContractHarness.defaultContext,
-      ),
-    );
+    // An app that starts on the route at [start], or on the fallback start
+    // screen of the app entry if no route starts it.
+    String fileOf({String? start}) => named('router_walk').generatedFiles!(
+          MatrixApp(
+            'gate',
+            const [ModuleId('gate')],
+            hook: RoleHookRequest(
+              data: [
+                routerRole
+                    .data(
+                      RoutesData(
+                        [
+                          route(
+                            '/intro',
+                            'IntroScreen',
+                            children: [route('terms', 'TermsScreen')],
+                          ),
+                          // As many routes as fill the walk with the two
+                          // above.
+                          for (var index = 2; index < routerWalkLimit; index++)
+                            route('/r$index', 'Screen$index'),
+                          route('/login', 'LoginScreen'),
+                        ],
+                        // The module declares its guard of the later
+                        // stage first: the app asks it last.
+                        guards: [
+                          guard(
+                            'signedIn',
+                            'login',
+                            stage: GuardStage.identity,
+                          ),
+                          guard('firstRun', 'intro'),
+                          guard('consent', 'intro'),
+                        ],
+                      ),
+                    )
+                    .withOrigin(const ModuleOrigin(ModuleId('gate'))),
+              ],
+              presentRoles: {routerRole},
+              context: ContractHarness.defaultContext,
+              choices: {routerRole: RouterChoice(startPath: start)},
+            ),
+          ),
+          'my_app',
+        )[routerWalkFile]!;
 
-    final text =
-        named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+    final text = fileOf(start: '/gate/r2');
 
     final (:index, :errors) = DartFileIndexer.parse(routerWalkFile, text);
     expect(errors, isEmpty);
@@ -248,8 +280,10 @@ void main() {
       index.declarations.map((declaration) => declaration.name),
       [
         'WalkedLocation',
+        'ShownScreen',
         'walkedLocations',
         'guardTargets',
+        'startOfApp',
         'shownFor',
         'closedGuards',
       ],
@@ -262,10 +296,12 @@ void main() {
     final walked = text.substring(0, targetsAt);
     final targets = text.substring(
       targetsAt,
-      text.indexOf('WalkedLocation shownFor'),
+      text.indexOf('const ShownScreen startOfApp'),
     );
     // The walk does not go to the target of the last guard, which is past
     // its limit; the file has it all the same, for the walk to expect it.
+    // The targets are in the order the app asks the guards, by their
+    // stages, and not as the module declares them.
     expect(routesIn(walked), hasLength(routerWalkLimit));
     expect(routesIn(walked), isNot(contains('gate.login')));
     expect(routesIn(targets), ['gate.intro', 'gate.login']);
@@ -279,21 +315,42 @@ void main() {
         '  ),\n',
       ),
     );
-    // What the router shows for a location is what redirectOf() of the
-    // role says of its route, and the guards that do not allow are those of
+    // The screen that the app starts on: that of the route that the router
+    // role chose, with the name of that route.
+    expect(
+      text,
+      contains(
+        'const ShownScreen startOfApp = (\n'
+        "  route: 'gate.r2',\n"
+        '  screen: screen0.Screen2,\n'
+        ');\n',
+      ),
+    );
+    // What the router shows for a location is what the role says of its
+    // route: the target of the guard that keeps the user from it, as
+    // redirectOf() says, which decides first; else the screen that the app
+    // starts on if flowIsOver() says that its flow is over; else the
+    // location itself. And the guards that do not allow are those of
     // routeGuards of the role.
     expect(
       [
         for (final call in index.invocations)
           if (call.target == null) call.name,
       ],
-      contains(RouterRole.redirectOf),
+      containsAllInOrder([RouterRole.redirectOf, RouterRole.flowIsOver]),
     );
     expect(
       text,
       contains(
         '  final target = redirectOf(walked.route);\n'
-        '  if (target == null) return walked;\n',
+        '  if (target != null) {\n'
+        '    final shown = guardTargets.firstWhere(\n'
+        '      (shown) => shown.route == target.routeName,\n'
+        '    );\n'
+        '    return (route: shown.route, screen: shown.screen);\n'
+        '  }\n'
+        '  if (flowIsOver(walked.route)) return startOfApp;\n'
+        '  return (route: walked.route, screen: walked.screen);\n',
       ),
     );
     expect(
@@ -303,12 +360,35 @@ void main() {
         '    if (!guard.allows.value) guard.name,\n',
       ),
     );
+
+    // In an app that no route can start, the screen that it starts on is
+    // the fallback start screen of the app entry role, which is no route:
+    // the file imports it like the screens of the routes.
+    final withoutStart = fileOf();
+    final parsed = DartFileIndexer.parse(routerWalkFile, withoutStart);
+    expect(parsed.errors, isEmpty);
+    expect(
+      [
+        for (final import in parsed.index.imports)
+          '${import.uri} ${import.prefix}',
+      ],
+      contains('package:my_app/core/app/fallback_start_screen.dart screen1'),
+    );
+    expect(
+      withoutStart,
+      contains(
+        'const ShownScreen startOfApp = (\n'
+        '  route: null,\n'
+        '  screen: screen1.FallbackStartScreen,\n'
+        ');\n',
+      ),
+    );
   });
 
   test(
       'the walk of the routes goes to the locations in the flows of the '
-      'guards after every other location, in their order among themselves, '
-      'and leaves them out first in an app with more locations than it goes '
+      'guards like any other, in the order of the routes of the app, and '
+      'leaves out the last ones in an app with more locations than it goes '
       'to', () {
     const gate = ImportRef.app('features/gate/gate_screens.dart');
     const feed = ImportRef.app('features/feed/feed_screens.dart');
@@ -329,6 +409,7 @@ void main() {
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: GuardStage.welcome,
         );
     // A module with two guards, listed before a module with [routes] routes
     // of its own. The flow of its first guard is the target and the route
@@ -374,36 +455,31 @@ void main() {
     String fileOf(MatrixApp app) =>
         named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
 
-    // A screen in the flow of a guard may change what its guard allows when
-    // it is shown. The router then shows the target of that guard for each
-    // location after it, so the walk would not see the screens of those.
+    // No screen of a flow changes what the walk sees after it: while its
+    // guard does not allow, the router shows the target for every location
+    // outside the flow anyway, and once the flow is over, its screens are
+    // not shown.
     final text = fileOf(appWith(routes: 2));
     expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
     expect(_walkedRoutesOf(text), [
-      'gate.help',
-      'feed.r0',
-      'feed.r1',
       'gate.intro',
       'gate.terms',
       'gate.login',
+      'gate.help',
+      'feed.r0',
+      'feed.r1',
     ]);
 
     // The locations of the flows count among those that the walk goes to,
-    // so they are the first that it leaves out.
-    expect(_walkedRoutesOf(fileOf(appWith(routes: routerWalkLimit - 2))), [
-      'gate.help',
-      for (var index = 0; index < routerWalkLimit - 2; index++) 'feed.r$index',
-      'gate.intro',
-    ]);
+    // and are left out no sooner than any other.
     final beyond = fileOf(appWith(routes: routerWalkLimit));
     expect(_walkedRoutesOf(beyond), [
+      'gate.intro',
+      'gate.terms',
+      'gate.login',
       'gate.help',
-      for (var index = 0; index < routerWalkLimit - 1; index++) 'feed.r$index',
+      for (var index = 0; index < routerWalkLimit - 4; index++) 'feed.r$index',
     ]);
-    // The file has the targets of the guards all the same, for the walk to
-    // expect them while a guard does not allow.
-    expect(beyond, contains("    route: 'gate.intro',\n"));
-    expect(beyond, contains("    route: 'gate.login',\n"));
   });
 
   test(

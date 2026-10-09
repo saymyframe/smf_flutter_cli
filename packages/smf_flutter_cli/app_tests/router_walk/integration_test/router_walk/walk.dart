@@ -8,23 +8,30 @@
 // too: it uses no test framework, and takes the function that waits until
 // the screen settles. The matrix writes locations.dart next to it, with the
 // locations of the app from the data of its router role, and with what the
-// guards of its routes show in their place: while a guard does not allow,
-// as on a device, where no test opens it, the walk expects the target of
-// the guard for each location that the guard keeps the user from.
+// router shows for each. While a guard of the routes does not allow, as on
+// a device, where no test opens it, the walk expects the target of the
+// guard for each location that the guard keeps the user from. For any
+// other location in the flow of a guard, once the flow is over, it expects
+// the screen that the app starts on.
 import 'package:flutter/widgets.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 
 import 'locations.dart';
 
 /// What the walk of the routes found wrong, as text, each problem as
-/// `<route> (<path>): <problem>`, and for a location that a guard keeps the
-/// user from, as
-/// `<route> (<path>), in place of which a guard shows <route>: <problem>`.
+/// `<route> (<path>): <problem>`, and for a location that the router shows
+/// another screen for, the target of a guard or the screen that the app
+/// starts on, as
+/// `<route> (<path>), in place of which the router shows <shown>: <problem>`.
+/// There `<shown>` is `the screen <screen> of <route>`, or
+/// `the screen <screen>` alone for a screen that is no route.
 final class WalkProblems {
   /// The locations after which the page on top of the innermost navigator
   /// on the screen, the one that shows the page the user sees, is not named
   /// after the route that the router shows for the location, as the router
   /// role names the page of each route, or no navigator is on the screen.
+  /// The walk does not look at the name of the page of a screen that is no
+  /// route, as the fallback start screen is.
   final List<String> pages = [];
 
   /// The locations after which the screen of the route that the router
@@ -51,7 +58,9 @@ final class WalkProblems {
 /// target, so the walk sees the page and the screen of the routes of the
 /// flow only, and with a flow of one route, the screen that is shown
 /// already. The other routes get their walk under `flutter test`, where
-/// the guards allow.
+/// the guards allow. There, and wherever a flow is over and no guard keeps
+/// the user from its locations, the walk checks that each of them shows
+/// the screen that the app starts on.
 Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
     (await walkRoutes(settle)).all;
 
@@ -60,14 +69,11 @@ Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
 /// waits with [settle] until the screen settles, and returns what is wrong
 /// after each; see [WalkProblems].
 ///
-/// After each, the router shows the location, or the target of the guard
-/// that keeps the user from it, as the router role says: [shownFor], which
-/// the walk asks before it goes to the location, as the router does.
-///
-/// The locations in the flows of the guards are the last of
-/// [walkedLocations]. A screen of a flow may change what its guard allows
-/// when it is shown, and the walk then expects the target of that guard
-/// for each location outside its flow that it goes to afterwards.
+/// After each, the router shows what the router role says: the target of
+/// the guard that keeps the user from the location, or else the screen
+/// that the app starts on if the location is in a flow that is over, or
+/// else the location itself. That is [shownFor], which the walk asks
+/// before it goes to the location, as the router does.
 ///
 /// The errors that Flutter reports while it walks come to it; it puts back
 /// the handler of the errors of Flutter that it found when it returns.
@@ -83,7 +89,7 @@ Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {
       final label = [
         '${walked.route} (${walked.location.path})',
         if (shown.route != walked.route)
-          ', in place of which a guard shows ${shown.route}',
+          ', in place of which the router shows ${_nameOf(shown)}',
       ].join();
       reported.clear();
       // Without a navigator on the screen to go from, what is on the
@@ -108,18 +114,14 @@ Future<WalkProblems> walkRoutes(Future<void> Function() settle) async {
   return problems;
 }
 
-/// Adds to [problems] what is wrong on the screen for [shown], the location
-/// that the router shows once the walk went to the location named [label].
-void _checkScreen(
-  WalkedLocation shown,
-  String label,
-  WalkProblems problems,
-) {
+/// Adds to [problems] what is wrong on the screen for [shown], what the
+/// router shows once the walk went to the location named [label].
+void _checkScreen(ShownScreen shown, String label, WalkProblems problems) {
   final navigator = _innermostNavigator();
   if (navigator == null) {
     problems.pages.add('$label: no navigator is on the screen');
   } else if (_topOf(navigator)?.settings.name case final name
-      when name != shown.route) {
+      when shown.route != null && name != shown.route) {
     problems.pages.add(
       '$label: the page on top of the innermost navigator on the screen is '
       '${name == null ? 'unnamed' : 'named $name'}',
@@ -137,11 +139,16 @@ void _checkScreen(
     }
   });
   if (!onScreen.contains(shown.screen)) {
-    problems.screens.add(
-      '$label: the screen ${shown.screen} of ${shown.route} is not shown',
-    );
+    problems.screens.add('$label: ${_nameOf(shown)} is not shown');
   }
 }
+
+/// How a problem names [shown]: the screen and the route that it is of, or
+/// the screen alone if it is no route.
+String _nameOf(ShownScreen shown) => switch (shown.route) {
+      final route? => 'the screen ${shown.screen} of $route',
+      null => 'the screen ${shown.screen}',
+    };
 
 /// The navigator on the screen that is nested deepest, which shows the page
 /// the user sees, or `null` if none is on the screen.
