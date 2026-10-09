@@ -267,8 +267,7 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/router_walk_test.dart',
-            'each location that needs no values shows the page and the screen '
-                'of its route',
+            _walkTest,
             'Each location shows the screen of its route, or the screen that '
                 'the app starts on if it is in a flow that is over.',
           ),
@@ -316,8 +315,7 @@ List<BrokenProvider> brokenProviders() => const [
           // flows too, which are over.
           MatrixExpectedFailure(
             'test/router_walk_test.dart',
-            'each location that needs no values shows the page and the screen '
-                'of its route',
+            _walkTest,
             'The page on top of the innermost navigator on the screen is '
                 'named after the route of each location, or after the route '
                 'that the app starts on for a location in a flow that is over.',
@@ -863,6 +861,11 @@ const List<ModuleId> _appWithMainNavigation = [
   FakeScreenLogModule.id,
 ];
 
+/// The name of the test of the walk of the routes.
+const _walkTest =
+    'each location that needs no values shows the page and the screen of '
+    'its route, or the screen that the app starts on if its flow is over';
+
 /// The name of the test of the flow of a guard of the routes.
 const _flowTest =
     'the routes of the flow of a guard show only while the guard does not '
@@ -929,8 +932,7 @@ List<MatrixFailingApp> brokenModuleApps() => const [
         failures: [
           MatrixExpectedFailure(
             'test/router_walk_test.dart',
-            'each location that needs no values shows the page and the '
-                'screen of its route',
+            _walkTest,
             'These guards of the routes do not allow, so the walk cannot '
                 'reach the routes outside their flows, and the tests of the '
                 'other modules of the app do not see the screens that they '

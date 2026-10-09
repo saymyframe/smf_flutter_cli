@@ -22,7 +22,9 @@ import 'locations.dart';
 /// `<route> (<path>): <problem>`, and for a location that the router shows
 /// another screen for, the target of a guard or the screen that the app
 /// starts on, as
-/// `<route> (<path>), in place of which the router shows <route>: <problem>`.
+/// `<route> (<path>), in place of which the router shows the screen
+/// <screen> of <route>: <problem>`, without `of <route>` for a screen that
+/// is no route.
 final class WalkProblems {
   /// The locations after which the page on top of the innermost navigator
   /// on the screen, the one that shows the page the user sees, is not named

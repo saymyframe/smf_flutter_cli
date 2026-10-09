@@ -73,7 +73,7 @@ void main() {
   // fails sooner.
   testWidgets(
     'each location that needs no values shows the page and the screen of '
-    'its route',
+    'its route, or the screen that the app starts on if its flow is over',
     (tester) async {
       await _startApp(tester);
 
