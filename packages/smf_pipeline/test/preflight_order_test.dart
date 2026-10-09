@@ -230,6 +230,124 @@ void main() {
     }
   });
 
+  group(
+      'a required check that no installation fixes, of a module that has '
+      'nothing to do with the one whose check installs a tool', () {
+    late TestCheck cli;
+    late TestCheck needed;
+
+    /// The module `core`, whose check installs a tool; `rules`, which
+    /// depends on it and has a check that needs the tool; and `zeta`, which
+    /// neither depends on them nor is depended on, with a required check
+    /// that fails whatever the run installs.
+    List<SmfModule> modules() {
+      cli = _tool('cli');
+      needed = TestCheck(
+        'needed',
+        status: const PreflightMissing(instructions: 'Get it.'),
+        required: true,
+      );
+      return [
+        scaffold(),
+        TestModule(
+          'core',
+          contributions: [
+            Preflight([cli]),
+          ],
+        ),
+        TestModule(
+          'rules',
+          dependsOn: {'core'},
+          contributions: [
+            Preflight([_BuildsOn('version', cli)]),
+          ],
+        ),
+        TestModule(
+          'zeta',
+          contributions: [
+            Preflight([needed]),
+          ],
+        ),
+      ];
+    }
+
+    /// The error of the required check of `zeta`.
+    const error = 'error [zeta]: Tool needed is missing. Get it.';
+
+    Matcher stopsFor(String issue) => throwsA(
+          isA<GenerationFailedException>().having(
+            (e) => [for (final issue in e.issues) '$issue'],
+            'issues',
+            [issue],
+          ),
+        );
+
+    // The pipeline does not know which installation a check needs: any
+    // installable check before a failing required one may fix it. The
+    // checks of core come before those of rules, so they come before those
+    // of zeta too when the user names rules first.
+    test(
+        'stops a strict run only after the installation that comes before '
+        'it was offered', () async {
+      final host = FakeHost(answers: [true], terminal: true);
+
+      await expectLater(
+        pipeline(modules(), host)
+            .plan(request(['rules', 'zeta'], strict: true)),
+        stopsFor(error),
+      );
+
+      expect(
+        host.prompter.asked.map((prompt) => prompt.message),
+        [startsWith('Tool cli is missing (needed by core).')],
+      );
+      expect(cli.installs, 1);
+      // Once before the installation, and once after it.
+      expect(needed.checks, 2);
+    });
+
+    test(
+        'stops a strict run before anything is installed when it comes '
+        'before every installation', () async {
+      final host = FakeHost(terminal: true);
+
+      await expectLater(
+        pipeline(modules(), host)
+            .plan(request(['zeta', 'rules'], strict: true)),
+        stopsFor(error),
+      );
+
+      expect(host.prompter.asked, isEmpty);
+      expect(cli.installs, 0);
+      expect(needed.checks, 1);
+    });
+
+    test(
+        'leaves its module out of a lenient run after the installation '
+        'that comes before it', () async {
+      final host = FakeHost(answers: [true], terminal: true);
+
+      final plan =
+          (await pipeline(modules(), host).plan(request(['rules', 'zeta'])))!;
+
+      expect(plan.leftOut.map((left) => '${left.module}'), ['zeta']);
+      expect(
+        plan.resolution.modules.map((module) => module.id.value),
+        ['rules', 'core', 'scaffold'],
+      );
+      // One question, also over the two passes of the stage.
+      expect(
+        host.prompter.asked.map((prompt) => prompt.message),
+        [startsWith('Tool cli is missing (needed by core).')],
+      );
+      expect(cli.installs, 1);
+      expect(host.logger.warnings, [
+        'Leaving out zeta: Tool needed is missing. Get it.',
+      ]);
+      await plan.environment.dispose();
+    });
+  });
+
   group('the checks of the modules run', () {
     /// A module [id] that depends on [dependsOn], with the check `tool`.
     TestModule checked(String id, {Set<String> dependsOn = const {}}) =>
