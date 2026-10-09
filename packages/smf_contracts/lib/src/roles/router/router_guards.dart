@@ -70,8 +70,9 @@ const _guardClass = '''
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
-/// flow (see [flowIsOver]), so the code of the app changes what [allows]
-/// reads and never navigates into the flow.
+/// flow (see [flowIsOver]), or the target of another guard while that one
+/// does not allow. So the code of the app changes what [allows] reads and
+/// never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -126,8 +127,10 @@ AppLocation? ${RouterRole.redirectOf}(String? routeName) {
 const _flowIsOver = '''
 
 /// Whether the route [routeName] is in the flow of a guard and every guard
-/// with that flow allows: the flow is over, and the router shows the screen
-/// that the app starts on in place of the route.
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [${RouterRole.redirectOf}]).
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, which is in no flow. Two guards with one target

@@ -69,8 +69,9 @@ import 'package:smf_onboarding/src/agents.dart';
 /// onboarding is not finished, and nothing navigates to it. The route is
 /// the flow of the guard, which is over once the onboarding is finished: a
 /// navigation to it then, such as a link, shows the screen that the app
-/// starts on, as the router role says of the flow of a guard. `restart()`
-/// is the only way to show the onboarding again.
+/// starts on, or the target of another guard of the app while that one
+/// does not allow, as the router role says of the flow of a guard.
+/// `restart()` is the only way to show the onboarding again.
 ///
 /// The texts of the screen, [texts], are in English and in Ukrainian. The
 /// module only uses the localization role: in an app with the role they are

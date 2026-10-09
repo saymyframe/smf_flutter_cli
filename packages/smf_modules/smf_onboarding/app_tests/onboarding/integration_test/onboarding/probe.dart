@@ -26,8 +26,9 @@
 // The start check as a whole ends that way too. The walk of the routes,
 // whose probe runs after this one, goes to the route of the onboarding as
 // to every other. The onboarding is finished by then, so its flow is over:
-// the router shows the screen that the app starts on in place of the
-// route, and nothing starts the onboarding again.
+// in place of the route, the router shows the screen that the app starts
+// on, or the target of a guard that does not allow on the device. Nothing
+// starts the onboarding again.
 //
 // The tests of the module run it too (onboarding/later_launch_test.dart).
 import 'package:flutter/widgets.dart';

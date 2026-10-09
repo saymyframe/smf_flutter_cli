@@ -118,8 +118,9 @@ Future<MatrixAppTests> smfAppTests() async {
       // walk of the routes in this list, whose probe then goes through the
       // routes of an app past its onboarding. For the route of the
       // onboarding, whose flow is over by then, the walk expects the screen
-      // that the app starts on. So on a device the start check leaves the
-      // app with the onboarding finished.
+      // that the app starts on, or the target of a guard that does not
+      // allow there. So on a device the start check leaves the app with the
+      // onboarding finished.
       MatrixAppTest(
         '$onboarding/onboarding',
         appliesTo: _has(OnboardingModule.id),
@@ -676,8 +677,8 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// In an app with guards of the routes, the walk expects what the role
 /// says. For a location that a guard keeps the user from, that is the page
 /// and the screen of the target of that guard (`redirectOf()` of the
-/// role). For a location in a flow that is over, it is the screen that the
-/// app starts on (`flowIsOver()` of the role). So its probe,
+/// role). For any other location in a flow that is over, it is the screen
+/// that the app starts on (`flowIsOver()` of the role). So its probe,
 /// `probeRoutes()`, which the start check runs on a device, holds whichever
 /// guards allow there, where no test can open one, such as a guard that
 /// asks for a signed-in user. The test itself first fails on each guard

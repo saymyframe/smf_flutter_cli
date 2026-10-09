@@ -42,7 +42,7 @@ With `gen-l10n` of Flutter:
 
 ## Onboarding
 
-- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on.
+- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on, or the `redirectTo` of another guard while that one does not allow.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
 - The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
 - `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Nothing else shows the onboarding again: call `restart()` where the user asks to see it, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
@@ -74,7 +74,7 @@ With `shared_preferences`:
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
 - To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
 - A feature changes the value of `allows` of its guard, and the router navigates when it does: it shows the `redirectTo` while the value is `false`, and brings the user back to where they were once it is `true`.
-- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, so no code navigates into a `flow`.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 
 With `go_router`:
 
@@ -1021,8 +1021,9 @@ abstract interface class AppNavigator {
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
-/// flow (see [flowIsOver]), so the code of the app changes what [allows]
-/// reads and never navigates into the flow.
+/// flow (see [flowIsOver]), or the target of another guard while that one
+/// does not allow. So the code of the app changes what [allows] reads and
+/// never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -1079,8 +1080,10 @@ AppLocation? redirectOf(String? routeName) {
 }
 
 /// Whether the route [routeName] is in the flow of a guard and every guard
-/// with that flow allows: the flow is over, and the router shows the screen
-/// that the app starts on in place of the route.
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [redirectOf]).
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, which is in no flow. Two guards with one target
@@ -1988,8 +1991,9 @@ import 'onboarding_status.dart';
 /// The next launches of the app start there.
 ///
 /// A navigation to the route of the screen once the onboarding is
-/// finished, such as a link, shows the screen that the app starts on too.
-/// Only [OnboardingStatus.restart] shows the onboarding again.
+/// finished, such as a link, shows the screen that the app starts on too,
+/// or the target of another guard of the app while that one does not
+/// allow. Only [OnboardingStatus.restart] shows the onboarding again.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
   const OnboardingScreen({super.key});

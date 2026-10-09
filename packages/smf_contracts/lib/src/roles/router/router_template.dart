@@ -189,5 +189,5 @@ const String _guardsAgentNote = '''
 - `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`.
 - To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
 - A feature changes the value of `allows` of its guard, and the router navigates when it does: it shows the `redirectTo` while the value is `false`, and brings the user back to where they were once it is `true`.
-- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, so no code navigates into a `flow`.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 ''';

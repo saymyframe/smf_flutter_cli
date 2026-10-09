@@ -10,9 +10,9 @@
 // locations of the app from the data of its router role, and with what the
 // router shows for each. While a guard of the routes does not allow, as on
 // a device, where no test opens it, the walk expects the target of the
-// guard for each location that the guard keeps the user from. And for a
-// location in the flow of a guard, once the flow is over, it expects the
-// screen that the app starts on.
+// guard for each location that the guard keeps the user from. For any
+// other location in the flow of a guard, once the flow is over, it expects
+// the screen that the app starts on.
 import 'package:flutter/widgets.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 
@@ -58,8 +58,9 @@ final class WalkProblems {
 /// target, so the walk sees the page and the screen of the routes of the
 /// flow only, and with a flow of one route, the screen that is shown
 /// already. The other routes get their walk under `flutter test`, where
-/// the guards allow. There, and wherever a flow is over, the walk checks
-/// that each location of the flow shows the screen that the app starts on.
+/// the guards allow. There, and wherever a flow is over and no guard keeps
+/// the user from its locations, the walk checks that each of them shows
+/// the screen that the app starts on.
 Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
     (await walkRoutes(settle)).all;
 
@@ -68,11 +69,11 @@ Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
 /// waits with [settle] until the screen settles, and returns what is wrong
 /// after each; see [WalkProblems].
 ///
-/// After each, the router shows what the router role says: the location,
-/// or the target of the guard that keeps the user from it, or the screen
-/// that the app starts on for a location in a flow that is over. That is
-/// [shownFor], which the walk asks before it goes to the location, as the
-/// router does.
+/// After each, the router shows what the router role says: the target of
+/// the guard that keeps the user from the location, or else the screen
+/// that the app starts on if the location is in a flow that is over, or
+/// else the location itself. That is [shownFor], which the walk asks
+/// before it goes to the location, as the router does.
 ///
 /// The errors that Flutter reports while it walks come to it; it puts back
 /// the handler of the errors of Flutter that it found when it returns.

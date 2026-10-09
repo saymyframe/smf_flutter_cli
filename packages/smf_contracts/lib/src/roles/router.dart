@@ -153,9 +153,10 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// The routes of a flow show only while a guard with that flow does not
   /// allow. Once the flow is over, the router shows the screen that the
-  /// app starts on in place of each location of the flow, as
-  /// [guardedNavigation] says. So nothing navigates into a flow: its
-  /// module changes what its guard reads, and the router shows the target.
+  /// app starts on in place of each location of the flow, or the target of
+  /// another guard while that one does not allow, as [guardedNavigation]
+  /// says. So nothing navigates into a flow: its module changes what its
+  /// guard reads, and the router shows the target.
   /// A route of a flow cannot start the app, so the screen that the app
   /// starts on is in no flow.
   static const flowIsOver = 'flowIsOver';
@@ -194,12 +195,19 @@ final class RouterRole extends Role<RoutesData> {
   /// platform gives it, if it takes any. When the answer is a location, the
   /// target of a guard or the location `/`, the provider:
   /// - shows it in place of the other, as `go()` to it does: it takes the
-  ///   whole stack, whichever page the other location was asked from, and
-  ///   the stacks of every branch of the main navigation, so that each
-  ///   branch is back on its destination when the user comes to it again.
-  ///   Such a `push()` completes with `null` at once;
+  ///   whole stack, whichever page the other location was asked from. Such
+  ///   a `push()` completes with `null` at once;
   /// - never builds the screen of the other location, and the listeners of
   ///   [screenListeners] never hear of it.
+  ///
+  /// The target of a guard also takes the stacks of every branch of the
+  /// main navigation, so that each branch is back on its destination when
+  /// the user comes to it again: the pages of the branches are pages that
+  /// the guard keeps the user from, and none of them may show again. The
+  /// location `/` for a flow that is over hides nothing from the user. The
+  /// provider shows it as its `go()` to that location does, and whether the
+  /// branches that are not selected keep their pages then is up to the
+  /// provider, as it is for that `go()`.
   ///
   /// Each time [guardChanges] notifies, the provider calls `changed(pages)`
   /// with the pages that the user can get back to, the one on top first:
@@ -211,15 +219,15 @@ final class RouterRole extends Role<RoutesData> {
   /// provider. A provider that has no page yet, as before it shows the
   /// location that the app starts on, has none to tell of and shows
   /// nothing then: it asks about its first location when it shows it. When
-  /// the answer is a location, the provider shows it as it shows an answer
-  /// of `asked`: in place of its whole stack and of the stacks of every
-  /// branch, so no page that a guard kept the user from shows again in a
-  /// branch that was not selected. When it is `null`, the provider leaves
-  /// everything as it is: the stack stays, the listeners of
-  /// [screenListeners] hear nothing, and each `push()` still completes with
-  /// the value of its page. Whether the `push()` of a page that an answer
-  /// takes out of the stack completes is up to the provider, as it is when
-  /// `go()` replaces the stack.
+  /// the answer is a location, the provider shows it as it shows that
+  /// answer of `asked`: in place of its whole stack, and the target of a
+  /// guard in place of the stacks of every branch too, so no page that a
+  /// guard kept the user from shows again in a branch that was not
+  /// selected. When it is `null`, the provider leaves everything as it is:
+  /// the stack stays, the listeners of [screenListeners] hear nothing, and
+  /// each `push()` still completes with the value of its page. Whether the
+  /// `push()` of a page that an answer takes out of the stack completes is
+  /// up to the provider, as it is when `go()` replaces the stack.
   ///
   /// What the class answers, and what it remembers:
   /// - `asked` answers as [redirectOf] does for a location that a guard
@@ -232,7 +240,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   otherwise. So the routes of a flow show only while a guard with
   ///   that flow does not allow: at any other time `go()`, `replace()`,
   ///   `push()`, which completes with `null`, and a location from the
-  ///   platform show the screen that the app starts on.
+  ///   platform show the screen that the app starts on, or the target of
+  ///   another guard while that one does not allow.
   /// - `changed` answers the target of the guard that keeps the user from
   ///   one of the pages, so that no such page stays in the stack. Unless it
   ///   remembers a location already, it then remembers the location below

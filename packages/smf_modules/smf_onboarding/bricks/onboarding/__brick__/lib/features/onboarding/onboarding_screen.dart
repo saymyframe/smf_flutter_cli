@@ -17,8 +17,9 @@ import 'onboarding_status.dart';
 /// The next launches of the app start there.
 ///
 /// A navigation to the route of the screen once the onboarding is
-/// finished, such as a link, shows the screen that the app starts on too.
-/// Only [OnboardingStatus.restart] shows the onboarding again.
+/// finished, such as a link, shows the screen that the app starts on too,
+/// or the target of another guard of the app while that one does not
+/// allow. Only [OnboardingStatus.restart] shows the onboarding again.
 {{{smf_router__screen_annotations__onboarding__onboarding_screen}}}
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
