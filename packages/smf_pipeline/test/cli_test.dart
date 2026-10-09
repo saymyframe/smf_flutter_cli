@@ -311,6 +311,66 @@ void main() {
       );
     });
 
+    test(
+        'is left for later with the step that it continues, with the notice '
+        'after its own command', () async {
+      host = terminal();
+      modules = [
+        ...modulesWith([
+          const PostGenStep(
+            ToolRef('dart'),
+            ['run', 'first'],
+            id: first,
+            description: 'Setting up',
+            skippable: true,
+            external: true,
+          ),
+        ]),
+        modules.last,
+      ];
+
+      expect(
+        await smf([...create, '--skip-external-setup']),
+        SmfExitCodes.success,
+      );
+
+      expect(host.prompter.asked, isEmpty);
+      expect(runner.lines, isNot(contains(startsWith('dart run'))));
+      expect(host.logger.warnings, [
+        equals(
+          'Setting up is not done, because the run skips external setup. Run '
+          'it in the app: dart run first',
+        ),
+        equals(
+          'Enabling the methods is not done, because it runs after "Setting '
+          'up", which is not done. Run it in the app: dart run enable\n'
+          '$notice',
+        ),
+      ]);
+    });
+
+    test('that fails once the user agreed is left for later, with the notice',
+        () async {
+      host = terminal([true]);
+      runner.onRun = (call) => call.line == 'dart run enable'
+          ? const SmfProcessResult(exitCode: 1)
+          : const SmfProcessResult(exitCode: 0);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(host.prompter.asked, hasLength(1));
+      expect(runner.lines, contains('dart run enable'));
+      expect(host.logger.warnings, [
+        'The step "Enabling the methods" failed: it exited with code 1',
+        equals(
+          'Enabling the methods is not done, because it exited with code 1. '
+          'Run it in the app: dart run enable\n'
+          '$notice',
+        ),
+      ]);
+      expect(created.single.skippedSteps.single.failed, isTrue);
+    });
+
     test('is shown by --explain under its command', () async {
       host = terminal();
 

@@ -1694,6 +1694,26 @@ void main() {
         expect(noTool.map((step) => step.notice), [notice, null]);
         expect(noTool.map((step) => step.failed), [true, false]);
         expect(questions(), isEmpty);
+
+        // A run that cannot ask leaves the step for later for that reason,
+        // whether its tool is there or not: nothing failed.
+        environment = environmentOf();
+        for (final name in ['verify', 'tidy']) {
+          host.fileSystem.file('/usr/bin/$name').createSync();
+        }
+
+        final unasked = await runPostGen(
+          directory: '/tmp/app',
+          environment: environment,
+          steps: stepsOf(setUp),
+        );
+
+        expect(records(unasked), [
+          'Enable the methods: enable methods (the run cannot ask the user)',
+          afterEnable,
+        ]);
+        expect(unasked.map((step) => step.notice), [notice, null]);
+        expect(unasked.map((step) => step.failed), [false, false]);
       });
     });
 
