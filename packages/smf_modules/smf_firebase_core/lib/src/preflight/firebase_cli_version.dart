@@ -35,6 +35,9 @@ import 'package:smf_firebase_core/src/preflight/firebase_cli.dart';
 /// On a machine without the Firebase CLI the check reports it missing, and
 /// when the command does not run, it says only that: the check of the
 /// Firebase CLI of this package tells why, and offers the installation.
+/// That check comes first, since the pipeline checks the machine for a
+/// module after the modules it depends on, so once it installed the
+/// Firebase CLI, this check runs again and reads its version.
 final class FirebaseCliVersionCheck extends PreflightCheck {
   /// Creates the check of a Firebase CLI in the version [minimum] or later,
   /// which is three numbers, such as `15.6.0`.
