@@ -508,6 +508,301 @@ void main() {
     });
   });
 
+  group('FirebaseCliVersionCheck', () {
+    const check = FirebaseCliVersionCheck(minimum: '15.6.0');
+    const install = 'Install it with "npm install -g firebase-tools", or see '
+        'https://firebase.google.com/docs/cli.';
+    const update = 'Update it with "npm install -g firebase-tools" if npm '
+        'installed it, or see https://firebase.google.com/docs/cli#update-cli.';
+
+    /// A machine whose `firebase --version` prints [output].
+    FakeMachine machineWith(
+      String output, {
+      HostOperatingSystem operatingSystem = HostOperatingSystem.macos,
+    }) =>
+        FakeMachine(
+          operatingSystem: operatingSystem,
+          executables: {'firebase': _firebase},
+          reply: (_) => _result(0, stdout: output),
+        );
+
+    test(
+        'is a check of its own, named after the lowest version, which stops '
+        'no generation', () {
+      expect(check.id, 'firebase_cli_version');
+      // Next to the check of the Firebase CLI in one run, under another id.
+      expect(check.id, isNot(const FirebaseCliCheck().id));
+      expect(check.description, 'Firebase CLI 15.6.0 or later');
+      expect(
+        const FirebaseCliVersionCheck(minimum: '16.1.0').description,
+        'Firebase CLI 16.1.0 or later',
+      );
+      expect(check.required, isFalse);
+    });
+
+    test(
+        'passes with the lowest version or a later one, and asks as the '
+        'check of the Firebase CLI does', () async {
+      for (final output in [
+        '15.6.0\n',
+        '15.6.1\n',
+        // By its numbers, not as a text.
+        '15.14.0\n',
+        '16.0.0\n',
+        '100.0.0\n',
+        // A pre-release and a build of a later version, and a build of the
+        // lowest one.
+        '15.7.0-rc.1\n',
+        '15.6.0+build.5\n',
+        '15.14.0\r\n',
+        '15.14.0',
+      ]) {
+        final machine = machineWith(output);
+
+        expect(
+          await check.check(machine),
+          isA<PreflightPassed>(),
+          reason: output,
+        );
+        final call = machine.calls.single;
+        expect(call.line, '$_firebase --version');
+        expect(call.interactive, isFalse);
+        // A directory of its own for firebase-debug.log, and no check for
+        // updates in the background.
+        expect(
+          call.workingDirectory,
+          directoryOf(machine.tempFiles.keys.single),
+        );
+        expect(call.environment, {'NO_UPDATE_NOTIFIER': '1'});
+        expect(machine.reports, isEmpty);
+        expect(machine.questions, isEmpty);
+      }
+    });
+
+    test(
+        'tells which Firebase CLI is older and how to update it, on every '
+        'system, and offers no installation', () async {
+      for (final version in [
+        '15.5.1',
+        '15.5.99',
+        '14.27.0',
+        // By its numbers: 9 comes before 15.
+        '9.23.3',
+        // A pre-release of the lowest version comes before it.
+        '15.6.0-rc.1',
+        '15.6.0-rc.1+build.5',
+      ]) {
+        for (final system in HostOperatingSystem.values) {
+          expect(
+            await check.check(
+              machineWith('$version\n', operatingSystem: system),
+            ),
+            _missing(
+              found: '$_firebase is $version',
+              instructions: update,
+              installable: false,
+            ),
+            reason: '$version on $system',
+          );
+        }
+      }
+    });
+
+    test('compares with the lowest version that the module gave', () async {
+      const later = FirebaseCliVersionCheck(minimum: '16.1.0');
+
+      expect(
+        await later.check(machineWith('15.14.0\n')),
+        _missing(
+          found: '$_firebase is 15.14.0',
+          instructions: update,
+          installable: false,
+        ),
+      );
+      expect(
+        await later.check(machineWith('16.0.9\n')),
+        isA<PreflightMissing>(),
+      );
+      for (final version in ['16.1.0', '17.0.0']) {
+        expect(
+          await later.check(machineWith('$version\n')),
+          isA<PreflightPassed>(),
+          reason: version,
+        );
+      }
+    });
+
+    test(
+        'reads the version from its line among the others of the output, '
+        'the last one that is a version', () async {
+      // A firebase command that picks its Node.js and says so first.
+      expect(
+        await check.check(
+          machineWith('Now using node v22.11.0 (npm v10.9.0)\n\n15.5.1\n'),
+        ),
+        _missing(
+          found: '$_firebase is 15.5.1',
+          instructions: update,
+          installable: false,
+        ),
+      );
+      expect(
+        await check.check(machineWith('1.0.0\n15.14.0\n')),
+        isA<PreflightPassed>(),
+      );
+    });
+
+    test('fails on an output without a version, and shows it on one line',
+        () async {
+      for (final (output, printed) in [
+        ('main\n', 'main'),
+        // Not three numbers.
+        ('15.6\n', '15.6'),
+        ('15\n', '15'),
+        // A version inside a line is not the version that the command
+        // prints.
+        ('firebase-tools 15.14.0 is out\n', 'firebase-tools 15.14.0 is out'),
+        ('v15.14.0\n', 'v15.14.0'),
+        ('a\r\n\r\nb\r\n', 'a b'),
+        ('', ''),
+      ]) {
+        expect(
+          await check.check(machineWith(output)),
+          _failed(
+            '"firebase --version" printed "$printed", which is not a version.',
+          ),
+          reason: output,
+        );
+      }
+      // The last lines of a long output.
+      expect(
+        await check.check(
+          machineWith([for (var i = 1; i <= 8; i++) 'line $i'].join('\n')),
+        ),
+        _failed(
+          '"firebase --version" printed "… line 4 line 5 line 6 line 7 line '
+          '8", which is not a version.',
+        ),
+      );
+    });
+
+    test(
+        'says only that the Firebase CLI does not run when it does not, '
+        'which the check of the Firebase CLI tells about', () async {
+      const doesNotRun = 'the Firebase CLI does not run';
+      for (final system in HostOperatingSystem.values) {
+        final failing = FakeMachine(
+          operatingSystem: system,
+          executables: {'firebase': _firebase},
+          reply: (_) => _result(
+            1,
+            // A version in the output of a command that failed is none.
+            stdout: '15.14.0\n',
+            stderr: 'Firebase CLI v15.14.0 is incompatible with Node.js '
+                'v18.20.8 Please upgrade Node.js to version >=20.0.0\n',
+          ),
+        );
+
+        expect(
+          await check.check(failing),
+          _missing(
+            found: doesNotRun,
+            instructions: install,
+            installable: false,
+          ),
+          reason: '$system',
+        );
+        expect(failing.calls.single.line, '$_firebase --version');
+      }
+
+      final cannotStart = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (call) => throw ProcessException(
+          call.executable,
+          call.arguments,
+          'Permission denied',
+          13,
+        ),
+      );
+      expect(
+        await check.check(cannotStart),
+        _missing(found: doesNotRun, instructions: install, installable: false),
+      );
+    });
+
+    test(
+        'reports it missing on a machine without the Firebase CLI, and runs '
+        'nothing', () async {
+      for (final system in HostOperatingSystem.values) {
+        final machine = FakeMachine(operatingSystem: system);
+
+        expect(
+          await check.check(machine),
+          // The check of the Firebase CLI offers the installation.
+          _missing(instructions: install, installable: false),
+          reason: '$system',
+        );
+        expect(machine.calls, isEmpty);
+      }
+    });
+
+    test('lets the cancellation of the run through', () async {
+      final machine = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => throw const SmfCancelledException(),
+      );
+
+      await expectLater(
+        check.check(machine),
+        throwsA(isA<SmfCancelledException>()),
+      );
+    });
+
+    test('installs nothing', () async {
+      final machine = machineWith('15.5.1\n');
+
+      await expectLater(check.install(machine), throwsUnsupportedError);
+      expect(machine.calls, isEmpty);
+      expect(machine.questions, isEmpty);
+    });
+
+    test(
+        'refuses a lowest version that is not three numbers, before it runs '
+        'anything', () async {
+      for (final minimum in [
+        '15.6',
+        '15',
+        'latest',
+        '',
+        // A range, or a pre-release, which a module cannot ask for.
+        '^15.6.0',
+        '>=15.6.0',
+        '15.6.0-rc.1',
+        '15.6.0+build.5',
+        ' 15.6.0',
+      ]) {
+        final machine = machineWith('15.14.0\n');
+
+        await expectLater(
+          FirebaseCliVersionCheck(minimum: minimum).check(machine),
+          throwsA(
+            isA<ArgumentError>()
+                .having((error) => error.name, 'name', 'minimum')
+                .having((error) => error.invalidValue, 'value', minimum)
+                .having(
+                  (error) => error.message,
+                  'message',
+                  'The lowest version of the Firebase CLI must be three '
+                      'numbers, such as 15.6.0',
+                ),
+          ),
+          reason: minimum,
+        );
+        expect(machine.calls, isEmpty, reason: minimum);
+      }
+    });
+  });
+
   group('FirebaseLoginCheck', () {
     const check = FirebaseLoginCheck();
 
