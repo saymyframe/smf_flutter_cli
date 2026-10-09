@@ -42,9 +42,9 @@ String _notDeployed(String reason) =>
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 
 /// A module of the tests that depends on firebase_core and continues its
-/// step with a command that the Firebase CLI has since 15.6.0, as a module
-/// of another package would: with the check of the version in its own
-/// [Preflight], which its step needs.
+/// step with a command of the Firebase CLI, as if its command needed
+/// 15.6.0. As a module of another package would, it has the check of the
+/// version in its own [Preflight], which its step needs.
 final class _RulesModule extends SmfModule {
   const _RulesModule();
 
