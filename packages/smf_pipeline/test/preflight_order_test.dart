@@ -103,9 +103,8 @@ void main() {
       ];
     }
 
-    // The module alone, for which the pipeline adds the one it depends on;
-    // before that one; and after it, the order of the modules that the
-    // checks ran in before.
+    // The user names the module alone, and the pipeline adds the one it
+    // depends on after it; or names it before that one; or after it.
     for (final named in [
       ['rules'],
       ['rules', 'core'],
