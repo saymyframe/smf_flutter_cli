@@ -554,10 +554,45 @@ void main() {
       'router_walk_guards',
       'layout_screens',
       'go_router_screens',
+      'go_router_branches',
       'bottom_tabs_screens',
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the test of the branches of go_router applies to the apps of '
+      'go_router with a main navigation of both fixture features, those '
+      'with guards and those without', () {
+    final branches = named('go_router_branches');
+    bool hasGuards(MatrixApp app) =>
+        routerRole.facadeOf(routerRole.hookInput(app.hook!)).guards.isNotEmpty;
+    final withBranches = apps.where(branches.appliesTo).toList();
+
+    // The router asks the guards in the redirect of its routes, which stays
+    // with the routes that get a new main navigation.
+    expect(withBranches.where(hasGuards), isNotEmpty);
+    expect(withBranches.where((app) => !hasGuards(app)), isNotEmpty);
+    for (final app in withBranches) {
+      expect(
+        [
+          for (final route
+              in layoutRole.destinationsIn(layoutRole.hookInput(app.hook!)))
+            route.fullName,
+        ],
+        containsAll(['fake_feature.home', 'fake_second.second']),
+        reason: app.name,
+      );
+    }
+    // And to no app that the tests of go_router of every app do not apply
+    // to.
+    expect(
+      appsOf(named('go_router_screens')),
+      containsAll(appsOf(branches)),
+    );
+    expect(named('go_router_screens').roles, isEmpty);
+    expect(branches.roles, isEmpty);
   });
 
   test(

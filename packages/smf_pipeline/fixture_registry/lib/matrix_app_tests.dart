@@ -90,9 +90,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // again, the user is back in the main navigation, on the destination
       // that the page of the second fixture feature was pushed from, or,
       // after the guard of the fixture late gate, which does not bring the
-      // user back, on the screen that the app starts on. The apps it
-      // applies to have the tests of router_screens and of router_guards,
-      // whose helpers it uses.
+      // user back, on the screen that the app starts on. No branch keeps a
+      // page that the guard kept the user from, also when the guard allows
+      // again in the turn in which it stopped allowing, or while the
+      // transition to its target is on its way. The apps it applies to have
+      // the tests of router_screens and of router_guards, whose helpers it
+      // uses.
       MatrixAppTest(
         '$appTests/layout_guards',
         appliesTo: (app) =>
@@ -149,6 +152,25 @@ Future<MatrixAppTests> fixtureAppTests() async {
         '$appTests/go_router_screens',
         appliesTo: (app) =>
             _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('go_router')),
+      ),
+      // What only go_router does with the branches of the main navigation:
+      // it keeps their pages with the route of the main navigation for as
+      // long as a page of that route is in the widget tree, so the router of
+      // the module gives it a new route each time the main navigation leaves
+      // its pages. After a go() out of the main navigation and back, in one
+      // turn and while the transition is on its way too, each branch is on
+      // its destination, and Flutter finds no key twice. It checks no role,
+      // so it names its module, as `tools/app_tests_test.dart` lets it. The
+      // apps it applies to have a layout and both fixture features, whose
+      // destinations and page outside the main navigation it goes between,
+      // and the tests of router_screens, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/go_router_branches',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.hook!.presentRoles.contains(layoutRole) &&
+            app.modules.contains(const ModuleId('fake_second')) &&
             app.modules.contains(const ModuleId('go_router')),
       ),
       // What only bottom_tabs does: its bar shows a tab with the label of
