@@ -1631,6 +1631,14 @@ final class MatrixCommands {
 /// the matrix has, is a problem of the run too. The apps keep their numbers
 /// in the matrix when only some are checked.
 ///
+/// A run for one app with every module by its name
+/// ([NamedEveryModuleApp]), as a job of CI checks its app of the plan, has
+/// a matrix with that app alone among the apps with every module. The
+/// other jobs check the others, so such a run holds the [appTests] against
+/// the matrix with all of them: a test that applies only to an app with
+/// every module that another job checks, such as one for another value of
+/// a mode option, is no problem there.
+///
 /// The apps stay in [directory], with the tests. [commands] run for each
 /// app, and their log gets what happens.
 Future<int> runMatrix(
@@ -1672,13 +1680,19 @@ Future<int> runMatrix(
     problems.addAll(await run.check(app, 'app_${index + 1}'));
   }
   // Tests that apply to no app would leave CI without saying so. Those of
-  // the apps that are not checked run where the whole matrix is.
+  // the apps that are not checked run where the whole matrix is, and the
+  // matrix of a run for one app with every module lacks the others.
+  final all = switch (selection.everyModuleApps) {
+    NamedEveryModuleApp() =>
+      (await matrixOf(modules, roleOptions: roleOptions)).apps,
+    _ => apps,
+  };
   for (final test in appTests.tests) {
-    if (!apps.any(test.appliesTo)) {
+    if (!all.any(test.appliesTo)) {
       problems.add('The tests of ${test.directory} apply to no app.');
     }
   }
-  problems.addAll(appTests.roleProblems(modules, apps));
+  problems.addAll(appTests.roleProblems(modules, all));
   run.say('\n${checked.length} apps generated in $directory.');
   return _exitCode(problems, run.say);
 }

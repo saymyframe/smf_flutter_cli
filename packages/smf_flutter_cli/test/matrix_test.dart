@@ -1211,12 +1211,17 @@ Type type() => Types;
       int testCode = 0,
       Set<String>? only,
       bool everyModule = false,
+      EveryModuleSelection everyModuleApps = EveryModuleCombinations.all,
     }) =>
         runMatrix(
           modules,
           directory: '/apps',
           appTests: MatrixAppTests(appTests, testedRoles: testedRoles),
-          selection: MatrixSelection(only: only, everyModule: everyModule),
+          selection: MatrixSelection(
+            only: only,
+            everyModule: everyModule,
+            everyModuleApps: everyModuleApps,
+          ),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {
@@ -1403,6 +1408,90 @@ Type type() => Types;
       expect(await run(appTests: [other]), 1);
       expect(tested, isEmpty);
       expect(log.last, 'The tests of /tests/other apply to no app.');
+    });
+
+    test(
+        'for one app with every module holds the tests against the matrix '
+        'with all of them, which other runs check: tests of another of '
+        'them, or of the apps of another value of a mode option, are no '
+        'problem, and tests that apply to no app of that matrix are', () async {
+      const oak = NamedEveryModuleApp('every module (oak)');
+      final ofPine = MatrixAppTest(
+        '/tests/pine',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.modules.contains(const ModuleId('pine')),
+      );
+      final ofGuests = MatrixAppTest(
+        '/tests/guests',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            doors.modeIn(app.hook!, 'access') == 'guests',
+      );
+      // A test of the role of the wood in the apps with every module, where
+      // the run has no app with pine, its second provider.
+      final ofWood = MatrixAppTest(
+        '/tests/wood',
+        appliesTo: (app) => app.everyModuleWith != null,
+        roles: {wood},
+      );
+      final ofNone = MatrixAppTest(
+        '/tests/none',
+        appliesTo: (app) => app.modules.contains(const ModuleId('other')),
+      );
+
+      expect(
+        await run(
+          modules: doorsOfWood,
+          appTests: [ofPine, ofGuests, ofWood],
+          testedRoles: {wood},
+          everyModule: true,
+          everyModuleApps: oak,
+        ),
+        0,
+        reason: log.join('\n'),
+      );
+      // It checks its app alone, with the tests that apply to it.
+      expect(created.single.take(2), ['create', 'app_7']);
+      expect(tested, ['app_7 (every module (oak)): /tests/wood']);
+
+      expect(
+        await run(
+          modules: doorsOfWood,
+          appTests: [ofPine, ofGuests, ofNone],
+          everyModule: true,
+          everyModuleApps: oak,
+        ),
+        1,
+      );
+      expect(log.sublist(log.indexOf('Problems:') + 1), [
+        'The tests of /tests/none apply to no app.',
+      ]);
+
+      // A run of the matrix with a covering has the apps that CI checks,
+      // so a test of an app that the covering lacks is a problem there.
+      final ofAll = MatrixAppTest(
+        '/tests/all',
+        appliesTo: (app) => app.modes.length > 1,
+      );
+      expect(
+        await run(
+          modules: const [...doorsOfWood, tower],
+          appTests: [ofAll],
+          everyModuleApps: EveryModuleCombinations.pairwise,
+        ),
+        0,
+      );
+      log.clear();
+      expect(
+        await run(
+          modules: doorsOfWood,
+          appTests: [ofAll],
+          everyModuleApps: EveryModuleCombinations.pairwise,
+        ),
+        1,
+      );
+      expect(log.last, 'The tests of /tests/all apply to no app.');
     });
 
     group('with tests of a role', () {

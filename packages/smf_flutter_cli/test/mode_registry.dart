@@ -23,7 +23,7 @@ final class ModeRole extends Role<Object> {
   final List<RoleOption> options;
 
   @override
-  String get description => 'Role $id';
+  String get description => '${id[0].toUpperCase()}${id.substring(1)}';
 
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
