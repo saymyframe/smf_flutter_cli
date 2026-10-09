@@ -1303,6 +1303,465 @@ void main() {
       });
     });
 
+    group('a mode option of a role', () {
+      const access = RoleOption.mode(
+        name: 'access',
+        help: 'Who may use the app.',
+        values: ['members', 'guests', 'anyone'],
+      );
+
+      /// The role `doors` with the mode option `--access`, whose template
+      /// is [template].
+      TestRole<String> doors(
+        RoleTemplate<String> template, {
+        Set<Role> uses = const {},
+      }) =>
+          TestRole<String>(
+            'doors',
+            uses: uses,
+            options: const [access],
+            template: template,
+          );
+
+      /// The harness of an app whose one module, `lock`, provides [role].
+      ContractHarness harnessOf(
+        Role role, {
+        Map<String, String?> roleOptions = const {},
+      }) =>
+          ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule('lock', providers: [RoleProvider.plain(role)]),
+            ]),
+            roleOptions: roleOptions,
+          );
+
+      const lock = ContractCase('lock', requested: [ModuleId('lock')]);
+      const lockForGuests = ContractCase(
+        'lock for guests',
+        requested: [ModuleId('lock')],
+        roleOptions: {'access': 'guests'},
+      );
+
+      test(
+          'sets the app of a case with a value apart from the app of the same '
+          'modules without it', () async {
+        final harness = harnessOf(doors(_AccessTemplate()));
+
+        final byDefault = await harness.check(lock);
+        final forGuests = await harness.check(lockForGuests);
+
+        expect(byDefault.errors, isEmpty);
+        expect(forGuests.errors, isEmpty);
+        expect(byDefault.appKey, 'lock(),scaffold()');
+        expect(forGuests.appKey, 'lock(),scaffold() --access=guests');
+        expect(
+          forGuests.app!.files['lib/access.dart']!.text,
+          isNot(byDefault.app!.files['lib/access.dart']!.text),
+        );
+        // The options of the case in the order of their names, without one
+        // that has no value. The key needs no rendered app.
+        final unrendered = await ContractHarness(
+          harness.registry,
+          render: false,
+        ).check(
+          const ContractCase(
+            'lock',
+            requested: [ModuleId('lock')],
+            roleOptions: {'start': '/home', 'access': 'anyone', 'other': null},
+          ),
+        );
+        expect(
+          unrendered.appKey,
+          'lock(),scaffold() --access=anyone --start=/home',
+        );
+      });
+
+      test(
+          'gives each provider of its role a case for each value after the '
+          'first, with every role that the role uses', () async {
+        final nav = TestRole<NoDsl>('nav');
+        final tracking = TestRole<NoDsl>(
+          'tracking',
+          cardinality: RoleCardinality.many,
+        );
+        final role = doors(_AccessTemplate(), uses: {nav, tracking});
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule('lock', providers: [RoleProvider.plain(role)]),
+            TestModule('bolt', providers: [RoleProvider.plain(role)]),
+            TestModule('go', providers: [RoleProvider.plain(nav)]),
+            TestModule('auto', providers: [RoleProvider.plain(nav)]),
+            TestModule('a1', providers: [RoleProvider.plain(tracking)]),
+          ]),
+        );
+
+        final cases = harness.casesOfRole(role);
+
+        expect(cases.map((c) => '$c'), [
+          for (final provider in ['lock', 'bolt']) ...[
+            'doors by $provider (go) with nav, tracking',
+            'doors by $provider (auto) with nav, tracking',
+            'doors by $provider (go) with nav',
+            'doors by $provider (auto) with nav',
+            'doors by $provider with tracking',
+            'doors by $provider',
+          ],
+          // The first case of each provider once more for each other value.
+          for (final provider in ['lock', 'bolt'])
+            for (final value in ['guests', 'anyone'])
+              'doors by $provider (go) with nav, tracking --access=$value',
+        ]);
+        final withoutValue = cases.first;
+        final forAnyone = cases.singleWhere(
+          (c) =>
+              c.name == 'doors by lock (go) with nav, tracking --access=anyone',
+        );
+        expect(withoutValue.roleOptions, isEmpty);
+        expect(forAnyone.roleOptions, {'access': 'anyone'});
+        expect(forAnyone.requested, withoutValue.requested);
+        expect(forAnyone.picks, withoutValue.picks);
+
+        // Each of them builds an app of its own, which the harness keeps.
+        final results = await harness.checkAll();
+        expect(
+          [
+            for (final result in results)
+              for (final issue in result.errors)
+                '${result.contractCase}: $issue',
+          ],
+          isEmpty,
+        );
+        expect(
+          [
+            for (final result in results)
+              if (result.contractCase.roleOptions.isNotEmpty)
+                '${result.contractCase}',
+          ],
+          [
+            for (final provider in ['lock', 'bolt'])
+              for (final value in ['guests', 'anyone'])
+                'doors by $provider (go) with nav, tracking --access=$value',
+          ],
+        );
+        final keys = [for (final result in results) result.appKey];
+        expect(keys.toSet(), hasLength(keys.length));
+      });
+
+      test('gives the hooks of the app of a case with a value that choice',
+          () async {
+        final role = doors(_AccessTemplate());
+        final harness = harnessOf(role);
+
+        final result = await harness.check(
+          harness.casesOfRole(role).singleWhere(
+                (c) => c.name == 'doors by lock --access=guests',
+              ),
+        );
+
+        expect(result.errors, isEmpty);
+        expect(result.choices, {role: 'guests', appEntryRole: null});
+        // The option decides, so the harness answers nothing.
+        expect(result.answers, isEmpty);
+        expect(role.hookInput(result.hook!).choice, 'guests');
+        expect(
+          result.app!.files['lib/access.dart']!.text,
+          "const access = 'guests';\n",
+        );
+      });
+
+      test(
+          'has no case of its own for a value that the harness gives every '
+          'case', () async {
+        final role = doors(_AccessTemplate());
+        final harness =
+            harnessOf(role, roleOptions: const {'access': 'guests'});
+
+        expect(harness.casesOfRole(role).map((c) => '$c'), ['doors by lock']);
+        final results = await harness.checkAll();
+        expect(results.map((result) => '${result.contractCase}'), [
+          'scaffold',
+          'lock',
+        ]);
+        expect(results.last.errors, isEmpty);
+        expect(results.last.choices![role], 'guests');
+        // An option without a value fixes nothing.
+        expect(
+          harnessOf(role, roleOptions: const {'access': null})
+              .casesOfRole(role)
+              .map((c) => '$c'),
+          [
+            'doors by lock',
+            'doors by lock --access=guests',
+            'doors by lock --access=anyone',
+          ],
+        );
+      });
+
+      test(
+          'gives each app with every module a case for each other '
+          'combination of the values of the options of its roles', () {
+        final nav = TestRole<NoDsl>('nav');
+        final role = doors(_AccessTemplate());
+        final clock = TestRole<String>(
+          'clock',
+          options: const [
+            RoleOption.mode(name: 'hours', help: '', values: ['24', '12']),
+            // No mode: a value of it sets no app apart.
+            RoleOption(name: 'zone', help: '', allowed: ['utc', 'local']),
+          ],
+          template: TestTemplate(),
+        );
+        // A role of the registry that no module provides.
+        final bells = TestRole<String>(
+          'bells',
+          options: const [
+            RoleOption.mode(name: 'chime', help: '', values: ['on', 'off']),
+          ],
+          template: TestTemplate(),
+        );
+        final modules = [
+          scaffold(),
+          TestModule('go', providers: [RoleProvider.plain(nav)]),
+          TestModule('auto', providers: [RoleProvider.plain(nav)]),
+          TestModule('lock', providers: [RoleProvider.plain(role)]),
+          TestModule('dial', providers: [RoleProvider.plain(clock)]),
+          TestModule('tower', uses: {bells}),
+        ];
+        final harness = ContractHarness(ModuleRegistry(modules));
+
+        final every = harness.casesOfAll();
+        expect(every.map((c) => '$c'), [
+          'every module (go)',
+          'every module (auto)',
+        ]);
+        final cases = harness.casesOfModes();
+
+        expect(cases.map((c) => '$c'), [
+          for (final app in every) ...[
+            '$app --hours=12',
+            '$app --access=guests',
+            '$app --access=guests --hours=12',
+            '$app --access=anyone',
+            '$app --access=anyone --hours=12',
+          ],
+        ]);
+        expect(
+          cases.map((c) => c.roleOptions),
+          [
+            for (final _ in every) ...[
+              {'hours': '12'},
+              {'access': 'guests'},
+              {'access': 'guests', 'hours': '12'},
+              {'access': 'anyone'},
+              {'access': 'anyone', 'hours': '12'},
+            ],
+          ],
+        );
+        for (final (index, contractCase) in cases.indexed) {
+          final app = every[index ~/ 5];
+          expect(contractCase.requested, app.requested);
+          expect(contractCase.picks, app.picks);
+        }
+
+        // A value that the harness gives every case is no dimension.
+        expect(
+          ContractHarness(
+            ModuleRegistry(modules),
+            roleOptions: const {'access': 'guests'},
+          ).casesOfModes().map((c) => '$c'),
+          ['every module (go) --hours=12', 'every module (auto) --hours=12'],
+        );
+        // Nor has a registry without such an option any such case.
+        expect(
+          ContractHarness(ModuleRegistry(modules.sublist(0, 3))).casesOfModes(),
+          isEmpty,
+        );
+      });
+
+      /// The errors of the app of the role with [template], which the
+      /// harness does not render with them, for [contractCase].
+      Future<List<SmfIssue>> errorsOf(
+        RoleTemplate<String> template, [
+        ContractCase contractCase = lock,
+      ]) async {
+        final result = await harnessOf(doors(template)).check(contractCase);
+        if (result.errors.isNotEmpty) {
+          expect(result.app, isNull);
+          expect(result.hook, isNull);
+          expect(result.choices, isNotNull);
+        }
+        return result.errors;
+      }
+
+      test('passes with a template that asks, and with one that does not',
+          () async {
+        final asking = doors(_AccessTemplate());
+        final asked = await harnessOf(asking).check(lock);
+        expect(asked.errors, isEmpty);
+        expect(asked.choices![asking], 'members');
+        // The answer of the user who presses Enter.
+        expect(asked.answers, {'access': 'members'});
+
+        final silent = doors(_AccessTemplate(asks: false));
+        final unasked = await harnessOf(silent).check(lock);
+        expect(unasked.errors, isEmpty);
+        expect(unasked.choices![silent], 'members');
+        expect(unasked.answers, isEmpty);
+      });
+
+      /// The origin of an issue of the template of the role `doors`.
+      final ofDoors = isA<RoleTemplateOrigin>()
+          .having((origin) => origin.role.id, 'role', 'doors');
+
+      test(
+          'is an error when the choice without it is not its first value, '
+          'the default', () async {
+        // The question offers another value first.
+        final offered = await errorsOf(_AccessTemplate(enter: 'guests'));
+        expect(
+          offered.single.message,
+          'Without --access, the doors role makes the choice guests when the '
+          'user presses Enter, for which its template gives --access guests, '
+          'not --access members: the first value of a mode option is its '
+          'default.',
+        );
+        expect(offered.single.origin, ofDoors);
+        expect(offered.single.hint, contains('offers first'));
+
+        // The template chooses another value without asking, in a terminal
+        // and without one.
+        final chosen = await errorsOf(
+          _AccessTemplate(
+            asks: false,
+            enter: 'anyone',
+            withoutTerminal: 'anyone',
+          ),
+        );
+        const rest = 'for which its template gives --access anyone, not '
+            '--access members: the first value of a mode option is its '
+            'default.';
+        const start = 'Without --access, the doors role makes the choice '
+            'anyone';
+        expect(chosen.map((issue) => issue.message), [
+          '$start when the user presses Enter, $rest',
+          '$start in a run without a terminal, $rest',
+        ]);
+
+        // The template gives no option for a choice that it made without
+        // asking, so nothing tells which value the app has.
+        final unnamed = await errorsOf(
+          _AccessTemplate(asks: false, optionsFor: (choice) => const {}),
+        );
+        expect(unnamed, hasLength(2));
+        expect(
+          unnamed.first.message,
+          'Without --access, the doors role makes the choice members when '
+          'the user presses Enter, for which its template gives no --access, '
+          'not --access members: the first value of a mode option is its '
+          'default.',
+        );
+        expect(unnamed.first.hint, contains('optionsOf()'));
+      });
+
+      test(
+          'is an error when a run without a terminal needs it, or chooses '
+          'another value than the first without it', () async {
+        // As a template that asks in a terminal, and cannot decide without.
+        final needed = await errorsOf(_AccessTemplate(withoutTerminal: null));
+        expect(
+          needed.single.message,
+          'The doors role cannot choose in a run without a terminal and '
+          'without --access: Give --access.',
+        );
+        expect(needed.single.origin, ofDoors);
+        expect(needed.single.hint, contains('first value'));
+
+        final other = await errorsOf(
+          _AccessTemplate(withoutTerminal: 'guests'),
+        );
+        expect(
+          other.single.message,
+          'Without --access, the doors role makes the choice guests in a run '
+          'without a terminal, for which its template gives --access guests, '
+          'not --access members: the first value of a mode option is its '
+          'default.',
+        );
+        expect(other.single.origin, ofDoors);
+
+        // With the option, neither run has a choice to make.
+        expect(
+          await errorsOf(_AccessTemplate(withoutTerminal: null), lockForGuests),
+          isEmpty,
+        );
+      });
+
+      test(
+          'names the role that cannot choose without a terminal, among '
+          'roles without a template and roles that chose', () async {
+        // The harness answers the question of the colors, so its option is
+        // part of the run without a terminal; the doors come after a role
+        // without a template and one that makes its choice.
+        final nav = TestRole<NoDsl>('nav');
+        final colors = TestRole<String>(
+          'colors',
+          options: const [RoleOption(name: 'color', help: 'The color.')],
+          template: _AskTemplate(),
+        );
+        final role = doors(_AccessTemplate(withoutTerminal: null));
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule('go', providers: [RoleProvider.plain(nav)]),
+            TestModule('asker', providers: [RoleProvider.plain(colors)]),
+            TestModule('lock', providers: [RoleProvider.plain(role)]),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase(
+            'all',
+            requested: [ModuleId('go'), ModuleId('asker'), ModuleId('lock')],
+          ),
+        );
+
+        expect(
+          result.errors.single.message,
+          'The doors role cannot choose in a run without a terminal and '
+          'without --access: Give --access.',
+        );
+        expect(result.errors.single.origin, ofDoors);
+      });
+
+      test('is an error when the choice with a value is not that value',
+          () async {
+        // The template does not read the option.
+        final ignored = await errorsOf(
+          _AccessTemplate(readsOption: false),
+          lockForGuests,
+        );
+        expect(
+          ignored.single.message,
+          'With --access guests, the doors role makes the choice members, '
+          'for which its template gives --access members, not --access '
+          'guests: the choice of a mode option is its value.',
+        );
+        expect(ignored.single.origin, ofDoors);
+        expect(ignored.single.hint, contains('choose()'));
+
+        // So is the value that the harness gives every case.
+        final everywhere = await harnessOf(
+          doors(_AccessTemplate(readsOption: false)),
+          roleOptions: const {'access': 'anyone'},
+        ).check(lock);
+        expect(
+          everywhere.errors.single.message,
+          startsWith('With --access anyone, the doors role makes the choice'),
+        );
+      });
+    });
+
     test('a harness that does not render leaves the app out', () async {
       final harness = ContractHarness(registry, render: false);
       final result = await harness.check(
@@ -3162,6 +3621,76 @@ final class _AskTemplate extends RoleTemplate<String> {
 
   @override
   Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
+}
+
+/// The template of a role with the mode option `--access`, whose values are
+/// `members`, `guests` and `anyone`. Its choice is the value of the option,
+/// unless it does not read it ([readsOption]). Without the option, it is
+/// [withoutTerminal] in a run without a terminal, which fails if that is
+/// `null`, and [enter] in a terminal: the value that its question offers
+/// first, or that it chooses without a question if it asks nothing
+/// ([asks]). It gives [optionsFor] of its choice, and renders the choice
+/// into a brick.
+final class _AccessTemplate extends RoleTemplate<String> {
+  _AccessTemplate({
+    this.asks = true,
+    this.enter = 'members',
+    this.withoutTerminal = 'members',
+    this.readsOption = true,
+    this.optionsFor = _accessOf,
+  });
+
+  static Map<String, String> _accessOf(Object? choice) => {'access': '$choice'};
+
+  /// Whether the template asks in a terminal.
+  final bool asks;
+
+  /// The choice of a user who presses Enter.
+  final String enter;
+
+  /// The choice in a run without a terminal, or `null` if the template
+  /// cannot make one there.
+  final String? withoutTerminal;
+
+  /// Whether the template reads the option.
+  final bool readsOption;
+
+  /// The options of a choice.
+  final Map<String, String> Function(Object? choice) optionsFor;
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundle(
+            'access',
+            files: {'lib/access.dart': "const access = '{{access}}';\n"},
+          ),
+        ),
+      ];
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    final given = readsOption ? context.option('access') : null;
+    if (given != null) return given;
+    final environment = context.environment;
+    if (!environment.interactive) {
+      return withoutTerminal ??
+          (throw const SmfUsageException('Give --access.'));
+    }
+    if (!asks) return enter;
+    return environment.prompter.select(
+      'Who may use the app?',
+      const ['members', 'guests', 'anyone'],
+      defaultValue: enter,
+    );
+  }
+
+  @override
+  Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) =>
+      RoleOutput(vars: {'access': input.choice});
 }
 
 /// A template that asks a question of every kind and joins the answers,
