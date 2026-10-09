@@ -632,6 +632,27 @@ void main() {
       }
     });
 
+    test('compares the third number too, by its value', () async {
+      const patched = FirebaseCliVersionCheck(minimum: '15.6.2');
+
+      expect(
+        await patched.check(machineWith('15.6.1\n')),
+        _missing(
+          found: '$_firebase is 15.6.1',
+          instructions: update,
+          installable: false,
+        ),
+      );
+      // 10 comes after 2, and the second number before the third.
+      for (final version in ['15.6.2', '15.6.10', '15.7.0']) {
+        expect(
+          await patched.check(machineWith('$version\n')),
+          isA<PreflightPassed>(),
+          reason: version,
+        );
+      }
+    });
+
     test(
         'reads the version from its line among the others of the output, '
         'the last one that is a version', () async {
@@ -649,6 +670,38 @@ void main() {
       expect(
         await check.check(machineWith('1.0.0\n15.14.0\n')),
         isA<PreflightPassed>(),
+      );
+    });
+
+    test(
+        'reads the version from the standard output alone, whatever the '
+        'command writes to its standard error', () async {
+      // A warning of Node.js, and a line that would be a later version.
+      const warning = '(node:4242) [DEP0040] DeprecationWarning: The '
+          '`punycode` module is deprecated. Please use a userland '
+          'alternative instead.\n16.0.0\n';
+      final older = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => _result(0, stdout: '15.5.1\n', stderr: warning),
+      );
+
+      expect(
+        await check.check(older),
+        _missing(
+          found: '$_firebase is 15.5.1',
+          instructions: update,
+          installable: false,
+        ),
+      );
+
+      final silent = FakeMachine(
+        executables: {'firebase': _firebase},
+        reply: (_) => _result(0, stderr: warning),
+      );
+
+      expect(
+        await check.check(silent),
+        _failed('"firebase --version" printed "", which is not a version.'),
       );
     });
 
