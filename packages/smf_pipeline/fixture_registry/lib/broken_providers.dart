@@ -414,6 +414,44 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerKeepingSelectedBranch,
+        role: routerRole,
+        bug: 'When it shows the location that the guards of the routes '
+            'answer, it puts the branches of the main navigation back on '
+            'their destinations, but for the selected one, which keeps its '
+            'pages. So once a guard that does not bring the user back allows '
+            'again, that branch still has a page that the guard kept the '
+            'user from.',
+        // The app of the guards with a layout and the second fixture
+        // feature, whose destination is the branch that is selected when
+        // the guard stops allowing. The fixture feature comes first, so the
+        // app starts on its screen.
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeLateGateModule.id,
+          FakeGateModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/layout_guard_return_test.dart',
+            'after a guard that does not bring the user back, the user is in '
+                'the main navigation on the screen that the app starts on, '
+                'and every branch is back on its destination',
+            'The target of a guard takes the stacks of every branch of the '
+                'main navigation, the selected one too: when the user does '
+                'not come back to that branch, it is back on its destination '
+                'all the same.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenLayoutModule.givingFirstDestination(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '
