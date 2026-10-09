@@ -1449,6 +1449,38 @@ void main() {
         expect(keys.toSet(), hasLength(keys.length));
       });
 
+      test(
+          'gives a role with two of them a case for each value of each, not '
+          'for each pair of their values', () {
+        final clock = TestRole<String>(
+          'clock',
+          options: const [
+            RoleOption.mode(name: 'hours', help: '', values: ['24', '12']),
+            RoleOption.mode(
+              name: 'hands',
+              help: '',
+              values: ['two', 'three', 'none'],
+            ),
+          ],
+          template: TestTemplate(),
+        );
+
+        final cases = harnessOf(clock).casesOfRole(clock);
+
+        expect(cases.map((c) => '$c'), [
+          'clock by lock',
+          'clock by lock --hours=12',
+          'clock by lock --hands=three',
+          'clock by lock --hands=none',
+        ]);
+        expect(cases.map((c) => c.roleOptions), [
+          isEmpty,
+          {'hours': '12'},
+          {'hands': 'three'},
+          {'hands': 'none'},
+        ]);
+      });
+
       test('gives the hooks of the app of a case with a value that choice',
           () async {
         final role = doors(_AccessTemplate());
