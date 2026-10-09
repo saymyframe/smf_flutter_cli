@@ -362,9 +362,12 @@ List<BrokenProvider> brokenProviders() => const [
           MatrixExpectedFailure(
             'test/router_guard_early_change_test.dart',
             'a guard that starts allowing before the router shows its first '
-                'location lets the app start on its start screen',
+                'location lets the app start on the location that it is '
+                'opened with',
             'With guards that allow when the app starts, the app starts on '
-                'its start screen.',
+                'the location that it is opened with: the one from the '
+                'platform, or its start screen for a router that takes no '
+                'location from the platform.',
           ),
         ],
       ),
