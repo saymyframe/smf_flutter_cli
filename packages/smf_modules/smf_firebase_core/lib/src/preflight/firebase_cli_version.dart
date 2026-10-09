@@ -52,11 +52,13 @@ final class FirebaseCliVersionCheck extends PreflightCheck {
       'npm installed it, or see '
       'https://firebase.google.com/docs/cli#update-cli.';
 
-  /// Throws an [ArgumentError] when [minimum] is not three numbers, which is
-  /// a mistake of the module that created the check.
+  /// Throws an [ArgumentError] when [minimum] is not three numbers, each
+  /// within the 64 bits of an `int`, which is a mistake of the module that
+  /// created the check.
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
-    if (!_threeNumbers.hasMatch(minimum)) {
+    final lowest = _numbersOf(minimum);
+    if (lowest == null) {
       throw ArgumentError.value(
         minimum,
         'minimum',
@@ -77,7 +79,7 @@ final class FirebaseCliVersionCheck extends PreflightCheck {
     }
     final printed = [
       for (final line in output.split('\n'))
-        if (_version.firstMatch(line.trim()) case final version?) version,
+        if (_versionOn(line.trim()) case final version?) version,
     ].lastOrNull;
     if (printed == null) {
       return PreflightFailed(
@@ -85,9 +87,9 @@ final class FirebaseCliVersionCheck extends PreflightCheck {
         'which is not a version.',
       );
     }
-    if (_isBefore(printed, minimum.split('.').map(int.parse).toList())) {
+    if (_isBefore(printed, lowest)) {
       return PreflightMissing(
-        found: '$firebase is ${printed[0]}',
+        found: '$firebase is ${printed.text}',
         instructions: _update,
       );
     }
@@ -95,22 +97,45 @@ final class FirebaseCliVersionCheck extends PreflightCheck {
   }
 }
 
-/// The lowest version that a module may ask for: three numbers and nothing
-/// else, such as `15.6.0`.
+/// Three numbers with dots between them and nothing else, such as `15.6.0`.
 final _threeNumbers = RegExp(r'^\d+\.\d+\.\d+$');
+
+/// The three numbers of [version], or `null` if it is not three numbers and
+/// nothing else, as the lowest version that a module may ask for is, or if
+/// one of them is beyond the 64 bits of an `int`.
+List<int>? _numbersOf(String version) {
+  if (!_threeNumbers.hasMatch(version)) return null;
+  final numbers = version.split('.').map(int.tryParse).nonNulls.toList();
+  return numbers.length == 3 ? numbers : null;
+}
 
 /// A version as `firebase --version` prints it on a line of its own: three
 /// numbers, then a pre-release after `-` and a build after `+`, if any,
 /// such as `15.14.0`, `15.6.0-rc.1` or `15.6.0+build.5`.
-final _version = RegExp(r'^(\d+)\.(\d+)\.(\d+)(-[^+\s]+)?(\+\S+)?$');
+final _version = RegExp(r'^(\d+\.\d+\.\d+)(-[^+\s]+)?(\+\S+)?$');
 
-/// Whether [version], a match of [_version], comes before the version of
-/// the numbers [lowest]: by its numbers, and with the same numbers when it
-/// is a pre-release, which may lack what the version itself has.
-bool _isBefore(RegExpMatch version, List<int> lowest) {
+/// A version that `firebase --version` printed: the text of its line, its
+/// three numbers and whether it is a pre-release.
+typedef _Printed = ({String text, List<int> numbers, bool preRelease});
+
+/// The version on [line] of the output of `firebase --version`, or `null`
+/// if the line is not a version (see [_version]), or is one with a number
+/// beyond the 64 bits of an `int`, which no version of the Firebase CLI has.
+_Printed? _versionOn(String line) {
+  final match = _version.firstMatch(line);
+  if (match == null) return null;
+  final numbers = _numbersOf(match[1]!);
+  if (numbers == null) return null;
+  return (text: line, numbers: numbers, preRelease: match[2] != null);
+}
+
+/// Whether [version] comes before the version of the numbers [lowest]: by
+/// its numbers, and with the same numbers when it is a pre-release, which
+/// may lack what the version itself has.
+bool _isBefore(_Printed version, List<int> lowest) {
   for (var i = 0; i < 3; i++) {
-    final number = int.parse(version[i + 1]!);
+    final number = version.numbers[i];
     if (number != lowest[i]) return number < lowest[i];
   }
-  return version[4] != null;
+  return version.preRelease;
 }
