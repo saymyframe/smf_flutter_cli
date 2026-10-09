@@ -26,6 +26,10 @@ typedef GiveGuestData = Future<void> Function(String accountUid);
 /// function that this one returns is reported as an error of the app, and
 /// the user stays signed in.
 ///
+/// Call no method of `appSession` here, nor in the function that this one
+/// returns. The sign-in is one of its calls, which run one after another,
+/// so such a call would wait for the sign-in, and the sign-in for it.
+///
 /// It is not called when a guest signs up, since the guest then keeps the
 /// id and everything under it, nor in an app without anonymous users.
 Future<GiveGuestData?> takeGuestData(String guestUid) async => null;

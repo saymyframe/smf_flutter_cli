@@ -140,11 +140,10 @@ class FlutterError {
 
 /// A stand-in for the part of Flutter's widgets library that the files of
 /// the role use: what that library exports of the foundation library, and
-/// the listener of the lifecycle of the app. `resumeApp()` stands for the
-/// user who comes back to the app.
+/// the binding with the observers of the lifecycle of the app.
+/// `lifecycle()` puts the app into a state, and `resumeApp()` stands for
+/// the user who comes back to the app.
 const _widgets = '''
-import 'foundation.dart';
-
 export 'foundation.dart'
     show
         ChangeNotifier,
@@ -155,24 +154,35 @@ export 'foundation.dart'
         debugPrint,
         immutable;
 
-/// The listeners of the lifecycle of the app that were not disposed of.
-final List<AppLifecycleListener> lifecycleListeners = [];
+enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
 
-class AppLifecycleListener {
-  AppLifecycleListener({this.onResume}) {
-    lifecycleListeners.add(this);
-  }
-
-  final VoidCallback? onResume;
-
-  void dispose() => lifecycleListeners.remove(this);
+abstract mixin class WidgetsBindingObserver {
+  void didChangeAppLifecycleState(AppLifecycleState state) {}
 }
 
-/// The user comes back to the app.
-void resumeApp() {
-  for (final listener in [...lifecycleListeners]) {
-    listener.onResume?.call();
+class WidgetsBinding {
+  static final WidgetsBinding instance = WidgetsBinding();
+
+  /// The observers that were added and not removed.
+  final List<WidgetsBindingObserver> observers = [];
+
+  void addObserver(WidgetsBindingObserver observer) => observers.add(observer);
+
+  bool removeObserver(WidgetsBindingObserver observer) =>
+      observers.remove(observer);
+}
+
+/// The app comes into [state], which every observer is told of.
+void lifecycle(AppLifecycleState state) {
+  for (final observer in [...WidgetsBinding.instance.observers]) {
+    observer.didChangeAppLifecycleState(state);
   }
+}
+
+/// The user comes back to the app, which was shown but not in use.
+void resumeApp() {
+  lifecycle(AppLifecycleState.inactive);
+  lifecycle(AppLifecycleState.resumed);
 }
 ''';
 
@@ -248,6 +258,9 @@ final class FakeAuth implements AuthService {
     onDevice = user;
     _changes.add(user);
   }
+
+  /// Sends an error to those who follow the changes of the user.
+  void fail(Object error) => _changes.addError(error, StackTrace.current);
 
   void _set(AuthUser? user) {
     _user = user;
@@ -371,6 +384,57 @@ Future<String> failureOf(Future<void> Function() call) async {
     return 'no AuthFailure: $error';
   }
 }
+
+/// The errors that the app reported, each as what a test compares.
+List<Map<String, Object?>> reported() => [
+      for (final details in reportedErrors)
+        {
+          'exception': '${details.exception}',
+          'has a stack trace': details.stack != null,
+          'library': details.library,
+          'context': details.context?.message,
+        },
+    ];
+
+/// A timer of [timed], which runs when a script fires it.
+final class HeldTimer implements Timer {
+  HeldTimer(this.duration, this._callback);
+
+  /// How long the code asked the timer to wait.
+  final Duration duration;
+
+  final void Function() _callback;
+
+  void fire() {
+    cancel();
+    _callback();
+  }
+
+  @override
+  void cancel() => timers.remove(this);
+
+  @override
+  bool get isActive => timers.contains(this);
+
+  @override
+  int get tick => 0;
+}
+
+/// The timers of [timed] that neither ran nor were cancelled.
+final List<HeldTimer> timers = [];
+
+/// Runs [body] in a zone whose timers wait until a script fires them, so
+/// that a script sees how long the code waits without waiting itself.
+void timed(void Function() body) => runZoned(
+      body,
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          final timer = HeldTimer(duration, callback);
+          timers.add(timer);
+          return timer;
+        },
+      ),
+    );
 
 const email = 'ann@example.com';
 const password = 'secret';
@@ -601,8 +665,9 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// Changes the user as something outside the app does, and starts the
-/// session again with another service.
+/// Changes the user as something outside the app does, starts the session
+/// again with another service, sends an error where a change is told of,
+/// and removes listeners of the two flags.
 const _changes = '''
 Future<void> main(List<String> arguments, SendPort port) async {
   final heard = <String>[];
@@ -646,6 +711,30 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await pump();
   note('a change of the service of the start');
 
+  second.fail(StateError('The stream broke.'));
+  await pump();
+  note('an error where a change is told of');
+  result['reported'] = reported();
+  second.change(null);
+  await pump();
+  note('a change after the error');
+
+  var flags = 0;
+  void onFlag() => flags++;
+  appSession.allowsApp.addListener(onFlag);
+  appSession.hasAccount.addListener(onFlag);
+  second.change(remote);
+  await pump();
+  final heardByFlags = flags;
+  appSession.allowsApp.removeListener(onFlag);
+  appSession.hasAccount.removeListener(onFlag);
+  second.change(null);
+  await pump();
+  result['the listeners of the flags'] = {
+    'told of a change': heardByFlags,
+    'told once they are removed': flags - heardByFlags,
+  };
+
   result['sessions compare by value'] = {
     'signed out': SignedOutSession() == const SignedOutSession(),
     'the same anonymous user': AnonymousSession('a') == AnonymousSession('a'),
@@ -669,8 +758,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// Makes calls before the first start of a session, in each mode, and two
-/// after it, the second while the first is on its way.
+/// Makes calls before the first start of a session, in each mode, and
+/// three after it, each while the one before it is on its way.
 const _earlyCalls = r'''
 Future<void> main(List<String> arguments, SendPort port) async {
   for (final mode in AuthMode.values) {
@@ -719,21 +808,31 @@ Future<void> main(List<String> arguments, SendPort port) async {
       'state': show(session.value),
     };
 
-    // After the first start, a call still waits for the one before it.
+    // After the first start, a call still waits for the one before it,
+    // and a third one for the second, once the first is over too.
     final holdOfSignOut = holds['signOut'] = Completer<void>();
+    final holdOfReset = holds['sendPasswordReset'] = Completer<void>();
     unawaited(session.signOut());
-    final reset = session.sendPasswordReset(email);
+    unawaited(session.sendPasswordReset(email));
     await pump();
     final first = takeCalls();
-    holds.clear();
     holdOfSignOut.complete();
-    await reset;
+    await pump();
+    final second = takeCalls();
+    holds.clear();
+    final third = session.sendPasswordReset('later@example.com');
+    await pump();
+    final whileTheSecondRuns = takeCalls();
+    holdOfReset.complete();
+    await third;
     result[mode.name] = {
       'before the start': before,
       'while the first call is on its way': during,
       'after the start': after,
       'a call after the start': first,
-      'the call after it': takeCalls(),
+      'the call after it': second,
+      'a third call while the second is on its way': whileTheSecondRuns,
+      'the third call': takeCalls(),
     };
     session.dispose();
   }
@@ -834,7 +933,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['the user comes back to an app with a user'] = note(session);
   session.dispose();
   result['after dispose'] = {
-    'listeners of the lifecycle': lifecycleListeners.length,
+    'observers of the lifecycle': WidgetsBinding.instance.observers.length,
     'the service is listened to': service.hasListener,
   };
 
@@ -886,17 +985,20 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['the deletion of an anonymous user'] = note(session);
   session.dispose();
 
-  // A start with another service while the sign-in of the first is on its
-  // way, and a start with that service again: each service signs in once,
-  // and when the sign-in of the first comes, that of the second is still
-  // the one on its way.
+  // Starts with one service, with another, and with each of them again,
+  // while their sign-ins are on their way: each service signs in once, and
+  // when the sign-in of the first comes, that of the second is still the
+  // one on its way.
   onDevice = null;
   session = anonymousSession(wait: const Duration(milliseconds: 20));
   final holdOfFirst = holds['signInAnonymously'] = Completer<void>();
-  await session.start(FakeAuth());
+  final first = FakeAuth();
+  await session.start(first);
   final holdOfSecond = holds['signInAnonymously'] = Completer<void>();
   final second = FakeAuth();
   await session.start(second);
+  await session.start(second);
+  await session.start(first);
   await session.start(second);
   final signInsOfStarts = takeCalls();
   holdOfFirst.complete();
@@ -969,16 +1071,179 @@ Future<void> main(List<String> arguments, SendPort port) async {
     onDevice = null;
     session = AppSessionController(mode: mode, takeGuestData: takeGuestData);
     await session.start(FakeAuth());
-    final listeners = lifecycleListeners.length;
+    final observers = WidgetsBinding.instance.observers.length;
     await session.signOut();
     resumeApp();
     await pump();
     result['in the mode ${mode.name}'] = {
       ...note(session),
-      'listeners of the lifecycle': listeners,
+      'observers of the lifecycle': observers,
     };
     session.dispose();
   }
+
+  // The first start waits as long as the session was told, also when the
+  // user comes back to the app meanwhile.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(minutes: 7));
+  hold = holds['signInAnonymously'] = Completer<void>();
+  started = false;
+  timed(
+    () => unawaited(session.start(FakeAuth()).then((_) => started = true)),
+  );
+  await pump();
+  resumeApp();
+  await pump();
+  final waits = [for (final timer in timers) '${timer.duration}'];
+  final startedEarly = started;
+  timers.single.fire();
+  await pump();
+  result['the user comes back while the first start waits'] = {
+    'the waits': waits,
+    'the start is done before the wait is over': startedEarly,
+    'the start is done once it is over': started,
+    ...note(session),
+  };
+  holds.clear();
+  hold.complete();
+  await pump();
+  result['once the sign-in of that start has come'] = note(session);
+  session.dispose();
+
+  // A call that fails and leaves nobody signed in, as one for a user whose
+  // session has ended: the app signs in anonymously again, and the failure
+  // does not wait for that.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  await session.start(FakeAuth());
+  takeCalls();
+  hold = holds['signInAnonymously'] = Completer<void>();
+  failuresSignOut = true;
+  failures['linkPassword'] = const AuthFailure(
+    AuthFailureReason.recentSignInRequired,
+  );
+  final ended = await failureOf(
+    () => session.signUp(email: 'carol@example.com', password: password),
+  );
+  failuresSignOut = false;
+  failures.clear();
+  result['a call that fails and leaves nobody signed in'] = {
+    'it': ended,
+    ...note(session),
+  };
+  holds.clear();
+  hold.complete();
+  await session.signUp(email: 'carol@example.com', password: password);
+  result['the same call again'] = note(session);
+  session.dispose();
+
+  // A start while a call is on its way waits for the call, so its
+  // anonymous sign-in does not run next to it.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  failures['signInAnonymously'] = StateError('No network.');
+  final same = FakeAuth();
+  await session.start(same);
+  failures.clear();
+  debugPrinted.clear();
+  takeCalls();
+  hold = holds['signIn'] = Completer<void>();
+  final signIn = session.signIn(email: email, password: password);
+  await pump();
+  var restarted = false;
+  unawaited(session.start(same).then((_) => restarted = true));
+  await pump();
+  final whileSigningIn = {
+    'calls': takeCalls(),
+    'the start is done': restarted,
+  };
+  holds.clear();
+  hold.complete();
+  await signIn;
+  await pump();
+  result['a start while a sign-in is on its way'] = {
+    'while it is on its way': whileSigningIn,
+    'the start is done': restarted,
+    ...note(session),
+  };
+  session.dispose();
+
+  // The user comes back from the background: the session looks at nothing
+  // but that the app is resumed, whatever state it was in.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  failures['signInAnonymously'] = StateError('No network.');
+  await session.start(FakeAuth());
+  failures.clear();
+  debugPrinted.clear();
+  takeCalls();
+  lifecycle(AppLifecycleState.paused);
+  await pump();
+  final whilePaused = takeCalls();
+  lifecycle(AppLifecycleState.resumed);
+  await pump();
+  result['the app is paused and then resumed'] = {
+    'calls while it is paused': whilePaused,
+    ...note(session),
+  };
+  session.dispose();
+
+  // A session that is disposed of while a call is on its way: the call
+  // ends as it would have, and no anonymous sign-in follows it.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(hours: 1));
+  await session.start(FakeAuth());
+  takeCalls();
+  hold = holds['signOut'] = Completer<void>();
+  final signOut = failureOf(session.signOut);
+  await pump();
+  session.dispose();
+  holds.clear();
+  hold.complete();
+  result['a call that ends after dispose'] = {
+    'it': await signOut,
+    'calls': takeCalls(),
+  };
+
+  // Two starts at once, before the first one is over.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(milliseconds: 20));
+  hold = holds['signInAnonymously'] = Completer<void>();
+  final both = FakeAuth();
+  await Future.wait([session.start(both), session.start(both)]);
+  result['two starts at once'] = note(session);
+  holds.clear();
+  hold.complete();
+  await pump();
+  session.dispose();
+
+  // A call that works and leaves nobody signed in, as a password reset in
+  // an app whose anonymous sign-in failed: the sign-in that follows it
+  // does not hold the call back.
+  onDevice = null;
+  session = anonymousSession(wait: const Duration(minutes: 7));
+  failures['signInAnonymously'] = StateError('No network.');
+  await session.start(FakeAuth());
+  failures.clear();
+  debugPrinted.clear();
+  takeCalls();
+  hold = holds['signInAnonymously'] = Completer<void>();
+  var reset = false;
+  timed(
+    () => unawaited(
+      session.sendPasswordReset(email).then((_) => reset = true),
+    ),
+  );
+  await pump();
+  result['a call that works and leaves nobody signed in'] = {
+    'the call is done': reset,
+    'the waits': [for (final timer in timers) '${timer.duration}'],
+    ...note(session),
+  };
+  holds.clear();
+  hold.complete();
+  await pump();
+  session.dispose();
   port.send(result);
 }
 ''';
@@ -1046,15 +1311,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   givingFails = StateError('The cart does not save.');
   result['giving fails'] = note(session, await failureOf(() => signIn(session)));
   givingFails = null;
-  result['reported'] = [
-    for (final details in reportedErrors)
-      {
-        'exception': '${details.exception}',
-        'has a stack trace': details.stack != null,
-        'library': details.library,
-        'context': details.context?.message,
-      },
-  ];
+  result['reported'] = reported();
   session.dispose();
 
   // Sign-up gives the guest the account, so nothing moves.
@@ -1075,6 +1332,28 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await signIn(session);
   result['a user who is not signed in signs in'] = note(session);
   session.dispose();
+
+  // An anonymous user whom the provider has on the device in an app of
+  // another mode: sign-up gives that user the account, and sign-in moves
+  // the data.
+  for (final mode in [AuthMode.guest, AuthMode.required]) {
+    final name = mode.name;
+    onDevice = AuthUser(uid: 'restored-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await session.signUp(email: '$name@example.com', password: password);
+    final signedUp = note(session);
+    session.dispose();
+    onDevice = AuthUser(uid: 'other-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await signIn(session);
+    result['an anonymous user in the mode $name'] = {
+      'signs up': signedUp,
+      'signs in': note(session),
+    };
+    session.dispose();
+  }
 
   result['the function of the app has nothing to move'] =
       await takeGuestData('user-1') == null;
@@ -1431,8 +1710,9 @@ void main() {
           contains("import 'package:my_app/fakes/fake_auth.dart' as impl0;"),
         );
         // The start-up, with any provider: the session starts in it.
-        final start = rendered.elsewhere.single;
-        expect(start.socket, AppEntryRole.bootstrapPlatform);
+        final start = rendered.elsewhere.singleWhere(
+          (entry) => entry.socket == AppEntryRole.bootstrapPlatform,
+        );
         expect(start.fragment!.code, 'await initAuth();');
         expect(start.fragment!.imports, [_sessionImport]);
       });
@@ -1580,8 +1860,9 @@ void main() {
 
       test(
           'follows the changes of the user that no call made, tells its '
-          'listeners only of a change, and follows only the service of the '
-          'last start', () async {
+          'listeners only of a change and only while they listen, follows '
+          'only the service of the last start, and reports an error that '
+          'comes where a change is told of', () async {
         expect(await app.run('$_notes$_changes'), {
           'a change that no call made': {
             'state': 'account remote remote@example.com',
@@ -1609,6 +1890,29 @@ void main() {
           'a change of the service of the start': {
             'state': 'account remote remote@example.com',
             'heard': ['account remote remote@example.com'],
+          },
+          // The session reports the error as an error of the app, keeps
+          // its user, and goes on listening.
+          'an error where a change is told of': {
+            'state': 'account remote remote@example.com',
+            'heard': <Object?>[],
+          },
+          'reported': [
+            {
+              'exception': 'Bad state: The stream broke.',
+              'has a stack trace': true,
+              'library': 'app session',
+              'context': 'while following the user of the provider of '
+                  'sign-in',
+            },
+          ],
+          'a change after the error': {
+            'state': 'signed out',
+            'heard': ['signed out'],
+          },
+          'the listeners of the flags': {
+            'told of a change': 2,
+            'told once they are removed': 0,
           },
           'sessions compare by value': {
             'signed out': true,
@@ -1661,6 +1965,8 @@ void main() {
               if (anonymous) 'signInAnonymously',
               'sendPasswordReset $_email',
             ],
+            'a third call while the second is on its way': <Object?>[],
+            'the third call': ['sendPasswordReset later@example.com'],
           };
         }
 
@@ -1686,9 +1992,10 @@ void main() {
       test(
           'in the anonymous mode, waits for its anonymous user only as long '
           'as it is told, starts without a user when the sign-in fails or '
-          'takes longer, tries again when the user comes back to the app '
-          'and after a sign-out or a deletion, and runs no call next to an '
-          'anonymous sign-in', () async {
+          'takes longer, tries again when the user comes back to the app, '
+          'after a sign-out or a deletion and after a call that leaves '
+          'nobody signed in, and runs neither a call nor a later start next '
+          'to an anonymous sign-in', () async {
         const failed = 'The anonymous sign-in failed, so the app has no '
             'user: AuthFailure: notConfigured (Enable anonymous sign-in.)';
         const noNetwork = 'The anonymous sign-in failed, so the app has no '
@@ -1714,7 +2021,7 @@ void main() {
           'when it comes': note('anonymous user-1'),
           'the user comes back to an app with a user': note('anonymous user-1'),
           'after dispose': {
-            'listeners of the lifecycle': 0,
+            'observers of the lifecycle': 0,
             'the service is listened to': false,
           },
           'a sign-in that comes within the wait': note(
@@ -1752,6 +2059,7 @@ void main() {
             calls: ['deleteAccount', 'signInAnonymously'],
           ),
           'starts while an anonymous sign-in is on its way': {
+            // Five starts, and one sign-in of each of the two services.
             'the sign-ins of the starts': [
               'signInAnonymously',
               'signInAnonymously',
@@ -1785,8 +2093,59 @@ void main() {
           for (final mode in ['required', 'guest'])
             'in the mode $mode': {
               ...note('signed out', calls: ['signOut']),
-              'listeners of the lifecycle': 0,
+              'observers of the lifecycle': 0,
             },
+          // The wait is the one of the session. The start is over when it
+          // is, although the try of the user who came back still waits for
+          // the sign-in that is on its way.
+          'the user comes back while the first start waits': {
+            'the waits': ['0:07:00.000000'],
+            'the start is done before the wait is over': false,
+            'the start is done once it is over': true,
+            ...note('signed out', calls: ['signInAnonymously']),
+          },
+          'once the sign-in of that start has come': note('anonymous user-10'),
+          'a call that fails and leaves nobody signed in': {
+            'it': 'recentSignInRequired, hint null, thrown in fake_auth.dart',
+            ...note(
+              'signed out',
+              calls: ['linkPassword carol@example.com', 'signInAnonymously'],
+            ),
+          },
+          // The new anonymous user gets the account.
+          'the same call again': note(
+            'account user-12 carol@example.com',
+            calls: ['linkPassword carol@example.com'],
+          ),
+          'a start while a sign-in is on its way': {
+            'while it is on its way': {
+              'calls': ['signIn $_email'],
+              'the start is done': false,
+            },
+            'the start is done': true,
+            ...note('account user-8 $_email'),
+          },
+          'the app is paused and then resumed': {
+            'calls while it is paused': <Object?>[],
+            ...note('anonymous user-13', calls: ['signInAnonymously']),
+          },
+          'a call that ends after dispose': {
+            'it': 'none',
+            'calls': ['signOut'],
+          },
+          'two starts at once': note(
+            'signed out',
+            calls: ['signInAnonymously'],
+          ),
+          // The sign-in is on its way, with its wait, and the call is over.
+          'a call that works and leaves nobody signed in': {
+            'the call is done': true,
+            'the waits': ['0:07:00.000000'],
+            ...note(
+              'signed out',
+              calls: ['sendPasswordReset $_email', 'signInAnonymously'],
+            ),
+          },
         });
       });
 
@@ -1856,6 +2215,17 @@ void main() {
             owner,
             ['signIn $_email'],
           ),
+          for (final mode in ['guest', 'required'])
+            'an anonymous user in the mode $mode': {
+              'signs up': note(
+                'account restored-$mode $mode@example.com',
+                ['linkPassword $mode@example.com'],
+              ),
+              'signs in': note(
+                owner,
+                ['take other-$mode', 'signIn $_email', 'give owner'],
+              ),
+            },
           'the function of the app has nothing to move': true,
         });
       });

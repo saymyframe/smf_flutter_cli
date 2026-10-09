@@ -113,7 +113,9 @@ final appSession = AppSessionController(
 ///
 /// The calls run one after another, in the order they were made, and none
 /// runs next to an anonymous sign-in that is on its way. So the user of the
-/// app is the result of the call that was made last.
+/// app is the result of the call that was made last. In the mode
+/// [AuthMode.anonymous], a call that leaves nobody signed in is followed by
+/// an anonymous sign-in.
 final class AppSessionController extends ChangeNotifier
     implements ValueListenable<AppSession> {
   /// Creates a controller for an app in [mode]. The app creates
@@ -140,6 +142,7 @@ final class AppSessionController extends ChangeNotifier
   AuthService? _service;
   StreamSubscription<AuthUser?>? _userChanges;
   AppSession _session = const SignedOutSession();
+  bool _disposed = false;
 
   /// Completes when the app has started for the first time.
   final Completer<void> _started = Completer<void>();
@@ -151,13 +154,13 @@ final class AppSessionController extends ChangeNotifier
   /// goes on in fake time.
   Future<void>? _lastCall;
 
-  /// The anonymous sign-in that is on its way, so that the app starts no
-  /// second one next to it.
-  Future<void>? _anonymousSignIn;
+  /// The anonymous sign-ins that are on their way, each by its service, so
+  /// that the app starts no second one next to it.
+  final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
-  AppLifecycleListener? _lifecycle;
+  _ResumeObserver? _observer;
 
   /// Who uses the app.
   @override
@@ -198,29 +201,44 @@ final class AppSessionController extends ChangeNotifier
   /// A call made before the first start waits for it: [signIn], [signUp],
   /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
   /// their order once the start has the user, and the future of this start
-  /// completes after them. The mocks of the tests of an app use this: a
-  /// call of [signUp] made before `bootstrap()`, which nothing awaits,
-  /// gives the app an account before its first frame.
+  /// completes after them, but waits for no call that is made while it
+  /// runs. The mocks of the tests of an app use this: a call of [signUp]
+  /// made before `bootstrap()`, which nothing awaits, gives the app an
+  /// account before its first frame. A test makes such a call outside the
+  /// body of a test, as in a `setUpAll`: made in the body of a widget
+  /// test, it waits in the fake time of that body, and a start that runs in
+  /// real time never completes.
   ///
   /// It may be called again, with the service that the session has from
   /// then on: `initAuth()` does so in a test of the next launch of the app,
-  /// and a test gives it a service of its own.
+  /// and a test gives it a service of its own. Such a start takes its turn
+  /// after the calls that are on their way.
   Future<void> start(AuthService service) async {
+    // The calls that were made before this start. The first start lets
+    // them run once it has the user, and a later one waits for them.
+    final earlier = _lastCall;
+    final first = !_started.isCompleted;
+    if (!first) await earlier;
     unawaited(_userChanges?.cancel());
-    if (!identical(service, _service)) _anonymousSignIn = null;
     _service = service;
-    _userChanges = service.userChanges.listen((_) => _sync());
+    _userChanges = service.userChanges.listen(
+      (_) => _sync(),
+      onError: (Object error, StackTrace stackTrace) => _report(
+        error,
+        stackTrace,
+        'while following the user of the provider of sign-in',
+      ),
+    );
     _sync();
     if (mode == AuthMode.anonymous) {
-      // The try of a user who comes back waits for its turn among the
-      // calls, so it starts no anonymous sign-in next to a sign-in.
-      _lifecycle ??= AppLifecycleListener(
-        onResume: () => unawaited(_call((_) => _signInAnonymously())),
-      );
+      if (_observer == null) {
+        final observer = _observer = _ResumeObserver(_retry);
+        WidgetsBinding.instance.addObserver(observer);
+      }
       await _signInAnonymously();
     }
     if (!_started.isCompleted) _started.complete();
-    await _lastCall;
+    if (first) await earlier;
   }
 
   /// Signs in to the account of [email] with [password].
@@ -252,11 +270,8 @@ final class AppSessionController extends ChangeNotifier
 
   /// Signs the user out. In the mode [AuthMode.anonymous], the app then
   /// signs in anonymously again, as when it starts.
-  Future<void> signOut() => _call((service) async {
-        await service.signOut();
-        _sync();
-        await _signInAnonymously();
-      });
+  Future<void> signOut() =>
+      _call((service) => service.signOut(), waitsForAnonymousUser: true);
 
   /// Deletes the user who is signed in. The app is then without a user, as
   /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
@@ -264,22 +279,39 @@ final class AppSessionController extends ChangeNotifier
   ///
   /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
   /// then signs out, signs in again and repeats it.
-  Future<void> deleteAccount() => _call((service) async {
-        await service.deleteAccount();
-        _sync();
-        await _signInAnonymously();
-      });
+  Future<void> deleteAccount() =>
+      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
 
+  /// Stops following the service and the lifecycle of the app. A call that
+  /// is on its way still ends as it would have, but tells no listener, and
+  /// no anonymous sign-in follows it.
   @override
   void dispose() {
+    _disposed = true;
     unawaited(_userChanges?.cancel());
-    _lifecycle?.dispose();
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
     super.dispose();
   }
 
+  /// The user came back to the app. In the mode [AuthMode.anonymous], an
+  /// app without a user then signs in anonymously again: as what follows
+  /// every call, so this takes a turn among the calls with nothing else to
+  /// do, and starts no anonymous sign-in next to a sign-in.
+  void _retry() => unawaited(_call((service) async {}));
+
   /// Runs [call] with the service once the calls made before it are over,
   /// and not before the app has started for the first time.
-  Future<void> _call(Future<void> Function(AuthService service) call) async {
+  ///
+  /// In the mode [AuthMode.anonymous], a call that leaves nobody signed in
+  /// is followed by an anonymous sign-in. A call that
+  /// [waitsForAnonymousUser], as a sign-out, completes once that sign-in is
+  /// over or took too long, as the start does.
+  Future<void> _call(
+    Future<void> Function(AuthService service) call, {
+    bool waitsForAnonymousUser = false,
+  }) async {
     final earlier =
         _lastCall ?? (_started.isCompleted ? null : _started.future);
     final done = Completer<void>();
@@ -287,6 +319,8 @@ final class AppSessionController extends ChangeNotifier
     if (earlier != null) await earlier;
     try {
       await _guarded(call);
+      final signIn = _signInAnonymously();
+      if (waitsForAnonymousUser) await signIn;
     } finally {
       if (identical(_lastCall, own)) _lastCall = null;
       done.complete();
@@ -299,23 +333,25 @@ final class AppSessionController extends ChangeNotifier
   ///
   /// Whatever [call] throws that is no [AuthFailure] becomes one, and the
   /// session has the user of the service when it is over, also when it
-  /// failed.
+  /// failed. A call that failed does not wait for the anonymous sign-in
+  /// that follows it, so that its failure is not late.
   Future<void> _guarded(
     Future<void> Function(AuthService service) call,
   ) async {
+    final service = _service!;
     try {
-      await _anonymousSignIn;
-      await call(_service!);
-    } on AuthFailure {
-      rethrow;
+      await _anonymousSignIns[service];
+      await call(service);
     } on Object catch (error, stackTrace) {
+      _sync();
+      unawaited(_signInAnonymously());
+      if (error is AuthFailure) rethrow;
       Error.throwWithStackTrace(
         AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
         stackTrace,
       );
-    } finally {
-      _sync();
     }
+    _sync();
   }
 
   /// Signs in to an account with [signIn], in whichever way, and moves what
@@ -341,18 +377,24 @@ final class AppSessionController extends ChangeNotifier
     try {
       await give(account.uid);
     } on Object catch (error, stackTrace) {
+      _report(
+        error,
+        stackTrace,
+        'while giving the data of a guest to the account',
+      );
+    }
+  }
+
+  /// Reports [error], which no call can fail with, as an error of the app.
+  void _report(Object error, StackTrace stackTrace, String during) =>
       FlutterError.reportError(
         FlutterErrorDetails(
           exception: error,
           stack: stackTrace,
           library: 'app session',
-          context: ErrorDescription(
-            'while giving the data of a guest to the account',
-          ),
+          context: ErrorDescription(during),
         ),
       );
-    }
-  }
 
   /// In the mode [AuthMode.anonymous], signs in anonymously when nobody is
   /// signed in, and waits for that for at most [anonymousWait].
@@ -362,11 +404,14 @@ final class AppSessionController extends ChangeNotifier
   /// until the next try, and in debug mode its error is printed.
   Future<void> _signInAnonymously() async {
     final service = _service!;
-    if (mode != AuthMode.anonymous || service.currentUser != null) return;
-    final signIn = _anonymousSignIn ??=
+    if (_disposed ||
+        mode != AuthMode.anonymous ||
+        service.currentUser != null) {
+      return;
+    }
+    final signIn = _anonymousSignIns[service] ??=
         _tryAnonymously(service).whenComplete(() {
-      if (!identical(service, _service)) return;
-      _anonymousSignIn = null;
+      _anonymousSignIns.remove(service);
       _sync();
     });
     await signIn.timeout(anonymousWait, onTimeout: () {});
@@ -385,8 +430,9 @@ final class AppSessionController extends ChangeNotifier
   }
 
   /// Takes the user of the service as the session, and tells the listeners
-  /// when that changes it.
+  /// when that changes it, unless the session was disposed of.
   void _sync() {
+    if (_disposed) return;
     final session = switch (_service!.currentUser) {
       null => const SignedOutSession(),
       AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
@@ -395,6 +441,19 @@ final class AppSessionController extends ChangeNotifier
     if (session == _session) return;
     _session = session;
     notifyListeners();
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
   }
 }
 

@@ -107,15 +107,26 @@ abstract interface class AuthService {
 
   /// Tells of each change of [currentUser], once [currentUser] has changed:
   /// a broadcast stream. It may also tell of a user who has not changed.
+  ///
+  /// An error that it sends changes nothing: the session reports it as an
+  /// error of the app and goes on listening.
   Stream<AuthUser?> get userChanges;
 
   /// Signs in to the account of [email] with [password].
   ///
   /// A wrong password and an address without an account both fail with
   /// [AuthFailureReason.invalidCredentials].
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of this account then replaces that
+  /// user on the device.
   Future<void> signIn({required String email, required String password});
 
   /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// It is also called while the user of another account is signed in, and
+  /// the user of the new account then replaces that user on the device.
+  /// For an anonymous user, the session calls [linkPassword] instead.
   Future<void> signUp({required String email, required String password});
 
   /// Gives the anonymous user who is signed in an account for [email] with
