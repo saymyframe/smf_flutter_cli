@@ -97,12 +97,14 @@ enum GuardStage {
 /// screen that the user is on. Where the user comes to once the guard
 /// allows again is up to [resumes]. By default the router remembers the
 /// location that the guard takes the user from and shows it again, as
-/// after an onboarding that the user asked to see once more. A guard with
-/// [resumes] `false` makes the router remember nothing then, so the user
-/// comes to the screen that the app starts on: after a sign-out, the next
-/// user does not come to the screen that the last one was on. Either way,
-/// the router shows a location that is asked for while the guard does not
-/// allow, such as a link, once the guard allows.
+/// after an onboarding that the user asked to see once more. When a guard
+/// with [resumes] `false` stops allowing, the router remembers no location
+/// for it and forgets what it remembered, for another guard too. So the
+/// user comes to the screen that the app starts on: after a sign-out, the
+/// next user comes neither to the screen that the last one was on nor to a
+/// link that the last one followed. Either way, the router shows a
+/// location that is asked for after that, while the guard does not allow,
+/// once the guards allow.
 ///
 /// A guard keeps the user from every route outside its flow. A condition
 /// that only some routes ask for, such as a paid screen, is not a guard:
@@ -180,14 +182,24 @@ final class RouteGuard {
   /// Whether the router brings the user back to the location that the
   /// guard takes them from when it stops allowing, once it allows again.
   ///
-  /// With `false`, the router remembers nothing when the guard stops
-  /// allowing, and the user comes to the screen that the app starts on
-  /// once it allows again, as the next user does after a sign-out. A
-  /// location that is asked for while the guard does not allow is
-  /// remembered then too, so the user still comes to a link that arrived
-  /// in the meantime. And what the router remembers already stays, such as
-  /// the location that a guard before this one took the user from: the
-  /// router shows it once the guards allow it.
+  /// When a guard with `false` stops allowing, the router remembers no
+  /// location for it, and it forgets what it remembered: the location that
+  /// another guard took the user from, and a location that was asked for
+  /// before. So the user comes to the screen that the app starts on once
+  /// the guards allow, as the next user does after a sign-out, whichever
+  /// flows were shown in between. A location that is asked for after the
+  /// guard stopped, while it does not allow, is remembered, so the user
+  /// still comes to a link that arrives then.
+  ///
+  /// The guard stopped when the router finds that it does not allow after
+  /// it found that it allowed. The router looks each time it is about to
+  /// show a location and each time a guard notifies, whichever guard
+  /// decides then. So a guard that does not allow when the app starts has
+  /// not stopped: the location that the app is opened with is shown once
+  /// the guards of a first launch allow. And a guard that stops and allows
+  /// again without the router looking in between, as one that does not
+  /// notify when [allows] changes, is not seen to stop: the router forgets
+  /// nothing then.
   final bool resumes;
 
   @override

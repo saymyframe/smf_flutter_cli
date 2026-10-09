@@ -592,8 +592,10 @@ void main() {
 
 /// Prints what `GuardedNavigation` answers in an app whose guard
 /// `account.signedIn` does not bring the user back, while the guards before
-/// and after it do, as that guard and the others stop and start allowing.
-/// The pages are written as in [_vmMemoryMain].
+/// and after it do, as that guard and the others stop and start allowing:
+/// alone, behind a guard that does not allow, before one, and with the
+/// class told of each change or asked only later. The pages are written as
+/// in [_vmMemoryMain].
 const _vmResumesMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/account/account_composition.dart';
@@ -653,7 +655,7 @@ void main() {
   changed('signedIn allows', login);
   changed('a notification', ['home.details /home/details/7', 'home.root /home']);
 
-  print('a location that a guard before it remembered');
+  print('it stops behind a guard that brings the user back');
   introSeenNow.value = false;
   changed('firstRun stops', details);
   signedInNow.value = false;
@@ -663,7 +665,47 @@ void main() {
   signedInNow.value = true;
   changed('signedIn allows', login);
 
-  print('a location that a guard after it remembered');
+  print('it stops before a guard that brings the user back');
+  signedInNow.value = false;
+  changed('signedIn stops', details);
+  introSeenNow.value = false;
+  changed('firstRun stops', login);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+
+  print('it stops and allows again behind a guard that does not allow');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  signedInNow.value = false;
+  changed('signedIn stops', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', intro);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+
+  print('a location that was asked for before it stops');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  asked('home.details', '/home/details/8');
+  signedInNow.value = false;
+  changed('signedIn stops', intro);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  signedInNow.value = true;
+  changed('signedIn allows', login);
+
+  print('it stops without the class being told, which is asked next');
+  introSeenNow.value = false;
+  changed('firstRun stops', details);
+  signedInNow.value = false;
+  asked('intro.terms', '/intro/terms');
+  signedInNow.value = true;
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+
+  print('it stops while a guard after it does not allow');
   premiumNow.value = false;
   changed('premium stops', details);
   signedInNow.value = false;
@@ -1424,15 +1466,17 @@ all allow: shows it
     });
 
     test(
-        'the generated class remembers nothing when a guard that does not '
-        'bring the user back stops allowing, so the user comes to the start '
-        'of the app; it still remembers a location that is asked for while '
-        'the guard does not allow, and keeps what it remembered before',
-        () async {
+        'the generated class forgets what it remembers when a guard that '
+        'does not bring the user back stops allowing, whichever guard made '
+        'it remember, so the user comes to the start of the app; it still '
+        'shows a location that is asked for after the guard stopped, and one '
+        'that the app is opened with while the guard never allowed', () async {
       final printed = await printedBy(_vmResumesMain, data: _accountFirstData);
 
       // The location that the app is opened with is asked for while no
-      // guard allows: the user comes to it once the last guard allows.
+      // guard allows. The guard that does not bring the user back never
+      // allowed, so it did not stop: the user comes to that location once
+      // the last guard allows.
       expect(_section(printed, 'a first launch'), '''
   asked /home/details/3: /intro
   firstRun allows: /account/login
@@ -1457,25 +1501,77 @@ all allow: shows it
   a notification: stays
 ''',
       );
-      // The guard takes the user from the flow of a guard before it, which
-      // took them from a location: that location stays remembered.
+      // A guard before it took the user from a location, and it stops
+      // while the flow of that guard is shown: the location is forgotten,
+      // though the guard before it still decides and the stack stays.
       expect(
-        _section(printed, 'a location that a guard before it remembered'),
+        _section(printed, 'it stops behind a guard that brings the user back'),
         '''
   firstRun stops: /intro
   signedIn stops: stays
   firstRun allows: /account/login
-  signedIn allows: /home/details/5?tab=a
+  signedIn allows: /
 ''',
       );
-      // And so does the location that a guard after it took the user from.
+      // The other order of the two, as in one handler: it stops first, and
+      // the guard before it then takes the user from its target, a location
+      // in a flow, which is never remembered.
       expect(
-        _section(printed, 'a location that a guard after it remembered'),
+        _section(printed, 'it stops before a guard that brings the user back'),
+        '''
+  signedIn stops: /account/login
+  firstRun stops: /intro
+  firstRun allows: /account/login
+  signedIn allows: /
+''',
+      );
+      // It allows again before the guard before it does: the router showed
+      // nothing of it, and the location is forgotten all the same.
+      expect(
+        _section(
+          printed,
+          'it stops and allows again behind a guard that does not allow',
+        ),
+        '''
+  firstRun stops: /intro
+  signedIn stops: stays
+  signedIn allows: stays
+  firstRun allows: /
+''',
+      );
+      // A location that was asked for before it stopped is forgotten too.
+      expect(
+        _section(printed, 'a location that was asked for before it stops'),
+        '''
+  firstRun stops: /intro
+  asked /home/details/8: /intro
+  signedIn stops: stays
+  firstRun allows: /account/login
+  signedIn allows: /
+''',
+      );
+      // A change that the class is not told of counts the next time it is
+      // asked: it finds that the guard does not allow, which allowed when
+      // it last looked.
+      expect(
+        _section(
+          printed,
+          'it stops without the class being told, which is asked next',
+        ),
+        '''
+  firstRun stops: /intro
+  asked /intro/terms: shows it
+  firstRun allows: /
+''',
+      );
+      // And so is the location that a guard after it took the user from.
+      expect(
+        _section(printed, 'it stops while a guard after it does not allow'),
         '''
   premium stops: /intro/paywall
   signedIn stops: /account/login
   signedIn allows: /intro/paywall
-  premium allows: /home/details/5?tab=a
+  premium allows: /
 ''',
       );
       // The guards before and after it bring the user back as before: to

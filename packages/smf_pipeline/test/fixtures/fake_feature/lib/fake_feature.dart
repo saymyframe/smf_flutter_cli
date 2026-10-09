@@ -335,9 +335,9 @@ final class FakeGateModule extends SmfModule {
 /// gates, and the order of the modules alone would ask it first.
 ///
 /// The guard does not resume ([RouteGuard.resumes]): when its gate closes,
-/// the router remembers nothing, and once it opens again, the user comes to
-/// the screen that the app starts on, unless a location was asked for while
-/// the gate was closed.
+/// the router forgets what it remembered, for the guards of the fixture
+/// gates too, and once the gates are open again, the user comes to the
+/// screen that the app starts on, unless a location was asked for since.
 ///
 /// The module depends on the fake state manager that the fixture gates
 /// depend on, so the apps with every fixture have the guards of both

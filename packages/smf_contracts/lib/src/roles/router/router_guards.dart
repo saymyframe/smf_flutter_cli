@@ -103,9 +103,12 @@ final class RouteGuard {
   /// Whether the router brings the user back to the location that the
   /// guard takes them from when it stops allowing, once it allows again.
   ///
-  /// With `false`, the user then comes to the screen that the app starts
-  /// on, as the next user does after a sign-out, unless a location was
-  /// asked for while the guard did not allow, such as a link.
+  /// With `false`, the router forgets what it remembers when the guard
+  /// stops allowing: where the user was, whichever guard took them from
+  /// it, and a location that was asked for before. So once the guards
+  /// allow, the user comes to the screen that the app starts on, as the
+  /// next user does after a sign-out, unless a location was asked for
+  /// since the guard stopped, such as a link.
   final bool resumes;
 }
 ''';
@@ -205,6 +208,17 @@ final class $_navigation<L> {
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
+  /// The guards that do not bring the user back (see [RouteGuard.resumes])
+  /// and that allowed when the class last looked at the guards, which it
+  /// does each time it is asked or told. One of them that does not allow
+  /// at the next look has stopped allowing. The class first looks when it
+  /// is first asked or told, so a guard that does not allow then has not
+  /// stopped.
+  late final Set<RouteGuard> _allowed = {
+    for (final guard in $_list)
+      if (!guard.resumes && guard.allows.value) guard,
+  };
+
   /// What the router shows in place of [location], whose route has the
   /// full name [route], or `null` to show it: the target of the guard that
   /// keeps the user from it (see [$_ask]), or [start] for a location in a
@@ -218,7 +232,11 @@ final class $_navigation<L> {
   /// whether or not that guard brings the user back (see
   /// [RouteGuard.resumes]). A location in the flow of a guard is never
   /// remembered: once that guard allows, its flow is over.
+  ///
+  /// Before that, what was remembered is forgotten if a guard that does
+  /// not bring the user back stopped allowing, as [changed] says.
   ({L location})? asked(String? route, L location) {
+    _forgetAfterStop();
     final target = $_ask(route);
     if (target == null) return $_over(route) ? (location: start) : null;
     if (!_inAFlow(route)) _remembered = (route: route, location: location);
@@ -232,22 +250,32 @@ final class $_navigation<L> {
   /// first: those of the root navigator and of the selected branch of the
   /// main navigation, each with the full name of its route, its location,
   /// and whether `push()` showed it; none for a router that has no page
-  /// yet. The answer is the first of these:
+  /// yet.
+  ///
+  /// First, the remembered location is forgotten if a guard that does not
+  /// bring the user back (see [RouteGuard.resumes]) stopped allowing: it
+  /// allowed when the class was last asked or told, and does not now. That
+  /// holds whichever guard decides and whatever the pages are, and for
+  /// whichever guard the location was remembered, so that the next user
+  /// does not come to a location of the last one. A guard that stops and
+  /// allows again without the class being asked or told in between is not
+  /// seen to stop.
+  ///
+  /// The answer is then the first of these:
   /// - the target of the guard that keeps the user from one of the pages.
-  ///   If that guard brings the user back (see [RouteGuard.resumes]), the
-  ///   location below the pages that pushes showed is then remembered, or
-  ///   [start] if pushes showed them all, unless one is remembered already
-  ///   or it is in the flow of a guard. A guard that does not bring the
-  ///   user back changes nothing of what is remembered;
+  ///   If that guard brings the user back, the location below the pages
+  ///   that pushes showed is then remembered, or [start] if pushes showed
+  ///   them all, unless one is remembered already or it is in the flow of
+  ///   a guard;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
   /// - [start], when the page on top is in a flow that is over (see
   ///   [$_over]): its guard started allowing while the flow was shown, and
-  ///   nothing is remembered, as after a guard that does not bring the
-  ///   user back stopped allowing.
+  ///   nothing is remembered.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
+    _forgetAfterStop();
     for (final page in pages) {
       final guard = _guardKeepingFrom(page.route);
       if (guard == null) continue;
@@ -266,6 +294,20 @@ final class $_navigation<L> {
       return (location: remembered.location);
     }
     return $_over(pages.firstOrNull?.route) ? (location: start) : null;
+  }
+
+  /// Forgets the remembered location if a guard that does not bring the
+  /// user back stopped allowing since the class last looked at the guards,
+  /// and notes which of those guards allow now.
+  void _forgetAfterStop() {
+    for (final guard in $_list) {
+      if (guard.resumes) continue;
+      if (guard.allows.value) {
+        _allowed.add(guard);
+      } else if (_allowed.remove(guard)) {
+        _remembered = null;
+      }
+    }
   }
 
   /// Whether [route] is in the flow of a guard, of whichever guard.

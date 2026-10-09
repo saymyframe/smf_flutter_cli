@@ -372,8 +372,8 @@ List<BrokenProvider> brokenProviders() => const [
           MatrixExpectedFailure(
             'test/router_guard_return_test.dart',
             _returnTest,
-            'When a guard stops allowing, the router shows its target in '
-                'place of the pages that it keeps the user from.',
+            'Once a guard allows, a guard of a later stage that does not '
+                'allow shows its target.',
           ),
           MatrixExpectedFailure(
             'test/router_guard_early_change_test.dart',

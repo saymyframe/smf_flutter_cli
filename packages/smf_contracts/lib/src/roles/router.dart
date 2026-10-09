@@ -260,12 +260,23 @@ final class RouterRole extends Role<RoutesData> {
   ///   page. So the user comes back to where the pushed pages were opened
   ///   from, such as a tab of the main navigation, and not to a pushed page
   ///   alone, with no way back.
-  /// - For a guard that does not bring the user back, `changed` remembers
-  ///   nothing then, and forgets nothing either. So once that guard allows
-  ///   again, the user comes to a location that was asked for in the
-  ///   meantime, to one that the class remembered before, or else to `/`,
-  ///   as the last of these rules says: after a sign-out, the next user
-  ///   does not come to the page that the last one was on.
+  /// - When a guard that does not bring the user back stops allowing, the
+  ///   class remembers no location for it and forgets the one that it
+  ///   remembers, whichever guard or request made it remember it. So once
+  ///   the guards allow again, the user comes to a location that was asked
+  ///   for since, or else to `/`, as the last of these rules says: after a
+  ///   sign-out, the next user comes neither to the page that the last one
+  ///   was on nor to a link that the last one followed.
+  /// - The class takes such a guard to have stopped when it does not allow
+  ///   at a call of `asked` or `changed` and allowed at the call before.
+  ///   That holds while another guard decides and the answer is `null`
+  ///   too. At the first call no guard has stopped, so the location that
+  ///   the app is opened with stays remembered through the flows of a
+  ///   first launch. A provider calls `changed` each time [guardChanges]
+  ///   notifies, so the class sees every stop of a guard that notifies
+  ///   while it does not allow. It cannot see a guard that stops and
+  ///   allows again between two calls, such as one that does not notify:
+  ///   it forgets nothing then.
   /// - With no such page, `changed` answers the location that it
   ///   remembers, once the guards allow that location, and forgets it.
   ///   Nothing else makes it forget one.
