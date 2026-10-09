@@ -2,15 +2,23 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/src/preflight/commands.dart';
 import 'package:smf_firebase_core/src/preflight/install_scripts.dart';
 
-/// Why the Firebase CLI [firebase] does not run, or `null` if it runs, as
-/// `firebase --version` tells: how the command ended and the last lines of
-/// what it wrote, or that it could not start, such as a file that may not be
-/// executed, on one line and without a final period.
+/// How to install the Firebase CLI by hand.
+const howToInstallFirebaseCli = 'Install it with "npm install -g '
+    'firebase-tools", or see https://firebase.google.com/docs/cli.';
+
+/// What `firebase --version` of the Firebase CLI [firebase] tells.
+///
+/// When the command succeeds, `output` is what it wrote on its standard
+/// output, which is its version, and `why` is `null`. Otherwise the
+/// Firebase CLI does not run: `output` is empty, and `why` tells how the
+/// command ended and the last lines of what it wrote, or that it could not
+/// start, such as a file that may not be executed, on one line and without
+/// a final period.
 ///
 /// The command runs in a directory of its own, where the Firebase CLI may
 /// leave its `firebase-debug.log`, and without its check for updates, which
 /// would run in the background after it.
-Future<String?> whyFirebaseDoesNotRun(
+Future<({String output, String? why})> askFirebaseVersion(
   String firebase,
   SmfEnvironment environment,
 ) async {
@@ -26,23 +34,31 @@ Future<String?> whyFirebaseDoesNotRun(
   } on SmfCancelledException {
     rethrow;
   } on Exception catch (error) {
-    return _withoutPeriod('"$command" could not start: ${_oneLine('$error')}');
+    return (
+      output: '',
+      why: _withoutPeriod('"$command" could not start: ${oneLine('$error')}'),
+    );
   }
-  if (result.succeeded) return null;
+  if (result.succeeded) return (output: result.stdout, why: null);
   final end = endOf(command, result.exitCode, environment.operatingSystem);
-  final errors = _oneLine(outputTail(result, lines: 5));
-  return _withoutPeriod(errors.isEmpty ? end : '$end: $errors');
+  final errors = oneLine(outputTail(result, lines: 5));
+  return (
+    output: '',
+    why: _withoutPeriod(errors.isEmpty ? end : '$end: $errors'),
+  );
 }
+
+/// Why the Firebase CLI [firebase] does not run, or `null` if it runs, as
+/// `firebase --version` tells; see [askFirebaseVersion].
+Future<String?> whyFirebaseDoesNotRun(
+  String firebase,
+  SmfEnvironment environment,
+) async =>
+    (await askFirebaseVersion(firebase, environment)).why;
 
 /// [text] without its final period, which the sentence around it ends with.
 String _withoutPeriod(String text) =>
     text.endsWith('.') ? text.substring(0, text.length - 1) : text;
-
-/// The lines of [text] that are not blank, on one line.
-String _oneLine(String text) => [
-      for (final line in text.split('\n'))
-        if (line.trim() case final trimmed when trimmed.isNotEmpty) trimmed,
-    ].join(' ');
 
 /// Checks that the Firebase CLI is installed and runs, which
 /// `flutterfire configure` runs to reach the Firebase projects of the user.
@@ -69,22 +85,22 @@ final class FirebaseCliCheck extends PreflightCheck {
   @override
   String get description => 'Firebase CLI';
 
-  static const _install = 'Install it with "npm install -g firebase-tools", '
-      'or see https://firebase.google.com/docs/cli.';
-
   @override
   Future<PreflightStatus> check(SmfEnvironment environment) async {
     final installable = InstallScript.of(environment.operatingSystem) != null;
     final firebase = await environment.findExecutable('firebase');
     if (firebase == null) {
-      return PreflightMissing(instructions: _install, installable: installable);
+      return PreflightMissing(
+        instructions: howToInstallFirebaseCli,
+        installable: installable,
+      );
     }
     final why = await whyFirebaseDoesNotRun(firebase, environment);
     if (why == null) return const PreflightPassed();
     // On one line, since a question shows the instructions.
     return PreflightMissing(
       found: '$firebase does not run',
-      instructions: '$why. $_install',
+      instructions: '$why. $howToInstallFirebaseCli',
       installable: installable,
     );
   }

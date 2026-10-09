@@ -36,10 +36,12 @@ import 'package:smf_firebase_core/src/readme.dart';
 /// without one, or that skips external setup, prints the command to run
 /// later, and so does a run that lacks what the checks look for, since
 /// flutterfire would fail without it. The modules that depend on this one
-/// may continue the step, as [configureStep]. The README of the app tells
-/// how to configure it again, such as on another machine, and its guide for
-/// coding agents that the options are a placeholder which flutterfire
-/// writes, and that only a person can run it.
+/// may continue the step, as [configureStep]. One whose command needs a
+/// later Firebase CLI than flutterfire does checks the version with
+/// `FirebaseCliVersionCheck` of this package, in its own [Preflight]. The
+/// README of the app tells how to configure it again, such as on another
+/// machine, and its guide for coding agents that the options are a
+/// placeholder which flutterfire writes, and that only a person can run it.
 ///
 /// Firebase supports iOS [minimumIosVersion] or newer, so the module raises
 /// the minimum iOS version of the app to it.
