@@ -1,20 +1,21 @@
 // A test that continuous integration runs in the apps of the fixture
-// modules with every module, a router, whichever module provides it, and
-// the fixture gates: the walk of the routes that the CLI keeps for the
-// router role (integration_test/router_walk/walk.dart) holds while a guard
-// of the routes keeps the user out, as on a device, where no test opens a
-// guard, and once the guards allow. The first gate is closed before the
-// app starts. The walk expects what the role says, shownFor() of the file
-// that the matrix writes for it: the target of the guard in place of each
-// location outside its flow, as redirectOf() of the app says, and the
-// locations of its flow themselves. closedGuards() of that file names the
-// guard, as the test of the walk does when it fails on it.
+// modules with every module, a router, whichever module provides it, the
+// fixture gates and the fixture late gate: the walk of the routes that the
+// CLI keeps for the router role (integration_test/router_walk/walk.dart)
+// holds while a guard of the routes keeps the user out, as on a device,
+// where no test opens a guard, and once the guards allow. The first gate
+// is closed before the app starts. The walk expects what the role says,
+// shownFor() of the file that the matrix writes for it: the target of the
+// guard in place of each location outside its flow, as redirectOf() of
+// the app says, and the locations of its flow themselves. closedGuards()
+// of that file names the guard, as the test of the walk does when it
+// fails on it.
 //
-// Once the gate opens, the flows of both guards are over, as flowIsOver()
-// of the app says. The walk then expects the screen that the app starts
-// on in place of each location of a flow, and reaches every other route.
-// So it never shows a screen of a flow that is over, and no such screen
-// can change what the walk sees of the locations after it.
+// Once the gate opens, the flows of all three guards are over, as
+// flowIsOver() of the app says. The walk then expects the screen that the
+// app starts on in place of each location of a flow, and reaches every
+// other route. So it never shows a screen of a flow that is over, and no
+// such screen can change what the walk sees of the locations after it.
 //
 // It uses what the tests of router_screens share, which every app that it
 // applies to has. Each expectation gives its reason, which a provider of
@@ -23,6 +24,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
+import 'package:{{app_name}}/features/fake_late_gate/fixture_late_gate_screen.dart';
 
 import '../integration_test/router_walk/locations.dart';
 import '../integration_test/router_walk/walk.dart';
@@ -52,7 +54,12 @@ void main() {
       final routes = [for (final walked in walkedLocations) walked.route];
       expect(
         routes,
-        containsAll([...flow, 'fake_feature.home', 'fake_gate.second']),
+        containsAll([
+          ...flow,
+          'fake_feature.home',
+          'fake_gate.second',
+          'fake_late_gate.gate',
+        ]),
         reason: 'The walk goes to routes of the flow of the guard and to '
             'routes outside it.',
       );
@@ -74,7 +81,7 @@ void main() {
             'its own screen.',
       );
 
-      // The gate opens: the flows of both guards are over. The walk
+      // The gate opens: the flows of all three guards are over. The walk
       // expects the screen that the app starts on in place of each
       // location of a flow, and each other location itself.
       fixtureGate.value = true;
@@ -84,7 +91,7 @@ void main() {
         isEmpty,
         reason: 'closedGuards() names no guard that allows.',
       );
-      const flows = {...flow, 'fake_gate.second'};
+      const flows = {...flow, 'fake_gate.second', 'fake_late_gate.gate'};
       expect(
         startOfApp.route,
         isNotNull,
@@ -119,6 +126,8 @@ void main() {
               'fake_gate.step',
             if (find.byType(FixtureSecondGateScreen).evaluate().isNotEmpty)
               'fake_gate.second',
+            if (find.byType(FixtureLateGateScreen).evaluate().isNotEmpty)
+              'fake_late_gate.gate',
           ].join(', '),
         );
       }

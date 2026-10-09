@@ -303,6 +303,14 @@ List<BrokenProvider> brokenProviders() => const [
             'go() to a location in a flow that is over shows the screen that '
                 'the app starts on.',
           ),
+          // A location that is asked for while a guard that does not bring
+          // the user back does not allow.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'go() to a location that a guard keeps the user from shows the '
+                'target of the guard.',
+          ),
           MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
             'the walk of the routes holds while a guard keeps the user out, '
@@ -359,6 +367,14 @@ List<BrokenProvider> brokenProviders() => const [
                 'top, the router leaves the flow: it shows the screen that '
                 'the app starts on.',
           ),
+          // What the guards answer for a guard that does not bring the user
+          // back is an answer like any other: the router does not show it.
+          MatrixExpectedFailure(
+            'test/router_guard_return_test.dart',
+            _returnTest,
+            'Once a guard allows, a guard of a later stage that does not '
+                'allow shows its target.',
+          ),
           MatrixExpectedFailure(
             'test/router_guard_early_change_test.dart',
             'a guard that starts allowing before the router shows its first '
@@ -394,6 +410,44 @@ List<BrokenProvider> brokenProviders() => const [
             _flowTest,
             'replace() with a location in a flow that is over shows the '
                 'screen that the app starts on.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerKeepingSelectedBranch,
+        role: routerRole,
+        bug: 'When it shows the location that the guards of the routes '
+            'answer, it puts the branches of the main navigation back on '
+            'their destinations, but for the selected one, which keeps its '
+            'pages. So once a guard that does not bring the user back allows '
+            'again, that branch still has a page that the guard kept the '
+            'user from.',
+        // The app of the guards with a layout and the second fixture
+        // feature, whose destination is the branch that is selected when
+        // the guard stops allowing. The fixture feature comes first, so the
+        // app starts on its screen.
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeLateGateModule.id,
+          FakeGateModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/layout_guard_return_test.dart',
+            'after a guard that does not bring the user back, the user is in '
+                'the main navigation on the screen that the app starts on, '
+                'and every branch is back on its destination',
+            'The target of a guard takes the stacks of every branch of the '
+                'main navigation, the selected one too: when the user does '
+                'not come back to that branch, it is back on its destination '
+                'all the same.',
           ),
         ],
       ),
@@ -835,12 +889,14 @@ List<BrokenProvider> brokenProviders() => const [
     ];
 
 /// The other modules of the app of a router that breaks what the role says
-/// of the guards of the routes: the fixture gates, whose guards the tests
-/// close and open, the fixture feature, whose screens the guards keep the
-/// user from, and what the fixture feature and the tests of the listeners
-/// of the screen need.
+/// of the guards of the routes: the fixture late gate and the fixture
+/// gates, in the order of the registry of the fixtures, whose guards the
+/// tests close and open, the fixture feature, whose screens the guards keep
+/// the user from, and what the fixture feature and the tests of the
+/// listeners of the screen need.
 const List<ModuleId> _appWithGates = [
   FakeFeatureModule.id,
+  FakeLateGateModule.id,
   FakeGateModule.id,
   FakeBlocModule.id,
   FakeDiModule.id,
@@ -874,6 +930,13 @@ const _flowTest =
     'the routes of the flow of a guard show only while the guard does not '
     'allow, and the screen that the app starts on in their place once the '
     'flow is over';
+
+/// The name of the test of a guard of the routes that does not bring the
+/// user back.
+const _returnTest =
+    'a guard that does not bring the user back shows the screen that the app '
+    'starts on once it allows again, or a location that was asked for while '
+    'it did not allow';
 
 /// The name of the test of the labels of the destinations.
 const _labelsTest =

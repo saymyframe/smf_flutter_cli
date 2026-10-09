@@ -74,10 +74,18 @@ final class RouterFacade {
   List<FacadeRoute> get routes =>
       [for (final feature in features) ...feature.allRoutes];
 
-  /// The guards of the app, in the order the app asks them: that of the
+  /// The guards of the app, in the order the app asks them: by their
+  /// [RouteGuard.stage], and those of one stage in the order of the
   /// features and of their guards; see [FacadeFeature.guards].
-  List<FacadeGuard> get guards =>
-      [for (final feature in features) ...feature.guards];
+  ///
+  /// So the guards of an earlier stage come first, whatever the order of
+  /// the modules: the guard of an onboarding before that of a sign-in.
+  List<FacadeGuard> get guards => [
+        for (final stage in GuardStage.values)
+          for (final feature in features)
+            for (final guard in feature.guards)
+              if (guard.guard.stage == stage) guard,
+      ];
 
   /// The top-level routes that are destinations of the main navigation, in
   /// the order of the features and their routes.
@@ -186,7 +194,8 @@ final class FacadeFeature {
   /// The top-level routes of the module, in order.
   late final List<FacadeRoute> routes;
 
-  /// The guards of the module, in order, each with its target.
+  /// The guards of the module, as it declares them, each with its target.
+  /// The app asks them by their stages; see [RouterFacade.guards].
   ///
   /// A guard whose [RouteGuard.redirectTo] names no top-level route of the
   /// module is left out; the module rule `router.guards` reports it.

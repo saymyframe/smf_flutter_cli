@@ -223,6 +223,37 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that, when it shows the location that the guards of
+  /// the routes answer, puts the branches of the main navigation back on
+  /// their destinations, but for the selected one, which keeps its pages.
+  /// A location that brings the user back into that branch makes its stack
+  /// anew, so the bug shows only when the user comes back somewhere else,
+  /// as after a guard that does not bring the user back: the branch then
+  /// still has a page that the guard kept the user from.
+  static const routerKeepingSelectedBranch = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_selected_branch'),
+    'A plain navigator whose guards leave the selected branch (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      if (index == _selected) continue;\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.

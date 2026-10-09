@@ -763,12 +763,82 @@ void main() {
         RouterRole.guardChanges,
       };
 
-      // The fixture gates are among the fixtures, and have two guards.
+      // The fixture gates and the fixture late gate are among the
+      // fixtures, with three guards between them.
       expect(await namesIn(everyFixture()), containsAll(ofGuards));
       expect(
         (await namesIn(const [FakeRouterModule.id, ModuleId('fake_second')]))
             .intersection(ofGuards),
         isEmpty,
+      );
+    });
+
+    test(
+        'gets the guards of the app by their stages, whatever the order of '
+        'the modules: those of the fixture gates before that of the fixture '
+        'late gate, a later stage, whose module the fixtures list first; and '
+        'only the guard that does not bring the user back says so', () async {
+      /// The guards of `routeGuards` in the app of [modules], each as its
+      /// full name and the arguments that it has besides its function, its
+      /// target and its flow.
+      Future<List<String>> guardsOf(List<ModuleId> modules) async {
+        final result = await harness.check(
+          ContractCase('fixture guards', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final guards = parseString(
+          content: result.app!.files[RouterRole.appRouterFile]!.text,
+        )
+            .unit
+            .declarations
+            .whereType<TopLevelVariableDeclaration>()
+            .map((declaration) => declaration.variables.variables.single)
+            .singleWhere(
+              (variable) => variable.name.lexeme == RouterRole.routeGuards,
+            );
+        String code(NamedArgument argument) => [
+              argument.name.lexeme,
+              argument.argumentExpression.toSource(),
+            ].join(': ');
+        return [
+          for (final guard in (guards.initializer! as ListLiteral)
+              .elements
+              .cast<MethodInvocation>())
+            [
+              (guard.argumentList.arguments.first as StringLiteral).stringValue,
+              for (final argument
+                  in guard.argumentList.arguments.whereType<NamedArgument>())
+                if (!const {'allows', 'redirectTo', 'flow'}
+                    .contains(argument.name.lexeme))
+                  code(argument),
+            ].join(' '),
+        ];
+      }
+
+      const expected = [
+        'fake_gate.first',
+        'fake_gate.second',
+        'fake_late_gate.late resumes: false',
+      ];
+      // The apps with every fixture ask for the late gate first.
+      final requested = everyFixture();
+      expect(
+        requested.indexOf(FakeLateGateModule.id),
+        lessThan(requested.indexOf(FakeGateModule.id)),
+      );
+      expect(await guardsOf(requested), expected);
+      // And the other way round.
+      expect(
+        await guardsOf([
+          for (final id in requested)
+            if (id == FakeLateGateModule.id)
+              FakeGateModule.id
+            else if (id == FakeGateModule.id)
+              FakeLateGateModule.id
+            else
+              id,
+        ]),
+        expected,
       );
     });
 
@@ -801,7 +871,8 @@ void main() {
         ];
       }
 
-      // The fixture gates depend on one of the two fixture state managers.
+      // The fixture gates and the fixture late gate depend on one of the
+      // two fixture state managers.
       expect(await tellsOfGuards(everyFixture()), [false, true]);
       expect(
         await tellsOfGuards(everyFixture(stateManager: FakeRiverpodModule.id)),
@@ -1769,6 +1840,8 @@ const _cases = [
   'fake_second (go_router) with localization',
   'fake_second (fake_router)',
   'fake_second (go_router)',
+  'fake_late_gate (fake_router)',
+  'fake_late_gate (go_router)',
   'fake_gate (fake_router)',
   'fake_gate (go_router)',
   'fake_sockets',

@@ -237,7 +237,8 @@ void main() {
       'them, with each router: the gates are in the apps with the state '
       'manager that they depend on, whichever the other providers are, so '
       'every covering of the pairs of providers has both kinds for each '
-      'router', () {
+      'router; and the fixture late gate is in the apps with the fixture '
+      'gates, before them, though the app asks its guard after theirs', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -249,6 +250,31 @@ void main() {
       expect(
         hasGates(app),
         app.modules.contains(FakeGateModule.stateManager),
+        reason: app.name,
+      );
+      expect(
+        app.modules.contains(FakeLateGateModule.id),
+        hasGates(app),
+        reason: app.name,
+      );
+      if (!hasGates(app)) continue;
+      // The stages of the guards go against the order of their modules.
+      expect(
+        app.modules.indexOf(FakeLateGateModule.id),
+        lessThan(app.modules.indexOf(FakeGateModule.id)),
+        reason: app.name,
+      );
+      expect(
+        [
+          for (final guard
+              in routerRole.facadeOf(routerRole.hookInput(app.hook!)).guards)
+            '${guard.fullName} ${guard.guard.stage.name}',
+        ],
+        [
+          'fake_gate.first welcome',
+          'fake_gate.second welcome',
+          'fake_late_gate.late identity',
+        ],
         reason: app.name,
       );
     }
@@ -299,9 +325,9 @@ void main() {
 
   test(
       'the tests of the guards of the routes apply to the apps with every '
-      'module that have the fixture gates, with each router, which run '
-      'flutter test for other tests already; with a page over the main '
-      'navigation, to those of them with a layout', () {
+      'module that have the fixture gates and the fixture late gate, with '
+      'each router, which run flutter test for other tests already; with a '
+      'page over the main navigation, to those of them with a layout', () {
     final guards = named('router_guards');
     final withLayout = named('layout_guards');
 
@@ -311,6 +337,12 @@ void main() {
             app.modules.contains(FakeGateModule.id))
           app.name,
     ]);
+    // They close and open the late gate too, so no app of either module
+    // alone has them.
+    for (final app in apps) {
+      if (!guards.appliesTo(app)) continue;
+      expect(app.modules, contains(FakeLateGateModule.id), reason: app.name);
+    }
     // The test with the main navigation uses the helpers of the tests of
     // the guards.
     expect(appsOf(guards), containsAll(appsOf(withLayout)));
@@ -374,7 +406,7 @@ void main() {
       if (!walkGuards.appliesTo(app)) continue;
       expect(
         app.modules,
-        contains(const ModuleId('fake_gate')),
+        containsAll(const [ModuleId('fake_gate'), ModuleId('fake_late_gate')]),
         reason: app.name,
       );
     }
@@ -395,27 +427,47 @@ void main() {
   });
 
   test(
-      'the walk of the routes goes to the routes of the fixture gates, the '
-      'flows of their guards, and to the routes of the other fixtures, in '
-      'the order of the routes of the app', () {
+      'the walk of the routes goes to the routes of the fixture gates and '
+      'of the fixture late gate, the flows of their guards, and to the '
+      'routes of the other fixtures, in the order of the routes of the app; '
+      'and its file has the targets of the guards in the order the app asks '
+      'the guards, by their stages', () {
     // The apps with every fixture, where the test of the walk closes and
-    // opens a gate: the walk has locations of the flows of both guards and
-    // locations outside them to check there.
+    // opens a gate: the walk has locations of the flows of the three
+    // guards and locations outside them to check there.
     final withGates = apps.where(named('router_walk_guards').appliesTo);
     expect(withGates, isNotEmpty);
     for (final app in withGates) {
+      final file =
+          named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+      final targetsAt = file.indexOf('guardTargets = [');
+      expect(targetsAt, isPositive, reason: app.name);
+      // The routes come in the order of the modules, the late gate first.
       expect(
-        _walkedRoutesOf(
-          named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!,
-        ),
+        _walkedRoutesOf(file),
         [
           'fake_feature.home',
           'fake_second.second',
           'fake_second.outside',
+          'fake_late_gate.gate',
           'fake_gate.gate',
           'fake_gate.step',
           'fake_gate.second',
         ],
+        reason: app.name,
+      );
+      // The targets come in the order of the guards, the late gate last.
+      expect(
+        [
+          for (final route in RegExp(r"route: '([\w.]+)'").allMatches(
+            file.substring(
+              targetsAt,
+              file.indexOf('const ShownScreen startOfApp'),
+            ),
+          ))
+            route[1],
+        ],
+        ['fake_gate.gate', 'fake_gate.second', 'fake_late_gate.gate'],
         reason: app.name,
       );
     }

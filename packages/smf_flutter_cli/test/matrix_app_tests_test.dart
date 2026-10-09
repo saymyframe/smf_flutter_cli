@@ -206,10 +206,16 @@ void main() {
           screen: ScreenRef(screen, import: screens),
           children: children,
         );
-    RouteGuard guard(String name, String target) => RouteGuard(
+    RouteGuard guard(
+      String name,
+      String target, {
+      GuardStage stage = GuardStage.welcome,
+    }) =>
+        RouteGuard(
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: stage,
         );
     // An app that starts on the route at [start], or on the fallback start
     // screen of the app entry if no route starts it.
@@ -234,10 +240,16 @@ void main() {
                             route('/r$index', 'Screen$index'),
                           route('/login', 'LoginScreen'),
                         ],
+                        // The module declares its guard of the later
+                        // stage first: the app asks it last.
                         guards: [
+                          guard(
+                            'signedIn',
+                            'login',
+                            stage: GuardStage.identity,
+                          ),
                           guard('firstRun', 'intro'),
                           guard('consent', 'intro'),
-                          guard('signedIn', 'login'),
                         ],
                       ),
                     )
@@ -288,6 +300,8 @@ void main() {
     );
     // The walk does not go to the target of the last guard, which is past
     // its limit; the file has it all the same, for the walk to expect it.
+    // The targets are in the order the app asks the guards, by their
+    // stages, and not as the module declares them.
     expect(routesIn(walked), hasLength(routerWalkLimit));
     expect(routesIn(walked), isNot(contains('gate.login')));
     expect(routesIn(targets), ['gate.intro', 'gate.login']);
@@ -395,6 +409,7 @@ void main() {
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: GuardStage.welcome,
         );
     // A module with two guards, listed before a module with [routes] routes
     // of its own. The flow of its first guard is the target and the route

@@ -35,7 +35,10 @@ import 'package:smf_onboarding/src/agents.dart';
 /// The module declares a guard of the routes, `firstRun`, whose target is
 /// that route (see [RouteGuard]): until the user has finished the
 /// onboarding, the router shows it in place of every other screen of the
-/// app, whichever module provides the router. Skip and the last button
+/// app, whichever module provides the router. The guard is of the stage
+/// [GuardStage.welcome], so the app asks it before a guard of a later
+/// stage, such as one that asks who the user is: the onboarding comes
+/// first, whatever the order of the modules. Skip and the last button
 /// only finish the onboarding, and the router leaves it for the location
 /// that the guard kept the user from: on a first launch, the screen that
 /// the app starts on, or the fallback screen of the app entry in an app
@@ -61,9 +64,10 @@ import 'package:smf_onboarding/src/agents.dart';
 /// guard stops allowing, so the router shows the onboarding in place of the
 /// screen that the user is on. Once it is finished again, the router shows
 /// that screen again, or the screen below the pushed pages if the user was
-/// on a page pushed over another screen. Before the start-up of the app
-/// opened the preferences, `restart()` changes only memory, and the
-/// start-up then takes what is saved.
+/// on a page pushed over another screen: the guard brings the user back,
+/// as a guard does unless it says otherwise ([RouteGuard.resumes]). Before
+/// the start-up of the app opened the preferences, `restart()` changes only
+/// memory, and the start-up then takes what is saved.
 ///
 /// So the app shows the screen of the onboarding exactly while the
 /// onboarding is not finished, and nothing navigates to it. The route is
@@ -171,6 +175,7 @@ final class OnboardingModule extends SmfModule {
                 name: 'firstRun',
                 allows: FunctionRef('onboardingCompleted', import: _status),
                 redirectTo: _route,
+                stage: GuardStage.welcome,
               ),
             ],
           ),
