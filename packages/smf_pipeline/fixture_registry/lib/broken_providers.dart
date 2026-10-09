@@ -315,7 +315,8 @@ List<BrokenProvider> brokenProviders() => const [
           MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
             'the walk of the routes holds while a guard keeps the user out, '
-                'and once the flows of the guards are over',
+                'once the flows of the guards are over, and while a condition '
+                'does not hold',
             'While a guard does not allow, each location outside its flow '
                 'shows the target of the guard, and each location of its flow '
                 'its own screen.',
@@ -328,6 +329,20 @@ List<BrokenProvider> brokenProviders() => const [
             'The page on top of the innermost navigator on the screen is '
                 'named after the route of each location, or after the route '
                 'that the app starts on for a location in a flow that is over.',
+          ),
+          // A route that asks for a condition that does not hold is a
+          // location that a guard keeps the user from too.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'go() to a route that asks for a condition that does not hold '
+                'shows the target of the guard of the condition.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_gates_test.dart',
+            _conditionGatesTest,
+            'While a gate does not allow, go() to a route that asks for no '
+                'condition shows the target of the gate.',
           ),
         ],
       ),
@@ -386,6 +401,20 @@ List<BrokenProvider> brokenProviders() => const [
                 'platform, or its start screen for a router that takes no '
                 'location from the platform.',
           ),
+          // The location that was asked for while a condition did not hold
+          // is an answer like any other: the router does not show it.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'Once the condition holds, the router shows the location that '
+                'was asked for.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_gates_test.dart',
+            _conditionGatesTest,
+            'Once the gate and the condition allow, the router shows the '
+                'latest location that was asked for.',
+          ),
         ],
       ),
       BrokenProvider(
@@ -411,6 +440,15 @@ List<BrokenProvider> brokenProviders() => const [
             _flowTest,
             'replace() with a location in a flow that is over shows the '
                 'screen that the app starts on.',
+          ),
+          // And the target of the guard of a condition that does not hold,
+          // for a route that asks for it. The test of such a guard next to
+          // the gates replaces no page, so it passes.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'replace() with a route that asks for a condition that does not '
+                'hold shows the target of the guard of the condition.',
           ),
         ],
       ),
@@ -944,6 +982,17 @@ const _returnTest =
     'a guard that does not bring the user back shows the screen that the app '
     'starts on once it allows again, or a location that was asked for while '
     'it did not allow';
+
+/// The names of the two tests of a guard that stands for a condition: of
+/// the routes that ask for it, and of the guard next to the gates.
+const _conditionsTest =
+    'a route that asks for a condition shows only while the condition holds, '
+    'the target of its guard in its place until then, and every other route '
+    'as it is';
+const _conditionGatesTest =
+    'a gate decides before a guard of a condition, the flow that the two '
+    'have is over once both allow, and a guard of a condition that does not '
+    'bring the user back makes the router forget where the user was';
 
 /// The name of the test of the labels of the destinations.
 const _labelsTest =
