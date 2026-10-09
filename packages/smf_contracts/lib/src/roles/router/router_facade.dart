@@ -223,7 +223,8 @@ final class FacadeFeature {
   late final List<FacadeRoute> routes;
 
   /// The guards of the module, as it declares them, each with its target.
-  /// The app asks them by their stages; see [RouterFacade.guards].
+  /// The app asks them in another order, the gates first and those of each
+  /// kind by their stages; see [RouterFacade.guards].
   ///
   /// A guard whose [RouteGuard.redirectTo] names no top-level route of the
   /// module is left out; the module rule `router.guards` reports it.

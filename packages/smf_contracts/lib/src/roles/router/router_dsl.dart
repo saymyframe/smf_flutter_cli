@@ -173,12 +173,13 @@ final class RouteCondition {
 /// shows the target of the guard in place of the whole stack, whichever of
 /// `go()`, `push()`, `replace()` and the platform asked for the route, and
 /// such a `push()` completes with `null`. It remembers the location, and
-/// shows it in place of the stack once the guards allow it. So the target
-/// has no page below it to go back to, and neither has the location that
-/// was asked for once the router shows it. The router also remembers the
-/// location while the user is elsewhere: it shows it once the condition
-/// holds, unless a later location that a guard kept the user from took
-/// its place or a guard with [resumes] `false` stopped allowing.
+/// shows it in place of the stack once the guards allow it, as `go()` to
+/// it does. So the user cannot go back from the target to the screen that
+/// they were on, nor from the location that was asked for once the router
+/// shows it. The router also remembers the location while the user is
+/// elsewhere: it shows it once the condition holds, unless a later
+/// location that a guard kept the user from took its place or a guard with
+/// [resumes] `false` stopped allowing.
 ///
 /// The flow of such a guard is its target and the routes below it too, and
 /// it is over once the guard allows. Until then every route shows that
