@@ -557,8 +557,10 @@ final class ContractHarness {
             if (option.isMode && roleOptions[option.name] == null) option,
       ];
 
-  /// [contractCase] with [modes], values of mode options by name, among
-  /// its options and after its name, each as `--<name>=<value>`.
+  /// [contractCase], a case that the harness built, with [modes], values
+  /// of mode options by name, as its options and after its name, each as
+  /// `--<name>=<value>`. The harness builds its cases without options, so
+  /// the case has none to keep.
   static ContractCase _withModes(
     ContractCase contractCase,
     Map<String, String> modes,
@@ -570,7 +572,7 @@ final class ContractHarness {
         ].join(' '),
         requested: contractCase.requested,
         picks: contractCase.picks,
-        roleOptions: {...contractCase.roleOptions, ...modes},
+        roleOptions: modes,
       );
 
   /// The name of a case of [subject], such as `home` or `analytics by
