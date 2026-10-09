@@ -685,27 +685,96 @@ void main() {
     });
   });
 
-  test('plannedChecks puts the SDK first, then the modules in order', () {
-    final first = TestCheck('a', status: const PreflightPassed());
-    final second = TestCheck('b', status: const PreflightPassed());
-    final sdk = FlutterSdkCheck(FakeHost().fileSystem);
-    final collection = Collection([
-      Collected(Preflight([first, second]), _module, applies: true),
-      Collected(
-        Preflight([TestCheck('c', status: _missing)]),
-        _module,
-        applies: false,
-      ),
-    ]);
+  group('plannedChecks', () {
+    TestCheck passing(String id) =>
+        TestCheck(id, status: const PreflightPassed());
 
-    final planned = plannedChecks(collection, sdk);
+    test('puts the SDK first, then the modules in order', () {
+      final first = passing('a');
+      final second = passing('b');
+      final sdk = FlutterSdkCheck(FakeHost().fileSystem);
+      final collection = Collection([
+        Collected(Preflight([first, second]), _module, applies: true),
+        Collected(
+          Preflight([TestCheck('c', status: _missing)]),
+          _module,
+          applies: false,
+        ),
+        Collected(
+          Preflight([passing('d')]),
+          const ModuleOrigin(ModuleId('other')),
+          applies: true,
+        ),
+      ]);
 
-    expect(planned.map((p) => p.check), [sdk, first, second]);
-    expect(planned.map((p) => p.key), [
-      'pipeline/flutter_sdk',
-      'firebase/a',
-      'firebase/b',
-    ]);
+      final planned = plannedChecks(
+        collection,
+        sdk,
+        resolutionOf([TestModule('firebase'), TestModule('other')]),
+      );
+
+      expect(planned.take(3).map((p) => p.check), [sdk, first, second]);
+      expect(planned.map((p) => p.key), [
+        'pipeline/flutter_sdk',
+        'firebase/a',
+        'firebase/b',
+        'other/d',
+      ]);
+    });
+
+    test(
+        'puts the checks of a module after those of the modules it depends '
+        'on, with those of its variant, and those of the role templates last',
+        () {
+      final role = TestRole<NoDsl>('state');
+      const rules = ModuleId('rules');
+      final collection = Collection([
+        // What is no check keeps none back and adds none.
+        const Collected(CodegenRequest(), ModuleOrigin(rules), applies: true),
+        Collected(
+          Preflight([passing('version')]),
+          const ModuleOrigin(rules),
+          applies: true,
+        ),
+        Collected(
+          Preflight([passing('of_variant')]),
+          const ModuleOrigin(rules, variant: ModuleId('bloc')),
+          applies: true,
+        ),
+        Collected(
+          Preflight([passing('unrelated')]),
+          const ModuleOrigin(ModuleId('other')),
+          applies: true,
+        ),
+        Collected(Preflight([passing('cli')]), _module, applies: true),
+        Collected(
+          Preflight([passing('of_template')]),
+          RoleTemplateOrigin(role),
+          applies: true,
+        ),
+      ]);
+
+      final planned = plannedChecks(
+        collection,
+        FlutterSdkCheck(FakeHost().fileSystem),
+        // The order in which the modules were selected: the one that rules
+        // depends on was added for it, after the others.
+        resolutionOf([
+          TestModule('rules', dependsOn: {'firebase'}),
+          TestModule('other'),
+          TestModule('firebase'),
+        ]),
+      );
+
+      expect(planned.map((p) => p.key), [
+        'pipeline/flutter_sdk',
+        'firebase/cli',
+        'rules/version',
+        'rules (bloc)/of_variant',
+        'other/unrelated',
+        'role:state/of_template',
+      ]);
+    });
   });
 }
 

@@ -142,6 +142,33 @@ final class Resolution {
     visit(id);
     return closure;
   }
+
+  /// The modules of the app in the order of [modules], except that each
+  /// comes after the modules it depends on, directly or not. A module that
+  /// [modules] has after one that depends on it comes right before the
+  /// first such module instead, and so do the modules that it depends on
+  /// itself, before it. Modules of which none depends on another keep the
+  /// order of [modules].
+  ///
+  /// So what the pipeline does for a module in this order may build on what
+  /// it did for the modules that the module depends on, as a check of the
+  /// machine builds on a tool that a check of such a module installs,
+  /// whether the user named those modules before it, after it or not at
+  /// all.
+  List<ResolvedModule> get dependenciesFirst {
+    final placed = <ModuleId>{};
+    final ordered = <ResolvedModule>[];
+    void place(ResolvedModule module) {
+      // A module is placed once, where the first module that needs it is.
+      if (!placed.add(module.id)) return;
+      final dependsOn = module.descriptor.dependsOn;
+      modules.where((other) => dependsOn.contains(other.id)).forEach(place);
+      ordered.add(module);
+    }
+
+    modules.forEach(place);
+    return ordered;
+  }
 }
 
 /// The result of stage 3: a [resolution] or the [issues] that prevent one.

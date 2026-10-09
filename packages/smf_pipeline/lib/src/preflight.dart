@@ -6,6 +6,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
+import 'package:smf_pipeline/src/resolver.dart';
 
 /// The check of the Flutter SDK that every app needs, which the pipeline
 /// runs before the checks of the modules.
@@ -283,17 +284,32 @@ final class PreflightReport {
 }
 
 /// The checks of the machine that the app needs: the Flutter SDK, then the
-/// checks of every [Preflight] among [collection]'s contributions that
-/// applies, in the order of the modules.
+/// checks of every [Preflight] that applies among [collection]'s
+/// contributions, which are those of the modules of [resolution] and of the
+/// templates of its roles.
+///
+/// The checks of a module come after those of the modules it depends on,
+/// directly or not, wherever the user named those, and otherwise in the
+/// order of the modules; see [Resolution.dependenciesFirst]. A check may
+/// need what a check of such a module installs, as a check of the version
+/// of a tool needs the tool, and [runPreflight] runs again only the checks
+/// after an installation. The checks of the templates of the roles come
+/// last, in the order of the roles.
 List<PlannedCheck> plannedChecks(
   Collection collection,
   FlutterSdkCheck sdkCheck,
+  Resolution resolution,
 ) =>
     [
       PlannedCheck(sdkCheck, const PipelineOrigin()),
-      for (final collected in collection.applyingOf<Preflight>())
-        for (final check in (collected.contribution as Preflight).checks)
-          PlannedCheck(check, collected.origin),
+      for (final collected in [
+        for (final module in resolution.dependenciesFirst)
+          ...collection.ofModule(module.id),
+        ...collection.all.where((c) => c.origin is! ModuleOrigin),
+      ])
+        if (collected.applies)
+          if (collected.contribution case Preflight(:final checks))
+            for (final check in checks) PlannedCheck(check, collected.origin),
     ];
 
 /// Stage 6 of the pipeline: runs [checks] on the machine.
@@ -307,7 +323,9 @@ List<PlannedCheck> plannedChecks(
 /// going through the checks in order: the directories of the installed
 /// tools go into the environment's `PATH`, and the checks after an
 /// installation run again, since they may need what it installed, each
-/// with a progress that names it.
+/// with a progress that names it. A check before an installation does not
+/// run again, so [checks] has each check after the checks that may install
+/// what it needs, as [plannedChecks] orders them.
 ///
 /// Nothing is installed when generation cannot go on anyway: when a
 /// required check that nothing can fix fails for the pipeline itself, or
@@ -404,7 +422,8 @@ Future<List<CheckResult>> _checkAll(
 }
 
 /// The contributors that a failing required check among [results] dooms:
-/// one that no installation before it can fix.
+/// one that no installation before it can fix. The checks whose
+/// installations may fix a check all come before it; see [plannedChecks].
 Set<ContributionOrigin> _doomedBy(List<CheckResult> results) {
   final doomed = <ContributionOrigin>{};
   var installableBefore = false;
