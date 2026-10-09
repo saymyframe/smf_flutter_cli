@@ -38,7 +38,8 @@ final class ContractCase {
 
   /// Values of role options by name, as `--start /home` on the command
   /// line, for the choices of the roles when the app of the case is
-  /// rendered.
+  /// rendered. A case that the harness builds for a value of a mode option
+  /// has that value here (see [ContractHarness.casesOfRole]).
   final Map<String, String?> roleOptions;
 
   @override
@@ -132,16 +133,26 @@ final class ContractResult {
           if (issue.isError) issue,
       ];
 
-  /// The modules of the app with their variants, which tell apart the apps
-  /// of different cases, or `null` if the case did not resolve.
-  String? get appKey => switch (resolution) {
-        null => null,
-        final resolution => ([
-            for (final module in resolution.modules)
-              '${module.id}(${module.variant ?? ''})',
-          ]..sort())
-              .join(','),
-      };
+  /// The modules of the app with their variants, and the values that the
+  /// case gives the options of the roles, each as `--<name>=<value>` in the
+  /// order of the names, which tell apart the apps of different cases, or
+  /// `null` if the case did not resolve.
+  ///
+  /// It has what the case asks for, not what the roles chose, so a harness
+  /// that does not render tells the apps apart too.
+  String? get appKey {
+    final resolution = this.resolution;
+    if (resolution == null) return null;
+    final modules = [
+      for (final module in resolution.modules)
+        '${module.id}(${module.variant ?? ''})',
+    ]..sort();
+    final options = [
+      for (final MapEntry(:key, :value) in contractCase.roleOptions.entries)
+        if (value != null) '--$key=$value',
+    ]..sort();
+    return [modules.join(','), ...options].join(' ');
+  }
 }
 
 /// The contract test harness: checks that the modules and roles of a
@@ -158,7 +169,10 @@ final class ContractResult {
 /// would give an app two providers of a role that takes one, unless every
 /// combination would, so that the cases report why. [uncheckedProviders]
 /// lists each provider of a role of a module that none of the apps of the
-/// module has.
+/// module has. For a role with a mode option (see [RoleOption.mode]), it
+/// builds one more app of each provider of the role for each value of the
+/// option after the first, and [casesOfModes] has the apps with every
+/// module once more for those values.
 /// Each app goes through the stages 3 to 5 of the pipeline, in a run
 /// without a terminal that skips external setup, as the Flutter job
 /// generates apps; stage 5 includes [checkTemplateTags], and the
@@ -170,7 +184,10 @@ final class ContractResult {
 /// as the start screen of an app with several, gets the answer of a user
 /// who presses Enter: the default, or the first choice. The result has the
 /// options that make the same choice without asking
-/// ([ContractResult.answers]).
+/// ([ContractResult.answers]). A mode option needs no answer. Its role
+/// chooses the first value without it, in a terminal and in a run without
+/// one, and the value that a case gives it otherwise: the harness reports
+/// a role that does not (see [check]).
 ///
 /// It depends on no test framework, so the tests of any package can use it.
 final class ContractHarness {
@@ -211,7 +228,9 @@ final class ContractHarness {
   /// override them.
   ///
   /// A question of a role that no option answers gets the answer of a user
-  /// who presses Enter; see [ContractResult.answers].
+  /// who presses Enter; see [ContractResult.answers]. A mode option with a
+  /// value here has that value in every app, so the harness builds no case
+  /// for its other values.
   final Map<String, String?> roleOptions;
 
   /// The cases of the module [id]:
@@ -483,30 +502,78 @@ final class ContractHarness {
   /// combination whose providers cannot be in one app with the provider is
   /// left out, such as another provider of a role that the provider
   /// provides too, unless no combination of the subset can.
+  ///
+  /// After them come the cases of the mode options of [role] (see
+  /// [RoleOption.mode]): for each provider and each value of such an option
+  /// after the first, the first case of the provider, which has every role
+  /// that the role uses, once more with that value among its
+  /// [ContractCase.roleOptions], named `<case> --<option>=<value>`, such as
+  /// `clock by sundial --clock-hours=12`. The cases before them leave the
+  /// option out, so their apps have its first value. A role with two such
+  /// options gets a case for each value of each, not for each pair of
+  /// them. An option that [roleOptions] give a value has no such cases.
   List<ContractCase> casesOfRole(Role role) {
     final used = [
       for (final other in role.uses)
         if (registry.providersOf(other).isNotEmpty) other,
     ];
-    return [
+    final byProvider = [
       for (final provider in registry.providersOf(role))
-        for (final subset in _subsets(used))
-          for (final picks in _fittingPicks(
-            _withDependencies(provider),
-            _picksOf([...provider.descriptor.effectiveRequires, ...subset]),
-          ))
-            _case(
-              _caseName(
-                '${role.id} by ${provider.descriptor.id}',
-                picks,
-                subset,
+        [
+          for (final subset in _subsets(used))
+            for (final picks in _fittingPicks(
+              _withDependencies(provider),
+              _picksOf([...provider.descriptor.effectiveRequires, ...subset]),
+            ))
+              _case(
+                _caseName(
+                  '${role.id} by ${provider.descriptor.id}',
+                  picks,
+                  subset,
+                ),
+                [provider.descriptor.id],
+                picks: {...picks, role: provider.descriptor.id},
+                present: subset,
               ),
-              [provider.descriptor.id],
-              picks: {...picks, role: provider.descriptor.id},
-              present: subset,
-            ),
+        ],
+    ];
+    final modes = _openModesOf([role]);
+    return [
+      for (final cases in byProvider) ...cases,
+      // The subsets come the largest first, so the first case of a provider
+      // has every role that the role uses.
+      for (final cases in byProvider)
+        for (final option in modes)
+          for (final value in option.allowed!.skip(1))
+            _withModes(cases.first, {option.name: value}),
     ];
   }
+
+  /// The mode options of [roles] that [roleOptions] give no value, so that
+  /// their values set the apps of the cases apart.
+  List<RoleOption> _openModesOf(Iterable<Role> roles) => [
+        for (final role in roles)
+          for (final option in role.options)
+            if (option.isMode && roleOptions[option.name] == null) option,
+      ];
+
+  /// [contractCase], a case that the harness built, with [modes], values
+  /// of mode options by name, as its options and after its name, each as
+  /// `--<name>=<value>`. The harness builds its cases without options, so
+  /// the case has none to keep.
+  static ContractCase _withModes(
+    ContractCase contractCase,
+    Map<String, String> modes,
+  ) =>
+      ContractCase(
+        [
+          contractCase.name,
+          for (final MapEntry(:key, :value) in modes.entries) '--$key=$value',
+        ].join(' '),
+        requested: contractCase.requested,
+        picks: contractCase.picks,
+        roleOptions: modes,
+      );
 
   /// The name of a case of [subject], such as `home` or `analytics by
   /// firebase_analytics`, with the providers it [picks] and the [subset] of
@@ -573,6 +640,59 @@ final class ContractHarness {
     );
   }
 
+  /// The cases of the apps with every module for the other values of the
+  /// mode options (see [RoleOption.mode]): each case of [casesOfAll] once
+  /// more for every combination of the values of the mode options of the
+  /// roles of its app, but the combination of the first value of each,
+  /// which is the app of [casesOfAll] itself.
+  ///
+  /// Each has the values of its combination other than the first of their
+  /// options among its [ContractCase.roleOptions] and after its name, such
+  /// as `every module (riverpod) --clock-hours=12`; an option with its
+  /// first value is left out, as in [casesOfAll]. An option of a role that
+  /// the app lacks has no cases, nor has one that [roleOptions] give a
+  /// value.
+  List<ContractCase> casesOfModes() => [
+        for (final contractCase in casesOfAll())
+          for (final modes in _modeCombinations(
+            _openModesOf(_rolesOf(contractCase)),
+          ).skip(1))
+            _withModes(contractCase, modes),
+      ];
+
+  /// The roles of the app of [contractCase], a case of [casesOfAll], which
+  /// asks for every module of its app: those that its modules provide, in
+  /// the order of the registry.
+  List<Role> _rolesOf(ContractCase contractCase) {
+    final provided = {
+      for (final id in contractCase.requested)
+        ...registry[id]!.descriptor.provides,
+    };
+    return [
+      for (final role in registry.roles)
+        if (provided.contains(role)) role,
+    ];
+  }
+
+  /// Every combination of the values of [options], mode options: each has
+  /// the values other than the first of their options, by the name of the
+  /// option. The first combination, of the first value of each option, has
+  /// none.
+  static List<Map<String, String>> _modeCombinations(
+    List<RoleOption> options,
+  ) {
+    var combinations = <Map<String, String>>[{}];
+    for (final option in options) {
+      final values = option.allowed!;
+      combinations = [
+        for (final combination in combinations)
+          for (final value in values)
+            {...combination, if (value != values.first) option.name: value},
+      ];
+    }
+    return combinations;
+  }
+
   /// [module] and the registered modules it depends on, directly or not.
   List<SmfModule> _withDependencies(SmfModule module) {
     final found = <ModuleId, SmfModule>{module.descriptor.id: module};
@@ -632,6 +752,29 @@ final class ContractHarness {
   /// Runs the stages 3 to 5 of the pipeline and [missingTemplateTags] for
   /// [contractCase], then, if [render] is on and they found no error, the
   /// stages 7 and 8 and [checkRendered].
+  ///
+  /// Before the stage 7, it reports a value that the case or [roleOptions]
+  /// give an option that does not take it (see [RoleOption.allowed]), as
+  /// the command line would refuse it, and makes no choice with it.
+  ///
+  /// Between the stages 7 and 8, it holds the choice of each role of the
+  /// app with a mode option to what the option states (see
+  /// [RoleOption.mode]). For that it makes the choices of the app a second
+  /// time, without a terminal, as `smf create --no-input` makes them when
+  /// the matrices generate the app. The value of a choice is what
+  /// [RoleTemplate.optionsOf] gives the option for it:
+  /// - with a value of the option, from the case or from [roleOptions], the
+  ///   choice has that value in both runs, so a template that does not
+  ///   read the option, or not without a terminal, is an error;
+  /// - without one, the choice has the first value of the option in both
+  ///   runs, also when the role asks and the harness answers as a user who
+  ///   presses Enter;
+  /// - no role fails or asks in the run without a terminal, which gets no
+  ///   value for a mode option that the case leaves out;
+  /// - the two choices of the role are equal, so that the run without a
+  ///   terminal generates the app that the harness renders.
+  ///
+  /// An app with such an error is not rendered.
   Future<ContractResult> check(ContractCase contractCase) async {
     final environment = PipelineEnvironment(
       _silentHost,
@@ -680,9 +823,11 @@ final class ContractHarness {
     );
     if (!render || checked.errors.isNotEmpty) return checked;
 
+    final options = {...roleOptions, ...contractCase.roleOptions};
+    final refused = _refusedValues(options);
+    if (refused.isNotEmpty) return checked._with(refused);
     final Map<Role, Object?> choices;
     final RenderedApp app;
-    final options = {...roleOptions, ...contractCase.roleOptions};
     final answering = _EnterPrompter();
     // The choices of the roles that asked, which the harness answered.
     final answered = <Role, Object?>{};
@@ -713,6 +858,17 @@ final class ContractHarness {
       );
       if (problems.isNotEmpty) {
         return checked._with(problems, choices: choices);
+      }
+      final ofModes = await _modeProblems(
+        choices,
+        asked: {...answered.keys},
+        resolution: resolution,
+        collection: collection,
+        options: options,
+        answers: given,
+      );
+      if (ofModes.isNotEmpty) {
+        return checked._with(ofModes, choices: choices);
       }
       answers = given;
       app = renderApp(
@@ -746,6 +902,26 @@ final class ContractHarness {
     );
     return rendered._with(checkRendered(rendered, app));
   }
+
+  /// The values among [options], the values of role options of a case by
+  /// name, that their options do not take: a value outside the allowed
+  /// ones of an option of a role of the registry (see [RoleOption.allowed]),
+  /// such as one that is not among the values of a mode option. The
+  /// command line refuses such a value in every app, also in one without
+  /// the role, so the app of the case could not be generated with it.
+  List<SmfIssue> _refusedValues(Map<String, String?> options) => [
+        for (final role in registry.roles)
+          for (final option in role.options)
+            if ((option.allowed, options[option.name])
+                case (final allowed?, final value?)
+                when !allowed.contains(value))
+              SmfIssue(
+                '--${option.name}=$value is not a value of the option of '
+                'the $role, which takes ${allowed.join(', ')}: the command '
+                'line refuses it.',
+                hint: 'Give the option one of its values, or leave it out.',
+              ),
+      ];
 
   /// The options that the templates of the roles in [answered] give for the
   /// choices that the harness answered, and the problems of those options:
@@ -846,8 +1022,203 @@ final class ContractHarness {
     return (options: given, problems: problems);
   }
 
+  /// The problems of the mode options of the roles of an app (see
+  /// [RoleOption.mode]), whose roles made [choices] in a terminal with
+  /// [options], where the harness answered the questions of the roles in
+  /// [asked] as a user who presses Enter; see [check]. [answers] are the
+  /// options that make the choices that the harness answered.
+  ///
+  /// It makes the choices again without a terminal, as the matrices
+  /// generate every app, with [options] and [answers] but no answer for a
+  /// mode option: one that [options] give has that value, and no run needs
+  /// the others. Then it holds each role with a mode option to the option
+  /// in both runs, and the two choices of the role to one another:
+  /// - The value of a choice is what [RoleTemplate.optionsOf] gives the
+  ///   option for it, so a template that gives none is reported too. It is
+  ///   the value that [options] give, or the first value of the option.
+  ///   Both runs with the same other value are one problem.
+  /// - The choices of the two runs are equal. A role that asks is held to
+  ///   that by its answers already; this holds one that asks nothing, or
+  ///   that gets every answer from [options].
+  /// - A role that fails or asks in the run without a terminal is a
+  ///   problem of that role, also when it has no mode option: the apps of
+  ///   the case cannot be generated without a terminal. The roles that
+  ///   chose before it are still checked.
+  Future<List<SmfIssue>> _modeProblems(
+    Map<Role, Object?> choices, {
+    required Set<Role> asked,
+    required Resolution resolution,
+    required Collection collection,
+    required Map<String, String?> options,
+    required Map<String, String> answers,
+  }) async {
+    final modes = <Role, List<RoleOption>>{};
+    for (final role in resolution.presentRoles) {
+      for (final option in role.options) {
+        if (option.isMode) modes.putIfAbsent(role, () => []).add(option);
+      }
+    }
+    if (modes.isEmpty) return const [];
+    final names = {
+      for (final ofRole in modes.values)
+        for (final option in ofRole) option.name,
+    };
+
+    // The choices of the run without a terminal, of the roles that made
+    // one before a role failed.
+    final again = <Role, Object?>{};
+    String? failure;
+    try {
+      await chooseRoles(
+        registry: registry,
+        resolution: resolution,
+        collection: collection,
+        optionValues: {
+          ...options,
+          for (final MapEntry(:key, :value) in answers.entries)
+            if (!names.contains(key)) key: value,
+        },
+        environment: PipelineEnvironment(
+          _silentHost,
+          interactive: false,
+          skipExternalSetup: true,
+        ),
+        context: context,
+        onChoice: (role, choice) => again[role] = choice,
+      );
+    } on SmfUsageException catch (error) {
+      failure = error.message;
+    } on GenerationFailedException catch (error) {
+      // As when the template asks, which the harness cannot answer there.
+      failure = error.message;
+    }
+    return [
+      if (failure != null)
+        _failedWithoutTerminal(
+          failure,
+          // The roles choose in the order of the present roles, so the
+          // first role with a template that has not chosen is the one
+          // that failed.
+          resolution.presentRoles.firstWhere(
+            (role) => role.template != null && !again.containsKey(role),
+          ),
+          modes: modes,
+          options: options,
+        ),
+      for (final MapEntry(key: role, value: ofRole) in modes.entries)
+        ..._choiceProblems(
+          role,
+          ofRole,
+          options: options,
+          inTerminal: choices[role],
+          asked: asked.contains(role),
+          choseAgain: again.containsKey(role),
+          again: again[role],
+        ),
+    ];
+  }
+
+  /// The problem of [role], which failed with [failure] to choose in the
+  /// run without a terminal: it names the mode options of [role] among
+  /// [modes] that [options] give no value, which the role must not need.
+  static SmfIssue _failedWithoutTerminal(
+    String failure,
+    Role role, {
+    required Map<Role, List<RoleOption>> modes,
+    required Map<String, String?> options,
+  }) {
+    final open = [
+      for (final option in modes[role] ?? const <RoleOption>[])
+        if (options[option.name] == null) '--${option.name}',
+    ];
+    return SmfIssue(
+      'The $role cannot choose in a run without a terminal'
+      '${open.isEmpty ? '' : ' and without ${open.join(', ')}'}: $failure',
+      hint: open.isEmpty
+          ? null
+          : 'A mode option has a default, its first value, so no run needs '
+              'it: without a terminal, choose() of the template chooses '
+              'that value and asks nothing.',
+      origin: RoleTemplateOrigin(role),
+    );
+  }
+
+  /// The problems of the choices of [role], a role with the mode options
+  /// [modes], with [options]: [inTerminal], where the harness answered a
+  /// question of the role if it [asked], and [again], in the run without a
+  /// terminal, if the role chose there ([choseAgain]); see [_modeProblems].
+  static List<SmfIssue> _choiceProblems(
+    Role role,
+    List<RoleOption> modes, {
+    required Map<String, String?> options,
+    required Object? inTerminal,
+    required bool asked,
+    required bool choseAgain,
+    required Object? again,
+  }) {
+    // The registry takes no role with an option and no template.
+    final template = role.template!;
+    final terminal =
+        asked ? 'when the user presses Enter at its question' : 'in a terminal';
+    const script = 'in a run without a terminal';
+    final problems = <SmfIssue>[];
+    var sameValues = true;
+    for (final option in modes) {
+      final name = option.name;
+      final given = options[name];
+      final expected = given ?? option.allowed!.first;
+      final first = template.optionsOf(inTerminal)[name];
+      final second = choseAgain ? template.optionsOf(again)[name] : first;
+
+      /// The problem of [choice], whose option has [value], not [expected].
+      SmfIssue problem(Object? choice, String? value, String where) {
+        final gives = value == null ? 'no --$name' : '--$name $value';
+        final run = given == null ? 'Without --$name' : 'With --$name $given';
+        final rule = given == null
+            ? 'the first value of a mode option is its default'
+            : 'the choice of a mode option is its value';
+        return SmfIssue(
+          '$run, the $role makes the choice $choice $where, for which its '
+          'template gives $gives, not --$name $expected: $rule.',
+          hint: 'In choose() of the template, read the option, and choose '
+              'its first value without it, which a question offers first. '
+              'In optionsOf(), give the option for every choice.',
+          origin: RoleTemplateOrigin(role),
+        );
+      }
+
+      if (first != expected) {
+        // One problem when both runs have the same other value.
+        final both = choseAgain && second == first;
+        problems.add(
+          problem(inTerminal, first, both ? '$terminal and $script' : terminal),
+        );
+      }
+      if (second != first) {
+        sameValues = false;
+        if (second != expected) problems.add(problem(again, second, script));
+      }
+    }
+    // Choices with different values of a mode option are reported above.
+    if (choseAgain && sameValues && again != inTerminal) {
+      problems.add(
+        SmfIssue(
+          'The $role makes the choice $again $script, not $inTerminal, its '
+          'choice in a terminal with the same options: a run without a '
+          'terminal would generate another app than the harness renders.',
+          hint: 'The choices of a role with a mode option compare by value, '
+              'and are the same with a terminal and without one.',
+          origin: RoleTemplateOrigin(role),
+        ),
+      );
+    }
+    return problems;
+  }
+
   /// Checks every case of every module and every role of the registry, and
-  /// returns the results of the cases whose app no case before built.
+  /// returns the results of the cases whose app no case before built. A
+  /// case with a value of a role option builds an app of its own, as the
+  /// cases of the mode options do (see [casesOfRole]).
   Future<List<ContractResult>> checkAll() async {
     final results = <ContractResult>[];
     final apps = <String>{};

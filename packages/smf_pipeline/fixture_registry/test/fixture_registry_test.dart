@@ -5,6 +5,7 @@ import 'package:fake_broken/fake_broken.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
@@ -275,8 +276,9 @@ void main() {
         );
         // Both features can start the app, so the harness answers the
         // question of the router with the first, as the user who presses
-        // Enter would.
-        expect(result.answers, {'start': '/fake_feature'});
+        // Enter would, and that of the clock with the first value of its
+        // option.
+        expect(result.answers, _answers);
       }
     });
 
@@ -335,7 +337,7 @@ void main() {
         (result.choices![routerRole]! as RouterChoice).startPath,
         '/fake_feature',
       );
-      expect(result.answers, {'start': '/fake_feature'});
+      expect(result.answers, _answers);
       expect(
         result.validation!.socketOrders[AppEntryRole.bootstrapPlatform]!
             .contributions
@@ -499,7 +501,7 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
-      expect(result.answers, {'start': '/fake_feature'});
+      expect(result.answers, _answers);
       expect(
         initialLocationsOf(result),
         ['/fake_feature', '/fake_feature', '/fake_second'],
@@ -528,7 +530,9 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
-      expect(result.answers, isEmpty);
+      // The option answers the question of the router, not that of the
+      // clock.
+      expect(result.answers, {'clock-hours': '24'});
       expect(
         initialLocationsOf(result),
         ['/fake_second', '/fake_feature', '/fake_second'],
@@ -564,14 +568,15 @@ void main() {
         'app_go_router_get_it_fake_riverpod',
       ]);
       for (final app in every) {
-        expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
+        expect(app.roleOptions, _answers, reason: '$app');
         expect(
           app.createArguments('app_1', '/apps'),
-          contains('--start=/fake_feature'),
+          containsAll(['--start=/fake_feature', '--clock-hours=24']),
           reason: '$app',
         );
       }
-      // An app with one screen that can start it needs no answer.
+      // An app with one screen that can start it, and without the clock,
+      // needs no answer.
       expect(
         apps
             .singleWhere((app) => app.name == 'fake_second (go_router)')
@@ -1285,6 +1290,168 @@ void main() {
     });
   });
 
+  group('the fixture clock, whose role has a mode option', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    const clockFile = 'lib/core/clock/clock.dart';
+    const factoryFile = 'lib/core/clock/clock_factory.dart';
+    const userFile = 'lib/core/clock_user/clock_user.dart';
+
+    /// The app of the provider of the clock and of the module that uses it,
+    /// with [options].
+    Future<ContractResult> clockApp([
+      Map<String, String?> options = const {},
+    ]) async {
+      final result = await harness.check(
+        ContractCase(
+          'clock',
+          requested: const [FakeClockBadgeModule.id, FakeClockUserModule.id],
+          roleOptions: options,
+        ),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    /// The source of what [name] is in [path] of the app of [result]: the
+    /// value of a top-level constant, or the body of a function or of a
+    /// method of a class.
+    String codeOf(ContractResult result, String path, String name) {
+      final unit = parseString(content: result.app!.files[path]!.text).unit;
+      final finder = _Code(name);
+      unit.accept(finder);
+      return finder.code.single;
+    }
+
+    test(
+        'has the hours of --clock-hours as a constant of the role, and 24, '
+        'the first value, without the option', () async {
+      final byDefault = await clockApp();
+      final twelve = await clockApp(const {'clock-hours': '12'});
+
+      // The role asks, and the harness answers as a user who presses
+      // Enter: with the first value.
+      expect(byDefault.answers, {'clock-hours': '24'});
+      expect(twelve.answers, isEmpty);
+      expect(clockRole.hoursIn(clockRole.hookInput(byDefault.hook!)), 24);
+      expect(clockRole.hoursIn(clockRole.hookInput(twelve.hook!)), 12);
+      expect(codeOf(byDefault, clockFile, 'clockHours'), '24');
+      expect(codeOf(twelve, clockFile, 'clockHours'), '12');
+    });
+
+    test('its provider renders the code of the hours of the app', () async {
+      expect(codeOf(await clockApp(), factoryFile, 'hourOf'), '=> time.hour;');
+      expect(
+        codeOf(
+          await clockApp(const {'clock-hours': '12'}),
+          factoryFile,
+          'hourOf',
+        ),
+        '=> (time.hour + 11) % 12 + 1;',
+      );
+    });
+
+    test(
+        'a module that only uses the role has the same code for every value, '
+        'which reads the constant when the app runs', () async {
+      final byDefault = await clockApp();
+      final twelve = await clockApp(const {'clock-hours': '12'});
+
+      expect(
+        twelve.app!.files[userFile]!.text,
+        byDefault.app!.files[userFile]!.text,
+      );
+      expect(
+        codeOf(twelve, userFile, 'clockUserHour'),
+        startsWith('=> clockHours == 12 ? '),
+      );
+      // Without the clock, the module has no constant to read.
+      final without = await harness.check(
+        const ContractCase('user', requested: [FakeClockUserModule.id]),
+      );
+      expect(without.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        codeOf(without, userFile, 'clockUserHour'),
+        r"=> '${time.hour}:00';",
+      );
+    });
+
+    test(
+        'the harness builds an app of its provider for the other value, '
+        'which the matrix generates with the option', () async {
+      expect(harness.casesOfRole(clockRole).map((c) => '$c'), [
+        'clock by fake_clock_badge',
+        'clock by fake_clock_badge --clock-hours=12',
+      ]);
+
+      final (:apps, :failed) = await matrixOf(fixtureModules());
+      expect(failed, isEmpty);
+      MatrixApp named(String name) =>
+          apps.singleWhere((app) => app.name == name);
+      final twelve = named('clock by fake_clock_badge --clock-hours=12');
+      final byDefault = named('fake_clock_badge');
+      expect(twelve.modules, byDefault.modules);
+      expect(
+        twelve.createArguments('app_1', '/apps'),
+        contains('--clock-hours=12'),
+      );
+      expect(clockRole.hoursIn(clockRole.hookInput(twelve.hook!)), 12);
+      // The other apps with the clock get the answer of the harness.
+      expect(
+        byDefault.createArguments('app_1', '/apps'),
+        contains('--clock-hours=24'),
+      );
+      expect(
+        [
+          for (final app in apps)
+            if (app.hook!.presentRoles.contains(clockRole))
+              clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+        ].where((hours) => hours == 12),
+        hasLength(1),
+      );
+    });
+
+    test(
+        'smf create without a terminal generates the clock of 24 hours '
+        'without the option, and takes no value but those of the option',
+        () async {
+      /// Runs `smf create` for the clock with [options], and returns its
+      /// exit code and the hours of the clock of the app, if it has one.
+      Future<(int, String?)> create(List<String> options) async {
+        final host = testHost(processRunner: RecordingRunner());
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            '${FakeClockBadgeModule.id},${FakeClockUserModule.id}',
+            ...options,
+            '--no-input',
+            '--skip-external-setup',
+            '--strict',
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        final file = host.fileSystem.file('/work/fixture_app/$clockFile');
+        if (!file.existsSync()) return (code, null);
+        final unit = parseString(content: file.readAsStringSync()).unit;
+        final finder = _Code('clockHours');
+        unit.accept(finder);
+        return (code, finder.code.single);
+      }
+
+      expect(await create(const []), (SmfExitCodes.success, '24'));
+      expect(
+        await create(const ['--clock-hours', '12']),
+        (SmfExitCodes.success, '12'),
+      );
+      expect(
+        await create(const ['--clock-hours', '13']),
+        (SmfExitCodes.usage, null),
+      );
+    });
+  });
+
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
@@ -1484,6 +1651,11 @@ void main() {
   });
 }
 
+/// The answers of the harness to the questions of the roles of an app with
+/// every fixture: the first of the two screens that can start it, and the
+/// first value of the mode option of the fixture clock.
+const _answers = {'start': '/fake_feature', 'clock-hours': '24'};
+
 /// The one of the two modules [both] that is not [one].
 String _other(List<String> both, String one) =>
     both.singleWhere((module) => module != one);
@@ -1635,6 +1807,9 @@ const _cases = [
   'fake_clock_user',
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
+  // The other value of the mode option of the fixture clock, with its
+  // provider.
+  'clock by fake_clock_badge --clock-hours=12',
 ];
 
 /// Whether [text] is a text of the app entry of the fixtures, which every
@@ -1652,6 +1827,36 @@ final class _TextArguments extends RecursiveAstVisitor<void> {
       arguments.add(node.argumentList.arguments.first.toSource());
     }
     super.visitMethodInvocation(node);
+  }
+}
+
+/// Collects the source of what is named [name]: the value of a top-level
+/// constant, and the body of a function or of a method.
+final class _Code extends RecursiveAstVisitor<void> {
+  _Code(this.name);
+
+  final String name;
+
+  final List<String> code = [];
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    if (node.name.lexeme == name) code.add(node.initializer!.toSource());
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) {
+    if (node.name.lexeme == name) {
+      code.add(node.functionExpression.body.toSource());
+    }
+    super.visitFunctionDeclaration(node);
+  }
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) {
+    if (node.name.lexeme == name) code.add(node.body.toSource());
+    super.visitMethodDeclaration(node);
   }
 }
 
