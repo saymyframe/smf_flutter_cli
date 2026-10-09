@@ -611,31 +611,66 @@ void main() {
     test(
         'of a covering have every tuple with another value that one of them '
         'has, of providers of different roles and of values of different '
-        'options, and keep their order', () async {
+        'options, and keep their order, also when an option is of a role '
+        'that only some of the apps have', () async {
       const options = [access, chime];
-      for (final modules in [
-        const [...doorsOfWood, tower],
-        [
-          ..._registry(const [2, 3]),
-          lock,
-          tower,
-        ],
-        [
-          ..._registry(const [2, 2, 2]),
-          lock,
-        ],
+      // Each registry with the numbers of the apps of the other values:
+      // all of them, and those of a pairwise and of a 3-wise covering.
+      for (final (name, modules, all, pairwise, threeWise) in [
+        ('the doors and the bells', const [...doorsOfWood, tower], 10, 5, 10),
+        (
+          'two roles, the doors and the bells',
+          [
+            ..._registry(const [2, 3]),
+            lock,
+            tower,
+          ],
+          30,
+          7,
+          15,
+        ),
+        (
+          'three roles and the doors',
+          [
+            ..._registry(const [2, 2, 2]),
+            lock,
+          ],
+          16,
+          4,
+          8,
+        ),
+        // The bells depend on pine, so the app with oak has no bells, and
+        // no value of their option: it has one thing less that sets it
+        // apart than the app with pine, and still its pairs. And an app
+        // with the first value of an option is an app with the role of the
+        // option, so the app with oak for guests does not stand for the
+        // app for guests whose bells ring.
+        (
+          'the doors, and the bells with pine alone',
+          const [
+            ...doorsOfWood,
+            ModeModule(
+              ModuleId('tower'),
+              provides: {bells},
+              dependsOn: {ModuleId('pine')},
+            ),
+          ],
+          7,
+          7,
+          7,
+        ),
       ]) {
-        for (final combinations in [
-          EveryModuleCombinations.pairwise,
-          EveryModuleCombinations.threeWise,
+        for (final (combinations, count) in [
+          (EveryModuleCombinations.pairwise, pairwise),
+          (EveryModuleCombinations.threeWise, threeWise),
         ]) {
-          final (:every, :selected, :modes, :selectedModes) = await take(
+          final (every: _, selected: _, :modes, :selectedModes) = await take(
             modules,
             combinations,
           );
-          final reason = '${combinations.option} of ${_names(every).first}, '
-              '${every.length} apps';
+          final reason = '${combinations.option} of $name';
 
+          expect(modes, hasLength(all), reason: reason);
           for (var size = 1; size <= combinations.strength!; size++) {
             expect(
               _modeTuplesOf(selectedModes, options, size),
@@ -648,15 +683,7 @@ void main() {
             orderedEquals(modes.where(selectedModes.contains)),
             reason: reason,
           );
-          // A pairwise covering is a part of them; a 3-wise covering of
-          // three things that set the apps apart is all of them.
-          expect(
-            selectedModes.length,
-            combinations == EveryModuleCombinations.pairwise
-                ? lessThan(modes.length)
-                : lessThanOrEqualTo(modes.length),
-            reason: reason,
-          );
+          expect(selectedModes, hasLength(count), reason: reason);
         }
       }
     });

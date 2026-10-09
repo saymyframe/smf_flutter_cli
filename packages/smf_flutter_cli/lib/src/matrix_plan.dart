@@ -337,8 +337,13 @@ final class _Covering {
   /// What [app] has that a covering must have: the tuples of [size] of its
   /// [parts], its providers of the roles that have several and its values
   /// of the mode options that have several among the apps, and its modules.
+  ///
+  /// An app with fewer parts than [size] has one tuple, of all of them: an
+  /// app lacks the value of an option whose role it lacks, and what it has
+  /// with the others sets it apart all the same.
   static Set<String> _itemsOf(MatrixApp app, List<String> parts, int size) => {
-        for (final tuple in _subsets(parts, size))
+        for (final tuple
+            in _subsets(parts, size < parts.length ? size : parts.length))
           if (tuple.isNotEmpty) tuple.join('+'),
         for (final module in app.modules) 'module:$module',
       };
