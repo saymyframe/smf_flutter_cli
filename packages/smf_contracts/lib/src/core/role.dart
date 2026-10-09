@@ -349,15 +349,21 @@ final class RoleOption {
   ///   writes the value into a file of the role as a constant, and the code
   ///   of such a module branches on it when the app runs.
   /// - The first of [values] is the default, the value of an app that got
-  ///   none. [RoleTemplate.choose] chooses it when the option is not given
-  ///   and the run has no terminal, and a user who presses Enter at its
-  ///   question gets it too. So no run needs the option, and a script
-  ///   written before the role had it generates the same app.
+  ///   none. [RoleTemplate.choose] chooses the value that the option gives,
+  ///   and the first one when the option is not given: in a run without a
+  ///   terminal, where it neither fails nor asks for the lack of the
+  ///   option, and at its question, where a user who presses Enter gets it
+  ///   too. So no run needs the option, and a script written before the
+  ///   role had it generates the same app.
   /// - [RoleTemplate.optionsOf] gives the option with its value for every
   ///   choice, also for one that the template made without asking.
+  /// - The choices of the role compare by value, and with the same options
+  ///   the role makes the same choice in a terminal and in a run without
+  ///   one, so that what a test renders is what `smf create` generates.
   /// - Every value gets apps in the tests. The contract test harness
   ///   builds an app of each provider of the role for each value after the
-  ///   first, besides the apps with the first, and reports a template that
+  ///   first, besides the apps with the first. It makes the choices of each
+  ///   such app in a terminal and without one, and reports a template that
   ///   does not hold to the statements above.
   ///
   /// A mode has at least two [values], each of lower-case letters and

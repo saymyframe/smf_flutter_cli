@@ -53,7 +53,8 @@ abstract base class RoleTemplate<D extends Object> {
   /// makes the same decision. So a role whose [choose] asks the user gives
   /// options of its own for every answer, and its choices compare by value.
   /// A role with a mode option gives that option for every choice, also
-  /// for one that it made without asking (see [RoleOption.mode]).
+  /// for one that it made without asking, and its choices compare by value
+  /// too (see [RoleOption.mode]).
   /// It returns no values by default, for a role that asks nothing.
   Map<String, String> optionsOf(Object? choice) => const {};
 
