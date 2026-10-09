@@ -4,6 +4,10 @@
 /// The two roles take the same data type, `String`, so a run with data for
 /// both shows that the pipeline keeps the data of roles apart by role, not
 /// by type. One module provides both roles.
+///
+/// The clock has a mode option, `--clock-hours`: an app with a clock of 12
+/// hours is another app than one with a clock of 24, so the tests build
+/// both.
 library;
 
 import 'package:fake_roles/bundles/badge_role_bundle.dart';
@@ -24,8 +28,30 @@ String _literals(RoleHookInput<String> input) =>
 /// A role of a third-party package: the clock of the app, with the time
 /// zones the modules ask for as data and the ticks of the modules as a
 /// socket.
+///
+/// The clock shows 24 hours or 12, as [hoursOption] says. The value reaches
+/// the code of the app in three ways:
+/// - the template of the role writes it into the file of the role as the
+///   constant `clockHours` (see [clockImport]);
+/// - a provider reads it in its render hook with [hoursIn], for the code of
+///   `Clock.hourOf`;
+/// - a module that only uses the role has no render hook, so its code is
+///   the same in every app and reads `clockHours` when the app runs.
 final class ClockRole extends Role<String> {
   const ClockRole._();
+
+  /// `--clock-hours`, how many hours the clock shows: 24, the default, or
+  /// 12.
+  static const hoursOption = RoleOption.mode(
+    name: 'clock-hours',
+    help: 'How many hours the clock of the app shows: 24, the default, or '
+        '12.',
+    values: ['24', '12'],
+  );
+
+  /// The import of the file of the role, which has `Clock` and the
+  /// constant `clockHours`.
+  static const clockImport = ImportRef.app('core/clock/clock.dart');
 
   /// Statements that run on every tick, in `tick()`.
   static const ticks = SocketRef<CodeSocket>.role(
@@ -54,6 +80,9 @@ final class ClockRole extends Role<String> {
   List<SocketRef> get sockets => const [ticks];
 
   @override
+  List<RoleOption> get options => const [hoursOption];
+
+  @override
   RoleInterface get interface => const RoleInterface(
         files: ['lib/core/clock/clock.dart'],
         symbols: [createClock],
@@ -61,8 +90,18 @@ final class ClockRole extends Role<String> {
 
   @override
   RoleTemplate<String> get template => const _ClockTemplate();
+
+  /// How many hours the clock of the app shows, 24 or 12: the choice of
+  /// the role in [input], the input of a render hook of the role or of its
+  /// provider.
+  int hoursIn(RoleHookInput<String> input) =>
+      int.parse(input.choice! as String);
 }
 
+/// Writes the hours of the clock into the file of the role.
+///
+/// Its choice is the value of [ClockRole.hoursOption]: the one given, or
+/// the first, which it offers first when it asks.
 final class _ClockTemplate extends RoleTemplate<String> {
   const _ClockTemplate();
 
@@ -71,8 +110,31 @@ final class _ClockTemplate extends RoleTemplate<String> {
       [BrickContribution(clockRoleBundle)];
 
   @override
-  RoleOutput render(RoleHookInput<String> input) =>
-      RoleOutput(vars: {'zones': _literals(input)});
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    const option = ClockRole.hoursOption;
+    final values = option.allowed!;
+    final given = context.option(option.name);
+    if (given != null) return given;
+    final environment = context.environment;
+    if (!environment.interactive) return values.first;
+    return environment.prompter.select(
+      'How many hours does the clock show?',
+      values,
+      defaultValue: values.first,
+    );
+  }
+
+  @override
+  Map<String, String> optionsOf(Object? choice) =>
+      {ClockRole.hoursOption.name: choice! as String};
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) => RoleOutput(
+        vars: {
+          'zones': _literals(input),
+          'clock_hours': clockRole.hoursIn(input),
+        },
+      );
 }
 
 /// A role of a third-party package with the same data type as [ClockRole]:
@@ -150,6 +212,10 @@ final class FakeClockBadgeModule extends SmfModule {
 /// `clockZone<n>`, and gives the brick of the module the constants, with the
 /// imports of their files. A brick has the same files in every app, so only
 /// the render hook can generate as many files as the app has zones.
+///
+/// It also gives the brick the code of `Clock.hourOf` for the hours that
+/// the role chose, so the clock of an app has the code of its own hours
+/// only.
 final class _FakeClockProvider extends RoleProvider<String> {
   const _FakeClockProvider();
 
@@ -164,6 +230,10 @@ final class _FakeClockProvider extends RoleProvider<String> {
     ];
     return RoleOutput(
       vars: {
+        'hour_of': switch (clockRole.hoursIn(input)) {
+          12 => '(time.hour + 11) % 12 + 1',
+          _ => 'time.hour',
+        },
         'zone_constants': Fragment(
           [for (final zone in zones) 'clockZone${zone.number}'].join(', '),
           imports: [
@@ -188,6 +258,10 @@ final class _FakeClockProvider extends RoleProvider<String> {
 /// symbols only under `when` or, in its brick, under the presence flag
 /// `{{#has_badge}}` or as the value of a variable for an app with the
 /// clock.
+///
+/// It has no render hook, so it cannot know the hours that the clock role
+/// chose when the app is generated. Its code for an app with the clock
+/// reads the constant of the role and branches on it when the app runs.
 final class FakeClockUserModule extends SmfModule {
   /// Creates the module.
   const FakeClockUserModule();
@@ -217,6 +291,21 @@ final class FakeClockUserModule extends SmfModule {
                 imports: [ClockRole.createClock.importRef],
               ),
               absent: 'const <String>[]',
+            ),
+            // The same code for a clock of 24 hours and for one of 12.
+            'clock_hour': RoleVar(
+              clockRole,
+              present: Fragment(
+                'clockHours == 12 '
+                r"? '${createClock().hourOf(time)} "
+                r"${time.hour < 12 ? 'AM' : 'PM'}' "
+                r": '${createClock().hourOf(time)}:00'",
+                imports: [
+                  ClockRole.createClock.importRef,
+                  ClockRole.clockImport,
+                ],
+              ),
+              absent: r"'${time.hour}:00'",
             ),
           },
         ),

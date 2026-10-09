@@ -335,7 +335,47 @@ final class RoleOption {
     required this.help,
     this.valueHelp,
     this.allowed,
-  });
+  }) : isMode = false;
+
+  /// Creates the mode option `--<name>`, which takes one of [values].
+  ///
+  /// With it a role states that each value makes another app, as an app
+  /// that every user signs in to is another app than one that lets a guest
+  /// in:
+  /// - The code of the app depends on the value. The template of the role
+  ///   and its providers read the choice in their render hooks (see
+  ///   [RoleHookInput.choice]). A module that is no provider has no hook
+  ///   and its contributions are the same for every value, so the template
+  ///   writes the value into a file of the role as a constant, and the code
+  ///   of such a module branches on it when the app runs.
+  /// - The first of [values] is the default, the value of an app that got
+  ///   none. [RoleTemplate.choose] chooses the value that the option gives,
+  ///   and the first one when the option is not given: in a run without a
+  ///   terminal, where it neither fails nor asks for the lack of the
+  ///   option, and at its question, where a user who presses Enter gets it
+  ///   too. So no run needs the option, and a script written before the
+  ///   role had it generates the same app.
+  /// - [RoleTemplate.optionsOf] gives the option with its value for every
+  ///   choice, also for one that the template made without asking.
+  /// - The choices of the role compare by value, and with the same options
+  ///   the role makes the same choice in a terminal and in a run without
+  ///   one, so that what a test renders is what `smf create` generates.
+  /// - Every value gets apps in the tests. The contract test harness
+  ///   builds an app of each provider of the role for each value after the
+  ///   first, besides the apps with the first. It makes the choices of each
+  ///   such app in a terminal and without one, and reports a template that
+  ///   does not hold to the statements above.
+  ///
+  /// A mode has at least two [values], each of lower-case letters and
+  /// digits with single hyphens between them, as they become part of the
+  /// names of those apps.
+  const RoleOption.mode({
+    required this.name,
+    required this.help,
+    required List<String> values,
+  })  : allowed = values,
+        valueHelp = null,
+        isMode = true;
 
   /// The name of the option without dashes, in lower kebab-case, such as
   /// `start`.
@@ -349,8 +389,13 @@ final class RoleOption {
   /// The placeholder of the value in `--help`, such as `path`.
   final String? valueHelp;
 
-  /// The allowed values, or `null` to allow any.
+  /// The allowed values, or `null` to allow any; the values of a mode
+  /// option, the default first.
   final List<String>? allowed;
+
+  /// Whether the option is a mode of the app, whose values each get apps in
+  /// the tests; see [RoleOption.mode].
+  final bool isMode;
 }
 
 /// What a role guarantees to the rest of the app: the files its template

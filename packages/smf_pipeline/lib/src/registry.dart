@@ -83,8 +83,8 @@ final class ModuleRegistry {
   /// empty list.
   ///
   /// It checks the names that become Dart identifiers, tags and options,
-  /// the dependencies between modules, the rules of module kinds, the
-  /// variants, and the sockets.
+  /// the values of the mode options, the dependencies between modules, the
+  /// rules of module kinds, the variants, and the sockets.
   static List<String> problemsOf(List<SmfModule> modules) {
     final roles = rolesOf(modules);
     return [
@@ -458,6 +458,7 @@ List<String> _optionProblems(List<Role> roles) {
     for (final option in role.options) {
       final name = option.name;
       problems.addAll(_optionNameProblems(name, role));
+      if (option.isMode) problems.addAll(_modeProblems(option, role));
       if (role.template == null) {
         problems.add(
           'The $role has the option --$name but no template, whose '
@@ -470,6 +471,43 @@ List<String> _optionProblems(List<Role> roles) {
           'The $other and the $role both have the option --$name.',
         );
       }
+    }
+  }
+  return problems;
+}
+
+/// A value of a mode option: lower-case letters and digits with single
+/// hyphens between them, such as `guest`, `sign-in` or `24`.
+final RegExp _modeValue = RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$');
+
+/// The problems of the values of [option], a mode option of [role] (see
+/// [RoleOption.mode]): it must have at least two, each of them once, and
+/// each of lower-case letters and digits with single hyphens between them,
+/// since the values name the apps that the tests build for them.
+List<String> _modeProblems(RoleOption option, Role role) {
+  final values = option.allowed!;
+  final mode = 'mode option --${option.name} of the $role';
+  final problems = <String>[];
+  if (values.length < 2) {
+    problems.add(
+      'The $mode has '
+      '${values.isEmpty ? 'no value' : 'one value, ${values.single}'}: a '
+      'mode has at least two values, the first of them the default.',
+    );
+  }
+  final seen = <String>{};
+  final repeated = <String>{};
+  for (final value in values) {
+    if (!seen.add(value) && repeated.add(value)) {
+      problems.add('The $mode has the value $value twice.');
+    }
+  }
+  for (final value in seen) {
+    if (!_modeValue.hasMatch(value)) {
+      problems.add(
+        'The value "$value" of the $mode is not of lower-case letters and '
+        'digits with single hyphens between them.',
+      );
     }
   }
   return problems;

@@ -835,10 +835,18 @@ import 'package:flutter/foundation.dart';
 abstract interface class Clock {
   /// The time zones the modules of the app asked for.
   List<String> get zones;
+
+  /// The hour of [time] on the clock: from 0 to 23, or from 1 to 12 on a
+  /// clock of 12 hours (see [clockHours]).
+  int hourOf(DateTime time);
 }
 
 /// The time zones the modules of the app asked for.
 const clockZones = <String>['Europe/Kyiv\'s zone'];
+
+/// How many hours the clock of the app shows, 24 or 12: the value of
+/// `--clock-hours` that the app was generated with.
+const clockHours = 24;
 
 /// Runs the ticks of the modules of the app.
 void tick() {
@@ -858,11 +866,16 @@ final class _FixedClock implements Clock {
   // Each zone is a constant of a file of its own.
   @override
   List<String> get zones => const [clockZone1];
+
+  // The code for the hours of the clock of this app.
+  @override
+  int hourOf(DateTime time) => time.hour;
 }
 === lib/core/clock/zones/zone_1.dart (fake_clock_badge) ===
 /// A time zone that a module of the app asked for (fixture).
 const clockZone1 = 'Europe/Kyiv\'s zone';
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+import 'package:fixture_app/core/clock/clock.dart';
 import 'package:fixture_app/core/clock/clock_factory.dart';
 
 import '../badge/badge_factory.dart';
@@ -876,6 +889,13 @@ String clockUserText() {
 /// The time zones that the clock user shows: those of the clock when the
 /// app has one.
 List<String> clockUserZones() => createClock().zones;
+
+/// The hour of [time] as the clock user shows it: the hour on the clock of
+/// the app, with AM or PM after it on a clock of 12 hours. Without a clock,
+/// the hour of [time] itself.
+String clockUserHour(DateTime time) => clockHours == 12
+    ? '${createClock().hourOf(time)} ${time.hour < 12 ? 'AM' : 'PM'}'
+    : '${createClock().hourOf(time)}:00';
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 

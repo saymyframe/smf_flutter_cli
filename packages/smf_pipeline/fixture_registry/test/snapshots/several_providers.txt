@@ -87,10 +87,10 @@ With `get_it`:
 
 ## Onboarding
 
-- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
+- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on, or the `redirectTo` of another guard while that one does not allow.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
 - The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
-- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Nothing else shows the onboarding again: call `restart()` where the user asks to see it, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
 
 ## Preferences
@@ -118,7 +118,8 @@ With `shared_preferences`:
 
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
 - To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does: it shows the `redirectTo` while the value is `false`, and brings the user back to where they were once it is `true`.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`.
 
 With `go_router`:
 
@@ -2551,6 +2552,13 @@ abstract interface class AppNavigator {
 /// router shows the location that the user last asked for, or the one that
 /// the guard took the user from, or else the screen that the app starts
 /// on.
+///
+/// The routes of its flow show only while it does not allow, or while
+/// another guard with the same flow does not. At any other time the router
+/// shows the screen that the app starts on in place of a location of the
+/// flow (see [flowIsOver]), or the target of another guard while that one
+/// does not allow. So the code of the app changes what [allows] reads and
+/// never navigates into the flow.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -2573,6 +2581,7 @@ final class RouteGuard {
 
   /// The full names of the routes that the user may see while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
+  /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
 }
 
@@ -2593,12 +2602,30 @@ final List<RouteGuard> routeGuards = [
 /// no route of a module, such as the error screen of the router. The first
 /// guard that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow.
+///
+/// A route that the guards let the user see may still be in a flow that is
+/// over, in place of which the router shows the screen that the app starts
+/// on; see [flowIsOver].
 AppLocation? redirectOf(String? routeName) {
   for (final guard in routeGuards) {
     if (guard.allows.value) continue;
     return guard.flow.contains(routeName) ? null : guard.redirectTo;
   }
   return null;
+}
+
+/// Whether the route [routeName] is in the flow of a guard and every guard
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [redirectOf]).
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, which is in no flow. Two guards with one target
+/// have one flow, which is over once both allow.
+bool flowIsOver(String? routeName) {
+  final guards = routeGuards.where((guard) => guard.flow.contains(routeName));
+  return guards.isNotEmpty && guards.every((guard) => guard.allows.value);
 }
 
 /// Notifies its listeners when a guard starts or stops allowing, so that
@@ -2633,11 +2660,10 @@ final class GuardedNavigation<L> {
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
-  /// Whether each guard allowed when the router last told of its pages.
-  List<bool> _allowed = _allowedNow();
-
   /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it; see [redirectOf].
+  /// full name [route], or `null` to show it: the target of the guard that
+  /// keeps the user from it (see [redirectOf]), or [start] for a location in a
+  /// flow that is over (see [flowIsOver]).
   ///
   /// The router asks before it shows a location: the one the app starts
   /// on, each one that `go()`, `push()` or `replace()` is asked to show,
@@ -2648,7 +2674,7 @@ final class GuardedNavigation<L> {
   /// allows, its flow is over.
   ({L location})? asked(String? route, L location) {
     final target = redirectOf(route);
-    if (target == null) return null;
+    if (target == null) return flowIsOver(route) ? (location: start) : null;
     if (!_inAFlow(route)) _remembered = (route: route, location: location);
     return (location: locationOf(target));
   }
@@ -2667,14 +2693,12 @@ final class GuardedNavigation<L> {
   ///   already or it is in the flow of a guard;
   /// - the remembered location, once the guards allow it, which is then
   ///   forgotten;
-  /// - [start], when a guard started allowing while a page of its flow is
-  ///   on top, every guard allows and nothing is remembered: its flow is
-  ///   over.
+  /// - [start], when the page on top is in a flow that is over (see
+  ///   [flowIsOver]): its guard started allowing while the flow was shown, and
+  ///   nothing is remembered.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
-    final before = _allowed;
-    _allowed = _allowedNow();
     for (final page in pages) {
       final target = redirectOf(page.route);
       if (target == null) continue;
@@ -2692,19 +2716,8 @@ final class GuardedNavigation<L> {
       _remembered = null;
       return (location: remembered.location);
     }
-    final top = pages.firstOrNull?.route;
-    for (final (index, guard) in routeGuards.indexed) {
-      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
-        return _allowed.contains(false) ? null : (location: start);
-      }
-    }
-    return null;
+    return flowIsOver(pages.firstOrNull?.route) ? (location: start) : null;
   }
-
-  /// Whether each guard allows now, in the order of [routeGuards].
-  static List<bool> _allowedNow() => [
-    for (final guard in routeGuards) guard.allows.value,
-  ];
 
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
@@ -2804,9 +2817,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   ///
   /// go_router asks them about every location that it parses, in its
   /// `redirect`: the one the app starts on, those of [go] and those of the
-  /// platform, and goes to the location that they answer. [push] and
-  /// [replace] ask them before they hand a location to go_router, which
-  /// would put the target of the guard on top of the stack.
+  /// platform, and goes to the location that they answer. That is the
+  /// target of the guard that keeps the user from the location, or `/` for
+  /// a location in a flow that is over. [push] and [replace] ask them
+  /// before they hand a location to go_router, which would put that answer
+  /// on top of the stack: they go to it instead.
   final GuardedNavigation<String> _guards = GuardedNavigation(
     start: '/',
     locationOf: (location) => location.path,
@@ -2837,8 +2852,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   /// Tells the guards of the pages of the router when one of them starts
   /// or stops allowing, and goes to the location that they answer: the
-  /// target of the guard that keeps the user from one of the pages, or the
-  /// location that the user comes back to once the guards allow it.
+  /// target of the guard that keeps the user from one of the pages, the
+  /// location that the user comes back to once the guards allow it, or `/`
+  /// when the page on top is in a flow that is over.
   ///
   /// The pages of the router are those that pushes showed, the one on top
   /// first, and, below them, the location that go_router went to last. A
@@ -2848,13 +2864,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// about the location below the pushed pages.
   void _guardsChanged() {
     final configuration = config.routerDelegate.currentConfiguration;
-    // Before its first location, the router has no page to tell of. The
-    // guards still take note of what they allow, so that a notification
-    // without a change does not look like one later.
-    if (configuration.isEmpty && !configuration.isError) {
-      _guards.changed(const []);
-      return;
-    }
+    // Before its first location, the router has no page to tell the
+    // guards of, and no stack that an answer of theirs could take the
+    // place of: it asks them about that location when it shows it.
+    if (configuration.isEmpty && !configuration.isError) return;
     final below = config.configuration.findMatch(configuration.uri);
     final shown = _guards.changed([
       for (final page in _pushedPages(configuration.matches).toList().reversed)
@@ -4733,10 +4746,10 @@ import 'onboarding_status.dart';
 /// onboarding is not finished, and then the screen that the app starts on.
 /// The next launches of the app start there.
 ///
-/// When something shows the screen although the onboarding is finished,
-/// such as a link to its route, the onboarding starts again, as
-/// [OnboardingStatus.restart] has it: Skip and the last button then leave
-/// the screen.
+/// A navigation to the route of the screen once the onboarding is
+/// finished, such as a link, shows the screen that the app starts on too,
+/// or the target of another guard of the app while that one does not
+/// allow. Only [OnboardingStatus.restart] shows the onboarding again.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
   const OnboardingScreen({super.key});
@@ -4750,21 +4763,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// The index of the page that the user sees.
   var _page = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // The router shows the screen while the onboarding is not finished.
-    // Shown although it is finished, the screen starts the onboarding
-    // again, so that the router leaves the screen once Skip or the last
-    // button finishes it. The router acts on that at once, which it must
-    // not do while a frame is built.
-    if (onboardingStatus.completed.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) onboardingStatus.restart();
-      });
-    }
-  }
 
   @override
   void dispose() {
