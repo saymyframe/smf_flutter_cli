@@ -28,8 +28,11 @@ final class RoutesData implements DataWithTexts {
 
   /// The guards of the module; see [RouteGuard].
   ///
-  /// The app asks the guards of all modules by their [RouteGuard.stage],
-  /// and those of one stage in the order of the modules and of this list.
+  /// The app asks the gates of all modules first, the guards without a
+  /// [RouteGuard.condition], and then the guards that stand for a
+  /// condition. It asks the guards of each kind by their
+  /// [RouteGuard.stage], and those of one stage in the order of the modules
+  /// and of this list.
   final List<RouteGuard> guards;
 
   /// The texts of the routes that a user sees: the labels of their
@@ -41,9 +44,11 @@ final class RoutesData implements DataWithTexts {
       ];
 }
 
-/// When the app asks a guard of the routes among its guards: it asks the
-/// guards of an earlier stage first, whatever the order of their modules,
-/// and the first guard that does not allow decides (see [RouteGuard]).
+/// When the app asks a guard of the routes among the guards of its kind,
+/// the gates or the guards of conditions (see [RouteGuard.condition]): it
+/// asks the guards of an earlier stage first, whatever the order of their
+/// modules, and the first guard that does not allow decides (see
+/// [RouteGuard]).
 ///
 /// The stages come in the order of a first launch: the user goes through
 /// the flow of a [welcome] guard, and once that guard allows, through the
@@ -69,11 +74,61 @@ enum GuardStage {
   identity,
 }
 
-/// A gate over the whole app: a condition without which the user sees a
-/// route of the module in place of every other screen of the app, such as
-/// the onboarding until the user went through it.
+/// Something that a user needs for some routes of the app only, such as an
+/// account for an account screen, as a role names it.
 ///
-/// While the guard does not allow, the router shows the route [redirectTo]
+/// The role that knows what the condition is publishes it as a constant of
+/// its class, such as `static const account = RouteCondition(authRole,
+/// 'account')`. Two modules then meet through the role, and neither knows
+/// the other:
+/// - a feature asks for the condition on a route ([Route.conditions]). It
+///   lists the role among its roles, and knows no module with a guard;
+/// - a module that requires or provides the role stands for the condition
+///   with a guard ([RouteGuard.condition]). The function of the guard says
+///   whether the condition holds, and its target is the route that the
+///   router shows in place of a route that asks for it until it does.
+///
+/// An app may have no guard that stands for a condition: it lacks the role,
+/// or it has no module with such a guard. The routes that ask for the
+/// condition then show like any other, and the router role reports
+/// nothing. Whether such an app is worth a warning is up to the role of
+/// the condition, whose hooks see the guards of the app if it requires or
+/// uses the router role ([RouterFacade.guardFor]).
+@immutable
+final class RouteCondition {
+  /// Creates the condition [name] of [role].
+  const RouteCondition(this.role, this.name);
+
+  /// The role that publishes the condition.
+  final Role role;
+
+  /// The name of the condition in its role, a lowerCamelCase word such as
+  /// `account`; messages name the condition `<role id>.<name>`.
+  final String name;
+
+  /// Two conditions are the same if they have one role and one name.
+  @override
+  bool operator ==(Object other) =>
+      other is RouteCondition &&
+      identical(other.role, role) &&
+      other.name == name;
+
+  @override
+  int get hashCode => Object.hash(role, name);
+
+  @override
+  String toString() => '${role.id}.$name';
+}
+
+/// Something that the user needs before the app shows some of its screens,
+/// with a route of the module to show until then. A guard without a
+/// [condition] is a gate over the whole app: until it allows, the user sees
+/// a route of the module in place of every other screen of the app, such as
+/// the onboarding until the user went through it. A guard with a
+/// [condition] keeps the user only from the routes that ask for that
+/// condition; see below.
+///
+/// While a gate does not allow, the router shows the route [redirectTo]
 /// of the module, the target of the guard, in place of every location
 /// outside its flow: the target and the routes below it. That holds for the
 /// location the app starts on, for every location that `go()`, `push()` or
@@ -92,8 +147,9 @@ enum GuardStage {
 /// on in place of a location of the flow, or the target of another guard
 /// while that one does not allow, whether `go()`, `push()`, `replace()` or
 /// the platform asks for it, and such a `push()` completes with `null`. So
-/// no code navigates into a flow, the module of the guard included: it
-/// changes what the guard reads, and the router shows the target.
+/// no code navigates into the flow of a gate, the module of the guard
+/// included: it changes what the guard reads, and the router shows the
+/// target.
 ///
 /// A guard may stop allowing while the app runs, by what the screens of
 /// its own module do too: the router then shows its target in place of the
@@ -109,16 +165,41 @@ enum GuardStage {
 /// location that is asked for after that, while the guard does not allow,
 /// once the guards allow.
 ///
-/// A guard keeps the user from every route outside its flow. A condition
-/// that only some routes ask for, such as a paid screen, is not a guard:
-/// the role has nothing for it.
+/// A guard with a [condition] keeps the user from the routes that ask for
+/// the condition ([Route.conditions]), of whichever module, and from no
+/// other: a screen for users with an account is such a route, and the
+/// rest of the app shows to a user without one. While the condition does
+/// not hold, the router answers for such a route as it does for a gate. It
+/// shows the target of the guard in place of the whole stack, whichever of
+/// `go()`, `push()`, `replace()` and the platform asked for the route, and
+/// such a `push()` completes with `null`. It remembers the location, and
+/// shows it in place of the stack once the guards allow it. So the target
+/// has no page below it to go back to, and neither has the location that
+/// was asked for once the router shows it. The router also remembers the
+/// location while the user is elsewhere: it shows it once the condition
+/// holds, unless a later location that a guard kept the user from took
+/// its place or a guard with [resumes] `false` stopped allowing.
 ///
-/// The app asks the guards of all modules by their [stage], those of an
-/// earlier stage first, whatever the order of the modules: the guard of an
-/// onboarding comes before the guard of a sign-in. It asks the guards of
-/// one stage in the order of the modules and of [RoutesData.guards]. The
-/// first guard that does not allow decides, and no later one is asked, so
-/// the flows of the guards show one after another.
+/// The flow of such a guard is its target and the routes below it too, and
+/// it is over once the guard allows. Until then every route shows that
+/// does not ask for the condition, the routes of the flow among them: a
+/// module may navigate to the target of its guard while the condition does
+/// not hold, as to a sign-in screen that a guest opens. A guard with a
+/// condition may show the target of a gate of its module. The two then
+/// have one flow, which is over only once both allow: the screens of a
+/// sign-in whose gate lets everyone in still show while its guard of an
+/// account does not allow.
+///
+/// The app asks its gates first: those of all modules by their [stage],
+/// the gates of an earlier stage first, whatever the order of the modules,
+/// so the guard of an onboarding comes before the guard of a sign-in. It
+/// asks the gates of one stage in the order of the modules and of
+/// [RoutesData.guards]. The first gate that does not allow decides, for
+/// every route, and no later guard is asked, so the flows of the gates
+/// show one after another. Only when every gate allows does the app ask
+/// the guards with a condition, in the same order among themselves: for a
+/// route, the first one whose condition the route asks for and that does
+/// not allow decides.
 ///
 /// ```dart
 /// RoutesData(
@@ -139,13 +220,16 @@ enum GuardStage {
 @immutable
 final class RouteGuard {
   /// Creates the guard [name] of the stage [stage], which shows the route
-  /// [redirectTo] of its module until [allows] says otherwise.
+  /// [redirectTo] of its module until [allows] says otherwise: in place of
+  /// every other screen of the app, or, with a [condition], in place of
+  /// the routes that ask for it.
   const RouteGuard({
     required this.name,
     required this.allows,
     required this.redirectTo,
     required this.stage,
     this.resumes = true,
+    this.condition,
   });
 
   /// The name of the guard in its module, a lowerCamelCase identifier such
@@ -175,11 +259,13 @@ final class RouteGuard {
   /// guard does not allow, such as `intro`: its target.
   ///
   /// It is a top-level route that needs no values and is outside the main
-  /// navigation. Neither it nor a route below it can start the app.
+  /// navigation. Neither it nor a route below it can start the app, and
+  /// none of them asks for a condition.
   final String redirectTo;
 
-  /// When the app asks the guard among its guards: before every guard of a
-  /// later stage, whichever module declares it; see [GuardStage].
+  /// When the app asks the guard among the guards of its kind, the gates
+  /// or the guards with a [condition]: before every one of a later stage,
+  /// whichever module declares it; see [GuardStage].
   final GuardStage stage;
 
   /// Whether the router brings the user back to the location that the
@@ -203,7 +289,22 @@ final class RouteGuard {
   /// again without the router looking in between, as one that does not
   /// notify when [allows] changes, is not seen to stop: the router forgets
   /// nothing then.
+  ///
+  /// It holds for a guard with a [condition] as for a gate: such a guard
+  /// stops whichever page the user is on, and the router then forgets what
+  /// it remembered.
   final bool resumes;
+
+  /// The condition that the guard stands for, or `null` for a gate, which
+  /// keeps the user from every route outside its flow.
+  ///
+  /// With a condition, the guard keeps the user only from the routes of
+  /// the app that ask for it ([Route.conditions]), and [allows] says
+  /// whether the condition holds. The module requires or provides the role
+  /// of the condition, and an app has one guard for a condition: a module
+  /// declares one at most, and two modules with one each cannot be in one
+  /// app.
+  final RouteCondition? condition;
 
   @override
   String toString() => 'guard $name';
@@ -226,6 +327,7 @@ final class Route {
     this.children = const [],
     this.destination,
     this.startCandidate = false,
+    this.conditions = const [],
   });
 
   /// The path of the route relative to its parent.
@@ -272,8 +374,24 @@ final class Route {
   final Destination? destination;
 
   /// Whether the app can start on this route; see the `--start` option of
-  /// the router. Such a route takes no required parameters.
+  /// the router. Such a route takes no required parameters and asks for no
+  /// condition.
   final bool startCandidate;
+
+  /// What a user needs for this route and for the routes below it, each a
+  /// condition of a role that the module requires, uses or provides, such
+  /// as an account; see [RouteCondition].
+  ///
+  /// While a condition does not hold, the router shows the target of the
+  /// guard that stands for it in the app in place of the route (see
+  /// [RouteGuard.condition]). In an app without such a guard, the route
+  /// shows like any other.
+  ///
+  /// Every user gets to the main navigation, to the screen that the app
+  /// starts on and to the flow of a guard, so a route that asks for a
+  /// condition is none of these: it is no destination and below none, no
+  /// start candidate, and outside the flows of the guards of the module.
+  final List<RouteCondition> conditions;
 }
 
 /// Where the value of a [RouteParam] comes from.

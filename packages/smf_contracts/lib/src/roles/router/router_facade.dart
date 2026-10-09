@@ -74,17 +74,45 @@ final class RouterFacade {
   List<FacadeRoute> get routes =>
       [for (final feature in features) ...feature.allRoutes];
 
-  /// The guards of the app, in the order the app asks them: by their
+  /// The guards of the app, in the order the app asks them: the gates, and
+  /// then the guards that stand for a condition (see
+  /// [RouteGuard.condition]); those of each kind by their
   /// [RouteGuard.stage], and those of one stage in the order of the
   /// features and of their guards; see [FacadeFeature.guards].
   ///
-  /// So the guards of an earlier stage come first, whatever the order of
-  /// the modules: the guard of an onboarding before that of a sign-in.
+  /// So a gate that does not allow always decides, also before a guard of
+  /// a condition of an earlier stage. And among the guards of one kind,
+  /// those of an earlier stage come first, whatever the order of the
+  /// modules: the guard of an onboarding before that of a sign-in.
   List<FacadeGuard> get guards => [
-        for (final stage in GuardStage.values)
-          for (final feature in features)
-            for (final guard in feature.guards)
-              if (guard.guard.stage == stage) guard,
+        for (final isGate in const [true, false])
+          for (final stage in GuardStage.values)
+            for (final feature in features)
+              for (final guard in feature.guards)
+                if (guard.isGate == isGate && guard.guard.stage == stage) guard,
+      ];
+
+  /// The guard that stands for [condition] in the app, the first of
+  /// [guards] with that [RouteGuard.condition], or `null` if no module of
+  /// the app has one: the routes that ask for the condition then show like
+  /// any other.
+  ///
+  /// An app has one guard for a condition. The module rule `router.guards`
+  /// reports a second one of a module, and the template of the role one of
+  /// another module.
+  FacadeGuard? guardFor(RouteCondition condition) {
+    for (final guard in guards) {
+      if (guard.guard.condition == condition) return guard;
+    }
+    return null;
+  }
+
+  /// The routes of the app that ask for [condition], in the order of
+  /// [routes]: those that list it among their [Route.conditions], and the
+  /// routes below them.
+  List<FacadeRoute> routesAsking(RouteCondition condition) => [
+        for (final route in routes)
+          if (route.conditions.contains(condition)) route,
       ];
 
   /// The top-level routes that are destinations of the main navigation, in
@@ -276,6 +304,11 @@ final class FacadeGuard {
   /// The full name of the guard, such as `intro.firstRun`.
   String get fullName => '${feature.module}.${guard.name}';
 
+  /// Whether the guard is a gate, which keeps the user from every route
+  /// outside its [flow]: it stands for no condition that only some routes
+  /// ask for ([RouteGuard.condition]).
+  bool get isGate => guard.condition == null;
+
   /// The routes that the user may see while the guard does not allow:
   /// [target] and the routes below it, parents first.
   List<FacadeRoute> get flow => target.withDescendants;
@@ -338,6 +371,11 @@ final class FacadeRoute {
   /// The top-level route of [chain]; its destination, if any, is the branch
   /// of the main navigation this route is in.
   FacadeRoute get topLevel => parent?.topLevel ?? this;
+
+  /// The conditions that the route asks for: those of the routes of
+  /// [chain], the parents' first, each once; see [Route.conditions].
+  Set<RouteCondition> get conditions =>
+      {for (final route in chain) ...route.route.conditions};
 
   /// This route followed by all routes below it, parents first.
   List<FacadeRoute> get withDescendants =>

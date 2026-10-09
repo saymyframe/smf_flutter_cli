@@ -64,18 +64,23 @@ const routerRole = RouterRole._();
 /// - creates `config` once.
 ///
 /// A module may keep the user from the rest of the app until a condition
-/// holds, with the guards of its [RoutesData.guards] (see [RouteGuard]). In
-/// an app whose modules declare guards, the role's template also generates
+/// holds, with the guards of its [RoutesData.guards] (see [RouteGuard]): a
+/// guard is a gate over the whole app, unless it stands for a condition
+/// that only some routes ask for ([RouteCondition]), from which alone it
+/// then keeps the user. A role publishes such a condition, a feature asks
+/// for it on its routes ([Route.conditions]), and a module with the role
+/// declares the guard, so neither module knows the other. In an app whose
+/// modules declare guards, the role's template also generates
 /// [routeGuards], [redirectOf], [flowIsOver], [guardChanges] and
 /// [guardedNavigation] in `app_router.dart`. The provider asks the guards
 /// through them about every location before it shows it, and tells them of
 /// its pages when one of them changes, as [guardedNavigation] says. In the
 /// guide for coding agents of such an app, the template tells where the
-/// guards are and in which order the router asks them, how the code of the
-/// app adds one and changes what it allows, that the router navigates when
-/// it does, where the user comes to once a guard allows again, and that no
-/// code navigates into the flow of a guard. An app without guards gets
-/// none of this.
+/// guards are and in which order the router asks them, what tells a gate
+/// from a guard of some routes, how the code of the app adds one and
+/// changes what it allows, that the router navigates when it does, where
+/// the user comes to once a guard allows again, and that no code navigates
+/// into the flow of a gate. An app without guards gets none of this.
 ///
 /// When the role is present, the provider of the [AppEntryRole] builds the
 /// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
@@ -103,11 +108,12 @@ final class RouterRole extends Role<RoutesData> {
   /// The name of the list of the guards of an app with guards, which the
   /// role's template generates in [appRouterFile], as
   /// `final List<RouteGuard> routeGuards`: the guards of
-  /// [RouterFacade.guards], in the order the app asks them. That is by
-  /// their stages (see [GuardStage]), whatever the order of the modules,
-  /// and for the guards of one stage, in the order of the modules and of
-  /// their [RoutesData.guards]. The app has nothing else of the stage of a
-  /// guard.
+  /// [RouterFacade.guards], in the order the app asks them. The gates come
+  /// first, and then the guards that stand for a condition. Those of each
+  /// kind come by their stages (see [GuardStage]), whatever the order of
+  /// the modules, and for the guards of one stage, in the order of the
+  /// modules and of their [RoutesData.guards]. The app has nothing else of
+  /// the stage of a guard.
   ///
   /// Each is a `RouteGuard` of the app, a class of the same file:
   /// - `name`, the full name of the guard (see [FacadeGuard.fullName]);
@@ -118,7 +124,12 @@ final class RouterRole extends Role<RoutesData> {
   ///   [FacadeGuard.flow]);
   /// - `resumes`, whether the router brings the user back to where they
   ///   were once the guard allows again (see [RouteGuard.resumes]): `true`
-  ///   unless the list says otherwise.
+  ///   unless the list says otherwise;
+  /// - `routes`, for a guard that stands for a condition, the full names of
+  ///   the routes of the app that ask for it
+  ///   ([RouterFacade.routesAsking]), which may be none; and `null` for a
+  ///   gate, for which the list leaves it out. The app has nothing else of
+  ///   a condition.
   static const routeGuards = 'routeGuards';
 
   /// The name of the function that says what the guards show in place of a
@@ -133,15 +144,18 @@ final class RouterRole extends Role<RoutesData> {
   /// the fallback screen of the app entry.
   ///
   /// It returns the location to show instead, or `null` if the guards let
-  /// the user see the route: the target of the first guard of [routeGuards]
-  /// that does not allow, unless the route is in the flow of that guard. No
-  /// guard after it is asked, so the answer for the routes of its flow is
-  /// always `null`.
+  /// the user see the route. That is the target of the first gate of
+  /// [routeGuards] that does not allow, unless the route is in the flow of
+  /// that gate. No guard after it is asked, so the answer for the routes of
+  /// its flow is always `null`: while a gate does not allow, it keeps the
+  /// user from every route outside its flow, of whichever module.
   ///
-  /// So a guard is a gate over the whole app: while it does not allow, it
-  /// keeps the user from every route outside its flow, of whichever
-  /// module. The role has nothing for a guard that only some routes ask
-  /// for, and what it says of the guards holds for gates only.
+  /// When every gate allows, the answer is the target of the first guard
+  /// with `routes` that does not allow and has the route among them: a
+  /// guard that stands for a condition keeps the user only from the routes
+  /// that ask for it, and from no location that is no route of a module.
+  /// The routes of its flow are none of them, so the answer for them is
+  /// `null` then too.
   ///
   /// The function only answers for the guards that do not allow. A route
   /// that they let the user see may be in a flow that is over, which
@@ -157,8 +171,11 @@ final class RouterRole extends Role<RoutesData> {
   /// returns whether the route is in the flow of a guard and every guard
   /// of [routeGuards] with that flow allows. Two guards of a module may
   /// show the same target and so have the same flow, which is over only
-  /// once both allow. A route outside every flow is in none, and neither
-  /// is a location that is no route of a module.
+  /// once both allow. That holds for a gate and a guard that stands for a
+  /// condition too: while the gate lets every user in and the condition
+  /// does not hold, the flow is not over, and its routes show like any
+  /// other. A route outside every flow is in none, and neither is a
+  /// location that is no route of a module.
   ///
   /// The routes of a flow show only while a guard with that flow does not
   /// allow. Once the flow is over, the router shows the screen that the
@@ -245,6 +262,13 @@ final class RouterRole extends Role<RoutesData> {
   ///   before: the user comes back to the latest location that they or the
   ///   platform asked for, such as a link that arrives while the flow of a
   ///   guard is shown.
+  /// - A guard that stands for a condition gets the answers of a gate, for
+  ///   the routes that ask for the condition. The target takes the whole
+  ///   stack, so the user cannot go back from it to the screen that they
+  ///   were on, and the location that was asked for takes the stack in turn
+  ///   once the guards allow it. No gate keeps the user in the flow then,
+  ///   so they may be on another screen when the condition comes to hold:
+  ///   `changed` answers the remembered location all the same.
   /// - For a location that the guards let the user see, `asked` answers
   ///   `/` when its flow is over, as [flowIsOver] tells, and `null`
   ///   otherwise. So the routes of a flow show only while a guard with
@@ -282,10 +306,14 @@ final class RouterRole extends Role<RoutesData> {
   ///   Nothing else makes it forget one.
   /// - It never remembers a location in the flow of a guard, of whichever
   ///   guard: once that guard allows, its flow is over.
-  /// - With no such page and nothing remembered, `changed` answers `/` when
-  ///   the page on top is in a flow that is over. So the user leaves a flow
-  ///   whose guard started allowing for the screen that the app starts on,
-  ///   as when the platform opened the app on a location of the flow.
+  /// - With no such page and nothing remembered that the guards allow,
+  ///   `changed` answers `/` when the page on top is in a flow that is
+  ///   over. So the user leaves a flow whose guard started allowing for the
+  ///   screen that the app starts on, as when the platform opened the app
+  ///   on a location of the flow. That holds while a guard of a condition
+  ///   still keeps the user from the remembered location, which stays
+  ///   remembered: the app was opened on a route that asks for the
+  ///   condition, and the flow of a gate is over.
   /// - Otherwise `changed` answers `null`, as for a notification without a
   ///   change of what the guards allow.
   static const guardedNavigation = 'GuardedNavigation';
@@ -436,7 +464,10 @@ final class RouterRole extends Role<RoutesData> {
           id: 'router.routes',
           description: 'The routes of a module have valid paths, names, '
               'screens, parameters and destinations, and a router can reach '
-              'each of them.',
+              'each of them. A route asks only for conditions of the roles '
+              'of the module, and such a route is outside the main '
+              'navigation and the flows of the guards of the module, and '
+              'neither it nor a route below it is a start candidate.',
           check: _checkRoutes,
         ),
         ModuleRule(
@@ -444,7 +475,10 @@ final class RouterRole extends Role<RoutesData> {
           description: 'The guards of a module have valid names and '
               'functions of the app, and each shows a top-level route of '
               'the module that needs no values, is outside the main '
-              'navigation, and has no start candidate in its flow.',
+              'navigation, and has no start candidate in its flow. A guard '
+              'that stands for a condition is the only one of the module '
+              'for it, and the module requires or provides the role of the '
+              'condition.',
           check: _checkGuards,
         ),
         ModuleRule(

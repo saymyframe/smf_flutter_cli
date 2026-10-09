@@ -31,7 +31,10 @@ Fragment _guardsCode(RouterFacade facade) {
     ..writeln()
     ..writeln(
       '/// The guards of the routes of the app, in the order the app asks '
-      'them.',
+      'them:',
+    )
+    ..writeln(
+      '/// the gates first, and then the guards with [RouteGuard.routes].',
     )
     ..writeln('final List<RouteGuard> ${RouterRole.routeGuards} = [');
   for (final guard in guards) {
@@ -45,6 +48,13 @@ Fragment _guardsCode(RouterFacade facade) {
       ..writeln('    redirectTo: const ${guard.target.locationClass}(),')
       ..writeln('    flow: const {${flow.join(', ')}},');
     if (!guard.guard.resumes) buffer.writeln('    resumes: false,');
+    if (guard.guard.condition case final condition?) {
+      final routes = [
+        for (final route in facade.routesAsking(condition))
+          SmfNames.dartString(route.fullName),
+      ];
+      buffer.writeln('    routes: const {${routes.join(', ')}},');
+    }
     buffer.writeln('  ),');
   }
   buffer
@@ -59,21 +69,24 @@ Fragment _guardsCode(RouterFacade facade) {
 /// The class of a guard in the app.
 const _guardClass = '''
 
-/// A guard of the routes of the app: while it does not allow, the router
-/// shows its target in place of every location outside its flow.
+/// A guard of the routes of the app. Without [routes] it is a gate: while
+/// it does not allow, the router shows its target in place of every
+/// location outside its flow. With [routes] it keeps the user only from
+/// those routes, and the router shows every other route as it is.
 ///
-/// `go()`, `push()` and `replace()` of such a location show the target
-/// too, and `push()` completes with `null`. Once the guard allows, the
-/// router shows the location that the user last asked for, or the one that
-/// the guard took the user from if it [resumes], or else the screen that
-/// the app starts on.
+/// `go()`, `push()` and `replace()` of a location that the guard keeps the
+/// user from show the target too, in place of the whole stack, and `push()`
+/// completes with `null`. Once the guard allows, the router shows the
+/// location that the user last asked for, or the one that the guard took
+/// the user from if it [resumes], or else the screen that the app starts
+/// on.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
 /// flow (see [flowIsOver]), or the target of another guard while that one
 /// does not allow. So the code of the app changes what [allows] reads and
-/// never navigates into the flow.
+/// never navigates into the flow of a gate.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -82,13 +95,14 @@ final class RouteGuard {
     required this.redirectTo,
     required this.flow,
     this.resumes = true,
+    this.routes,
   });
 
   /// The full name of the guard: its module and its name there.
   final String name;
 
-  /// Whether the guard lets the user see the locations outside its [flow];
-  /// it notifies its listeners when that changes.
+  /// Whether the guard lets the user see the locations that it keeps them
+  /// from otherwise; it notifies its listeners when that changes.
   final ValueListenable<bool> allows;
 
   /// The target of the guard: the location that the router shows while the
@@ -110,6 +124,16 @@ final class RouteGuard {
   /// next user does after a sign-out, unless a location was asked for
   /// since the guard stopped, such as a link.
   final bool resumes;
+
+  /// The full names of the routes that the guard keeps the user from while
+  /// it does not allow, or `null` for a gate, which keeps the user from
+  /// every route outside its [flow].
+  ///
+  /// A guard with routes stands for something that only those routes need,
+  /// such as an account: every other route shows whatever the guard says.
+  /// None of its routes is in the [flow] of a guard. To ask for it on one
+  /// more route, add the full name of the route here.
+  final Set<String>? routes;
 }
 ''';
 
@@ -121,8 +145,10 @@ const _redirectOf = '''
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, such as the error screen of the router. The first
-/// guard that does not allow decides, and no guard after it is asked: it
-/// shows its target in place of every route outside its flow.
+/// gate that does not allow decides, and no guard after it is asked: it
+/// shows its target in place of every route outside its flow. When every
+/// gate allows, the first guard that has the route among its
+/// [RouteGuard.routes] and does not allow shows its target in its place.
 ///
 /// A route that the guards let the user see may still be in a flow that is
 /// over, in place of which the router shows the screen that the app starts
@@ -131,12 +157,15 @@ AppLocation? ${RouterRole.redirectOf}(String? routeName) =>
     _guardKeepingFrom(routeName)?.redirectTo;
 
 /// The guard that keeps the user from the route [routeName], or `null` if
-/// the guards let the user see it: the first guard that does not allow,
-/// unless the route is in its flow.
+/// the guards let the user see it: the first gate that does not allow,
+/// unless the route is in its flow, or else the first guard with
+/// [RouteGuard.routes] that does not allow and has the route among them.
 RouteGuard? _guardKeepingFrom(String? routeName) {
   for (final guard in ${RouterRole.routeGuards}) {
     if (guard.allows.value) continue;
-    return guard.flow.contains(routeName) ? null : guard;
+    final routes = guard.routes;
+    if (routes == null) return guard.flow.contains(routeName) ? null : guard;
+    if (routes.contains(routeName)) return guard;
   }
   return null;
 }
@@ -190,7 +219,9 @@ const _guardedNavigation = '''
 /// does, such as its URI. The router asks [asked] before it shows a
 /// location, and [changed] when [$_changes] notifies. It shows the
 /// location that either answers in place of its whole stack, as `go()` to
-/// it does. An answer is a record with the location, so that `null` is no
+/// it does, for a guard with [RouteGuard.routes] as for a gate: the user
+/// cannot go back from the target of such a guard to the screen that they
+/// were on. An answer is a record with the location, so that `null` is no
 /// answer also for a router whose [L] is nullable.
 final class $_navigation<L> {
   /// Creates the guards for a router whose location `/`, the screen that
@@ -233,6 +264,12 @@ final class $_navigation<L> {
   /// [RouteGuard.resumes]). A location in the flow of a guard is never
   /// remembered: once that guard allows, its flow is over.
   ///
+  /// That holds for a gate and for a guard with [RouteGuard.routes] alike.
+  /// A gate keeps the user in its flow, so the location is still what the
+  /// user waits for when the gate allows. A guard with routes keeps the
+  /// user from its routes only, so the user may be on another screen when
+  /// it allows: the remembered location is shown all the same.
+  ///
   /// Before that, what was remembered is forgotten if a guard that does
   /// not bring the user back stopped allowing, as [changed] says.
   ({L location})? asked(String? route, L location) {
@@ -271,7 +308,8 @@ final class $_navigation<L> {
   ///   forgotten;
   /// - [start], when the page on top is in a flow that is over (see
   ///   [$_over]): its guard started allowing while the flow was shown, and
-  ///   nothing is remembered.
+  ///   nothing is remembered, or a guard with [RouteGuard.routes] still
+  ///   keeps the user from what is.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
@@ -288,11 +326,15 @@ final class $_navigation<L> {
       }
       return (location: locationOf(guard.redirectTo));
     }
-    if (_remembered case final remembered?) {
-      if ($_ask(remembered.route) != null) return null;
+    if (_remembered case final remembered?
+        when $_ask(remembered.route) == null) {
       _remembered = null;
       return (location: remembered.location);
     }
+    // A guard may still keep the user from the remembered location. For a
+    // gate, the pages are those of its flow, which is not over. A guard
+    // with routes leaves the user where they are, and that may be a flow
+    // that is over.
     return $_over(pages.firstOrNull?.route) ? (location: start) : null;
   }
 
@@ -319,6 +361,7 @@ List<SmfIssue> _checkGuards(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
   final routes = [for (final data in input.data) ...data.value.routes];
   final names = <String>{};
+  final conditions = <RouteCondition>{};
   final problems = <String>[];
   for (final data in input.data) {
     for (final guard in data.value.guards) {
@@ -335,9 +378,52 @@ List<SmfIssue> _checkGuards(ModuleRuleInput<RoutesData> input) {
       problems
         ..addAll(_guardFunctionProblems(guard, label))
         ..addAll(_guardTargetProblems(guard, label, routes));
+      if (guard.condition case final condition?) {
+        problems.addAll(
+          _guardConditionProblems(
+            condition,
+            label,
+            input.module,
+            first: conditions.add(condition),
+          ),
+        );
+      }
     }
   }
   return [for (final problem in problems) SmfIssue(problem, origin: origin)];
+}
+
+/// The problems with [condition], which the guard of [label] of [module]
+/// stands for; [first] is whether no guard of the module before it stands
+/// for the same condition.
+///
+/// The function of the guard says whether the condition holds, which it
+/// reads from what the role of the condition has. So the module has that
+/// role in every app: it requires or provides it, and does not only use
+/// it. And a route that asks for the condition shows the target of one
+/// guard, so a module has one guard for a condition.
+List<String> _guardConditionProblems(
+  RouteCondition condition,
+  String label,
+  ModuleDescriptor module, {
+  required bool first,
+}) {
+  final role = condition.role;
+  final problems = <String>[];
+  if (!module.provides.contains(role) &&
+      !module.effectiveRequires.contains(role)) {
+    problems.add(
+      '$label stands for the condition $condition, but the module neither '
+      'requires nor provides the $role, whose condition it is.',
+    );
+  }
+  if (!first) {
+    problems.add(
+      'Two guards of the module stand for the condition $condition; an app '
+      'has one guard for a condition.',
+    );
+  }
+  return problems;
 }
 
 /// The problems with the function of [guard], the guard of [label]: it is
