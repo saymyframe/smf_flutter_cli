@@ -1059,6 +1059,72 @@ void main() {
       );
     });
 
+    test(
+        'shows the notice of a step under its command, and tells that a run '
+        'asks first', () async {
+      const configure = PostGenStepId(ModuleId('core'), 'configure');
+      const enable = PostGenStepId(ModuleId('auth'), 'enable');
+      final host = FakeHost(terminal: true);
+      final modules = [
+        scaffold(),
+        TestModule(
+          'core',
+          contributions: const [
+            PostGenStep(ToolRef('configure'), [], id: configure),
+          ],
+        ),
+        TestModule(
+          'auth',
+          dependsOn: {'core'},
+          contributions: const [
+            // It continues the step of core, and another continues it.
+            PostGenStep(
+              ToolRef('enable'),
+              ['methods'],
+              id: enable,
+              followUpOf: configure,
+              notice: 'The tool also registers a web app in the project.',
+              skippable: true,
+            ),
+            PostGenStep(ToolRef('verify'), [], followUpOf: enable),
+            // A step that continues no other.
+            PostGenStep(
+              ToolRef('report'),
+              [],
+              notice: 'It sends the names of the modules.',
+              skippable: true,
+            ),
+          ],
+        ),
+      ];
+
+      await pipeline(modules, host).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('auth')],
+          explain: true,
+        ),
+      );
+
+      expect(host.prompter.asked, isEmpty);
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'After generation\n'
+          '  configure (core)\n'
+          '    then enable methods (auth)\n'
+          '      The tool also registers a web app in the project.\n'
+          '      A run asks before it runs this step, and leaves it for later '
+          'when it cannot ask.\n'
+          '      then verify (auth)\n'
+          '  report (auth)\n'
+          '    It sends the names of the modules.\n'
+          '    A run asks before it runs this step, and leaves it for later '
+          'when it cannot ask.\n',
+        ),
+      );
+    });
+
     test('says when generation would stop', () async {
       final host = FakeHost(flutter: false);
       final modules = [

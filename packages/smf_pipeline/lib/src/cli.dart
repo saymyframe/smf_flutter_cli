@@ -241,9 +241,12 @@ final class _CreateCommand extends Command<int> {
       );
     }
     for (final step in app.skippedSteps) {
+      final notice = step.notice;
       logger.warn(
         '${step.description} is not done, because ${step.reason}. Run it '
-        'in the app: ${step.command}',
+        'in the app: ${step.command}'
+        // On a line of its own, since nothing else ends the command.
+        '${notice == null ? '' : '\n$notice'}',
       );
     }
     logger
