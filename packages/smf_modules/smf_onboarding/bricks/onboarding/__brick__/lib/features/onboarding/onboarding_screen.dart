@@ -16,10 +16,9 @@ import 'onboarding_status.dart';
 /// onboarding is not finished, and then the screen that the app starts on.
 /// The next launches of the app start there.
 ///
-/// When something shows the screen although the onboarding is finished,
-/// such as a link to its route, the onboarding starts again, as
-/// [OnboardingStatus.restart] has it: Skip and the last button then leave
-/// the screen.
+/// A navigation to the route of the screen once the onboarding is
+/// finished, such as a link, shows the screen that the app starts on too.
+/// Only [OnboardingStatus.restart] shows the onboarding again.
 {{{smf_router__screen_annotations__onboarding__onboarding_screen}}}
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
@@ -34,21 +33,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// The index of the page that the user sees.
   var _page = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // The router shows the screen while the onboarding is not finished.
-    // Shown although it is finished, the screen starts the onboarding
-    // again, so that the router leaves the screen once Skip or the last
-    // button finishes it. The router acts on that at once, which it must
-    // not do while a frame is built.
-    if (onboardingStatus.completed.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) onboardingStatus.restart();
-      });
-    }
-  }
 
   @override
   void dispose() {

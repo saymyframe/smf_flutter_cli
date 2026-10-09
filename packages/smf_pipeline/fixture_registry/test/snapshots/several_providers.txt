@@ -87,10 +87,10 @@ With `get_it`:
 
 ## Onboarding
 
-- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. A navigation to that route, such as a link, starts the onboarding again.
+- On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
 - The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
-- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Call `restart()` where the user asks to see the onboarding again, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
+- `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Nothing else shows the onboarding again: call `restart()` where the user asks to see it, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
 
 ## Preferences
@@ -4741,10 +4741,9 @@ import 'onboarding_status.dart';
 /// onboarding is not finished, and then the screen that the app starts on.
 /// The next launches of the app start there.
 ///
-/// When something shows the screen although the onboarding is finished,
-/// such as a link to its route, the onboarding starts again, as
-/// [OnboardingStatus.restart] has it: Skip and the last button then leave
-/// the screen.
+/// A navigation to the route of the screen once the onboarding is
+/// finished, such as a link, shows the screen that the app starts on too.
+/// Only [OnboardingStatus.restart] shows the onboarding again.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the screen.
   const OnboardingScreen({super.key});
@@ -4758,21 +4757,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// The index of the page that the user sees.
   var _page = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // The router shows the screen while the onboarding is not finished.
-    // Shown although it is finished, the screen starts the onboarding
-    // again, so that the router leaves the screen once Skip or the last
-    // button finishes it. The router acts on that at once, which it must
-    // not do while a frame is built.
-    if (onboardingStatus.completed.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) onboardingStatus.restart();
-      });
-    }
-  }
 
   @override
   void dispose() {

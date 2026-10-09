@@ -38,7 +38,7 @@ An `OnboardingPage` is a cell of the periodic table among smaller cells, with a 
 
 Skip and Get started call `onboardingStatus.complete()` of `onboarding_status.dart`, which finishes the onboarding and saves that in the preferences, under `onboarding.completed`. The screen does not navigate. On the first launch, the app shows the onboarding at `/onboarding` in place of the start screen at `/home`: a guard of the routes keeps the user there. Once the onboarding is finished, the router shows the start screen, and later launches open on it.
 
-To show the onboarding again, call `onboardingStatus.restart()`. The app shows it at once. Once it is finished, the user is back on the screen that they were on, or, from a page pushed over another screen, on the screen below the pushed pages. A link to `/onboarding` starts the onboarding again too. The app remembers that the onboarding is finished, so while you edit the pages, a call in `main()` after `bootstrap()` is how you see them again.
+To show the onboarding again, call `onboardingStatus.restart()`. The app shows it at once. Once it is finished, the user is back on the screen that they were on, or, from a page pushed over another screen, on the screen below the pushed pages. A link to `/onboarding` does not: once the onboarding is finished, it shows the start screen. The app remembers that the onboarding is finished, so while you edit the pages, a call in `main()` after `bootstrap()` is how you see them again.
 
 In a test that starts the app to look at another screen, call `onboardingStatus.complete()` before the app starts. Otherwise the test sees the onboarding.
 
