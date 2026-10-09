@@ -1,21 +1,21 @@
 // A test that continuous integration runs in the apps of the fixture
 // modules with every module, a router, whichever module provides it, the
 // fixture gates and the fixture late gate: the walk of the routes that the
-// CLI keeps for the
-// router role (integration_test/router_walk/walk.dart) holds while a guard
-// of the routes keeps the user out, as on a device, where no test opens a
-// guard, and once the guards allow. The first gate is closed before the
-// app starts. The walk expects what the role says, shownFor() of the file
-// that the matrix writes for it: the target of the guard in place of each
-// location outside its flow, as redirectOf() of the app says, and the
-// locations of its flow themselves. closedGuards() of that file names the
-// guard, as the test of the walk does when it fails on it.
+// CLI keeps for the router role (integration_test/router_walk/walk.dart)
+// holds while a guard of the routes keeps the user out, as on a device,
+// where no test opens a guard, and once the guards allow. The first gate
+// is closed before the app starts. The walk expects what the role says,
+// shownFor() of the file that the matrix writes for it: the target of the
+// guard in place of each location outside its flow, as redirectOf() of
+// the app says, and the locations of its flow themselves. closedGuards()
+// of that file names the guard, as the test of the walk does when it
+// fails on it.
 //
 // Once the gate opens, the flows of all three guards are over, as
-// flowIsOver() of the app says. The walk then expects the screen that the app starts
-// on in place of each location of a flow, and reaches every other route.
-// So it never shows a screen of a flow that is over, and no such screen
-// can change what the walk sees of the locations after it.
+// flowIsOver() of the app says. The walk then expects the screen that the
+// app starts on in place of each location of a flow, and reaches every
+// other route. So it never shows a screen of a flow that is over, and no
+// such screen can change what the walk sees of the locations after it.
 //
 // It uses what the tests of router_screens share, which every app that it
 // applies to has. Each expectation gives its reason, which a provider of
