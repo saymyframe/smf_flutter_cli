@@ -59,6 +59,17 @@ final _apps = <String, (List<SmfModule>, ContractCase)>{
       ],
     ),
   ),
+  // The other value of the mode option of the fixture clock: what the
+  // template of the role, its provider and a module that uses the role
+  // render for a clock of 12 hours.
+  'clock_12_hours': (
+    fixtureModules(),
+    const ContractCase(
+      'the clock of 12 hours',
+      requested: [ModuleId('fake_clock_badge'), ModuleId('fake_clock_user')],
+      roleOptions: {'clock-hours': '12'},
+    ),
+  ),
   // Providers of a role created synchronously and asynchronously, in one
   // app.
   'several_providers': (
