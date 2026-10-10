@@ -624,8 +624,9 @@ jobs:
     needs: [plan, firebase-key]
     if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
-    # About 13 minutes: the app, its configuration, its build and its start,
-    # which start_app.sh gives 240 s once the app is built.
+    # About 14 minutes: the app, its configuration, its sign-in methods, its
+    # build and its start, which start_app.sh gives 240 s once the app is
+    # built.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -681,6 +682,31 @@ jobs:
           unset FIREBASE_SERVICE_ACCOUNT
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_FIREBASE_APP \
             "$RUNNER_TEMP/SMF apps/firebase" dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
+
+      # A test of smf_firebase_auth asks the project as a client, with the
+      # API key of the app that flutterfire configured, whether
+      # Email/Password is enabled there, which creates nothing, and skips an
+      # app that does not depend on firebase_auth. Before that, one job
+      # enables the methods with the script of the app, as the README of the
+      # app says, with the key of the service account: the job of the first
+      # app of the plan in a run that may register apps in the project, of
+      # build.yml, so that two jobs never write to the project at once. The
+      # Firebase CLI adds a web app to a project that has none, which only
+      # such a run lets it do.
+      - name: Enable the sign-in methods of the app with every module in Firebase
+        working-directory: packages/smf_modules/smf_firebase_auth
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+          SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
+          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
+          SMF_FIREBASE_ENABLE_SIGN_IN: ${{ inputs.register_firebase_apps && strategy.job-index == 0 && '1' || '0' }}
+        run: |
+          trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
+          (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
+          unset FIREBASE_SERVICE_ACCOUNT
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
+            "$RUNNER_TEMP/SMF apps/firebase" dart test test/enable_sign_in_test.dart --file-reporter json:build/test-results/enable_sign_in_test.json
 
       - &delete_key
         name: Delete the key of the service account
@@ -1149,9 +1175,10 @@ jobs:
     needs: [plan, firebase-key]
     if: inputs.macos_and_windows && needs.firebase-key.outputs.key == 'true'
     runs-on: macos-26
-    # About 17 minutes: the app, its configuration, the simulator, the build
-    # of the app, which takes up to 10 minutes on a busy runner, and its
-    # start, which start_app.sh gives 240 s once the app is built.
+    # About 18 minutes: the app, its configuration, its sign-in methods, the
+    # simulator, the build of the app, which takes up to 10 minutes on a
+    # busy runner, and its start, which start_app.sh gives 240 s once the
+    # app is built.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1201,6 +1228,19 @@ jobs:
             "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/flutterfire_configure_test.dart --file-reporter json:build/test-results/flutterfire_configure_test.json
 
       - *delete_key
+
+      # The test of smf_firebase_auth that asks the project as a client
+      # whether Email/Password is enabled there, as on Linux. This job only
+      # asks: the job on Linux is the one that enables the methods, so the
+      # test gets neither the key of the service account nor
+      # SMF_FIREBASE_ENABLE_SIGN_IN here.
+      - name: Check the sign-in methods of the app with every module in Firebase
+        working-directory: packages/smf_modules/smf_firebase_auth
+        env:
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
+            "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/enable_sign_in_test.dart --file-reporter json:build/test-results/enable_sign_in_test.json
 
       # A test of smf_firebase_crashlytics fixes the build phase for
       # Crashlytics that flutterfire added with the command of the README of
