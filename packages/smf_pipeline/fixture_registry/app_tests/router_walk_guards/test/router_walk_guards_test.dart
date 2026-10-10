@@ -22,10 +22,11 @@
 // the test takes the badge of the fixture away. Such a guard keeps the
 // user only from the routes that ask for its condition, those of the
 // second fixture feature in an app with that feature. The walk expects the
-// target of the guard in their place, and every other location as before,
-// but for the flow of the guard, which is that of the first gate too and is
-// not over now: its locations show themselves. closedGuards() names that
-// guard as it names a gate.
+// target of the guard on top for them, which the router opens over the
+// page that the walk is on, and every other location as before, but for
+// the flow of the guard, which is that of the first gate too and is not
+// over now: its locations show themselves. closedGuards() names that guard
+// as it names a gate.
 //
 // It uses what the tests of router_screens share, which every app that it
 // applies to has. Each expectation gives its reason, which a provider of
@@ -160,7 +161,7 @@ void main() {
 
       // The condition of the third guard stops holding, with every gate
       // open. The routes that ask for it are those that the guard names,
-      // if the app has any: the walk expects its target in their place.
+      // if the app has any: the walk expects its target on top for them.
       // Its flow, the one of the first gate too, is not over while it does
       // not allow, so the locations of that flow show themselves, and
       // every other location shows what it showed before.
@@ -196,9 +197,9 @@ void main() {
               route,
         ],
         reason: 'While a condition does not hold, the walk expects the '
-            'target of its guard in place of each location that asks for '
-            'it, the locations of the flow of that guard themselves, and '
-            'each other location as with guards that allow.',
+            'target of its guard for each location that asks for it, the '
+            'locations of the flow of that guard themselves, and each other '
+            'location as with guards that allow.',
       );
       final kept = await walkRoutes(tester.pumpAndSettle);
       expect(

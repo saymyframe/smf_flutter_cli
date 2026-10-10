@@ -20,6 +20,7 @@ final class DartFileIndex {
     this.invocations = const [],
     this.references = const [],
     this.memberAccesses = const [],
+    this.typeNames = const [],
   });
 
   /// The path of the file relative to the project root, with forward
@@ -46,6 +47,16 @@ final class DartFileIndex {
   /// Property accesses, such as `context.nav` or `nav.home`, in source
   /// order.
   final List<IndexedMemberAccess> memberAccesses;
+
+  /// The types that the code of the file names, in source order: the type
+  /// of a pattern, of a type test or of a cast, of a variable, a parameter
+  /// or a return value, a type argument and a supertype.
+  ///
+  /// The class of a constructor that the file calls is an invocation, and
+  /// is not among them, and neither is a name in a comment or in an
+  /// annotation. So code that tells a value by its type, as in
+  /// `case ClosePages(:final pages)`, names the type here and nowhere else.
+  final List<IndexedTypeName> typeNames;
 
   /// Whether the file imports [uri].
   bool importsUri(String uri) => imports.any((import) => import.uri == uri);
@@ -399,5 +410,31 @@ final class IndexedMemberAccess {
   final String? enclosingDeclaration;
 
   /// The offset of the access in the file.
+  final int offset;
+}
+
+/// A type that an indexed file names, such as `ClosePages` in the pattern
+/// `ClosePages(:final pages)`, or `router.ClosePages` in the type test
+/// `answer is router.ClosePages<L>`.
+final class IndexedTypeName {
+  /// Creates the index of the type [name].
+  const IndexedTypeName(
+    this.name, {
+    this.prefix,
+    this.enclosingDeclaration,
+    this.offset = 0,
+  });
+
+  /// The name of the type as written, without its type arguments.
+  final String name;
+
+  /// The import prefix before the name, such as `router`, if any.
+  final String? prefix;
+
+  /// The name of the top-level declaration the type is named in, or `null`
+  /// outside any.
+  final String? enclosingDeclaration;
+
+  /// The offset of the type in the file.
   final int offset;
 }

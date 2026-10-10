@@ -144,9 +144,9 @@ final class _ClockTemplate extends RoleTemplate<String> {
 /// A role of a third-party package with the same data type as [ClockRole]:
 /// a badge with the labels the modules ask for.
 ///
-/// It publishes a condition for the routes of an app, [holder]: a feature
-/// asks for it on a route, and another module stands for it with a guard,
-/// and each knows only this role.
+/// It publishes two conditions for the routes of an app, [holder] and
+/// [senior]: a feature asks for one or for both on a route, and another
+/// module stands for each with a guard, and each knows only this role.
 final class BadgeRole extends Role<String> {
   const BadgeRole._();
 
@@ -154,6 +154,11 @@ final class BadgeRole extends Role<String> {
   /// that requires the role says whether the user holds one, with a guard
   /// of the routes that stands for the condition.
   static const holder = RouteCondition(badgeRole, 'holder');
+
+  /// What a user needs for the routes of the holders of a senior badge: a
+  /// second condition, so that a route can ask for two, and an app can have
+  /// two guards with routes, each with a flow of its own.
+  static const senior = RouteCondition(badgeRole, 'senior');
 
   /// `Badge createBadge()`, which every provider generates.
   static const createBadge = RequiredFunction(

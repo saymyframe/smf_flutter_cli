@@ -138,10 +138,14 @@ final class FakeFeatureModule extends SmfModule {
 /// navigation, which asks for nothing: a router that asked the guards about
 /// the route above a route would show it to everyone. The module declares
 /// no guard and knows no module that has one. In an app with a guard that
-/// stands for the condition, the router shows the target of that guard in
-/// place of the three routes while the condition does not hold. In an app
-/// without one, as in an app without the role, they show like any other
-/// route.
+/// stands for the condition, a request for one of the three routes opens
+/// the target of that guard over the page that the user is on while the
+/// condition does not hold. In an app without one, as in an app without
+/// the role, they show like any other route.
+///
+/// Two more routes ask for the second condition of the role
+/// ([BadgeRole.senior]): `/fake_second/lounge`, and the route below it,
+/// which lists the first condition too and so asks for both.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -253,6 +257,23 @@ final class FakeSecondModule extends SmfModule {
                 ),
               ],
             ),
+            // A route that asks for the second condition, and below it one
+            // that asks for both.
+            Route(
+              '/lounge',
+              name: 'lounge',
+              screen: ScreenRef('FixtureLoungeScreen', import: _members),
+              conditions: [BadgeRole.senior],
+              children: [
+                Route(
+                  'seat',
+                  name: 'loungeSeat',
+                  screen:
+                      ScreenRef('FixtureLoungeSeatScreen', import: _members),
+                  conditions: [BadgeRole.holder],
+                ),
+              ],
+            ),
           ]),
         ),
         // Only an app with a settings screen gets the widget of the
@@ -298,6 +319,19 @@ final class FakeSecondModule extends SmfModule {
 /// late gate too, a gate of a later stage. It does not bring the user back.
 /// The module knows no route that asks for the condition: those of the
 /// second fixture feature do, in an app with that feature.
+///
+/// The first and the third guard each read a gate of their own, which a
+/// test closes and opens apart from the other, and both read one more
+/// notifier, the session of the fixture, as two guards with one flow do:
+/// a test changes what both allow with one assignment to it, so the router
+/// never finds one of them changed and the other not.
+///
+/// The fourth guard stands for the second condition of the fixture badge
+/// role ([BadgeRole.senior]), and shows the second gate screen, the target
+/// of the second gate. So the app has two guards with routes, each with a
+/// flow of its own, and the app asks the third before the fourth, as the
+/// module declares them. It brings the user back, which says nothing for
+/// such a guard.
 ///
 /// The module depends on one of the two fake state managers, as a feature
 /// that works with one state manager does, though it uses nothing of it.
@@ -387,6 +421,15 @@ final class FakeGateModule extends SmfModule {
                 allows: FunctionRef('fixtureSecondGateOpen', import: _gates),
                 redirectTo: 'second',
                 stage: GuardStage.welcome,
+              ),
+              // A second guard with routes, which has the flow of the
+              // second gate: another flow than that of the third guard.
+              RouteGuard(
+                name: 'senior',
+                allows: FunctionRef('fixtureIsSenior', import: _gates),
+                redirectTo: 'second',
+                stage: GuardStage.welcome,
+                condition: BadgeRole.senior,
               ),
             ],
           ),

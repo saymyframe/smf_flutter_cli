@@ -3118,6 +3118,11 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   bool get _onMainNavigation =>
       _stack.isNotEmpty && identical(_stack.last, _mainNavigation);
 
+  /// Whether the fallback screen is at the bottom of the root navigator:
+  /// when the stack is empty, and below the pages that pushes showed over
+  /// the fallback screen.
+  bool get _overFallback => _stack.every(_results.containsKey);
+
   /// Tells the router of a change of the stacks, as each navigation does.
   ///
   /// When the main navigation has left the stack, the branches get new
@@ -3142,7 +3147,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_stack.isEmpty)
+        if (_overFallback)
           const MaterialPage<Object?>(child: FallbackStartScreen()),
         for (final entry in _stack)
           if (entry case final AppLocation location)
@@ -3321,6 +3326,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   void replace(AppLocation location) {
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
+    // A page that takes the place of one that a push showed closes without
+    // the pages below it too, so it is one that a push showed.
+    final (_, replaced) = _top;
     if (branch != null && _onMainNavigation) {
       _branches[_selected]
         ..removeLast()
@@ -3332,6 +3340,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       } else {
         _showMainNavigation(branch, location);
       }
+    }
+    if (_results.containsKey(replaced)) {
+      _results[location] = Completer<Object?>();
     }
     notifyListeners();
   }
@@ -3378,6 +3389,8 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeSecondVaultLocation() => const screen4.FixtureVaultScreen(),
   FakeSecondMembersLocation() => const screen4.FixtureMembersScreen(),
   FakeSecondMemberCardLocation() => const screen4.FixtureMemberCardScreen(),
+  FakeSecondLoungeLocation() => const screen4.FixtureLoungeScreen(),
+  FakeSecondLoungeSeatLocation() => const screen4.FixtureLoungeSeatScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -3552,6 +3565,33 @@ final class FakeSecondMemberCardLocation extends AppLocation {
   AppLocation get parent => const FakeSecondMembersLocation();
 }
 
+/// The location of `fake_second.lounge`: `/fake_second/lounge`.
+final class FakeSecondLoungeLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeLocation();
+
+  @override
+  String get routeName => 'fake_second.lounge';
+
+  @override
+  String get path => '/fake_second/lounge';
+}
+
+/// The location of `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+final class FakeSecondLoungeSeatLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeSeatLocation();
+
+  @override
+  String get routeName => 'fake_second.loungeSeat';
+
+  @override
+  String get path => '/fake_second/lounge/seat';
+
+  @override
+  AppLocation get parent => const FakeSecondLoungeLocation();
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -3611,6 +3651,13 @@ final class FakeSecondRoutes {
   /// The route `fake_second.memberCard`: `/fake_second/members/card`.
   NavLink memberCard() =>
       NavLink(_context, const FakeSecondMemberCardLocation());
+
+  /// The route `fake_second.lounge`: `/fake_second/lounge`.
+  NavLink lounge() => NavLink(_context, const FakeSecondLoungeLocation());
+
+  /// The route `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+  NavLink loungeSeat() =>
+      NavLink(_context, const FakeSecondLoungeSeatLocation());
 }
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
@@ -3864,6 +3911,29 @@ class FixtureMemberCardScreen extends StatelessWidget {
 class FixtureVaultScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureVaultScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen for the holders of a senior badge: its route asks for the
+/// second condition of the fixture badge role.
+@FixtureScreen('fake_second.lounge')
+class FixtureLoungeScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the screen for the holders of a senior badge, for those
+/// who hold both badges: its route asks for the first condition itself,
+/// and for the second by being below that route.
+@FixtureScreen('fake_second.loungeSeat')
+class FixtureLoungeSeatScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeSeatScreen({super.key});
 
   @override
   Widget build(BuildContext context) => const Scaffold();

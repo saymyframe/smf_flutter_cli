@@ -90,6 +90,12 @@ class RouterConfig<T> {
 
 class NavigatorObserver {}
 
+class WidgetsBinding {
+  static WidgetsBinding get instance => WidgetsBinding();
+
+  void addPostFrameCallback(void Function(Duration timeStamp) callback) {}
+}
+
 typedef ValueChanged<T> = void Function(T value);
 
 final class IconData {
@@ -278,6 +284,8 @@ class RouteMatchList {
   bool get isError => false;
 
   RouteMatch? get lastOrNull => null;
+
+  RouteMatchList remove(RouteMatchBase match) => this;
 }
 
 class GoRouterDelegate implements Listenable {

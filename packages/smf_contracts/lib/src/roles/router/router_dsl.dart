@@ -86,7 +86,8 @@ enum GuardStage {
 /// - a module that requires or provides the role stands for the condition
 ///   with a guard ([RouteGuard.condition]). The function of the guard says
 ///   whether the condition holds, and its target is the route that the
-///   router shows in place of a route that asks for it until it does.
+///   router opens over the page that the user is on when a route that asks
+///   for it is asked for before it does.
 ///
 /// An app may have no guard that stands for a condition: it lacks the role,
 /// or it has no module with such a guard. The routes that ask for the
@@ -145,10 +146,10 @@ final class RouteCondition {
 /// The routes of the flow show only until the flow is over, which it is
 /// once the guard allows, and so does every other guard of the module with
 /// the same target. The router then shows the screen that the app starts
-/// on in place of a location of the flow, or the target of another guard
-/// while that one does not allow, whether `go()`, `push()`, `replace()` or
-/// the platform asks for it, and such a `push()` completes with `null`. So
-/// no code navigates into the flow of a gate, the module of the guard
+/// on in place of a location of the flow, or the target of a gate while
+/// that one does not allow, whether `go()`, `push()`, `replace()` or the
+/// platform asks for it, and such a `push()` completes with `null`. So no
+/// code navigates into the flow of a gate, the module of the guard
 /// included: it changes what the guard reads, and the router shows the
 /// target. That holds unless a guard with a [condition] has the same flow:
 /// while that one does not allow and the gate does, the flow is not over,
@@ -172,28 +173,70 @@ final class RouteCondition {
 /// the condition ([Route.conditions]), of whichever module, and from no
 /// other: a screen for users with an account is such a route, and the
 /// rest of the app shows to a user without one. While the condition does
-/// not hold, the router answers for such a route as it does for a gate. It
-/// shows the target of the guard in place of the whole stack, whichever of
-/// `go()`, `push()`, `replace()` and the platform asked for the route, and
-/// such a `push()` completes with `null`. It remembers the location, and
-/// shows it in place of the stack once the guards allow it, as `go()` to
-/// it does. So the user cannot go back from the target to the screen that
-/// they were on, nor from the location that was asked for once the router
-/// shows it. No gate keeps the user in the flow of such a guard, so the
-/// user may move on from its target: to a location outside every flow
-/// that is asked for, such as a link, or to the screen that the app starts
-/// on in place of a flow that is over. The router then forgets the
-/// location, and nothing happens once the condition holds.
+/// not hold, a request for such a route opens the target of the guard over
+/// the page that the user is on, and the request waits:
+/// - back from the target returns to that page, and the request is
+///   dropped: a `push()` completes with `null`;
+/// - once the condition holds, the router closes the pages of the flow and
+///   does what was asked. `push()` shows the route over the page that the
+///   user was on and completes with the value of its page, `go()` shows it
+///   in place of the stack, and `replace()` in place of that page;
+/// - a location from the platform, or one that is asked for before the
+///   app has a page, opens the target over the screen that the app starts
+///   on, and shows as `go()` to it does once the condition holds;
+/// - a further request for a route that asks for the condition does
+///   nothing while a page of the flow is open, and the first one waits;
+/// - when a gate stops allowing meanwhile, its target takes the place of
+///   the stack, and the request is dropped with the pages of the flow. If
+///   that target is a page of the same flow, the request is dropped once
+///   the target leaves;
+/// - when the page that the request was made on closes below the flow, as
+///   one that asks for another condition, which stopped holding, the flow
+///   closes with it and the request is dropped.
+///
+/// A known limit: behind a gate that does not allow, the router remembers
+/// such a location for the gate, as it does any other, and opens no flow.
+/// Once the gate allows while the condition does not hold, the user comes
+/// to the screen that the app starts on, and the location is lost. So a
+/// link to such a route that opens the app on a first launch, behind an
+/// onboarding, does not open the target of the guard, which it does in an
+/// app whose gates allow.
+///
+/// When the condition stops holding, the router closes each page that asks
+/// for it, with the pages over it, so the user is on the page that it was
+/// opened from. A page that asks for it and has no page below it, as after
+/// `go()` to it, leaves for the screen that the app starts on.
+///
+/// So a screen never closes itself, and never navigates, after it changed
+/// what a guard reads: the router has done both by then. That goes for a
+/// screen of a flow that made its guard allow, as after a sign-in, and for
+/// a page that asks for a condition and ends it itself, as a screen of an
+/// account does with its sign-out. A `pop()` after the change closes the
+/// page that is on top by then. After a sign-in that is the page that the
+/// user asked for, and a `push()` that waited for it completes with `null`.
+/// After a sign-out it is the page below the one that the router closed,
+/// which may be the main navigation of the app. Only in the turn of the
+/// change itself, before the next frame, does such a `pop()` still close
+/// the page that the router closed. A `go()` after the change takes the
+/// place of what the router showed.
 ///
 /// The flow of such a guard is its target and the routes below it too, and
 /// it is over once the guard allows. Until then every route shows that
 /// does not ask for the condition, the routes of the flow among them: a
 /// module may navigate to the target of its guard while the condition does
-/// not hold, as to a sign-in screen that a guest opens. A guard with a
+/// not hold, as to a sign-in screen that a guest opens. With `push()` the
+/// user can go back from it, and once the condition holds the router
+/// closes it as it closes a target that it opened itself. The screens of
+/// the flow move between its routes with `push()` or `replace()`, which
+/// keep the request waiting; `go()` takes the place of the page that the
+/// flow was opened over, and the request goes with it. A guard with a
 /// condition may show the target of a gate of its module. The two then
 /// have one flow, which is over only once both allow: the screens of a
 /// sign-in whose gate lets everyone in still show while its guard of an
-/// account does not allow.
+/// account does not allow. Their functions read one notifier, so that the
+/// router never finds that one of them changed and the other did not yet:
+/// a location that asks for the condition and was asked for behind the
+/// gate is lost when the gate allows first.
 ///
 /// The app asks its gates first: those of all modules by their [stage],
 /// the gates of an earlier stage first, whatever the order of the modules,
@@ -204,12 +247,10 @@ final class RouteCondition {
 /// show one after another. Only when every gate allows does the app ask
 /// the guards with a condition, in the same order among themselves: for a
 /// route, the first one whose condition the route asks for and that does
-/// not allow decides. The flows of such guards do not show one after
-/// another. For a route that asks for two conditions, the target of the
-/// first guard shows, and once that guard allows, its flow is over while
-/// the second still keeps the user from the route: the user comes to the
-/// screen that the app starts on, and asks for the route again to see the
-/// target of the second.
+/// not allow decides. For a route that asks for two conditions, the target
+/// of the first guard opens, and once that guard allows, the router closes
+/// its flow and asks about the request again: the target of the second
+/// guard opens in turn.
 ///
 /// ```dart
 /// RoutesData(
@@ -300,9 +341,12 @@ final class RouteGuard {
   /// notify when [allows] changes, is not seen to stop: the router forgets
   /// nothing then.
   ///
-  /// It holds for a guard with a [condition] as for a gate: such a guard
-  /// stops whichever page the user is on, and the router then forgets what
-  /// it remembered.
+  /// The router remembers a location only for a gate. A guard with a
+  /// [condition] takes the user from no location: when it stops allowing,
+  /// the router closes the pages that ask for the condition, and the user
+  /// is on the page below them, whatever this says. With `false`, such a
+  /// guard still makes the router forget what a gate made it remember,
+  /// whichever page the user is on when it stops.
   final bool resumes;
 
   /// The condition that the guard stands for, or `null` for a gate, which
@@ -394,10 +438,11 @@ final class Route {
   /// condition of a role that the module requires, uses or provides, such
   /// as an account; see [RouteCondition].
   ///
-  /// While a condition does not hold, the router shows the target of the
-  /// guard that stands for it in the app in place of the route (see
-  /// [RouteGuard.condition]). In an app without such a guard, the route
-  /// shows like any other.
+  /// While a condition does not hold, a request for the route opens the
+  /// target of the guard that stands for it in the app over the page that
+  /// the user is on, and the router shows the route once it holds (see
+  /// [RouteGuard]). In an app without such a guard, the route shows like
+  /// any other.
   ///
   /// Every user gets to the main navigation, to the screen that the app
   /// starts on and to the flow of a guard, so a route that asks for a

@@ -72,17 +72,21 @@ const routerRole = RouterRole._();
 /// that only some routes ask for ([RouteCondition]), from which alone it
 /// then keeps the user. A role publishes such a condition, a feature asks
 /// for it on its routes ([Route.conditions]), and a module with the role
-/// declares the guard, so neither module knows the other. In an app whose
-/// modules declare guards, the role's template also generates
-/// [routeGuards], [redirectOf], [flowIsOver], [guardChanges] and
-/// [guardedNavigation] in `app_router.dart`. The provider asks the guards
-/// through them about every location before it shows it, and tells them of
-/// its pages when one of them changes, as [guardedNavigation] says. In the
-/// guide for coding agents of such an app, the template tells where the
-/// guards are and in which order the router asks them, what tells a gate
-/// from a guard of some routes, how the code of the app adds one and
-/// changes what it allows, that the router navigates when it does, where
-/// the user comes to once a guard allows again, and when code may navigate
+/// declares the guard, so neither module knows the other. The target of a
+/// gate takes the place of the whole stack. The target of a guard that
+/// stands for a condition opens over the page that the user is on, who can
+/// go back from it, and the router does what was asked once the condition
+/// holds. In an app whose modules declare guards, the role's template also
+/// generates [routeGuards], [redirectOf], [flowIsOver], [guardChanges] and
+/// [guardedNavigation] with the classes of its answers in `app_router.dart`.
+/// The provider asks the guards through them about every location before
+/// it shows it, and tells them of its pages when one of them changes, as
+/// [guardedNavigation] says. In the guide for coding agents of such an app,
+/// the template tells where the guards are and in which order the router
+/// asks them, what tells a gate from a guard of some routes, how the code
+/// of the app adds one and changes what it allows, that the router
+/// navigates when it does, what the user sees while a guard of either kind
+/// does not allow and once it allows again, and when code may navigate
 /// into the flow of a guard. An app without guards gets none of this.
 ///
 /// When the role is present, the provider of the [AppEntryRole] builds the
@@ -135,9 +139,10 @@ final class RouterRole extends Role<RoutesData> {
   ///   a condition.
   static const routeGuards = 'routeGuards';
 
-  /// The name of the function that says what the guards show in place of a
-  /// route, which the role's template generates in [appRouterFile] in an
-  /// app with guards, as `AppLocation? redirectOf(String? routeName)`.
+  /// The name of the function that says what the guards show when the
+  /// router is asked for a route, which the role's template generates in
+  /// [appRouterFile] in an app with guards, as
+  /// `AppLocation? redirectOf(String? routeName)`.
   ///
   /// It takes the full name of the route of a location (see
   /// [FacadeRoute.fullName]), or `null` for a location that is no route of
@@ -146,24 +151,27 @@ final class RouterRole extends Role<RoutesData> {
   /// provider asks about by the name of that route when it shows it, or
   /// the fallback screen of the app entry.
   ///
-  /// It returns the location to show instead, or `null` if the guards let
-  /// the user see the route. That is the target of the first gate of
-  /// [routeGuards] that does not allow, unless the route is in the flow of
-  /// that gate. No guard after it is asked, so the answer for the routes of
-  /// its flow is always `null`: while a gate does not allow, it keeps the
-  /// user from every route outside its flow, of whichever module.
+  /// It returns the location that the router then shows, or `null` if the
+  /// guards let the user see the route. That is the target of the first
+  /// gate of [routeGuards] that does not allow, unless the route is in the
+  /// flow of that gate. No guard after it is asked, so the answer for the
+  /// routes of its flow is always `null`: while a gate does not allow, it
+  /// keeps the user from every route outside its flow, of whichever
+  /// module, and its target shows in place of the route.
   ///
   /// When every gate allows, the answer is the target of the first guard
   /// with `routes` that does not allow and has the route among them: a
   /// guard that stands for a condition keeps the user only from the routes
   /// that ask for it, and from no location that is no route of a module.
-  /// The routes of its flow are none of them, so the answer for them is
-  /// `null` then too.
+  /// Its target shows over the page that the user is on rather than in
+  /// place of the route. The routes of its flow are none of its `routes`,
+  /// so the answer for them is `null` then too.
   ///
   /// The function only answers for the guards that do not allow. A route
   /// that they let the user see may be in a flow that is over, which
   /// [flowIsOver] tells. A provider asks through [guardedNavigation], which
-  /// asks both and also keeps what the guards make a router remember.
+  /// asks both, says how the router shows the answer, and keeps what the
+  /// gates make a router remember.
   static const redirectOf = 'redirectOf';
 
   /// The name of the function that says whether the flow of a route is
@@ -183,9 +191,10 @@ final class RouterRole extends Role<RoutesData> {
   /// The routes of a flow show only while a guard with that flow does not
   /// allow. Once the flow is over, the router shows the screen that the
   /// app starts on in place of each location of the flow, or the target of
-  /// another guard while that one does not allow, as [guardedNavigation]
-  /// says. So nothing navigates into a flow: its module changes what its
-  /// guard reads, and the router shows the target.
+  /// a gate while that one does not allow, and it closes the pages of the
+  /// flow that it has, as [guardedNavigation] says. So nothing navigates
+  /// into the flow of a gate: its module changes what its guard reads, and
+  /// the router shows the target.
   /// A route of a flow cannot start the app, so the screen that the app
   /// starts on is in no flow.
   static const flowIsOver = 'flowIsOver';
@@ -202,12 +211,12 @@ final class RouterRole extends Role<RoutesData> {
 
   /// The name of the class through which the provider asks the guards of an
   /// app with guards, which the role's template generates in
-  /// [appRouterFile], as `GuardedNavigation<L>`. The class keeps what the
-  /// guards make a router remember, so that it is written once: providers
-  /// that tell it of the same pages bring the user back to the same
-  /// location at the same time. Only what a provider tells of a page that
-  /// `replace()` showed is up to the provider (see below), so after a
-  /// `replace()` that location may differ between providers.
+  /// [appRouterFile], as `GuardedNavigation<L>`, with the classes of its
+  /// answers: `ShowInstead`, `ShowOver`, `ShowNothing` and `ClosePages`. The
+  /// class decides what a router does about the guards, and keeps what the
+  /// gates make it remember, so that this is written once: providers that
+  /// ask it alike and do what it answers show the user the same pages at
+  /// the same time.
   ///
   /// `L` is how the provider knows a location that it can show as `go()`
   /// does, such as the URI of the location. The provider creates one
@@ -217,97 +226,187 @@ final class RouterRole extends Role<RoutesData> {
   /// of the guards. It then asks the class at two times.
   ///
   /// Before it shows a location, the provider calls
-  /// `asked(route, location)`, with the full name of the route of the
-  /// location or `null`, as [redirectOf] takes it: for the location the app
-  /// starts on, for each location that `go()`, `push()` or `replace()` of
-  /// the navigation is asked to show, and for each location that the
-  /// platform gives it, if it takes any. When the answer is a location, the
-  /// target of a guard or the location `/`, the provider:
-  /// - shows it in place of the other, as `go()` to it does: it takes the
-  ///   whole stack, whichever page the other location was asked from. Such
-  ///   a `push()` completes with `null` at once;
-  /// - never builds the screen of the other location, and the listeners of
-  ///   [screenListeners] never hear of it.
+  /// `asked(route, location, onTopOf: routes)`, with the full name of the
+  /// route of the location or `null`, as [redirectOf] takes it: for the
+  /// location the app starts on, for each location that `go()`, `push()`
+  /// or `replace()` of the navigation is asked to show, and for each
+  /// location that the platform gives it, if it takes any. `onTopOf` are
+  /// the full names of the routes of the pages that the user can get back
+  /// to at that time, the same pages that the provider tells `changed` of
+  /// (see below). It gives none while it has no page, and none for a
+  /// location from the platform, which takes the place of the stack.
   ///
-  /// The target of a guard also takes the stacks of every branch of the
+  /// The provider asks once for each request, and does what the answer
+  /// says. The class keeps no request, so a second call for a request that
+  /// it answered `ShowOver` for finds the flow open and answers
+  /// `ShowNothing`. A second call for a location that the provider shows
+  /// changes nothing: for a location that the class answered `null` for,
+  /// and for one that it gave in an answer, it answers `null` again while
+  /// no guard changed, also with no pages. So a router whose own navigation
+  /// asks once more, as one whose redirect runs for each location that it
+  /// goes to, may let it.
+  ///
+  /// A provider that has no page yet may have no stack to push on, and no
+  /// page to replace. It may then take each request as `go()` to its
+  /// location, which takes the place of the stack as a location from the
+  /// platform does: it asks about it once, with no pages, and such a
+  /// `push()` completes with `null` at once. A provider that can open no
+  /// page over its error screen may take a request there the same way when
+  /// the answer is `ShowOver`. The target then opens over the location `/`
+  /// in place of the error screen.
+  ///
+  /// When the answer is `null`, the provider shows the location. Otherwise
+  /// it never builds the screen of that location, and the listeners of
+  /// [screenListeners] never hear of it. It does what the answer says:
+  /// - `ShowInstead(location)`, with the target of a gate or the location
+  ///   `/`: it shows that location in place of the other, as `go()` to it
+  ///   does. It takes the whole stack, whichever page the other location
+  ///   was asked from. Such a `push()` completes with `null` at once.
+  /// - `ShowOver(location, flow: routes)`, with the target of a guard that
+  ///   stands for a condition and the full names of the routes of its
+  ///   flow: it shows the target over the page on top, as `push()` of it
+  ///   does, so the user can go back from it. Asked with no pages, as for
+  ///   a location from the platform, it first shows `/` in place of the
+  ///   stack and then the target over it, and the listeners of
+  ///   [screenListeners] hear only of the target. It keeps the request
+  ///   waiting, as said below, and a `push()` that waits does not complete.
+  /// - `ShowNothing()`: it shows nothing and leaves its pages as they are.
+  ///   Such a `push()` completes with `null` at once.
+  ///
+  /// The target of a gate also takes the stacks of every branch of the
   /// main navigation, so that each branch is back on its destination when
   /// the user comes to it again: the pages of the branches are pages that
-  /// the guard keeps the user from, and none of them may show again. The
+  /// the gate keeps the user from, and none of them may show again. The
   /// location `/` for a flow that is over hides nothing from the user. The
   /// provider shows it as its `go()` to that location does, and whether the
   /// branches that are not selected keep their pages then is up to the
-  /// provider, as it is for that `go()`.
+  /// provider, as it is for that `go()`. `ShowOver` and `ClosePages` leave the
+  /// main navigation and its branches as they are: no route of the main
+  /// navigation asks for a condition.
   ///
-  /// Each time [guardChanges] notifies, the provider calls `changed(pages)`
-  /// with the pages that the user can get back to, the one on top first:
-  /// those of its root navigator and, in place of the main navigation,
-  /// those of its selected branch, but not those of the other branches.
-  /// Each page comes with the full name of its route or `null`, with its
-  /// location, and with whether `push()` showed it. Whether a page that
-  /// `replace()` showed counts as one that a push showed is up to the
-  /// provider. A provider that has no page yet, as before it shows the
-  /// location that the app starts on, has none to tell of and shows
-  /// nothing then: it asks about its first location when it shows it. When
-  /// the answer is a location, the provider shows it as it shows that
-  /// answer of `asked`: in place of its whole stack, and the target of a
-  /// guard in place of the stacks of every branch too, so no page that a
-  /// guard kept the user from shows again in a branch that was not
-  /// selected. That holds for a gate and for a guard that stands for a
-  /// condition alike, whenever the guard allows again: also in the turn in
-  /// which it stopped allowing, and while the transition to its target is
-  /// on its way. Whether the listeners of [screenListeners] hear of a
-  /// target that no frame showed is up to the provider. When the answer is
-  /// `null`, the provider leaves everything as it is: the stack stays, the
-  /// listeners of [screenListeners] hear nothing, and each `push()` still
-  /// completes with the value of its page. Whether the `push()` of a page
-  /// that an answer takes out of the stack completes is up to the provider,
-  /// as it is when `go()` replaces the stack.
+  /// The request that waits is the one that the provider got `ShowOver`
+  /// for: the location, and whether `go()`, `push()`, `replace()` or the
+  /// platform asked for it. The provider keeps it, not the class, since
+  /// only the provider can complete a `push()`. It keeps one request: when
+  /// it gets `ShowOver` while a request waits, it drops the earlier one,
+  /// and a `push()` that waited completes with `null`. The request waits
+  /// while a page of a route of the `flow` of the answer is among the
+  /// pages that the user can get back to, so it is still there after a
+  /// `push()` or a `replace()` inside the flow. It ends in one of three
+  /// ways:
+  /// - `changed` answers `ClosePages` without `dropsRequest`, and no page of
+  ///   the flow is left after the provider closed the pages. The provider
+  ///   then makes the request again as it was made, on top of the pages
+  ///   that are left, and asks the class about it again: `push()` shows the
+  ///   location over the page that the flow was opened from, and the first
+  ///   `push()` completes with the value of that page; `go()` shows it in
+  ///   place of the stack; `replace()` shows it in place of the page that
+  ///   the flow was opened from; and a location from the platform shows as
+  ///   `go()` to it. The class may answer the request with the target of
+  ///   another guard, as for a route that asks for two conditions.
+  /// - `changed` answers `ClosePages` with `dropsRequest`: the pages that
+  ///   close reach below the flow, so the page that the request was made
+  ///   on closes too, as one that asks for a condition that stopped holding
+  ///   while the flow of another condition was open over it. The provider
+  ///   drops the request, and does not make it on the page below.
+  /// - The last page of the flow leaves in any other way: the user goes
+  ///   back from it, or a location takes the place of the stack. The
+  ///   provider drops the request, and a `push()` that waited completes
+  ///   with `null`. The target of a gate takes the place of the stack, and
+  ///   the request goes with the pages of its flow. When that target is a
+  ///   page of the same flow, as for a gate and a guard of a condition
+  ///   with one flow, the request waits on until the target leaves.
+  ///
+  /// Each time [guardChanges] notifies, the provider calls
+  /// `changed(pages)` with the pages that the user can get back to, the
+  /// one on top first: those of its root navigator and, in place of the
+  /// main navigation, those of its selected branch, but not those of the
+  /// other branches. Each page comes with the full name of its route or
+  /// `null`, with its location, and with `pushed`: whether the provider
+  /// can close the page on its own and leave the pages below it as they
+  /// are. That is `true` for a page that `push()` showed, and for a page
+  /// that `replace()` showed in place of such a page: a page of a flow
+  /// that replaces the target of its guard closes like the target. Whether
+  /// a page that `replace()` showed in place of another page is one is up
+  /// to the provider. A provider that has no page yet, as before it shows
+  /// the location that the app starts on, has none to tell of and shows
+  /// nothing then: it asks about its first location when it shows it.
+  ///
+  /// When the answer is `null`, the provider leaves everything as it is:
+  /// the stack stays, the listeners of [screenListeners] hear nothing, and
+  /// each `push()` still completes with the value of its page. Otherwise:
+  /// - `ShowInstead(location)`: it shows the location as it shows that
+  ///   answer of `asked`, in place of its whole stack, and the target of a
+  ///   gate in place of the stacks of every branch too, so no page that a
+  ///   gate kept the user from shows again in a branch that was not
+  ///   selected. That holds whenever the gate allows again: also in the
+  ///   turn in which it stopped allowing, and while the transition to its
+  ///   target is on its way. Whether the listeners of [screenListeners]
+  ///   hear of a target that no frame showed is up to the provider, and so
+  ///   is whether the `push()` of a page that the answer takes out of the
+  ///   stack completes, as it is when `go()` replaces the stack.
+  /// - `ClosePages(n, dropsRequest: ...)`: it closes the `n` pages on top,
+  ///   each of which it told of as `pushed`, and leaves the pages below
+  ///   them as they are. The pages leave at once, whatever the navigator
+  ///   shows over them, such as a dialog, and also a page that a `push()`
+  ///   of the same turn showed and that the navigator has not built yet.
+  ///   Each `push()` that showed one of them completes with `null`, at once
+  ///   or when the frame is over. Then the provider drops the request that
+  ///   waits, with `dropsRequest`, or else makes it again, if no page of
+  ///   its flow is left. The listeners of [screenListeners] hear of the
+  ///   page that the user ends on, and not of the page below the closed
+  ///   ones when the request shows another page over it: the user never
+  ///   saw that page come back.
+  ///
+  /// Until the navigator of the provider builds again, it may still have
+  /// the route of a page that the provider closed. The code of a screen
+  /// that closes its own page in that time, or the back button of the
+  /// system, closes that route and no page of the provider, and the
+  /// provider does not fail. The `push()` of such a page may complete with
+  /// the value that the page closed with. A frame later the same code
+  /// closes the page that is on top by then; see [RouteGuard] for what a
+  /// screen does not do after it changed what a guard reads.
   ///
   /// What the class answers, and what it remembers:
-  /// - `asked` answers as [redirectOf] does for a location that a guard
-  ///   keeps the user from. It remembers that location, whichever guard
-  ///   keeps the user from it, in place of the one that it remembered
-  ///   before: the user comes back to the latest location that they or the
-  ///   platform asked for, such as a link that arrives while the flow of a
-  ///   guard is shown.
-  /// - A guard that stands for a condition gets the answers of a gate, for
-  ///   the routes that ask for the condition. The target takes the whole
-  ///   stack, and the stacks of every branch of the main navigation with
-  ///   it, though no page of a branch asks for a condition. So the user
-  ///   cannot go back from the target to the screen that they were on, and
-  ///   the location that was asked for takes the stack in turn once the
-  ///   guards allow it. No gate keeps the user in the flow then, so they
-  ///   may move on to another screen before the condition holds, and the
-  ///   class forgets the location that it remembers when they do: when
-  ///   `asked` answers `null` for a location outside every flow, and when
-  ///   `asked` or `changed` answers `/` for a flow that is over. Every gate
-  ///   allows at such a call, so only a guard of a condition could still
-  ///   keep the user from that location. So a location that was asked for
-  ///   long ago does not take the stack when the condition comes to hold,
-  ///   and it does not stand in the way of a gate that brings the user
-  ///   back to where they went on to.
-  /// - For a location that the guards let the user see, `asked` answers
-  ///   `/` when its flow is over, as [flowIsOver] tells, and `null`
-  ///   otherwise. So the routes of a flow show only while a guard with
-  ///   that flow does not allow: at any other time `go()`, `replace()`,
-  ///   `push()`, which completes with `null`, and a location from the
-  ///   platform show the screen that the app starts on, or the target of
-  ///   another guard while that one does not allow.
-  /// - `changed` answers the target of the guard that keeps the user from
-  ///   one of the pages, so that no such page stays in the stack. If that
-  ///   guard brings the user back ([RouteGuard.resumes]), and unless the
-  ///   class remembers a location already, it then remembers the location
-  ///   below the pages that pushes showed, or `/` when pushes showed every
-  ///   page. So the user comes back to where the pushed pages were opened
-  ///   from, such as a tab of the main navigation, and not to a pushed page
-  ///   alone, with no way back.
+  /// - While a gate keeps the user from a location, `asked` answers
+  ///   `ShowInstead` of its target, as [redirectOf] tells it. The class
+  ///   remembers that location, whichever gate keeps the user from it, in
+  ///   place of the one that it remembered before: the user comes back to
+  ///   the latest location that they or the platform asked for, such as a
+  ///   link that arrives while the flow of a gate is shown.
+  /// - For a location that the gates let the user see, `asked` answers
+  ///   `ShowInstead` of `/` when its flow is over, as [flowIsOver] tells.
+  ///   So the routes of a flow show only while a guard with that flow does
+  ///   not allow: at any other time `go()`, `replace()`, `push()`, which
+  ///   completes with `null`, and a location from the platform show the
+  ///   screen that the app starts on, or the target of a gate while that
+  ///   one does not allow.
+  /// - For a route that asks for a condition that does not hold, `asked`
+  ///   answers `ShowOver` of the target of the guard that stands for it,
+  ///   and `ShowNothing` while a page of the flow of that guard is among
+  ///   `onTopOf`. The page may be on top or below another page, such as a
+  ///   page outside the flow that was pushed from the target. So the flow
+  ///   never opens over itself: a further request while it is open does
+  ///   nothing, and the first one waits. The class remembers no location
+  ///   for such a guard, only how many pages it opened the flow over.
+  /// - `changed` first answers `ShowInstead` of the target of the gate that
+  ///   keeps the user from one of the pages, so that no such page stays in
+  ///   the stack. If that gate brings the user back
+  ///   ([RouteGuard.resumes]), and unless the class remembers a location
+  ///   already, it then remembers the location below the pages that the
+  ///   provider can close, or `/` when it can close every page. So the
+  ///   user comes back to where the pushed pages were opened from, such as
+  ///   a tab of the main navigation, and not to a pushed page alone, with
+  ///   no way back. The flow of a condition that was open goes with the
+  ///   stack, and its request with the pages of the flow.
   /// - When a guard that does not bring the user back stops allowing, the
   ///   class remembers no location for it and forgets the one that it
-  ///   remembers, whichever guard or request made it remember it. So once
-  ///   the guards allow again, the user comes to a location that was asked
-  ///   for since, or else to `/`, as the last of these rules says: after a
-  ///   sign-out, the next user comes neither to the page that the last one
-  ///   was on nor to a link that the last one followed.
+  ///   remembers, whichever gate or request made it remember it. So once
+  ///   the gates allow again, the user comes to a location that was asked
+  ///   for since, or else to `/`: after a sign-out, the next user comes
+  ///   neither to the page that the last one was on nor to a link that the
+  ///   last one followed. That holds for a guard that stands for a
+  ///   condition too, though the class remembers nothing for it.
   /// - The class takes such a guard to have stopped when it does not allow
   ///   at a call of `asked` or `changed` and allowed at the call before.
   ///   That holds while another guard decides and the answer is `null`
@@ -318,28 +417,47 @@ final class RouterRole extends Role<RoutesData> {
   ///   while it does not allow. It cannot see a guard that stops and
   ///   allows again between two calls, such as one that does not notify:
   ///   it forgets nothing then.
-  /// - With no such page, `changed` answers the location that it
-  ///   remembers, once the guards allow that location, and forgets it.
-  ///   Besides that, only a guard that does not bring the user back and a
-  ///   user who moves on make it forget one, as said above.
+  /// - With no page that a gate keeps the user from, `changed` answers
+  ///   `ShowInstead` of the location that it remembers, once no gate keeps
+  ///   the user from that location, and forgets it.
+  /// - A known limit: if a guard that stands for a condition still keeps
+  ///   the user from the remembered location then, the answer is
+  ///   `ShowInstead` of `/`, and the location is lost. The class answers
+  ///   `ShowOver` only when it is asked, and it keeps no request waiting.
+  ///   So a link to a route that asks for a condition, which opens the app
+  ///   behind a gate, as on a first launch with an onboarding, leaves the
+  ///   user on the screen that the app starts on once the gate allows,
+  ///   while the same link opens the flow over that screen when no gate is
+  ///   in its way. For the same reason two guards with one flow, as the
+  ///   gate and the guard of an account of a sign-in, read one notifier:
+  ///   the class then never finds that the gate allows while the condition
+  ///   does not hold yet.
+  /// - The class also forgets the location that it remembers when the user
+  ///   moves on: when `asked` answers for a location that no gate keeps
+  ///   the user from and that is outside every flow, or in a flow that is
+  ///   over. The code of the app may navigate right when a gate starts
+  ///   allowing, before the provider tells the class.
   /// - It never remembers a location in the flow of a guard, of whichever
   ///   guard: once that guard allows, its flow is over.
-  /// - With no such page and nothing remembered that the guards allow,
-  ///   `changed` answers `/` when the page on top is in a flow that is
-  ///   over. So the user leaves a flow whose guard started allowing for the
-  ///   screen that the app starts on, as when the platform opened the app
-  ///   on a location of the flow. That holds while a guard of a condition
-  ///   still keeps the user from the remembered location, which is then
-  ///   forgotten: the app was opened on a route that asks for the
-  ///   condition, and the flow of a gate is over. So for a route that asks
-  ///   for two conditions, the user comes to `/` once the first one holds,
-  ///   not to the target of the guard of the second.
-  /// - `changed` looks for a flow that is over at the page on top only,
-  ///   since its answer takes the place of the whole stack. A page of such
-  ///   a flow below another page stays, and the user sees it again when
-  ///   they go back to it: the target of a guard of a condition that the
-  ///   user opened, with a page of a route outside the flow pushed from
-  ///   it, once the condition holds.
+  /// - Otherwise `changed` looks for the lowest page that has to leave: a
+  ///   page in a flow that is over, or a page that a guard that stands for
+  ///   a condition keeps the user from. It answers `ClosePages` of that page
+  ///   and the pages over it when the provider can close each of them and
+  ///   a page stays below. So once a condition holds, the pages of its
+  ///   flow close, with a page outside the flow that was pushed from them,
+  ///   and the provider makes the request again. And once a condition
+  ///   stops holding, the pages that ask for it close, and the user is on
+  ///   the page that they were opened from. The answer has `dropsRequest`
+  ///   when fewer pages stay than the flow that `asked` opened last was
+  ///   opened over: the page on top of those, which the request was made
+  ///   on, is among the pages that close.
+  /// - When the provider cannot close those pages, or no page stays below
+  ///   them, `changed` answers `ShowInstead` of `/`. So the user leaves a
+  ///   flow that took the place of the stack for the screen that the app
+  ///   starts on, as when the gate of the flow started allowing with
+  ///   nothing remembered, or when the platform opened the app on a
+  ///   location of the flow. The same goes for a page that asks for a
+  ///   condition and has no page below it, as after `go()` to it.
   /// - Otherwise `changed` answers `null`, as for a notification without a
   ///   change of what the guards allow.
   static const guardedNavigation = 'GuardedNavigation';
@@ -386,6 +504,13 @@ final class RouterRole extends Role<RoutesData> {
   /// route on top of the innermost navigator, only when it closes a page of
   /// the router: when it closes a dialog, the page below it stays the
   /// screen the user sees.
+  ///
+  /// Nor does a provider call them for a page that is on top only while it
+  /// does what the guards of the routes answer (see [guardedNavigation]),
+  /// which the user never sees: the page below a flow that it closes, when
+  /// the request that waited shows another page over it at once, and the
+  /// screen that the app starts on, when it opens a flow over that screen
+  /// for a location from the platform.
   ///
   /// A listener gets the full name of the route of the screen among the
   /// routes of the modules, such as `home.details` (see
@@ -542,7 +667,8 @@ final class RouterRole extends Role<RoutesData> {
         StructuralRule(
           id: 'router.guards_asked',
           description: 'In an app with guards, the files of the provider of '
-              'the role create a GuardedNavigation and read guardChanges.',
+              'the role create a GuardedNavigation, read guardChanges, and '
+              'name its answers ShowOver and ClosePages.',
           check: _checkGuardsAsked,
         ),
         StructuralRule(

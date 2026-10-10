@@ -58,6 +58,7 @@ void main() {
           'fake_gate.second',
           'fake_late_gate.late',
           'fake_gate.holder',
+          'fake_gate.senior',
         ],
         reason: 'The app lists its gates by their stages, and those of one '
             'stage in the order of the modules and of their declarations, '

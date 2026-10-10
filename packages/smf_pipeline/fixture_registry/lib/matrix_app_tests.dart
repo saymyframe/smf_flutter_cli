@@ -82,9 +82,11 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // nothing, and the third guard of the fixture gates stands for it,
       // with the flow of the first, a gate. The tests take the badge away
       // and give it back, next to the gates, also while a page that asks
-      // for the condition is on the stack. The apps it applies to have the
-      // tests of router_screens and of router_guards, whose helpers it
-      // uses.
+      // for the condition is on the stack. A request for such a route opens
+      // the flow of the guard over the page that the user is on: back
+      // returns to that page, and once the condition holds the router does
+      // what was asked. The apps it applies to have the tests of
+      // router_screens and of router_guards, whose helpers it uses.
       MatrixAppTest(
         '$appTests/router_conditions',
         appliesTo: (app) =>
@@ -113,9 +115,11 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // user back, on the screen that the app starts on. No branch keeps a
       // page that the guard kept the user from, also when the guard allows
       // again in the turn in which it stopped allowing, or while the
-      // transition to its target is on its way. The apps it applies to have
-      // the tests of router_screens and of router_guards, whose helpers it
-      // uses.
+      // transition to its target is on its way. And the flow of a guard
+      // that stands for a condition opens over the main navigation, which
+      // stays below it with its destination selected and the pages of its
+      // branches. The apps it applies to have the tests of router_screens
+      // and of router_guards, whose helpers it uses.
       MatrixAppTest(
         '$appTests/layout_guards',
         appliesTo: (app) =>
@@ -197,6 +201,23 @@ Future<MatrixAppTests> fixtureAppTests() async {
         appliesTo: (app) =>
             _hearsScreens(app) &&
             app.hook!.presentRoles.contains(layoutRole) &&
+            app.modules.contains(const ModuleId('fake_second')) &&
+            app.modules.contains(const ModuleId('go_router')),
+      ),
+      // What only go_router does about the flow of a guard that stands for
+      // a condition: a refresh of its routes while the flow is open, after
+      // which the push that waits still completes with the value of its
+      // page; a request on its error screen, which it gets as go() gives
+      // it a location and asks about in its redirect; and two links in one
+      // turn, for which it opens the flow once. It checks no role, so it
+      // names its module, as `tools/app_tests_test.dart` lets it. The apps
+      // it applies to have the tests of router_conditions, whose helpers it
+      // uses with those of router_screens and of router_guards.
+      MatrixAppTest(
+        '$appTests/go_router_conditions',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            _hasGates(app) &&
             app.modules.contains(const ModuleId('fake_second')) &&
             app.modules.contains(const ModuleId('go_router')),
       ),

@@ -15,8 +15,19 @@
 /// socket fails `flutter analyze`. In an app with guards, it asks them
 /// through the `GuardedNavigation` of the router role, which keeps what the
 /// router comes back to: about the screen it starts on and about each
-/// location that it is asked to show, and it tells them of the pages of its
-/// stack when one of them changes, and shows the location that they answer.
+/// location that it is asked to show, once and with the routes of its
+/// pages, and it tells them of the pages of its stack when one of them
+/// changes. It does what they answer. It shows a location in place of its
+/// stack, or opens the target of a guard that stands for a condition over
+/// the page on top and keeps the request waiting while a page of that flow
+/// is in its stack, or closes the pages on top and makes that request
+/// again, or drops it when they say so. A page is one that it can close on
+/// its own while the push that showed it waits, and so is a page that
+/// `replace()` showed in place of such a page. It keeps the fallback screen
+/// below the pages that pushes show over it. A location that the guards
+/// answer in place of the stack completes the pushes of the pages that
+/// leave, so no page of it is one that a push showed. Its pages have the
+/// location as their key, so it cannot show one location twice in a stack.
 /// When the main navigation leaves the stack, by an answer of the guards or
 /// by a navigation, the branches get new navigators, so that a main
 /// navigation that comes back before the transition to the page that took

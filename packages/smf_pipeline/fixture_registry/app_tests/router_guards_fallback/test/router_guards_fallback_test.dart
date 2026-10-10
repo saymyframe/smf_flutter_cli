@@ -9,9 +9,14 @@
 // when the gate closes, the target takes its place, and the router comes
 // back to it. And once the guard allows, its flow is over: in place of a
 // location of the flow, the router shows the screen that the app starts
-// on, which is the fallback screen here. It starts the app with main() of
-// lib/main.dart, which the app entry role puts into every app, so it
-// applies to a new provider of the router role as it is.
+// on, which is the fallback screen here. Last, the flow of a guard that
+// stands for a condition is a flow over a page, and the fallback screen is
+// such a page: while the condition of the third guard of the fixture gates
+// does not hold, its target shows over the fallback screen, back returns
+// to that screen, and once the condition holds the router closes the
+// target. It starts the app with main() of lib/main.dart, which the app
+// entry role puts into every app, so it applies to a new provider of the
+// router role as it is.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -155,6 +160,69 @@ void main() {
         result,
         isNull,
         reason: 'push() of a location in a flow that is over completes with '
+            'null.',
+      );
+
+      // The condition of the third guard, which has the flow of the first,
+      // stops holding: the flow is not over, and push() shows its target
+      // over the fallback screen, which stays below it.
+      fixtureHolder.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        _builtScreens(tester),
+        [FallbackStartScreen],
+        reason: 'A condition that stops holding leaves the fallback screen, '
+            'which asks for nothing, as it is.',
+      );
+      Future<void> pushTarget() async {
+        result = 'not completed';
+        unawaited(
+          tester
+              .element(find.byType(FallbackStartScreen))
+              .nav
+              .fakeGate
+              .gate()
+              .push<Object?>()
+              .then((value) => result = value),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          _builtScreens(tester),
+          [FallbackStartScreen, FixtureGateScreen],
+          reason: 'While a condition does not hold, push() of the target of '
+              'its guard shows it over the fallback screen, which stays '
+              'below it.',
+        );
+      }
+
+      await pushTarget();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        _builtScreens(tester),
+        [FallbackStartScreen],
+        reason: 'Back from the target of a guard of a condition returns to '
+            'the fallback screen that it was pushed over.',
+      );
+      expect(
+        result,
+        isNull,
+        reason: 'push() of the target of a guard completes when the user '
+            'goes back from it.',
+      );
+      await pushTarget();
+      fixtureHolder.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        _builtScreens(tester),
+        [FallbackStartScreen],
+        reason: 'Once the condition holds, the router closes the pages of '
+            'its flow, over the fallback screen too.',
+      );
+      expect(
+        result,
+        isNull,
+        reason: 'The push() of a page that the router closes completes with '
             'null.',
       );
     },

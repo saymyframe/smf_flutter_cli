@@ -388,6 +388,11 @@ const _ofOneProvider = {
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_branches': {
     'go_router',
   },
+  // A refresh of the routes of go_router while the flow of a condition is
+  // open, a request on its error screen, and two links in one turn.
+  'packages/smf_pipeline/fixture_registry/app_tests/go_router_conditions': {
+    'go_router',
+  },
   // A tap on a tab of the bar of bottom_tabs, which selects its
   // destination.
   'packages/smf_pipeline/fixture_registry/app_tests/bottom_tabs_screens': {

@@ -169,13 +169,13 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '  bool _redirected(AppLocation location) {\n'
-            '    final guarded = _guards.asked(location.routeName, location);\n'
-            '    if (guarded == null) return false;\n'
-            '    _go(guarded.location);\n'
-            '    return true;\n'
-            '  }\n',
-        '  bool _redirected(AppLocation location) => false;\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.routeName,\n'
+            '        location,\n'
+            '        onTopOf: [for (final page in _pages) page.route],\n'
+            '      );\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => null;\n',
       ),
     ],
   );
@@ -191,9 +191,19 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '    final shown = _guards.changed(_pages);\n'
-            '    if (shown != null) _go(shown.location);\n',
-        '    _guards.changed(_pages);\n',
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        break;\n'
+            '      case ShowInstead(:final location):\n'
+            '        _go(location);\n'
+            '      case ClosePages(:final pages, :final dropsRequest):\n'
+            '        _close(pages, dropsRequest: dropsRequest);\n'
+            '    }\n',
+        // It still tells an answer that closes pages from the others, and
+        // closes none of them.
+        '    if (_guards.changed(_pages) is ClosePages<AppLocation?>) {\n'
+            '      _close(0, dropsRequest: false);\n'
+            '    }\n',
       ),
     ],
   );
@@ -212,11 +222,11 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '    {{#guards}}if (_redirected(location)) return;\n'
+        '    {{#guards}}if (_redirected(location, again: () => '
+            'replace(location))) return;\n'
             '    {{/guards}}final branch = _branchOf(location);\n'
             "    _checkMainNavigation(location, branch, 'replace');\n",
-        '    {{#guards}}if (_guards.asked(location.routeName, location) != '
-            'null) return;\n'
+        '    {{#guards}}if (_asked(location) != null) return;\n'
             '    {{/guards}}final branch = _branchOf(location);\n'
             "    _checkMainNavigation(location, branch, 'replace');\n",
       ),
@@ -274,6 +284,8 @@ final class BrokenModule extends SmfModule {
             '              location: location,\n'
             '              pushed: _results.containsKey(location),\n'
             '            ),\n'
+            '        if (_overFallback) (route: null, location: null, '
+            'pushed: false),\n'
             '      ];\n',
         '            (\n'
             '              route: _results.containsKey(location)\n'
@@ -282,6 +294,8 @@ final class BrokenModule extends SmfModule {
             '              location: location,\n'
             '              pushed: _results.containsKey(location),\n'
             '            ),\n'
+            '        if (_overFallback) (route: null, location: null, '
+            'pushed: false),\n'
             '      ];\n'
             '\n'
             '  /// The location below the pages that pushes showed, or `null` '
@@ -317,11 +331,64 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '    final guarded = _guards.asked(location.routeName, location);\n',
-        '    final guarded = _guards.asked(\n'
-            '      location.chain.first.routeName,\n'
-            '      location,\n'
-            '    );\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.routeName,\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.chain.first.routeName,\n',
+      ),
+    ],
+  );
+
+  /// The fake router that shows the target of a guard that stands for a
+  /// condition in place of its whole stack, as it shows the target of a
+  /// gate, where the guards answer to show it over the page on top, and
+  /// that keeps no request waiting. So the user cannot go back from the
+  /// target to the page that they were on, and nothing happens once the
+  /// condition holds but that the flow, which is over, leaves for the
+  /// screen that the app starts on.
+  static const routerShowingFlowInPlace = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_shows_flow_in_place'),
+    'A plain navigator that opens the flow of a condition in place of its '
+    'stack (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      case ShowOver(location: final target, :final flow):\n'
+            '        _drop();\n'
+            '        _stack.add(target!);\n'
+            '        _results[target] = Completer<Object?>();\n'
+            '        _waiting = (flow: flow, again: again, drop: drop);\n'
+            '        notifyListeners();\n',
+        '      case ShowOver(location: final target):\n'
+            '        _go(target);\n'
+            '        drop?.call();\n',
+      ),
+    ],
+  );
+
+  /// The fake router that opens the target of a guard that stands for a
+  /// condition over the page on top and keeps the request waiting, but
+  /// drops the request when the guards close the pages of the flow, rather
+  /// than making it again. So once the condition holds, the user is back on
+  /// the page that the flow was opened over, the location that was asked
+  /// for does not show, and a `push()` that waited completes with `null`.
+  static const routerForgettingWaitingRequest = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_forgets_waiting_request'),
+    'A plain navigator that forgets the request that waits for a flow '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      } else {\n'
+            '        waiting.again();\n'
+            '      }\n',
+        '      } else {\n'
+            '        waiting.drop?.call();\n'
+            '      }\n',
       ),
     ],
   );

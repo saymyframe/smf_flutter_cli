@@ -764,18 +764,20 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// and the screen of the target of that guard (`redirectOf()` of the
 /// role): every location outside the flow of a gate, and for a guard that
 /// stands for a condition, only the locations of the routes that ask for
-/// the condition. For any other location in a flow that is over, it is the
-/// screen that the app starts on (`flowIsOver()` of the role). So its
-/// probe, `probeRoutes()`, which the start check runs on a device, holds
-/// whichever guards allow there, where no test can open one, such as a
-/// guard that asks for a signed-in user. The test itself first fails on
-/// each guard that does not allow, by its name, a guard of a condition
-/// too: under `flutter test`, the module of a guard opens it for the tests
-/// of the app, in the mocks of its app test ([MatrixAppTest.mocks]), so
-/// that the walk reaches every route outside the flows and the tests of
-/// the other modules see the screens that they expect. The screens of a
-/// flow are then for the tests of its module, since the router shows them
-/// only while the guard does not allow.
+/// the condition. The target of a gate takes the place of the stack, and
+/// that of a guard of a condition opens over the page that the walk is on:
+/// either way it is the page on top, which the walk looks at. For any other
+/// location in a flow that is over, it is the screen that the app starts on
+/// (`flowIsOver()` of the role). So its probe, `probeRoutes()`, which the
+/// start check runs on a device, holds whichever guards allow there, where
+/// no test can open one, such as a guard that asks for a signed-in user.
+/// The test itself first fails on each guard that does not allow, by its
+/// name, a guard of a condition too: under `flutter test`, the module of a
+/// guard opens it for the tests of the app, in the mocks of its app test
+/// ([MatrixAppTest.mocks]), so that the walk reaches every route outside
+/// the flows and the tests of the other modules see the screens that they
+/// expect. The screens of a flow are then for the tests of its module,
+/// since the router shows them only while the guard does not allow.
 ///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes and the guards of its router role, into
@@ -961,11 +963,12 @@ const ShownScreen startOfApp = (
   screen: ${start.screen},
 );
 
-/// What the router shows when it is asked to show [walked], as the router
-/// role says: the target of the guard that keeps the user from it
-/// (redirectOf()), a gate or a guard of a condition that [walked] asks for,
-/// or else the screen that the app starts on if the flow of [walked] is
-/// over (flowIsOver()), or else the page and the screen of [walked] itself.
+/// What the router shows on top when it is asked to show [walked], as the
+/// router role says: the target of the guard that keeps the user from it
+/// (redirectOf()), in place of the stack for a gate, and over the page that
+/// the user is on for a guard of a condition that [walked] asks for; or
+/// else the screen that the app starts on if the flow of [walked] is over
+/// (flowIsOver()), or else the page and the screen of [walked] itself.
 ShownScreen shownFor(WalkedLocation walked) {
   final target = ${RouterRole.redirectOf}(walked.route);
   if (target != null) {

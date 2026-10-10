@@ -373,13 +373,16 @@ void main() {
 
 /// Prints what `GuardedNavigation` of the app answers a router that knows
 /// a location by its URI, as it is asked about locations and told of the
-/// pages of a stack while the guards open and close. A page is written as
-/// its route, or `-` for none, its location, and `pushed` if a push showed
-/// it; the page on top comes first.
+/// pages of a stack while the guards open and close. The pages are written
+/// as `pagesOf` of [vmAnswers] reads them. The app has no guard with routes,
+/// so no answer depends on the pages that a location is asked for on top
+/// of, and the script gives none.
 const _vmMemoryMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/account/account_composition.dart';
 import 'package:my_app/features/intro/intro_status.dart';
+
+import 'answers.dart';
 
 final guards = GuardedNavigation<String>(
   start: '/',
@@ -387,20 +390,12 @@ final guards = GuardedNavigation<String>(
 );
 
 void asked(String? route, String location) {
-  final answer = guards.asked(route, location);
-  print('  asked $location: ${answer?.location ?? 'shows it'}');
+  final answer = guards.asked(route, location, onTopOf: const []);
+  print('  asked $location: ${whenAsked(answer)}');
 }
 
 void changed(String what, List<String> pages) {
-  final answer = guards.changed([
-    for (final page in pages.map((page) => page.split(' ')))
-      (
-        route: page[0] == '-' ? null : page[0],
-        location: page[1],
-        pushed: page.length > 2,
-      ),
-  ]);
-  print('  $what: ${answer?.location ?? 'stays'}');
+  print('  $what: ${whenChanged(guards.changed(pagesOf(pages)))}');
 }
 
 void main() {
@@ -521,26 +516,20 @@ import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/account/account_composition.dart';
 import 'package:my_app/features/intro/intro_status.dart';
 
+import 'answers.dart';
+
 final guards = GuardedNavigation<String>(
   start: '/',
   locationOf: (location) => location.path,
 );
 
 void asked(String? route, String location) {
-  final answer = guards.asked(route, location);
-  print('  asked $location: ${answer?.location ?? 'shows it'}');
+  final answer = guards.asked(route, location, onTopOf: const []);
+  print('  asked $location: ${whenAsked(answer)}');
 }
 
 void changed(String what, List<String> pages) {
-  final answer = guards.changed([
-    for (final page in pages.map((page) => page.split(' ')))
-      (
-        route: page[0] == '-' ? null : page[0],
-        location: page[1],
-        pushed: page.length > 2,
-      ),
-  ]);
-  print('  $what: ${answer?.location ?? 'stays'}');
+  print('  $what: ${whenChanged(guards.changed(pagesOf(pages)))}');
 }
 
 void main() {
@@ -655,20 +644,22 @@ const _vmSharedTargetMain = r'''
 import 'package:my_app/core/router/app_router.dart';
 import 'package:my_app/features/intro/intro_status.dart';
 
+import 'answers.dart';
+
 void main() {
   // The router is created while no guard allows, and has no page yet.
   final guards = GuardedNavigation<String>(
     start: '/',
     locationOf: (location) => location.path,
   );
-  String told(List<(String, String)> pages) =>
-      guards.changed([
-        for (final (route, location) in pages)
-          (route: route, location: location, pushed: false),
-      ])?.location ??
-      'stays';
+  String told(List<(String, String)> pages) => whenChanged(
+        guards.changed([
+          for (final (route, location) in pages)
+            (route: route, location: location, pushed: false),
+        ]),
+      );
   String asked(String route, String location) =>
-      guards.asked(route, location)?.location ?? 'shows it';
+      whenAsked(guards.asked(route, location, onTopOf: const []));
   String over() => flowIsOver('intro.terms') ? 'over' : 'not over';
   const flow = [('intro.terms', '/intro/terms'), ('intro.intro', '/intro')];
 
@@ -959,7 +950,13 @@ void main() {
               'RouteGuard.flow',
               // Whether the user comes back to where they were.
               'RouteGuard.resumes',
+              // The routes that a guard keeps the user from, if not all.
+              'RouteGuard.routes',
               RouterRole.routeGuards,
+              // What a request for such a route does once its guard allows.
+              'AppNavigator.go',
+              'AppNavigator.push',
+              'AppNavigator.replace',
             ],
           },
           files: rendered.files,
@@ -1782,7 +1779,8 @@ two guards with one target, in the other order
       expect(
         routerRole.structuralRules[3].description,
         'In an app with guards, the files of the provider of the role create '
-        'a GuardedNavigation and read guardChanges.',
+        'a GuardedNavigation, read guardChanges, and name its answers '
+        'ShowOver and ClosePages.',
       );
     });
 
@@ -1940,7 +1938,7 @@ two guards with one target, in the other order
       bool withProvider = true,
     }) =>
         _structuralIssues(
-          'The provider of the router role does not ask the guards',
+          'The provider of the router role does not',
           StructuralRuleRequest(
             hook: RoleHookRequest(
               data: data ?? _guardedData,
@@ -1949,8 +1947,8 @@ two guards with one target, in the other order
             ),
             files: {
               for (final file in files) file.path: file,
-              // A file of a feature that uses both, which asks nothing for
-              // the router.
+              // A file of a feature that uses them all, which asks nothing
+              // for the router.
               screenPath: const DartFileIndex(
                 path: screenPath,
                 imports: [
@@ -1958,6 +1956,10 @@ two guards with one target, in the other order
                 ],
                 invocations: [IndexedInvocation('GuardedNavigation')],
                 references: [IndexedReference('guardChanges')],
+                typeNames: [
+                  IndexedTypeName('ShowOver'),
+                  IndexedTypeName('ClosePages'),
+                ],
               ),
             },
             owners: {
@@ -1982,37 +1984,47 @@ two guards with one target, in the other order
         );
 
     /// The file of the provider with `createAppRouter()`, which imports the
-    /// file of the role by a relative path, and calls [calls] and reads
-    /// [reads].
+    /// file of the role by a relative path, calls [calls], reads [reads]
+    /// and names the types [types].
     DartFileIndex factory({
       List<String> calls = const [],
       List<String> reads = const [],
+      List<String> types = const [],
     }) =>
         DartFileIndex(
           path: factoryPath,
           imports: const [IndexedImport('app_router.dart')],
           invocations: [for (final name in calls) IndexedInvocation(name)],
           references: [for (final name in reads) IndexedReference(name)],
+          typeNames: [for (final name in types) IndexedTypeName(name)],
+        );
+
+    /// A file of the provider that asks the guards and does what they
+    /// answer.
+    DartFileIndex asking() => factory(
+          calls: ['GuardedNavigation'],
+          reads: ['guardChanges'],
+          types: ['ShowOver', 'ClosePages'],
         );
 
     String problem(String what) =>
         'The provider of the router role does not ask the guards of the '
         'app: none of its files $what of ${RouterRole.appRouterFile}.';
 
+    String unanswered(String answer) =>
+        'The provider of the router role does not do what the guards of '
+        'the app answer: none of its files names the answer $answer of '
+        '${RouterRole.appRouterFile}.';
+
     test(
-        'accepts a provider whose files create a GuardedNavigation and read '
-        'guardChanges', () {
-      expect(
-        check([
-          factory(calls: ['GuardedNavigation'], reads: ['guardChanges']),
-        ]),
-        isEmpty,
-      );
+        'accepts a provider whose files create a GuardedNavigation, read '
+        'guardChanges, and name the answers ShowOver and ClosePages', () {
+      expect(check([asking()]), isEmpty);
       // In two of its files, one of which imports the file of the role
       // with a prefix.
       expect(
         check([
-          factory(calls: ['GuardedNavigation']),
+          factory(calls: ['GuardedNavigation'], types: ['ClosePages']),
           const DartFileIndex(
             path: delegatePath,
             imports: [
@@ -2022,14 +2034,24 @@ two guards with one target, in the other order
               ),
             ],
             memberAccesses: [IndexedMemberAccess('router', 'guardChanges')],
+            typeNames: [IndexedTypeName('ShowOver', prefix: 'router')],
           ),
         ]),
         isEmpty,
       );
+      // An app whose guards are all gates gets no other answer than a
+      // location, and the rule holds there all the same: a guard with
+      // routes that is added to the app by hand needs no other router.
+      expect(
+        _facade(_guardedData).guards.every((guard) => guard.isGate),
+        isTrue,
+      );
     });
 
     test('reports a provider that does not ask the guards', () {
-      final issues = check([factory()]);
+      final issues = check([
+        factory(types: ['ShowOver', 'ClosePages']),
+      ]);
 
       expect(
         [for (final issue in issues) issue.message],
@@ -2041,6 +2063,7 @@ two guards with one target, in the other order
       for (final issue in issues) {
         expect(issue.origin, provider);
         expect(issue.path, factoryPath);
+        expect(issue.isError, isTrue);
         expect(
           issue.hint,
           'A router asks its GuardedNavigation about every location before '
@@ -2051,7 +2074,10 @@ two guards with one target, in the other order
       expect(
         [
           for (final issue in check([
-            factory(calls: ['GuardedNavigation']),
+            factory(
+              calls: ['GuardedNavigation'],
+              types: ['ShowOver', 'ClosePages'],
+            ),
           ]))
             issue.message,
         ],
@@ -2060,7 +2086,7 @@ two guards with one target, in the other order
       expect(
         [
           for (final issue in check([
-            factory(reads: ['guardChanges']),
+            factory(reads: ['guardChanges'], types: ['ShowOver', 'ClosePages']),
           ]))
             issue.message,
         ],
@@ -2070,9 +2096,73 @@ two guards with one target, in the other order
       // guards make a router remember.
       expect(
         check([
-          factory(calls: ['redirectOf'], reads: ['guardChanges']),
+          factory(
+            calls: ['redirectOf'],
+            reads: ['guardChanges'],
+            types: ['ShowOver', 'ClosePages'],
+          ),
         ]),
         hasLength(1),
+      );
+    });
+
+    test(
+        'reports a provider that asks the guards and names neither the '
+        'answer that opens a flow over the page on top nor the one that '
+        'closes pages, as one that shows every answer in place of its stack',
+        () {
+      final issues = check([
+        factory(
+          calls: ['GuardedNavigation'],
+          reads: ['guardChanges'],
+          // The other answers, and a type that it only declares a field
+          // with.
+          types: ['ShowInstead', 'ShowNothing', 'GuardedNavigation'],
+        ),
+      ]);
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [unanswered('ShowOver'), unanswered('ClosePages')],
+      );
+      for (final issue in issues) {
+        expect(issue.origin, provider);
+        expect(issue.path, factoryPath);
+        expect(issue.isError, isTrue);
+        expect(
+          issue.hint,
+          'A router opens the target of a guard with routes over the page '
+          'on top for the answer ShowOver, and closes the pages on top for '
+          'the answer ClosePages; see RouterRole.guardedNavigation.',
+        );
+      }
+      expect(
+        [
+          for (final issue in check([
+            factory(
+              calls: ['GuardedNavigation'],
+              reads: ['guardChanges'],
+              types: ['ShowOver'],
+            ),
+          ]))
+            issue.message,
+        ],
+        [unanswered('ClosePages')],
+      );
+      // A call of a function of that name is no answer of the guards that
+      // the provider tells apart.
+      expect(
+        [
+          for (final issue in check([
+            factory(
+              calls: ['GuardedNavigation', 'ShowOver', 'ClosePages'],
+              reads: ['guardChanges', 'ShowOver', 'ClosePages'],
+              types: ['ClosePages'],
+            ),
+          ]))
+            issue.message,
+        ],
+        [unanswered('ShowOver')],
       );
     });
 
@@ -2093,6 +2183,40 @@ two guards with one target, in the other order
             ],
             // Of an object, not of the import.
             memberAccesses: [IndexedMemberAccess('guards', 'guardChanges')],
+            typeNames: [
+              // Of other.dart too, and after a prefix that no import has.
+              IndexedTypeName('ShowOver'),
+              IndexedTypeName('ClosePages', prefix: 'other'),
+            ],
+          ),
+        ]),
+        hasLength(4),
+      );
+      // A file that does not import the file of the role names none of its
+      // types.
+      expect(
+        check([
+          asking(),
+          const DartFileIndex(
+            path: delegatePath,
+            typeNames: [
+              IndexedTypeName('ShowOver'),
+              IndexedTypeName('ClosePages'),
+            ],
+          ),
+        ]),
+        isEmpty,
+      );
+      expect(
+        check([
+          factory(calls: ['GuardedNavigation'], reads: ['guardChanges']),
+          const DartFileIndex(
+            path: delegatePath,
+            imports: [IndexedImport('package:my_app/core/other.dart')],
+            typeNames: [
+              IndexedTypeName('ShowOver'),
+              IndexedTypeName('ClosePages'),
+            ],
           ),
         ]),
         hasLength(2),
@@ -2102,7 +2226,7 @@ two guards with one target, in the other order
     test(
         'checks an app with guards and the files of a provider among its '
         'modules, and nothing otherwise', () {
-      expect(check(const []), hasLength(2));
+      expect(check(const []), hasLength(4));
       expect(check(const [], withProvider: false), isEmpty);
       expect(check([factory()], data: _data), isEmpty);
     });
