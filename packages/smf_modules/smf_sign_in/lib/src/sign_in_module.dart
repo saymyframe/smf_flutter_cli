@@ -86,7 +86,9 @@ import 'package:smf_sign_in/src/agents.dart';
 ///   `appSession.hasAccount`, and the router shows the sign-in in place of
 ///   such a route until it holds. With it, the screens of the sign-in show
 ///   in an app that everyone may use without an account too, where the gate
-///   always allows.
+///   always allows. It does not bring the user back either: once the user
+///   of an account signs out on such a route, the next user does not come
+///   to it.
 ///
 /// So no screen navigates once the user is signed in, and nothing navigates
 /// to the sign-in: the session changes, and the router shows the sign-in or
