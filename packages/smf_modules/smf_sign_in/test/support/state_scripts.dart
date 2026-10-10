@@ -8,10 +8,11 @@ import 'dart_app.dart';
 /// whichever way the app manages state.
 ///
 /// `Scripted` notes its calls, holds them while `hold` is not complete,
-/// and fails them with `failure` while that is set. `Screen` is the state
-/// of one screen as a scenario sees it: its state, each state that it told
-/// its listeners of, the call of the screen, and the user who leaves the
-/// screen.
+/// and fails them with `failure` while that is set. `change()` gives it
+/// another user without a call, as when a session ends on the server.
+/// `Screen` is the state of one screen as a scenario sees it: its state,
+/// each state that it told its listeners of, the call of the screen, and
+/// the user who leaves the screen.
 const _prelude = r'''
 import 'dart:async';
 import 'dart:isolate';
@@ -45,6 +46,13 @@ final class Scripted implements AuthService {
     if (next == null) return;
     user = next();
     _changes.add(user);
+  }
+
+  /// The user changes without a call of the app, and the service tells of
+  /// it.
+  void change(AuthUser? next) {
+    user = next;
+    _changes.add(next);
   }
 
   @override
@@ -111,6 +119,8 @@ String show(Object? value) => switch (value) {
     'busy: $busy, failure: ${failure?.reason.name}',
   ResetPasswordState(:final busy, :final failure, :final sentTo) =>
     'busy: $busy, failure: ${failure?.reason.name}, sent to: $sentTo',
+  AccountState(:final busy, :final failure) =>
+    'busy: ${busy?.name}, failure: ${failure?.reason.name}',
   SignedOutSession() => 'nobody',
   AnonymousSession(:final uid) => 'anonymous $uid',
   AccountSession(:final uid, :final email) => 'account $uid $email',
@@ -127,6 +137,7 @@ final class Screen {
     required this.states,
     required this.submit,
     required this.leave,
+    this.other,
   });
 
   /// The state of the screen now.
@@ -140,6 +151,10 @@ final class Screen {
 
   /// The user leaves the screen.
   final Future<void> Function() leave;
+
+  /// Makes the other call of a screen with two, or `null` for a screen with
+  /// one.
+  final Future<void> Function()? other;
 }
 
 /// What a screen does in each scenario, by the name of the scenario:
