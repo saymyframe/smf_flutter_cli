@@ -289,7 +289,7 @@ final class $_stay<L> implements WhenAsked<L> {
 /// The router closes the [pages] pages on top, at once and whatever its
 /// navigator shows over them, such as a dialog, and each `push()` that
 /// showed one of them completes with `null`. It then makes the request
-/// that waited for those pages again.
+/// that waits again, if no page of the flow of that request is left.
 final class $_close<L> implements WhenChanged<L> {
   /// Creates the answer.
   const $_close(this.pages);
