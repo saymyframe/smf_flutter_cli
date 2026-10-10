@@ -41,12 +41,14 @@ While a call is on its way, the state of a screen is busy and takes no second ca
 
 ## What shows the sign-in
 
-The screens do not navigate once the user is signed in, and no code navigates to the sign-in. The module declares two guards of the routes, and the router shows the sign-in by what they say:
+The screens neither close themselves nor navigate once the user is signed in. The module declares two guards of the routes, and the router shows the sign-in and leaves it by what they say:
 
 - `sign_in.gate` reads `appSession.allowsApp`. In an app that nobody may use without an account, the router shows the sign-in in place of every other screen until the user is signed in.
-- `sign_in.account` reads `appSession.hasAccount`. In an app that everyone may use, the router shows the sign-in in place of a route that needs an account, and the rest of the app stays open.
+- `sign_in.account` reads `appSession.hasAccount`. In an app that everyone may use, a request for a route that needs an account opens the sign-in over the page that the user is on, and the rest of the app stays open. Back returns to that page. Once the user is signed in, the router closes the sign-in and shows the route that was asked for.
 
 Which of the two keeps a user out is up to the sign-in mode of the app, which `smf create` asks for. The code of the module is the same in every mode.
+
+In an app that everyone may use, a screen may also offer to sign in. It opens the sign-in with `context.nav.signIn.signIn().push<void>()`, so that back leads back. In an app that needs an account, no code navigates to the sign-in: the gate shows it.
 
 Once the user is signed in to an account, both guards allow, and the router leaves the sign-in. From then on, a navigation to one of the three routes, such as a link, shows the screen that the app starts on. After a sign-out in an app that needs an account, the router shows the sign-in again. The next user then starts on the screen that the app starts on, wherever the last user was.
 
