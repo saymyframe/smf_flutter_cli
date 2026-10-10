@@ -9,13 +9,16 @@
 // screen that creates an account and to the one that resets a password, and
 // each leads back. A sign-up and a sign-in show the screen that the app
 // starts on, the next launch has the account, and a sign-out shows the
-// sign-in again.
+// sign-in again. For a user with an account, a link to a route of the
+// sign-in shows the screen that the app starts on.
 //
 // An app that everyone may use shows the screen that it starts on, and the
 // sign-in once code asks for it, over that screen, with a button that leads
 // back. A sign-up closes the sign-in, and the user is back on the screen
 // below. In an app that signs an anonymous user in, that user keeps the id
-// with the account. A sign-out leaves the app open.
+// with the account. A sign-out leaves the app open. After a sign-in over a
+// screen, the user is on that same page, with the pages that were below
+// it: the router closed the sign-in, and its screen closed nothing.
 //
 // The screens only change the session of the app: the router of the app,
 // whichever module provides it, shows them and leaves them, as the router
