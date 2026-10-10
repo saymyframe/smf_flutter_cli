@@ -120,6 +120,13 @@ enum AuthMode {
 /// that is no provider has no hook, so its code is the same in every mode
 /// and reads `authMode` when the app runs.
 ///
+/// The declaration of `authMode` keeps the form in which the template
+/// writes it, `const AuthMode authMode = AuthMode.required;`, on a line
+/// that it starts, and the developer of the app changes the mode there. So
+/// a tool of the app that `dart` runs, which cannot load a file that
+/// imports Flutter, reads the mode from the text of [sessionFile], with
+/// [modeDeclaration]; [modeWrittenIn] reads it so.
+///
 /// ## A route that needs an account
 ///
 /// [account] is the condition of a route whose screen is only for the user
@@ -351,6 +358,56 @@ final class AuthRole extends Role<RoleImplementation> {
   /// a render hook of the role or of its provider.
   AuthMode modeIn(RoleHookInput<RoleImplementation> input) =>
       input.choice! as AuthMode;
+
+  /// How a tool reads the mode of an app from the text of [sessionFile]:
+  /// the source of a regular expression for a search over the lines of the
+  /// file, `RegExp(AuthRole.modeDeclaration, multiLine: true)`.
+  ///
+  /// A provider whose side has to be set up for the mode, such as with a
+  /// way to sign in that only one mode needs, may give the app a tool for
+  /// that, a script that `dart` runs. `dart` cannot load [sessionFile],
+  /// which imports Flutter. And the mode that the render hook of the
+  /// provider knows ([modeIn]) is the one that the app was generated in,
+  /// which a script would have wrong from the first time the developer of
+  /// the app changes `authMode`. So such a tool reads the declaration.
+  ///
+  /// Each match of the expression is a comment of the file, or a
+  /// declaration of `authMode` that starts its line and has a mode as its
+  /// value. Only a declaration has the first group, the name of its mode.
+  /// The file tells the mode when exactly one match has that group; a tool
+  /// stops otherwise, rather than guess. [modeWrittenIn] reads the mode so.
+  ///
+  /// The expression takes the declaration as the template writes it and as
+  /// `dart format` leaves it, and as a developer may leave it: without the
+  /// type, with `final`, with its value on the next line, and with a
+  /// comment after it. It takes no value that is not the name of an
+  /// [AuthMode], no computed value, no declaration within a comment, and
+  /// none that does not start its line, as that of a local variable. It
+  /// follows a block comment within a block comment, but not one within
+  /// that.
+  static final String modeDeclaration =
+      // A block comment, which may have block comments within it.
+      r'/\*(?:[^*/]|\*(?!/)|/(?!\*)|/\*(?:[^*]|\*(?!/))*\*/)*\*/'
+      // A comment to the end of its line.
+      r'|//[^\n]*'
+      // The declaration, which starts its line.
+      r'|^(?:const|final)\s+(?:AuthMode\s+)?authMode\s*=\s*AuthMode\.'
+      '(${[for (final mode in AuthMode.values) mode.name].join('|')})'
+      r'\s*;';
+
+  /// The mode that [source], the text of [sessionFile] of an app, declares
+  /// as `authMode`, or `null` if it does not tell the mode: it has no
+  /// declaration that [modeDeclaration] takes, or more than one.
+  AuthMode? modeWrittenIn(String source) {
+    final declared = [
+      for (final match
+          in RegExp(modeDeclaration, multiLine: true).allMatches(source))
+        if (match[1] case final name?) name,
+    ];
+    return declared.length == 1
+        ? AuthMode.values.byName(declared.single)
+        : null;
+  }
 }
 
 /// What the owner of a file does rather than reach the service of the
