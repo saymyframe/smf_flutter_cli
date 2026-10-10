@@ -66,6 +66,12 @@ void main() {
           reason: 'The target of a guard of a condition opens over the page '
               'that the user is on.',
         );
+        expect(
+          result(),
+          'not completed',
+          reason: 'A push() that opened the flow of a guard waits while the '
+              'flow is open.',
+        );
         return result;
       }
 
