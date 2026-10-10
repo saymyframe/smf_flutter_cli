@@ -1604,6 +1604,10 @@ void main() {
       // The router, whose routes ask for the account. Not the DI role: the
       // role registers nothing in a container.
       expect(authRole.uses, {routerRole});
+      // Its provider uses what the role uses, so the contract harness
+      // builds the apps of a provider with a router and without one.
+      expect(_provider.effectiveUses, {routerRole});
+      expect(_provider.effectiveRequires, isEmpty);
       expect(authRole.sockets, const [AuthRole.implementations]);
       expect(AuthRole.implementations.tag, 'smf_auth__implementations');
       expect(authRole.options, const [AuthRole.modeOption]);
