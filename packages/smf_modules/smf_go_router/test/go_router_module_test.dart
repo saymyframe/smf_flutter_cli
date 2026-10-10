@@ -139,10 +139,13 @@ class _GoAppRouter {
 
 /// The members of the router that give go_router a new route for the main
 /// navigation once the main navigation has left its pages, as the analyzer
-/// prints their declarations, by name.
-final Map<String, String> _expectedRenewalMembers = {
-  for (final member in parseString(
-    content: '''
+/// prints their declarations, by name. In an app with [guards], the router
+/// counts what go_router does with its new routes among its own calls, so
+/// that the `redirect` of go_router does not ask the guards about locations
+/// that are shown already.
+Map<String, String> _expectedRenewalMembers({bool guards = false}) => {
+      for (final member in parseString(
+        content: '''
 class _GoAppRouter {
   late StatefulShellRoute _mainNavigationRoute = _mainNavigation();
 
@@ -164,6 +167,7 @@ class _GoAppRouter {
     final routes = _routes.value;
     _mainNavigationRoute = _mainNavigation();
     _renewing = true;
+    ${guards ? '_asking++;' : ''}
     try {
       _routes.value = RoutingConfig(
         routes: [
@@ -178,14 +182,15 @@ class _GoAppRouter {
         config.restore(shown);
       }
     } finally {
+      ${guards ? '_asking--;' : ''}
       _renewing = false;
     }
   }
 }
 ''',
-  ).unit.declarations.whereType<ClassDeclaration>().single.body.members)
-    _nameOf(member)!: member.toSource(),
-};
+      ).unit.declarations.whereType<ClassDeclaration>().single.body.members)
+        _nameOf(member)!: member.toSource(),
+    };
 
 /// The members of the router that let each push complete with the value
 /// that its page returns when it closes, whatever completer go_router gives
@@ -253,11 +258,22 @@ class _GoAppRouter {
     locationOf: (location) => location.path,
   );
 
+  int _asking = 0;
+
   ({Set<String> flow, void Function() again, void Function()? drop})? _waiting;
 
   void Function()? _opening;
 
   bool _muted = false;
+
+  R _own<R>(R Function() navigate) {
+    _asking++;
+    try {
+      return navigate();
+    } finally {
+      _asking--;
+    }
+  }
 
   void _quietly(void Function() navigate) {
     final muted = _muted;
@@ -271,6 +287,7 @@ class _GoAppRouter {
   }
 
   String? _redirect(String? route, String location) {
+    if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
       case null || ShowNothing():
         return null;
@@ -304,7 +321,7 @@ class _GoAppRouter {
       case null:
         return false;
       case ShowInstead(location: final shown):
-        config.go(shown);
+        _own(() => config.go(shown));
         drop?.call();
       case ShowNothing():
         drop?.call();
@@ -321,7 +338,7 @@ class _GoAppRouter {
     void Function()? drop,
   }) {
     _drop();
-    unawaited(config.push<Object?>(target));
+    _own(() => unawaited(config.push<Object?>(target)));
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -339,7 +356,7 @@ class _GoAppRouter {
       final closing = _pushedPages(
         shown.matches,
       ).toList().reversed.take(count).toList();
-      config.restore(shown.remove(closing.last));
+      _own(() => config.restore(shown.remove(closing.last)));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final page in closing) {
           if (!page.completer.isCompleted) page.completer.complete();
@@ -381,7 +398,7 @@ class _GoAppRouter {
       case null:
         break;
       case ShowInstead(:final location):
-        config.go(location);
+        _own(() => config.go(location));
       case ClosePages(pages: final count, :final dropsRequest):
         _close(count, dropsRequest: dropsRequest);
     }
@@ -1352,7 +1369,7 @@ void main() {
       // Nor what replaces one: go_router gets the routes themselves.
       expect(_goRouterOf(unit).target, isNull);
       expect(_fieldOf(unit, '_routes'), isNull);
-      for (final name in _expectedRenewalMembers.keys) {
+      for (final name in _expectedRenewalMembers().keys) {
         expect(app.files[_factory]!.text, isNot(contains(name)), reason: name);
       }
       // Only `_GoRouter` puts them into a `RoutingConfig`, which a class
@@ -1546,8 +1563,9 @@ void main() {
 
     test(
         'asks the guards in the redirect of go_router about the locations '
-        'that go_router parses, as the one it starts on and those of the '
-        'platform, with no pages', () {
+        'that go_router parses on its own, as the one it starts on and those '
+        'of the platform, with no pages, and not about those that the router '
+        'hands it', () {
       final router = _goRouterOf(unit);
 
       expect(
@@ -1556,11 +1574,14 @@ void main() {
         r"_redirect(state.topRoute?.name, '${state.uri}')",
       );
       // Such a location takes the place of the stack, so the guards are
-      // told of no pages. The redirect runs within the calls of the router
-      // too, for a location that the guards let the user see or that they
-      // answered: they answer nothing for it a second time.
+      // told of no pages, and the redirect answers nothing within a call of
+      // go_router that the router made itself: asked with no pages about a
+      // page of the flow of a guard that stands for a condition, the guards
+      // open it over the screen that the app starts on, as for a link.
+      final redirect = _expectedGuardMembers['_redirect']!;
+      expect(redirect, contains('if (_asking > 0) return null;'));
       expect(
-        _expectedGuardMembers['_redirect'],
+        redirect,
         contains('_guards.asked(route, location, onTopOf: const [])'),
       );
       // The location that the app opens with is the start route, which the
@@ -1579,21 +1600,24 @@ void main() {
 
       expect(
         _bodyOf(router, 'go'),
-        '{if (!_withoutPage && _redirected(location, again: () => '
-        'go(location))) {return;} config.go(location.path);}',
+        '{if (_withoutPage) return config.go(location.path); if '
+        '(_redirected(location, again: () => go(location))) return; '
+        '_own(() => config.go(location.path));}',
       );
       expect(
         _bodyOf(router, 'push'),
         '{$_pushWithoutPage final waiting = Completer<T?>(); if '
         '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
-        '{return waiting.future;} return config.push<T>(location.path);}',
+        '{return waiting.future;} return _own(() => '
+        'config.push<T>(location.path));}',
       );
       expect(
         _bodyOf(router, 'replace'),
         '{$_replaceWithoutPage if (_redirected(location, again: () => '
         'replace(location))) '
-        'return; config.pushReplacement<Object?>(location.path);}',
+        'return; _own(() => '
+        'config.pushReplacement<Object?>(location.path));}',
       );
     });
 
@@ -1611,9 +1635,11 @@ void main() {
       expect(_expectedGuardMembers.keys, [
         '_GoAppRouter',
         '_guards',
+        '_asking',
         '_waiting',
         '_opening',
         '_muted',
+        '_own',
         '_quietly',
         '_redirect',
         '_redirected',
@@ -1690,14 +1716,18 @@ void main() {
         '(context, state) => '
         r"_redirect(state.topRoute?.name, '${state.uri}')",
       );
-      // As everything else that the configuration has.
-      for (final MapEntry(key: name, value: source)
-          in _expectedRenewalMembers.entries) {
+      // As everything else that the configuration has. When go_router gets
+      // its new routes, it matches its location again and the router puts
+      // its pages back, and the redirect runs for both: the router counts
+      // them among its own calls, so that the guards are not asked about
+      // locations that are shown already.
+      final renewal = _expectedRenewalMembers(guards: true);
+      for (final MapEntry(key: name, value: source) in renewal.entries) {
         expect(members[name], source, reason: name);
       }
       for (final kept in ['onEnter', 'redirect', 'redirectLimit']) {
         expect(
-          _expectedRenewalMembers['_renewMainNavigation'],
+          renewal['_renewMainNavigation'],
           contains('$kept: routes.$kept'),
         );
       }
@@ -1710,14 +1740,14 @@ void main() {
         '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
         "{return waiting.future;} _checkMainNavigation(location, 'push'); "
-        'return config.push<T>(location.path);}',
+        'return _own(() => config.push<T>(location.path));}',
       );
       expect(
         _bodyOf(router, 'replace'),
         '{$_replaceWithoutPage if (_redirected(location, again: () => '
         'replace(location))) '
-        "return; _checkMainNavigation(location, 'replace'); "
-        'config.pushReplacement<Object?>(location.path);}',
+        "return; _checkMainNavigation(location, 'replace'); _own(() => "
+        'config.pushReplacement<Object?>(location.path));}',
       );
       expect(await analysisProblems(withLayout.app!), isEmpty);
     });
@@ -1826,14 +1856,14 @@ void main() {
           _nameOf(member): member.toSource(),
       };
 
-      expect(_expectedRenewalMembers.keys, [
+      expect(_expectedRenewalMembers().keys, [
         '_mainNavigationRoute',
         '_mainNavigationShown',
         '_renewing',
         '_renewMainNavigation',
       ]);
       for (final MapEntry(key: name, value: source)
-          in _expectedRenewalMembers.entries) {
+          in _expectedRenewalMembers().entries) {
         expect(members[name], source, reason: name);
       }
       // First of all when the pages change, so that the next location that

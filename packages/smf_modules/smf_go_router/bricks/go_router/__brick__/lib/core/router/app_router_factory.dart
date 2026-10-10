@@ -73,17 +73,24 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// that the user comes back to once the gates allow it. The router knows
   /// a location by its URI, and `/` is the screen that the app starts on.
   ///
-  /// The router asks them about each location before go_router shows it:
-  /// [go], [push] and [replace] ask in [_redirected], with the pages that
-  /// the location is asked for on top of, and the `redirect` of go_router
-  /// asks in [_redirect] about the locations that go_router parses on its
-  /// own, which take the place of the stack. The `redirect` runs for the
-  /// calls of the router too, with a location that the guards let the user
-  /// see or that they answered: they then answer nothing a second time.
+  /// The router asks them once about each location, before go_router shows
+  /// it: [go], [push] and [replace] ask in [_redirected], with the pages
+  /// that the location is asked for on top of, and the `redirect` of
+  /// go_router asks in [_redirect] about the locations that go_router
+  /// parses on its own, which take the place of the stack.
   final GuardedNavigation<String> _guards = GuardedNavigation(
     start: '/',
     locationOf: (location) => location.path,
   );
+
+  /// How many calls of go_router the router is in that are its own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already. The `redirect` of
+  /// go_router runs within each of them, and does not ask the guards then.
+  /// Asked with no pages, they would open a page of the flow of a guard
+  /// that stands for a condition over `/`, as for a link, though the router
+  /// shows it over the page that the user is on.
+  int _asking = 0;
 
   /// The request that waits for a flow that the guards opened over the page
   /// on top, if there is one: the routes of the flow, how to make the
@@ -103,10 +110,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   void go(AppLocation location) {{^guards}}=> config.go(location.path);{{/guards}}{{#guards}}{
-    if (!_withoutPage && _redirected(location, again: () => go(location))) {
-      return;
-    }
-    config.go(location.path);
+    if (_withoutPage) return config.go(location.path);
+    if (_redirected(location, again: () => go(location))) return;
+    _own(() => config.go(location.path));
   }{{/guards}}
 
   @override
@@ -126,7 +132,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       return waiting.future;
     }
     {{/guards}}{{#main_navigation}}_checkMainNavigation(location, 'push');
-    {{/main_navigation}}return config.push<T>(location.path);
+    {{/main_navigation}}return {{#guards}}_own(() => {{/guards}}config.push<T>(location.path){{#guards}}){{/guards}};
   }
 
   @override
@@ -134,7 +140,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (_withoutPage) return go(location);
     {{#guards}}if (_redirected(location, again: () => replace(location))) return;
     {{/guards}}{{#main_navigation}}_checkMainNavigation(location, 'replace');
-    {{/main_navigation}}config.pushReplacement<Object?>(location.path);
+    {{/main_navigation}}{{#guards}}_own(() => {{/guards}}config.pushReplacement<Object?>(location.path){{#guards}}){{/guards}};
   }
 
   /// Whether go_router has no page of a route: before it shows its first
@@ -156,6 +162,18 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// go_router asks, with no pages.{{/guards}}
   bool get _withoutPage =>
       config.routerDelegate.currentConfiguration.matches.isEmpty;{{#guards}}
+
+  /// Runs [navigate], a call of go_router that is the router's own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already.
+  R _own<R>(R Function() navigate) {
+    _asking++;
+    try {
+      return navigate();
+    } finally {
+      _asking--;
+    }
+  }
 
   /// Runs [navigate], of which the listeners of the screen hear only the
   /// page that it ends on. That page is not there yet while the `redirect`
@@ -184,6 +202,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// already, as when the user is on that screen. The listeners of the
   /// screen hear only of the target.
   String? _redirect(String? route, String location) {
+    if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
       case null || ShowNothing():
         return null;
@@ -227,7 +246,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         return false;
       case ShowInstead(location: final shown):
-        config.go(shown);
+        _own(() => config.go(shown));
         drop?.call();
       case ShowNothing():
         drop?.call();
@@ -248,7 +267,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     void Function()? drop,
   }) {
     _drop();
-    unawaited(config.push<Object?>(target));
+    _own(() => unawaited(config.push<Object?>(target)));
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -284,7 +303,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       final closing = _pushedPages(
         shown.matches,
       ).toList().reversed.take(count).toList();
-      config.restore(shown.remove(closing.last));
+      _own(() => config.restore(shown.remove(closing.last)));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final page in closing) {
           if (!page.completer.isCompleted) page.completer.complete();
@@ -346,7 +365,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         break;
       case ShowInstead(:final location):
-        config.go(location);
+        _own(() => config.go(location));
       case ClosePages(pages: final count, :final dropsRequest):
         _close(count, dropsRequest: dropsRequest);
     }
@@ -393,7 +412,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// its location again, without the redirects of the routes. So a
   /// location that a redirect refused, such as one without a value that its
   /// route requires, would get the page of its route in place of the error
-  /// screen: the router puts back the pages that go_router had.
+  /// screen: the router puts back the pages that go_router had.{{#guards}} The
+  /// `redirect` of go_router runs as it matches and as the router puts the
+  /// pages back, for locations that are shown already: the router counts
+  /// both among its own calls, so the guards are not asked about them.{{/guards}}
   void _renewMainNavigation() {
     final shown = config.routerDelegate.currentConfiguration;
     if (shown.matches.any(
@@ -407,7 +429,8 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     final left = _mainNavigationRoute;
     final routes = _routes.value;
     _mainNavigationRoute = _mainNavigation();
-    _renewing = true;
+    _renewing = true;{{#guards}}
+    _asking++;{{/guards}}
     try {
       _routes.value = RoutingConfig(
         routes: [
@@ -422,7 +445,8 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         config.restore(shown);
       }
     } finally {
-      _renewing = false;
+      {{#guards}}_asking--;
+      {{/guards}}_renewing = false;
     }
   }{{/main_navigation}}
 
