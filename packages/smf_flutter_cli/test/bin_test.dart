@@ -375,6 +375,10 @@ void main() {
                 'role, which sign_in requires\n',
               ),
               contains(
+                '  settings: the only provider of the settings screen '
+                'role, which sign_in requires\n',
+              ),
+              contains(
                 '  go_router: the only provider of the router role, which '
                 'sign_in requires\n',
               ),
