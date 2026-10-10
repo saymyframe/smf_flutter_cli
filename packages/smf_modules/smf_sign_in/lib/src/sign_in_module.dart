@@ -12,8 +12,8 @@ import 'package:smf_sign_in/src/agents.dart';
 /// ## The screens
 ///
 /// `SignInScreen` is at `/` of the module, so its full path is `/sign_in`.
-/// `SignUpScreen`, at `/sign_in/sign-up`, and `ResetPasswordScreen`, at
-/// `/sign_in/reset-password`, are below it, so each shows over the sign-in
+/// `SignUpScreen`, at `/sign_in/sign_up`, and `ResetPasswordScreen`, at
+/// `/sign_in/reset_password`, are below it, so each shows over the sign-in
 /// and its back button leads there. None of them is a destination of the
 /// main navigation, and the app cannot start on them.
 ///
@@ -32,10 +32,15 @@ import 'package:smf_sign_in/src/agents.dart';
 /// The parts of a screen rise in one after another, once. In an app that
 /// asks for less motion they are there at once, and a busy button is
 /// disabled with its label rather than spinning. A screen scrolls when it
-/// is too small for its content, is no wider than a phone, and takes its
-/// colours and its text styles from the theme of the app, whichever module
-/// provides it. The letters of the cell keep their size at a large text
-/// size, since the cell is a picture.
+/// is too small for its content and is no wider than a phone. The letters
+/// of the cell keep their size at a large text size, since the cell is a
+/// picture.
+///
+/// The fields, the buttons and the cards of a screen are those of the
+/// theme of the app, whichever module provides it: a screen gives a field
+/// no colour, border or padding of its own, so a change of the theme
+/// changes them here as everywhere else. What a screen draws itself, the
+/// cells of its picture, takes its colours from the theme too.
 ///
 /// ## Look and state
 ///
@@ -46,13 +51,11 @@ import 'package:smf_sign_in/src/agents.dart';
 /// the module has [Variants] of the state management role, and requires
 /// that role:
 /// - for [blocVariant], a cubit for each screen, which the screen provides
-///   and builds its view from, a composition file that creates the cubits
-///   with the session of the app, and `SessionCubit`, which the root of the
-///   app provides, for a widget that reads who uses the app;
+///   and builds its view from, and a composition file that creates the
+///   cubits with the session of the app;
 /// - for [riverpodVariant], a provider for each screen, which lasts as long
-///   as the screen, `appSessionProvider`, through which they reach the
-///   session of the app, and `sessionProvider`, for a widget that reads who
-///   uses the app.
+///   as the screen, and `appSessionProvider`, through which they reach the
+///   session of the app.
 ///
 /// Each variant adds the package of its state manager with the constraint
 /// `any`, so the version is the one of the module that provides the role.
@@ -60,8 +63,11 @@ import 'package:smf_sign_in/src/agents.dart';
 /// The state signs in only through `appSession` of the auth role, which
 /// the module requires, whichever module provides it. It calls
 /// `appSession.signUp` in every mode of the app: what an anonymous user
-/// gets is up to the session. The module registers nothing in a DI
-/// container and needs none.
+/// gets is up to the session. While a call is on its way, the state is
+/// busy and takes no second call. A failure ends that, with the failure as
+/// part of the state. A sign-in or a sign-up that succeeded leaves the
+/// state busy: the user is signed in then, and the router leaves the
+/// screen. The module registers nothing in a DI container and needs none.
 ///
 /// ## The guards
 ///
@@ -99,8 +105,9 @@ import 'package:smf_sign_in/src/agents.dart';
 ///
 /// The guide for coding agents of the app has a section of the module:
 /// where its screens are and what shows them, which files are the look and
-/// which the state, where a failure gets its text, and, by the variant, how
-/// a widget reads who uses the app.
+/// which the state, where a failure gets its text, what a widget test minds
+/// while a call is on its way, and, by the variant, where the state of a
+/// screen is.
 final class SignInModule extends SmfModule {
   /// Creates the module.
   const SignInModule();
@@ -313,29 +320,11 @@ final class SignInModule extends SmfModule {
         ),
       );
 
-  /// The screens with their state in cubits, the cubit with the session of
-  /// the app around the root of the app, and what the note of the module
-  /// says of them.
+  /// The screens with their state in cubits, and what the note of the
+  /// module says of them.
   static List<Contribution> _bloc(ModuleContext context) => [
         BrickContribution(signInBlocBundle),
         const PubspecContribution.hosted('flutter_bloc', 'any'),
-        const SocketContribution.wrap(
-          AppEntryRole.rootWrappers,
-          Fragment.wrap(
-            'BlocProvider(create: (_) => createSessionCubit(), child: ',
-            ')',
-            imports: [
-              ImportRef(
-                'package:flutter_bloc/flutter_bloc.dart',
-                show: ['BlocProvider'],
-              ),
-              ImportRef.app(
-                '$_folder/sign_in_composition.dart',
-                show: ['createSessionCubit'],
-              ),
-            ],
-          ),
-        ),
         AppEntryRole.agentSections.entry(
           agentHeading,
           AgentNote(blocAgentNote),
@@ -377,7 +366,7 @@ final class SignInModule extends SmfModule {
                 ),
                 children: [
                   Route(
-                    'sign-up',
+                    'sign_up',
                     name: 'signUp',
                     screen: ScreenRef(
                       'SignUpScreen',
@@ -385,7 +374,7 @@ final class SignInModule extends SmfModule {
                     ),
                   ),
                   Route(
-                    'reset-password',
+                    'reset_password',
                     name: 'resetPassword',
                     screen: ScreenRef(
                       'ResetPasswordScreen',

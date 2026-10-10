@@ -27,7 +27,9 @@ class SignUpScreen extends StatelessWidget {
           email: email,
           password: password,
         ),
-        // The screen of the sign-in is below this one.
+        // Closes this page. The screen of the sign-in is the page below
+        // it, whether that one is the first page of the app or shown over
+        // another screen.
         onSignIn: () => Navigator.of(context).maybePop(),
       ),
     ),

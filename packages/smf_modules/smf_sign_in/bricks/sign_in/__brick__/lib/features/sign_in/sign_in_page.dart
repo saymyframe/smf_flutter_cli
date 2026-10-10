@@ -119,9 +119,9 @@ class _AuthPageState extends State<AuthPage>
                       children: [
                         Semantics(
                           header: true,
-                          // The title is large already, so it grows only
-                          // by half with the text size of the device, and
-                          // a word of it stays on one line.
+                          // The title is large already. It grows only
+                          // by half with the text size of the device, so
+                          // that no word of it breaks on a narrow phone.
                           child: MediaQuery.withClampedTextScaling(
                             maxScaleFactor: 1.5,
                             child: Text(

@@ -22,7 +22,9 @@ class ResetPasswordScreen extends StatelessWidget {
         failure: state.failure,
         sentTo: state.sentTo,
         onSubmit: (email) => context.read<ResetPasswordCubit>().send(email),
-        // The screen of the sign-in is below this one.
+        // Closes this page. The screen of the sign-in is the page below
+        // it, whether that one is the first page of the app or shown over
+        // another screen.
         onSignIn: () => Navigator.of(context).maybePop(),
       ),
     ),

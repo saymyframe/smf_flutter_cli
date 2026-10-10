@@ -10,8 +10,11 @@ final class AuthActionState {
   /// Creates the state.
   const AuthActionState({this.busy = false, this.failure});
 
-  /// Whether the call is on its way. It stays so once the call succeeded:
-  /// the user is signed in then, and the router leaves the screen.
+  /// Whether the call is on its way.
+  ///
+  /// It stays so once the call succeeded. The user is signed in then, and
+  /// what comes next is up to the router, which leaves the screen: the
+  /// screen neither navigates nor shows its form again. A failure ends it.
   final bool busy;
 
   /// Why the last call failed, or `null` if none did.

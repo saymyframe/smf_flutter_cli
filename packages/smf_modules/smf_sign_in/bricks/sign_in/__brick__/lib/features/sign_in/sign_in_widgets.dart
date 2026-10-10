@@ -5,6 +5,9 @@ import '../../core/auth/app_session.dart';
 
 /// A field of a form with its [label] above it. The label takes as many
 /// lines as it needs, and a screen reader announces it with the field.
+///
+/// The field itself is as the theme of the app has its fields: no widget
+/// of the sign-in gives a field a colour, a border or a padding.
 class _Labelled extends StatelessWidget {
   const _Labelled({required this.label, required this.child});
 
@@ -32,32 +35,10 @@ class _Labelled extends StatelessWidget {
   }
 }
 
-/// The look of a field of the sign-in: a box in the colours of the theme of
-/// the app, with a thin line around it that tells whether the field has the
-/// focus or a mistake.
-InputDecoration _fieldDecoration(BuildContext context, {Widget? suffixIcon}) {
-  final colors = Theme.of(context).colorScheme;
-  OutlineInputBorder border(Color color, {double width = 1}) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: color, width: width),
-      );
-  return InputDecoration(
-    filled: true,
-    fillColor: colors.surfaceContainerLow,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-    border: border(colors.outlineVariant),
-    enabledBorder: border(colors.outlineVariant),
-    focusedBorder: border(colors.primary, width: 1.5),
-    errorBorder: border(colors.error),
-    focusedErrorBorder: border(colors.error, width: 1.5),
-    // The text of a mistake takes the lines that it needs.
-    errorMaxLines: 5,
-    suffixIcon: suffixIcon,
-    // The button in a field keeps its colour when the field has a mistake.
-    suffixIconColor: colors.onSurfaceVariant,
-  );
-}
+/// What every field of the sign-in has of its own: the text of a mistake
+/// takes the lines that it needs, as with a large text size, whatever the
+/// theme of the app says of its fields.
+const _mistakeLines = 5;
 
 /// The field of the email address of a form. It tells the form of an
 /// address that is missing or that has no `@`: whether the address is one,
@@ -93,7 +74,7 @@ class EmailField extends StatelessWidget {
       label: {{{text_email}}},
       child: TextFormField(
         controller: controller,
-        decoration: _fieldDecoration(context),
+        decoration: const InputDecoration(errorMaxLines: _mistakeLines),
         keyboardType: TextInputType.emailAddress,
         textInputAction: textInputAction,
         autofillHints: autofillHints,
@@ -147,20 +128,17 @@ class _PasswordFieldState extends State<PasswordField> {
       label: {{{text_password}}},
       child: TextFormField(
         controller: widget.controller,
-        decoration: _fieldDecoration(
-          context,
-          suffixIcon: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: IconButton(
-              onPressed: () => setState(() => _hidden = !_hidden),
-              tooltip: _hidden
-                  ? {{{text_show_password}}}
-                  : {{{text_hide_password}}},
-              icon: Icon(
-                _hidden
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-              ),
+        decoration: InputDecoration(
+          errorMaxLines: _mistakeLines,
+          suffixIcon: IconButton(
+            onPressed: () => setState(() => _hidden = !_hidden),
+            tooltip: _hidden
+                ? {{{text_show_password}}}
+                : {{{text_hide_password}}},
+            icon: Icon(
+              _hidden
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
             ),
           ),
         ),
@@ -179,6 +157,10 @@ class _PasswordFieldState extends State<PasswordField> {
 
 /// The button that submits a form, as wide as the form. While the call of
 /// the form is on its way, it shows that it is [busy] and does nothing.
+///
+/// It spins for as long as the call takes. So a widget test that waits for
+/// the screen with `pumpAndSettle()` returns only once the call has ended:
+/// while a call is on its way, such a test pumps frames one at a time.
 class SubmitButton extends StatelessWidget {
   /// Creates the button.
   const SubmitButton({
@@ -218,11 +200,14 @@ class SubmitButton extends StatelessWidget {
             child: Text(label, textAlign: TextAlign.center),
           ),
           if (spins)
-            SizedBox.square(
-              dimension: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Theme.of(context).colorScheme.onPrimary,
+            // In the colour that the theme of the app gives the label.
+            Builder(
+              builder: (context) => SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: DefaultTextStyle.of(context).style.color,
+                ),
               ),
             ),
         ],
@@ -253,7 +238,9 @@ class FailureMessage extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 20),
             child: _Failure(failure),
           );
-    // An app that asks for less motion shows the message at once.
+    // An app that asks for less motion shows the message at once. It does
+    // so without an AnimatedSize: one with a duration of zero fails an
+    // assertion of Flutter when the size of its child changes.
     if (MediaQuery.disableAnimationsOf(context)) return message;
     return AnimatedSize(
       duration: Durations.short4,
@@ -264,8 +251,8 @@ class FailureMessage extends StatelessWidget {
   }
 }
 
-/// The box with the text of [failure]: a tint of the colour that the theme
-/// has for an error, with a thin line around it.
+/// The box with the text of [failure]: a card as the theme of the app has
+/// its cards, in a tint of the colour that the theme has for an error.
 class _Failure extends StatelessWidget {
   const _Failure(this.failure);
 
@@ -279,59 +266,60 @@ class _Failure extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Color.alphaBlend(
-            colors.error.withValues(alpha: 0.08),
-            colors.surface,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: colors.error.withValues(alpha: 0.4)),
+      child: Card.outlined(
+        // In the theme of any app, the card is as wide as the form.
+        margin: EdgeInsets.zero,
+        color: Color.alphaBlend(
+          colors.error.withValues(alpha: 0.08),
+          colors.surface,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              // The icon grows with the first line of the text next to it.
-              size: MediaQuery.textScalerOf(context).scale(20),
-              color: colors.error,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    authFailureText(context, failure.reason),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurface,
-                    ),
-                  ),
-                  if (hint != null) ...[
-                    const SizedBox(height: 6),
-                    // As a path, it is not much larger than usual.
-                    MediaQuery.withClampedTextScaling(
-                      maxScaleFactor: 1.5,
-                      child: Text(
-                        hint,
-                        // The monospaced font of the device: Android has
-                        // it under the first name, and iOS under the next.
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontFamilyFallback: const ['Menlo', 'Courier'],
-                          fontSize: 12,
-                          color: colors.onSurfaceVariant,
-                        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                // The icon grows with the first line of the text next to
+                // it.
+                size: MediaQuery.textScalerOf(context).scale(20),
+                color: colors.error,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      authFailureText(context, failure.reason),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurface,
                       ),
                     ),
+                    if (hint != null) ...[
+                      const SizedBox(height: 6),
+                      // As a path, it is not much larger than usual.
+                      MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.5,
+                        child: Text(
+                          hint,
+                          // The monospaced font of the device: Android has
+                          // it under the first name, and iOS under the
+                          // next.
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontFamilyFallback: const ['Menlo', 'Courier'],
+                            fontSize: 12,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -359,7 +347,8 @@ String authFailureText(BuildContext context, AuthFailureReason reason) =>
     };
 
 /// An email address on a line of its own, as a page shows the address that
-/// a message went to: a text of the app has no place for it.
+/// a message went to: a text of the app has no place for it. It is a card
+/// as the theme of the app has its cards.
 class EmailAddress extends StatelessWidget {
   /// Creates the widget of [address].
   const EmailAddress(this.address, {super.key});
@@ -368,35 +357,13 @@ class EmailAddress extends StatelessWidget {
   final String address;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.mail_outline_rounded,
-            size: 20,
-            color: colors.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          // A long address takes more lines.
-          Expanded(
-            child: Text(
-              address,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colors.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Card.outlined(
+    // In the theme of any app, the card is as wide as the form.
+    margin: EdgeInsets.zero,
+    child: ListTile(
+      leading: const Icon(Icons.mail_outline_rounded),
+      // A long address takes more lines.
+      title: Text(address),
+    ),
+  );
 }
