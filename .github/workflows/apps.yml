@@ -276,7 +276,8 @@ jobs:
             "$RUNNER_TEMP/SMF apps застосунки é"
 
   # The tests that the modules of the CLI keep for the apps they are in, in
-  # the one app with every module of the registry of several providers
+  # one app with every module of the registry of several providers, the
+  # one with its first state manager
   # (severalProvidersModules of the fixture registry): the modules of the
   # CLI that provide a role an app can have several providers of, next to
   # fixture providers of the same roles, whose start-up and services go
