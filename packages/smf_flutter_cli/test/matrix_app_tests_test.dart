@@ -14,6 +14,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
 
 /// A provider of the auth role for the test of the app test of the role,
@@ -120,6 +121,15 @@ const _everyModule = [
   'every module (riverpod) --auth-mode=anonymous',
 ];
 
+/// The apps of the sign-in of the matrix of the CLI: one for each state
+/// manager, with the localization and without.
+const _signIn = [
+  'sign_in (bloc) with localization',
+  'sign_in (riverpod) with localization',
+  'sign_in (bloc)',
+  'sign_in (riverpod)',
+];
+
 /// The codes of the languages of the file of the texts of a module that
 /// the matrix writes for an app, [file], in the order of the file.
 List<String> _languagesOf(String file) => [
@@ -185,6 +195,7 @@ void main() {
     );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('onboarding').roles, {routerRole});
+    expect(named('sign_in').roles, {routerRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
@@ -876,9 +887,11 @@ void main() {
         'onboarding with localization',
         'onboarding',
         // Firebase Authentication with the localization, which requires
-        // the preferences.
+        // the preferences, and the sign-in with it.
         'firebase_auth with localization, router',
         'firebase_auth with localization',
+        'sign_in (bloc) with localization',
+        'sign_in (riverpod) with localization',
         ..._everyModule,
       ],
     );
@@ -986,9 +999,11 @@ void main() {
         'material_theme with localization',
         'onboarding with localization',
         // Firebase Authentication, which asks for its messages in the
-        // language of the app.
+        // language of the app, and the sign-in, whose screens have texts.
         'firebase_auth with localization, router',
         'firebase_auth with localization',
+        'sign_in (bloc) with localization',
+        'sign_in (riverpod) with localization',
         ..._everyModule,
       ],
     );
@@ -1018,6 +1033,8 @@ void main() {
         'onboarding with localization': ['en', 'uk'],
         'firebase_auth with localization, router': ['en', 'uk'],
         'firebase_auth with localization': ['en', 'uk'],
+        'sign_in (bloc) with localization': ['en', 'uk'],
+        'sign_in (riverpod) with localization': ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
     );
@@ -1910,6 +1927,202 @@ void main() {
         '};\n',
       ),
     );
+  });
+
+  test(
+      'the test of the sign-in applies to the apps with the module, '
+      'whatever else they have, in every mode of the auth role, declares '
+      'the mocks that sign a test account up through the session of the '
+      'app for the tests of every module of those apps, has no probe, and '
+      'expects the screen that the router role chose for the app to start '
+      'on, or the fallback screen of the app entry, and the texts of the '
+      'module in each language of the app', () {
+    final test = named('sign_in');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('sign_in'))) app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [..._signIn, ..._everyModule],
+    );
+    // The files of the test are the same in every mode, which the app has
+    // as a constant, and the matrix has an app with the module in each:
+    // the mode is the choice of the auth role for the app.
+    expect(
+      {
+        for (final app in applies)
+          authRole.modeIn(authRole.hookInput(app.hook!)).name,
+      },
+      {'required', 'guest', 'anonymous'},
+    );
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    // Nobody can sign in on a device, and the walk of the routes shows the
+    // screens there.
+    expect(test.startProbe, isNull);
+    expect(test.mocks!.path, 'test/sign_in_mocks.dart');
+    expect(test.mocks!.function, 'signUpTestAccount');
+    final mocks = DartFileIndexer.index(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    final function = mocks.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
+    // The account goes through the session of the app, so the mocks know
+    // no provider of the auth role: they call signUp() of the session, and
+    // import no other file of the app than that of the role.
+    expect(
+      [
+        for (final call in mocks.invocations)
+          if (call.enclosingDeclaration == test.mocks!.function) call.name,
+      ],
+      containsAll(['signUp', 'unawaited']),
+    );
+    final sessionFile = AuthRole.sessionFile.substring('lib/'.length);
+    expect(
+      [
+        for (final import in mocks.imports)
+          if (import.uri.startsWith('package:')) import.uri,
+      ],
+      ['package:{{app_name}}/$sessionFile'],
+    );
+
+    final screens = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [signInOfAppFile], reason: app.name);
+      final text = files[signInOfAppFile]!;
+      languages[app.name] = _languagesOf(text);
+      final (:index, :errors) = DartFileIndexer.parse(signInOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['startScreen', 'signInTexts'],
+        reason: app.name,
+      );
+      final import = index.imports.single;
+      expect(import.prefix, 'screen', reason: app.name);
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+    }
+    expect(screens, {
+      // No route can start the app, since those of the sign-in cannot.
+      for (final name in _signIn)
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      // The start screen of home.
+      for (final name in _everyModule)
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    expect(languages, {
+      for (final name in _signIn)
+        name: name.endsWith('with localization') ? ['en', 'uk'] : ['en'],
+      for (final app in _everyModule) app: ['en', 'uk'],
+    });
+  });
+
+  test(
+      'the test of the sign-in gets each text of the module by its name, '
+      'in each language of the app in the order of the localization role, '
+      'in English where the module has no translation, and in English alone '
+      'in an app without the role; its files look up only texts of the '
+      'module, and have a text for every reason of a failure', () {
+    final test = named('sign_in');
+    String textsOf({List<String>? languages}) => test.generatedFiles!(
+          MatrixApp(
+            'texts',
+            const [ModuleId('sign_in')],
+            hook: RoleHookRequest(
+              data: const [],
+              presentRoles: {
+                routerRole,
+                if (languages != null) localizationRole,
+              },
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          ),
+          'my_app',
+        )[signInOfAppFile]!;
+    // The texts of a language in the file, each by its name.
+    Map<String, String> textsIn(String file, String language) {
+      final start = file.indexOf("  '$language': {\n");
+      expect(start, isNonNegative, reason: language);
+      final entries = file.substring(start, file.indexOf('  },\n', start));
+      return {
+        for (final entry in RegExp(r"^    '(\w+)': (.+),$", multiLine: true)
+            .allMatches(entries))
+          entry[1]!: entry[2]!,
+      };
+    }
+
+    final names = [for (final text in SignInModule.texts.texts) text.name];
+    final localized = textsOf(languages: ['uk', 'en', 'de']);
+    expect(_languagesOf(localized), ['uk', 'en', 'de']);
+    expect(
+      localized,
+      contains('const Map<String, Map<String, String>> signInTexts = {\n'),
+    );
+    final english = textsIn(localized, 'en');
+    expect(english.keys, names);
+    expect(textsIn(localized, 'uk').keys, names);
+    expect(english['title'], "'Sign in'");
+    expect(textsIn(localized, 'uk')['title'], "'Вхід'");
+    expect(
+      english['failureCredentials'],
+      "'The email or the password is wrong.'",
+    );
+    // The module has no German texts.
+    expect(textsIn(localized, 'de'), english);
+    final plain = textsOf();
+    expect(_languagesOf(plain), ['en']);
+    expect(textsIn(plain, 'en'), english);
+
+    // The files of the test look each text up by its name, texts['name']
+    // or text('name'), and failureTextOf() of app.dart names the text of
+    // each reason of a failure: a name that the module does not have would
+    // fail only in a running app.
+    final looked = <String>{};
+    final failures = <String>{};
+    for (final file in Directory(test.directory)
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))) {
+      final source = file.readAsStringSync();
+      looked.addAll([
+        for (final use
+            in RegExp(r"\btexts?[\[(]'(\w+)'[\])]").allMatches(source))
+          use[1]!,
+      ]);
+      failures.addAll([
+        for (final use
+            in RegExp(r"AuthFailureReason\.\w+ => '(\w+)',").allMatches(source))
+          use[1]!,
+      ]);
+    }
+    expect(looked, isNotEmpty);
+    expect(names, containsAll(looked));
+    expect(failures, {
+      for (final name in names)
+        if (name.startsWith('failure')) name,
+      // An address that is none has one text, in the form and from the
+      // provider.
+      'emailInvalid',
+    });
   });
 
   test(
@@ -2840,6 +3053,8 @@ void main() {
           'firebase_auth with localization',
           'firebase_auth with router',
           'firebase_auth',
+          // The sign-in requires the role.
+          ..._signIn,
         ])
           name: 'required',
         'auth by firebase_auth with router --auth-mode=guest': 'guest',
@@ -2882,6 +3097,8 @@ void main() {
         'firebase_auth with localization',
         'firebase_auth with router',
         'firebase_auth',
+        // The apps of the sign-in get the provider of the auth role.
+        ..._signIn,
         'auth by firebase_auth with router --auth-mode=guest',
         'auth by firebase_auth with router --auth-mode=anonymous',
         ..._everyModule,

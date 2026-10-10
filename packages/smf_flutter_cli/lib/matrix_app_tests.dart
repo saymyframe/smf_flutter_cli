@@ -13,6 +13,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -35,6 +36,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
   );
+  final signIn = await appTestsDirectoryOf('smf_sign_in');
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -222,6 +224,36 @@ Future<MatrixAppTests> smfAppTests() async {
         '$home/home',
         appliesTo: _has(HomeModule.id),
         generatedFiles: (app, packageName) => _homeTextsFileOf(app),
+      ),
+      // The screens of sign-in of the module, in each mode of the auth
+      // role, which the app has as a constant: an app that asks for an
+      // account shows the sign-in on its first launch in place of the
+      // screen that it starts on (see _signInOfAppOf), and an app that
+      // everyone may use shows it once code asks for it; a sign-up, a
+      // sign-in and a sign-out go through the session of the app, and an
+      // anonymous user keeps the id with the account; the forms show what
+      // is wrong with an email address and a password, the text of each
+      // failure of a call in each language of the app, and that a call is
+      // on its way; a password reset tells where the message went; and the
+      // screens fit a small phone with a large text size. The screens only
+      // change the session: the router shows them and leaves them,
+      // whichever module provides it, as the router role says of the
+      // guards of the routes, so this is a test of the router role too.
+      // The mocks sign a test account up before the app starts, through
+      // the session, and the matrix sets them up for the tests of every
+      // module of the app, which expect the screens that the guards of the
+      // sign-in would keep them from. The test has no probe for the start
+      // check: nobody can sign in on a device, and the walk of the routes
+      // shows the screens there.
+      MatrixAppTest(
+        '$signIn/sign_in',
+        appliesTo: _has(SignInModule.id),
+        generatedFiles: _signInOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/sign_in_mocks.dart',
+          'signUpTestAccount',
+        ),
       ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
@@ -1154,20 +1186,7 @@ const homeTextsFile = 'test/home/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _homeTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in HomeModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, HomeModule.texts);
   return {
     homeTextsFile: '''
 // The texts of the start screen of the home module in each language of the
@@ -1357,14 +1376,7 @@ const onboardingStartScreenFile = 'test/onboarding/start_screen.dart';
 ///
 /// It imports the file of the screen with the prefix `screen`.
 Map<String, String> _startScreenFileOf(MatrixApp app, String packageName) {
-  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
-  final (import, screen) = switch (start?.screen) {
-    final screen? => (screen.import, screen.className),
-    null => (
-        AppEntryRole.fallbackStartScreen.importRef,
-        AppEntryRole.fallbackStartScreen.name,
-      ),
-  };
+  final (import, screen) = _startScreenClassOf(app);
   return {
     onboardingStartScreenFile: '''
 // The screen that the app starts on, which the matrix of SMF writes from
@@ -1395,20 +1407,7 @@ const onboardingTextsFile = 'test/onboarding/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in OnboardingModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, OnboardingModule.texts);
   return {
     onboardingTextsFile: '''
 // The texts of the onboarding in each language of the app, which the
@@ -1492,6 +1491,89 @@ Future<void> chooseLanguage(String? language) =>
     appLocale.choose(language == null ? null : Locale(language));
 ''',
   };
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// sign-in module: `startScreen`, the type of the screen that the app
+/// starts on, which the app shows once its user may see it, and
+/// `signInTexts`, the texts of the module ([SignInModule.texts]), each by
+/// its name, in each language of the app, by the code of the language. The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose screens have the English texts.
+const signInOfAppFile = 'test/sign_in/of_app.dart';
+
+/// The file at [signInOfAppFile] of [app], an app of the matrix with the
+/// router role, whose package is [packageName].
+///
+/// The screen is that of the route that the router role chose to start the
+/// app on, or the fallback start screen of the app entry role when no route
+/// of its modules can start it; the file imports its file with the prefix
+/// `screen`. A text of the module without a translation into a language of
+/// the app is the English one there, as the localization role says of the
+/// texts of an app.
+Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
+  final (import, screen) = _startScreenClassOf(app);
+  final texts = _textsByLanguageOf(app, SignInModule.texts);
+  return {
+    signInOfAppFile: '''
+// What the tests of the sign-in module, in test/sign_in, need to know of
+// the app, which the matrix of SMF writes from the data of the router role
+// of the app, from the texts of the module and from the languages of the
+// localization role of the app.
+import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+/// The texts of the screens of sign-in by the code of each language of the
+/// app, the first of which the app uses when the device asks for none of
+/// them: each text by its name in the module. An app without the
+/// localization role has the English texts alone.
+const Map<String, Map<String, String>> signInTexts = {
+$texts};
+''',
+  };
+}
+
+/// The file and the name of the class of the screen that [app], an app of
+/// the matrix with the router role, starts on: the screen of the route
+/// that the role chose to start the app on, or the fallback start screen of
+/// the app entry role when no route of its modules can start it.
+(ImportRef, String) _startScreenClassOf(MatrixApp app) {
+  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
+  return switch (start?.screen) {
+    final screen? => (screen.import, screen.className),
+    null => (
+        AppEntryRole.fallbackStartScreen.importRef,
+        AppEntryRole.fallbackStartScreen.name,
+      ),
+  };
+}
+
+/// The entries of a Dart map of the [texts] of a module in each language
+/// of [app], an app of the matrix: for the code of each language, each
+/// text by its name. The languages are those of the localization role of
+/// the app, in its order, or English alone in an app without the role. A
+/// text without a translation into a language is the English one there.
+String _textsByLanguageOf(MatrixApp app, TextsData texts) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final entries = StringBuffer();
+  for (final language in languages) {
+    entries.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      entries.writeln('    $name: $shown,');
+    }
+    entries.writeln('  },');
+  }
+  return '$entries';
 }
 
 /// The name under which the listener of Firebase Analytics logs the
