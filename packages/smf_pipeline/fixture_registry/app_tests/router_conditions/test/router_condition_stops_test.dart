@@ -121,7 +121,7 @@ void main() {
       );
       await holdAgain();
 
-      // A route that asks for the condition by itself, below a route that
+      // A route that lists the condition itself, below a route that
       // asks for nothing, which go() showed.
       shown(tester, FixtureHomeScreen).nav.fakeSecond.vault().go();
       await tester.pumpAndSettle();
@@ -146,7 +146,7 @@ void main() {
       );
       await holdAgain();
 
-      // A pushed page that asks for the condition by itself, over a route
+      // A pushed page whose route lists the condition itself, over a route
       // that asks for it too.
       shown(tester, FixtureHomeScreen).nav.fakeSecond.members().go();
       await tester.pumpAndSettle();

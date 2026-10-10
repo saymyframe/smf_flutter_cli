@@ -133,14 +133,15 @@ final class FakeFeatureModule extends SmfModule {
 /// And it uses the fixture badge role: its route `/fake_second/members`,
 /// outside the main navigation, asks for the condition that the role
 /// publishes ([BadgeRole.holder]), and so does the route below it, by being
-/// there. A third route asks for it by itself, `/fake_second/outside/vault`,
-/// below the route outside the main navigation, which asks for nothing: a
-/// router that asked the guards about the route above a route would show
-/// it to everyone. The module declares no guard and knows no module that
-/// has one. In an app with a guard that stands for the condition, the
-/// router shows the target of that guard in place of the three routes
-/// while the condition does not hold. In an app without one, as in an app
-/// without the role, they show like any other route.
+/// there. A third route lists the condition itself,
+/// `/fake_second/outside/vault`, below the route outside the main
+/// navigation, which asks for nothing: a router that asked the guards about
+/// the route above a route would show it to everyone. The module declares
+/// no guard and knows no module that has one. In an app with a guard that
+/// stands for the condition, the router shows the target of that guard in
+/// place of the three routes while the condition does not hold. In an app
+/// without one, as in an app without the role, they show like any other
+/// route.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();

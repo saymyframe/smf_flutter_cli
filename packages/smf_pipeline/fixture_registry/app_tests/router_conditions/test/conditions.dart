@@ -18,7 +18,7 @@ const memberCardScreen = (
   '/fake_second/members/card',
 );
 
-/// The route that asks for the condition by itself, below a route of the
+/// The route that lists the condition itself, below a route of the
 /// feature that asks for nothing, as the listeners of the screen hear of
 /// it.
 const vaultScreen = ('fake_second.vault', '/fake_second/outside/vault');

@@ -489,7 +489,7 @@ void main() {
         reason: app.name,
       );
       expect(guard!.guard.resumes, isFalse, reason: app.name);
-      // One route asks for the condition by itself below a route that asks
+      // One route lists the condition itself below a route that asks
       // for nothing, so that a router has to ask about the route of a
       // location and not about the route above it. Another asks by being
       // below one that does. All are outside the main navigation.

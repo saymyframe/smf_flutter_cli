@@ -5,10 +5,11 @@
 // that condition (Route.conditions), as RouterRole.guardedNavigation says.
 // Three routes of the second fixture feature ask for the condition of the
 // fixture badge role, and the third guard of the fixture gates stands for
-// it. One of them asks by being below another, and one asks by itself,
-// below a route that asks for nothing: a router that asked the guards
-// about the route above a route would show it to everyone. The feature
-// knows nothing of that guard: both know only the role.
+// it. One of them asks by being below another, and one lists the
+// condition itself, below a route that asks for nothing: a router that
+// asked the guards about the route above a route would show it to
+// everyone. The feature knows nothing of that guard: both know only the
+// role.
 //
 // While the condition does not hold, the router shows the target of the
 // guard in place of a route that asks for it, whichever of go(), push(),
@@ -182,9 +183,9 @@ void main() {
             'app starts on.',
       );
 
-      // go() to the route that asks for it by itself, below a route that
-      // asks for nothing: the router asks about the route of the location,
-      // not about the route above it.
+      // go() to the route that lists the condition itself, below a route
+      // that asks for nothing: the router asks about the route of the
+      // location, not about the route above it.
       fixtureHolder.value = false;
       await tester.pumpAndSettle();
       expect(heard(), isEmpty, reason: _stays);
