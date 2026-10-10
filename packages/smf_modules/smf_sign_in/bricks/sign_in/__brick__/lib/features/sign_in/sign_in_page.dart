@@ -78,6 +78,11 @@ class _AuthPageState extends State<AuthPage>
     if (MediaQuery.disableAnimationsOf(context)) {
       _entrance.value = 1;
     } else {
+      // The entrance starts when the page is first built. A widget test
+      // that starts the app in real time, as with tester.runAsync(), does
+      // so once in its file: when a second test of the file starts the app
+      // again, the time of this animation runs backwards, and Flutter
+      // fails an assertion.
       _entrance.forward();
     }
   }

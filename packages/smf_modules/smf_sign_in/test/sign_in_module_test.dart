@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:io';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
@@ -2206,6 +2208,116 @@ void main() {
         ],
         isEmpty,
       );
+    });
+  });
+  group('the documentation of the package', () {
+    late Map<ModuleId, RenderedApp> apps;
+    late Set<String> paths;
+
+    /// The text of [path] in the package, with the line endings of Git on
+    /// any system.
+    String read(String path) =>
+        File(path).readAsStringSync().replaceAll('\r\n', '\n');
+
+    setUpAll(() async {
+      // The example generates an app without localization.
+      final results = {
+        for (final variant in _variants)
+          variant.id: await _rendered(variant.id, others: const []),
+      };
+      apps = {
+        for (final MapEntry(key: id, value: result) in results.entries)
+          id: result.app!,
+      };
+      paths = {
+        for (final route in _facadeOf(results.values.first).routes)
+          route.fullPath,
+      };
+    });
+
+    test(
+        'shows in its example parts of the files of the app, with each '
+        'state manager', () {
+      final example = read('example/README.md');
+      final shown = [
+        for (final block
+            in RegExp(r'```dart\n([\s\S]*?)```').allMatches(example))
+          block[1]!,
+      ];
+      String? fileWith(RenderedApp app, String part) => _ownFilesOf(app)
+          .where((path) => app.files[path]!.text.contains(part))
+          .firstOrNull;
+
+      expect(shown, hasLength(5));
+      expect(
+        [
+          for (final part in shown)
+            (
+              fileWith(apps[SignInModule.blocVariant]!, part),
+              fileWith(apps[SignInModule.riverpodVariant]!, part),
+            ),
+        ],
+        [
+          // The screen and the cubit of the variant for bloc, the screen of
+          // the variant for riverpod, and the two functions of the guards,
+          // which every app has.
+          (_screens['SignInScreen'], null),
+          (_cubits.first, null),
+          (null, _screens['SignInScreen']),
+          (_guards, _guards),
+          (_guards, _guards),
+        ],
+      );
+      expect(example, contains('smf create my_app -m home,sign_in,bloc'));
+    });
+
+    test(
+        'names in its README and in its example the files, the classes and '
+        'the routes of the module as the apps have them', () {
+      for (final document in ['README.md', 'example/README.md']) {
+        final code = _codeOf(
+          // Without the blocks of code, whose backticks are no inline code.
+          read(document).replaceAll(RegExp(r'```[\s\S]*?```'), ''),
+        );
+        final files = {
+          for (final app in apps.values)
+            for (final path in _ownFilesOf(app)) path.split('/').last,
+        };
+        final declared = {
+          for (final app in apps.values)
+            for (final path in _ownFilesOf(app))
+              for (final declaration in _indexOf(app, path).declarations)
+                declaration.name,
+        };
+
+        // Every file that the text names is a file of the module.
+        expect(
+          code
+              .where((name) => name.endsWith('.dart'))
+              .toSet()
+              .difference(files),
+          isEmpty,
+          reason: document,
+        );
+        // Every class, function and provider of the module that it names
+        // is declared in one of them.
+        final named = code
+            .map((name) => name.replaceFirst('()', ''))
+            .where(
+              (name) => RegExp(
+                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message)|'
+                r'authFailureText|signIn\w+)$',
+              ).hasMatch(name),
+            )
+            .toSet();
+        expect(named, isNotEmpty, reason: document);
+        expect(named.difference(declared), isEmpty, reason: document);
+        // The paths of the routes are those of the router role.
+        final routes =
+            code.where((name) => name.startsWith('/sign_in')).toSet();
+        expect(routes, isNotEmpty, reason: document);
+        expect(routes.difference(paths), isEmpty, reason: document);
+      }
     });
   });
 }
