@@ -677,17 +677,20 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// In an app with guards of the routes, the walk expects what the role
 /// says. For a location that a guard keeps the user from, that is the page
 /// and the screen of the target of that guard (`redirectOf()` of the
-/// role). For any other location in a flow that is over, it is the screen
-/// that the app starts on (`flowIsOver()` of the role). So its probe,
-/// `probeRoutes()`, which the start check runs on a device, holds whichever
-/// guards allow there, where no test can open one, such as a guard that
-/// asks for a signed-in user. The test itself first fails on each guard
-/// that does not allow, by its name: under `flutter test`, the module of a
-/// guard opens it for the tests of the app, in the mocks of its app test
-/// ([MatrixAppTest.mocks]), so that the walk reaches every route outside
-/// the flows and the tests of the other modules see the screens that they
-/// expect. The screens of a flow are then for the tests of its module,
-/// since the router shows them only while the guard does not allow.
+/// role): every location outside the flow of a gate, and for a guard that
+/// stands for a condition, only the locations of the routes that ask for
+/// the condition. For any other location in a flow that is over, it is the
+/// screen that the app starts on (`flowIsOver()` of the role). So its
+/// probe, `probeRoutes()`, which the start check runs on a device, holds
+/// whichever guards allow there, where no test can open one, such as a
+/// guard that asks for a signed-in user. The test itself first fails on
+/// each guard that does not allow, by its name, a guard of a condition
+/// too: under `flutter test`, the module of a guard opens it for the tests
+/// of the app, in the mocks of its app test ([MatrixAppTest.mocks]), so
+/// that the walk reaches every route outside the flows and the tests of
+/// the other modules see the screens that they expect. The screens of a
+/// flow are then for the tests of its module, since the router shows them
+/// only while the guard does not allow.
 ///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes and the guards of its router role, into
@@ -730,15 +733,18 @@ Future<MatrixAppTest> routerWalkAppTest({
 ///   the guard that keeps the user from `walked`, as `redirectOf()` of the
 ///   role says; else `startOfApp` for a location in a flow that is over,
 ///   as `flowIsOver()` of the role says; else the ones of `walked`. The
-///   targets are in `guardTargets`, in the order of the guards, also those
-///   that are not among the first [routerWalkLimit] locations.
+///   targets are in `guardTargets`, in the order of the guards, those of
+///   the gates first and then those of the guards that stand for a
+///   condition, each once, also those that are not among the first
+///   [routerWalkLimit] locations.
 ///   `startOfApp` is the screen that the app starts on: that of the route
 ///   that the role chose ([RouterRole.startIn]), with the name of that
 ///   route, or the fallback start screen of the app entry role
 ///   ([AppEntryRole.fallbackStartScreen]) without the name of a route, in
 ///   an app that no route can start;
 /// - `closedGuards()`, the full names of the guards that do not allow, in
-///   the order of `routeGuards` of the role; none in an app without guards.
+///   the order of `routeGuards` of the role, a guard whose condition does
+///   not hold among them; none in an app without guards.
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
@@ -775,7 +781,8 @@ Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
   }
 
   final locations = routes.map(walked).join();
-  // Each target once: two guards may show the same one.
+  // Each target once: two guards may show the same one, such as a gate and
+  // a guard that stands for a condition.
   final targets = {for (final guard in facade.guards) guard.target};
   const fallback = AppEntryRole.fallbackStartScreen;
   final guards = targets.isEmpty
@@ -871,9 +878,9 @@ const ShownScreen startOfApp = (
 
 /// What the router shows when it is asked to show [walked], as the router
 /// role says: the target of the guard that keeps the user from it
-/// (redirectOf()), or else the screen that the app starts on if the flow of
-/// [walked] is over (flowIsOver()), or else the page and the screen of
-/// [walked] itself.
+/// (redirectOf()), a gate or a guard of a condition that [walked] asks for,
+/// or else the screen that the app starts on if the flow of [walked] is
+/// over (flowIsOver()), or else the page and the screen of [walked] itself.
 ShownScreen shownFor(WalkedLocation walked) {
   final target = ${RouterRole.redirectOf}(walked.route);
   if (target != null) {

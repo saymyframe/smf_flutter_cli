@@ -5,7 +5,11 @@
 // order is by the stages of the guards, whatever the order of the modules:
 // the guards of the fixture gates are of the stage before that of the
 // guard of the fixture late gate, whose module the app lists before
-// theirs. All three gates are closed before the app starts. The first
+// theirs. The gates come before the guards that stand for a condition: the
+// fixture gates declare such a guard between their two gates, with the
+// stage of both, and the app lists it last. Its condition holds here, so
+// it keeps the user from nothing. All three gates are closed before the
+// app starts. The first
 // guard that does not allow shows its target, and the targets of the
 // guards after it are then routes like any other; once the first allows,
 // the second shows its target, and once that one allows, the guard of the
@@ -49,9 +53,15 @@ void main() {
       );
       expect(
         [for (final guard in routeGuards) guard.name],
-        ['fake_gate.first', 'fake_gate.second', 'fake_late_gate.late'],
-        reason: 'The app lists its guards by their stages, and those of one '
-            'stage in the order of the modules and of their declarations.',
+        [
+          'fake_gate.first',
+          'fake_gate.second',
+          'fake_late_gate.late',
+          'fake_gate.holder',
+        ],
+        reason: 'The app lists its gates by their stages, and those of one '
+            'stage in the order of the modules and of their declarations, '
+            'and then its guards that stand for a condition.',
       );
       final gate = shown(tester, FixtureGateScreen);
       gate.nav.fakeGate.second().go();

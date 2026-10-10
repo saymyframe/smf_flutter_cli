@@ -254,6 +254,78 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that tells the guards of the routes of a page that a
+  /// push showed under the route of the location below the pushed pages,
+  /// not under its own. A gate keeps the user from every route outside its
+  /// flow, so its answer is the same. A guard that stands for a condition
+  /// keeps the user only from the routes that ask for it: when the
+  /// condition stops holding, a pushed page that asks for it stays if the
+  /// page below asks for nothing.
+  static const routerNamingPushedPagesAfterPageBelow = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_names_pushed_pages_after_page_below'),
+    'A plain navigator that names a pushed page after the page below it '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '            (\n'
+            '              route: location.routeName,\n'
+            '              location: location,\n'
+            '              pushed: _results.containsKey(location),\n'
+            '            ),\n'
+            '      ];\n',
+        '            (\n'
+            '              route: _results.containsKey(location)\n'
+            '                  ? _belowPushed?.routeName\n'
+            '                  : location.routeName,\n'
+            '              location: location,\n'
+            '              pushed: _results.containsKey(location),\n'
+            '            ),\n'
+            '      ];\n'
+            '\n'
+            '  /// The location below the pages that pushes showed, or `null` '
+            'if\n'
+            '  /// pushes showed every page.\n'
+            '  AppLocation? get _belowPushed {\n'
+            '    for (final entry in _stack.reversed) {\n'
+            '      final locations = entry is AppLocation\n'
+            '          ? [entry]\n'
+            '          : _branches[_selected].reversed;\n'
+            '      for (final location in locations) {\n'
+            '        if (!_results.containsKey(location)) return location;\n'
+            '      }\n'
+            '    }\n'
+            '    return null;\n'
+            '  }\n',
+      ),
+    ],
+  );
+
+  /// The fake router that asks the guards of the routes about a location
+  /// that `go()`, `push()` or `replace()` is asked to show by the name of
+  /// its top-level route, not by that of its own route. The flow of a
+  /// guard is a top-level route with the routes below it, so a gate
+  /// answers the same. A guard that stands for a condition does not: a
+  /// route that asks for the condition below a route that asks for
+  /// nothing shows to everyone.
+  static const routerAskingAboutTopLevelRoute = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_asks_about_top_level_route'),
+    'A plain navigator that asks the guards about the top-level route '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    final guarded = _guards.asked(location.routeName, location);\n',
+        '    final guarded = _guards.asked(\n'
+            '      location.chain.first.routeName,\n'
+            '      location,\n'
+            '    );\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.

@@ -21,8 +21,19 @@ final FixtureGate fixtureGate = FixtureGate();
 /// shows the second gate screen.
 final FixtureGate fixtureSecondGate = FixtureGate();
 
+/// Whether the user holds the badge of the fixture: while this gate is
+/// open, which it is until a test closes it, also in an app whose gates
+/// start closed. The third guard of the fixture reads it. That guard keeps
+/// the user only from the routes of the app that ask for a holder of a
+/// badge, and shows the gate screen of the first guard in their place.
+final FixtureGate fixtureHolder = FixtureGate()..value = true;
+
 /// Whether the first guard of the fixture allows: while its gate is open.
 ValueListenable<bool> fixtureGateOpen() => fixtureGate;
 
 /// Whether the second guard of the fixture allows: while its gate is open.
 ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
+
+/// Whether the third guard of the fixture allows: while the user holds the
+/// badge of the fixture.
+ValueListenable<bool> fixtureHolds() => fixtureHolder;
