@@ -236,12 +236,15 @@ final class RouterRole extends Role<RoutesData> {
   /// (see below). It gives none while it has no page, and none for a
   /// location from the platform, which takes the place of the stack.
   ///
-  /// The provider asks once for each request. The class remembers nothing
-  /// of a request that it answers `ShowOver` for, so a second call for the
-  /// same request finds the flow open and answers `ShowNothing`. A router
-  /// that asks again inside its own navigation, as one whose redirect runs
-  /// for each location that it goes to, keeps that second call from the
-  /// class.
+  /// The provider asks once for each request, and does what the answer
+  /// says. The class keeps no request, so a second call for a request that
+  /// it answered `ShowOver` for finds the flow open and answers
+  /// `ShowNothing`. A second call for a location that the provider shows
+  /// changes nothing: for a location that the class answered `null` for,
+  /// and for one that it gave in an answer, it answers `null` again while
+  /// no guard changed, also with no pages. So a router whose own navigation
+  /// asks once more, as one whose redirect runs for each location that it
+  /// goes to, may let it.
   ///
   /// A provider that has no page yet may have no stack to push on, and no
   /// page to replace. It may then take each request as `go()` to its
@@ -289,21 +292,30 @@ final class RouterRole extends Role<RoutesData> {
   /// and a `push()` that waited completes with `null`. The request waits
   /// while a page of a route of the `flow` of the answer is among the
   /// pages that the user can get back to, so it is still there after a
-  /// `push()` or a `replace()` inside the flow. It ends in one of two ways:
-  /// - `changed` answers `ClosePages` and no page of the flow is left after the
-  ///   provider closed the pages. The provider then makes the request
-  ///   again as it was made, on top of the pages that are left, and asks
-  ///   the class about it again: `push()` shows the location over the page
-  ///   that the flow was opened from, and the first `push()` completes
-  ///   with the value of that page; `go()` shows it in place of the stack;
-  ///   `replace()` shows it in place of the page that the flow was opened
-  ///   from; and a location from the platform shows as `go()` to it. The
-  ///   class may answer the request with the target of another guard, as
-  ///   for a route that asks for two conditions.
+  /// `push()` or a `replace()` inside the flow. It ends in one of three
+  /// ways:
+  /// - `changed` answers `ClosePages` without `dropsRequest`, and no page of
+  ///   the flow is left after the provider closed the pages. The provider
+  ///   then makes the request again as it was made, on top of the pages
+  ///   that are left, and asks the class about it again: `push()` shows the
+  ///   location over the page that the flow was opened from, and the first
+  ///   `push()` completes with the value of that page; `go()` shows it in
+  ///   place of the stack; `replace()` shows it in place of the page that
+  ///   the flow was opened from; and a location from the platform shows as
+  ///   `go()` to it. The class may answer the request with the target of
+  ///   another guard, as for a route that asks for two conditions.
+  /// - `changed` answers `ClosePages` with `dropsRequest`: the pages that
+  ///   close reach below the flow, so the page that the request was made
+  ///   on closes too, as one that asks for a condition that stopped holding
+  ///   while the flow of another condition was open over it. The provider
+  ///   drops the request, and does not make it on the page below.
   /// - The last page of the flow leaves in any other way: the user goes
   ///   back from it, or a location takes the place of the stack. The
   ///   provider drops the request, and a `push()` that waited completes
-  ///   with `null`.
+  ///   with `null`. The target of a gate takes the place of the stack, and
+  ///   the request goes with the pages of its flow. When that target is a
+  ///   page of the same flow, as for a gate and a guard of a condition
+  ///   with one flow, the request waits on until the target leaves.
   ///
   /// Each time [guardChanges] notifies, the provider calls
   /// `changed(pages)` with the pages that the user can get back to, the
@@ -333,16 +345,27 @@ final class RouterRole extends Role<RoutesData> {
   ///   hear of a target that no frame showed is up to the provider, and so
   ///   is whether the `push()` of a page that the answer takes out of the
   ///   stack completes, as it is when `go()` replaces the stack.
-  /// - `ClosePages(n)`: it closes the `n` pages on top, each of which it
-  ///   told of as `pushed`, and leaves the pages below them as they are.
-  ///   The pages leave at once, whatever the navigator shows over them,
-  ///   such as a dialog, and also a page that a `push()` of the same turn
-  ///   showed and that the navigator has not built yet. Each `push()` that
-  ///   showed one of them completes with `null`. The provider then makes
-  ///   the request that waits again, if no page of its flow is left. The
-  ///   listeners of [screenListeners] hear of the page that the user ends
-  ///   on, and not of the page below the closed ones when the request shows
-  ///   another page over it: the user never saw that page come back.
+  /// - `ClosePages(n, dropsRequest: ...)`: it closes the `n` pages on top,
+  ///   each of which it told of as `pushed`, and leaves the pages below
+  ///   them as they are. The pages leave at once, whatever the navigator
+  ///   shows over them, such as a dialog, and also a page that a `push()`
+  ///   of the same turn showed and that the navigator has not built yet.
+  ///   Each `push()` that showed one of them completes with `null`, at once
+  ///   or when the frame is over. Then the provider drops the request that
+  ///   waits, with `dropsRequest`, or else makes it again, if no page of
+  ///   its flow is left. The listeners of [screenListeners] hear of the
+  ///   page that the user ends on, and not of the page below the closed
+  ///   ones when the request shows another page over it: the user never
+  ///   saw that page come back.
+  ///
+  /// Until the navigator of the provider builds again, it may still have
+  /// the route of a page that the provider closed. The code of a screen
+  /// that closes its own page in that time, or the back button of the
+  /// system, closes that route and no page of the provider, and the
+  /// provider does not fail. The `push()` of such a page may complete with
+  /// the value that the page closed with. A frame later the same code
+  /// closes the page that is on top by then; see [RouteGuard] for what a
+  /// screen does not do after it changed what a guard reads.
   ///
   /// What the class answers, and what it remembers:
   /// - While a gate keeps the user from a location, `asked` answers
@@ -365,7 +388,7 @@ final class RouterRole extends Role<RoutesData> {
   ///   page outside the flow that was pushed from the target. So the flow
   ///   never opens over itself: a further request while it is open does
   ///   nothing, and the first one waits. The class remembers no location
-  ///   for such a guard.
+  ///   for such a guard, only how many pages it opened the flow over.
   /// - `changed` first answers `ShowInstead` of the target of the gate that
   ///   keeps the user from one of the pages, so that no such page stays in
   ///   the stack. If that gate brings the user back
@@ -375,7 +398,7 @@ final class RouterRole extends Role<RoutesData> {
   ///   user comes back to where the pushed pages were opened from, such as
   ///   a tab of the main navigation, and not to a pushed page alone, with
   ///   no way back. The flow of a condition that was open goes with the
-  ///   stack, and its request with it.
+  ///   stack, and its request with the pages of the flow.
   /// - When a guard that does not bring the user back stops allowing, the
   ///   class remembers no location for it and forgets the one that it
   ///   remembers, whichever gate or request made it remember it. So once
@@ -424,7 +447,10 @@ final class RouterRole extends Role<RoutesData> {
   ///   flow close, with a page outside the flow that was pushed from them,
   ///   and the provider makes the request again. And once a condition
   ///   stops holding, the pages that ask for it close, and the user is on
-  ///   the page that they were opened from.
+  ///   the page that they were opened from. The answer has `dropsRequest`
+  ///   when fewer pages stay than the flow that `asked` opened last was
+  ///   opened over: the page on top of those, which the request was made
+  ///   on, is among the pages that close.
   /// - When the provider cannot close those pages, or no page stays below
   ///   them, `changed` answers `ShowInstead` of `/`. So the user leaves a
   ///   flow that took the place of the stack for the screen that the app

@@ -187,7 +187,12 @@ final class RouteCondition {
 /// - a further request for a route that asks for the condition does
 ///   nothing while a page of the flow is open, and the first one waits;
 /// - when a gate stops allowing meanwhile, its target takes the place of
-///   the stack, and the request is dropped.
+///   the stack, and the request is dropped with the pages of the flow. If
+///   that target is a page of the same flow, the request is dropped once
+///   the target leaves;
+/// - when the page that the request was made on closes below the flow, as
+///   one that asks for another condition, which stopped holding, the flow
+///   closes with it and the request is dropped.
 ///
 /// A known limit: behind a gate that does not allow, the router remembers
 /// such a location for the gate, as it does any other, and opens no flow.
@@ -201,6 +206,19 @@ final class RouteCondition {
 /// for it, with the pages over it, so the user is on the page that it was
 /// opened from. A page that asks for it and has no page below it, as after
 /// `go()` to it, leaves for the screen that the app starts on.
+///
+/// So a screen never closes itself, and never navigates, after it changed
+/// what a guard reads: the router has done both by then. That goes for a
+/// screen of a flow that made its guard allow, as after a sign-in, and for
+/// a page that asks for a condition and ends it itself, as a screen of an
+/// account does with its sign-out. A `pop()` after the change closes the
+/// page that is on top by then. After a sign-in that is the page that the
+/// user asked for, and a `push()` that waited for it completes with `null`.
+/// After a sign-out it is the page below the one that the router closed,
+/// which may be the main navigation of the app. Only in the turn of the
+/// change itself, before the next frame, does such a `pop()` still close
+/// the page that the router closed. A `go()` after the change takes the
+/// place of what the router showed.
 ///
 /// The flow of such a guard is its target and the routes below it too, and
 /// it is over once the guard allows. Until then every route shows that
