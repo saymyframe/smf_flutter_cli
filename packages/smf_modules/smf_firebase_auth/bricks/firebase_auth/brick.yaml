@@ -1,0 +1,11 @@
+name: firebase_auth
+description: "The sign-in of an SMF app with Firebase Authentication: the sign-in service on FirebaseAuth."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags and the variables of
+# its module.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

@@ -27,6 +27,7 @@ workspace:
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
+  - packages/smf_modules/smf_firebase_auth
   - packages/smf_modules/smf_firebase_core
   - packages/smf_modules/smf_firebase_crashlytics
   - packages/smf_modules/smf_flutter_core
