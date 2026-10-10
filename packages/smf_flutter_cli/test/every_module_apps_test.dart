@@ -108,44 +108,49 @@ void main() {
     ]);
   });
 
+  // The test compiles a copy of the tool, which alone takes most of the
+  // default 30 seconds on a busy Windows runner.
   test(
-      'prints no app with every module of another value of a mode option '
-      'of a role: each app gets no value of the option, as an app that a '
-      'user generates without it', () async {
-    const directory = '/tmp/SMF apps from pub.dev';
-    final tool = await compiledFor(
-      p.join('test', 'mode_registry.dart'),
-      'doorsOfWood',
-    );
+    'prints no app with every module of another value of a mode option '
+    'of a role: each app gets no value of the option, as an app that a '
+    'user generates without it',
+    () async {
+      const directory = '/tmp/SMF apps from pub.dev';
+      final tool = await compiledFor(
+        p.join('test', 'mode_registry.dart'),
+        'doorsOfWood',
+      );
 
-    final result = await run([directory], tool: tool);
+      final result = await run([directory], tool: tool);
 
-    expect(result.exitCode, 0, reason: '${result.stderr}');
-    // The matrix of the registry has each of its two apps with every
-    // module twice more, for the other values of the option.
-    final (:apps, :failed) = await matrixOf(doorsOfWood);
-    expect(failed, isEmpty);
-    expect(
-      apps.where((app) => app.everyModuleWith != null),
-      hasLength(6),
-    );
-    final listed = jsonDecode('${result.stdout}') as List<Object?>;
-    expect(
-      [for (final app in listed) (app! as Map<String, Object?>)['name']],
-      ['every module (oak)', 'every module (pine)'],
-    );
-    expect(
-      [
-        for (final app in listed)
-          ...(app! as Map<String, Object?>)['arguments']! as List<Object?>,
-      ],
-      allOf(
-        containsAll(['app_1', 'app_2', 'flutter_core,lock,pine']),
-        isNot(contains('app_3')),
-        isNot(contains(startsWith('--access'))),
-      ),
-    );
-  });
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      // The matrix of the registry has each of its two apps with every
+      // module twice more, for the other values of the option.
+      final (:apps, :failed) = await matrixOf(doorsOfWood);
+      expect(failed, isEmpty);
+      expect(
+        apps.where((app) => app.everyModuleWith != null),
+        hasLength(6),
+      );
+      final listed = jsonDecode('${result.stdout}') as List<Object?>;
+      expect(
+        [for (final app in listed) (app! as Map<String, Object?>)['name']],
+        ['every module (oak)', 'every module (pine)'],
+      );
+      expect(
+        [
+          for (final app in listed)
+            ...(app! as Map<String, Object?>)['arguments']! as List<Object?>,
+        ],
+        allOf(
+          containsAll(['app_1', 'app_2', 'flutter_core,lock,pine']),
+          isNot(contains('app_3')),
+          isNot(contains(startsWith('--access'))),
+        ),
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('fails with its usage without a directory, or with more', () async {
     for (final arguments in [
