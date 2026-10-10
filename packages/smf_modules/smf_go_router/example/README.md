@@ -11,7 +11,7 @@ The module adds go_router to the `pubspec.yaml` of the app, and `lib/core/router
 
 ```dart
 @override
-late final GoRouter config = GoRouter(
+late final GoRouter config = _GoRouter(
   initialLocation: '/home',
   observers: _observers(),
   routes: [
@@ -24,6 +24,8 @@ late final GoRouter config = GoRouter(
   ],
 )..routerDelegate.addListener(_pagesChanged);
 ```
+
+`_GoRouter` is a class of that file that extends `GoRouter`, so that the back button of the system works on the error screen of go_router too.
 
 Screens navigate with `context.nav`, such as `context.nav.home.home().go()`, which the router role writes into `lib/core/router/navigation.dart`. It does not name go_router, so the screens of a feature work with any router. With a layout such as `bottom_tabs`, the router builds the main navigation with a branch for each tab.
 

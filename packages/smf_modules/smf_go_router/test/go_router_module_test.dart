@@ -2053,8 +2053,10 @@ void main() {
       // The router takes the routes themselves, in the constructor that
       // the note tells to give the routes that go_router follows instead.
       _expectBackButton(unit, _constructorOfRoutes);
-      expect(firstDestinationAgentNote,
-          contains('the constructor of `_GoRouter`'));
+      expect(
+        firstDestinationAgentNote,
+        contains('The constructor of `_GoRouter` then takes that notifier'),
+      );
       expect(index.declaration('_observers')?.kind, DeclarationKind.function);
       expect(_routesOf(unit).map((route) => route.path), ['/']);
       expect(

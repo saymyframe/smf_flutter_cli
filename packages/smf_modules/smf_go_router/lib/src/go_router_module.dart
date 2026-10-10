@@ -79,6 +79,27 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the key and the location of the page. Once go_router keeps the
 /// completers of its pages, the router can leave this out.
 ///
+/// The router is a `_GoRouter`, a class of its file that extends `GoRouter`
+/// with a dispatcher of the back button of the system of its own,
+/// `_BackButton`, since go_router takes none. go_router shows its error
+/// screen in place of the whole stack, for a location that no route matches
+/// or that the redirect of a route refuses, and has no page of a route
+/// then. Asked to close the route on top, its delegate looks for the last
+/// of those pages and throws a `StateError`
+/// (https://github.com/flutter/flutter/issues/187616). So while go_router
+/// has no page, the dispatcher asks the root navigator itself, as the
+/// router role says of the button on any screen: a route that is shown
+/// over the error screen, such as a dialog, closes, and with no route to
+/// close the button is left to the system. A `BackButtonListener` below
+/// the router hears of the button first there too, and an error screen
+/// that a push showed over a page is a page of go_router, which closes it.
+/// A class can extend `GoRouter` only through the constructor that takes
+/// the routes as a `RoutingConfig` that go_router follows. So in an app
+/// without a main navigation, the constructor of `_GoRouter` takes the
+/// routes themselves and puts them into one that never changes. Once the
+/// delegate of go_router answers without a page, the router can leave
+/// this out.
+///
 /// In an app whose modules declare guards, the router asks them as the
 /// router role says, through the `GuardedNavigation` of the role, which
 /// keeps the location that the user comes back to: the router remembers

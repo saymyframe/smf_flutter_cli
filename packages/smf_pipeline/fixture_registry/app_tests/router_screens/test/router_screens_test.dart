@@ -4,14 +4,17 @@
 // listener of the fixture analytics, once for each change of the screen
 // the user sees, gives each navigator observers of its own
 // (RouterRole.observers), and closes the route on top with the back button
-// of the system. It starts the app with main() of lib/main.dart, which the
-// app entry role puts into every app, and navigates only through the
-// navigation facade of the router role and the navigators of Flutter, so
-// it applies to a new provider of the role as it is. What only one router
-// does is tested in the app tests about that router, such as
-// go_router_screens. Each expectation gives its reason, which a provider of
-// the role with a known bug fails the test with (brokenProviders of the
-// fixture registry).
+// of the system. That holds after a location from the platform that the
+// router cannot show too: on its error screen, as on any other page, the
+// button throws nothing, closes the route on top, and is left to the
+// system where the router has no route to close. It starts the app with
+// main() of lib/main.dart, which the app entry role puts into every app,
+// and navigates only through the navigation facade of the router role and
+// the navigators of Flutter, so it applies to a new provider of the role as
+// it is. What only one router does is tested in the app tests about that
+// router, such as go_router_screens. Each expectation gives its reason,
+// which a provider of the role with a known bug fails the test with
+// (brokenProviders of the fixture registry).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
