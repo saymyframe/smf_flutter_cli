@@ -225,14 +225,15 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // What only go_router does about the flow of a guard that stands for
       // a condition: a refresh of its routes while the flow is open, after
       // which the push that waits still completes with the value of its
-      // page; a request on its error screen, which it gets as go() gives
-      // it a location and asks about in its redirect; two links in one
-      // turn, for which it opens the flow once; and the calls of go_router
-      // that the router makes itself, within which its redirect does not
-      // ask the guards. It checks no role, so it names its module, as
-      // `tools/app_tests_test.dart` lets it. The apps it applies to have
-      // the tests of router_conditions, whose helpers it uses with those of
-      // router_screens and of router_guards.
+      // page, and the pages stay; a request on its error screen, which it
+      // gets as go() gives it a location and asks about in its redirect;
+      // two links in one turn, for which it opens the flow once, and a
+      // second link to the page on top, which keeps that page; and the
+      // calls of go_router that the router makes itself, within which its
+      // redirect does not ask the guards. It checks no role, so it names
+      // its module, as `tools/app_tests_test.dart` lets it. The apps it
+      // applies to have the tests of router_conditions, whose helpers it
+      // uses with those of router_screens and of router_guards.
       MatrixAppTest(
         '$appTests/go_router_conditions',
         appliesTo: (app) =>

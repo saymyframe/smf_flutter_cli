@@ -90,6 +90,7 @@ void main() {
     expect(named('router_listeners').roles, {routerRole});
     expect(named('router_guards').roles, {routerRole});
     expect(named('router_conditions').roles, {routerRole});
+    expect(named('router_flow_opens').roles, {routerRole});
     expect(named('router_guards_fallback').roles, {routerRole});
     expect(named('layout_guards').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
@@ -778,6 +779,31 @@ void main() {
   });
 
   test(
+      'the test of a request that opens the flow of a condition applies to '
+      'each app with the tests of the conditions, and its apps have the '
+      'guard of the condition and the route that the test asks for', () {
+    final opens = named('router_flow_opens');
+
+    expect(appsOf(opens), containsAll(appsOf(named('router_conditions'))));
+    for (final app in apps.where(opens.appliesTo)) {
+      final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
+      expect(
+        facade.guardFor(BadgeRole.holder)?.fullName,
+        'fake_gate.holder',
+        reason: app.name,
+      );
+      expect(
+        [
+          for (final route in facade.routesAsking(BadgeRole.holder))
+            route.fullName,
+        ],
+        contains('fake_second.members'),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
       'the tests that use the helpers of router_screens apply only to the '
       'apps that have them', () {
     final routerScreens = appsOf(named('router_screens'));
@@ -786,6 +812,7 @@ void main() {
       'router_listeners',
       'router_guards',
       'router_conditions',
+      'router_flow_opens',
       'layout_guards',
       'router_walk_guards',
       'layout_screens',
