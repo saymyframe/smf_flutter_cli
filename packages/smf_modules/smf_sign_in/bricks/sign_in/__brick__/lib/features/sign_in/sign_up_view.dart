@@ -108,12 +108,9 @@ class _SignUpViewState extends State<SignUpView> {
               onPressed: _submit,
             ),
             const SizedBox(height: 4),
-            TextButton(
+            OtherScreenAction(
+              label: {{{text_have_account}}},
               onPressed: widget.busy ? null : widget.onSignIn,
-              child: Text(
-                {{{text_have_account}}},
-                textAlign: TextAlign.center,
-              ),
             ),
           ],
         ),

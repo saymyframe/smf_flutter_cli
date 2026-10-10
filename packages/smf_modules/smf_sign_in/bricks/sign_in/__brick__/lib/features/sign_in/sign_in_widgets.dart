@@ -216,6 +216,45 @@ class SubmitButton extends StatelessWidget {
   }
 }
 
+/// The action of a screen that leads to the other screen of the sign-in:
+/// from the sign-in to the screen that creates an account, and from there
+/// back.
+///
+/// It is a text button of the theme of the app with one colour of its own,
+/// the accent of the colour scheme. A theme makes a text button quiet,
+/// which suits what belongs to a field, such as the way to a forgotten
+/// password. This action is the second way on of its screen, so it stands
+/// out. Its shape, its text style, its padding and what a touch shows stay
+/// those of the theme, and so does the colour of a button that takes no
+/// tap, as while the form of the screen submits.
+class OtherScreenAction extends StatelessWidget {
+  /// Creates the action.
+  const OtherScreenAction({
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the action, which takes as many lines as it needs.
+  final String label;
+
+  /// Shows the other screen, or `null` while the action takes no tap.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.fromMap({
+        // The theme has the colour of a button that takes no tap.
+        WidgetState.disabled: null,
+        WidgetState.any: Theme.of(context).colorScheme.secondary,
+      }),
+    ),
+    onPressed: onPressed,
+    child: Text(label, textAlign: TextAlign.center),
+  );
+}
+
 /// Why the last call of a form failed, in the language of the app, or
 /// nothing while [failure] is `null`. It takes its place smoothly, and a
 /// screen reader announces it when it appears.

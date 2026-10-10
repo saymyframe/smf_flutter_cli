@@ -1202,7 +1202,6 @@ void main() {
         'errorBorder',
         'suffixIconColor',
         'styleFrom',
-        'ButtonStyle',
       };
       for (final path in _look) {
         expect(
@@ -1377,9 +1376,9 @@ void main() {
     });
 
     test(
-        'has one filled action and one text action on the sign-in and on '
-        'the sign-up, the text action leading to the other screen and '
-        'waiting while the form submits', () {
+        'has one filled action and one action that leads to the other '
+        'screen on the sign-in and on the sign-up, which waits while the '
+        'form submits', () {
       final app = localized[SignInModule.blocVariant]!.app!;
       final signIn = _parsed(app, _views[0]);
       final signUp = _parsed(app, _views[1]);
@@ -1390,23 +1389,23 @@ void main() {
         expect(_callsOf(view, 'FilledButton'), isEmpty);
         expect(_callsOf(view, 'OutlinedButton'), isEmpty);
       }
-      final [forgot, create] = _callsOf(signIn, 'TextButton');
-      final have = _callsOf(signUp, 'TextButton').single;
-      // What belongs to the password is at the end of its field, inside
-      // the form, and takes no input while the form submits, as the form.
+      // What belongs to the password is a text button as the theme has
+      // it, at the end of its field, inside the form: it takes no input
+      // while the form submits, as the form.
+      final forgot = _callsOf(signIn, 'TextButton').single;
+      expect(forgot.keys, ['onPressed', 'child']);
       expect(forgot['onPressed'], 'widget.onForgotPassword');
       expect(forgot['child'], contains('TextAlign.end'));
-      // The way to the other screen is the same kind of action on both
-      // screens, in the middle below the button.
-      expect(
-        create['onPressed'],
-        'widget.busy ? null : widget.onCreateAccount',
-      );
-      expect(have['onPressed'], 'widget.busy ? null : widget.onSignIn');
-      for (final action in [create, have]) {
-        expect(action.keys, ['onPressed', 'child']);
-        expect(action['child'], contains('TextAlign.center'));
-      }
+      expect(_callsOf(signUp, 'TextButton'), isEmpty);
+      // The way to the other screen is the same action on both screens.
+      expect(_callsOf(signIn, 'OtherScreenAction').single, {
+        'label': 'context.l10n.${_getterOf('createAccount')}',
+        'onPressed': 'widget.busy ? null : widget.onCreateAccount',
+      });
+      expect(_callsOf(signUp, 'OtherScreenAction').single, {
+        'label': 'context.l10n.${_getterOf('haveAccount')}',
+        'onPressed': 'widget.busy ? null : widget.onSignIn',
+      });
       expect(
         _textsReadIn(_classOf(signIn, '_SignInViewState')),
         containsAllInOrder([
@@ -1421,6 +1420,44 @@ void main() {
           _getterOf('signUpSubmit'),
           _getterOf('haveAccount'),
         ]),
+      );
+    });
+
+    test(
+        'gives the action that leads to the other screen the accent of '
+        'the colour scheme, on a text button that is as the theme has it '
+        'in everything else, the colour of one that takes no tap too', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final action = _classOf(_parsed(app, _widgets), 'OtherScreenAction');
+      String compact(String? code) => code!.replaceAll(RegExp(r'\s'), '');
+
+      final button = _callsOf(action, 'TextButton').single;
+      expect(button.keys, ['style', 'onPressed', 'child']);
+      expect(button['onPressed'], 'onPressed');
+      expect(button['child'], contains('TextAlign.center'));
+      // One colour, and nothing else of the look of the button.
+      final style = _callsOf(action, 'ButtonStyle').single;
+      expect(style.keys, ['foregroundColor']);
+      expect(
+        compact(_callsOf(action, 'WidgetStateProperty').single['0']),
+        '{WidgetState.disabled:null,'
+        'WidgetState.any:Theme.of(context).colorScheme.secondary}',
+      );
+      // No other widget of the look has a style of its own.
+      expect(
+        [
+          for (final path in _look)
+            if (_callsOf(_parsed(app, path), 'ButtonStyle').isNotEmpty) path,
+        ],
+        [_widgets],
+      );
+      expect(_callsOf(_parsed(app, _widgets), 'ButtonStyle'), hasLength(1));
+      // The file says why this one button has a colour of its own.
+      expect(
+        action.documentationComment!.tokens
+            .map((token) => token.lexeme)
+            .join(' '),
+        allOf(contains('accent of the colour scheme'), contains('quiet')),
       );
     });
 
@@ -2138,6 +2175,7 @@ void main() {
         'ResetPasswordState': _state,
         'FailureMessage': _widgets,
         'SubmitButton': _widgets,
+        'OtherScreenAction': _widgets,
       };
 
       expect(
@@ -2377,7 +2415,7 @@ void main() {
             .map((name) => name.replaceFirst('()', ''))
             .where(
               (name) => RegExp(
-                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message)|'
+                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action)|'
                 r'authFailureText|signIn\w+)$',
               ).hasMatch(name),
             )

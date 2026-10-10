@@ -40,7 +40,11 @@ import 'package:smf_sign_in/src/agents.dart';
 /// theme of the app, whichever module provides it: a screen gives a field
 /// no colour, border or padding of its own, so a change of the theme
 /// changes them here as everywhere else. What a screen draws itself, the
-/// cells of its picture, takes its colours from the theme too.
+/// cells of its picture, takes its colours from the theme too. One button
+/// has a colour of its own: the action that leads to the other screen,
+/// from the sign-in to the sign-up and back, is a text button of the theme
+/// in the accent of the colour scheme, since a theme keeps its text
+/// buttons quiet and this one is the second way on from its screen.
 ///
 /// ## Look and state
 ///

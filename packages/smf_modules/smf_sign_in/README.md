@@ -16,6 +16,8 @@ Each screen shows the cell of the app, with the symbol that SMF makes from its n
 
 The fields, the buttons and the cards of the screens are those of the theme of the app, in its light and in its dark mode. The screens give a field no colour, border or padding of their own, so for another look of the fields, change the theme of the app. The cells of the picture, which a screen draws itself, take their colours from the theme too.
 
+One button has a colour of its own. The action that leads to the other screen is Create account on the sign-in and I already have an account on the sign-up. It is a text button of the theme in the accent of the colour scheme, `colorScheme.secondary`, because a theme keeps its text buttons quiet and this one is the second way on from its screen. Forgot password? stays as the theme has it.
+
 The parts of a screen rise in one after another, once. On a device that asks for less motion, they are there at once, and a busy button is disabled and keeps its label. A screen scrolls when it is too small for what it shows, as with the keyboard open or with a large text size on a small phone, and the labels and the buttons grow with their texts. The letters in the cell keep their size, since they are part of a picture. A screen reader announces the title as a header, each field by its label, and a failure when it appears.
 
 ## Look and state
@@ -24,7 +26,7 @@ The module generates its files in `lib/features/sign_in/`. The look of the scree
 
 - `sign_in_view.dart`, `sign_up_view.dart` and `reset_password_view.dart` have `SignInView`, `SignUpView` and `ResetPasswordView`. A view is a plain Flutter widget: it keeps its form, gets the state of its call, and takes callbacks for what the user asks for.
 - `sign_in_page.dart` has `AuthPage`, the frame of a screen: the cell, the title, the line of text, and the entrance.
-- `sign_in_widgets.dart` has the fields, the button that submits, `FailureMessage`, and `authFailureText()`, which has a text for every reason of a failure.
+- `sign_in_widgets.dart` has the fields, the button that submits, `OtherScreenAction` for the way to the other screen, `FailureMessage`, and `authFailureText()`, which has a text for every reason of a failure.
 - `sign_in_state.dart` has `AuthActionState` and `ResetPasswordState`, the values of the state of a screen.
 - `sign_in_guards.dart` has the functions of the two guards.
 

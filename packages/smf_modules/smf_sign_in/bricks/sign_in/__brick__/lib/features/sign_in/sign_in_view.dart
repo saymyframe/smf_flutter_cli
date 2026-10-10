@@ -125,12 +125,9 @@ class _SignInViewState extends State<SignInView> {
             // The way to the other screen, as on the screen that creates an
             // account: in the middle below the button, apart from what
             // belongs to the password above it.
-            TextButton(
+            OtherScreenAction(
+              label: {{{text_create_account}}},
               onPressed: widget.busy ? null : widget.onCreateAccount,
-              child: Text(
-                {{{text_create_account}}},
-                textAlign: TextAlign.center,
-              ),
             ),
           ],
         ),
