@@ -3,7 +3,12 @@
 // an app that the module rendered, in each mode of the auth role. A
 // stand-in for the Firebase CLI is on its PATH, a Dart program that notes
 // how it was called, so nothing reaches Firebase.
+//
+// A test starts the Dart VM for the script and for each call of the
+// stand-in, some of them many times over, so it gets more time than a test
+// has by default.
 @TestOn('vm')
+@Timeout(Duration(minutes: 3))
 library;
 
 import 'dart:convert';
