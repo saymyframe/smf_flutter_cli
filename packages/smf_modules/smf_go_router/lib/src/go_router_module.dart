@@ -104,15 +104,16 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// router role says, through the `GuardedNavigation` of the role, which
 /// keeps the location that the user comes back to: the router remembers
 /// nothing of the gates itself. It knows a location by its URI. `go()`,
-/// `push()` and `replace()` ask once, before they hand a location to
-/// go_router, with the routes of the pages that the user can get back to.
-/// The top-level `redirect` of go_router runs inside each call of
-/// go_router, so the router counts the calls that it makes with a location
-/// that it asked about, or that the role answered, and the `redirect` asks
-/// only about what go_router parses on its own: the location that the app
-/// starts on, those of the platform, and that of a branch of the main
-/// navigation that the user selects. Such a location takes the place of
-/// the stack, so the role is told of no pages for it.
+/// `push()` and `replace()` ask before they hand a location to go_router,
+/// with the routes of the pages that the user can get back to. The
+/// top-level `redirect` of go_router asks about what go_router parses on
+/// its own: the location that the app starts on, those of the platform,
+/// and that of a branch of the main navigation that the user selects. Such
+/// a location takes the place of the stack, so the role is told of no
+/// pages for it. The `redirect` runs inside each call of go_router that
+/// the router makes too, with a location that the role let the user see or
+/// that it answered. The role answers nothing for such a location a second
+/// time, so the router does not keep those calls from it.
 ///
 /// For a gate, or a flow that is over, the role answers a location, the
 /// target of the gate or `/`, and the router goes to it: `push()` then
@@ -143,7 +144,13 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// On its error screen, go_router has no page of a route to open a flow
 /// over. When the role answers a request there with a flow, the router
 /// gives go_router the location the same way, and the flow opens over `/`
-/// in place of the error screen.
+/// in place of the error screen. Two locations from the platform in one
+/// turn open the target once, for the later one: the microtask of the
+/// first finds that another one is waiting, and does nothing. A location
+/// from the platform that arrives while a flow covers a page that was
+/// pushed in a branch of the main navigation opens the new flow over `/`
+/// as any other does. go_router keeps that page built below the new flow
+/// until the user goes back, and then shows `/`.
 ///
 /// The router listens to `guardChanges` itself. When a guard starts or
 /// stops allowing, it tells the role of the pages that pushes showed, the
@@ -154,14 +161,22 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// `replace()` showed over other pages counts as one that a push showed, as
 /// it is one to go_router. When the role answers to close pages, those of
 /// a flow that is over or of routes whose condition stopped holding, the
-/// router takes them out of the pages of go_router with one `restore()`,
-/// and completes their pushes with `null`, which go_router does not do for
-/// a page that leaves that way. `pop()` would close what the navigator
-/// shows on top, such as a dialog over the page, and it cannot close a
-/// page that a push of the same turn showed, which the navigator has not
-/// built yet. Then the router makes the request that waited again, if no
-/// page of its flow is left, and tells the listeners of the screen only of
-/// the page that the user ends on. The main navigation stays among the
+/// router takes them out of the pages of go_router with one `restore()`.
+/// `pop()` would close what the navigator shows on top, such as a dialog
+/// over the page, and it cannot close a page that a push of the same turn
+/// showed, which the navigator has not built yet. go_router does not
+/// complete the push of a page that leaves that way, so the router
+/// completes it with `null`, once the frame is over. Until its next build
+/// the navigator still has the routes of those pages. When the code of a
+/// screen or the back button of the system pops one of them in that time,
+/// go_router completes its push itself, with the value of the pop, and
+/// would throw on a push that is completed already. Then the router drops
+/// the request that waited, when the role says that the page it was made
+/// on closed too, or else makes it again, if no page of its flow is left.
+/// It tells the listeners of the screen only of the page that the user
+/// ends on, also when the request, asked about again in the `redirect`,
+/// opens the target of another guard over `/`: they then hear of that
+/// target, and nothing of `/`. The main navigation stays among the
 /// pages through all of this, so the router gives go_router no new one.
 /// The router does not hand `guardChanges` to go_router as its
 /// `refreshListenable`: a refresh asks only about the location below the

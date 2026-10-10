@@ -90,6 +90,12 @@ class RouterConfig<T> {
 
 class NavigatorObserver {}
 
+class WidgetsBinding {
+  static WidgetsBinding get instance => WidgetsBinding();
+
+  void addPostFrameCallback(void Function(Duration timeStamp) callback) {}
+}
+
 typedef ValueChanged<T> = void Function(T value);
 
 final class IconData {
