@@ -934,6 +934,12 @@ List<BrokenProvider> brokenProviders() => const [
             'in, in every mode',
             _knownAtStart,
           ),
+          // The start after a link has nobody either.
+          MatrixExpectedFailure(
+            _nextStartTests,
+            _leftOnDeviceTest,
+            _linkKeptOnDevice,
+          ),
           // The test expects the account right after the start, before it
           // deletes it.
           MatrixExpectedFailure(
@@ -959,8 +965,8 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/auth_role/auth_service_test.dart',
-            'an anonymous user has an id and no email address, and keeps the '
-                'id with an account',
+            'an anonymous user has an id of its own and no email address, '
+                'and keeps the id with an account',
             'linkPassword() gives the anonymous user who is signed in an '
                 'account: the user keeps the id, is no longer anonymous and '
                 'has the email address.',
@@ -972,6 +978,12 @@ List<BrokenProvider> brokenProviders() => const [
                 'mode of the app says',
             'In the mode anonymous, a sign-up gives the anonymous user the '
                 'account: the user keeps the id.',
+          ),
+          // The next start has the account under the new id.
+          MatrixExpectedFailure(
+            _nextStartTests,
+            _leftOnDeviceTest,
+            _linkKeptOnDevice,
           ),
         ],
       ),
@@ -1164,6 +1176,17 @@ const _knownAtStart =
     'When the next start of the session is over, the session has the user '
     'who was signed in on the device: who uses the app is known before the '
     'first frame.';
+
+/// The name of the test of what a link and a deletion leave on the device,
+/// and the reason of its expectation that the next start has the account
+/// that an anonymous user got, with the id of that user.
+const _leftOnDeviceTest =
+    'the next start has what the service left on the device: the account '
+    'that an anonymous user got, and nobody once the user was deleted';
+const _linkKeptOnDevice =
+    'The account that linkPassword() gave an anonymous user is kept on the '
+    'device: the next start has that account, with the id of the anonymous '
+    'user.';
 
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of

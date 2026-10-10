@@ -1,11 +1,13 @@
 // A test that continuous integration runs in the apps with the auth role,
 // whichever module provides it, in each mode of the role: who uses the app
 // is known before the first frame. The next start of the app has the user
-// who was signed in on the device when it is over, the user of an account
-// and an anonymous one. A start that finds nobody on the device has
+// who was signed in on the device when it is over: the user of an account,
+// after a sign-up and after a sign-in, an anonymous user, and the account
+// that an anonymous user got. A start that finds nobody on the device has
 // nobody, and in the mode anonymous it signs in anonymously and waits for
-// that. And the account of a user whom a start found on the device can be
-// deleted, at the latest once the user has signed in again.
+// that. The account of a user whom a start found on the device can be
+// deleted, at the latest once the user has signed in again. And a user
+// who was deleted is not on the device at the next start.
 //
 // It knows only the role. The start-up of the app runs first, as on a
 // device, with the mocks of the platform side of every module of the app,
@@ -17,9 +19,9 @@
 // comes right after its start-up. The session of the app has that user
 // before such a start already, which a launch of the app does not: so a
 // session of the test, which never had a user, starts with the service
-// too. Each test signs out first, and uses email addresses of its own. Each expectation gives its reason, which a
-// provider of the role with a known bug fails the test with
-// (brokenProviders of the fixture registry).
+// too. Each test signs out first, and uses email addresses of its own.
+// Each expectation gives its reason, which a provider of the role with a
+// known bug fails the test with (brokenProviders of the fixture registry).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
 import 'package:{{app_name}}/core/auth/guest_data.dart';
@@ -65,6 +67,11 @@ void main() {
         uid = appSession.value.uid;
       });
       final found = await _nextStart(tester);
+      await inRealTime(tester, 'signing out and in', () async {
+        await appSession.signOut();
+        await appSession.signIn(email: email, password: password);
+      });
+      final afterSignIn = await _nextStart(tester);
       await inRealTime(tester, 'starting a session of the test', () async {
         // A session that never had a user, as that of an app is when the
         // app is launched: it disposes of it once it started.
@@ -78,6 +85,12 @@ void main() {
       });
 
       expect(found, (sessionOfAccount(email), uid), reason: _knownAtStart);
+      expect(
+        afterSignIn,
+        (sessionOfAccount(email), uid),
+        reason: 'A sign-in is kept on the device as a sign-up is: the next '
+            'start after a sign-out and a sign-in has the account too.',
+      );
       expect(
         (userOf(createAuthService().currentUser), sessionNow()),
         ('the account of $email', sessionOfAccount(email)),
@@ -126,6 +139,59 @@ void main() {
   );
 
   testWidgets(
+    'the next start has what the service left on the device: the account '
+    'that an anonymous user got, and nobody once the user was deleted',
+    (tester) async {
+      await startUp(tester);
+      final email = addressOf('left-on-device');
+      String? uid;
+      Object? deletion;
+
+      await inRealTime(tester, 'giving an anonymous user an account', () async {
+        // Through the service, which does the same in every mode of the
+        // app.
+        final service = createAuthService();
+        await service.signOut();
+        await service.signInAnonymously();
+        uid = service.currentUser?.uid;
+        await service.linkPassword(email: email, password: password);
+      });
+      final linked = await _nextStart(tester);
+      await inRealTime(tester, 'deleting the user', () async {
+        // The service of that start found the user on the device, and may
+        // ask for a new sign-in before it deletes the account.
+        final service = createAuthService();
+        await service.signOut();
+        await service.signIn(email: email, password: password);
+        deletion = await errorOf(service.deleteAccount);
+      });
+      final (deleted, deletedUid) = await _nextStart(tester);
+
+      expect(
+        linked,
+        (sessionOfAccount(email), uid),
+        reason: 'The account that linkPassword() gave an anonymous user is '
+            'kept on the device: the next start has that account, with the '
+            'id of the anonymous user.',
+      );
+      expect(
+        deletion,
+        isNull,
+        reason: 'deleteAccount() succeeds for a user who has just signed in.',
+      );
+      expect(
+        (deleted, deletedUid == uid),
+        (sessionWithoutAccount, false),
+        reason: 'A user who was deleted is not on the device any more: the '
+            'next start finds nobody there, so it has nobody in the modes '
+            'required and guest, and a new anonymous user in the mode '
+            'anonymous.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
     'a start that finds nobody on the device has nobody, and in the mode '
     'anonymous a new anonymous user, whom it waits for',
     (tester) async {
@@ -166,6 +232,7 @@ void main() {
     (tester) async {
       await startUp(tester);
       final email = addressOf('deleted-later');
+      String? uid;
       Object? first;
       Object? second;
       Object? gone;
@@ -174,6 +241,7 @@ void main() {
       await inRealTime(tester, 'signing up', () async {
         await appSession.signOut();
         await appSession.signUp(email: email, password: password);
+        uid = appSession.value.uid;
       });
       final (found, _) = await _nextStart(tester);
       expect(found, sessionOfAccount(email), reason: _knownAtStart);
@@ -186,6 +254,9 @@ void main() {
           second = await errorOf(appSession.deleteAccount);
         }
         after = sessionNow();
+      });
+      final (restarted, restartedUid) = await _nextStart(tester);
+      await inRealTime(tester, 'signing in to the deleted account', () async {
         gone = await errorOf(
           () => appSession.signIn(email: email, password: password),
         );
@@ -207,6 +278,13 @@ void main() {
         after,
         sessionWithoutAccount,
         reason: 'Once the account is deleted, the session has no account.',
+      );
+      expect(
+        (restarted, restartedUid == uid),
+        (sessionWithoutAccount, false),
+        reason: 'The next start after the deletion of the account does not '
+            'have the user of that account: the deletion took that user '
+            'from the device.',
       );
       expect(
         gone,

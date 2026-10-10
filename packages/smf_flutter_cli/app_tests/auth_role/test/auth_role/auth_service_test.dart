@@ -4,16 +4,19 @@
 // When a call completes, the user of the service is its result. Signing up
 // creates an account and signs in to it, and the user of an account has
 // the same id each time. A wrong password and an address without an
-// account fail alike. The user of a call replaces the user who was signed
-// in. An anonymous user keeps the id with an account. Deleting removes the
+// account fail alike. A call that fails leaves whoever is signed in. The
+// user of a call replaces the user who was signed in. Each anonymous user
+// has an id of its own, and keeps it with an account. Deleting removes the
 // account. A call for the user who is signed in fails when nobody is. And
 // the stream of the changes tells of each change, once the user changed.
 //
-// It knows only the role, and calls the service itself, which only a test
-// of the contract of the role does: the code of an app signs in through
-// appSession. The start-up of the app runs first, as on a device, since it
-// creates the service, with the mocks of the platform side of every module
-// of the app, which the matrix sets up before the tests of each test file
+// It knows only the role, and calls the service itself, through
+// createAuthService(), since the contract of that service is what it
+// checks. The code of an app signs in through appSession, and so do the
+// tests of a module: a convention for tests, which no check enforces. The
+// start-up of the app runs first, as on a device, since it creates the
+// service, with the mocks of the platform side of every module of the
+// app, which the matrix sets up before the tests of each test file
 // (flutter_test_config.dart). Each test signs out first, and uses email
 // addresses of its own. Each expectation gives its reason, which a
 // provider of the role with a known bug fails the test with
@@ -92,13 +95,16 @@ void main() {
 
   testWidgets(
     'a wrong password and an address without an account fail alike, and '
-    'sign nobody in',
+    'leave whoever is signed in',
     (tester) async {
       await startUp(tester);
       final email = addressOf('wrong-password');
       Object? wrong;
       Object? unknown;
       AuthUser? after;
+      AuthUser? signedIn;
+      Object? whileSignedIn;
+      AuthUser? kept;
 
       await inRealTime(tester, 'signing in with what matches no account',
           () async {
@@ -116,6 +122,12 @@ void main() {
           ),
         );
         after = service.currentUser;
+        await service.signIn(email: email, password: password);
+        signedIn = service.currentUser;
+        whileSignedIn = await errorOf(
+          () => service.signIn(email: email, password: wrongPassword),
+        );
+        kept = service.currentUser;
       });
 
       expect(
@@ -136,6 +148,18 @@ void main() {
         'nobody',
         reason: 'A sign-in that failed signs nobody in.',
       );
+      expect(
+        whileSignedIn,
+        failsWith(AuthFailureReason.invalidCredentials),
+        reason: 'signIn() with a wrong password fails with '
+            'invalidCredentials while a user is signed in too.',
+      );
+      expect(
+        (userOf(kept), kept?.uid),
+        ('the account of $email', signedIn?.uid),
+        reason: 'A sign-in that failed leaves the user who is signed in as '
+            'that user was.',
+      );
     },
     timeout: timeout,
   );
@@ -149,6 +173,9 @@ void main() {
       Object? second;
       AuthUser? after;
       Object? signIn;
+      AuthUser? signedIn;
+      Object? whileSignedIn;
+      AuthUser? kept;
 
       await inRealTime(tester, 'signing up twice', () async {
         final service = createAuthService();
@@ -162,6 +189,11 @@ void main() {
         signIn = await errorOf(
           () => service.signIn(email: email, password: password),
         );
+        signedIn = service.currentUser;
+        whileSignedIn = await errorOf(
+          () => service.signUp(email: email, password: wrongPassword),
+        );
+        kept = service.currentUser;
       });
 
       expect(
@@ -175,6 +207,18 @@ void main() {
         ('nobody', null),
         reason: 'A sign-up that failed signs nobody in, and the account of '
             'the address keeps its password.',
+      );
+      expect(
+        whileSignedIn,
+        failsWith(AuthFailureReason.emailInUse),
+        reason: 'signUp() with an address that has an account fails with '
+            'emailInUse while a user is signed in too.',
+      );
+      expect(
+        (userOf(kept), kept?.uid),
+        ('the account of $email', signedIn?.uid),
+        reason: 'A sign-up that failed leaves the user who is signed in as '
+            'that user was.',
       );
     },
     timeout: timeout,
@@ -267,8 +311,8 @@ void main() {
   );
 
   testWidgets(
-    'an anonymous user has an id and no email address, and keeps the id '
-    'with an account',
+    'an anonymous user has an id of its own and no email address, and '
+    'keeps the id with an account',
     (tester) async {
       await startUp(tester);
       final email = addressOf('linked');
@@ -321,6 +365,12 @@ void main() {
         ('the account of $email', anonymous?.uid),
         reason: 'The account that an anonymous user got is the account of '
             'that user: signing in to it again finds the same id.',
+      );
+      expect(
+        (userOf(other), other?.uid == anonymous?.uid),
+        ('an anonymous user', false),
+        reason: 'signInAnonymously() creates a user: an anonymous user who '
+            'signs in after a sign-out has another id than the one before.',
       );
       expect(
         taken,
