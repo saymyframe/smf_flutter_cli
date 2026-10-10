@@ -153,7 +153,7 @@ final class SignInModule extends SmfModule {
     LocalizedText(
       'hidePassword',
       en: 'Hide password',
-      translations: {'uk': 'Сховати пароль'},
+      translations: {'uk': 'Приховати пароль'},
     ),
     LocalizedText('submit', en: 'Sign in', translations: {'uk': 'Увійти'}),
     LocalizedText(
@@ -215,8 +215,8 @@ final class SignInModule extends SmfModule {
       en: 'If this address has an account, a link to set a new password is '
           'on its way to:',
       translations: {
-        'uk': 'Якщо для цієї адреси є акаунт, посилання для нового пароля '
-            'вже прямує на:',
+        'uk': 'Якщо ця адреса має акаунт, посилання для нового пароля вже '
+            'надіслано на:',
       },
     ),
     LocalizedText(
@@ -252,7 +252,7 @@ final class SignInModule extends SmfModule {
     LocalizedText(
       'failureWeakPassword',
       en: 'This password is too weak. Choose a longer one.',
-      translations: {'uk': 'Цей пароль заслабкий. Виберіть довший.'},
+      translations: {'uk': 'Цей пароль надто слабкий. Виберіть довший.'},
     ),
     LocalizedText(
       'failureDisabled',
@@ -268,7 +268,7 @@ final class SignInModule extends SmfModule {
       'failureNoNetwork',
       en: 'No connection. Check the internet and try again.',
       translations: {
-        'uk': 'Немає звʼязку. Перевірте інтернет і спробуйте ще раз.',
+        'uk': 'Немає зв’язку. Перевірте інтернет і спробуйте ще раз.',
       },
     ),
     LocalizedText(

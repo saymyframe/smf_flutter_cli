@@ -412,6 +412,8 @@ InputDecoration _fieldDecoration(BuildContext context, {Widget? suffixIcon}) {
     // The text of a mistake takes the lines that it needs.
     errorMaxLines: 5,
     suffixIcon: suffixIcon,
+    // The button in a field keeps its colour when the field has a mistake.
+    suffixIconColor: colors.onSurfaceVariant,
   );
 }
 
@@ -602,73 +604,90 @@ class FailureMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final failure = this.failure;
-    final hint = kDebugMode ? failure?.developerHint : null;
+    final message = failure == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _Failure(failure),
+          );
+    // An app that asks for less motion shows the message at once.
+    if (MediaQuery.disableAnimationsOf(context)) return message;
     return AnimatedSize(
-      // An app that asks for less motion shows the message at once.
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : Durations.short4,
+      duration: Durations.short4,
       curve: Easing.emphasizedDecelerate,
       alignment: Alignment.topCenter,
-      child: failure == null
-          ? const SizedBox(width: double.infinity)
-          : Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Semantics(
-                container: true,
-                liveRegion: true,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: colors.errorContainer,
-                    borderRadius: BorderRadius.circular(16),
+      child: message,
+    );
+  }
+}
+
+/// The box with the text of [failure]: a tint of the colour that the theme
+/// has for an error, with a thin line around it.
+class _Failure extends StatelessWidget {
+  const _Failure(this.failure);
+
+  final AuthFailure failure;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hint = kDebugMode ? failure.developerHint : null;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+            colors.error.withValues(alpha: 0.08),
+            colors.surface,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colors.error.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              // The icon grows with the first line of the text next to it.
+              size: MediaQuery.textScalerOf(context).scale(20),
+              color: colors.error,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    authFailureText(context, failure.reason),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurface,
+                    ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 20,
-                        color: colors.onErrorContainer,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authFailureText(context, failure.reason),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colors.onErrorContainer,
-                              ),
-                            ),
-                            if (hint != null) ...[
-                              const SizedBox(height: 6),
-                              // As a path, it is not much larger than
-                              // usual.
-                              MediaQuery.withClampedTextScaling(
-                                maxScaleFactor: 1.5,
-                                child: Text(
-                                  hint,
-                                  style: _monospace.copyWith(
-                                    fontSize: 12,
-                                    color: colors.onErrorContainer,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                  if (hint != null) ...[
+                    const SizedBox(height: 6),
+                    // As a path, it is not much larger than usual.
+                    MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.5,
+                      child: Text(
+                        hint,
+                        style: _monospace.copyWith(
+                          fontSize: 12,
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ],
+                ],
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

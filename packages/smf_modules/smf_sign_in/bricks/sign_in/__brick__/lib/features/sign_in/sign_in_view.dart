@@ -97,6 +97,10 @@ class _SignInViewState extends State<SignInView> {
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: TextButton(
+                      // Its text ends where the fields do.
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
                       onPressed: widget.onForgotPassword,
                       child: Text(
                         {{{text_forgot_password}}},
