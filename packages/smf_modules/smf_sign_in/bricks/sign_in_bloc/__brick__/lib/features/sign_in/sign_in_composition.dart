@@ -1,5 +1,7 @@
 import '../../core/auth/app_session.dart';
+import 'account_cubit.dart';
 import 'reset_password_cubit.dart';
+import 'session_cubit.dart';
 import 'sign_in_cubit.dart';
 import 'sign_up_cubit.dart';
 
@@ -15,3 +17,10 @@ SignUpCubit createSignUpCubit() => SignUpCubit(appSession);
 
 /// Creates the cubit of the screen that resets a password.
 ResetPasswordCubit createResetPasswordCubit() => ResetPasswordCubit(appSession);
+
+/// Creates the cubit of the screen of the account.
+AccountCubit createAccountCubit() => AccountCubit(appSession);
+
+/// Creates the cubit with the session of the app, which the root of the app
+/// provides to every widget.
+SessionCubit createSessionCubit() => SessionCubit(appSession);

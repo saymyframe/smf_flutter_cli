@@ -279,44 +279,65 @@ class SubmitButton extends StatelessWidget {
   /// Whether the call of the form is on its way.
   final bool busy;
 
-  /// Submits the form.
-  final VoidCallback onPressed;
+  /// Submits the form, or `null` while the button takes no tap, as while
+  /// another call of its page is on its way.
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    // In an app that asks for less motion, nothing spins: the button is
-    // disabled and keeps its label.
-    final spins = busy && !MediaQuery.disableAnimationsOf(context);
+    final spins = _spins(context, busy: busy);
     return FilledButton(
-      // A button that spins keeps its colour.
-      onPressed: !busy
-          ? onPressed
-          : spins
-          ? () {}
-          : null,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // The label keeps its place, so that the button keeps its size.
-          Visibility.maintain(
-            visible: !spins,
-            child: WholeWords(label, textAlign: TextAlign.center),
-          ),
-          if (spins)
-            // In the colour that the theme of the app gives the label.
-            Builder(
-              builder: (context) => SizedBox.square(
-                dimension: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: DefaultTextStyle.of(context).style.color,
-                ),
-              ),
-            ),
-        ],
-      ),
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins),
     );
   }
+}
+
+/// Whether a button whose call is on its way spins. In an app that asks for
+/// less motion, nothing spins: the button is disabled and keeps its label.
+bool _spins(BuildContext context, {required bool busy}) =>
+    busy && !MediaQuery.disableAnimationsOf(context);
+
+/// What a tap on a button does while its call may be on its way: a button
+/// that spins keeps its colour and does nothing, and one that is busy
+/// without spinning takes no tap.
+VoidCallback? _whileBusy(
+  VoidCallback? onPressed, {
+  required bool busy,
+  required bool spins,
+}) {
+  if (!busy) return onPressed;
+  return spins ? () {} : null;
+}
+
+/// The label of a button, or what spins in its place while the call of the
+/// button is on its way.
+class _BusyLabel extends StatelessWidget {
+  const _BusyLabel(this.label, {required this.spins});
+
+  final String label;
+  final bool spins;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      // The label keeps its place, so that the button keeps its size.
+      Visibility.maintain(
+        visible: !spins,
+        child: WholeWords(label, textAlign: TextAlign.center),
+      ),
+      if (spins)
+        // In the colour that the button gives its label.
+        SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: DefaultTextStyle.of(context).style.color,
+          ),
+        ),
+    ],
+  );
 }
 
 /// The action of a screen that leads to the other screen of the sign-in:
@@ -357,6 +378,51 @@ class OtherScreenAction extends StatelessWidget {
     onPressed: onPressed,
     child: WholeWords(label, textAlign: TextAlign.center),
   );
+}
+
+/// The action of a screen that cannot be undone, such as the deletion of
+/// the account. While its call is on its way, it shows that it is [busy]
+/// and does nothing.
+///
+/// It is a text button of the theme of the app in the colour that the theme
+/// has for an error, which tells it apart from the other actions. Its
+/// shape, its text style, its padding and what a touch shows stay those of
+/// the theme, and so does the colour of a button that takes no tap.
+class DestructiveAction extends StatelessWidget {
+  /// Creates the action.
+  const DestructiveAction({
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the action, which takes as many lines as it needs and
+  /// keeps its words whole.
+  final String label;
+
+  /// Whether the call of the action is on its way.
+  final bool busy;
+
+  /// Starts the action, or `null` while it takes no tap, as while another
+  /// call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    return TextButton(
+      style: ButtonStyle(
+        foregroundColor: WidgetStateProperty.fromMap({
+          // The theme has the colour of a button that takes no tap.
+          WidgetState.disabled: null,
+          WidgetState.any: Theme.of(context).colorScheme.error,
+        }),
+      ),
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins),
+    );
+  }
 }
 
 /// Why the last call of a form failed, in the language of the app, or

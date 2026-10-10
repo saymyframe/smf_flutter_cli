@@ -307,6 +307,63 @@ final class SignInModule extends SmfModule {
       en: 'Something went wrong. Try again.',
       translations: {'uk': 'Щось пішло не так. Спробуйте ще раз.'},
     ),
+    LocalizedText(
+      'accountTitle',
+      en: 'Account',
+      translations: {'uk': 'Акаунт'},
+    ),
+    LocalizedText(
+      'signedInAs',
+      en: 'You are signed in to this account:',
+      translations: {'uk': 'Ви увійшли в цей акаунт:'},
+    ),
+    LocalizedText(
+      'signedIn',
+      en: 'You are signed in.',
+      translations: {'uk': 'Ви увійшли в акаунт.'},
+    ),
+    LocalizedText(
+      'signOut',
+      en: 'Sign out',
+      translations: {'uk': 'Вийти'},
+    ),
+    LocalizedText(
+      'deleteAccount',
+      en: 'Delete account',
+      translations: {'uk': 'Видалити акаунт'},
+    ),
+    LocalizedText(
+      'deleteTitle',
+      en: 'Delete your account?',
+      translations: {'uk': 'Видалити акаунт?'},
+    ),
+    LocalizedText(
+      'deleteText',
+      en: 'This deletes your account for good. You cannot undo it.',
+      translations: {
+        'uk': 'Акаунт буде видалено назавжди. Відновити його не можна.',
+      },
+    ),
+    LocalizedText(
+      'cancel',
+      en: 'Cancel',
+      translations: {'uk': 'Скасувати'},
+    ),
+    LocalizedText(
+      'delete',
+      en: 'Delete',
+      translations: {'uk': 'Видалити'},
+    ),
+    LocalizedText(
+      'settingSignedIn',
+      en: 'Signed in',
+      translations: {'uk': 'Вхід виконано'},
+    ),
+    LocalizedText(
+      'notSignedIn',
+      en: 'Not signed in',
+      translations: {'uk': 'Вхід не виконано'},
+    ),
   ]);
 
   /// The name of the route of the sign-in, the target of both guards.
@@ -322,7 +379,7 @@ final class SignInModule extends SmfModule {
         id: id,
         description: 'Sign-in, sign-up and password reset with an email',
         kind: ModuleKinds.feature,
-        requires: {authRole},
+        requires: {authRole, settingsScreenRole},
         uses: {localizationRole},
         variants: Variants(
           role: stateManagementRole,
@@ -337,6 +394,24 @@ final class SignInModule extends SmfModule {
   static List<Contribution> _bloc(ModuleContext context) => [
         BrickContribution(signInBlocBundle),
         const PubspecContribution.hosted('flutter_bloc', 'any'),
+        // Who uses the app, for every widget of the app.
+        const SocketContribution.wrap(
+          AppEntryRole.rootWrappers,
+          Fragment.wrap(
+            'BlocProvider(create: (_) => createSessionCubit(), child: ',
+            ')',
+            imports: [
+              ImportRef(
+                'package:flutter_bloc/flutter_bloc.dart',
+                show: ['BlocProvider'],
+              ),
+              ImportRef.app(
+                '$_folder/sign_in_composition.dart',
+                show: ['createSessionCubit'],
+              ),
+            ],
+          ),
+        ),
         AppEntryRole.agentSections.entry(
           agentHeading,
           AgentNote(blocAgentNote),
@@ -397,6 +472,18 @@ final class SignInModule extends SmfModule {
                   ),
                 ],
               ),
+              // For the user of an account only. It is shown over the
+              // screen that the user asked for it on, and is no destination
+              // of the main navigation.
+              Route(
+                '/account',
+                name: 'account',
+                screen: ScreenRef(
+                  'AccountScreen',
+                  import: ImportRef.app('$_folder/account_screen.dart'),
+                ),
+                conditions: [AuthRole.account],
+              ),
             ],
             guards: [
               // After a sign-out, the next user starts on the screen that
@@ -417,6 +504,15 @@ final class SignInModule extends SmfModule {
                 condition: AuthRole.account,
               ),
             ],
+          ),
+        ),
+        // The entrance to the screen of the account.
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'AccountSetting',
+              import: ImportRef.app('$_folder/account_setting.dart'),
+            ),
           ),
         ),
         localizationRole.data(texts),
