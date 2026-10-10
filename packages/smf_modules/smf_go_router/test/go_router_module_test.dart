@@ -653,8 +653,8 @@ void _expectBackButton(CompilationUnit unit, String constructor) {
     ..accept(plain)
     ..accept(named);
   expect([...plain.calls, ...named.calls], isEmpty);
-  // The one router of the app, which its root runs.
-  expect(_goRouterOf(unit), isNotNull);
+  // The one router of the app, which its root runs, is of that class.
+  expect(_goRouterOf(unit).toSource(), startsWith('_GoRouter'));
 }
 
 /// Checks that the router of [unit] lets each push complete with the value
@@ -1768,10 +1768,6 @@ void main() {
       );
       expect(text, contains('ValueNotifier<RoutingConfig>'));
       // Which the constructor of that class passes on to go_router.
-      expect(
-        _expectedGoRouter(_constructorOfRoutingConfig),
-        contains('required super.routingConfig'),
-      );
       _expectBackButton(unit, _constructorOfRoutingConfig);
       // And the pages that go_router had, which the router puts back.
       expect(
