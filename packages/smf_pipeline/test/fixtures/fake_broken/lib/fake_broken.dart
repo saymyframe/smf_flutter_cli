@@ -393,6 +393,28 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that throws when the back button of the system has no
+  /// route to close, rather than leaving the button to the system: its
+  /// navigators still close a route on top, such as a dialog or a pushed
+  /// page, but on the first page of the app it throws a `StateError`, as a
+  /// router does that looks for the last of its pages where it has none.
+  static const routerThrowingWithNoRouteToClose = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_throws_with_no_route_to_close'),
+    'A plain navigator whose back button throws on its first page (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      if (await navigator.maybePop()) return true;\n'
+            '    }\n'
+            '    return false;\n',
+        '      if (await navigator.maybePop()) return true;\n'
+            '    }\n'
+            "    throw StateError('No element');\n",
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.

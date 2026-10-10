@@ -54,7 +54,10 @@ const routerRole = RouterRole._();
 ///   page of the selected branch of the main navigation before the main
 ///   navigation, unless a route of the root navigator, such as a dialog,
 ///   covers the main navigation; with no route to close, it leaves the
-///   button to the system, which closes the app;
+///   button to the system, which closes the app. Its error screen is a
+///   page like any other for the button: a dialog over it closes, and the
+///   screen itself closes only if a page is below it, which is up to the
+///   provider. With none, the router has no route to close;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - calls the listeners of [screenListeners] each time the screen the user
 ///   sees changes, each on its own, so that a listener that throws keeps no

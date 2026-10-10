@@ -655,6 +655,29 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerThrowingWithNoRouteToClose,
+        role: routerRole,
+        bug: 'It throws a StateError when the back button of the system has '
+            'no route to close, as on the first page of the app, rather than '
+            'leaving the button to the system.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_screens_test.dart',
+            'each screen the user sees is heard of once',
+            'The back button of the system throws nothing on the page that '
+                'the router stayed on.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenLayoutModule.givingFirstDestination(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '

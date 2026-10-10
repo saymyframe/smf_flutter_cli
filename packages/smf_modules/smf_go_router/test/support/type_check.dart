@@ -58,7 +58,35 @@ abstract class StatefulWidget extends Widget {
   const StatefulWidget({super.key});
 }
 
-class RouterConfig<T> {}
+abstract class State<T extends StatefulWidget> {}
+
+class GlobalKey<T extends State<StatefulWidget>> extends Key {
+  const GlobalKey();
+
+  T? get currentState => null;
+}
+
+class Navigator extends StatefulWidget {
+  const Navigator({super.key});
+}
+
+class NavigatorState extends State<Navigator> {
+  Future<bool> maybePop<T extends Object?>([T? result]) async => false;
+}
+
+abstract class BackButtonDispatcher {
+  void addCallback(ValueGetter<Future<bool>> callback) {}
+
+  void removeCallback(ValueGetter<Future<bool>> callback) {}
+}
+
+class RootBackButtonDispatcher extends BackButtonDispatcher {}
+
+class RouterConfig<T> {
+  const RouterConfig({this.backButtonDispatcher});
+
+  final BackButtonDispatcher? backButtonDispatcher;
+}
 
 class NavigatorObserver {}
 
@@ -81,6 +109,8 @@ const bool kDebugMode = true;
 void debugPrint(String? message, {int? wrapWidth}) {}
 
 typedef VoidCallback = void Function();
+
+typedef ValueGetter<T> = T Function();
 
 abstract class Listenable {
   const Listenable();
@@ -253,6 +283,8 @@ class RouteMatchList {
 class GoRouterDelegate implements Listenable {
   RouteMatchList currentConfiguration = RouteMatchList();
 
+  GlobalKey<NavigatorState> get navigatorKey => const GlobalKey();
+
   @override
   void addListener(VoidCallback listener) {}
 }
@@ -304,9 +336,12 @@ class GoRouter implements RouterConfig<RouteMatchList> {
     required ValueListenable<RoutingConfig> routingConfig,
     String? initialLocation,
     List<NavigatorObserver>? observers,
-  });
+  }) : backButtonDispatcher = RootBackButtonDispatcher();
 
   late final RouteConfiguration configuration;
+
+  @override
+  final BackButtonDispatcher backButtonDispatcher;
 
   late final GoRouterDelegate routerDelegate;
 
