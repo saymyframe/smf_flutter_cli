@@ -337,6 +337,58 @@ void main() {
       );
 
       test(
+        'the sign-in without a state manager is a usage error that says '
+        'which modules to choose from, and --explain shows the app with '
+        'the first of them and what else the sign-in brings',
+        () async {
+          const create = ['create', 'my_app', '-m', 'sign_in', '-o'];
+
+          final result = await _smf(
+            [...create, temporary.path, '--no-input'],
+            path: sdk,
+          );
+          final explained = await _smf(
+            [...create, temporary.path, '--explain'],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 64);
+          expect(
+            result.stderr,
+            contains(
+              'Several modules provide the state management role, which '
+              'sign_in requires: bloc, riverpod. Add one of them to -m.',
+            ),
+          );
+          expect(explained.exitCode, 0, reason: '${explained.stderr}');
+          expect(
+            explained.stdout,
+            allOf(
+              contains('  sign_in: requested, variant for bloc\n'),
+              contains(
+                '  bloc: the first provider of the state management role, '
+                'which sign_in requires; a run asks which one, also offering '
+                'riverpod\n',
+              ),
+              contains(
+                '  firebase_auth: the only provider of the authentication '
+                'role, which sign_in requires\n',
+              ),
+              contains(
+                '  go_router: the only provider of the router role, which '
+                'sign_in requires\n',
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         '--explain shows the module chosen to route the app',
         () async {
           final result = await _smf(

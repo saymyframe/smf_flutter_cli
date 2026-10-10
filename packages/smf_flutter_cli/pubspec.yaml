@@ -47,6 +47,7 @@ dependencies:
   smf_riverpod: ^0.3.1
   smf_settings: ^0.4.0
   smf_shared_preferences: ^0.4.0
+  smf_sign_in: ^0.4.0
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.

@@ -212,6 +212,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
+      'sign_in — Sign-in, sign-up and password reset with an email',
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -369,6 +370,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
+      'sign_in — Sign-in, sign-up and password reset with an email',
     ]);
     expect(
       run.lines,
@@ -1509,5 +1511,140 @@ void main() {
         contains('This app was generated in the mode `anonymous`'),
       ),
     );
+  });
+
+  test(
+      'a run in a terminal offers the sign-in among the features, asks '
+      'which module manages the state of its screens, with no choice of '
+      'none, adds the only provider of the authentication without a '
+      'question, and asks who may use the app without an account', () async {
+    final run = await _create(
+      {
+        'Features': ['home', 'sign_in'],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Settings screen': ['None'],
+        'State management': ['riverpod'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Preferences': ['None'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final asked = {
+      for (final question in run.asked) question.message: question.shown,
+    };
+    // The screens of the sign-in keep their state with the state manager
+    // of the app, so the app has one: the question says who requires it
+    // and has no None.
+    expect(
+      asked['State management: sign_in requires the state management role. '
+          'Which module provides it?'],
+      [
+        'bloc — BLoC with flutter_bloc',
+        'riverpod — Riverpod with flutter_riverpod',
+      ],
+    );
+    // firebase_auth is the only module that provides the authentication,
+    // which the sign-in requires, so there is nothing to ask.
+    expect(asked.keys, isNot(contains(startsWith('Authentication:'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding firebase_auth: the only provider of the authentication '
+        'role, which sign_in requires.',
+      ),
+    );
+    expect(
+      run.lines,
+      contains('Adding firebase_core: a dependency of firebase_auth.'),
+    );
+    // The mode of the auth role is asked last, as in an app without the
+    // screens.
+    expect(run.asked.last.message, 'Who may use the app without an account?');
+    final app = run.files.directory('/work/my_app');
+    // The screens come with the state layer of the chosen state manager.
+    expect(
+      app.childFile('lib/features/sign_in/sign_in_notifier.dart').existsSync(),
+      isTrue,
+    );
+    expect(
+      app.childFile('lib/features/sign_in/sign_in_cubit.dart').existsSync(),
+      isFalse,
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  flutter_riverpod: '), isNot(contains('flutter_bloc'))),
+    );
+    // The router asks the two guards of the sign-in, which read the
+    // session of the app, and the app starts on the start screen once the
+    // gate allows.
+    expect(
+      app.childFile('lib/core/router/app_router.dart').readAsStringSync(),
+      allOf(
+        contains("'sign_in.gate',"),
+        contains('allows: guard0.signInAllowsApp(),'),
+        contains("'sign_in.account',"),
+        contains('allows: guard0.signInHasAccount(),'),
+        contains('redirectTo: const SignInSignInLocation(),'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/router/app_router_factory.dart')
+          .readAsStringSync(),
+      allOf(
+        contains("initialLocation: '/home',"),
+        contains("path: '/sign_in',"),
+      ),
+    );
+  });
+
+  test(
+      'the router asks the guard of the onboarding before the gate of the '
+      'sign-in, whichever of the two features was picked first, so a first '
+      'launch shows the onboarding and then the sign-in', () async {
+    final guards = <String, List<String>>{};
+    for (final modules in [
+      'onboarding,sign_in,bloc',
+      'sign_in,bloc,onboarding',
+    ]) {
+      final run = await _create(
+        {},
+        options: ['--no-input', '--skip-external-setup', '-m', modules],
+      );
+      expect(run.code, 0, reason: run.lines.join('\n'));
+      final router = run.files
+          .file('/work/my_app/lib/core/router/app_router.dart')
+          .readAsStringSync();
+      guards[modules] = [
+        for (final match
+            in RegExp(r"RouteGuard\(\s*'([^']+)',").allMatches(router))
+          match.group(1)!,
+      ];
+    }
+
+    // The router shows the target of the first guard that does not allow.
+    // The guard of the onboarding is of an earlier stage than those of the
+    // sign-in, which decides their order, not the order of the modules.
+    expect(guards, {
+      'onboarding,sign_in,bloc': [
+        'onboarding.firstRun',
+        'sign_in.gate',
+        'sign_in.account',
+      ],
+      'sign_in,bloc,onboarding': [
+        'onboarding.firstRun',
+        'sign_in.gate',
+        'sign_in.account',
+      ],
+    });
   });
 }
