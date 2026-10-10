@@ -263,9 +263,10 @@ final class $_instead<L> implements WhenAsked<L>, WhenChanged<L> {
 /// a route of [flow] is among its pages.
 ///
 /// The router makes the request again once [$_navigation.changed] closes
-/// the last of those pages, and drops it when the last of them leaves in
-/// another way, as when the user goes back. It keeps one request: a
-/// request that waited before is dropped.
+/// the last of those pages, unless that answer drops the request. And it
+/// drops the request when the last of them leaves in another way, as when
+/// the user goes back. It keeps one request: a request that waited before
+/// is dropped.
 final class $_onTop<L> implements WhenAsked<L> {
   /// Creates the answer.
   const $_onTop(this.location, {required this.flow});
@@ -287,16 +288,24 @@ final class $_nothing<L> implements WhenAsked<L> {
 }
 
 /// The router closes the [pages] pages on top, at once and whatever its
-/// navigator shows over them, such as a dialog, and each `push()` that
-/// showed one of them completes with `null`. It then makes the request
-/// that waits again, if no page of the flow of that request is left.
+/// navigator shows over them, such as a dialog. Each `push()` that showed
+/// one of them completes with `null`, at once or when the frame is over.
+///
+/// Then, if a request waits: with [dropsRequest] the router drops it. And
+/// else it makes the request again, if no page of the flow of that request
+/// is left.
 final class $_close<L> implements WhenChanged<L> {
   /// Creates the answer.
-  const $_close(this.pages);
+  const $_close(this.pages, {required this.dropsRequest});
 
   /// How many pages to close, from the one on top down. The router said of
   /// each that it can close it on its own, and a page stays below them.
   final int pages;
+
+  /// Whether the page that the last flow was opened over is among those
+  /// that close: the request that waits for that flow was made on that
+  /// page, so it is not made again on the page below.
+  final bool dropsRequest;
 }
 ''';
 
@@ -346,6 +355,10 @@ final class $_navigation<L> {
       if (!guard.resumes && guard.allows.value) guard,
   };
 
+  /// How many pages the flow that [asked] opened last was opened over: the
+  /// request that waits for that flow was made on the one on top of them.
+  int _below = 0;
+
   /// What the router does in place of showing [location], whose route has
   /// the full name [route], or `null` to show it.
   ///
@@ -372,10 +385,11 @@ final class $_navigation<L> {
   ///   already; and else [$_onTop] of the target of the guard, with its
   ///   flow.
   ///
-  /// Nothing is remembered for a guard with routes, so the answer depends
-  /// on what the router did about the request before: asked twice about
-  /// one request, the class answers [$_nothing] for a flow that the first
-  /// answer opened.
+  /// For a guard with routes the class remembers no location, only over
+  /// how many pages its flow was opened, for [changed]. So the answer
+  /// depends on what the router did about the request before: asked twice
+  /// about one request, the class answers [$_nothing] for a flow that the
+  /// first answer opened.
   ///
   /// What a gate made the class remember is forgotten when no gate keeps
   /// the user from the location and it is outside every flow, or in one
@@ -399,6 +413,7 @@ final class $_navigation<L> {
     if (over) return $_instead(start);
     if (guard == null) return null;
     if (onTopOf.any(guard.flow.contains)) return const $_nothing();
+    _below = onTopOf.length;
     return $_onTop(locationOf(guard.redirectTo), flow: guard.flow);
   }
 
@@ -437,7 +452,11 @@ final class $_navigation<L> {
   ///   over (see [$_over]) or which a guard with [RouteGuard.routes] keeps
   ///   the user from: [$_close] of that page and the pages over it, if the
   ///   router can close each of them and a page stays below; and else
-  ///   [$_instead] of [start].
+  ///   [$_instead] of [start]. The request that waits is dropped when the
+  ///   pages that close reach below the flow that [asked] opened last: the
+  ///   page that the request was made on closes then, as when it asks for
+  ///   a condition that stopped holding while the flow of another one was
+  ///   open over it.
   ///
   /// So the pages of a flow close once its guards allow, also below a page
   /// that was pushed from them, and a page that asks for a condition
@@ -481,9 +500,9 @@ final class $_navigation<L> {
       (page) => $_over(page.route) || _guardKeepingFrom(page.route) != null,
     );
     if (lowest < 0) return null;
-    final leaving = all.take(lowest + 1);
-    return leaving.every((page) => page.pushed) && lowest + 1 < all.length
-        ? $_close(lowest + 1)
+    final closed = lowest + 1;
+    return all.take(closed).every((page) => page.pushed) && closed < all.length
+        ? $_close(closed, dropsRequest: all.length - closed < _below)
         : $_instead(start);
   }
 

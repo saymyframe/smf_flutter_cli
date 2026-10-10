@@ -432,14 +432,35 @@ void main() {
   changed('both stop', [home]);
   asked('rooms.lounge', '/rooms/lounge', on: [home]);
   asked('rooms.lounge', '/rooms/lounge', on: [over(plans), home]);
-  asked('rooms.members', '/rooms/members', on: [over(plans), home]);
   paidNow.value = true;
-  changed('paid holds below the flow of member', [over(login), over(plans), home]);
   changed('paid holds', [over(plans), home]);
   asked('rooms.lounge', '/rooms/lounge', on: [home]);
   memberNow.value = true;
   changed('member holds', [over(login), home]);
   asked('rooms.lounge', '/rooms/lounge', on: [home]);
+
+  print('the page that a request was made on closes');
+  memberNow.value = false;
+  paidNow.value = false;
+  changed('both stop', [home]);
+  asked('rooms.lounge', '/rooms/lounge', on: [home]);
+  asked('rooms.members', '/rooms/members', on: [over(plans), home]);
+  paidNow.value = true;
+  changed('paid holds below the flow of member', [over(login), over(plans), home]);
+  memberNow.value = true;
+  paidNow.value = false;
+  changed('member holds, paid stops', [over(members), lobby]);
+  asked('rooms.lounge', '/rooms/lounge', on: [over(members), lobby]);
+  memberNow.value = false;
+  changed('member stops below the flow of paid', [over(plans), over(members), lobby]);
+  memberNow.value = true;
+  changed('member holds', [lobby]);
+  asked('rooms.lounge', '/rooms/lounge', on: [lobby]);
+  memberNow.value = false;
+  changed('member stops over the flow of paid', [over(card), over(plans), lobby]);
+  memberNow.value = true;
+  paidNow.value = true;
+  changed('paid holds, with a page over its flow', [over(lobby), over(plans), lobby]);
 
   print('a gate and a condition with one flow, in one turn');
   signedInNow.value = false;
@@ -1144,22 +1165,49 @@ a gate of the first stage does not allow
         'and the request, asked about again, opens the flow of the next',
         () async {
       // The guard of `shop` comes first. While its flow is open, a further
-      // request for the lounge shows nothing, and a request for a route of
-      // the members opens the flow of the other guard: a flow is open for
-      // the guards that have it. Once `shop` allows, the pages of its flow
-      // close with what is over them. The lounge is asked about again and
-      // opens the target of the other guard, and shows once that allows.
+      // request for the lounge shows nothing. Once `shop` allows, the pages
+      // of its flow close. The lounge is asked about again and opens the
+      // target of the other guard, and shows once that allows.
       expect(sectionOf(await flow, 'a route that asks for two conditions'), '''
   both stop: stays
   asked /rooms/lounge on home.root: /shop/plans over the page, while shop.plans
   asked /rooms/lounge on shop.plans + home.root: nothing
-  asked /rooms/members on shop.plans + home.root: $opensLogin
-  paid holds below the flow of member: closes 2
   paid holds: closes 1
   asked /rooms/lounge on home.root: $opensLogin
   member holds: closes 1
   asked /rooms/lounge on home.root: shows it
 ''');
+    });
+
+    test(
+        'when the pages that close reach below the flow that was opened '
+        'last, the request that waits for it is dropped: the page that it '
+        'was made on closes', () async {
+      // A request for a route of the members, made on the target of
+      // `shop`, opens the flow of the other guard over that target: a flow
+      // is open for the guards that have it. Once `shop` allows, its flow
+      // closes with what is over it, and the request was made on a page
+      // that closes. The same goes for a request that was made on a page
+      // that asks for a condition, once that condition stops holding below
+      // the flow of the other one. A page over the flow that closes drops
+      // nothing, and neither does the flow itself when it closes with a
+      // page over it: the page that the request was made on stays.
+      expect(
+        sectionOf(await flow, 'the page that a request was made on closes'),
+        '''
+  both stop: stays
+  asked /rooms/lounge on home.root: /shop/plans over the page, while shop.plans
+  asked /rooms/members on shop.plans + home.root: $opensLogin
+  paid holds below the flow of member: closes 2, and drops the request
+  member holds, paid stops: stays
+  asked /rooms/lounge on rooms.members + rooms.lobby: /shop/plans over the page, while shop.plans
+  member stops below the flow of paid: closes 2, and drops the request
+  member holds: stays
+  asked /rooms/lounge on rooms.lobby: /shop/plans over the page, while shop.plans
+  member stops over the flow of paid: closes 1
+  paid holds, with a page over its flow: closes 2
+''',
+      );
     });
 
     test(

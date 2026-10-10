@@ -106,11 +106,13 @@ String whenAsked(WhenAsked<String>? answer) => switch (answer) {
     };
 
 /// What `changed` answered: `stays` for none, the location that the router
-/// shows in place of its stack, or how many pages on top it closes.
+/// shows in place of its stack, or how many pages on top it closes, and
+/// whether it then drops the request that waits.
 String whenChanged(WhenChanged<String>? answer) => switch (answer) {
       null => 'stays',
       ShowInstead(:final location) => location,
-      ClosePages(:final pages) => 'closes $pages',
+      ClosePages(:final pages, :final dropsRequest) =>
+        'closes $pages${dropsRequest ? ', and drops the request' : ''}',
     };
 
 /// The pages of a stack for `changed`, the one on top first: each of
