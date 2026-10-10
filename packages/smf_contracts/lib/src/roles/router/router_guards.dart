@@ -7,9 +7,9 @@ const _foundation = ImportRef('package:flutter/foundation.dart');
 /// The code of the guards of [facade] for `lib/core/router/app_router.dart`
 /// of the router's template: the class `RouteGuard`,
 /// [RouterRole.routeGuards], [RouterRole.redirectOf],
-/// [RouterRole.flowIsOver], [RouterRole.guardChanges] and the class
-/// [RouterRole.guardedNavigation], with the imports they need; or no code
-/// for an app without guards.
+/// [RouterRole.flowIsOver], [RouterRole.guardChanges], the classes of the
+/// answers of [RouterRole.guardedNavigation] and that class, with the
+/// imports they need; or no code for an app without guards.
 ///
 /// The file of the function of each guard is imported with a prefix of the
 /// template's own, `guard0`, `guard1` and so on, so that no function can
@@ -62,6 +62,7 @@ Fragment _guardsCode(RouterFacade facade) {
     ..write(_redirectOf)
     ..write(_flowIsOver)
     ..write(_guardChanges)
+    ..write(_answers)
     ..write(_guardedNavigation);
   return Fragment('$buffer', imports: [_foundation, ...files.values]);
 }
@@ -74,20 +75,30 @@ const _guardClass = '''
 /// location outside its flow. With [routes] it keeps the user only from
 /// those routes, and the router shows every other route as it is.
 ///
-/// `go()`, `push()` and `replace()` of a location that the guard keeps the
-/// user from show the target too, in place of the whole stack, and `push()`
-/// completes with `null`. Once the guard allows, the router shows the
-/// location that the user last asked for, or the one that the guard took
-/// the user from if it [resumes]. With neither, it shows the screen that
-/// the app starts on in place of a page of the flow, and leaves a page
-/// outside the flow as it is: the user may be on one when a guard with
-/// [routes] starts allowing.
+/// While a gate does not allow, `go()`, `push()` and `replace()` of a
+/// location that it keeps the user from show its target in place of the
+/// whole stack, and `push()` completes with `null`. Once it allows, the
+/// router shows the location that the user last asked for, or the one that
+/// the gate took the user from if it [resumes], or else the screen that
+/// the app starts on.
+///
+/// While a guard with [routes] does not allow, a request for one of them
+/// opens its target over the page that the user is on, and the request
+/// waits. Back returns to that page and drops the request. Once the guard
+/// allows, the router closes the pages of the flow and does what was asked:
+/// `push()` shows the location over the page that the user was on, and
+/// completes with the value of its page, `go()` shows it in place of the
+/// stack, and `replace()` in place of that page. A further request for one
+/// of the [routes] does nothing while the flow is open. A location from
+/// the platform opens the target over the screen that the app starts on.
+/// When the guard stops allowing, the router closes each page of its
+/// [routes] and the pages over it.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
-/// flow (see [flowIsOver]), or the target of another guard while that one
-/// does not allow. So the code of the app changes what [allows] reads. It
+/// flow (see [flowIsOver]), or the target of a gate while that one does
+/// not allow. So the code of the app changes what [allows] reads. It
 /// navigates into a flow only while a guard with [routes] and that flow
 /// does not allow and every gate does, as to a sign-in that a guest opens.
 final class RouteGuard {
@@ -121,11 +132,16 @@ final class RouteGuard {
   /// guard takes them from when it stops allowing, once it allows again.
   ///
   /// With `false`, the router forgets what it remembers when the guard
-  /// stops allowing: where the user was, whichever guard took them from
-  /// it, and a location that was asked for before. So once the guards
+  /// stops allowing: where the user was, whichever gate took them from
+  /// it, and a location that was asked for before. So once the gates
   /// allow, the user comes to the screen that the app starts on, as the
   /// next user does after a sign-out, unless a location was asked for
   /// since the guard stopped, such as a link.
+  ///
+  /// The router remembers a location only for a gate. A guard with
+  /// [routes] closes its pages when it stops allowing, so the user is on
+  /// the page below them, whatever this says. With `false`, such a guard
+  /// still makes the router forget what a gate made it remember.
   final bool resumes;
 
   /// The full names of the routes that the guard keeps the user from while
@@ -144,15 +160,17 @@ final class RouteGuard {
 /// The function of the app that asks its guards about a route.
 const _redirectOf = '''
 
-/// The location that the router shows in place of the route [routeName],
-/// or `null` if the guards let the user see it.
+/// The location that the router shows when it is asked for the route
+/// [routeName] and a guard keeps the user from it, or `null` if the guards
+/// let the user see the route.
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, such as the error screen of the router. The first
 /// gate that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow. When every
 /// gate allows, the first guard that has the route among its
-/// [RouteGuard.routes] and does not allow shows its target in its place.
+/// [RouteGuard.routes] and does not allow shows its target: over the page
+/// that the user is on, not in place of it.
 ///
 /// A route that the guards let the user see may still be in a flow that is
 /// over, in place of which the router shows the screen that the app starts
@@ -203,30 +221,104 @@ final Listenable ${RouterRole.guardChanges} = Listenable.merge([
 ]);
 ''';
 
-/// The names that the code of [_flowIsOver] and of [_guardedNavigation] has
-/// from the role.
+/// The names that the code of [_flowIsOver], of [_answers] and of
+/// [_guardedNavigation] has from the role.
 const String _navigation = RouterRole.guardedNavigation;
 const String _ask = RouterRole.redirectOf;
 const String _over = RouterRole.flowIsOver;
 const String _list = RouterRole.routeGuards;
 const String _changes = RouterRole.guardChanges;
 
+/// The names of the classes of the answers of [RouterRole.guardedNavigation]
+/// in the app.
+const String _instead = 'ShowInstead';
+const String _onTop = 'ShowOver';
+const String _stay = 'Stay';
+const String _close = 'Close';
+
+/// The classes of the app for what its guards answer its router.
+const _answers = '''
+
+/// What [$_navigation.asked] answers a router that is not to show the
+/// location that it asked about: [$_instead], [$_onTop] or [$_stay].
+sealed class WhenAsked<L> {}
+
+/// What [$_navigation.changed] answers a router that is to change its
+/// pages: [$_instead] or [$_close].
+sealed class WhenChanged<L> {}
+
+/// The router shows [location] in place of its whole stack, as `go()` to
+/// it does. A `push()` that it asked about completes with `null`.
+final class $_instead<L> implements WhenAsked<L>, WhenChanged<L> {
+  /// Creates the answer.
+  const $_instead(this.location);
+
+  /// The location to show: the target of a gate, the location that the
+  /// user comes back to, or the screen that the app starts on.
+  final L location;
+}
+
+/// The router shows [location] over the page on top, as `push()` of it
+/// does, and keeps the request that it asked about waiting while a page of
+/// a route of [flow] is among its pages.
+///
+/// The router makes the request again once [$_navigation.changed] closes
+/// the last of those pages, and drops it when the last of them leaves in
+/// another way, as when the user goes back. It keeps one request: a
+/// request that waited before is dropped.
+final class $_onTop<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const $_onTop(this.location, {required this.flow});
+
+  /// The location to show on top: the target of a guard with
+  /// [RouteGuard.routes].
+  final L location;
+
+  /// The full names of the routes of the flow of that guard.
+  final Set<String> flow;
+}
+
+/// The router shows nothing and leaves its pages as they are: the flow of
+/// the guard is open already. A `push()` that it asked about completes
+/// with `null`.
+final class $_stay<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const $_stay();
+}
+
+/// The router closes the [pages] pages on top, at once and whatever its
+/// navigator shows over them, such as a dialog, and each `push()` that
+/// showed one of them completes with `null`. It then makes the request
+/// that waited for those pages again.
+final class $_close<L> implements WhenChanged<L> {
+  /// Creates the answer.
+  const $_close(this.pages);
+
+  /// How many pages to close, from the one on top down. The router said of
+  /// each that it can close it on its own, and a page stays below them.
+  final int pages;
+}
+''';
+
 /// The class of the app through which its router asks the guards, which
 /// keeps what they make the router remember.
 const _guardedNavigation = '''
 
 /// The guards of the routes as the router of the app asks them, with what
-/// they make it remember: the location that the user comes back to once
-/// the guards allow it.
+/// the gates make it remember: the location that the user comes back to
+/// once the gates allow it.
 ///
 /// [L] is how the router knows a location that it can show as `go()`
-/// does, such as its URI. The router asks [asked] before it shows a
-/// location, and [changed] when [$_changes] notifies. It shows the
-/// location that either answers in place of its whole stack, as `go()` to
-/// it does, for a guard with [RouteGuard.routes] as for a gate: the user
-/// cannot go back from the target of such a guard to the screen that they
-/// were on. An answer is a record with the location, so that `null` is no
-/// answer also for a router whose [L] is nullable.
+/// does, such as its URI. The router asks [asked] once for each request to
+/// show a location, before it shows it, and tells [changed] of its pages
+/// each time [$_changes] notifies. It does what either answers, and shows
+/// the location, or leaves its pages as they are, when the answer is
+/// `null`.
+///
+/// A gate answers with a location that takes the place of the whole stack.
+/// A guard with [RouteGuard.routes] opens its target over the page that
+/// the user is on and closes it again, so the user can go back from it,
+/// and the request that opened it waits with the router, not here.
 final class $_navigation<L> {
   /// Creates the guards for a router whose location `/`, the screen that
   /// the app starts on, is [start], and which knows a location of the
@@ -239,7 +331,7 @@ final class $_navigation<L> {
   /// The location of the router for a location of the navigation.
   final L Function(AppLocation location) locationOf;
 
-  /// The location that the user comes back to once the guards allow it,
+  /// The location that the user comes back to once the gates allow it,
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
@@ -254,109 +346,138 @@ final class $_navigation<L> {
       if (!guard.resumes && guard.allows.value) guard,
   };
 
-  /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it: the target of the guard that
-  /// keeps the user from it (see [$_ask]), or [start] for a location in a
-  /// flow that is over (see [$_over]).
+  /// What the router does in place of showing [location], whose route has
+  /// the full name [route], or `null` to show it.
   ///
-  /// The router asks before it shows a location: the one the app starts
-  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
-  /// and each one from the platform. A location that a guard keeps the
-  /// user from is remembered in place of the one before it, so the user
-  /// comes back to the latest one that they or the platform asked for,
-  /// whether or not that guard brings the user back (see
-  /// [RouteGuard.resumes]). A location in the flow of a guard is never
-  /// remembered: once that guard allows, its flow is over.
+  /// The router asks once for each request, before it shows the location:
+  /// the one the app starts on, each one that `go()`, `push()` or
+  /// `replace()` is asked to show, and each one from the platform.
+  /// [onTopOf] are the full names of the routes of the pages that the user
+  /// can get back to then, as the router tells [changed] of them. The
+  /// router gives none when it has no page yet, and none for a location
+  /// from the platform, which takes the place of the stack.
   ///
-  /// That holds for a gate and for a guard with [RouteGuard.routes] alike.
-  /// A gate keeps the user in its flow, so the location is still what the
-  /// user waits for when the gate allows. A guard with routes keeps the
-  /// user from its routes only, so the user may leave its target for
-  /// another screen. So what was remembered is forgotten when the answer
-  /// is `null` for a location outside every flow, or [start] for a flow
-  /// that is over: the user has moved on. Every gate allows then, so only
-  /// a guard with routes could still keep the user from what was
-  /// remembered.
+  /// The answer is the first of these:
+  /// - [$_instead] of the target of the gate that keeps the user from the
+  ///   location (see [$_ask]). The location is then remembered in place of
+  ///   the one before it, so the user comes back to the latest one that
+  ///   they or the platform asked for, whether or not that gate brings the
+  ///   user back (see [RouteGuard.resumes]). A location in the flow of a
+  ///   guard is never remembered: once that guard allows, its flow is over.
+  /// - [$_instead] of [start] for a location in a flow that is over (see
+  ///   [$_over]).
+  /// - for a location that a guard with [RouteGuard.routes] keeps the user
+  ///   from: [$_stay] while a page of the flow of that guard is among
+  ///   [onTopOf], on top or below another page, since the flow is open
+  ///   already; and else [$_onTop] of the target of the guard, with its
+  ///   flow.
   ///
-  /// Before that, what was remembered is forgotten if a guard that does
-  /// not bring the user back stopped allowing, as [changed] says.
-  ({L location})? asked(String? route, L location) {
+  /// Nothing is remembered for a guard with routes, so the answer depends
+  /// on what the router did about the request before: asked twice about
+  /// one request, the class answers [$_stay] for a flow that the first
+  /// answer opened.
+  ///
+  /// What a gate made the class remember is forgotten when no gate keeps
+  /// the user from the location and it is outside every flow, or in one
+  /// that is over: the user has moved on, as when the code of the app
+  /// navigates right when a gate starts allowing. Before that, it is
+  /// forgotten if a guard that does not bring the user back stopped
+  /// allowing, as [changed] says.
+  WhenAsked<L>? asked(
+    String? route,
+    L location, {
+    required Iterable<String?> onTopOf,
+  }) {
     _forgetAfterStop();
-    final target = $_ask(route);
-    if (target != null) {
+    final guard = _guardKeepingFrom(route);
+    if (guard != null && guard.routes == null) {
       if (!_inAFlow(route)) _remembered = (route: route, location: location);
-      return (location: locationOf(target));
+      return $_instead(locationOf(guard.redirectTo));
     }
     final over = $_over(route);
     if (over || !_inAFlow(route)) _remembered = null;
-    return over ? (location: start) : null;
+    if (over) return $_instead(start);
+    if (guard == null) return null;
+    if (onTopOf.any(guard.flow.contains)) return const $_stay();
+    return $_onTop(locationOf(guard.redirectTo), flow: guard.flow);
   }
 
-  /// What the router shows in place of its stack now that a guard started
-  /// or stopped allowing, or `null` to leave the stack as it is.
+  /// What the router does now that a guard started or stopped allowing, or
+  /// `null` to leave its pages as they are.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the
   /// main navigation, each with the full name of its route, its location,
-  /// and whether `push()` showed it; none for a router that has no page
-  /// yet.
+  /// and whether the router can close it on its own and leave the pages
+  /// below it as they are. That holds for a page that `push()` showed, and
+  /// for one that `replace()` showed in place of such a page. There are
+  /// none for a router that has no page yet.
   ///
   /// First, the remembered location is forgotten if a guard that does not
   /// bring the user back (see [RouteGuard.resumes]) stopped allowing: it
   /// allowed when the class was last asked or told, and does not now. That
   /// holds whichever guard decides and whatever the pages are, and for
-  /// whichever guard the location was remembered, so that the next user
+  /// whichever gate the location was remembered, so that the next user
   /// does not come to a location of the last one. A guard that stops and
   /// allows again without the class being asked or told in between is not
   /// seen to stop.
   ///
   /// The answer is then the first of these:
-  /// - the target of the guard that keeps the user from one of the pages.
-  ///   If that guard brings the user back, the location below the pages
-  ///   that pushes showed is then remembered, or [start] if pushes showed
-  ///   them all, unless one is remembered already or it is in the flow of
-  ///   a guard;
-  /// - the remembered location, once the guards allow it, which is then
-  ///   forgotten;
-  /// - [start], when the page on top is in a flow that is over (see
-  ///   [$_over]): its guard started allowing while the flow was shown, and
-  ///   nothing is remembered, or a guard with [RouteGuard.routes] still
-  ///   keeps the user from what is. That location is forgotten then, since
-  ///   the user moves on to [start].
+  /// - [$_instead] of the target of the gate that keeps the user from one
+  ///   of the pages. If that gate brings the user back, the location below
+  ///   the pages that the router can close is then remembered, or [start]
+  ///   if it can close them all, unless one is remembered already or it is
+  ///   in the flow of a guard.
+  /// - with a location remembered: `null` while a gate keeps the user from
+  ///   it. Otherwise the location is forgotten, and the answer is
+  ///   [$_instead] of it, or of [start] if a guard with
+  ///   [RouteGuard.routes] keeps the user from it: the class cannot keep a
+  ///   request waiting, so the user moves on to [start].
+  /// - for the lowest page that has to leave, which is in a flow that is
+  ///   over (see [$_over]) or which a guard with [RouteGuard.routes] keeps
+  ///   the user from: [$_close] of that page and the pages over it, if the
+  ///   router can close each of them and a page stays below; and else
+  ///   [$_instead] of [start].
   ///
-  /// A known limit: the class looks for a flow that is over at the page on
-  /// top only, since its answer takes the place of the whole stack. So a
-  /// page of a flow that is over stays below another page, such as the
-  /// target of a guard with routes below a page that was pushed from it,
-  /// and the user sees it again when they go back to it.
-  ({L location})? changed(
+  /// So the pages of a flow close once its guards allow, also below a page
+  /// that was pushed from them, and a page that asks for a condition
+  /// closes when the condition stops holding. A page that took the place
+  /// of the stack, as after `go()` to it, has nothing below it: the user
+  /// then comes to [start].
+  WhenChanged<L>? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
     _forgetAfterStop();
-    for (final page in pages) {
-      final guard = _guardKeepingFrom(page.route);
-      if (guard == null) continue;
-      final below = pages.where((other) => !other.pushed).firstOrNull;
-      if (guard.resumes && _remembered == null && !_inAFlow(below?.route)) {
+    final all = pages.toList();
+    for (final page in all) {
+      final gate = _guardKeepingFrom(page.route);
+      if (gate == null || gate.routes != null) continue;
+      final below = all.where((other) => !other.pushed).firstOrNull;
+      if (gate.resumes && _remembered == null && !_inAFlow(below?.route)) {
         _remembered = (
           route: below?.route,
           location: below == null ? start : below.location,
         );
       }
-      return (location: locationOf(guard.redirectTo));
+      return $_instead(locationOf(gate.redirectTo));
     }
-    if (_remembered case final remembered?
-        when $_ask(remembered.route) == null) {
+    if (_remembered case final remembered?) {
+      final guard = _guardKeepingFrom(remembered.route);
+      // The pages are those of the flow of the gate, which is not over.
+      if (guard != null && guard.routes == null) return null;
       _remembered = null;
-      return (location: remembered.location);
+      return $_instead(guard == null ? remembered.location : start);
     }
-    // A guard may still keep the user from the remembered location. For a
-    // gate, the pages are those of its flow, which is not over. A guard
-    // with routes leaves the user where they are, and that may be a flow
-    // that is over: the user moves on from it.
-    if (!$_over(pages.firstOrNull?.route)) return null;
-    _remembered = null;
-    return (location: start);
+    // No gate keeps the user from a page, so a guard that does is one with
+    // routes.
+    final lowest = all.lastIndexWhere(
+      (page) => $_over(page.route) || _guardKeepingFrom(page.route) != null,
+    );
+    if (lowest < 0) return null;
+    final leaving = all.take(lowest + 1);
+    return leaving.every((page) => page.pushed) && lowest + 1 < all.length
+        ? $_close(lowest + 1)
+        : $_instead(start);
   }
 
   /// Forgets the remembered location if a guard that does not bring the
@@ -566,13 +687,20 @@ List<SmfIssue> _checkGuardFunctions(StructuralRuleInput<RoutesData> input) {
 /// The problems of the provider of the role in an app with guards, in
 /// [input]: none of its files creates a [RouterRole.guardedNavigation], or
 /// none reads [RouterRole.guardChanges], through an import of the file of
-/// the role.
+/// the role; and none of them names the answer of that class that opens
+/// the target of a guard over the page on top, or the one that closes
+/// pages, as code that tells an answer by its type does.
 ///
 /// So a router that knows nothing of the guards cannot be in an app with a
-/// module that needs them. The rule does not tell whether the provider asks
-/// what it created, and does what it answers: only a running app shows
-/// that. Without the descriptor of a provider in [input], no file asks the
-/// guards and there is nothing to check.
+/// module that needs them, and neither can one that shows every answer in
+/// place of its stack, as a router did before the class had those answers.
+/// The rule asks for both answers in every app with guards, also in one
+/// whose guards are all gates, which get neither: the provider is the same
+/// router there, and a guard with routes that a developer adds to the app
+/// by hand needs no other. The rule does not tell whether the provider
+/// asks what it created, and does what it answers: only a running app
+/// shows that. Without the descriptor of a provider in [input], no file
+/// asks the guards and there is nothing to check.
 List<SmfIssue> _checkGuardsAsked(StructuralRuleInput<RoutesData> input) {
   if (routerRole.facadeOf(input.roleInput).guards.isEmpty) return const [];
   final providers = [
@@ -589,6 +717,15 @@ List<SmfIssue> _checkGuardsAsked(StructuralRuleInput<RoutesData> input) {
   bool uses(String name) => files.any(
         (file) => usesSymbols(file, {name}, RouterRole.appRouterFile),
       );
+  bool names(String type) => files.any(
+        (file) => namesTypes(file, {type}, RouterRole.appRouterFile),
+      );
+  SmfIssue issue(String message, String hint) => SmfIssue(
+        message,
+        hint: '$hint; see RouterRole.guardedNavigation.',
+        origin: ModuleOrigin(providers.first),
+        path: RouterRole.appRouterFactoryFile,
+      );
   return [
     for (final (name, use) in const [
       (
@@ -598,15 +735,22 @@ List<SmfIssue> _checkGuardsAsked(StructuralRuleInput<RoutesData> input) {
       (RouterRole.guardChanges, 'reads ${RouterRole.guardChanges}'),
     ])
       if (!uses(name))
-        SmfIssue(
+        issue(
           'The provider of the $routerRole does not ask the guards of the '
-          'app: none of its files $use of ${RouterRole.appRouterFile}.',
-          hint: 'A router asks its ${RouterRole.guardedNavigation} about '
-              'every location before it shows it, and tells it of its pages '
-              'when ${RouterRole.guardChanges} notifies; see '
-              'RouterRole.guardedNavigation.',
-          origin: ModuleOrigin(providers.first),
-          path: RouterRole.appRouterFactoryFile,
+              'app: none of its files $use of ${RouterRole.appRouterFile}.',
+          'A router asks its ${RouterRole.guardedNavigation} about every '
+              'location before it shows it, and tells it of its pages when '
+              '${RouterRole.guardChanges} notifies',
+        ),
+    for (final answer in const [_onTop, _close])
+      if (!names(answer))
+        issue(
+          'The provider of the $routerRole does not do what the guards of '
+              'the app answer: none of its files names the answer $answer '
+              'of ${RouterRole.appRouterFile}.',
+          'A router opens the target of a guard with routes over the page '
+              'on top for the answer $_onTop, and closes the pages on top '
+              'for the answer $_close',
         ),
   ];
 }

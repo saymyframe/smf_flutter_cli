@@ -84,11 +84,60 @@ abstract class BuildContext {}
 class RouterConfig<T> {}
 ''';
 
+/// The library `answers.dart` next to the script of [printedByGuards]: how
+/// a script writes what `GuardedNavigation` of the app answers a router
+/// that knows a location by its URI.
+///
+/// Each switch names every answer and has no default, so a script does not
+/// compile once `asked` or `changed` has an answer that the switch lacks.
+const vmAnswers = r'''
+import 'package:my_app/core/router/app_router.dart';
+
+/// What `asked` answered: `shows it` for none, the location that the
+/// router shows in place of its stack, the location that it shows over the
+/// page on top with the routes of the flow that the request waits for, or
+/// `nothing`.
+String whenAsked(WhenAsked<String>? answer) => switch (answer) {
+      null => 'shows it',
+      ShowInstead(:final location) => location,
+      ShowOver(:final location, :final flow) =>
+        '$location over the page, while ${flow.join(', ')}',
+      Stay() => 'nothing',
+    };
+
+/// What `changed` answered: `stays` for none, the location that the router
+/// shows in place of its stack, or how many pages on top it closes.
+String whenChanged(WhenChanged<String>? answer) => switch (answer) {
+      null => 'stays',
+      ShowInstead(:final location) => location,
+      Close(:final pages) => 'closes $pages',
+    };
+
+/// The pages of a stack for `changed`, the one on top first: each of
+/// [pages] is written as its route, or `-` for none, its location, and
+/// `pushed` if the router can close it on its own.
+List<({String? route, String location, bool pushed})> pagesOf(
+  List<String> pages,
+) =>
+    [
+      for (final page in pages.map((page) => page.split(' ')))
+        (
+          route: page[0] == '-' ? null : page[0],
+          location: page[1],
+          pushed: page.length > 2,
+        ),
+    ];
+
+/// The routes of [pages] for `asked`, the one on top first.
+List<String?> routesOf(List<String> pages) =>
+    [for (final page in pagesOf(pages)) page.route];
+''';
+
 /// What the script [main] prints in an app with guards of the routes: the
 /// app has the files that the template of the router role renders from
 /// [data], stand-ins for Flutter, and [files], the files of the functions
-/// of the guards, each by its path in the app. print ends a line with \r\n
-/// on Windows.
+/// of the guards, each by its path in the app. The script may import
+/// `answers.dart` ([vmAnswers]). print ends a line with \r\n on Windows.
 Future<String> printedByGuards(
   String main, {
   required List<RoleData<Object>> data,
@@ -111,6 +160,7 @@ AppRouter createAppRouter() => throw UnimplementedError();
     for (final MapEntry(key: path, value: text) in files.entries)
       'app/$path': text,
     'app/bin/main.dart': main,
+    'app/bin/answers.dart': vmAnswers,
     'app/.dart_tool/package_config.json': jsonEncode({
       'configVersion': 2,
       'packages': [
