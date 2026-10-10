@@ -5,21 +5,26 @@
 // of the main navigation, for as long as a page of that route is in the
 // widget tree. So a go() out of the main navigation and back in one turn
 // would bring the pages of the branches back, and one that comes back while
-// the transition is on its way would have those keys in the tree twice,
-// which Flutter throws for (https://github.com/flutter/flutter/issues/148768).
-// The router of the module gives go_router a new route for the main
-// navigation each time the main navigation leaves its pages, so the main
-// navigation that comes back is a new one, with each branch on its
-// destination, and the page that took its place stays as it is. What the
-// target of a guard does to the branches under any router is tested in
-// layout_guards. It uses what the tests of router_screens share, which
-// every app that it applies to has.
+// the transition is on its way would have those keys in the tree twice
+// (https://github.com/flutter/flutter/issues/148768). The router of the
+// module gives go_router a new route for the main navigation each time the
+// main navigation leaves its pages, so the main navigation that comes back
+// is a new one, with each branch on its destination. go_router matches its
+// location again when its routes change, without the redirects of the
+// routes, so the router puts back the pages that go_router had: the error
+// screen of a location that the redirect of its route refused stays. That
+// a router throws nothing when the main navigation comes back is tested
+// under any router in layout_screens, what the target of a guard does to
+// the branches in layout_guards, and the error screen in router_screens.
+// It uses what the tests of router_screens share, which every app that it
+// applies to has.
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:{{app_name}}/core/layout/app_shell.dart';
+import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
@@ -180,12 +185,6 @@ void main() {
       back.go();
       await tester.pumpAndSettle();
       expect(
-        tester.takeException(),
-        isNull,
-        reason: 'A main navigation that comes back in the turn in which it '
-            'left is the only one in the tree.',
-      );
-      expect(
         heard().last,
         _startScreen,
         reason: 'The user is on the screen that the last go() was asked for.',
@@ -219,19 +218,50 @@ void main() {
           .home()
           .go();
       await tester.pumpAndSettle();
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'A main navigation that comes back while the one that left '
-            'is still in the tree has keys of its own: Flutter finds none '
-            'of them twice.',
-      );
       expect(heard(), [_startScreen]);
       await _expectNewMainNavigation(
         tester,
         before: before,
         when: 'The main navigation left, and came back while the transition '
             'was on its way.',
+      );
+
+      // A location that the redirect of its route refuses, as GoRouter.go
+      // gets it: the id that the route requires is no number. The error
+      // screen takes the place of the main navigation, so the router gives
+      // go_router its new routes, and go_router matches the location again
+      // without that redirect.
+      await _pushInEachBranch(tester);
+      before = _branchesOf(tester);
+      final router = appRouter.config as GoRouter;
+      router.go('/fake_feature/details/abc');
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [(null, '/fake_feature/details/abc')],
+        reason: 'The error screen is heard of once, with no route: with its '
+            'new routes, go_router has the pages that it had.',
+      );
+      expect(
+        router.routerDelegate.currentConfiguration.isError,
+        isTrue,
+        reason: 'With its new routes, go_router still has the error of the '
+            'location that the redirect of its route refused.',
+      );
+      expect(
+        find.byType(FixtureDetailsScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'With its new routes, go_router shows no page of the route '
+            'whose redirect refused the location.',
+      );
+      expect(_shells(), findsNothing);
+      router.go('/fake_feature');
+      await tester.pumpAndSettle();
+      expect(heard(), [_startScreen]);
+      await _expectNewMainNavigation(
+        tester,
+        before: before,
+        when: 'The error screen took the place of the main navigation.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

@@ -46,9 +46,16 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   ){{^main_navigation}}..routerDelegate.addListener(_pagesChanged);{{/main_navigation}}{{#main_navigation}},
   );
 
-  /// Whether the main navigation that [_routes] has now is, or was, among
-  /// the pages of the router.
-  bool _mainNavigationShown = false;{{/main_navigation}}
+  /// The route of the main navigation that [_routes] has now.
+  late StatefulShellRoute _mainNavigationRoute = _mainNavigation();
+
+  /// Whether the main navigation of [_mainNavigationRoute] is, or was,
+  /// among the pages of the router.
+  bool _mainNavigationShown = false;
+
+  /// Whether the router is giving go_router its new routes, which changes
+  /// the pages of go_router for a moment that the router does not follow.
+  bool _renewing = false;{{/main_navigation}}
 
   /// The key of the page on top and its location, as the listeners of the
   /// screen last heard of them.
@@ -138,9 +145,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// of each change of them: keeps each push completing with the value of
   /// its page, and tells the listeners of the screen about the page on top.{{#main_navigation}}
   /// Before that, it gives go_router a new main navigation if the main
-  /// navigation has left the pages.{{/main_navigation}}
+  /// navigation has left the pages. Nothing here needs that order today:
+  /// it is for code that navigates when the pages change, which then finds
+  /// the new routes.{{/main_navigation}}
   void _pagesChanged() {
-    {{#main_navigation}}_renewMainNavigation();
+    {{#main_navigation}}if (_renewing) return;
+    _renewMainNavigation();
     {{/main_navigation}}_keepPushes();
     _showScreen();
   }{{#main_navigation}}
@@ -162,22 +172,41 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// its destination, at any time. Once go_router gives the main navigation
   /// that comes back a state of its own, this can go.
   ///
-  /// go_router parses its location again when its routes change. The other
-  /// routes stay the same objects, so that leaves its pages as they are.
+  /// The other routes stay the same objects, and the new configuration has
+  /// what the one before it had. When its routes change, go_router matches
+  /// its location again, without the redirects of the routes. So a
+  /// location that a redirect refused, such as one without a value that its
+  /// route requires, would get the page of its route in place of the error
+  /// screen: the router puts back the pages that go_router had.
   void _renewMainNavigation() {
-    final pages = config.routerDelegate.currentConfiguration.matches;
-    if (pages.any((page) => page is ShellRouteMatch)) {
+    final shown = config.routerDelegate.currentConfiguration;
+    if (shown.matches.any(
+      (page) => identical(page.route, _mainNavigationRoute),
+    )) {
       _mainNavigationShown = true;
-    } else if (_mainNavigationShown) {
-      _mainNavigationShown = false;
-      final routes = _routes.value;
+      return;
+    }
+    if (!_mainNavigationShown) return;
+    _mainNavigationShown = false;
+    final left = _mainNavigationRoute;
+    final routes = _routes.value;
+    _mainNavigationRoute = _mainNavigation();
+    _renewing = true;
+    try {
       _routes.value = RoutingConfig(
-        redirect: routes.redirect,
         routes: [
           for (final route in routes.routes)
-            route is StatefulShellRoute ? _mainNavigation() : route,
+            identical(route, left) ? _mainNavigationRoute : route,
         ],
+        onEnter: routes.onEnter,
+        redirect: routes.redirect,
+        redirectLimit: routes.redirectLimit,
       );
+      if (config.routerDelegate.currentConfiguration != shown) {
+        config.restore(shown);
+      }
+    } finally {
+      _renewing = false;
     }
   }{{/main_navigation}}
 

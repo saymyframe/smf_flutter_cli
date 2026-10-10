@@ -32,13 +32,14 @@ final class GoRoutes {
   /// generates in the same order, each with its label and its icon, the
   /// index of the selected branch, and `goBranch` to select another. The
   /// function `_mainNavigation()` of [mainNavigation] creates that route,
-  /// so that the router can create it anew, and the list of routes calls
-  /// it right after `/`: the router matches the destinations first, and the
-  /// other top-level routes follow, outside the main navigation. Each
-  /// branch starts on its destination and creates observers of its own,
-  /// and so does the root navigator; the branches do not notify the
-  /// observers of the root navigator, which would see their pages twice
-  /// otherwise.
+  /// so that the router can create it anew, and the list of routes has
+  /// `_mainNavigationRoute`, the field in which the router keeps the route
+  /// that it created last, right after `/`: the router matches the
+  /// destinations first, and the other top-level routes follow, outside the
+  /// main navigation. Each branch starts on its destination and creates
+  /// observers of its own, and so does the root navigator; the branches do
+  /// not notify the observers of the root navigator, which would see their
+  /// pages twice otherwise.
   ///
   /// A screen gets the values of its parameters from the location, parsed
   /// with `tryParse`: a path parameter from the path, including one of a
@@ -66,7 +67,7 @@ final class GoRoutes {
     final shell = destinations.isEmpty ? null : code.shellOf(destinations);
     final routes = [
       "GoRoute(\n  path: '/',\n$root\n)",
-      if (shell != null) '_mainNavigation()',
+      if (shell != null) '_mainNavigationRoute',
       for (final feature in facade.features)
         for (final route in feature.routes)
           if (!destinations.contains(route)) code.of(route),
@@ -93,8 +94,8 @@ final class GoRoutes {
   }
 
   /// The items of the list of routes of `GoRouter`, with the imports of the
-  /// screens: with a main navigation, a call of `_mainNavigation()` is in
-  /// its place among them.
+  /// screens: with a main navigation, `_mainNavigationRoute` is in its
+  /// place among them.
   final Fragment routes;
 
   /// The function `_mainNavigation()`, which creates the route of the main

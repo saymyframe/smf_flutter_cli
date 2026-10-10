@@ -109,11 +109,13 @@ void _callAlone(
 
 /// `_pagesChanged` of an app with a main navigation, which first gives
 /// go_router a new main navigation if the main navigation has left its
-/// pages, as the analyzer prints its declaration.
+/// pages, and does not follow the pages of go_router while it does so, as
+/// the analyzer prints its declaration.
 final String _expectedPagesChangedWithMainNavigation = parseString(
   content: '''
 class _GoAppRouter {
   void _pagesChanged() {
+    if (_renewing) return;
     _renewMainNavigation();
     _keepPushes();
     _showScreen();
@@ -137,22 +139,41 @@ final Map<String, String> _expectedRenewalMembers = {
   for (final member in parseString(
     content: '''
 class _GoAppRouter {
+  late StatefulShellRoute _mainNavigationRoute = _mainNavigation();
+
   bool _mainNavigationShown = false;
 
+  bool _renewing = false;
+
   void _renewMainNavigation() {
-    final pages = config.routerDelegate.currentConfiguration.matches;
-    if (pages.any((page) => page is ShellRouteMatch)) {
+    final shown = config.routerDelegate.currentConfiguration;
+    if (shown.matches.any(
+      (page) => identical(page.route, _mainNavigationRoute),
+    )) {
       _mainNavigationShown = true;
-    } else if (_mainNavigationShown) {
-      _mainNavigationShown = false;
-      final routes = _routes.value;
+      return;
+    }
+    if (!_mainNavigationShown) return;
+    _mainNavigationShown = false;
+    final left = _mainNavigationRoute;
+    final routes = _routes.value;
+    _mainNavigationRoute = _mainNavigation();
+    _renewing = true;
+    try {
       _routes.value = RoutingConfig(
-        redirect: routes.redirect,
         routes: [
           for (final route in routes.routes)
-            route is StatefulShellRoute ? _mainNavigation() : route,
+            identical(route, left) ? _mainNavigationRoute : route,
         ],
+        onEnter: routes.onEnter,
+        redirect: routes.redirect,
+        redirectLimit: routes.redirectLimit,
       );
+      if (config.routerDelegate.currentConfiguration != shown) {
+        config.restore(shown);
+      }
+    } finally {
+      _renewing = false;
     }
   }
 }
@@ -375,16 +396,18 @@ final class _GoRoute {
       };
 }
 
-/// The items of the list of the top-level routes in [unit].
-List<MethodInvocation> _topLevelOf(CompilationUnit unit) => [
+/// The items of the list of the top-level routes in [unit]: the calls
+/// that create them, and, in an app with a main navigation, the field in
+/// which the router keeps the route of the main navigation.
+List<Expression> _topLevelOf(CompilationUnit unit) => [
       for (final element
           in (_argument(_routingOf(unit), 'routes')! as ListLiteral).elements)
-        element as MethodInvocation,
+        element as Expression,
     ];
 
 /// The `GoRoute`s in the list of routes of `GoRouter` in [unit].
 List<_GoRoute> _routesOf(CompilationUnit unit) => [
-      for (final route in _topLevelOf(unit))
+      for (final route in _topLevelOf(unit).whereType<MethodInvocation>())
         if (route.target == null && route.methodName.name == 'GoRoute')
           _GoRoute(route),
     ];
@@ -396,11 +419,12 @@ List<_GoRoute> _routesOf(CompilationUnit unit) => [
 MethodInvocation? _shellOf(CompilationUnit unit) {
   expect(
     [
-      for (final route in _topLevelOf(unit))
-        if (route.methodName.name == 'indexedStack') route.toSource(),
+      for (final route in _topLevelOf(unit).whereType<MethodInvocation>())
+        if (route.methodName.name != 'GoRoute') route.toSource(),
     ],
     isEmpty,
-    reason: 'The routes have the main navigation only as _mainNavigation().',
+    reason: 'The routes have the main navigation only as the field of its '
+        'route.',
   );
   final function = unit.declarations
       .whereType<FunctionDeclaration>()
@@ -1340,10 +1364,13 @@ void main() {
         '(context, state) => '
         r"_guards.asked(state.topRoute?.name, '${state.uri}')?.location",
       );
-      expect(
-        _expectedRenewalMembers['_renewMainNavigation'],
-        contains('redirect: routes.redirect'),
-      );
+      // As everything else that the configuration has.
+      for (final kept in ['onEnter', 'redirect', 'redirectLimit']) {
+        expect(
+          _expectedRenewalMembers['_renewMainNavigation'],
+          contains('$kept: routes.$kept'),
+        );
+      }
       // The guards come first: while one keeps the user out, the main
       // navigation is not shown.
       expect(
@@ -1408,10 +1435,10 @@ void main() {
         'the other routes after it', () {
       final topLevel = _topLevelOf(unit);
 
-      expect(topLevel.first.methodName.name, 'GoRoute');
-      // The function that creates the shell, which the router calls again
-      // for a new main navigation.
-      expect(topLevel[1].toSource(), '_mainNavigation()');
+      expect((topLevel.first as MethodInvocation).methodName.name, 'GoRoute');
+      // The field with the shell, in which the router puts a new one for a
+      // new main navigation.
+      expect(topLevel[1].toSource(), '_mainNavigationRoute');
       expect(shell.methodName.name, 'indexedStack');
       expect(
         [for (final route in _routesOf(unit)) route.path],
@@ -1466,7 +1493,9 @@ void main() {
       };
 
       expect(_expectedRenewalMembers.keys, [
+        '_mainNavigationRoute',
         '_mainNavigationShown',
+        '_renewing',
         '_renewMainNavigation',
       ]);
       for (final MapEntry(key: name, value: source)
@@ -1485,7 +1514,8 @@ void main() {
         },
         {'_mainNavigation'},
       );
-      // Which the routes call once, and the router for each new one.
+      // Which the field of the route calls once, and the router for each
+      // new one.
       expect(index.invocationsOf('_mainNavigation'), hasLength(2));
     });
 
@@ -1543,6 +1573,7 @@ void main() {
       for (final name in [
         'StatefulShellRoute.indexedStack',
         '_mainNavigation()',
+        '_mainNavigationRoute',
         'routes',
         'StatefulShellBranch',
         'observers: _observers()',
@@ -1600,10 +1631,19 @@ void main() {
         'GoRouter',
       );
       expect(text, contains('ValueNotifier<RoutingConfig>'));
+      // And the pages that go_router had, which the router puts back.
+      expect(
+        [
+          for (final call in index.invocationsOf('restore'))
+            '${call.target}.restore in ${call.enclosingMember}',
+        ],
+        ['config.restore in _renewMainNavigation'],
+      );
       for (final name in [
         'StatefulShellRoute.indexedStack',
         'GoRouter.routingConfig',
         'ValueNotifier<RoutingConfig>',
+        'restore()',
         'notifyRootObserver: false',
         'StatefulShellBranch',
         'observers: _observers()',

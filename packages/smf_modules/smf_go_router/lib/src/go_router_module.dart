@@ -39,10 +39,13 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the main navigation leaves the pages of the router, it puts a new route
 /// for the main navigation there, which `_mainNavigation()` creates: the
 /// main navigation comes back with each branch on its destination, at any
-/// time. The other routes stay the same objects, so go_router, which parses
-/// its location again when its routes change, leaves its pages as they
-/// are. Once go_router gives the main navigation that comes back a state of
-/// its own, the router can leave this out.
+/// time. The other routes stay the same objects, and the new configuration
+/// has what the one before it had. When its routes change, go_router
+/// matches its location again, without the redirects of the routes, which
+/// would give a location that a redirect refused the page of its route. So
+/// the router puts back the pages that go_router had, and the error screen
+/// stays. Once go_router gives the main navigation that comes back a state
+/// of its own, the router can leave this out.
 ///
 /// Screens get the values of their parameters from the location, parsed
 /// with `tryParse`, a `bool` being `true` or `false` exactly: an optional

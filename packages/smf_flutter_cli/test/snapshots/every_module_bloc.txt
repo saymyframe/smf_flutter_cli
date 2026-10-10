@@ -150,7 +150,7 @@ With `go_router`:
 - The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
 - To follow the screen that the user sees, add a function to `_screenListeners`.
 
-- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack` that `_mainNavigation()` creates, in the order of `appDestinations` in `lib/core/layout/destination.dart`, which `AppShell` gets as its `destinations`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index of that list. A route outside the main navigation goes after `_mainNavigation()` in `routes`.
+- The destinations of the main navigation are the branches of the `StatefulShellRoute.indexedStack` that `_mainNavigation()` creates, in the order of `appDestinations` in `lib/core/layout/destination.dart`, which `AppShell` gets as its `destinations`. A new destination is a `StatefulShellBranch` there, with `observers: _observers()`, and a `Destination` at the same index of that list. A route outside the main navigation goes after `_mainNavigationRoute` in `routes`.
 - The router calls `_mainNavigation()` again each time the main navigation leaves its pages, so that the main navigation comes back with each branch on its destination. Create what a branch has of its own, such as a key of its navigator, inside that function.
 
 ## Settings screen
@@ -2509,7 +2509,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
           _guards.asked(state.topRoute?.name, '${state.uri}')?.location,
       routes: [
         GoRoute(path: '/', redirect: (context, state) => '/home'),
-        _mainNavigation(),
+        _mainNavigationRoute,
         GoRoute(
           path: '/onboarding',
           name: 'onboarding.onboarding',
@@ -2519,9 +2519,16 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     ),
   );
 
-  /// Whether the main navigation that [_routes] has now is, or was, among
-  /// the pages of the router.
+  /// The route of the main navigation that [_routes] has now.
+  late StatefulShellRoute _mainNavigationRoute = _mainNavigation();
+
+  /// Whether the main navigation of [_mainNavigationRoute] is, or was,
+  /// among the pages of the router.
   bool _mainNavigationShown = false;
+
+  /// Whether the router is giving go_router its new routes, which changes
+  /// the pages of go_router for a moment that the router does not follow.
+  bool _renewing = false;
 
   /// The key of the page on top and its location, as the listeners of the
   /// screen last heard of them.
@@ -2611,8 +2618,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// of each change of them: keeps each push completing with the value of
   /// its page, and tells the listeners of the screen about the page on top.
   /// Before that, it gives go_router a new main navigation if the main
-  /// navigation has left the pages.
+  /// navigation has left the pages. Nothing here needs that order today:
+  /// it is for code that navigates when the pages change, which then finds
+  /// the new routes.
   void _pagesChanged() {
+    if (_renewing) return;
     _renewMainNavigation();
     _keepPushes();
     _showScreen();
@@ -2635,22 +2645,41 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// its destination, at any time. Once go_router gives the main navigation
   /// that comes back a state of its own, this can go.
   ///
-  /// go_router parses its location again when its routes change. The other
-  /// routes stay the same objects, so that leaves its pages as they are.
+  /// The other routes stay the same objects, and the new configuration has
+  /// what the one before it had. When its routes change, go_router matches
+  /// its location again, without the redirects of the routes. So a
+  /// location that a redirect refused, such as one without a value that its
+  /// route requires, would get the page of its route in place of the error
+  /// screen: the router puts back the pages that go_router had.
   void _renewMainNavigation() {
-    final pages = config.routerDelegate.currentConfiguration.matches;
-    if (pages.any((page) => page is ShellRouteMatch)) {
+    final shown = config.routerDelegate.currentConfiguration;
+    if (shown.matches.any(
+      (page) => identical(page.route, _mainNavigationRoute),
+    )) {
       _mainNavigationShown = true;
-    } else if (_mainNavigationShown) {
-      _mainNavigationShown = false;
-      final routes = _routes.value;
+      return;
+    }
+    if (!_mainNavigationShown) return;
+    _mainNavigationShown = false;
+    final left = _mainNavigationRoute;
+    final routes = _routes.value;
+    _mainNavigationRoute = _mainNavigation();
+    _renewing = true;
+    try {
       _routes.value = RoutingConfig(
-        redirect: routes.redirect,
         routes: [
           for (final route in routes.routes)
-            route is StatefulShellRoute ? _mainNavigation() : route,
+            identical(route, left) ? _mainNavigationRoute : route,
         ],
+        onEnter: routes.onEnter,
+        redirect: routes.redirect,
+        redirectLimit: routes.redirectLimit,
       );
+      if (config.routerDelegate.currentConfiguration != shown) {
+        config.restore(shown);
+      }
+    } finally {
+      _renewing = false;
     }
   }
 

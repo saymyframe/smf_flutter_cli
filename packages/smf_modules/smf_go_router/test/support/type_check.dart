@@ -203,11 +203,14 @@ class StatefulShellRoute extends RouteBase {
   });
 }
 
-abstract class RouteMatchBase {}
+abstract class RouteMatchBase {
+  RouteBase get route;
+}
 
 class RouteMatch extends RouteMatchBase {
   RouteMatch(this.route, this.pageKey);
 
+  @override
   final GoRoute route;
 
   final ValueKey<String> pageKey;
@@ -227,6 +230,11 @@ class ImperativeRouteMatch extends RouteMatch {
 }
 
 class ShellRouteMatch extends RouteMatchBase {
+  ShellRouteMatch(this.route);
+
+  @override
+  final RouteBase route;
+
   final List<RouteMatchBase> matches = const [];
 }
 
@@ -253,10 +261,19 @@ class RouteConfiguration {
   RouteMatchList findMatch(Uri uri, {Object? extra}) => RouteMatchList();
 }
 
+typedef OnEnter = FutureOr<Object> Function(
+  BuildContext context,
+  GoRouterState currentState,
+  GoRouterState nextState,
+  GoRouter goRouter,
+);
+
 class RoutingConfig {
   const RoutingConfig({
     required this.routes,
+    this.onEnter,
     this.redirect = _defaultRedirect,
+    this.redirectLimit = 5,
   });
 
   static FutureOr<String?> _defaultRedirect(
@@ -267,7 +284,11 @@ class RoutingConfig {
 
   final List<RouteBase> routes;
 
+  final OnEnter? onEnter;
+
   final GoRouterRedirect redirect;
+
+  final int redirectLimit;
 }
 
 class GoRouter implements RouterConfig<RouteMatchList> {
@@ -290,6 +311,8 @@ class GoRouter implements RouterConfig<RouteMatchList> {
   late final GoRouterDelegate routerDelegate;
 
   void go(String location, {Object? extra}) {}
+
+  void restore(RouteMatchList matchList) {}
 
   Future<T?> push<T extends Object?>(String location, {Object? extra}) async =>
       null;
