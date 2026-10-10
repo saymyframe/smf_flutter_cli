@@ -377,8 +377,9 @@ List<String> roleFunctionProblemsOf(
 /// apps by their roles and by the modules it knows.
 const _ofOneProvider = {
   // The notifications of the delegate of go_router that leave the page on
-  // top as it is, which the listeners of the screen do not hear of, and
-  // push() after a refresh of its routes.
+  // top as it is, which the listeners of the screen do not hear of, push()
+  // after a refresh of its routes, and push() and replace() while
+  // go_router has no page of a route.
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_screens': {
     'go_router',
   },

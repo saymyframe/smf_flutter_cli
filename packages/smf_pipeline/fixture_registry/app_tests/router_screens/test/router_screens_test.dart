@@ -9,7 +9,10 @@
 // platform that the router cannot show too: its error screen is a page
 // like any other for the button, which throws nothing there, closes a
 // dialog over it, and closes the screen itself only if a page is below it,
-// which is up to the router. It starts the app with main() of
+// which is up to the router. And push() and replace() of the navigation
+// show their location from that screen too: over it or in its place for
+// push(), whose future completes, and in its place for replace(). It
+// starts the app with main() of
 // lib/main.dart, which the app entry role puts into every app, and
 // navigates only through the navigation facade of the router role and the
 // navigators of Flutter, so it applies to a new provider of the role as it
@@ -21,10 +24,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 
+import 'locations_from_any_page.dart';
 import 'screens.dart';
 
 void main() {
@@ -362,6 +367,119 @@ void main() {
               'hear of the page below it once.'
           : 'The back button of the system has no route to close on '
               '$screen, which stays as it is.',
+    );
+
+    // push() and replace() of the navigation on the error screen, for a
+    // location that a router shows from any page: the matrix writes them
+    // into locations_from_any_page.dart, each outside the main navigation
+    // of the app, of a route that needs no values and that no guard keeps
+    // the user from. The location shows, the listeners hear of it once,
+    // and the push completes: with null at once when the router shows the
+    // location in place of the error screen, as go() does, because it has
+    // no page to push over there, or with the value of its page when it
+    // shows it over the error screen. An app may have no such location.
+    if (locationsFromAnyPage.isEmpty) return;
+    final asked = locationsFromAnyPage.first;
+    final navigator = appRouter.navigatorOf(tester.binding.rootElement!);
+
+    /// The name of the page on top of the root navigator, where a page
+    /// outside the main navigation is.
+    String? pageOnTop() {
+      String? name;
+      tester.state<NavigatorState>(find.byType(Navigator).first).popUntil((
+        route,
+      ) {
+        name = route.settings.name;
+        return true;
+      });
+      return name;
+    }
+
+    /// Has the platform ask for [location], which no route matches;
+    /// whether the router shows its error screen there.
+    Future<bool> toErrorScreen(String location) async {
+      await tester.binding.handlePushRoute(location);
+      await tester.pumpAndSettle();
+      final shown = heard();
+      expect(
+        shown,
+        anyOf(isEmpty, [(null, location)]),
+        reason: 'The error screen is heard of once, at the location that no '
+            'route matches.',
+      );
+      return shown.isNotEmpty;
+    }
+
+    if (!await toErrorScreen('/no/such/screen?x=2')) return;
+    Object? pushed = 'not completed';
+    unawaited(navigator.push<Object?>(asked).then((value) => pushed = value));
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'push() on the error screen throws nothing.',
+    );
+    expect(
+      pageOnTop(),
+      asked.routeName,
+      reason: 'push() on the error screen shows its location.',
+    );
+    expect(
+      heard(),
+      [(asked.routeName, asked.path)],
+      reason: 'The location that push() shows from the error screen is heard '
+          'of once.',
+    );
+    expect(
+      pushed,
+      anyOf(isNull, 'not completed'),
+      reason: 'A push() on the error screen completes with null when its '
+          'location takes the place of that screen, and waits for the value '
+          'of its page when the page is over that screen.',
+    );
+    if (pushed != null) {
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop('closed');
+      await tester.pumpAndSettle();
+      expect(
+        pushed,
+        'closed',
+        reason: 'A push() that showed its location over the error screen '
+            'completes with the value of its page.',
+      );
+      expect(
+        heard(),
+        [(null, '/no/such/screen?x=2')],
+        reason: 'The error screen below a page that closes is heard of once.',
+      );
+    }
+
+    if (!await toErrorScreen('/no/such/screen?x=3')) return;
+    navigator.replace(asked);
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'replace() on the error screen throws nothing.',
+    );
+    expect(
+      pageOnTop(),
+      asked.routeName,
+      reason: 'replace() on the error screen shows its location.',
+    );
+    expect(
+      heard(),
+      [(asked.routeName, asked.path)],
+      reason: 'The location that replace() shows from the error screen is '
+          'heard of once.',
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      heard(),
+      isNot(contains((null, '/no/such/screen?x=3'))),
+      reason: 'replace() on the error screen shows its location in place of '
+          'that screen, which the back button of the system does not bring '
+          'back.',
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

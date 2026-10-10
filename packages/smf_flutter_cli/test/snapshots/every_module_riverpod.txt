@@ -3817,12 +3817,18 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   void go(AppLocation location) {
-    if (_redirected(location, again: () => go(location))) return;
+    if (!_withoutPage && _redirected(location, again: () => go(location))) {
+      return;
+    }
     config.go(location.path);
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
+    if (_withoutPage) {
+      go(location);
+      return Future.value();
+    }
     // A push that waits for a flow completes with what the request
     // completes with when the router makes it again, or with `null`.
     final waiting = Completer<T?>();
@@ -3839,10 +3845,31 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   void replace(AppLocation location) {
+    if (_withoutPage) return go(location);
     if (_redirected(location, again: () => replace(location))) return;
     _checkMainNavigation(location, 'replace');
     config.pushReplacement<Object?>(location.path);
   }
+
+  /// Whether go_router has no page of a route: before it shows its first
+  /// location, and while it shows its error screen in place of the whole
+  /// stack, as for a location that no route matches.
+  ///
+  /// It has no page to push over then, and none to replace.
+  /// `GoRouter.push` would keep the error screen and never complete, or
+  /// throw for a location in the main navigation, and before the first
+  /// location the app would start on the pushed page alone.
+  /// `GoRouter.pushReplacement` throws for want of a page. So [push] and
+  /// [replace] give go_router their location as [go] does: it shows with
+  /// the pages of its chain, in place of the error screen, and such a push
+  /// completes with `null`. An error screen that a push showed over a page
+  /// is a page of go_router, which pushes over it and replaces it like any
+  /// other.
+  ///
+  /// The router asks the guards nothing itself then: the `redirect` of
+  /// go_router asks, with no pages.
+  bool get _withoutPage =>
+      config.routerDelegate.currentConfiguration.matches.isEmpty;
 
   /// Runs [navigate], of which the listeners of the screen hear only the
   /// page that it ends on. That page is not there yet while the `redirect`
@@ -3896,26 +3923,19 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// [again] makes the request again, and [drop] ends it without showing
   /// its location, as a push does that completes with `null`.
   ///
-  /// Before go_router has a page, it has no stack to push on and no page to
-  /// replace: it gets the location as [go] gives it one, and asks the
-  /// guards about it in its `redirect`. On its error screen, it has no page
-  /// of a route to open the target of a guard over, so it gets the location
-  /// that way too, and the target opens over `/` in place of that screen.
+  /// go_router has a page of a route then; see [_withoutPage]. Without
+  /// one, the `redirect` of go_router asks about the location, with no
+  /// pages: the target of a guard that stands for a condition then opens
+  /// over `/`, in place of the error screen too.
   bool _redirected(
     AppLocation location, {
     required void Function() again,
     void Function()? drop,
   }) {
-    final pages = _pages;
-    if (pages.isEmpty) {
-      config.go(location.path);
-      drop?.call();
-      return true;
-    }
     final answer = _guards.asked(
       location.routeName,
       location.path,
-      onTopOf: [for (final page in pages) page.route],
+      onTopOf: [for (final page in _pages) page.route],
     );
     switch (answer) {
       case null:
@@ -3926,12 +3946,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case ShowNothing():
         drop?.call();
       case ShowOver(location: final target, :final flow):
-        if (config.routerDelegate.currentConfiguration.isError) {
-          config.go(location.path);
-          drop?.call();
-        } else {
-          _open(target, flow, again: again, drop: drop);
-        }
+        _open(target, flow, again: again, drop: drop);
     }
     return true;
   }

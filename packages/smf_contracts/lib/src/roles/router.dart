@@ -58,6 +58,12 @@ const routerRole = RouterRole._();
 ///   page like any other for the button: a dialog over it closes, and the
 ///   screen itself closes only if a page is below it, which is up to the
 ///   provider. With none, the router has no route to close;
+/// - on its error screen, still shows the location that `push()` or
+///   `replace()` asks for, and the listeners of [screenListeners] hear of
+///   it once. `replace()` shows it in place of that screen. `push()` shows
+///   it over that screen and completes with the value of its page; or,
+///   when the provider has no page there to push over, in place of that
+///   screen, as `go()` does, and completes with `null` at once;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - calls the listeners of [screenListeners] each time the screen the user
 ///   sees changes, each on its own, so that a listener that throws keeps no
@@ -246,14 +252,13 @@ final class RouterRole extends Role<RoutesData> {
   /// asks once more, as one whose redirect runs for each location that it
   /// goes to, may let it.
   ///
-  /// A provider that has no page yet may have no stack to push on, and no
-  /// page to replace. It may then take each request as `go()` to its
-  /// location, which takes the place of the stack as a location from the
-  /// platform does: it asks about it once, with no pages, and such a
-  /// `push()` completes with `null` at once. A provider that can open no
-  /// page over its error screen may take a request there the same way when
-  /// the answer is `ShowOver`. The target then opens over the location `/`
-  /// in place of the error screen.
+  /// A provider that has no page to push over or to replace, as before it
+  /// shows its first location, or on an error screen that took the place
+  /// of its stack, may take each request as `go()` to its location, which
+  /// takes the place of the stack as a location from the platform does: it
+  /// asks about it once, with no pages, and such a `push()` completes with
+  /// `null` at once. The target of a guard that stands for a condition
+  /// then opens over the location `/`, in place of the error screen too.
   ///
   /// When the answer is `null`, the provider shows the location. Otherwise
   /// it never builds the screen of that location, and the listeners of
