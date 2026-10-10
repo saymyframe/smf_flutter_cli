@@ -242,15 +242,20 @@ final class RouterRole extends Role<RoutesData> {
   /// (see below). It gives none while it has no page, and none for a
   /// location from the platform, which takes the place of the stack.
   ///
-  /// The provider asks once for each request, and does what the answer
-  /// says. The class keeps no request, so a second call for a request that
-  /// it answered `ShowOver` for finds the flow open and answers
-  /// `ShowNothing`. A second call for a location that the provider shows
-  /// changes nothing: for a location that the class answered `null` for,
-  /// and for one that it gave in an answer, it answers `null` again while
-  /// no guard changed, also with no pages. So a router whose own navigation
-  /// asks once more, as one whose redirect runs for each location that it
-  /// goes to, may let it.
+  /// The provider does what the answer says. The class keeps no request,
+  /// and its answer depends on the pages that the provider gives: a page of
+  /// the flow of a guard that stands for a condition shows as it was asked
+  /// when it is asked for on a page, and opens over `/` when it is asked
+  /// for with no pages. So a provider never asks with no pages about a
+  /// location that it shows over a page, nor about a location that it goes
+  /// to for a request that it asked about with the pages. Asked so about
+  /// the target that it shows for a `ShowOver`, the class answers
+  /// `ShowOver` again, and the provider would open the target without end.
+  /// A router whose redirect runs for each location that it goes to, with
+  /// no pages, keeps the calls of its own navigation from the class. Such
+  /// a redirect may run again for the location that it answered with, that
+  /// of a `ShowInstead` or `/`: the location takes the place of the stack,
+  /// and the class answers for it as for any other.
   ///
   /// A provider that has no page to push over or to replace, as before it
   /// shows its first location, or on an error screen that took the place
@@ -275,6 +280,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   stack and then the target over it, and the listeners of
   ///   [screenListeners] hear only of the target. It keeps the request
   ///   waiting, as said below, and a `push()` that waits does not complete.
+  ///   For a page of that flow that was itself asked for with no pages,
+  ///   the location of the answer is the one that was asked for.
   /// - `ShowNothing()`: it shows nothing and leaves its pages as they are.
   ///   Such a `push()` completes with `null` at once.
   ///
@@ -394,6 +401,20 @@ final class RouterRole extends Role<RoutesData> {
   ///   never opens over itself: a further request while it is open does
   ///   nothing, and the first one waits. The class remembers no location
   ///   for such a guard, only how many pages it opened the flow over.
+  /// - The routes of the flow of such a guard show while the condition does
+  ///   not hold, so `asked` answers `null` for one that is asked for on a
+  ///   page: it shows as the code of the app asked, over that page for
+  ///   `push()` and in place of the stack for `go()`. Asked for with no
+  ///   pages, as by a link, it would stand alone, with no way back into
+  ///   the app. So `asked` then answers `ShowOver` of the location itself,
+  ///   with its query, and of the flow: the page opens over `/`, back
+  ///   leads to `/`, and once the condition holds the provider closes the
+  ///   flow. That goes for a route below the target too, which then has
+  ///   `/` alone below it. The request that waits is the page itself:
+  ///   asked about again once the flow closes, it is answered with `/`,
+  ///   where the user is then. While a gate with the same flow does not
+  ///   allow, the flow is the gate's, and its page takes the place of the
+  ///   stack as before.
   /// - `changed` first answers `ShowInstead` of the target of the gate that
   ///   keeps the user from one of the pages, so that no such page stays in
   ///   the stack. If that gate brings the user back
@@ -436,7 +457,9 @@ final class RouterRole extends Role<RoutesData> {
   ///   in its way. For the same reason two guards with one flow, as the
   ///   gate and the guard of an account of a sign-in, read one notifier:
   ///   the class then never finds that the gate allows while the condition
-  ///   does not hold yet.
+  ///   does not hold yet. A link to a page of the flow of such a guard is
+  ///   lost behind a gate with another flow as well: the class never
+  ///   remembers a location in a flow.
   /// - The class also forgets the location that it remembers when the user
   ///   moves on: when `asked` answers for a location that no gate keeps
   ///   the user from and that is outside every flow, or in a flow that is

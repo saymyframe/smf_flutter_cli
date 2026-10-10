@@ -7,9 +7,13 @@
 // guard over that screen once the parse is over. The second link arrives
 // before the router opened the target for the first, so the router opens
 // it once, for the second, as a router does that takes the latest of two
-// locations from the platform. It uses what the tests of router_screens,
-// of router_guards and of the conditions share, which every app that it
-// applies to has.
+// locations from the platform. And a link to a page of the flow of the
+// guard that names the page on top, which an earlier link opened, keeps
+// that page: go_router goes to the screen that the app starts on for it,
+// and the router puts the page back over that screen before a frame shows
+// the change, so what the user typed on it stays. It uses what the tests
+// of router_screens, of router_guards and of the conditions share, which
+// every app that it applies to has.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
@@ -73,6 +77,61 @@ void main() {
         reason: 'Once the condition holds, the router shows the later of '
             'two links that arrived in one turn as go() to it does: its '
             'chain in place of the stack.',
+      );
+
+      // The same link to a page of the flow of the guard, twice.
+      await toDetails(tester, 2);
+      await takeBadge(tester);
+      await tester.binding.handlePushRoute(gateScreen.$2);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [gateScreen],
+        reason: 'A link to a page of the flow of a condition shows that '
+            'page.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureHomeScreen, FixtureGateScreen],
+        reason: 'A link to a page of the flow of a condition shows it over '
+            'the screen that the app starts on.',
+      );
+      final page = shown(tester, FixtureGateScreen);
+      await tester.binding.handlePushRoute(gateScreen.$2);
+      await tester.pumpAndSettle();
+      expect(
+        page.mounted,
+        isTrue,
+        reason: 'A link that names the page on top, which an earlier link '
+            'opened, keeps that page, with what the user did on it.',
+      );
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'A link that names the page on top, which an earlier link '
+            'opened, leaves the screen as it is, so the listeners of the '
+            'screen hear nothing.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureHomeScreen, FixtureGateScreen],
+        reason: 'A link that names the page on top, which an earlier link '
+            'opened, leaves that page over the screen that the app starts '
+            'on.',
+      );
+      await giveBadge(tester);
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'Once the condition holds, the router closes the page that '
+            'two links named, and the user is on the screen that the app '
+            'starts on.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureHomeScreen],
+        reason: 'Once the condition holds, the router closes the page that '
+            'two links named.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

@@ -253,11 +253,22 @@ class _GoAppRouter {
     locationOf: (location) => location.path,
   );
 
+  int _asking = 0;
+
   ({Set<String> flow, void Function() again, void Function()? drop})? _waiting;
 
   void Function()? _opening;
 
   bool _muted = false;
+
+  R _own<R>(R Function() navigate) {
+    _asking++;
+    try {
+      return navigate();
+    } finally {
+      _asking--;
+    }
+  }
 
   void _quietly(void Function() navigate) {
     final muted = _muted;
@@ -271,6 +282,7 @@ class _GoAppRouter {
   }
 
   String? _redirect(String? route, String location) {
+    if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
       case null || ShowNothing():
         return null;
@@ -278,11 +290,23 @@ class _GoAppRouter {
         return shown;
       case ShowOver(location: final target, :final flow):
         _muted = true;
+        final onTop = config.routerDelegate.currentConfiguration.lastOrNull;
+        final kept =
+            onTop is ImperativeRouteMatch && '${onTop.matches.uri}' == target
+            ? onTop
+            : null;
         void open() {
           if (_opening != open) return;
           _opening = null;
           _muted = false;
-          _open(target, flow, again: () => config.go(location));
+          _open(target, flow, again: () => config.go(location), kept: kept);
+          if (_opening == null) return;
+          _opening = null;
+          throw StateError(
+            'The redirect of go_router asked the guards about $target, '
+            'which the router pushes itself, and would open it without '
+            'end: it must ask nothing within a call of the router.',
+          );
         }
         _opening = open;
         scheduleMicrotask(open);
@@ -304,7 +328,7 @@ class _GoAppRouter {
       case null:
         return false;
       case ShowInstead(location: final shown):
-        config.go(shown);
+        _own(() => config.go(shown));
         drop?.call();
       case ShowNothing():
         drop?.call();
@@ -319,9 +343,13 @@ class _GoAppRouter {
     Set<String> flow, {
     required void Function() again,
     void Function()? drop,
+    ImperativeRouteMatch? kept,
   }) {
     _drop();
-    unawaited(config.push<Object?>(target));
+    _own(() {
+      if (kept == null) return unawaited(config.push<Object?>(target));
+      config.restore(config.routerDelegate.currentConfiguration.push(kept));
+    });
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -339,7 +367,7 @@ class _GoAppRouter {
       final closing = _pushedPages(
         shown.matches,
       ).toList().reversed.take(count).toList();
-      config.restore(shown.remove(closing.last));
+      _own(() => config.restore(shown.remove(closing.last)));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final page in closing) {
           if (!page.completer.isCompleted) page.completer.complete();
@@ -381,7 +409,7 @@ class _GoAppRouter {
       case null:
         break;
       case ShowInstead(:final location):
-        config.go(location);
+        _own(() => config.go(location));
       case ClosePages(pages: final count, :final dropsRequest):
         _close(count, dropsRequest: dropsRequest);
     }
@@ -437,11 +465,13 @@ const String _constructorOfRoutes = '''
 ''';
 
 /// The constructor of `_GoRouter` in an app without a main navigation whose
-/// modules declare guards, which takes the redirect that asks them too.
+/// modules declare guards, which takes the redirect that asks them too, and
+/// what counts a call of go_router among those of the router.
 const String _constructorOfGuardedRoutes = '''
   _GoRouter({
     required List<RouteBase> routes,
     required GoRouterRedirect redirect,
+    required this.own,
     super.initialLocation,
     super.observers,
   }) : super.routingConfig(
@@ -462,13 +492,37 @@ const String _constructorOfRoutingConfig = '''
   }) : super.routingConfig();
 ''';
 
+/// The same constructor in an app whose modules declare guards, which
+/// takes what counts a call of go_router among those of the router too.
+const String _constructorOfGuardedRoutingConfig = '''
+  _GoRouter.routingConfig({
+    required super.routingConfig,
+    super.initialLocation,
+    super.observers,
+    required this.own,
+  }) : super.routingConfig();
+''';
+
+/// The members of `_GoRouter` in an app whose modules declare guards: a
+/// refresh of go_router is a call of the router's own, within which the
+/// redirect of go_router asks the guards nothing.
+const String _refreshOfTheRouter = '''
+  final R Function<R>(R Function() navigate) own;
+
+  @override
+  void refresh() => own(super.refresh);
+''';
+
 /// `_GoRouter`, the `GoRouter` of the app with [constructor], whose
 /// dispatcher of the back button of the system is a `_BackButton`, as the
-/// analyzer prints its declaration.
-String _expectedGoRouter(String constructor) => parseString(
+/// analyzer prints its declaration; with [guards], in an app whose modules
+/// declare some.
+String _expectedGoRouter(String constructor, {bool guards = false}) =>
+    parseString(
       content: '''
 final class _GoRouter extends GoRouter {
 $constructor
+${guards ? _refreshOfTheRouter : ''}
   @override
   BackButtonDispatcher get backButtonDispatcher => _backButton;
 
@@ -775,12 +829,19 @@ void _expectPagesChanged(CompilationUnit unit) {
 /// (https://github.com/flutter/flutter/issues/187616): the router of the
 /// app is a `_GoRouter`, a `GoRouter` with [constructor] whose dispatcher of
 /// the button is a `_BackButton`, and nothing else creates a `GoRouter`.
-void _expectBackButton(CompilationUnit unit, String constructor) {
+void _expectBackButton(
+  CompilationUnit unit,
+  String constructor, {
+  bool guards = false,
+}) {
   final classes = {
     for (final declaration in unit.declarations.whereType<ClassDeclaration>())
       declaration.namePart.typeName.lexeme: declaration.toSource(),
   };
-  expect(classes['_GoRouter'], _expectedGoRouter(constructor));
+  expect(
+    classes['_GoRouter'],
+    _expectedGoRouter(constructor, guards: guards),
+  );
   expect(classes['_BackButton'], _expectedBackButton);
   final plain = _CallFinder('GoRouter');
   final named = _CallFinder('routingConfig', target: 'GoRouter');
@@ -1546,8 +1607,9 @@ void main() {
 
     test(
         'asks the guards in the redirect of go_router about the locations '
-        'that go_router parses, as the one it starts on and those of the '
-        'platform, with no pages', () {
+        'that go_router parses on its own, as the one it starts on and those '
+        'of the platform, with no pages, and not about those that the router '
+        'hands it', () {
       final router = _goRouterOf(unit);
 
       expect(
@@ -1556,11 +1618,14 @@ void main() {
         r"_redirect(state.topRoute?.name, '${state.uri}')",
       );
       // Such a location takes the place of the stack, so the guards are
-      // told of no pages. The redirect runs within the calls of the router
-      // too, for a location that the guards let the user see or that they
-      // answered: they answer nothing for it a second time.
+      // told of no pages, and the redirect answers nothing within a call of
+      // go_router that the router made itself: asked with no pages about a
+      // page of the flow of a guard that stands for a condition, the guards
+      // open it over the screen that the app starts on, as for a link.
+      final redirect = _expectedGuardMembers['_redirect']!;
+      expect(redirect, contains('if (_asking > 0) return null;'));
       expect(
-        _expectedGuardMembers['_redirect'],
+        redirect,
         contains('_guards.asked(route, location, onTopOf: const [])'),
       );
       // The location that the app opens with is the start route, which the
@@ -1579,21 +1644,24 @@ void main() {
 
       expect(
         _bodyOf(router, 'go'),
-        '{if (!_withoutPage && _redirected(location, again: () => '
-        'go(location))) {return;} config.go(location.path);}',
+        '{if (_withoutPage) return config.go(location.path); if '
+        '(_redirected(location, again: () => go(location))) return; '
+        '_own(() => config.go(location.path));}',
       );
       expect(
         _bodyOf(router, 'push'),
         '{$_pushWithoutPage final waiting = Completer<T?>(); if '
         '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
-        '{return waiting.future;} return config.push<T>(location.path);}',
+        '{return waiting.future;} return _own(() => '
+        'config.push<T>(location.path));}',
       );
       expect(
         _bodyOf(router, 'replace'),
         '{$_replaceWithoutPage if (_redirected(location, again: () => '
         'replace(location))) '
-        'return; config.pushReplacement<Object?>(location.path);}',
+        'return; _own(() => '
+        'config.pushReplacement<Object?>(location.path));}',
       );
     });
 
@@ -1611,9 +1679,11 @@ void main() {
       expect(_expectedGuardMembers.keys, [
         '_GoAppRouter',
         '_guards',
+        '_asking',
         '_waiting',
         '_opening',
         '_muted',
+        '_own',
         '_quietly',
         '_redirect',
         '_redirected',
@@ -1634,14 +1704,15 @@ void main() {
       expect(_argument(_goRouterOf(unit), 'refreshListenable'), isNull);
       // It closes pages with one restore() of the pages of go_router
       // without them, never with pop(), which closes what the navigator
-      // shows on top, such as a dialog over the page.
+      // shows on top, such as a dialog over the page. And it puts the page
+      // on top back over `/` with a restore() when a link names that page.
       final index = DartFileIndexer.index(_factory, app.files[_factory]!.text);
       expect(
         [
           for (final call in index.invocationsOf('restore'))
             '${call.target}.restore in ${call.enclosingMember}',
         ],
-        ['config.restore in _close'],
+        ['config.restore in _open', 'config.restore in _close'],
       );
       expect(index.invocationsOf('pop'), isEmpty);
       // It completes the pushes of the pages that it closed once the frame
@@ -1663,7 +1734,7 @@ void main() {
     test(
         'still keeps the back button of the system from go_router while it '
         'has no page, with a router that takes the redirect of the guards', () {
-      _expectBackButton(unit, _constructorOfGuardedRoutes);
+      _expectBackButton(unit, _constructorOfGuardedRoutes, guards: true);
     });
 
     test('renders code that type-checks, with a main navigation too', () async {
@@ -1684,13 +1755,20 @@ void main() {
       // The redirect that asks the guards is with the routes that go_router
       // follows, and stays when the router replaces the main navigation.
       expect(_argument(_goRouterOf(unit), 'redirect'), isNull);
-      _expectBackButton(unit, _constructorOfRoutingConfig);
+      _expectBackButton(
+        unit,
+        _constructorOfGuardedRoutingConfig,
+        guards: true,
+      );
+      expect(_argument(_goRouterOf(unit), 'own')!.toSource(), '_own');
       expect(
         _argument(_routingOf(unit), 'redirect')!.toSource(),
         '(context, state) => '
         r"_redirect(state.topRoute?.name, '${state.uri}')",
       );
-      // As everything else that the configuration has.
+      // As everything else that the configuration has. The router counts
+      // nothing there: the main navigation leaves within a call of its
+      // own, or for a location that the redirect has just answered.
       for (final MapEntry(key: name, value: source)
           in _expectedRenewalMembers.entries) {
         expect(members[name], source, reason: name);
@@ -1710,14 +1788,14 @@ void main() {
         '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
         "{return waiting.future;} _checkMainNavigation(location, 'push'); "
-        'return config.push<T>(location.path);}',
+        'return _own(() => config.push<T>(location.path));}',
       );
       expect(
         _bodyOf(router, 'replace'),
         '{$_replaceWithoutPage if (_redirected(location, again: () => '
         'replace(location))) '
-        "return; _checkMainNavigation(location, 'replace'); "
-        'config.pushReplacement<Object?>(location.path);}',
+        "return; _checkMainNavigation(location, 'replace'); _own(() => "
+        'config.pushReplacement<Object?>(location.path));}',
       );
       expect(await analysisProblems(withLayout.app!), isEmpty);
     });

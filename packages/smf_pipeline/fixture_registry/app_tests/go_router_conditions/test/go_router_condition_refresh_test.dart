@@ -4,9 +4,13 @@
 // guard that stands for a condition is open over a page. go_router then
 // matches its location again and shows its pages anew, with a new
 // completer for each pushed page, and its redirect runs for the location
-// below them. The router asks the guards about that location, which opens
-// no second flow, and the push that waits for the flow still completes
-// with the value of its page once the condition holds. The flow of a
+// below them, with no pages, as for a link. The router counts a refresh
+// among its own calls, so the redirect asks the guards nothing then: no
+// second flow opens, and the push that waits for the flow still completes
+// with the value of its page once the condition holds. Asked, the guards
+// would open a page of the flow that the code of the app went to with
+// go(), which stands alone, over the screen that the app starts on, and a
+// page that was pushed over it would be gone. The flow of a
 // condition under any router is tested in router_conditions. It uses what
 // the tests of router_screens, of router_guards and of the conditions
 // share, which every app that it applies to has.
@@ -17,6 +21,7 @@ import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_members_screens.dart';
+import 'package:{{app_name}}/features/fake_second/fixture_outside_screen.dart';
 
 import 'conditions.dart';
 import 'guards.dart';
@@ -102,6 +107,50 @@ void main() {
             'completer.',
       );
       expect(heard(), [detailsScreen(1)]);
+
+      // The code of the app went to the target of the guard with go(),
+      // which stands alone, and pushed a page over it: a refresh leaves
+      // both as they are, and that push still completes with the value of
+      // its page.
+      final alone = await toDetails(tester, 2);
+      await takeBadge(tester);
+      alone.nav.fakeGate.gate().go();
+      await tester.pumpAndSettle();
+      expect(heard(), [gateScreen], reason: 'go() shows its location.');
+      final over = pushed(
+        shown(tester, FixtureGateScreen).nav.fakeSecond.outside(),
+      );
+      await tester.pumpAndSettle();
+      expect(heard(), [outsideScreen], reason: 'push() shows its location.');
+      notified = 0;
+      router.refresh();
+      await tester.pumpAndSettle();
+      expect(notified, isPositive, reason: 'go_router notified.');
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'A refresh of the routes over a page of the flow of a '
+            'condition that stands alone leaves the page on top as it is.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureGateScreen, FixtureOutsideScreen],
+        reason: 'A refresh of the routes leaves a page of the flow of a '
+            'condition that the code of the app went to, and the page that '
+            'was pushed over it, as they are: the redirect of go_router '
+            'does not ask the guards about the location that a refresh '
+            'parses again.',
+      );
+      Navigator.of(shown(tester, FixtureOutsideScreen)).pop('closed');
+      await tester.pumpAndSettle();
+      expect(
+        over(),
+        'closed',
+        reason: 'A push() over a page of the flow of a condition that '
+            'stands alone completes with the value of its page after a '
+            'refresh of the routes.',
+      );
+      expect(heard(), [gateScreen], reason: 'Back returns to the page.');
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
