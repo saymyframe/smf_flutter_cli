@@ -278,6 +278,8 @@ class RouteMatchList {
   bool get isError => false;
 
   RouteMatch? get lastOrNull => null;
+
+  RouteMatchList remove(RouteMatchBase match) => this;
 }
 
 class GoRouterDelegate implements Listenable {
