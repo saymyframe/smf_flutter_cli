@@ -89,6 +89,11 @@ String _fakeSdk(Directory directory) {
   return bin;
 }
 
+/// The page of the Firebase console with the sign-in methods of a project
+/// that the user picks there.
+const _signInMethods =
+    'https://console.firebase.google.com/project/_/authentication/providers';
+
 /// The option of the platforms of `flutterfire configure` as the CLI prints
 /// a command for later: in double quotes on Windows, since PowerShell reads
 /// a comma as its own.
@@ -797,9 +802,8 @@ void main() {
                 '      The Firebase CLI adds a web app named "Default Web '
                 'App" to a project that has no web app, because it enables '
                 'the methods through one (firebase/firebase-tools#11250). '
-                'The Firebase console enables them without it: '
-                'https://console.firebase.google.com/project/_/'
-                'authentication/providers.\n'
+                'The page $_signInMethods of the Firebase console enables '
+                'them without it.\n'
                 '      A run asks before it runs this step, and leaves it '
                 'for later when it cannot ask.\n'
                 "    then ruby -e 'f = ARGV[0]; ",

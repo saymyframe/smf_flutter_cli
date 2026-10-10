@@ -508,10 +508,13 @@ void main() {
       final brick = module.contribute(ContractHarness.defaultContext).first
           as BrickContribution;
 
-      expect(
-        brick.vars.keys,
-        ['email_language', 'session_file', 'minimum_firebase_cli'],
-      );
+      expect(brick.vars.keys, [
+        'email_language',
+        'session_file',
+        'mode_declaration',
+        'anonymous_mode',
+        'minimum_firebase_cli',
+      ]);
       final language = brick.vars['email_language']! as RoleVar;
       expect(language.role, localizationRole);
       expect(language.absent, '');
@@ -542,14 +545,55 @@ void main() {
 
     test(
         'gives its brick, for the script that enables the ways to sign in, '
-        'the file in which the auth role writes the mode of the app and '
+        'what the auth role says of the mode of the app, its file, how a '
+        'tool reads the mode there and the mode with anonymous users, and '
         'the first Firebase CLI with the command', () {
       final brick = module.contribute(ContractHarness.defaultContext).first
           as BrickContribution;
 
       expect(brick.vars['session_file'], AuthRole.sessionFile);
+      expect(brick.vars['mode_declaration'], modeDeclarationCode);
+      expect(modeDeclarationCode, rawStringsOf(AuthRole.modeDeclaration));
+      expect(brick.vars['anonymous_mode'], 'anonymous');
+      expect(AuthMode.anonymous.name, 'anonymous');
       expect(brick.vars['minimum_firebase_cli'], '15.6.0');
       expect(firstFirebaseCliWithSignIn, '15.6.0');
+    });
+
+    test(
+        'writes a regular expression as raw strings of Dart, each on a line '
+        'that fits, which end before an alternative where they can and '
+        'never with a backslash', () {
+      /// The pattern that the strings of [code] make together, and the
+      /// widths of its lines.
+      (String, List<int>) read(String code) => (
+            [
+              for (final string in RegExp("r'([^']*)'").allMatches(code))
+                string[1],
+            ].join(),
+            [for (final line in code.split('\n')) line.length],
+          );
+
+      // One that fits is one string.
+      expect(rawStringsOf(r'^a\s+b$'), r"r'^a\s+b$'");
+      // The expression of the auth role ends its strings before
+      // alternatives.
+      final ofRole = rawStringsOf(AuthRole.modeDeclaration);
+      expect(read(ofRole).$1, AuthRole.modeDeclaration);
+      expect(ofRole.split('\n'), hasLength(3));
+      expect(
+        ofRole.split('\n').skip(1),
+        everyElement(startsWith("  r'|")),
+      );
+      expect(read(ofRole).$2, everyElement(lessThanOrEqualTo(78)));
+      // One without an alternative is cut where a line is full, but not
+      // after a backslash.
+      final digits = '${'a' * 71}${r'\d' * 40}';
+      final cut = rawStringsOf(digits);
+      expect(read(cut).$1, digits);
+      expect(cut.split('\n').first, "r'${'a' * 71}'");
+      expect(read(cut).$2, everyElement(lessThanOrEqualTo(78)));
+      expect(cut, isNot(contains(r"\'")));
     });
 
     test(
@@ -589,12 +633,19 @@ void main() {
         step.notice,
         'The Firebase CLI adds a web app named "Default Web App" to a '
         'project that has no web app, because it enables the methods '
-        'through one (firebase/firebase-tools#11250). The Firebase console '
-        'enables them without it: '
+        'through one (firebase/firebase-tools#11250). The page '
         'https://console.firebase.google.com/project/_/authentication/'
-        'providers.',
+        'providers of the Firebase console enables them without it.',
       );
       expect(step.notice, isNot(contains('\n')));
+      // A terminal that makes a link of the address takes no punctuation
+      // into it: a space follows the address.
+      const page = 'https://console.firebase.google.com/project/_/'
+          'authentication/providers';
+      expect(
+        RegExp(r'https://\S+').allMatches(step.notice!).map((m) => m[0]),
+        [page],
+      );
       expect(step.skippable, isTrue);
       expect(step.external, isTrue);
       // The script passes --non-interactive to the Firebase CLI, so the
@@ -1241,7 +1292,7 @@ void main() {
           allOf(
             contains("const _sessionFile = '${AuthRole.sessionFile}';"),
             contains(r"File('${app.path}/firebase.json')"),
-            contains("'deploy',\n        '--only',\n        'auth',"),
+            contains("'deploy',\n      '--only',\n      'auth',"),
           ),
         );
       });

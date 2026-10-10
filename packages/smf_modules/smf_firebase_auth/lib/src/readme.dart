@@ -28,7 +28,7 @@ The ways to sign in are enabled in the Firebase project, not in the code: Email/
 $enableSignInCommand
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `${AuthRole.sessionFile}`. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) $firstFirebaseCliWithSignIn or later. It never disables a method, and it changes no file of the app. Its arguments go to the Firebase CLI, so `--project <id>` names another project. The script runs the Firebase CLI in a temporary directory, so the Firebase CLI uses its default account, even when `firebase login:use` chose another account for the directory of the app. To use another account:
+The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `${AuthRole.sessionFile}`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) $firstFirebaseCliWithSignIn or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 $enableSignInCommand --account <email>

@@ -11,6 +11,7 @@
 @Timeout(Duration(minutes: 3))
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -26,53 +27,78 @@ import 'package:test/test.dart';
 import 'support/dart_app.dart';
 
 /// The stand-in for the Firebase CLI. It appends to the file that
-/// `STAND_IN_CALLS` names a line of JSON for each call: its arguments, and
-/// for a call other than `--version` the directory it ran in, the files
-/// there, with their texts, and whether it may check for a newer version,
-/// which the Firebase CLI does unless `NO_UPDATE_NOTIFIER` is set.
+/// `STAND_IN_CALLS` names a line of JSON for each call: its arguments, the
+/// directory it ran in, the files there, with their texts, and whether it
+/// may check for a newer version, which the Firebase CLI does unless
+/// `NO_UPDATE_NOTIFIER` is set.
+///
+/// As the Firebase CLI does on every call, it opens a log,
+/// `firebase-debug.log`, in the directory it runs in, and removes it when
+/// it ends, unless `DEBUG` is set or its exit code is 2 or more.
 ///
 /// `--version` prints the lines of `STAND_IN_VERSION`, which `|` separates,
 /// or 15.14.0, and what `STAND_IN_VERSION_ERRORS` has on the standard
 /// error, and exits with `STAND_IN_VERSION_CODE`. Any other call prints a
 /// line on each stream and exits with `STAND_IN_DEPLOY_CODE`. With
 /// `STAND_IN_REMOVES_DIRECTORY`, it removes the directory it ran in first.
-const _standIn = r'''
+/// When `STAND_IN_WAITS` names the call, `version` or `deploy`, it waits
+/// once it has noted the call, until a signal ends it.
+const _standIn = r"""
 import 'dart:convert';
 import 'dart:io';
 
-void main(List<String> arguments) {
+Future<void> main(List<String> arguments) async {
   final environment = Platform.environment;
   final asksVersion = arguments.length == 1 && arguments.single == '--version';
   final directory = Directory.current;
   File(environment['STAND_IN_CALLS']!).writeAsStringSync(
     '${jsonEncode({
       'arguments': arguments,
-      if (!asksVersion) ...{
-        'directory': directory.resolveSymbolicLinksSync(),
-        'files': {
-          for (final file in directory.listSync().whereType<File>())
-            file.uri.pathSegments.last: file.readAsStringSync(),
-        },
-        'checksForUpdates': !environment.containsKey('NO_UPDATE_NOTIFIER'),
+      'directory': directory.resolveSymbolicLinksSync(),
+      'files': {
+        for (final file in directory.listSync().whereType<File>())
+          file.uri.pathSegments.last: file.readAsStringSync(),
       },
+      'checksForUpdates': !environment.containsKey('NO_UPDATE_NOTIFIER'),
     })}\n',
     mode: FileMode.append,
+    flush: true,
   );
+  final log = File('firebase-debug.log')..writeAsStringSync('$arguments\n');
+  if (environment['STAND_IN_WAITS'] == (asksVersion ? 'version' : 'deploy')) {
+    await Future<void>.delayed(const Duration(minutes: 2));
+  }
+  final int code;
   if (asksVersion) {
     final version = environment['STAND_IN_VERSION'] ?? '15.14.0';
     stdout.writeln(version.split('|').join('\n'));
     stderr.write(environment['STAND_IN_VERSION_ERRORS'] ?? '');
-    exitCode = int.parse(environment['STAND_IN_VERSION_CODE'] ?? '0');
-    return;
+    code = int.parse(environment['STAND_IN_VERSION_CODE'] ?? '0');
+  } else {
+    stdout.writeln('stand-in: deploying');
+    stderr.writeln('stand-in: on the standard error');
+    code = int.parse(environment['STAND_IN_DEPLOY_CODE'] ?? '0');
   }
-  stdout.writeln('stand-in: deploying');
-  stderr.writeln('stand-in: on the standard error');
-  if (environment.containsKey('STAND_IN_REMOVES_DIRECTORY')) {
+  if (environment.containsKey('STAND_IN_REMOVES_DIRECTORY') && !asksVersion) {
     directory.deleteSync(recursive: true);
+  } else if (!environment.containsKey('DEBUG') && code < 2) {
+    log.deleteSync();
   }
-  exitCode = int.parse(environment['STAND_IN_DEPLOY_CODE'] ?? '0');
+  exitCode = code;
 }
-''';
+""";
+
+/// The command `firebase` of the tests on Windows, a batch file as npm
+/// installs one: it runs [_standIn], next to it, with the Dart VM that
+/// `SMF_TEST_DART` names and every argument it gets. It has no path of its
+/// own, so it holds on a machine whose paths have other letters than those
+/// of ASCII.
+const _batch = '@echo off\r\n"%SMF_TEST_DART%" "%~dp0stand_in.dart" %*\r\n';
+
+/// The command `firebase` of the tests elsewhere, a shell script that does
+/// the same, with nothing but the shell: its `PATH` has no other command.
+const _shell = '#!/bin/sh\n'
+    'exec "\$SMF_TEST_DART" "\${0%/*}/stand_in.dart" "\$@"\n';
 
 /// The ids of the Firebase apps of an app for Android and iOS.
 const _androidApp = '1:1234567890:android:0a1b2c3d4e5f6789';
@@ -187,14 +213,35 @@ String _enabling(String project, AuthMode mode) => 'Enabling Email/Password'
     '${mode == AuthMode.anonymous ? ' and Anonymous' : ''} in the Firebase '
     'project $project (the mode of the app is ${mode.name}).';
 
-/// A call of the stand-in for the Firebase CLI: its arguments, and for a
-/// call other than `--version` the directory it ran in, the files there,
-/// by name, with their texts, and whether it may check for a newer version.
+/// The first line of what the script tells after the Firebase CLI failed
+/// with [code].
+String _failed(int code) =>
+    'The Firebase CLI did not enable the sign-in methods (exit code $code).';
+
+/// What the script tells of the account after a failure, when its
+/// arguments name none.
+const _maybeAnotherAccount = '- If it ran as the wrong account: this script '
+    'runs the Firebase CLI in a temporary directory, where an account that '
+    '"firebase login:use" chose for the directory of the app does not '
+    'apply. To name the account, run: $enableSignInCommand --account <email>';
+
+/// What the script tells of the log of the Firebase CLI after a failure.
+const _withDebug = '- Its log, firebase-debug.log, was in that temporary '
+    'directory, which this script removes. To see what the Firebase CLI '
+    'did, run: $enableSignInCommand --debug';
+
+/// Why the script cannot tell the mode of the app.
+const _cannotTell = 'Cannot tell the sign-in mode of the app, by which this '
+    'script enables Anonymous or leaves it out';
+
+/// A call of the stand-in for the Firebase CLI: its arguments, the
+/// directory it ran in, the files there, by name, with their texts, and
+/// whether it may check for a newer version.
 typedef _Call = ({
   List<String> arguments,
-  String? directory,
-  Map<String, String>? files,
-  bool? checksForUpdates,
+  String directory,
+  Map<String, String> files,
+  bool checksForUpdates,
 });
 
 /// What a run of the script left: its exit code, what it and the Firebase
@@ -212,9 +259,9 @@ _Call _callOf(String line) {
   final call = jsonDecode(line) as Map<String, Object?>;
   return (
     arguments: (call['arguments']! as List<Object?>).cast<String>(),
-    directory: call['directory'] as String?,
-    files: (call['files'] as Map<String, Object?>?)?.cast<String, String>(),
-    checksForUpdates: call['checksForUpdates'] as bool?,
+    directory: call['directory']! as String,
+    files: (call['files']! as Map<String, Object?>).cast<String, String>(),
+    checksForUpdates: call['checksForUpdates']! as bool,
   );
 }
 
@@ -227,6 +274,10 @@ void main() {
   /// and `elsewhere`, which is no directory of an app.
   late Directory machine;
   late DartApp app;
+
+  /// The path of [name] in [machine], as the system writes it.
+  String inMachine(String name) =>
+      '${machine.path}${Platform.pathSeparator}$name';
 
   setUpAll(() async {
     const modules = [
@@ -259,23 +310,17 @@ void main() {
           .resolveSymbolicLinksSync(),
     );
     for (final name in ['bin', 'none', 'temp', 'elsewhere']) {
-      Directory('${machine.path}/$name').createSync();
+      Directory(inMachine(name)).createSync();
     }
-    final program = File('${machine.path}/stand_in.dart')
-      ..writeAsStringSync(_standIn);
     // The Firebase CLI is a command of the shell on every system, as npm
-    // installs it, which runs the program with the Dart VM of the tests.
-    final dart = Platform.resolvedExecutable;
+    // installs it, which runs the program next to it.
+    final bin = '${inMachine('bin')}${Platform.pathSeparator}';
+    File('${bin}stand_in.dart').writeAsStringSync(_standIn);
     if (Platform.isWindows) {
-      File('${machine.path}/bin/firebase.cmd').writeAsStringSync(
-        '@echo off\r\n"$dart" "${program.path}" %*\r\n',
-      );
+      File('${bin}firebase.cmd').writeAsStringSync(_batch, encoding: ascii);
     } else {
-      final command = File('${machine.path}/bin/firebase')
-        ..writeAsStringSync(
-          '#!/bin/sh\nexec "$dart" "${program.path}" "\$@"\n',
-        );
-      expect(Process.runSync('chmod', ['+x', command.path]).exitCode, 0);
+      File('${bin}firebase').writeAsStringSync(_shell);
+      expect(Process.runSync('chmod', ['+x', '${bin}firebase']).exitCode, 0);
     }
     app = DartApp.write(rendered[AuthMode.required]!);
   });
@@ -288,42 +333,59 @@ void main() {
   /// The path of `firebase.json` of [app], as the script names it.
   String configOf(DartApp app) => '${app.path}/firebase.json';
 
-  /// Runs the script of [app], or of the app of the test, with [arguments],
-  /// as `dart tool/enable_firebase_sign_in.dart` in the directory of the
-  /// app, or in [workingDirectory] with the path of the script.
+  /// The file in which the stand-in notes its calls.
+  File calls() => File(inMachine('calls'));
+
+  /// The calls that the stand-in noted so far.
+  List<_Call> callsSoFar() => [
+        if (calls().existsSync())
+          for (final line in calls().readAsLinesSync()) _callOf(line),
+      ];
+
+  /// Starts the script of [of], or of the app of the test, with
+  /// [arguments], as `dart tool/enable_firebase_sign_in.dart` in the
+  /// directory of the app, or in [workingDirectory] with [script], the path
+  /// of the script there, or its path in the app.
   ///
   /// The `PATH` of the script is the directory with the Firebase CLI, or an
   /// empty one unless [withFirebase], and its temporary files go into a
   /// directory of the test. [standIn] has the variables of the stand-in.
-  Future<_Run> run({
+  /// The script does not get `DEBUG` or `NO_UPDATE_NOTIFIER` of the machine
+  /// of the test: what the Firebase CLI gets of them is the test's and the
+  /// script's to say.
+  Future<Process> start({
     DartApp? of,
     List<String> arguments = const [],
     Map<String, String> standIn = const {},
     bool withFirebase = true,
     String? workingDirectory,
-  }) async {
+    String? script,
+  }) {
     final target = of ?? app;
-    final calls = File('${machine.path}/calls');
-    final temp = '${machine.path}/temp';
     final changes = {
-      'PATH': '${machine.path}/${withFirebase ? 'bin' : 'none'}',
-      'TMPDIR': temp,
-      'TEMP': temp,
-      'TMP': temp,
-      'STAND_IN_CALLS': calls.path,
+      'PATH': inMachine(withFirebase ? 'bin' : 'none'),
+      'TMPDIR': inMachine('temp'),
+      'TEMP': inMachine('temp'),
+      'TMP': inMachine('temp'),
+      'SMF_TEST_DART': Platform.resolvedExecutable,
+      'STAND_IN_CALLS': calls().path,
       ...standIn,
     };
     // The names of the variables of Windows are in any case, such as
     // `Path`, so a variable of the test replaces the one of the machine
     // whatever its case.
-    final replaced = {for (final name in changes.keys) name.toUpperCase()};
-    final result = await Process.run(
+    final replaced = {
+      for (final name in changes.keys) name.toUpperCase(),
+      'DEBUG',
+      'NO_UPDATE_NOTIFIER',
+    };
+    return Process.start(
       Platform.resolvedExecutable,
       [
         if (workingDirectory == null)
           enableSignInScript
         else
-          '${target.path}/$enableSignInScript',
+          script ?? '${target.path}/$enableSignInScript',
         ...arguments,
       ],
       workingDirectory: workingDirectory ?? target.path,
@@ -333,23 +395,47 @@ void main() {
         ...changes,
       },
       includeParentEnvironment: false,
-      stdoutEncoding: utf8,
-      stderrEncoding: utf8,
     );
+  }
+
+  /// What [process], a run of the script, leaves when it ends, once it
+  /// removed its temporary directory.
+  Future<_Run> finish(Process process) async {
+    final output = process.stdout.transform(utf8.decoder).join();
+    final errors = process.stderr.transform(utf8.decoder).join();
+    final code = await process.exitCode;
+    final printed = (await output).replaceAll('\r\n', '\n');
+    final failed = (await errors).replaceAll('\r\n', '\n');
     expect(
-      Directory(temp).listSync(),
+      Directory(inMachine('temp')).listSync(),
       isEmpty,
-      reason: 'The script removes its temporary directory.',
+      reason: 'The script removes its temporary directory.\n$failed',
     );
-    return (
-      code: result.exitCode,
-      output: (result.stdout as String).replaceAll('\r\n', '\n'),
-      errors: (result.stderr as String).replaceAll('\r\n', '\n'),
-      calls: [
-        if (calls.existsSync())
-          for (final line in calls.readAsLinesSync()) _callOf(line),
-      ],
+    return (code: code, output: printed, errors: failed, calls: callsSoFar());
+  }
+
+  /// Runs the script as [start] starts it, and forgets the calls of the
+  /// stand-in afterwards, for the next run of the test.
+  Future<_Run> run({
+    DartApp? of,
+    List<String> arguments = const [],
+    Map<String, String> standIn = const {},
+    bool withFirebase = true,
+    String? workingDirectory,
+    String? script,
+  }) async {
+    final result = await finish(
+      await start(
+        of: of,
+        arguments: arguments,
+        standIn: standIn,
+        withFirebase: withFirebase,
+        workingDirectory: workingDirectory,
+        script: script,
+      ),
     );
+    if (calls().existsSync()) calls().deleteSync();
+    return result;
   }
 
   /// The arguments of the calls of [run], each on a line.
@@ -363,11 +449,14 @@ void main() {
           entity.uri.pathSegments.lastWhere((segment) => segment.isNotEmpty),
       };
 
+  /// The file of the session of [app], which has the mode of the app.
+  File sessionOf(DartApp app) => File('${app.path}/${AuthRole.sessionFile}');
+
   group('the script of the app', () {
     test(
-        'is the file of the brick of the module, with the file of the auth '
-        'role that has the mode and the first Firebase CLI with the command',
-        () {
+        'is the file of the brick of the module, with what the auth role '
+        'says of the mode: its file, how a tool reads the mode there, and '
+        'the mode with anonymous users', () {
       final script = rendered[AuthMode.required]!.files[enableSignInScript]!;
 
       expect(script.owner, const ModuleOrigin(FirebaseAuthModule.id));
@@ -375,10 +464,30 @@ void main() {
         script.text,
         allOf(
           contains("const _sessionFile = '${AuthRole.sessionFile}';"),
+          contains("const _anonymous = '${AuthMode.anonymous.name}';"),
           contains("const _firstCli = '$firstFirebaseCliWithSignIn';"),
           contains("const _command = '$enableSignInCommand';"),
+          contains(
+            'final _modeDeclaration = RegExp(\n'
+            '  $modeDeclarationCode,\n'
+            '  multiLine: true,\n'
+            ');\n',
+          ),
           isNot(contains('{{')),
         ),
+      );
+      // The expression of the role, whole, in raw strings of the script.
+      expect(
+        [
+          for (final string
+              in RegExp("r'([^']*)'").allMatches(modeDeclarationCode))
+            string[1],
+        ].join(),
+        AuthRole.modeDeclaration,
+      );
+      expect(
+        modeDeclarationCode.split('\n').map((line) => line.length),
+        everyElement(lessThanOrEqualTo(78)),
       );
       // The check of the machine and the script ask for the same version.
       expect(firebaseCliWithSignIn.minimum, firstFirebaseCliWithSignIn);
@@ -393,9 +502,10 @@ void main() {
     });
 
     test(
-        'enables Email/Password in the project of flutterfire configure, '
-        'with a configuration of its own in a temporary directory, and '
-        'leaves the app as it is', () async {
+        'enables Email/Password in the project of flutterfire configure: it '
+        'runs the Firebase CLI in a temporary directory, for its version '
+        'too, with a configuration of its own there, and without its check '
+        'for a newer version', () async {
       final config = File(configOf(app))
         ..writeAsStringSync(_configuredFor('smf-app'));
       final before = entriesOf(app);
@@ -405,24 +515,26 @@ void main() {
       expect(result.code, 0, reason: result.errors);
       expect(commandsOf(result), [
         '--version',
-        'deploy --only auth --project smf-app --non-interactive',
+        'deploy --only auth --project=smf-app --non-interactive',
       ]);
-      // The Firebase CLI ran in a directory of the script, which had the
-      // configuration and nothing else, and is removed.
-      final deploy = result.calls.last;
+      // Both calls ran in one directory of the script, which had nothing
+      // but the configuration of the deploy, and is removed.
+      final [version, deploy] = result.calls;
       expect(
-        Directory(deploy.directory!).parent.uri,
-        Directory('${machine.path}/temp').uri,
+        Directory(version.directory).parent.uri,
+        Directory(inMachine('temp')).uri,
       );
       expect(
-        deploy.directory!.split(RegExp(r'[/\\]')).last,
+        version.directory.split(RegExp(r'[/\\]')).last,
         startsWith('firebase_sign_in_'),
       );
+      expect(deploy.directory, version.directory);
+      expect(version.files, isEmpty);
       expect(deploy.files, {'firebase.json': _emailPassword});
-      expect(Directory(deploy.directory!).existsSync(), isFalse);
+      expect(Directory(deploy.directory).existsSync(), isFalse);
       expect(
-        deploy.checksForUpdates,
-        isFalse,
+        [version.checksForUpdates, deploy.checksForUpdates],
+        [false, false],
         reason: 'The Firebase CLI checks for a newer version in a process '
             'of its own, which goes on after the command. On Windows, the '
             'directory of a process that runs cannot be removed, so the '
@@ -444,6 +556,31 @@ void main() {
     });
 
     test(
+        'changes no file of the app when the Firebase CLI keeps its log, as '
+        'with DEBUG set: the log is in the temporary directory, from the '
+        'call for the version on', () async {
+      File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+      final before = entriesOf(app);
+
+      // The script is run in another directory too, where the Firebase CLI
+      // must leave nothing either.
+      for (final workingDirectory in [null, inMachine('elsewhere')]) {
+        final result = await run(
+          standIn: {'DEBUG': 'true'},
+          workingDirectory: workingDirectory,
+        );
+
+        expect(result.code, 0, reason: result.errors);
+        expect(result.calls.last.files, {
+          'firebase-debug.log': '[--version]\n',
+          'firebase.json': _emailPassword,
+        });
+        expect(entriesOf(app), before);
+        expect(Directory(inMachine('elsewhere')).listSync(), isEmpty);
+      }
+    });
+
+    test(
         'enables what the mode of the app needs: Anonymous too in the mode '
         'anonymous, and only Email/Password in the others', () async {
       final found = <AuthMode, (String, String)>{};
@@ -454,10 +591,9 @@ void main() {
           final result = await run(of: ofMode);
           expect(result.code, 0, reason: '${mode.name}: ${result.errors}');
           found[mode] = (
-            result.calls.last.files!['firebase.json']!,
+            result.calls.last.files['firebase.json']!,
             result.output.split('\n').first,
           );
-          File('${machine.path}/calls').deleteSync();
         } finally {
           ofMode.delete();
         }
@@ -484,11 +620,12 @@ void main() {
 
     test(
         'follows the mode that the developer of the app changed in the file '
-        'of the auth role', () async {
+        'of the auth role, as the role says to read it', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
-      final session = File('${app.path}/${AuthRole.sessionFile}');
+      final session = sessionOf(app);
       const generated = 'const AuthMode authMode = AuthMode.required;';
-      expect(session.readAsStringSync(), contains('\n$generated\n'));
+      final text = session.readAsStringSync();
+      expect(text, contains('\n$generated\n'));
 
       final configs = <String, String>{};
       for (final changed in [
@@ -497,19 +634,22 @@ void main() {
         'const authMode = AuthMode.anonymous;',
         'const AuthMode authMode =\n    AuthMode.anonymous;',
         'const AuthMode authMode = AuthMode.guest;',
-        // A line that is not code decides nothing.
+        // A declaration within a comment decides nothing.
         '// const AuthMode authMode = AuthMode.anonymous;\n$generated',
+        '/*\nconst AuthMode authMode = AuthMode.anonymous;\n*/\n$generated',
       ]) {
-        session.writeAsStringSync(
-          rendered[AuthMode.required]!
-              .files[AuthRole.sessionFile]!
-              .text
-              .replaceFirst(generated, changed),
-        );
+        session.writeAsStringSync(text.replaceFirst(generated, changed));
+        // What the script reads is what the role reads.
+        final ofRole = authRole.modeWrittenIn(session.readAsStringSync());
+        expect(ofRole, isNotNull, reason: changed);
         final result = await run();
         expect(result.code, 0, reason: '$changed: ${result.errors}');
-        configs[changed] = result.calls.last.files!['firebase.json']!;
-        File('${machine.path}/calls').deleteSync();
+        expect(
+          result.output,
+          startsWith('${_enabling('smf-app', ofRole!)}\n'),
+          reason: changed,
+        );
+        configs[changed] = result.calls.last.files['firebase.json']!;
       }
 
       expect(configs.values, [
@@ -518,51 +658,76 @@ void main() {
         _withAnonymous,
         _emailPassword,
         _emailPassword,
+        _emailPassword,
       ]);
     });
 
     test(
-        'stops before the Firebase CLI when it cannot read the mode of the '
-        'app, and tells of the Firebase console', () async {
+        'stops before the Firebase CLI when the file of the auth role does '
+        'not tell the mode, names the file that it read, and tells of the '
+        'Firebase console', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
-      final session = File('${app.path}/${AuthRole.sessionFile}');
-      final generated = session.readAsStringSync();
-      const unreadable = 'Cannot tell the sign-in mode of the app, by which '
-          'this script enables Anonymous or leaves it out: '
-          '${AuthRole.sessionFile} does not have one line such as "const '
-          'AuthMode authMode = AuthMode.required;".\n';
+      final session = sessionOf(app);
+      const generated = 'const AuthMode authMode = AuthMode.required;';
+      const computed = 'final AuthMode authMode = modeOfBuild();';
+      final text = session.readAsStringSync();
+      final noDeclaration = '$_cannotTell: ${session.path} does not have '
+          'one declaration such as "$generated", which starts its line and '
+          'has a mode of the app as its value.\n'
+          '${_inConsole()}\n';
 
-      for (final (name, change) in <(String, void Function())>[
+      for (final (name, changed) in [
+        ('a mode that is computed', computed),
+        ('two modes', '$generated\nconst AuthMode authMode = AuthMode.guest;'),
+        // It would enable Email/Password alone for an app that may need
+        // Anonymous too.
+        ('no mode', 'const AuthMode authMode = AuthMode.anonymus;'),
         (
-          'a mode that is computed',
-          () {
-            session.writeAsStringSync(
-              generated.replaceFirst(
-                'const AuthMode authMode = AuthMode.required;',
-                'final AuthMode authMode = modeOfBuild();',
-              ),
-            );
-          }
+          'a mode within a comment only',
+          '/*\nconst AuthMode authMode = AuthMode.anonymous;\n*/\n$computed',
         ),
-        (
-          'two modes',
-          () {
-            session.writeAsStringSync(
-              '$generated\nconst AuthMode authMode = AuthMode.guest;\n',
-            );
-          }
-        ),
-        ('no file', session.deleteSync),
       ]) {
-        change();
+        session.writeAsStringSync(text.replaceFirst(generated, changed));
+        expect(
+          authRole.modeWrittenIn(session.readAsStringSync()),
+          isNull,
+          reason: name,
+        );
 
         final result = await run();
 
         expect(result.code, 1, reason: name);
-        expect(result.errors, '$unreadable${_inConsole()}\n', reason: name);
+        expect(result.errors, noDeclaration, reason: name);
         expect(result.output, isEmpty, reason: name);
         expect(result.calls, isEmpty, reason: name);
       }
+
+      // As Windows PowerShell 5 writes a file with `>`.
+      session.writeAsBytesSync([0xFF, 0xFE, ...utf8.encode(text)]);
+      final unreadable = await run();
+
+      expect(unreadable.code, 1);
+      expect(
+        unreadable.errors,
+        allOf(
+          startsWith(
+            '${session.path} could not be read as a text in UTF-8 (',
+          ),
+          endsWith(').\n'),
+          isNot(contains('#0 ')),
+        ),
+      );
+      expect(unreadable.calls, isEmpty);
+
+      session.deleteSync();
+      final missing = await run();
+
+      expect(missing.code, 1);
+      expect(
+        missing.errors,
+        '$_cannotTell: ${session.path} is missing.\n${_inConsole()}\n',
+      );
+      expect(missing.calls, isEmpty);
     });
 
     test(
@@ -583,7 +748,7 @@ void main() {
       expect(result.code, 0, reason: result.errors);
       expect(
         commandsOf(result).last,
-        'deploy --only auth --project smf-app --non-interactive',
+        'deploy --only auth --project=smf-app --non-interactive',
       );
     });
 
@@ -615,11 +780,11 @@ void main() {
       expect(named.code, 0, reason: named.errors);
       expect(
         commandsOf(named).last,
-        'deploy --only auth --non-interactive --project smf-dev',
+        'deploy --only auth --project=smf-dev --non-interactive',
       );
       expect(
         named.output,
-        startsWith('Enabling Email/Password in the Firebase project smf-dev '),
+        startsWith('${_enabling('smf-dev', AuthMode.required)}\n'),
       );
     });
 
@@ -644,11 +809,13 @@ void main() {
       expect(config.existsSync(), isFalse);
 
       // A file of the Firebase CLI alone, or one in which flutterfire has
-      // written no project yet, as before it knows the platforms.
+      // written no project yet, as before it knows the platforms. It
+      // writes the id of a project into maps only.
       for (final text in [
         '{"hosting": {"public": "build/web", "projectId": "of-hosting"}}',
         '{"flutter": {"platforms": {}}}',
         '{"flutter": {"platforms": {"dart": {"projectId": 7}}}}',
+        '{"flutter": {"platforms": [{"projectId": "in-a-list"}]}}',
         '["flutter"]',
       ]) {
         config.writeAsStringSync(text);
@@ -668,9 +835,9 @@ void main() {
     });
 
     test(
-        'stops at a firebase.json that is not JSON, or whose project is no '
-        'id of a project, and passes nothing of it to the Firebase CLI',
-        () async {
+        'stops at a firebase.json that is not JSON, that is no text in '
+        'UTF-8, or whose project is no id of a project, and passes nothing '
+        'of it to the Firebase CLI', () async {
       const again = 'Run "flutterfire configure" again (see README.md), or '
           'name the project: $enableSignInCommand --project <id>';
       final config = File(configOf(app))..writeAsStringSync('{"flutter": ');
@@ -686,6 +853,25 @@ void main() {
         ),
       );
       expect(broken.calls, isEmpty);
+
+      // As Windows PowerShell 5 writes a file with `>`: in UTF-16.
+      config.writeAsBytesSync([
+        0xFF,
+        0xFE,
+        for (final unit in _configuredFor('smf-app').codeUnits) ...[unit, 0],
+      ]);
+      final unreadable = await run();
+
+      expect(unreadable.code, 1);
+      expect(
+        unreadable.errors,
+        allOf(
+          startsWith('${config.path} could not be read as a text in UTF-8 ('),
+          endsWith(').\n'),
+          isNot(contains('#0 ')),
+        ),
+      );
+      expect(unreadable.calls, isEmpty);
 
       for (final project in [
         'My Project',
@@ -711,106 +897,267 @@ void main() {
     });
 
     test(
-        'gives the Firebase CLI its arguments as they are, after its own, '
-        'and its own project unless they name one', () async {
+        'gives the Firebase CLI the project that it says, and no other: the '
+        'last one that its arguments name before --, in each form that the '
+        'Firebase CLI takes, and the other arguments as they are', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
       const own = 'deploy --only auth';
-      final commands = <String, String>{};
+
+      final found = <String, (String, String)>{};
       for (final arguments in [
+        <String>[],
         ['--account', 'someone@example.com'],
         ['--debug', '--account=someone@example.com'],
-        ['--project', 'another-app', '--debug'],
-        ['--project=another-app'],
-        ['-P', 'another-app'],
-        ['-Panother-app'],
+        // Each form of the project.
+        ['--project', 'aaa-app'],
+        ['--project=aaa-app'],
+        ['-P', 'aaa-app'],
+        ['-Paaa-app'],
+        // The Firebase CLI takes the last project of its arguments.
+        ['--project', 'aaa-app', '--project', 'bbb-app'],
+        ['-P', 'aaa-app', '--project=bbb-app', '--debug', '-Pccc-app'],
+        ['--debug', '--project', 'aaa-app', '--account', 'me@example.com'],
+        // What comes after -- is no option of the Firebase CLI.
+        ['--project', 'aaa-app', '--', '--project', 'bbb-app'],
+        ['--', '--project', 'bbb-app'],
+        // The Firebase CLI would take --project for the account here, and
+        // no project at all. It gets the project that the script says, and
+        // refuses the account that is left without a value.
+        ['--account', '--project', 'bbb-app'],
       ]) {
         final result = await run(arguments: arguments);
         expect(result.code, 0, reason: '$arguments: ${result.errors}');
-        commands[arguments.join(' ')] = commandsOf(result).last;
-        final named = arguments.join().contains('another-app');
-        expect(
-          result.output.split('\n').first,
-          _enabling(named ? 'another-app' : 'smf-app', AuthMode.required),
-          reason: '$arguments',
-        );
-        File('${machine.path}/calls').deleteSync();
+        final said = RegExp(r'in the Firebase project (\S+) \(')
+            .firstMatch(result.output.split('\n').first)![1]!;
+        found[arguments.join(' ')] = (said, commandsOf(result).last);
       }
 
-      expect(commands, {
-        '--account someone@example.com':
-            '$own --project smf-app --non-interactive --account '
-                'someone@example.com',
-        '--debug --account=someone@example.com':
-            '$own --project smf-app --non-interactive --debug '
-                '--account=someone@example.com',
-        '--project another-app --debug':
-            '$own --non-interactive --project another-app --debug',
-        '--project=another-app': '$own --non-interactive --project=another-app',
-        '-P another-app': '$own --non-interactive -P another-app',
-        '-Panother-app': '$own --non-interactive -Panother-app',
+      expect(found, {
+        '': ('smf-app', '$own --project=smf-app --non-interactive'),
+        '--account someone@example.com': (
+          'smf-app',
+          '$own --project=smf-app --non-interactive --account '
+              'someone@example.com',
+        ),
+        '--debug --account=someone@example.com': (
+          'smf-app',
+          '$own --project=smf-app --non-interactive --debug '
+              '--account=someone@example.com',
+        ),
+        '--project aaa-app': (
+          'aaa-app',
+          '$own --project=aaa-app --non-interactive',
+        ),
+        '--project=aaa-app': (
+          'aaa-app',
+          '$own --project=aaa-app --non-interactive',
+        ),
+        '-P aaa-app': ('aaa-app', '$own --project=aaa-app --non-interactive'),
+        '-Paaa-app': ('aaa-app', '$own --project=aaa-app --non-interactive'),
+        '--project aaa-app --project bbb-app': (
+          'bbb-app',
+          '$own --project=bbb-app --non-interactive',
+        ),
+        '-P aaa-app --project=bbb-app --debug -Pccc-app': (
+          'ccc-app',
+          '$own --project=ccc-app --non-interactive --debug',
+        ),
+        '--debug --project aaa-app --account me@example.com': (
+          'aaa-app',
+          '$own --project=aaa-app --non-interactive --debug --account '
+              'me@example.com',
+        ),
+        '--project aaa-app -- --project bbb-app': (
+          'aaa-app',
+          '$own --project=aaa-app --non-interactive -- --project bbb-app',
+        ),
+        '-- --project bbb-app': (
+          'smf-app',
+          '$own --project=smf-app --non-interactive -- --project bbb-app',
+        ),
+        '--account --project bbb-app': (
+          'bbb-app',
+          '$own --project=bbb-app --non-interactive --account',
+        ),
       });
     });
 
     test(
-        'needs no firebase.json for a project that its arguments name, and '
-        'leaves a project without a value to the Firebase CLI', () async {
+        'stops at arguments whose project it cannot give the Firebase CLI: '
+        'one without a value, one that is no id of a project, and short '
+        'options in one argument that may name a project', () async {
+      File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+      String noId(String named) =>
+          'The arguments name "$named" as the Firebase project, which is no '
+          'id of a project.\n';
+      String unclear(String option) =>
+          'Cannot tell whether "$option" names a Firebase project. Name the '
+          'project with --project <id>, apart from the other options.\n';
+
+      final told = <String, String>{};
+      for (final arguments in [
+        ['--project'],
+        ['--debug', '-P'],
+        ['--project', 'aaa-app', '--project'],
+        ['--project='],
+        ['--project', '--debug'],
+        ['-P', 'My Project'],
+        ['--project=aaa-app', '--project', 'bbb_app'],
+        // As the Firebase CLI reads --json and the project bbb-app.
+        ['-jP', 'bbb-app'],
+        ['-jPbbb-app'],
+        // It would read the message "Patch" here, which the script cannot
+        // know of every option.
+        ['-mPatch'],
+      ]) {
+        final result = await run(arguments: arguments);
+
+        expect(result.code, 1, reason: '$arguments');
+        expect(result.output, isEmpty, reason: '$arguments');
+        expect(result.calls, isEmpty, reason: '$arguments');
+        told[arguments.join(' ')] = result.errors;
+      }
+
+      expect(told, {
+        '--project': '--project needs the id of a Firebase project after '
+            'it.\n',
+        '--debug -P': '-P needs the id of a Firebase project after it.\n',
+        '--project aaa-app --project': '--project needs the id of a Firebase '
+            'project after it.\n',
+        '--project=': noId(''),
+        '--project --debug': noId('--debug'),
+        '-P My Project': noId('My Project'),
+        '--project=aaa-app --project bbb_app': noId('bbb_app'),
+        '-jP bbb-app': unclear('-jP'),
+        '-jPbbb-app': unclear('-jPbbb-app'),
+        '-mPatch': unclear('-mPatch'),
+      });
+    });
+
+    test('needs no firebase.json for a project that its arguments name',
+        () async {
       final named = await run(arguments: ['--project', 'another-app']);
 
       expect(named.code, 0, reason: named.errors);
       expect(
         commandsOf(named).last,
-        'deploy --only auth --non-interactive --project another-app',
+        'deploy --only auth --project=another-app --non-interactive',
       );
       expect(File(configOf(app)).existsSync(), isFalse);
-      File('${machine.path}/calls').deleteSync();
-
-      final unnamed = await run(arguments: ['--project']);
-
-      expect(
-        commandsOf(unnamed).last,
-        'deploy --only auth --non-interactive --project',
-      );
     });
 
     test('runs from any directory, for the app that it is a file of', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
 
-      final result = await run(workingDirectory: '${machine.path}/elsewhere');
+      final result = await run(workingDirectory: inMachine('elsewhere'));
 
       expect(result.code, 0, reason: result.errors);
       expect(
         commandsOf(result).last,
-        'deploy --only auth --project smf-app --non-interactive',
+        'deploy --only auth --project=smf-app --non-interactive',
       );
-      expect(Directory('${machine.path}/elsewhere').listSync(), isEmpty);
+      expect(Directory(inMachine('elsewhere')).listSync(), isEmpty);
     });
 
     test(
+      'runs through a link to it, for the app that it is a file of',
+      () async {
+        File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+        final link = Link('${inMachine('elsewhere')}/enable.dart')
+          ..createSync('${app.path}/$enableSignInScript');
+
+        final result = await run(
+          workingDirectory: inMachine('elsewhere'),
+          script: link.path,
+        );
+
+        expect(result.code, 0, reason: result.errors);
+        expect(
+          commandsOf(result).last,
+          'deploy --only auth --project=smf-app --non-interactive',
+        );
+      },
+      // A link needs a right of its own on Windows.
+      testOn: '!windows',
+    );
+
+    test(
         'exits with the code of a Firebase CLI that fails, removes its '
-        'temporary directory, and tells of the account and of the Firebase '
-        'console', () async {
+        'temporary directory, and tells what may have gone wrong: the '
+        'account, where the log was, and the Firebase console', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+      String namedAccount(String account) =>
+          '- The arguments name the account $account for it. "firebase '
+          'login:list" shows the accounts that the Firebase CLI has.';
 
-      final result = await run(standIn: {'STAND_IN_DEPLOY_CODE': '2'});
+      final told = <String, List<String>>{};
+      for (final arguments in [
+        <String>[],
+        ['--account', 'nobody@example.com'],
+        ['--account=nobody@example.com'],
+        // The Firebase CLI takes the last account.
+        ['--account', 'first@example.com', '--account=last@example.com'],
+        // An account without a value is none, and what comes after -- is
+        // no option.
+        ['--account'],
+        ['--', '--account', 'nobody@example.com'],
+        ['--debug'],
+        ['--debug', '--account', 'nobody@example.com'],
+      ]) {
+        final result = await run(
+          arguments: arguments,
+          standIn: {'STAND_IN_DEPLOY_CODE': '2'},
+        );
 
-      expect(result.code, 2);
-      expect(result.calls, hasLength(2));
-      expect(Directory(result.calls.last.directory!).existsSync(), isFalse);
-      expect(result.output.split('\n').skip(1), ['stand-in: deploying', '']);
-      expect(
-        result.errors,
-        'stand-in: on the standard error\n'
-        'The Firebase CLI did not enable the sign-in methods (exit code 2).\n'
-        '- It ran as the default account of "firebase login:list": an '
-        'account that "firebase login:use" chose for the directory of the '
-        'app does not apply in the temporary directory in which this script '
-        'runs the Firebase CLI. For another account, run: '
-        '$enableSignInCommand --account <email>\n'
-        '- Its log, firebase-debug.log, was in that directory, which this '
-        'script removes. To see what the Firebase CLI did, run: '
-        '$enableSignInCommand --debug\n'
-        '- ${_inConsole('smf-app')}\n',
-      );
+        expect(result.code, 2, reason: '$arguments');
+        expect(result.calls, hasLength(2));
+        expect(Directory(result.calls.last.directory).existsSync(), isFalse);
+        expect(
+          result.output.split('\n').skip(1),
+          ['stand-in: deploying', ''],
+        );
+        final lines = result.errors.split('\n');
+        expect(lines.first, 'stand-in: on the standard error');
+        expect(lines.last, isEmpty);
+        told[arguments.join(' ')] = lines.sublist(1, lines.length - 1);
+      }
+
+      final console = '- ${_inConsole('smf-app')}';
+      expect(told, {
+        '': [_failed(2), _maybeAnotherAccount, _withDebug, console],
+        '--account nobody@example.com': [
+          _failed(2),
+          namedAccount('nobody@example.com'),
+          _withDebug,
+          console,
+        ],
+        '--account=nobody@example.com': [
+          _failed(2),
+          namedAccount('nobody@example.com'),
+          _withDebug,
+          console,
+        ],
+        '--account first@example.com --account=last@example.com': [
+          _failed(2),
+          namedAccount('last@example.com'),
+          _withDebug,
+          console,
+        ],
+        '--account': [_failed(2), _maybeAnotherAccount, _withDebug, console],
+        '-- --account nobody@example.com': [
+          _failed(2),
+          _maybeAnotherAccount,
+          _withDebug,
+          console,
+        ],
+        // The Firebase CLI printed its log already.
+        '--debug': [_failed(2), _maybeAnotherAccount, console],
+        '--debug --account nobody@example.com': [
+          _failed(2),
+          namedAccount('nobody@example.com'),
+          console,
+        ],
+      });
       expect(File(configOf(app)).readAsStringSync(), _configuredFor('smf-app'));
     });
 
@@ -830,7 +1177,7 @@ void main() {
           );
 
           expect(result.code, code);
-          final directory = result.calls.last.directory!;
+          final directory = result.calls.last.directory;
           expect(
             result.errors.split('\n'),
             contains(
@@ -844,11 +1191,53 @@ void main() {
             ),
             reason: 'exit code $code',
           );
-          File('${machine.path}/calls').deleteSync();
         }
       },
       // On Windows, a process cannot remove the directory that it runs in,
       // which is why the script may fail to remove it there.
+      testOn: '!windows',
+    );
+
+    test(
+      'after Ctrl+C, lets the Firebase CLI end, removes its temporary '
+      'directory and exits with 130, whichever call of the Firebase CLI '
+      'runs',
+      () async {
+        File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+
+        for (final (waits, running) in [('version', 1), ('deploy', 2)]) {
+          final process = await start(standIn: {'STAND_IN_WAITS': waits});
+          final ended = finish(process);
+          // The Firebase CLI runs once it noted its call.
+          for (var tries = 0; callsSoFar().length < running; tries++) {
+            expect(tries, lessThan(600), reason: 'no call for $waits');
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+          final directory = Directory(callsSoFar().last.directory);
+          expect(directory.existsSync(), isTrue);
+
+          // The signal goes to the script alone, as from another process:
+          // the script passes it on to the Firebase CLI.
+          expect(process.kill(ProcessSignal.sigint), isTrue);
+          final result = await ended;
+
+          expect(result.code, 130, reason: '$waits: ${result.errors}');
+          expect(result.calls, hasLength(running), reason: waits);
+          expect(directory.existsSync(), isFalse, reason: waits);
+          // Nothing of a failure: the user knows what stopped the script.
+          expect(result.errors, isEmpty, reason: waits);
+          expect(
+            result.output,
+            waits == 'version'
+                ? isEmpty
+                : '${_enabling('smf-app', AuthMode.required)}\n',
+            reason: waits,
+          );
+          calls().deleteSync();
+        }
+      },
+      // Windows has no signal that one process sends another: Ctrl+C in a
+      // terminal reaches the script and the Firebase CLI there.
       testOn: '!windows',
     );
 
@@ -897,7 +1286,6 @@ void main() {
       );
       expect(commandsOf(result), ['--version']);
 
-      File('${machine.path}/calls').deleteSync();
       final silent = await run(standIn: {'STAND_IN_VERSION_CODE': '1'});
 
       expect(
@@ -907,8 +1295,9 @@ void main() {
     });
 
     test(
-        'stops at a Firebase CLI that is older than the command, tells how '
-        'to update it, and does not run it', () async {
+        'stops at a Firebase CLI that is older than the command, by the '
+        'rule of the check of the machine, tells how to update it, and does '
+        'not run it', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
 
       for (final (printed, version) in [
@@ -917,6 +1306,9 @@ void main() {
         ('9.23.3', '9.23.3'),
         // The last line that is a version is that of the Firebase CLI.
         ('16.0.0|15.5.1', '15.5.1'),
+        // A pre-release of the first version may lack the command.
+        ('15.6.0-rc.1', '15.6.0-rc.1'),
+        ('15.6.0-rc.1+build.5', '15.6.0-rc.1+build.5'),
       ]) {
         final result = await run(standIn: {'STAND_IN_VERSION': printed});
 
@@ -926,13 +1318,12 @@ void main() {
           'The Firebase CLI of this machine is $version, and enabling '
           'sign-in methods needs 15.6.0 or later. Update it with "npm '
           'install -g firebase-tools" if npm installed it, or see '
-          'https://firebase.google.com/docs/cli#update-cli.\n'
+          'https://firebase.google.com/docs/cli#update-cli\n'
           '${_inConsole('smf-app')}\n',
           reason: version,
         );
         expect(result.output, isEmpty, reason: version);
         expect(commandsOf(result), ['--version'], reason: version);
-        File('${machine.path}/calls').deleteSync();
       }
     });
 
@@ -951,11 +1342,15 @@ void main() {
         // after a line that is another version.
         _withNotices,
         '15.5.1|15.6.0',
-        '15.6.0-rc.1',
+        // A build of the first version, and a pre-release of a later one.
+        '15.6.0+build.5',
+        '15.6.1-rc.1',
+        '16.0.0-beta.2',
         // Nothing that the script reads as a version: the Firebase CLI
         // tells itself what it cannot do.
         'a development build',
-        '99999999999.0.0',
+        '99999999999999999999.0.0',
+        '15.6',
       ]) {
         final result = await run(standIn: {'STAND_IN_VERSION': version});
 
@@ -964,11 +1359,10 @@ void main() {
           commandsOf(result),
           [
             '--version',
-            'deploy --only auth --project smf-app --non-interactive',
+            'deploy --only auth --project=smf-app --non-interactive',
           ],
           reason: version,
         );
-        File('${machine.path}/calls').deleteSync();
       }
     });
   });

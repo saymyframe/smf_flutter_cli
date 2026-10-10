@@ -44,9 +44,9 @@ const _enabling = 'Enabling the sign-in methods of the app in its Firebase '
 /// What the user has to know before the step runs.
 const _notice = 'The Firebase CLI adds a web app named "Default Web App" to '
     'a project that has no web app, because it enables the methods through '
-    'one (firebase/firebase-tools#11250). The Firebase console enables them '
-    'without it: '
-    'https://console.firebase.google.com/project/_/authentication/providers.';
+    'one (firebase/firebase-tools#11250). The page '
+    'https://console.firebase.google.com/project/_/authentication/providers '
+    'of the Firebase console enables them without it.';
 
 /// The question whether to configure Firebase now.
 const _configureNow = 'Configuring Firebase with flutterfire '

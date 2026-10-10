@@ -120,15 +120,19 @@ final class FirebaseAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
           firebaseAuthBundle,
-          vars: const {
-            'email_language': RoleVar(
+          vars: {
+            'email_language': const RoleVar(
               localizationRole,
               present: _emailLanguage,
               absent: '',
             ),
-            // What the script that enables the ways to sign in reads the
-            // mode of the app from, and the Firebase CLI that it asks for.
+            // For the script that enables the ways to sign in: the file
+            // that it reads the mode of the app from, how the auth role
+            // says to read it, the mode with anonymous users, and the
+            // Firebase CLI that it asks for.
             'session_file': AuthRole.sessionFile,
+            'mode_declaration': modeDeclarationCode,
+            'anonymous_mode': AuthMode.anonymous.name,
             'minimum_firebase_cli': firstFirebaseCliWithSignIn,
           },
         ),
