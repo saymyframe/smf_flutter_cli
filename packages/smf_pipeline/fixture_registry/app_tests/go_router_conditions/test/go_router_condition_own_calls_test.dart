@@ -9,12 +9,15 @@
 // nothing within them: a page of such a flow that the code of the app asks
 // for on a page shows as it was asked, over that page for push() and
 // replace(), and in place of the stack for go(), and the target that the
-// guards open for a request shows over the page that the user is on. It
-// uses what the tests of router_screens, of router_guards and of the
-// conditions share, which every app that it applies to has.
+// guards open for a request shows over the page that the user is on. And
+// when the router closes a page over a page of such a flow that stands
+// alone, it puts the pages below back as they were. It uses what the
+// tests of router_screens, of router_guards and of the conditions share,
+// which every app that it applies to has.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
+import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_outside_screen.dart';
 
 import 'conditions.dart';
@@ -98,6 +101,36 @@ void main() {
         [FixtureGateScreen],
         reason: 'go() to a page of the flow of a condition, made on a page, '
             'shows it in place of the stack, as the code of the app asked.',
+      );
+
+      // A page of the flow of the other guard over that page, which the
+      // router closes once its condition holds: the page below stays as it
+      // is, alone.
+      fixtureSenior.value = false;
+      await tester.pumpAndSettle();
+      pushed(shown(tester, FixtureGateScreen).nav.fakeGate.second());
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [secondGateScreen],
+        reason: 'While a condition does not hold, push() of the target of '
+            'its guard shows it.',
+      );
+      fixtureSenior.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [gateScreen],
+        reason: 'Once a condition holds, the router closes the page of its '
+            'flow, and the user is on the page below it.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureGateScreen],
+        reason: 'When the router closes a page over a page of the flow of '
+            'a condition that stands alone, the page below stays as it is: '
+            'the redirect of go_router does not ask the guards about the '
+            'pages that the router puts back.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

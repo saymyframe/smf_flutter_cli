@@ -16,9 +16,14 @@
 // target, with a query, which shows over the screen that the app starts on
 // alone; for the target while the flow of the other guard is open; and for
 // the target while the gate with the same flow does not allow, whose flow
-// takes the place of the stack as before. A router that takes no location
-// from the platform starts on the screen that the app starts on and stays
-// where it is.
+// takes the place of the stack as before. And once the user went back
+// from the page of a link, nothing of the link shows again: its request
+// was dropped with the page.
+//
+// A router that takes no location from the platform starts on the screen
+// that the app starts on. The test tells it from a router that shows that
+// screen for the link by a location of a route that asks for nothing,
+// which such a router shows to nobody when the platform asks for it.
 //
 // It uses what the tests of router_screens, of router_guards and of the
 // conditions share. Each expectation gives its reason, which a provider of
@@ -33,6 +38,10 @@ import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
 import 'conditions.dart';
 import 'guards.dart';
 import 'screens.dart';
+
+/// The route of the second fixture feature that asks for the second
+/// condition, as the listeners of the screen hear of it.
+const _loungeScreen = ('fake_second.lounge', '/fake_second/lounge');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,7 +69,20 @@ void main() {
             'the listeners of the screen hear; or its start screen, for a '
             'router that takes no location from the platform.',
       );
-      if (opened.single == startScreen) return;
+      if (opened.single == startScreen) {
+        await tester.binding.handlePushRoute(detailsScreen(7).$2);
+        await tester.pumpAndSettle();
+        expect(
+          heard(),
+          isEmpty,
+          reason: 'A router that takes locations from the platform shows a '
+              'page of the flow of a condition that the platform opens the '
+              'app on. Only a router that takes none, and so shows a '
+              'location of a route that asks for nothing to nobody, starts '
+              'on its start screen.',
+        );
+        return;
+      }
       expect(
         pagesBuilt(tester),
         [FixtureHomeScreen, FixtureGateScreen],
@@ -80,6 +102,34 @@ void main() {
         [FixtureHomeScreen],
         reason: 'Back from a page of the flow of a condition that a link '
             'opened closes that page.',
+      );
+
+      // The request of the link was dropped with its page: when the router
+      // next closes pages, as those of a route whose condition stops
+      // holding, it asks for nothing of the link again.
+      pushed(shown(tester, FixtureHomeScreen).nav.fakeSecond.lounge());
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_loungeScreen],
+        reason: 'While a condition holds, push() of a route that asks for it '
+            'shows the route.',
+      );
+      fixtureSenior.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'A link whose page the user went back from is dropped: when '
+            'the router next closes pages, the user is on the page below '
+            'them, and the page of the link does not open again.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureHomeScreen],
+        reason: 'A link whose page the user went back from is dropped: when '
+            'the router next closes pages, the page of the link does not '
+            'open again.',
       );
 
       // A link while the app runs, for the route below the target, with a
