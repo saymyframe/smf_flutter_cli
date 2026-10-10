@@ -3776,9 +3776,10 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     locationOf: (location) => location.path,
   );
 
-  /// How many calls of go_router the router is in whose location it asked
-  /// the guards about itself. The `redirect` of go_router runs within each
-  /// of them, and does not ask a second time.
+  /// How many calls of go_router the router is in that are its own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already. The `redirect` of
+  /// go_router runs within each of them, and does not ask the guards then.
   int _asking = 0;
 
   /// The request that waits for a flow that the guards opened over the page
@@ -3826,8 +3827,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     _own(() => config.pushReplacement<Object?>(location.path));
   }
 
-  /// Runs [navigate], a call of go_router with a location that the router
-  /// asked the guards about itself, or that they answered.
+  /// Runs [navigate], a call of go_router that is the router's own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already.
   R _own<R>(R Function() navigate) {
     _asking++;
     try {
