@@ -363,9 +363,9 @@ final class $_navigation<L> {
   /// What the router does in place of showing [location], whose route has
   /// the full name [route], or `null` to show it.
   ///
-  /// The router asks once for each request, before it shows the location:
-  /// the one the app starts on, each one that `go()`, `push()` or
-  /// `replace()` is asked to show, and each one from the platform.
+  /// The router asks about a location before it shows it: the one the app
+  /// starts on, each one that `go()`, `push()` or `replace()` is asked to
+  /// show, and each one from the platform.
   /// [onTopOf] are the full names of the routes of the pages that the user
   /// can get back to then, as the router tells [changed] of them. The
   /// router gives none when it has no page yet, and none for a location
@@ -397,9 +397,12 @@ final class $_navigation<L> {
   ///
   /// For a guard with routes the class remembers no location, only over
   /// how many pages its flow was opened, for [changed]. So the answer
-  /// depends on what the router did about the request before: asked twice
-  /// about one request, the class answers [$_nothing] for a flow that the
-  /// first answer opened.
+  /// depends on [onTopOf] and not on what the class answered before. Asked
+  /// again about a location that it answered [$_onTop] for, with a page of
+  /// the flow among [onTopOf], it answers [$_nothing] for a location that
+  /// the guard keeps the user from and `null` for a page of the flow. With
+  /// no pages it answers [$_onTop] again, so a router never asks with none
+  /// about a location that it shows over a page.
   ///
   /// What a gate made the class remember is forgotten when no gate keeps
   /// the user from the location and it is outside every flow, or in one
