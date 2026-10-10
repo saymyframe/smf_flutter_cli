@@ -462,6 +462,22 @@ void main() {
   paidNow.value = true;
   changed('paid holds, with a page over its flow', [over(lobby), over(plans), lobby]);
 
+  print('a second call for a location that the router shows');
+  memberNow.value = false;
+  changed('member stops', [lobby]);
+  asked('rooms.lobby', '/rooms', on: [home]);
+  asked('rooms.lobby', '/rooms');
+  asked('rooms.members', '/rooms/members', on: [lobby]);
+  asked('account.login', '/account/login');
+  memberNow.value = true;
+  changed('member holds', [over(login), lobby]);
+  introSeenNow.value = false;
+  asked('rooms.members', '/rooms/members?tab=a', on: [lobby]);
+  asked('intro.intro', '/intro');
+  introSeenNow.value = true;
+  changed('firstRun allows', [intro]);
+  asked('rooms.members', '/rooms/members?tab=a');
+
   print('a gate and a condition with one flow, in one turn');
   signedInNow.value = false;
   memberNow.value = false;
@@ -1206,6 +1222,37 @@ a gate of the first stage does not allow
   asked /rooms/lounge on rooms.lobby: /shop/plans over the page, while shop.plans
   member stops over the flow of paid: closes 1
   paid holds, with a page over its flow: closes 2
+''',
+      );
+    });
+
+    test(
+        'a second call for a location that the router shows, with no pages, '
+        'answers nothing and changes nothing: a router whose own navigation '
+        'asks again may let it', () async {
+      // A router such as one whose redirect runs for each location that it
+      // goes to asks a second time, with no pages: about a location that
+      // the class let the user see, about the target that it answered for
+      // a request, and about the location that it remembered for a gate.
+      // The flow that the first call opened is still the one whose request
+      // waits, and the location that a gate made the class remember is
+      // still remembered.
+      expect(
+        sectionOf(
+          await flow,
+          'a second call for a location that the router shows',
+        ),
+        '''
+  member stops: stays
+  asked /rooms on home.root: shows it
+  asked /rooms on no page: shows it
+  asked /rooms/members on rooms.lobby: $opensLogin
+  asked /account/login on no page: shows it
+  member holds: closes 1
+  asked /rooms/members?tab=a on rooms.lobby: /intro
+  asked /intro on no page: shows it
+  firstRun allows: /rooms/members?tab=a
+  asked /rooms/members?tab=a on no page: shows it
 ''',
       );
     });
