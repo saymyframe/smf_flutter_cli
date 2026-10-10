@@ -238,9 +238,16 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// The provider asks once for each request. The class remembers nothing
   /// of a request that it answers `ShowOver` for, so a second call for the
-  /// same request finds the flow open and answers `ShowNothing`. A router that
-  /// asks again inside its own navigation, as one whose redirect runs for
-  /// each location that it goes to, keeps that second call from the class.
+  /// same request finds the flow open and answers `ShowNothing`. A router
+  /// that asks again inside its own navigation, as one whose redirect runs
+  /// for each location that it goes to, keeps that second call from the
+  /// class.
+  ///
+  /// A provider that has no page yet may have no stack to push on, and no
+  /// page to replace. It may then take each request as `go()` to its
+  /// location, which takes the place of the stack as a location from the
+  /// platform does: it asks about it once, with no pages, and such a
+  /// `push()` completes with `null` at once.
   ///
   /// When the answer is `null`, the provider shows the location. Otherwise
   /// it never builds the screen of that location, and the listeners of
