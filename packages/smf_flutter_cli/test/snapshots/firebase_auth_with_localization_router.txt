@@ -2888,8 +2888,8 @@ Future<void> _checkCli(String project) async {
     if (found < number) {
       throw _Stop(
         'The Firebase CLI of this machine is ${version[0]!.trim()}, and '
-        'enabling sign-in methods needs $_firstCli or later. Update it with "npm '
-        'install -g firebase-tools" if npm installed it, or see '
+        'enabling sign-in methods needs $_firstCli or later. Update it with '
+        '"npm install -g firebase-tools" if npm installed it, or see '
         'https://firebase.google.com/docs/cli#update-cli.\n'
         '${_inConsole(project)}',
       );
