@@ -23,6 +23,16 @@
 // screen, the user is on that same page, and no page of the sign-in is
 // left.
 //
+// A link to a screen of the sign-in, a location that the platform asks the
+// app for, depends on who uses the app. With nobody signed in, an app that
+// asks for an account shows the sign-in in place of its screens, as before
+// the link. In an app that everyone may use, a user without an account
+// gets the screen of the link over the screen that the app starts on: the
+// sign-in, or the screen that creates an account without the sign-in below
+// it. The back button of the system leads into the app, a second link to
+// the screen on top leaves it with what the user typed, and after a
+// sign-in there the user is on the screen that the app starts on.
+//
 // The screens only change the session of the app: the router of the app,
 // whichever module provides it, shows them and leaves them, as the router
 // role says of the guards of the routes. The matrix writes of_app.dart next
@@ -34,6 +44,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
+import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
 
 import '../sign_in_mocks.dart';
@@ -112,6 +123,11 @@ Future<void> _asksForAccount(WidgetTester tester) async {
     reason: 'On its first launch, the app has nobody signed in.',
   );
   _expectSignInAlone('On its first launch');
+
+  // A link to the sign-in changes nothing: the gate shows it in place of
+  // every screen already.
+  await followLink(tester, const SignInSignInLocation());
+  _expectSignInAlone('After a link to the sign-in, with nobody signed in');
 
   // The sign-in leads to its two other screens, and each leads back.
   await tester.tap(otherScreenAction);
@@ -435,6 +451,110 @@ Future<void> _opensForEveryone(WidgetTester tester) async {
     reason: 'Once the user has signed in, the router has closed the page of '
         'the sign-in, and the user is on the page that it was opened over, '
         'with the pages that were below it.',
+  );
+
+  await _signOut(tester);
+  await _followsLinks(tester, uid);
+}
+
+/// A user without an account follows links to the screens of the sign-in,
+/// in an app that everyone may use, and signs in to the account of the
+/// test, whose id is [uid], on the sign-in that a link opened.
+///
+/// The flow of the guard of the account is not over for such a user, so its
+/// pages show. A location from the platform takes the place of the stack,
+/// which would leave a page of the sign-in alone, with no way back into
+/// the app: the router shows it over the screen that the app starts on.
+Future<void> _followsLinks(WidgetTester tester, String? uid) async {
+  _expectApp('After a sign-out, before a link');
+  final couldPop = rootCanPop(tester);
+  await followLink(tester, const SignInSignInLocation());
+  if (signInScreen.evaluate().isEmpty) {
+    await expectRouterTakesNoLinks(
+      tester,
+      'For a link to the sign-in, for a user without an account',
+    );
+    return;
+  }
+  expect(
+    (
+      signInScreen.evaluate().length,
+      builtStartScreen.evaluate().length,
+      rootCanPop(tester),
+    ),
+    (1, 1, true),
+    reason: 'A link to the sign-in, for a user without an account, shows '
+        'the sign-in over the screen that the app starts on, which is '
+        'built below it, with a way back into the app.',
+  );
+  expect(
+    await pressSystemBack(tester),
+    isTrue,
+    reason: 'The app handles the back button of the system on a sign-in '
+        'that a link opened: it does not close the app.',
+  );
+  _expectApp('After the back button of the system on that sign-in');
+
+  await followLink(tester, const SignInSignUpLocation());
+  expect(
+    (
+      signUpScreen.evaluate().length,
+      builtSignInScreen.evaluate().length,
+      builtStartScreen.evaluate().length,
+    ),
+    (1, 0, 1),
+    reason: 'A link to the screen that creates an account shows it over '
+        'the screen that the app starts on alone: the sign-in is not built '
+        'below it.',
+  );
+  expect(
+    await pressSystemBack(tester),
+    isTrue,
+    reason: 'The app handles the back button of the system on a screen '
+        'that creates an account that a link opened.',
+  );
+  _expectApp('After the back button of the system on that screen');
+
+  // A second link to the screen on top leaves it as it is.
+  await followLink(tester, const SignInSignInLocation());
+  await fill(tester, email: _email);
+  final opened = tester.element(signInScreen);
+  await followLink(tester, const SignInSignInLocation());
+  expect(
+    (
+      identical(tester.element(signInScreen), opened),
+      anySignInScreen.evaluate().length,
+      find
+          .descendant(of: emailField, matching: find.text(_email))
+          .evaluate()
+          .length,
+      builtStartScreen.evaluate().length,
+    ),
+    (true, 1, 1, 1),
+    reason: 'A second link to the sign-in while it is on top leaves the '
+        'screen as it is, with what the user typed, over the screen that '
+        'the app starts on.',
+  );
+
+  // A sign-in there closes the flow: the user is in the app.
+  await fill(tester, password: _password);
+  await tapInRealTime(
+    tester,
+    submitButton,
+    until: () => appSession.hasAccount.value,
+  );
+  expect(
+    (sessionNow(), appSession.value.uid),
+    ('the account of $_email', uid),
+    reason: 'The sign-in that a link opened signs the user in to the '
+        'account, through the session of the app.',
+  );
+  _expectApp('Once a user has signed in on a sign-in that a link opened');
+  expect(
+    rootCanPop(tester),
+    couldPop,
+    reason: 'Once that user has signed in, no page of the link is left '
+        'over the screen that the app starts on.',
   );
 }
 

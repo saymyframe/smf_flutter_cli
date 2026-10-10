@@ -50,6 +50,12 @@ final Finder anySignInScreen = find.byWidgetPredicate(
 /// The screen that the app starts on, also below another screen.
 final Finder builtStartScreen = find.byType(startScreen, skipOffstage: false);
 
+/// The screen of the sign-in itself, also below another screen.
+final Finder builtSignInScreen = find.byType(
+  SignInScreen,
+  skipOffstage: false,
+);
+
 /// The texts of the module in the language that the device asks for (see
 /// [useLanguage]), each by its name in the module.
 Map<String, String> texts = signInTexts.values.first;
@@ -178,9 +184,25 @@ Future<void> pushSignIn(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Asks the router for each of the three routes of the sign-in in turn, in
-/// place of the stack, as a link to it does, and waits for the screen after
-/// each.
+/// Has the platform ask the app for [location], as a link to it does while
+/// the app runs, and waits for the screen.
+Future<void> followLink(WidgetTester tester, AppLocation location) async {
+  await tester.binding.handlePushRoute(location.path);
+  await tester.pumpAndSettle();
+}
+
+/// Presses the back button of the system and waits for the screen. Returns
+/// whether the app handled the press: one that it does not handle closes
+/// the app.
+Future<bool> pressSystemBack(WidgetTester tester) async {
+  final handled = await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+  return handled;
+}
+
+/// Asks for each of the three routes of the sign-in in turn, as the code of
+/// a page does with go(), in place of the stack, and as the platform does
+/// for a link, and waits for the screen after each.
 Future<void> followLinksToSignIn(WidgetTester tester) async {
   for (final AppLocation location in const [
     SignInSignInLocation(),
@@ -189,6 +211,27 @@ Future<void> followLinksToSignIn(WidgetTester tester) async {
   ]) {
     navigatorOf(tester).go(location);
     await tester.pumpAndSettle();
+    await followLink(tester, location);
+  }
+}
+
+/// Checks that the router of the app takes no location from the platform,
+/// which the router role lets a router do, once it did not show the
+/// sign-in for a link to it, [when]: asked by the platform for another
+/// page of the app, whose route asks for nothing, it does not show that
+/// page either. A router that takes such locations shows the sign-in for a
+/// link to it, for a user without an account.
+Future<void> expectRouterTakesNoLinks(WidgetTester tester, String when) async {
+  for (final (:location, :screen) in otherPages) {
+    await followLink(tester, location);
+    expect(
+      find.byType(screen),
+      findsNothing,
+      reason: '$when, a router that takes locations from the platform, as '
+          'this one does for ${location.path}, shows the sign-in over the '
+          'screen that the app starts on. Only a router that takes none '
+          'leaves the user where they are.',
+    );
   }
 }
 
