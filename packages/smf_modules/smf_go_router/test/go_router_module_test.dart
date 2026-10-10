@@ -332,7 +332,12 @@ class _GoAppRouter {
       case ShowNothing():
         drop?.call();
       case ShowOver(location: final target, :final flow):
-        _open(target, flow, again: again, drop: drop);
+        if (config.routerDelegate.currentConfiguration.isError) {
+          config.go(location.path);
+          drop?.call();
+        } else {
+          _open(target, flow, again: again, drop: drop);
+        }
     }
     return true;
   }
@@ -1664,7 +1669,7 @@ void main() {
           // What go_router parses itself, and asks about in its redirect:
           // the request of a location from the platform that the router
           // makes again, and a location that is asked for before go_router
-          // has a page.
+          // has a page, or on its error screen when a flow would open.
           'go in _redirect',
           'go in _redirected',
           'go in _guardsChanged',

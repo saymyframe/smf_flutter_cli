@@ -3892,7 +3892,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   ///
   /// Before go_router has a page, it has no stack to push on and no page to
   /// replace: it gets the location as [go] gives it one, and asks the
-  /// guards about it in its `redirect`.
+  /// guards about it in its `redirect`. On its error screen, it has no page
+  /// of a route to open the target of a guard over, so it gets the location
+  /// that way too, and the target opens over `/` in place of that screen.
   bool _redirected(
     AppLocation location, {
     required void Function() again,
@@ -3918,7 +3920,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case ShowNothing():
         drop?.call();
       case ShowOver(location: final target, :final flow):
-        _open(target, flow, again: again, drop: drop);
+        if (config.routerDelegate.currentConfiguration.isError) {
+          config.go(location.path);
+          drop?.call();
+        } else {
+          _open(target, flow, again: again, drop: drop);
+        }
     }
     return true;
   }

@@ -140,6 +140,10 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// has a page, it has no stack to push on and no page to replace: `go()`,
 /// `push()` and `replace()` give it the location as `go()` does, the
 /// `redirect` asks about it, and such a `push()` completes with `null`.
+/// On its error screen, go_router has no page of a route to open a flow
+/// over. When the role answers a request there with a flow, the router
+/// gives go_router the location the same way, and the flow opens over `/`
+/// in place of the error screen.
 ///
 /// The router listens to `guardChanges` itself. When a guard starts or
 /// stops allowing, it tells the role of the pages that pushes showed, the
