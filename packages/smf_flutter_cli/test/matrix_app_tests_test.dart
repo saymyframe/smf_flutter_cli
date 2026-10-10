@@ -122,12 +122,18 @@ const _everyModule = [
 ];
 
 /// The apps of the sign-in of the matrix of the CLI: one for each state
-/// manager, with the localization and without.
-const _signIn = [
-  'sign_in (bloc) with localization',
-  'sign_in (riverpod) with localization',
+/// manager, with the localization and without. Each has a settings screen,
+/// which the module requires for the entry of the account.
+const List<String> _signIn = [
+  ..._localizedSignIn,
   'sign_in (bloc)',
   'sign_in (riverpod)',
+];
+
+/// Those of them with the localization.
+const _localizedSignIn = [
+  'sign_in (bloc) with localization',
+  'sign_in (riverpod) with localization',
 ];
 
 /// The codes of the languages of the file of the texts of a module that
@@ -1364,6 +1370,7 @@ void main() {
       [
         'settings with localization',
         'material_theme with settings_screen, localization',
+        ..._localizedSignIn,
         ..._everyModule,
       ],
     );
@@ -1998,6 +2005,7 @@ void main() {
 
     final screens = <String, String>{};
     final others = <String, String>{};
+    final settings = <String>{};
     final languages = <String, List<String>>{};
     for (final app in applies) {
       final files = test.generatedFiles!(app, 'my_app');
@@ -2008,8 +2016,47 @@ void main() {
       expect(errors, isEmpty, reason: app.name);
       expect(
         index.declarations.map((declaration) => declaration.name),
-        ['startScreen', 'otherPages', 'signInTexts'],
+        [
+          'startScreen',
+          'otherPages',
+          'settingsLocation',
+          'settingsScreen',
+          'accountEntry',
+          'signInTexts',
+        ],
         reason: app.name,
+      );
+      // The settings screen, as the settings screen role finds it in the
+      // app, and the entry that the module gave the role, each from its
+      // file with a prefix of its own.
+      final input = settingsScreenRole.hookInput(app.hook!);
+      final screen = settingsScreenRole.screenIn(input)!;
+      final entry = settingsScreenRole
+          .entriesIn(input)
+          .singleWhere((entry) => entry.widget.name == 'AccountSetting')
+          .widget;
+      expect(
+        {
+          for (final import in index.imports)
+            if (import.prefix case 'settings' || 'entry')
+              import.prefix: import.uri,
+        },
+        {
+          'entry': entry.import!.resolveUri('my_app'),
+          'settings': screen.route.screen.import.resolveUri('my_app'),
+        },
+        reason: app.name,
+      );
+      settings.add(
+        [
+          for (final name in [
+            'AppLocation settingsLocation',
+            'Type settingsScreen',
+            'Type accountEntry',
+          ])
+            RegExp('^const $name = (.+);\$', multiLine: true)
+                .firstMatch(text)![1],
+        ].join(', '),
       );
       final import =
           index.imports.singleWhere((import) => import.prefix == 'screen');
@@ -2021,15 +2068,19 @@ void main() {
               .map((match) => '${match[1]} ${match[2]}')
               .join(', ');
     }
-    // Another page of the app for a user to be on: the settings screen in
-    // the apps with every module, whose other routes are the screen that
-    // the app starts on and those in the flows of the guards, and none in
-    // an app of the module alone.
+    // Another page of the app for a user to be on: the settings screen,
+    // which every app with the module has. The other routes are the screen
+    // that an app with every module starts on, those in the flows of the
+    // guards, and the screen of the account, which asks for an account.
     expect(others, {
-      for (final name in _signIn) name: '',
-      for (final name in _everyModule)
+      for (final name in [..._signIn, ..._everyModule])
         name: 'SettingsSettingsLocation SettingsScreen',
     });
+    // The settings screen and the entry of the account are the same in
+    // every app of the matrix, whose settings screen is that of one module.
+    const everywhere = 'SettingsSettingsLocation(), settings.SettingsScreen, '
+        'entry.AccountSetting';
+    expect(settings, {everywhere});
     expect(screens, {
       // No route can start the app, since those of the sign-in cannot.
       for (final name in _signIn)
@@ -2054,14 +2105,54 @@ void main() {
       'in an app without the role; its files look up only texts of the '
       'module, and have a text for every reason of a failure', () {
     final test = named('sign_in');
-    String textsOf({List<String>? languages}) => test.generatedFiles!(
+    // The settings screen of a module of the test, and the entry that the
+    // sign-in module gives it.
+    const options = ModuleOrigin(ModuleId('options'));
+    final entry = settingsScreenRole
+        .data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'AccountSetting',
+              import: ImportRef.app('features/sign_in/account_setting.dart'),
+            ),
+          ),
+        )
+        .withOrigin(const ModuleOrigin(ModuleId('sign_in')));
+    final screen = [
+      routerRole
+          .data(
+            const RoutesData([
+              Route(
+                '/options',
+                name: 'options',
+                screen: ScreenRef(
+                  'OptionsScreen',
+                  import: ImportRef.app('features/options/options_screen.dart'),
+                ),
+              ),
+            ]),
+          )
+          .withOrigin(options),
+      settingsScreenRole
+          .data(const SettingsScreenRoute('options'))
+          .withOrigin(options),
+    ];
+    String textsOf({
+      List<String>? languages,
+      List<RoleData<Object>>? entries,
+    }) =>
+        test.generatedFiles!(
           MatrixApp(
             'texts',
             const [ModuleId('sign_in')],
             hook: RoleHookRequest(
-              data: const [],
+              data: [
+                ...screen,
+                ...entries ?? [entry],
+              ],
               presentRoles: {
                 routerRole,
+                settingsScreenRole,
                 if (languages != null) localizationRole,
               },
               context: ContractHarness.defaultContext,
@@ -2106,6 +2197,54 @@ void main() {
     final plain = textsOf();
     expect(_languagesOf(plain), ['en']);
     expect(textsIn(plain, 'en'), english);
+    // The settings screen of the module of the test, and the entry of the
+    // account among those of other modules: the one that the sign-in module
+    // gave the role.
+    final other = settingsScreenRole
+        .data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'FeedSetting',
+              import: ImportRef.app('features/options/feed_setting.dart'),
+            ),
+          ),
+        )
+        .withOrigin(options);
+    expect(
+      textsOf(entries: [other, entry, other]),
+      allOf(
+        contains(
+          "import 'package:my_app/features/sign_in/account_setting.dart' "
+          'as entry;\n',
+        ),
+        contains(
+          "import 'package:my_app/features/options/options_screen.dart' "
+          'as settings;\n',
+        ),
+        contains(
+          'const AppLocation settingsLocation = OptionsOptionsLocation();\n',
+        ),
+        contains('const Type settingsScreen = settings.OptionsScreen;\n'),
+        contains('const Type accountEntry = entry.AccountSetting;\n'),
+      ),
+    );
+    // The test needs that one entry.
+    for (final (entries, count) in [
+      (<RoleData<Object>>[other], 0),
+      ([entry, other, entry], 2),
+    ]) {
+      expect(
+        () => textsOf(entries: entries),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The module sign_in gives the settings screen of texts $count '
+                'entries, rather than the entry of the account alone.',
+          ),
+        ),
+      );
+    }
 
     // The files of the test look each text up by its name, texts['name']
     // or text('name'), and failureTextOf() of app.dart names the text of
@@ -2166,6 +2305,7 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
+        ..._signIn,
         ..._everyModule,
       ],
     );
@@ -2174,11 +2314,13 @@ void main() {
     expect(settings.startProbe, isNull);
     // The entries of each app, as the role gives them: none in the app of
     // the settings module alone, whose modules have no setting; the entry
-    // of the theme mode, which the template of the theme role contributes,
-    // in the apps with the theme; and the setting of the language, which
-    // the template of the localization role contributes, in the apps with
-    // the localization, after that of the theme, as the modules that
-    // provide the two roles are in the list of the CLI.
+    // of the account, which the sign-in module gives the role, in the apps
+    // with that module, before the entries of the templates of the roles;
+    // the entry of the theme mode, which the template of the theme role
+    // contributes, in the apps with the theme; and the setting of the
+    // language, which the template of the localization role contributes, in
+    // the apps with the localization, after that of the theme, as the
+    // modules that provide the two roles are in the list of the CLI.
     List<SettingsEntry> entriesOf(MatrixApp app) =>
         settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
     expect(
@@ -2194,8 +2336,12 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
+        for (final app in _localizedSignIn)
+          app: ['AccountSetting', 'LanguageSetting'],
+        'sign_in (bloc)': ['AccountSetting'],
+        'sign_in (riverpod)': ['AccountSetting'],
         for (final app in _everyModule)
-          app: ['ThemeModeSetting', 'LanguageSetting'],
+          app: ['AccountSetting', 'ThemeModeSetting', 'LanguageSetting'],
       },
     );
 
@@ -2640,6 +2786,7 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
+        ..._signIn,
         ..._everyModule,
       ],
     );
@@ -2656,7 +2803,12 @@ void main() {
 
     expect(
       withoutRole.map((app) => app.name),
-      ['settings', 'material_theme with settings_screen'],
+      [
+        'settings',
+        'material_theme with settings_screen',
+        'sign_in (bloc)',
+        'sign_in (riverpod)',
+      ],
     );
     for (final app in withoutRole) {
       final files = settings.generatedFiles!(app, 'my_app');
@@ -2711,6 +2863,7 @@ void main() {
         [
           'settings with localization',
           'material_theme with settings_screen, localization',
+          ..._localizedSignIn,
           ..._everyModule,
         ],
         reason: languages,
@@ -2849,7 +3002,11 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
-        for (final app in _everyModule) app: (2, true),
+        // The entry of the account, and the setting of the language.
+        for (final app in _localizedSignIn) app: (2, false),
+        'sign_in (bloc)': (1, false),
+        'sign_in (riverpod)': (1, false),
+        for (final app in _everyModule) app: (3, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {

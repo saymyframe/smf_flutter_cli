@@ -248,11 +248,12 @@ void main() {
         'shared_preferences, onboarding, firebase_core, '
         'firebase_crashlytics, firebase_analytics, firebase_auth, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
-    // of the auth role and its Firebase, and the router.
+    // of the auth role and its Firebase, the settings screen, which has
+    // the entry of the account, and the router.
     String signIn(String stateManager, {bool localized = false}) => [
           'sign_in ($stateManager)${localized ? ' with localization' : ''} ',
           '(sign_in, ${localized ? 'gen_l10n, ' : ''}flutter_core, ',
-          'firebase_auth, firebase_core, go_router, $stateManager',
+          'firebase_auth, firebase_core, settings, go_router, $stateManager',
           '${localized ? ', shared_preferences' : ''})',
         ].join();
     // The app of Firebase Authentication with the router in another mode of
