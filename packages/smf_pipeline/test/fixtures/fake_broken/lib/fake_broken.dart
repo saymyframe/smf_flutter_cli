@@ -196,13 +196,13 @@ final class BrokenModule extends SmfModule {
             '        break;\n'
             '      case ShowInstead(:final location):\n'
             '        _go(location);\n'
-            '      case ClosePages(:final pages):\n'
-            '        _close(pages);\n'
+            '      case ClosePages(:final pages, :final dropsRequest):\n'
+            '        _close(pages, dropsRequest: dropsRequest);\n'
             '    }\n',
         // It still tells an answer that closes pages from the others, and
         // closes none of them.
         '    if (_guards.changed(_pages) is ClosePages<AppLocation?>) '
-            '_close(0);\n',
+            '_close(0, dropsRequest: false);\n',
       ),
     ],
   );

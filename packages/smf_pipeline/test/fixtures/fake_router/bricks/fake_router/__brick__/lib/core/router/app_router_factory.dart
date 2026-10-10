@@ -127,8 +127,14 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   /// Shows [location] in place of the whole stack and of the stacks of
   /// every branch of the main navigation, each of which is back on its
-  /// destination; `null` is the fallback screen.
+  /// destination; `null` is the fallback screen. The push of each page that
+  /// leaves completes with `null`, so [location] is no page that a push
+  /// showed, as the target of a guard is that was open over a page.
   void _go(AppLocation? location) {
+    for (final result in _results.values) {
+      result.complete(null);
+    }
+    _results.clear();
     _stack.clear();
     for (final (index, branch) in _branches.indexed) {
       branch
@@ -196,17 +202,18 @@ final class _FixtureDelegate extends RouterDelegate<Object>
         break;
       case ShowInstead(:final location):
         _go(location);
-      case ClosePages(:final pages):
-        _close(pages);
+      case ClosePages(:final pages, :final dropsRequest):
+        _close(pages, dropsRequest: dropsRequest);
     }
   }
 
   /// Closes the [count] pages on top, each of which a push showed, whatever
   /// the navigator shows over them, and completes their pushes with `null`.
-  /// Then it makes the request that waits again, if no page of its flow is
-  /// left. The listeners of the screen hear of the page that the user ends
-  /// on when the router next builds its pages.
-  void _close(int count) {
+  /// Then it drops the request that waits, with [dropsRequest], or else
+  /// makes it again, if no page of its flow is left. The listeners of the
+  /// screen hear of the page that the user ends on when the router next
+  /// builds its pages.
+  void _close(int count, {required bool dropsRequest}) {
     final waiting = _waiting;
     _waiting = null;
     for (var closed = 0; closed < count; closed++) {
@@ -214,7 +221,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       _results.remove(stack.removeLast())?.complete(null);
     }
     if (waiting != null) {
-      if (_pages.any((page) => waiting.flow.contains(page.route))) {
+      if (dropsRequest) {
+        waiting.drop?.call();
+      } else if (_pages.any((page) => waiting.flow.contains(page.route))) {
         _waiting = waiting;
       } else {
         waiting.again();
