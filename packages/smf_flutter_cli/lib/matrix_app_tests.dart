@@ -575,8 +575,9 @@ $ofDevice};
 ///   same in every mode. When a call completes, the user of the service is
 ///   its result; signing up creates an account, whose user has the same id
 ///   each time; a wrong password and an address without an account fail
-///   alike; the user of a call replaces the user who was signed in; an
-///   anonymous user keeps the id with an account; deleting removes the
+///   alike; a call that fails leaves whoever is signed in; the user of a
+///   call replaces the user who was signed in; each anonymous user has an
+///   id of its own, and keeps it with an account; deleting removes the
 ///   account; a call for the user who is signed in fails when nobody is;
 ///   and the stream of the changes tells every listener of each change,
 ///   once the user has changed;
@@ -587,10 +588,11 @@ $ofDevice};
 ///   change that none of its calls made, and only an app in the mode
 ///   `anonymous` signs a user in when the user comes back to it;
 /// - the next start, `initAuth()` again, has the user of the device as soon
-///   as it is over, and so has a session of the test that never had a user;
-///   a start that finds nobody has nobody, and in the mode `anonymous` a
-///   new anonymous user; and the account of a user whom a start found can
-///   be deleted, at the latest once the user has signed in again;
+///   as it is over, after a sign-up, a sign-in and a link, and so has a
+///   session of the test that never had a user; a start that finds nobody
+///   has nobody, and in the mode `anonymous` a new anonymous user, also
+///   after a deletion; and the account of a user whom a start found can be
+///   deleted, at the latest once the user has signed in again;
 /// - an account that is signed up before the app starts is signed in when
 ///   the start-up is over, as the mocks of a module with a guard that asks
 ///   for an account rely on.
