@@ -135,13 +135,16 @@ enum AuthMode {
 ///
 /// ## What a provider keeps to
 ///
-/// The contract of `AuthService` is in [serviceFile]. In short:
+/// The contract of `AuthService` is in [serviceFile]. It is the same in
+/// every mode of the app, whatever the provider renders by the mode. In
+/// short:
 /// - the function of the implementation returns a service whose
 ///   `currentUser` is the user of the device already, without a request to
 ///   the server, and it may be called again;
 /// - when a call completes, `currentUser` is its result, and `userChanges`
-///   tells of every change, also of one that no call made. An error that
-///   the stream sends changes nothing: the session reports it with
+///   tells of every change, also of one that no call made. When it tells
+///   of a user, `currentUser` is that user. An error that the stream sends
+///   changes nothing: the session reports it with
 ///   `FlutterError.reportError` and goes on listening;
 /// - `signIn` is also called while a user is signed in, an anonymous one
 ///   or the user of another account, and `signUp` while the user of
@@ -152,10 +155,20 @@ enum AuthMode {
 ///   an address without an account are both `invalidCredentials`, and
 ///   `sendPasswordReset` completes whether the address has an account or
 ///   not. `notConfigured` has the provider's `developerHint`;
-/// - `linkPassword` keeps the id of the user;
-/// - `deleteAccount` may fail with `recentSignInRequired`, and succeeds
-///   once the user has signed in again, in whichever way. The role has no
-///   call that asks for the password again;
+/// - `signUp` and `linkPassword` with an address that has an account fail
+///   with `emailInUse` and change nothing;
+/// - a call that fails leaves the user who is signed in as that user was,
+///   but for the call of the last point: an anonymous user stays signed in
+///   when `linkPassword` fails, and so does whoever is signed in when
+///   `signIn` or `signUp` fails;
+/// - `signInAnonymously` creates a user with an id of its own, and
+///   `linkPassword` keeps the id of the user;
+/// - `deleteAccount` succeeds for a user who has just signed in, and for
+///   an anonymous user who was just created. For a user who signed in
+///   longer ago, such as one whom the service found on the device, it may
+///   fail with `recentSignInRequired`, and succeeds once the user has
+///   signed in again, in whichever way. The role has no call that asks for
+///   the password again;
 /// - a call for a user whose session has ended on the server signs that
 ///   user out on the device and fails with `recentSignInRequired`.
 ///

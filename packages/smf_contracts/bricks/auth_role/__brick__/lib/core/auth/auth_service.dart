@@ -84,7 +84,8 @@ final class AuthFailure implements Exception {
 /// signs in through `appSession` of `app_session.dart`, which calls this
 /// service and does what is the same with every provider.
 ///
-/// Every implementation keeps to this:
+/// Every implementation keeps to this, in every mode of the app, whatever
+/// the provider generates for the mode:
 /// - The service has [currentUser] from the moment it is created: the user
 ///   who was signed in on this device when the app last ran, without a
 ///   request to the server. The function that creates the service may be
@@ -92,10 +93,15 @@ final class AuthFailure implements Exception {
 ///   signed in now.
 /// - When the future of a call completes, [currentUser] is the result of
 ///   the call. [userChanges] tells of every change of [currentUser], also
-///   of one that no call here made.
+///   of one that no call here made, and when it tells of a user,
+///   [currentUser] is that user.
 /// - A call fails only with an [AuthFailure], and every call ends: when the
 ///   server does not answer, its future completes with
 ///   [AuthFailureReason.network].
+/// - A call that fails leaves the user who is signed in as that user was:
+///   an anonymous user stays signed in when [linkPassword] fails, and so
+///   does whoever is signed in when [signIn] or [signUp] fails. The one
+///   exception is a call for a user whose session has ended on the server.
 /// - [linkPassword] and [deleteAccount] are calls for the user who is
 ///   signed in. Made when nobody is signed in, or when the session of that
 ///   user has ended on the server, such a call fails with
@@ -106,7 +112,8 @@ abstract interface class AuthService {
   AuthUser? get currentUser;
 
   /// Tells of each change of [currentUser], once [currentUser] has changed:
-  /// a broadcast stream. It may also tell of a user who has not changed.
+  /// a broadcast stream. When it tells of a user, [currentUser] is that
+  /// user. It may also tell of a user who has not changed.
   ///
   /// An error that it sends changes nothing: the session reports it as an
   /// error of the app and goes on listening.
@@ -119,10 +126,14 @@ abstract interface class AuthService {
   ///
   /// It is also called while a user is signed in, an anonymous one or the
   /// user of another account: the user of this account then replaces that
-  /// user on the device.
+  /// user on the device. When it fails, that user stays signed in.
   Future<void> signIn({required String email, required String password});
 
   /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: that account keeps
+  /// its password, and whoever is signed in stays signed in.
   ///
   /// It is also called while the user of another account is signed in, and
   /// the user of the new account then replaces that user on the device.
@@ -132,9 +143,14 @@ abstract interface class AuthService {
   /// Gives the anonymous user who is signed in an account for [email] with
   /// [password]. The user keeps the [AuthUser.uid] and is no longer
   /// anonymous.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: the anonymous user
+  /// stays signed in, with the same id.
   Future<void> linkPassword({required String email, required String password});
 
-  /// Creates an anonymous user and signs in as that user.
+  /// Creates an anonymous user, with an id of its own, and signs in as that
+  /// user.
   Future<void> signInAnonymously();
 
   /// Sends the message with which the owner of the account of [email] sets
@@ -151,8 +167,11 @@ abstract interface class AuthService {
   /// Deletes the user who is signed in, an anonymous one too, and signs
   /// out.
   ///
-  /// It may fail with [AuthFailureReason.recentSignInRequired], and then
-  /// succeeds once the user has signed in again, in whichever way the
-  /// account allows.
+  /// It succeeds for a user who has just signed in, in whichever way, and
+  /// for an anonymous user who was just created. For a user who signed in
+  /// longer ago, such as one whom the service found on the device when it
+  /// was created, it may fail with
+  /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
+  /// user has signed in again, in whichever way the account allows.
   Future<void> deleteAccount();
 }
