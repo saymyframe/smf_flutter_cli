@@ -275,6 +275,91 @@ class _GoAppRouter {
     _nameOf(member)!: member.toSource(),
 };
 
+/// `_BackButton`, the dispatcher of the back button of the system of the
+/// router, which asks go_router to close the route on top only while
+/// go_router has a page of a route, and the root navigator otherwise, as on
+/// the error screen of go_router, where its delegate throws
+/// (https://github.com/flutter/flutter/issues/187616), as the analyzer
+/// prints its declaration.
+final String _expectedBackButton = parseString(
+  content: '''
+final class _BackButton extends RootBackButtonDispatcher {
+  _BackButton(this._router);
+
+  final GoRouter _router;
+
+  final Map<ValueGetter<Future<bool>>, ValueGetter<Future<bool>>> _asked = {};
+
+  @override
+  void addCallback(ValueGetter<Future<bool>> callback) => super.addCallback(
+    _asked[callback] = () {
+      final delegate = _router.routerDelegate;
+      if (delegate.currentConfiguration.matches.isNotEmpty) return callback();
+      return delegate.navigatorKey.currentState?.maybePop() ??
+          Future.value(false);
+    },
+  );
+
+  @override
+  void removeCallback(ValueGetter<Future<bool>> callback) =>
+      super.removeCallback(_asked.remove(callback) ?? callback);
+}
+''',
+).unit.declarations.single.toSource();
+
+/// The constructor of `_GoRouter` in an app without a main navigation and
+/// without guards, which takes the routes as `GoRouter()` does.
+const String _constructorOfRoutes = '''
+  _GoRouter({
+    required List<RouteBase> routes,
+    super.initialLocation,
+    super.observers,
+  }) : super.routingConfig(
+         routingConfig: ValueNotifier(RoutingConfig(routes: routes)),
+       );
+''';
+
+/// The constructor of `_GoRouter` in an app without a main navigation whose
+/// modules declare guards, which takes the redirect that asks them too.
+const String _constructorOfGuardedRoutes = '''
+  _GoRouter({
+    required List<RouteBase> routes,
+    required GoRouterRedirect redirect,
+    super.initialLocation,
+    super.observers,
+  }) : super.routingConfig(
+         routingConfig: ValueNotifier(
+           RoutingConfig(routes: routes, redirect: redirect),
+         ),
+       );
+''';
+
+/// The constructor of `_GoRouter` in an app with a main navigation, which
+/// takes the routes that go_router follows as `GoRouter.routingConfig()`
+/// does.
+const String _constructorOfRoutingConfig = '''
+  _GoRouter.routingConfig({
+    required super.routingConfig,
+    super.initialLocation,
+    super.observers,
+  }) : super.routingConfig();
+''';
+
+/// `_GoRouter`, the `GoRouter` of the app with [constructor], whose
+/// dispatcher of the back button of the system is a `_BackButton`, as the
+/// analyzer prints its declaration.
+String _expectedGoRouter(String constructor) => parseString(
+      content: '''
+final class _GoRouter extends GoRouter {
+$constructor
+  @override
+  BackButtonDispatcher get backButtonDispatcher => _backButton;
+
+  late final _BackButton _backButton = _BackButton(this);
+}
+''',
+    ).unit.declarations.single.toSource();
+
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
 
@@ -313,11 +398,12 @@ List<AgentNote> _notesOfModule(RenderedApp app) => [
 CompilationUnit _factoryOf(RenderedApp app) =>
     parseString(content: app.files[_factory]!.text).unit;
 
-/// The call that creates the `GoRouter` in [unit]: `GoRouter(...)`, or
-/// `GoRouter.routingConfig(...)` in an app with a main navigation.
+/// The call that creates the `GoRouter` in [unit], a `_GoRouter`:
+/// `_GoRouter(...)`, or `_GoRouter.routingConfig(...)` in an app with a
+/// main navigation.
 MethodInvocation _goRouterOf(CompilationUnit unit) {
-  final finder = _CallFinder('GoRouter');
-  final named = _CallFinder('routingConfig', target: 'GoRouter');
+  final finder = _CallFinder('_GoRouter');
+  final named = _CallFinder('routingConfig', target: '_GoRouter');
   unit
     ..accept(finder)
     ..accept(named);
@@ -546,6 +632,29 @@ void _expectPagesChanged(CompilationUnit unit) {
         ? _expectedPushMembers['_pagesChanged']
         : _expectedPagesChangedWithMainNavigation,
   );
+}
+
+/// Checks that the back button of the system reaches go_router in [unit]
+/// only while go_router has a page of a route, so that its delegate does
+/// not throw on its error screen
+/// (https://github.com/flutter/flutter/issues/187616): the router of the
+/// app is a `_GoRouter`, a `GoRouter` with [constructor] whose dispatcher of
+/// the button is a `_BackButton`, and nothing else creates a `GoRouter`.
+void _expectBackButton(CompilationUnit unit, String constructor) {
+  final classes = {
+    for (final declaration in unit.declarations.whereType<ClassDeclaration>())
+      declaration.namePart.typeName.lexeme: declaration.toSource(),
+  };
+  expect(classes['_GoRouter'], _expectedGoRouter(constructor));
+  expect(classes['_BackButton'], _expectedBackButton);
+  final plain = _CallFinder('GoRouter');
+  final named = _CallFinder('routingConfig', target: 'GoRouter');
+  unit
+    ..accept(plain)
+    ..accept(named);
+  expect([...plain.calls, ...named.calls], isEmpty);
+  // The one router of the app, which its root runs.
+  expect(_goRouterOf(unit), isNotNull);
 }
 
 /// Checks that the router of [unit] lets each push complete with the value
@@ -1114,7 +1223,12 @@ void main() {
       for (final name in _expectedRenewalMembers.keys) {
         expect(app.files[_factory]!.text, isNot(contains(name)), reason: name);
       }
-      expect(app.files[_factory]!.text, isNot(contains('RoutingConfig')));
+      // Only `_GoRouter` puts them into a `RoutingConfig`, which a class
+      // that extends `GoRouter` hands to it.
+      expect(
+        _routerClassOf(unit).toSource(),
+        isNot(contains('RoutingConfig')),
+      );
       expect(
         app.files[_factory]!.addedImports.map((added) => added.import.uri),
         isNot(contains(contains('/core/layout/'))),
@@ -1131,9 +1245,15 @@ void main() {
           .invocationsOf(name)
           .any((call) => arguments.every(call.namedArguments.contains));
 
-      // The one GoRouter, the config of the router of the app.
-      expect(index.invocationsOf('GoRouter'), hasLength(1));
-      expect(calls('GoRouter', ['initialLocation', 'routes']), isTrue);
+      // The one GoRouter, the config of the router of the app, which the
+      // file creates as a `_GoRouter`, a class of its own that extends it.
+      expect(index.invocationsOf('GoRouter'), isEmpty);
+      expect(index.invocationsOf('_GoRouter'), hasLength(1));
+      expect(calls('_GoRouter', ['initialLocation', 'routes']), isTrue);
+      expect(
+        _fieldOf(unit, 'config')!.fields.type!.toSource(),
+        'GoRouter',
+      );
       expect(
         index.declaration('_GoAppRouter')!.members.map((member) => member.name),
         contains('config'),
@@ -1222,6 +1342,13 @@ void main() {
         app.files[_factory]!.text,
         isNot(contains('_checkMainNavigation')),
       );
+    });
+
+    test(
+        'asks go_router to close the route on top only while go_router has a '
+        'page, so that the back button of the system throws nothing on its '
+        'error screen', () {
+      _expectBackButton(unit, _constructorOfRoutes);
     });
 
     test('asks no guards in an app without guards', () {
@@ -1345,6 +1472,12 @@ void main() {
       _expectPushResults(unit);
     });
 
+    test(
+        'still keeps the back button of the system from go_router while it '
+        'has no page, with a router that takes the redirect of the guards', () {
+      _expectBackButton(unit, _constructorOfGuardedRoutes);
+    });
+
     test('renders code that type-checks, with a main navigation too', () async {
       expect(await analysisProblems(app), isEmpty);
 
@@ -1359,6 +1492,7 @@ void main() {
       // The redirect that asks the guards is with the routes that go_router
       // follows, and stays when the router replaces the main navigation.
       expect(_argument(_goRouterOf(unit), 'redirect'), isNull);
+      _expectBackButton(unit, _constructorOfRoutingConfig);
       expect(
         _argument(_routingOf(unit), 'redirect')!.toSource(),
         '(context, state) => '
@@ -1462,8 +1596,10 @@ void main() {
         'it can replace the main navigation among them', () {
       final router = _goRouterOf(unit);
 
-      expect(router.target!.toSource(), 'GoRouter');
+      expect(router.target!.toSource(), '_GoRouter');
       expect(router.methodName.name, 'routingConfig');
+      // Which passes them on to go_router as they are.
+      _expectBackButton(unit, _constructorOfRoutingConfig);
       expect(_argument(router, 'routingConfig')!.toSource(), '_routes');
       expect(_argument(router, 'routes'), isNull);
       expect(_argument(router, 'redirect'), isNull);
@@ -1628,9 +1764,15 @@ void main() {
       // the main navigation.
       expect(
         index.invocationsOf('routingConfig').single.target,
-        'GoRouter',
+        '_GoRouter',
       );
       expect(text, contains('ValueNotifier<RoutingConfig>'));
+      // Which the constructor of that class passes on to go_router.
+      expect(
+        _expectedGoRouter(_constructorOfRoutingConfig),
+        contains('required super.routingConfig'),
+      );
+      _expectBackButton(unit, _constructorOfRoutingConfig);
       // And the pages that go_router had, which the router puts back.
       expect(
         [
@@ -1641,6 +1783,7 @@ void main() {
       );
       for (final name in [
         'StatefulShellRoute.indexedStack',
+        '_GoRouter',
         'GoRouter.routingConfig',
         'ValueNotifier<RoutingConfig>',
         'restore()',
@@ -1907,6 +2050,11 @@ void main() {
       expect(index.invocationsOf('_checkMainNavigation'), isEmpty);
       expect(index.invocationsOf('_renewMainNavigation'), isEmpty);
       expect(_goRouterOf(unit).target, isNull);
+      // The router takes the routes themselves, in the constructor that
+      // the note tells to give the routes that go_router follows instead.
+      _expectBackButton(unit, _constructorOfRoutes);
+      expect(firstDestinationAgentNote,
+          contains('the constructor of `_GoRouter`'));
       expect(index.declaration('_observers')?.kind, DeclarationKind.function);
       expect(_routesOf(unit).map((route) => route.path), ['/']);
       expect(
