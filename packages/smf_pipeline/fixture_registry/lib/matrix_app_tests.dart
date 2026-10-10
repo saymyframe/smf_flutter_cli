@@ -14,8 +14,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// contract they check with every provider: the router role and the layout
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
-/// role, and the app entry role, whose provider builds the root that
-/// follows the theme mode.
+/// role, the app entry role, whose provider builds the root that follows
+/// the theme mode, and the auth role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -273,6 +273,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeThemeModule.id),
         roles: {appEntryRole},
       ),
+      // Sign-in in the apps with the auth role, whichever module provides
+      // it, the test that the CLI keeps: in every app with the role, since
+      // it must hold in each mode of the role. Those are the apps of the
+      // fixture sign-in alone, one of each mode, and the apps with every
+      // module, which the matrix has once more for the other modes.
+      await authRoleAppTest(),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -297,6 +303,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       localizationRole,
       themeRole,
       appEntryRole,
+      authRole,
     },
   );
 }

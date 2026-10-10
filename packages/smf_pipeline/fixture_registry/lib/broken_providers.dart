@@ -70,13 +70,15 @@ const _appEntryBuildingRootOnce = BrokenModule(
 /// must fail on it in its app.
 final class BrokenProvider {
   /// Describes [module], which provides [role] with [bug]: in the app with
-  /// [module] and the modules [app], the tests of [failures] must fail.
+  /// [module] and the modules [app], generated with [roleOptions], the tests
+  /// of [failures] must fail.
   const BrokenProvider(
     this.module, {
     required this.role,
     required this.bug,
     required this.app,
     required this.failures,
+    this.roleOptions = const {},
   });
 
   /// The module with the bug.
@@ -102,6 +104,13 @@ final class BrokenProvider {
   /// the reason of its first failure. Every other test of the app must
   /// pass.
   final List<MatrixExpectedFailure> failures;
+
+  /// The values of role options by name that the app is generated with:
+  /// another value of a mode option of a role (see [RoleOption.mode]), for
+  /// a bug that the tests of the role show in full only in an app with that
+  /// value. None by default, so that each role chooses as it does for an
+  /// app that got no option.
+  final Map<String, String?> roleOptions;
 
   /// The fixture modules, with [module] in place of the other providers of
   /// [role]: the registry in which the contract harness checks [module]
@@ -142,11 +151,13 @@ final class BrokenProvider {
   }
 
   /// The app, named after [module]: of the apps with every module of
-  /// [modules], the one with the modules of [app].
+  /// [modules], the one with the modules of [app], generated with the
+  /// [roleOptions].
   MatrixFailingApp get failingApp => MatrixFailingApp(
         '${module.descriptor.id}',
         modules: modules,
         providers: app,
+        roleOptions: roleOptions,
         failures: failures,
       );
 }
@@ -903,6 +914,68 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.authRestoringUserLate,
+        role: authRole,
+        bug: 'Its function returns the service before it has read who is '
+            'signed in on the device: the service has nobody at first and '
+            'tells of that user a moment later, so a start of the app is '
+            'over without its user.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _nextStartTests,
+            'the next start of the app has the account that was signed in, '
+            'as soon as it is over',
+            _knownAtStart,
+          ),
+          MatrixExpectedFailure(
+            _nextStartTests,
+            'the next start of the app has the anonymous user who was signed '
+            'in, in every mode',
+            _knownAtStart,
+          ),
+          // The test expects the account right after the start, before it
+          // deletes it.
+          MatrixExpectedFailure(
+            _nextStartTests,
+            'the account of a user whom a start found on the device can be '
+            'deleted, at the latest once the user has signed in again',
+            _knownAtStart,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.authLinkingAsNewUser,
+        role: authRole,
+        bug: 'Its linkPassword() creates a new user for the account, rather '
+            'than giving the account to the anonymous user who is signed in: '
+            'the user of the account has another id.',
+        app: [],
+        // The session of an app in the mode anonymous gives an anonymous
+        // user the account on a sign-up, so there the test of the session
+        // fails on the bug too, next to the test of the service, which
+        // fails on it in every mode.
+        roleOptions: {'auth-mode': 'anonymous'},
+        failures: [
+          MatrixExpectedFailure(
+            'test/auth_role/auth_service_test.dart',
+            'an anonymous user has an id and no email address, and keeps the '
+                'id with an account',
+            'linkPassword() gives the anonymous user who is signed in an '
+                'account: the user keeps the id, is no longer anonymous and '
+                'has the email address.',
+          ),
+          MatrixExpectedFailure(
+            'test/auth_role/app_session_test.dart',
+            'the session of the app follows its user through a sign-up, a '
+                'sign-out, a sign-in and the deletion of the account, as the '
+                'mode of the app says',
+            'In the mode anonymous, a sign-up gives the anonymous user the '
+                'account: the user keeps the id.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '
@@ -1082,6 +1155,15 @@ const _probeTest = 'the probe of the role finds no problem';
 const _eachLanguageSupported =
     'For each language of the app, the root has a delegate of each kind of '
     'localizations that supports it.';
+
+/// The file of the tests of the next start of the auth role, and the
+/// reason of the expectation of each of them that a start of the app has
+/// the user of the device as soon as it is over.
+const _nextStartTests = 'test/auth_role/next_start_test.dart';
+const _knownAtStart =
+    'When the next start of the session is over, the session has the user '
+    'who was signed in on the device: who uses the app is known before the '
+    'first frame.';
 
 /// The app tests that the apps of the broken providers get: those of the
 /// apps of the fixture modules ([fixtureAppTests]) and those of the app of

@@ -3,15 +3,110 @@
 // only in its job with Flutter, which checks that they apply to some app
 // and that they check the contract of their roles with every provider
 // only at its end; these tests check the same without Flutter.
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
+
+/// A provider of the auth role for the test of the app test of the role,
+/// which applies to the apps with the role whichever module provides it: a
+/// service that has nobody signed in and takes no call.
+final class _SignInOfTest extends SmfModule {
+  const _SignInOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('sign_in_of_test');
+
+  static const _path = 'core/sign_in_of_test/sign_in_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import '../auth/auth_service.dart';
+
+AuthService createSignInOfTest() => const SignInOfTest();
+
+final class SignInOfTest implements AuthService {
+  const SignInOfTest();
+
+  @override
+  AuthUser? get currentUser => null;
+
+  @override
+  Stream<AuthUser?> get userChanges => const Stream.empty();
+
+  @override
+  Future<void> signIn({required String email, required String password}) =>
+      _refuse();
+
+  @override
+  Future<void> signUp({required String email, required String password}) =>
+      _refuse();
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) =>
+      _refuse();
+
+  @override
+  Future<void> signInAnonymously() => _refuse();
+
+  @override
+  Future<void> sendPasswordReset(String email) => _refuse();
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() => _refuse();
+
+  Future<void> _refuse() async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in that takes no call',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(authRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The service of the provider',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        authRole.data(
+          const RoleImplementation(
+            type: TypeRef('SignInOfTest', import: _file),
+            create: FactoryRef('createSignInOfTest', import: _file),
+          ),
+        ),
+      ];
+}
 
 /// The codes of the languages of the file of the texts of a module that
 /// the matrix writes for an app, [file], in the order of the file.
@@ -2651,5 +2746,69 @@ void main() {
         'every module (riverpod)': 'home.home',
       },
     );
+  });
+
+  test(
+      'the test of the auth role applies to the apps with the role, '
+      'whichever module provides it, in each mode of the role, and gets the '
+      'mode that the role chose for each: the first one in an app that got '
+      'no value of the option of the role', () async {
+    final authTest = await authRoleAppTest();
+    // No module of the CLI provides the role in the apps of its matrix, so
+    // the registry has a provider of the test.
+    const modules = <SmfModule>[FlutterCoreModule(), _SignInOfTest()];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+
+    expect(p.basename(authTest.directory), 'auth_role');
+    expect(Directory(authTest.directory).existsSync(), isTrue);
+    expect(authTest.roles, {authRole});
+    // The matrix writes no file for it, and it has neither mocks nor a
+    // probe for the start check.
+    expect(authTest.generatedFiles, isNull);
+    expect(authTest.mocks, isNull);
+    expect(authTest.startProbe, isNull);
+    expect(
+      {
+        for (final app in ofRole)
+          app.name: authTest.appliesTo(app) ? authTest.values!(app) : null,
+      },
+      {
+        // The app entry alone has no sign-in.
+        'flutter_core': null,
+        // The app of the provider is the app with every module of the
+        // registry too. It got no value of the option, so it is in the
+        // first mode.
+        'sign_in_of_test': {'auth_mode': 'required'},
+        'auth by sign_in_of_test --auth-mode=guest': {'auth_mode': 'guest'},
+        'auth by sign_in_of_test --auth-mode=anonymous': {
+          'auth_mode': 'anonymous',
+        },
+      },
+    );
+    for (final app in ofRole) {
+      expect(
+        app.createArguments('app_1', '/apps').where(
+              (argument) => argument.startsWith('--auth-mode'),
+            ),
+        [
+          if (app.modes['auth-mode'] case final mode?) '--auth-mode=$mode',
+        ],
+        reason: app.name,
+      );
+    }
+    // It selects its apps by the role, and reads the mode from the choice
+    // of the role, not from the name or the options of an app.
+    final tests = MatrixAppTests([authTest], testedRoles: {authRole});
+    expect(tests.roleProblems(modules, ofRole), isEmpty);
+    expect(tests.modeProblems(ofRole), isEmpty);
+    // No app of the modules of the CLI has the role yet.
+    expect(apps.where(authTest.appliesTo), isEmpty);
   });
 }

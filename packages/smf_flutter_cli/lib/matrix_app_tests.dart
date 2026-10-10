@@ -567,6 +567,52 @@ $ofDevice};
   };
 }
 
+/// The test of the auth role that the CLI keeps in its
+/// `app_tests/auth_role`, for the apps with the role, whichever module
+/// provides it, in each mode of the role. Each of its four files runs the
+/// start-up of the app once, with `bootstrap()`:
+/// - the service of the provider keeps the contract of `AuthService`, the
+///   same in every mode. When a call completes, the user of the service is
+///   its result; signing up creates an account, whose user has the same id
+///   each time; a wrong password and an address without an account fail
+///   alike; the user of a call replaces the user who was signed in; an
+///   anonymous user keeps the id with an account; deleting removes the
+///   account; a call for the user who is signed in fails when nobody is;
+///   and the stream of the changes tells every listener of each change,
+///   once the user has changed;
+/// - the session of the app does what the mode of the app says: the app is
+///   in the mode that the role chose, and without an account nobody uses it
+///   in the modes `required` and `guest`, and an anonymous user in the mode
+///   `anonymous`, who keeps the id with an account. The session follows a
+///   change that none of its calls made, and only an app in the mode
+///   `anonymous` signs a user in when the user comes back to it;
+/// - the next start, `initAuth()` again, has the user of the device as soon
+///   as it is over, and so has a session of the test that never had a user;
+///   a start that finds nobody has nobody, and in the mode `anonymous` a
+///   new anonymous user; and the account of a user whom a start found can
+///   be deleted, at the latest once the user has signed in again;
+/// - an account that is signed up before the app starts is signed in when
+///   the start-up is over, as the mocks of a module with a guard that asks
+///   for an account rely on.
+///
+/// The test knows only the role. The matrix fills in the mode of each app,
+/// which the test expects the app to be in: the choice of the role
+/// ([AuthRole.modeIn]), which an app that got no value of
+/// [AuthRole.modeOption] has too. So the same files hold in an app of every
+/// mode, and the test applies to every app with the role. No file expects
+/// anything of who is signed in right after the start-up, since the mocks
+/// of a module of the app may have signed a user up before it: each test
+/// signs out first and uses email addresses of its own. It has no probe for
+/// the start check: nobody can sign in on a device.
+Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_role',
+      appliesTo: (app) => app.hook!.presentRoles.contains(authRole),
+      values: (app) => {
+        'auth_mode': authRole.modeIn(authRole.hookInput(app.hook!)).name,
+      },
+      roles: {authRole},
+    );
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started
