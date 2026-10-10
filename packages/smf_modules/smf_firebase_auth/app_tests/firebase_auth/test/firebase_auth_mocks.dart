@@ -22,14 +22,16 @@
 // It answers at once, without a timer, so a call completes in a widget
 // test too. It keeps to what Firebase does where the app relies on it:
 // signing in and signing up replace the user who is signed in, an
-// anonymous user keeps the id with an account, and a wrong password and an
-// address without an account are answered alike. It differs in one thing:
-// the platform tells the plugin of each change of the user through a
-// stream, a moment after it answered the call that made the change, and
-// here it tells only of a change that a test makes with
-// [MockFirebaseAuth.signOutOnPlatform]. So the plugin has a user who was
-// deleted as its current one until the app signs out, which on a device
-// lasts only that moment.
+// anonymous sign-in while an anonymous user is signed in answers with that
+// user, an anonymous user keeps the id with an account, a wrong password
+// and an address without an account are answered alike, and the account of
+// a user whom the app found on the device is deleted only once that user
+// has signed in again. It differs in one thing: the platform tells the
+// plugin of each change of the user through a stream, a moment after it
+// answered the call that made the change, and here it tells only of a
+// change that a test makes with MockFirebaseAuth.signOutOnPlatform(). So
+// the plugin has a user who was deleted as its current one until the app
+// signs out, which on a device lasts only that moment.
 import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart'
     show InternalUserDetails, InternalUserInfo;
 // The codec of the messages and the class of an answer with a user.
