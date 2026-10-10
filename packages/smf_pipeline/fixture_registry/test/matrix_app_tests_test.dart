@@ -751,10 +751,49 @@ void main() {
       'layout_screens',
       'go_router_screens',
       'go_router_branches',
+      'go_router_conditions',
       'bottom_tabs_screens',
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the test of the conditions of go_router applies to the apps of '
+      'go_router with the tests of the conditions, whose helpers it uses', () {
+    final conditions = named('go_router_conditions');
+    final withConditions = apps.where(conditions.appliesTo).toList();
+
+    expect(withConditions, isNotEmpty);
+    for (final app in withConditions) {
+      expect(app.modules, contains(const ModuleId('go_router')));
+      // A guard of the app stands for a condition that its routes ask for.
+      final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
+      expect(
+        [
+          for (final guard in facade.guards)
+            if (guard.guard.condition case final condition?)
+              facade.routesAsking(condition).length,
+        ],
+        [isPositive],
+        reason: app.name,
+      );
+    }
+    expect(
+      appsOf(named('router_conditions')),
+      containsAll(appsOf(conditions)),
+    );
+    // And to each app of go_router with those tests.
+    expect(
+      appsOf(conditions),
+      [
+        for (final app in apps)
+          if (named('router_conditions').appliesTo(app) &&
+              app.modules.contains(const ModuleId('go_router')))
+            app.name,
+      ],
+    );
+    expect(conditions.roles, isEmpty);
   });
 
   test(
