@@ -378,13 +378,49 @@ void main() {
   memberNow.value = true;
   changed('member holds', login);
 
-  print('the user is elsewhere when the condition comes to hold');
+  print('the user moves on before the condition holds');
   memberNow.value = false;
   asked('rooms.members', '/rooms/members');
   asked('rooms.lobby', '/rooms');
   changed('a notification', lobby);
   memberNow.value = true;
   changed('member holds', lobby);
+
+  print('the user moves on, and a gate that brings the user back stops');
+  memberNow.value = false;
+  changed('member stops', lobby);
+  asked('rooms.members', '/rooms/members');
+  asked('rooms.lobby', '/rooms');
+  introSeenNow.value = false;
+  changed('firstRun stops', lobby);
+  introSeenNow.value = true;
+  changed('firstRun allows', intro);
+  memberNow.value = true;
+  changed('member holds', lobby);
+
+  print('the user moves on to a flow that is over');
+  memberNow.value = false;
+  changed('member stops', lobby);
+  asked('rooms.members', '/rooms/members');
+  asked('intro.intro', '/intro');
+  memberNow.value = true;
+  changed('member holds', home);
+
+  print('a page of a flow that is over below another page');
+  memberNow.value = false;
+  changed('member stops', home);
+  asked('account.login', '/account/login');
+  asked('rooms.lobby', '/rooms');
+  memberNow.value = true;
+  changed('member holds', [
+    'rooms.lobby /rooms pushed',
+    'account.login /account/login pushed',
+    ...home,
+  ]);
+  changed('a notification, the target on top again', [
+    'account.login /account/login pushed',
+    ...home,
+  ]);
 
   print('a gate and a condition with one flow, the gate first');
   signedInNow.value = false;
@@ -954,19 +990,80 @@ a gate of the first stage does not allow
   below a pushed page that does not ask: /account/login
   member holds: /rooms/members/card
 ''');
-      // No gate keeps the user in the flow, so they may have gone on to a
-      // route that does not ask. The location stays remembered, and the
-      // router shows it once the condition holds.
+    });
+
+    test(
+        'the generated class forgets the location that it remembers for a '
+        'guard of a condition once the user moves on: to a location outside '
+        'every flow, or to the start of the app from a flow that is over',
+        () async {
+      final printed = await memory;
+
+      // No gate keeps the user in the flow, so they may go on to a route
+      // that does not ask. The location that was asked for is then
+      // forgotten: nothing happens once the condition holds.
       expect(
-        sectionOf(
-          printed,
-          'the user is elsewhere when the condition comes to hold',
-        ),
+        sectionOf(printed, 'the user moves on before the condition holds'),
         '''
   asked /rooms/members: /account/login
   asked /rooms: shows it
   a notification: stays
-  member holds: /rooms/members
+  member holds: stays
+''',
+      );
+      // So it does not stand in the way of a gate that brings the user
+      // back: the gate takes the user from the screen that they went on
+      // to, and the router shows that screen once the gate allows, not the
+      // start of the app, and not the forgotten location when the
+      // condition holds later.
+      expect(
+        sectionOf(
+          printed,
+          'the user moves on, and a gate that brings the user back stops',
+        ),
+        '''
+  member stops: stays
+  asked /rooms/members: /account/login
+  asked /rooms: shows it
+  firstRun stops: /intro
+  firstRun allows: /rooms
+  member holds: stays
+''',
+      );
+      // A location in a flow that is over shows the start of the app: the
+      // user has moved on then too.
+      expect(
+        sectionOf(printed, 'the user moves on to a flow that is over'),
+        '''
+  member stops: stays
+  asked /rooms/members: /account/login
+  asked /intro: /
+  member holds: stays
+''',
+      );
+    });
+
+    test(
+        'KNOWN LIMIT, the behaviour to change once a router can close '
+        'pages: a page of a flow that is over stays below another page, and '
+        'leaves only at the next notification of a guard that finds it on '
+        'top', () async {
+      // The target of the guard of a condition is shown while the
+      // condition does not hold, and a route outside the flow on top of
+      // it. The condition holds: the class looks for a flow that is over
+      // at the page on top only, since its answer takes the place of the
+      // whole stack, so the target stays below.
+      expect(
+        sectionOf(
+          await memory,
+          'a page of a flow that is over below another page',
+        ),
+        '''
+  member stops: stays
+  asked /account/login: shows it
+  asked /rooms: shows it
+  member holds: stays
+  a notification, the target on top again: /
 ''',
       );
     });
@@ -1031,11 +1128,11 @@ a gate of the first stage does not allow
     test(
         'the generated class leaves a flow that is over for the start of the '
         'app while a guard of a condition still keeps the user from the '
-        'location that it remembers, which it shows once the condition holds',
-        () async {
+        'location that it remembers, which it forgets then', () async {
       // The app is asked for a route of the members behind a gate. Once the
       // gate allows, its flow is over, and the user is no member: the page
-      // of the flow does not stay.
+      // of the flow does not stay, the user moves on to the start of the
+      // app, and nothing happens once the condition holds.
       expect(
         sectionOf(
           await memory,
@@ -1046,7 +1143,7 @@ a gate of the first stage does not allow
   asked /rooms/members: /intro
   firstRun allows: /
   a notification: stays
-  member holds: /rooms/members
+  member holds: stays
 ''',
       );
     });
@@ -1081,11 +1178,13 @@ a gate of the first stage does not allow
 
     test(
         'for a route that asks for two conditions, the first guard that '
-        'does not allow answers, and then the next one', () async {
+        'does not allow answers; once it allows, the user comes to the start '
+        'of the app, not to the target of the next guard, and the location '
+        'is forgotten', () async {
       // The guard of `shop` comes first. Once it allows, the other one
       // still keeps the user from the lounge: the flow of `shop` is over,
-      // so the user leaves it for the start of the app, and the lounge
-      // shows once the second condition holds.
+      // so the user leaves it for the start of the app, and asks for the
+      // lounge again to come to the target of the other guard.
       expect(
           sectionOf(await memory, 'a route that asks for two conditions'), '''
   both stop: stays
@@ -1093,7 +1192,7 @@ a gate of the first stage does not allow
   asked /rooms/members: /account/login
   asked /rooms/lounge: /shop/plans
   paid holds: /
-  member holds: /rooms/lounge
+  member holds: stays
 ''');
     });
 
@@ -1499,10 +1598,14 @@ a gate of the first stage does not allow
   });
 
   group('the start route of an app with conditions', () {
-    Future<Object?> choose(String? start) => routerRole.template.choose(
+    Future<Object?> choose(
+      String? start, {
+      List<RoleData<Object>>? data,
+    }) =>
+        routerRole.template.choose(
           routerRole.choiceContext(
             RoleChoiceRequest(
-              data: _clubData,
+              data: data ?? _clubData,
               presentRoles: {routerRole},
               optionValues: {'start': start},
               environment: FakeEnvironment(),
@@ -1513,12 +1616,25 @@ a gate of the first stage does not allow
 
     test(
         'is no route that asks for a condition, its own or that of a route '
-        'above it', () {
+        'above it, also in an app without a guard for the condition', () {
+      // The app without the modules of the guards: the routes that ask for
+      // the conditions show like any other there, and none starts the app
+      // all the same.
+      final open = [
+        dataOf(routerRole, _homeRoutes),
+        dataOf(routerRole, _roomsRoutes, module: 'rooms'),
+      ];
+      expect(_facade(open).guards, isEmpty);
       for (final (start, conditions) in [
         ('/rooms/members', 'the condition club.member'),
         ('/rooms/members/card', 'the condition club.member'),
         ('/rooms/lounge', 'the conditions club.member, club.paid'),
       ]) {
+        expect(
+          () => choose(start, data: open),
+          throwsA(isA<SmfUsageException>()),
+          reason: start,
+        );
         expect(
           () => choose(start),
           throwsA(
@@ -1527,7 +1643,8 @@ a gate of the first stage does not allow
               'message',
               'The app cannot start on $start, because the route asks for '
                   '$conditions: every user sees the screen that the app '
-                  'starts on.',
+                  'starts on. That holds in an app without a guard for the '
+                  'condition too, where the route shows like any other.',
             ),
           ),
           reason: start,

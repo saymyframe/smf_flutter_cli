@@ -102,8 +102,9 @@ final class RouteCondition {
   /// The role that publishes the condition.
   final Role role;
 
-  /// The name of the condition in its role, a lowerCamelCase word such as
-  /// `account`; messages name the condition `<role id>.<name>`.
+  /// The name of the condition in its role, such as `account`. Messages
+  /// name the condition `<role id>.<name>`, and no code of an app has the
+  /// name.
   final String name;
 
   /// Two conditions are the same if they have one role and one name.
@@ -149,7 +150,9 @@ final class RouteCondition {
 /// the platform asks for it, and such a `push()` completes with `null`. So
 /// no code navigates into the flow of a gate, the module of the guard
 /// included: it changes what the guard reads, and the router shows the
-/// target.
+/// target. That holds unless a guard with a [condition] has the same flow:
+/// while that one does not allow and the gate does, the flow is not over,
+/// and its routes show like any other.
 ///
 /// A guard may stop allowing while the app runs, by what the screens of
 /// its own module do too: the router then shows its target in place of the
@@ -176,10 +179,11 @@ final class RouteCondition {
 /// shows it in place of the stack once the guards allow it, as `go()` to
 /// it does. So the user cannot go back from the target to the screen that
 /// they were on, nor from the location that was asked for once the router
-/// shows it. The router also remembers the location while the user is
-/// elsewhere: it shows it once the condition holds, unless a later
-/// location that a guard kept the user from took its place or a guard with
-/// [resumes] `false` stopped allowing.
+/// shows it. No gate keeps the user in the flow of such a guard, so the
+/// user may move on from its target: to a location outside every flow
+/// that is asked for, such as a link, or to the screen that the app starts
+/// on in place of a flow that is over. The router then forgets the
+/// location, and nothing happens once the condition holds.
 ///
 /// The flow of such a guard is its target and the routes below it too, and
 /// it is over once the guard allows. Until then every route shows that
@@ -200,7 +204,12 @@ final class RouteCondition {
 /// show one after another. Only when every gate allows does the app ask
 /// the guards with a condition, in the same order among themselves: for a
 /// route, the first one whose condition the route asks for and that does
-/// not allow decides.
+/// not allow decides. The flows of such guards do not show one after
+/// another. For a route that asks for two conditions, the target of the
+/// first guard shows, and once that guard allows, its flow is over while
+/// the second still keeps the user from the route: the user comes to the
+/// screen that the app starts on, and asks for the route again to see the
+/// target of the second.
 ///
 /// ```dart
 /// RoutesData(
@@ -376,7 +385,9 @@ final class Route {
 
   /// Whether the app can start on this route; see the `--start` option of
   /// the router. Such a route takes no required parameters and asks for no
-  /// condition.
+  /// condition. `--start` refuses a route that asks for one in every app,
+  /// also in an app without a guard for the condition, where the route
+  /// shows like any other.
   final bool startCandidate;
 
   /// What a user needs for this route and for the routes below it, each a

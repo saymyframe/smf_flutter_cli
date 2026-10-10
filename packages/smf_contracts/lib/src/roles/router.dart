@@ -79,8 +79,8 @@ const routerRole = RouterRole._();
 /// guards are and in which order the router asks them, what tells a gate
 /// from a guard of some routes, how the code of the app adds one and
 /// changes what it allows, that the router navigates when it does, where
-/// the user comes to once a guard allows again, and that no code navigates
-/// into the flow of a gate. An app without guards gets none of this.
+/// the user comes to once a guard allows again, and when code may navigate
+/// into the flow of a guard. An app without guards gets none of this.
 ///
 /// When the role is present, the provider of the [AppEntryRole] builds the
 /// root `MaterialApp` of the app as a `MaterialApp.router` and passes it
@@ -269,8 +269,15 @@ final class RouterRole extends Role<RoutesData> {
   ///   cannot go back from the target to the screen that they were on, and
   ///   the location that was asked for takes the stack in turn once the
   ///   guards allow it. No gate keeps the user in the flow then, so they
-  ///   may be on another screen when the condition comes to hold: `changed`
-  ///   answers the remembered location all the same.
+  ///   may move on to another screen before the condition holds, and the
+  ///   class forgets the location that it remembers when they do: when
+  ///   `asked` answers `null` for a location outside every flow, and when
+  ///   `asked` or `changed` answers `/` for a flow that is over. Every gate
+  ///   allows at such a call, so only a guard of a condition could still
+  ///   keep the user from that location. So a location that was asked for
+  ///   long ago does not take the stack when the condition comes to hold,
+  ///   and it does not stand in the way of a gate that brings the user
+  ///   back to where they went on to.
   /// - For a location that the guards let the user see, `asked` answers
   ///   `/` when its flow is over, as [flowIsOver] tells, and `null`
   ///   otherwise. So the routes of a flow show only while a guard with
@@ -305,7 +312,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   it forgets nothing then.
   /// - With no such page, `changed` answers the location that it
   ///   remembers, once the guards allow that location, and forgets it.
-  ///   Nothing else makes it forget one.
+  ///   Besides that, only a guard that does not bring the user back and a
+  ///   user who moves on make it forget one, as said above.
   /// - It never remembers a location in the flow of a guard, of whichever
   ///   guard: once that guard allows, its flow is over.
   /// - With no such page and nothing remembered that the guards allow,
@@ -313,9 +321,17 @@ final class RouterRole extends Role<RoutesData> {
   ///   over. So the user leaves a flow whose guard started allowing for the
   ///   screen that the app starts on, as when the platform opened the app
   ///   on a location of the flow. That holds while a guard of a condition
-  ///   still keeps the user from the remembered location, which stays
-  ///   remembered: the app was opened on a route that asks for the
-  ///   condition, and the flow of a gate is over.
+  ///   still keeps the user from the remembered location, which is then
+  ///   forgotten: the app was opened on a route that asks for the
+  ///   condition, and the flow of a gate is over. So for a route that asks
+  ///   for two conditions, the user comes to `/` once the first one holds,
+  ///   not to the target of the guard of the second.
+  /// - `changed` looks for a flow that is over at the page on top only,
+  ///   since its answer takes the place of the whole stack. A page of such
+  ///   a flow below another page stays, and the user sees it again when
+  ///   they go back to it: the target of a guard of a condition that the
+  ///   user opened, with a page of a route outside the flow pushed from
+  ///   it, once the condition holds.
   /// - Otherwise `changed` answers `null`, as for a notification without a
   ///   change of what the guards allow.
   static const guardedNavigation = 'GuardedNavigation';

@@ -78,15 +78,18 @@ const _guardClass = '''
 /// user from show the target too, in place of the whole stack, and `push()`
 /// completes with `null`. Once the guard allows, the router shows the
 /// location that the user last asked for, or the one that the guard took
-/// the user from if it [resumes], or else the screen that the app starts
-/// on.
+/// the user from if it [resumes]. With neither, it shows the screen that
+/// the app starts on in place of a page of the flow, and leaves a page
+/// outside the flow as it is: the user may be on one when a guard with
+/// [routes] starts allowing.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
 /// flow (see [flowIsOver]), or the target of another guard while that one
-/// does not allow. So the code of the app changes what [allows] reads and
-/// never navigates into the flow of a gate.
+/// does not allow. So the code of the app changes what [allows] reads. It
+/// navigates into a flow only while a guard with [routes] and that flow
+/// does not allow and every gate does, as to a sign-in that a guest opens.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -132,7 +135,8 @@ final class RouteGuard {
   /// A guard with routes stands for something that only those routes need,
   /// such as an account: every other route shows whatever the guard says.
   /// None of its routes is in the [flow] of a guard. To ask for it on one
-  /// more route, add the full name of the route here.
+  /// more route, add the full name of the route here, and that of each
+  /// route below it: a route does not ask because the route above it does.
   final Set<String>? routes;
 }
 ''';
@@ -267,17 +271,25 @@ final class $_navigation<L> {
   /// That holds for a gate and for a guard with [RouteGuard.routes] alike.
   /// A gate keeps the user in its flow, so the location is still what the
   /// user waits for when the gate allows. A guard with routes keeps the
-  /// user from its routes only, so the user may be on another screen when
-  /// it allows: the remembered location is shown all the same.
+  /// user from its routes only, so the user may leave its target for
+  /// another screen. So what was remembered is forgotten when the answer
+  /// is `null` for a location outside every flow, or [start] for a flow
+  /// that is over: the user has moved on. Every gate allows then, so only
+  /// a guard with routes could still keep the user from what was
+  /// remembered.
   ///
   /// Before that, what was remembered is forgotten if a guard that does
   /// not bring the user back stopped allowing, as [changed] says.
   ({L location})? asked(String? route, L location) {
     _forgetAfterStop();
     final target = $_ask(route);
-    if (target == null) return $_over(route) ? (location: start) : null;
-    if (!_inAFlow(route)) _remembered = (route: route, location: location);
-    return (location: locationOf(target));
+    if (target != null) {
+      if (!_inAFlow(route)) _remembered = (route: route, location: location);
+      return (location: locationOf(target));
+    }
+    final over = $_over(route);
+    if (over || !_inAFlow(route)) _remembered = null;
+    return over ? (location: start) : null;
   }
 
   /// What the router shows in place of its stack now that a guard started
@@ -309,7 +321,14 @@ final class $_navigation<L> {
   /// - [start], when the page on top is in a flow that is over (see
   ///   [$_over]): its guard started allowing while the flow was shown, and
   ///   nothing is remembered, or a guard with [RouteGuard.routes] still
-  ///   keeps the user from what is.
+  ///   keeps the user from what is. That location is forgotten then, since
+  ///   the user moves on to [start].
+  ///
+  /// A known limit: the class looks for a flow that is over at the page on
+  /// top only, since its answer takes the place of the whole stack. So a
+  /// page of a flow that is over stays below another page, such as the
+  /// target of a guard with routes below a page that was pushed from it,
+  /// and the user sees it again when they go back to it.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
@@ -334,8 +353,10 @@ final class $_navigation<L> {
     // A guard may still keep the user from the remembered location. For a
     // gate, the pages are those of its flow, which is not over. A guard
     // with routes leaves the user where they are, and that may be a flow
-    // that is over.
-    return $_over(pages.firstOrNull?.route) ? (location: start) : null;
+    // that is over: the user moves on from it.
+    if (!$_over(pages.firstOrNull?.route)) return null;
+    _remembered = null;
+    return (location: start);
   }
 
   /// Forgets the remembered location if a guard that does not bring the
