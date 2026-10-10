@@ -75,7 +75,7 @@ final signInBlocBundle = MasonBundle.fromJson(<String, dynamic>{
   "hooks": [],
   "name": "sign_in_bloc",
   "description":
-      "The state of the sign-in screens of an SMF app with BLoC: a Cubit for each screen, the screens that give their views its state, and the file that creates the Cubits with the session of the app.",
+      "The state of the sign-in screens of an SMF app with BLoC: a Cubit for each screen, the screens that give their views its state, the entry of the settings screen, the Cubit with the session for the widgets of the app, and the file that creates the Cubits with the session of the app.",
   "version": "0.1.0+1",
   "environment": {"mason": "^0.1.1"},
   "vars": {}

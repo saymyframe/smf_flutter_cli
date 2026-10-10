@@ -69,7 +69,7 @@ final signInRiverpodBundle = MasonBundle.fromJson(<String, dynamic>{
   "hooks": [],
   "name": "sign_in_riverpod",
   "description":
-      "The state of the sign-in screens of an SMF app with Riverpod: a provider for each screen, the screens that give their views its state, and the provider through which they reach the session of the app.",
+      "The state of the sign-in screens of an SMF app with Riverpod: a provider for each screen, the screens that give their views its state, the entry of the settings screen, and the providers through which they reach the session of the app and the widgets of the app read it.",
   "version": "0.1.0+1",
   "environment": {"mason": "^0.1.1"},
   "vars": {}

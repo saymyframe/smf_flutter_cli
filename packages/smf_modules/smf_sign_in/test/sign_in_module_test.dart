@@ -3124,7 +3124,7 @@ void main() {
           .where((path) => app.files[path]!.text.contains(part))
           .firstOrNull;
 
-      expect(shown, hasLength(5));
+      expect(shown, hasLength(6));
       expect(
         [
           for (final part in shown)
@@ -3135,13 +3135,15 @@ void main() {
         ],
         [
           // The screen and the cubit of the variant for bloc, the screen of
-          // the variant for riverpod, and the two functions of the guards,
-          // which every app has.
+          // the variant for riverpod, the two functions of the guards,
+          // which every app has, and the entry of the settings screen of
+          // the variant for bloc.
           (_screens['SignInScreen'], null),
           (_cubits.first, null),
           (null, _screens['SignInScreen']),
           (_guards, _guards),
           (_guards, _guards),
+          (_setting, null),
         ],
       );
       expect(example, contains('smf create my_app -m home,sign_in,bloc'));
@@ -3181,8 +3183,9 @@ void main() {
             .map((name) => name.replaceFirst('()', ''))
             .where(
               (name) => RegExp(
-                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action|Words)|'
-                r'authFailureText|signIn\w+)$',
+                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action|Words|'
+                'Setting|Row)|authFailureText|confirmDeleteAccount|'
+                r'signIn\w+)$',
               ).hasMatch(name),
             )
             .toSet();

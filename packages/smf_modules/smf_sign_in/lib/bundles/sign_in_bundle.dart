@@ -63,7 +63,7 @@ final signInBundle = MasonBundle.fromJson(<String, dynamic>{
   "hooks": [],
   "name": "sign_in",
   "description":
-      "The look of the sign-in screens of an SMF app: the views of sign-in, sign-up and password reset, their widgets, the values of their state, and the functions of the guards of the routes.",
+      "The look of the sign-in screens of an SMF app: the views of sign-in, sign-up, password reset and the account, their widgets, the row of the settings screen, the values of their state, and the functions of the guards of the routes.",
   "version": "0.1.0+1",
   "environment": {"mason": "^0.1.1"},
   "vars": {}

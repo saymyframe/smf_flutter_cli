@@ -377,7 +377,8 @@ final class SignInModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'Sign-in, sign-up and password reset with an email',
+        description:
+            'Sign-in with an email: sign-up, password reset, account screen',
         kind: ModuleKinds.feature,
         requires: {authRole, settingsScreenRole},
         uses: {localizationRole},

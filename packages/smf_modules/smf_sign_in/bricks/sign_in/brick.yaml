@@ -1,5 +1,5 @@
 name: sign_in
-description: "The look of the sign-in screens of an SMF app: the views of sign-in, sign-up and password reset, their widgets, the values of their state, and the functions of the guards of the routes."
+description: "The look of the sign-in screens of an SMF app: the views of sign-in, sign-up, password reset and the account, their widgets, the row of the settings screen, the values of their state, and the functions of the guards of the routes."
 
 # A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the
