@@ -58,6 +58,10 @@ final class FixtureAuth implements AuthService {
   Future<void> _restore() async {
     await _answer();
     _user = _onDevice;
+    // No listener hears this: nothing has the service before
+    // [openFixtureAuth] returns it, which waits for this. It is here so
+    // that the fixture with a known bug that returns the service first
+    // differs in one line, and tells of the user that it finds late.
     _changes.add(_user);
   }
 
