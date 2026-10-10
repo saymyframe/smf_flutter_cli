@@ -4,14 +4,16 @@
 // listener of the fixture analytics, once for each change of the screen
 // the user sees, gives each navigator observers of its own
 // (RouterRole.observers), and closes the route on top with the back button
-// of the system. That holds after a location from the platform that the
-// router cannot show too: on its error screen, as on any other page, the
-// button throws nothing, closes the route on top, and is left to the
-// system where the router has no route to close. It starts the app with
-// main() of lib/main.dart, which the app entry role puts into every app,
-// and navigates only through the navigation facade of the router role and
-// the navigators of Flutter, so it applies to a new provider of the role as
-// it is. What only one router does is tested in the app tests about that
+// of the system, which it handles when it closes a route and leaves to the
+// system when it has none to close. That holds after a location from the
+// platform that the router cannot show too: its error screen is a page
+// like any other for the button, which throws nothing there, closes a
+// dialog over it, and closes the screen itself only if a page is below it,
+// which is up to the router. It starts the app with main() of
+// lib/main.dart, which the app entry role puts into every app, and
+// navigates only through the navigation facade of the router role and the
+// navigators of Flutter, so it applies to a new provider of the role as it
+// is. What only one router does is tested in the app tests about that
 // router, such as go_router_screens. Each expectation gives its reason,
 // which a provider of the role with a known bug fails the test with
 // (brokenProviders of the fixture registry).
@@ -193,12 +195,19 @@ void main() {
 
     // The back button of the system closes the route on top of the
     // innermost navigator that the user sees: a dialog before the page
-    // below it, which stays on top, so the listeners hear of nothing.
+    // below it, which stays on top, so the listeners hear of nothing. The
+    // router answers that it handled the button: otherwise the system
+    // takes it too, and closes the app with the dialog.
     unawaited(
       showDialog<void>(context: below, builder: (_) => const Text('dialog')),
     );
     await tester.pumpAndSettle();
-    await tester.binding.handlePopRoute();
+    expect(
+      await tester.binding.handlePopRoute(),
+      isTrue,
+      reason: 'The router handles the back button of the system that closes '
+          'a dialog, so the system does not take the button too.',
+    );
     await tester.pumpAndSettle();
     expect(
       heard(),
@@ -213,9 +222,15 @@ void main() {
     );
     expect(below.mounted, isTrue, reason: 'The page below the dialog stays.');
 
-    // The back button of the system closes the child. Whether the location
-    // of the parent keeps the query of the child is up to the router.
-    await tester.binding.handlePopRoute();
+    // The back button of the system closes the child, and the router
+    // handles it. Whether the location of the parent keeps the query of the
+    // child is up to the router.
+    expect(
+      await tester.binding.handlePopRoute(),
+      isTrue,
+      reason: 'The router handles the back button of the system that closes '
+          'the child, so the system does not take the button too.',
+    );
     await tester.pumpAndSettle();
     expect(
       heard(),
@@ -274,8 +289,8 @@ void main() {
 
     // The back button of the system on the screen that the user is on now,
     // which is a page like any other for the button. A dialog over it is
-    // the route on top: the button closes it, and the screen below stays
-    // the screen of the router.
+    // the route on top: the button closes it, the router handles the
+    // button, and the screen below stays the screen of the router.
     final screen = unmatched.isEmpty
         ? 'the page that the router stayed on'
         : 'the error screen';
@@ -287,13 +302,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.binding.handlePopRoute();
+    final handled = await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(
       tester.takeException(),
       isNull,
       reason: 'The back button of the system throws nothing with a dialog '
           'over $screen.',
+    );
+    expect(
+      handled,
+      isTrue,
+      reason: 'The router handles the back button of the system that closes '
+          'a dialog over $screen, so the system does not take the button too.',
     );
     expect(
       find.text('dialog'),
@@ -307,12 +328,16 @@ void main() {
           '$screen stays the screen of the router.',
     );
 
-    // Without a dialog, the button closes the screen if a page is below
-    // it, and the listeners hear of that page once. With no page below it,
-    // as on the first page of the app, the router has no route to close:
-    // it leaves the button to the system, and the screen stays. Whether
-    // the error screen for a location from the platform has a page below
-    // it is up to the router.
+    // Without a dialog, the navigators that the user sees decide what the
+    // button does, not the router: if one of them can close a route, a page
+    // is below the screen, the router closes the screen and handles the
+    // button, and the listeners hear of the page below once. If none can,
+    // as on the first page of the app, the router leaves the button to the
+    // system, and the screen stays. Whether the error screen for a location
+    // from the platform has a page below it is up to the router.
+    final canClose = tester
+        .stateList<NavigatorState>(find.byType(Navigator))
+        .any((navigator) => navigator.canPop());
     final closed = await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(
@@ -321,12 +346,21 @@ void main() {
       reason: 'The back button of the system throws nothing on $screen.',
     );
     expect(
+      closed,
+      canClose,
+      reason: canClose
+          ? 'A page is below $screen, so the router handles the back button '
+              'of the system, which closes $screen.'
+          : 'With no route to close on $screen, the router leaves the back '
+              'button of the system to the system.',
+    );
+    expect(
       heard(),
-      hasLength(closed ? 1 : 0),
-      reason: closed
+      hasLength(canClose ? 1 : 0),
+      reason: canClose
           ? 'The back button of the system closed $screen, so the listeners '
               'hear of the page below it once.'
-          : 'The router left the back button of the system to the system on '
+          : 'The back button of the system has no route to close on '
               '$screen, which stays as it is.',
     );
   }, timeout: const Timeout(Duration(minutes: 2)));

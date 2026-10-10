@@ -10,10 +10,14 @@
 // is left to the system. An error screen that GoRouter.push shows over a
 // page is a page of go_router, which the button closes. And a
 // BackButtonListener below the router hears of the button before the
-// router does, on the error screen too. The back button after a location
-// from the platform that a router cannot show is tested in router_screens,
-// under any router. It uses what the tests of router_screens share, which
-// every app that it applies to has.
+// router does, on the error screen too. The router has a dispatcher of the
+// button of its own for this, which wraps the callback of the Router of
+// Flutter: when the root of the app is mounted anew over the same router,
+// the dispatcher lets the Router that leaves take its callback back, so the
+// button asks the router once. The back button after a location from the
+// platform that a router cannot show is tested in router_screens, under
+// any router. It uses what the tests of router_screens share, which every
+// app that it applies to has.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -140,5 +144,51 @@ void main() {
           'button of the system stays over the error screen.',
     );
     expect(tester.takeException(), isNull);
+
+    // The root of the app mounted anew over the same router, as when a
+    // widget above it is replaced: the Router of Flutter that leaves takes
+    // its callback back from the dispatcher of the button, and the new one
+    // gives its own. So the button asks the router once, and closes a
+    // dialog over the start screen.
+    router.go(_startScreen.$2);
+    await tester.pumpAndSettle();
+    expect(heard(), [_startScreen]);
+    final app = tester.widget<View>(find.byType(View)).child;
+    await tester.pumpWidget(KeyedSubtree(key: UniqueKey(), child: app));
+    await tester.pumpAndSettle();
+    expect(
+      heard(),
+      isEmpty,
+      reason: 'The start screen stays the screen of the router when the root '
+          'of the app is mounted anew.',
+    );
+    unawaited(
+      showDialog<void>(
+        context:
+            router.routerDelegate.navigatorKey.currentState!.overlay!.context,
+        builder: (_) => const Text('dialog'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'The back button of the system throws nothing once the root of '
+          'the app is mounted anew over the router.',
+    );
+    expect(
+      handled,
+      isTrue,
+      reason: 'The back button of the system still reaches the router once '
+          'the root of the app is mounted anew, and the router handles it.',
+    );
+    expect(
+      find.text('dialog'),
+      findsNothing,
+      reason: 'The back button of the system closes a dialog once the root '
+          'of the app is mounted anew over the router.',
+    );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

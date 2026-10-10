@@ -39,10 +39,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // of every module of the apps with them.
       ...await _fixtureMocks(),
       // The listeners of the screen, the navigator observers, the back
-      // button of the system, on the error screen of the router too, and
-      // the configuration of the router, which it creates once, whichever
-      // module provides the router: the tests start the app with main() and
-      // navigate through the navigation facade of the router role.
+      // button of the system, which the router handles when it closes a
+      // route and leaves to the system otherwise, on its error screen as
+      // on any other page, and the configuration of the router, which it
+      // creates once, whichever module provides the router: the tests
+      // start the app with main() and navigate through the navigation
+      // facade of the router role.
       MatrixAppTest(
         '$appTests/router_screens',
         appliesTo: _hearsScreens,
@@ -166,8 +168,9 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the listeners of the screen do not hear of, a push() that still
       // completes with the value of its page after a refresh, and the back
       // button of the system on its error screen for a location that only
-      // GoRouter can be asked for, where its delegate has no page to close.
-      // It checks no role, so it names its module, as
+      // GoRouter can be asked for, where its delegate has no page to close,
+      // and once the root of the app is mounted anew over the router. It
+      // checks no role, so it names its module, as
       // `tools/app_tests_test.dart` lets it. The apps it applies to have
       // the tests of router_screens, whose helpers it uses.
       MatrixAppTest(
